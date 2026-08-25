@@ -1,3 +1,4 @@
+pub mod asr;
 pub mod cleaner;
 pub mod llm;
 pub mod session;
