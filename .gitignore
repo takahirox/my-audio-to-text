@@ -1,0 +1,9 @@
+/target/
+.DS_Store
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+models/
+sessions/
+.build/
+DerivedData/
