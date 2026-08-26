@@ -43,8 +43,8 @@ approvals:
   new_registry_domain: "deny"
   promotion: "required"
 worker:
-  preferred: "codex_cli"
-  allowed: ["codex_cli"]
+  preferred: "ollama_cli"
+  allowed: ["codex_cli", "ollama_cli"]
 budgets:
   wall_seconds: 900.0
   worker_turns: 1
