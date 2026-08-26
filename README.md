@@ -1,26 +1,50 @@
 # my-audio-to-text
 
-Local-first speech-to-text and thought-synthesis system.
+Local-first speech-to-text and thought-synthesis for Apple Silicon macOS.
 
-The goal is not merely to transcribe speech. The system should let a person speak naturally, preserve what was actually said, remove speech-only noise without changing meaning, and optionally transform the result into polished text or a structured representation of a longer thinking session.
+The application implements two workflows:
 
-## Product goals
+- **Quick Dictation** — press `⌥Space`, speak, stop, and receive conservatively cleaned text in the focused app or clipboard.
+- **Thinking Session** — record a long session, preserve committed transcript segments continuously, then run whole-session FULL synthesis into topics, ideas, decisions, questions, actions, revisions, examples, and detailed notes.
 
-1. **Quick Dictation** — speak for seconds or minutes, get trustworthy text, optionally polish it, and use it in any app.
-2. **Thinking Session** — speak freely for tens of minutes or longer, keep the complete transcript, then turn the whole session into a structured model of topics, ideas, decisions, open questions, revisions, and action items.
-3. **Local first** — audio, transcription, storage, cleaning, rewriting, and synthesis should work locally by default after models are installed.
-4. **Trustworthy transformations** — Raw Transcript, Clean Transcript, Polished Text, and Synthesis are separate layers. Derived output never overwrites source data.
-5. **Evidence and reversibility** — important synthesized items should be traceable back to source transcript segments and, when audio is retained, to timestamps.
+Raw Transcript, Clean Transcript, Polished Text, and Synthesis are stored as separate information levels. Derived output never overwrites its source, and every substantive synthesis item must reference valid source segment IDs.
 
-## V1 direction
+## Requirements
 
-V1 targets Apple Silicon macOS first. The preferred initial architecture is a macOS native shell with a portable core, local ASR, local LLM support, durable session storage, global dictation, and a dedicated long-form Thinking Session mode.
+- Apple Silicon Mac running macOS 14 or newer
+- Xcode 16+ command-line tools / Swift 6
+- a local [`whisper.cpp`](https://github.com/ggml-org/whisper.cpp) `whisper-cli` executable and multilingual GGML model
+- optionally, a local [`llama.cpp`](https://github.com/ggml-org/llama.cpp) `llama-cli` executable and instruct GGUF model for polishing and synthesis
 
-For long sessions, V1 deliberately starts with **FULL synthesis**: when the transcript comfortably fits the selected model's context, send the complete Clean Transcript to the LLM rather than prematurely introducing semantic chunking or incremental memory. Add CHUNKED or INCREMENTAL strategies only when measurements show they are needed.
+Models are intentionally not bundled. Once the executables and models are installed, the primary workflow does not require a network connection.
 
-See:
+## Build and run
 
-- [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) — product behavior, requirements, scope, and acceptance criteria.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architectural direction and design principles.
+```bash
+swift test
+./scripts/build-app.sh
+open "dist/My Audio to Text.app"
+```
 
-Implementation is intentionally kept out of `main` until the specification is established.
+On first launch:
+
+1. Allow microphone access.
+2. Open Settings and select the `whisper-cli` executable and GGML model.
+3. Select `llama-cli` and a GGUF instruct model to enable polishing and synthesis.
+4. If focused-app paste automation is wanted, allow Accessibility access. Without it, completed text remains safely on the clipboard.
+
+The app stores configuration, SQLite data, and retained recordings under:
+
+```text
+~/Library/Application Support/MyAudioToText/
+```
+
+## Verification
+
+```bash
+./scripts/verify.sh
+```
+
+The offline suite covers conservative cleaning, unstable partial replacement, final-segment durability, crash recovery, whisper.cpp JSON parsing, evidence validation, context refusal for oversized FULL synthesis, and regenerating multiple output formats.
+
+See [the implementation design](docs/IMPLEMENTATION.md), [product specification](docs/PRODUCT_SPEC.md), and [acceptance guide](docs/ACCEPTANCE.md).

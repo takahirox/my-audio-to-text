@@ -126,3 +126,7 @@ These should remain architecturally possible without being implemented premature
 ## Engineering priority
 
 `Correctness > Data preservation > User trust > Simplicity > Performance > Feature count`
+
+## Implemented V1
+
+The concrete V1 component choices, persistence schema, flows, failure behavior, and rationale for using a UI-independent Swift core are recorded in [`IMPLEMENTATION.md`](IMPLEMENTATION.md). The product requirements above remain authoritative when implementation details evolve.
