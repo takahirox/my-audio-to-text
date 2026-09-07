@@ -21,6 +21,9 @@ let package = Package(
       ]
     ),
     .testTarget(name: "AudioTextCoreTests", dependencies: ["AudioTextCore"]),
+    .testTarget(
+      name: "MyAudioToTextAppTests", dependencies: ["MyAudioToTextApp", "AudioTextCore"]
+    ),
   ],
   swiftLanguageModes: [.v5]
 )
