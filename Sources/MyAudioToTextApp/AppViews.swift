@@ -4,6 +4,7 @@ import SwiftUI
 private enum TranscriptLevel: String, CaseIterable, Identifiable {
   case raw = "Raw Transcript"
   case clean = "Clean Transcript"
+  case personalized = "Personalized"
   case output = "Polished / Synthesis"
   case feedback = "Corrections"
 
@@ -12,7 +13,7 @@ private enum TranscriptLevel: String, CaseIterable, Identifiable {
 
 struct MainWindow: View {
   @EnvironmentObject private var controller: AppController
-  @State private var level: TranscriptLevel = .clean
+  @State private var level: TranscriptLevel = .personalized
 
   var body: some View {
     NavigationSplitView {
@@ -96,8 +97,8 @@ struct MainWindow: View {
         Button("Structured JSON") { controller.showSynthesisJSON() }
       }
       .disabled(controller.synthesis == nil)
-      Button("Copy", systemImage: "doc.on.doc") { controller.copyDisplayedOutput() }
-        .disabled(controller.cleanTranscript.isEmpty && controller.displayedOutput.isEmpty)
+      Button("Copy", systemImage: "doc.on.doc") { controller.copyTranscript(visibleText) }
+        .disabled(visibleText.isEmpty)
     }
     .padding()
   }
@@ -108,6 +109,42 @@ struct MainWindow: View {
         ForEach(TranscriptLevel.allCases) { Text($0.rawValue).tag($0) }
       }
       .pickerStyle(.segmented)
+
+      if level == .personalized {
+        if let run = controller.personalizationRun {
+          Text(
+            run.enabled
+              ? "\(run.appliedCount) corrections from your saved history"
+              : "Personalization was off for this recording. Showing the baseline transcript."
+          )
+          .font(.caption).foregroundStyle(.secondary)
+          if run.appliedCount > 0 {
+            DisclosureGroup("Applied corrections") {
+              ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                  ForEach(run.segments.filter { $0.appliedRule != nil }, id: \.segmentID) {
+                    segment in
+                    if let rule = segment.appliedRule {
+                      Text(
+                        "\(rule.source) → \(rule.replacement) · matching context, \(rule.sessionCount) sessions"
+                      )
+                      Text(
+                        "Last corrected \(rule.lastSeen.formatted(date: .abbreviated, time: .shortened))"
+                      )
+                      .font(.caption).foregroundStyle(.secondary)
+                    }
+                  }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+              }.frame(maxHeight: 120)
+            }
+          }
+        } else {
+          Text(
+            "Personalized results appear after recording finishes. Compare with Clean Transcript."
+          )
+          .font(.caption).foregroundStyle(.secondary)
+        }
+      }
 
       if level == .feedback {
         feedbackEditor
@@ -201,8 +238,9 @@ struct MainWindow: View {
     switch level {
     case .raw: controller.rawTranscript
     case .clean: controller.cleanTranscript
+    case .personalized: controller.personalizedTranscript
     case .output: controller.displayedOutput
-    case .feedback: ""
+    case .feedback: controller.correctedTranscript
     }
   }
 
@@ -210,6 +248,8 @@ struct MainWindow: View {
     switch level {
     case .raw: "Raw ASR segments will appear here."
     case .clean: "Conservatively cleaned transcript will appear here."
+    case .personalized:
+      "Enable personalization in Settings to use your saved corrections in future recordings."
     case .output: "Polished text and synthesis outputs never overwrite source transcripts."
     case .feedback: ""
     }
@@ -256,6 +296,15 @@ struct SettingsView: View {
         )
         .font(.caption)
         .foregroundStyle(.secondary)
+      }
+      Section("Personalization") {
+        Toggle(
+          "Use correction memory for new recordings",
+          isOn: $controller.configuration.personalizationEnabled)
+        Text(
+          "Applies a correction only when its context matches and at least two separate sessions support it. Compare results with Clean Transcript. Raw and Clean remain unchanged."
+        )
+        .font(.caption).foregroundStyle(.secondary)
       }
       HStack {
         Spacer()

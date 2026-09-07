@@ -11,6 +11,8 @@ Raw Transcript, Clean Transcript, Polished Text, and Synthesis are stored as sep
 
 After transcription, use **Corrections** to edit recognition errors, label the speech condition, and save local personalization feedback. Each revision preserves its source transcript and can be reloaded or exported as JSONL. See [personalization feedback](docs/PERSONALIZATION.md) for the workflow and corpus API.
 
+Enable **Settings → Personalization** to use recurring, context-matched corrections in future dictation. The **Personalized** tab shows the result and applied corrections; Raw/Clean remain available for comparison. See [correction memory and evaluation](docs/issue-6/README.md) and the [measured synthetic-data report](docs/issue-6/EVALUATION.md).
+
 ## Requirements
 
 - Apple Silicon Mac running macOS 14 or newer

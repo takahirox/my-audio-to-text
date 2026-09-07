@@ -15,6 +15,8 @@ This builds both debug and release configurations without network access and ver
 - rejection of partial persistence, ordinal gaps, invalid timestamps, and unknown evidence;
 - per-segment SQLite durability and interrupted-session recovery;
 - feedback revision persistence across restarts, source immutability, version 1 database migration, speech conditions, retained-audio references, and complete JSONL export;
+- context-matched correction memory, independent-session support, conflict/ambiguity abstention, version 2 database migration, audited personalized runs, and enabled/disabled ASR pipeline behavior;
+- reproducible baseline/personalized CER evaluation with per-condition results and session-overlap rejection;
 - parsing the current whisper.cpp full JSON shape, offsets, confidence, and empty segments;
 - FULL synthesis behavior, revisions, context overflow refusal, and evidence validation;
 - regeneration of Markdown, JSON, and action outputs from one source model.
@@ -38,6 +40,16 @@ This builds both debug and release configurations without network access and ver
 5. Export all corrections and confirm one JSON object per line, including both revisions and source segment metadata.
 6. Repeat with audio retention off; exported samples must omit audio paths. With retention on, the referenced session recording must exist.
 7. While transcription finishes, confirm session switching and correction saving are disabled.
+
+## Correction-memory smoke test
+
+1. Save the same recognition correction in two separate sessions, preserving the transcript's line breaks and surrounding context.
+2. Enable **Settings → Personalization → Use correction memory for new recordings** and save settings.
+3. Record another utterance with the same mistaken term and context. Confirm **Personalized** shows the correction and its evidence count; **Clean Transcript** still shows the baseline.
+4. Confirm Quick Dictation inserts the personalized result, and Copy copies the currently selected tab.
+5. Save feedback on the new session, restart, and verify the personalized run and original Raw/Clean data reload separately.
+6. Disable personalization and repeat. The new run must show the baseline; older runs remain unchanged.
+7. Try an unrelated use of the same text and a context with ambiguous/conflicting corrections. Confirm no unsupported replacement occurs.
 
 ## Thirty-minute durability run
 

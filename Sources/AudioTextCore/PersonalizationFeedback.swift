@@ -19,6 +19,8 @@ public struct PersonalizationFeedback: Codable, Equatable, Identifiable, Sendabl
   public let sourceSegments: [TranscriptSegment]
 
   init(
+    id: UUID = UUID(),
+    createdAt: Date = Date(),
     sessionID: UUID,
     correctedTranscript: String,
     speechCondition: SpeechCondition,
@@ -26,9 +28,9 @@ public struct PersonalizationFeedback: Codable, Equatable, Identifiable, Sendabl
     sourceSegments: [TranscriptSegment]
   ) {
     schemaVersion = 1
-    id = UUID()
+    self.id = id
     self.sessionID = sessionID
-    createdAt = Date()
+    self.createdAt = createdAt
     rawTranscript = sourceSegments.map(\.rawText).joined(separator: "\n")
     cleanTranscript = sourceSegments.map(\.cleanText).filter { !$0.isEmpty }.joined(separator: "\n")
     self.correctedTranscript = correctedTranscript

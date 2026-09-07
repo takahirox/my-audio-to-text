@@ -1,0 +1,198 @@
+[
+  {
+    "sessionID": "c3f6b96c-3f05-527b-9b4e-19cc6a9d6c44",
+    "split": "memory",
+    "condition": "normal",
+    "baseline": "今日はGPTソールを使います",
+    "reference": "今日はGPT Solを使います"
+  },
+  {
+    "sessionID": "d2c5d076-6d14-5645-a51d-072d72c46724",
+    "split": "memory",
+    "condition": "quiet",
+    "baseline": "明日はGPTソールを使います",
+    "reference": "明日はGPT Solを使います"
+  },
+  {
+    "sessionID": "a6a1802c-f7b1-5b84-a6e8-b48dd2acec20",
+    "split": "memory",
+    "condition": "whisper",
+    "baseline": "この処理は音声任式を使います",
+    "reference": "この処理は音声認識を使います"
+  },
+  {
+    "sessionID": "6fc9a9d3-8a44-555e-9cb1-3a04c14849dc",
+    "split": "memory",
+    "condition": "normal",
+    "baseline": "別の処理は音声任式を使います",
+    "reference": "別の処理は音声認識を使います"
+  },
+  {
+    "sessionID": "d81d5332-03eb-5c23-bda6-7f1d427f6bbf",
+    "split": "memory",
+    "condition": "quiet",
+    "baseline": "今回は今日と市に向かいます",
+    "reference": "今回は京都市に向かいます"
+  },
+  {
+    "sessionID": "fa4190df-d3e2-5177-870c-3248e12f5c25",
+    "split": "memory",
+    "condition": "whisper",
+    "baseline": "今回は今日と市に向かう予定です",
+    "reference": "今回は京都市に向かう予定です"
+  },
+  {
+    "sessionID": "264168e1-cedb-5e43-bcad-2000adecabed",
+    "split": "memory",
+    "condition": "normal",
+    "baseline": "次はニューラルネットわくを試します",
+    "reference": "次はニューラルネットワークを試します"
+  },
+  {
+    "sessionID": "a024fe9c-5e6d-5bcd-be4f-4f9b07220917",
+    "split": "memory",
+    "condition": "quiet",
+    "baseline": "次はニューラルネットわくを試したい",
+    "reference": "次はニューラルネットワークを試したい"
+  },
+  {
+    "sessionID": "dd709b4c-5891-5b86-9cf0-c5569a678457",
+    "split": "memory",
+    "condition": "whisper",
+    "baseline": "それはオープン英愛のモデルです",
+    "reference": "それはOpenAIのモデルです"
+  },
+  {
+    "sessionID": "d5c42e85-f547-5b57-a78a-61eb41ea5ea5",
+    "split": "memory",
+    "condition": "normal",
+    "baseline": "それはオープン英愛のモデルだと思う",
+    "reference": "それはOpenAIのモデルだと思う"
+  },
+  {
+    "sessionID": "fd3cdb10-27bd-55c0-bedd-f7865585429b",
+    "split": "test",
+    "condition": "normal",
+    "baseline": "今夜はGPTソールを使いますよ",
+    "reference": "今夜はGPT Solを使いますよ"
+  },
+  {
+    "sessionID": "043c87b6-8cca-5630-8529-7328d035bf89",
+    "split": "test",
+    "condition": "quiet",
+    "baseline": "新しい処理は音声任式を使います",
+    "reference": "新しい処理は音声認識を使います"
+  },
+  {
+    "sessionID": "c6de71fc-decd-5612-a9e6-6784963d91f6",
+    "split": "test",
+    "condition": "whisper",
+    "baseline": "今回は今日と市に向かいますよ",
+    "reference": "今回は京都市に向かいますよ"
+  },
+  {
+    "sessionID": "86361c12-a3e7-5603-bb65-b5b40a988ec7",
+    "split": "test",
+    "condition": "normal",
+    "baseline": "次はニューラルネットわくを試しましょう",
+    "reference": "次はニューラルネットワークを試しましょう"
+  },
+  {
+    "sessionID": "69b47af8-d381-5bc0-ae3c-3c2a00035e31",
+    "split": "test",
+    "condition": "quiet",
+    "baseline": "それはオープン英愛のモデルでしょう",
+    "reference": "それはOpenAIのモデルでしょう"
+  },
+  {
+    "sessionID": "cbb403c3-62f9-59db-bd87-9b7639066c2d",
+    "split": "test",
+    "condition": "whisper",
+    "baseline": "今週はGPTソールを使い始めます",
+    "reference": "今週はGPT Solを使い始めます"
+  },
+  {
+    "sessionID": "9f5bc361-4f8c-585b-a95f-31a1eb8a6600",
+    "split": "test",
+    "condition": "normal",
+    "baseline": "古い処理は音声任式を使い続けます",
+    "reference": "古い処理は音声認識を使い続けます"
+  },
+  {
+    "sessionID": "582161f9-4d1b-511f-85a3-f0bb304a2108",
+    "split": "test",
+    "condition": "quiet",
+    "baseline": "今回は今日と市に向かうつもりです",
+    "reference": "今回は京都市に向かうつもりです"
+  },
+  {
+    "sessionID": "d9193bb1-1788-57b2-a072-d9786109c1ac",
+    "split": "test",
+    "condition": "whisper",
+    "baseline": "次はニューラルネットわくを試したことがある",
+    "reference": "次はニューラルネットワークを試したことがある"
+  },
+  {
+    "sessionID": "476be5c8-a2af-5f26-a90d-3f6aeb9dfc6e",
+    "split": "test",
+    "condition": "normal",
+    "baseline": "それはオープン英愛のモデルかもしれない",
+    "reference": "それはOpenAIのモデルかもしれない"
+  },
+  {
+    "sessionID": "bdb67248-93b6-5888-beba-cdb3ac3742a3",
+    "split": "test",
+    "condition": "quiet",
+    "baseline": "今日は靴のソールを洗います",
+    "reference": "今日は靴のソールを洗います"
+  },
+  {
+    "sessionID": "7e56d061-48ec-586c-b59c-069981ca80d6",
+    "split": "test",
+    "condition": "whisper",
+    "baseline": "今回は今日と明日の予定を確認します",
+    "reference": "今回は今日と明日の予定を確認します"
+  },
+  {
+    "sessionID": "2683e468-9894-5f27-97b9-49661898233c",
+    "split": "test",
+    "condition": "normal",
+    "baseline": "音声認識の仕組みを調べます",
+    "reference": "音声認識の仕組みを調べます"
+  },
+  {
+    "sessionID": "92a245ac-5c9d-54da-b065-2f14bdc3c8ec",
+    "split": "test",
+    "condition": "quiet",
+    "baseline": "今日はGPT Solを使います",
+    "reference": "今日はGPT Solを使います"
+  },
+  {
+    "sessionID": "6baabf57-e253-5ce2-a674-44e4fed1955a",
+    "split": "test",
+    "condition": "whisper",
+    "baseline": "それはオープン英愛という架空の名前です",
+    "reference": "それはオープン英愛という架空の名前です"
+  },
+  {
+    "sessionID": "89442c9b-1a39-5a83-90fc-16a418da83b3",
+    "split": "test",
+    "condition": "normal",
+    "baseline": "昨日はGPTソールについて話しました",
+    "reference": "昨日はGPT Solについて話しました"
+  },
+  {
+    "sessionID": "c24668c7-96bd-56b2-9807-410f793cd576",
+    "split": "test",
+    "condition": "quiet",
+    "baseline": "この処理は音声任式で動きます",
+    "reference": "この処理は音声認識で動きます"
+  },
+  {
+    "sessionID": "a6e3c2e1-e995-5ad7-ad6c-88f6b5e753dc",
+    "split": "test",
+    "condition": "whisper",
+    "baseline": "静かな部屋で録音します",
+    "reference": "静かな部屋で録音します"
+  }
+]
