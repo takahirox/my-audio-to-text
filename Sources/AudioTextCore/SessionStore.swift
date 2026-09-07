@@ -291,6 +291,111 @@ public final class SessionStore: @unchecked Sendable {
     }
   }
 
+  /// Snapshots persisted ASR data in the same transaction as the appended correction.
+  /// Empty corrections are valid (for example, to label an ASR hallucination).
+  @discardableResult
+  public func saveFeedback(
+    sessionID: UUID,
+    correctedTranscript: String,
+    speechCondition: SpeechCondition
+  ) throws -> PersonalizationFeedback {
+    try transaction {
+      let audioPath: String? = try withStatement(
+        "SELECT status, audio_path, retain_audio FROM sessions WHERE id = ?"
+      ) { statement in
+        bind(sessionID.uuidString, at: 1, to: statement)
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+          throw AudioTextError.persistence("unknown feedback session")
+        }
+        guard let status = SessionStatus(rawValue: text(statement, 0)),
+          status != .recording, status != .processing
+        else { throw AudioTextError.persistence("finish transcription before saving feedback") }
+        return sqlite3_column_int(statement, 2) != 0 ? optionalText(statement, 1) : nil
+      }
+      let source = try segments(sessionID: sessionID)
+      guard !source.isEmpty else {
+        throw AudioTextError.persistence("feedback requires a committed transcript")
+      }
+      let feedback = PersonalizationFeedback(
+        sessionID: sessionID,
+        correctedTranscript: correctedTranscript,
+        speechCondition: speechCondition,
+        audioPath: audioPath,
+        sourceSegments: source
+      )
+      let json = String(decoding: try encoder.encode(feedback), as: UTF8.self)
+      try withStatement(
+        "INSERT INTO personalization_feedback (id, session_id, sample_json) VALUES (?, ?, ?)"
+      ) { statement in
+        bind(feedback.id.uuidString, at: 1, to: statement)
+        bind(sessionID.uuidString, at: 2, to: statement)
+        bind(json, at: 3, to: statement)
+        try stepDone(statement)
+      }
+      return feedback
+    }
+  }
+
+  /// Returns every revision in insertion order, optionally restricted to one session.
+  public func feedbackSamples(sessionID: UUID? = nil) throws -> [PersonalizationFeedback] {
+    try withLock {
+      var result: [PersonalizationFeedback] = []
+      try enumerateFeedback(sessionID: sessionID) { result.append($0) }
+      return result
+    }
+  }
+
+  /// Streams the complete local corpus as UTF-8 JSONL; dates use ISO 8601 UTC.
+  /// Audio paths are references only; this does not copy or upload recordings.
+  public func exportFeedback(to url: URL) throws {
+    let temporary = url.deletingLastPathComponent()
+      .appendingPathComponent(".feedback-\(UUID().uuidString).jsonl")
+    guard FileManager.default.createFile(atPath: temporary.path, contents: nil) else {
+      throw AudioTextError.persistence("could not create feedback export")
+    }
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let handle = try FileHandle(forWritingTo: temporary)
+    defer { try? handle.close() }
+    let exportEncoder = JSONEncoder()
+    exportEncoder.dateEncodingStrategy = .iso8601
+    exportEncoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    try withLock {
+      try enumerateFeedback { sample in
+        var line = try exportEncoder.encode(sample)
+        line.append(0x0A)
+        try handle.write(contentsOf: line)
+      }
+    }
+    try handle.synchronize()
+    try handle.close()
+    if FileManager.default.fileExists(atPath: url.path) {
+      _ = try FileManager.default.replaceItemAt(url, withItemAt: temporary)
+    } else {
+      try FileManager.default.moveItem(at: temporary, to: url)
+    }
+  }
+
+  private func enumerateFeedback(
+    sessionID: UUID? = nil,
+    _ visit: (PersonalizationFeedback) throws -> Void
+  ) throws {
+    let filter = sessionID == nil ? "" : " WHERE session_id = ?"
+    try withStatement(
+      "SELECT sample_json FROM personalization_feedback" + filter + " ORDER BY sequence ASC"
+    ) { statement in
+      if let sessionID { bind(sessionID.uuidString, at: 1, to: statement) }
+      while true {
+        switch sqlite3_step(statement) {
+        case SQLITE_ROW:
+          try visit(
+            decoder.decode(PersonalizationFeedback.self, from: Data(text(statement, 0).utf8)))
+        case SQLITE_DONE: return
+        default: throw databaseError()
+        }
+      }
+    }
+  }
+
   private func migrate() throws {
     try execute(
       """
@@ -351,8 +456,24 @@ public final class SessionStore: @unchecked Sendable {
       }
       return text(statement, 0)
     }
-    guard version == "1" else {
+    guard version == "1" || version == "2" else {
       throw AudioTextError.persistence("unsupported schema version \(version)")
+    }
+    if version == "1" {
+      try transaction {
+        try execute(
+          """
+          CREATE TABLE personalization_feedback (
+              sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+              id TEXT NOT NULL UNIQUE,
+              session_id TEXT NOT NULL REFERENCES sessions(id),
+              sample_json TEXT NOT NULL
+          );
+          CREATE INDEX feedback_by_session ON personalization_feedback(session_id, sequence);
+          UPDATE schema_metadata SET value = '2' WHERE key = 'schema_version';
+          """
+        )
+      }
     }
   }
 

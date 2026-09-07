@@ -5,6 +5,7 @@ private enum TranscriptLevel: String, CaseIterable, Identifiable {
   case raw = "Raw Transcript"
   case clean = "Clean Transcript"
   case output = "Polished / Synthesis"
+  case feedback = "Corrections"
 
   var id: String { rawValue }
 }
@@ -74,6 +75,7 @@ struct MainWindow: View {
         )
       }
       .buttonStyle(.borderedProminent)
+      .disabled(controller.isProcessing)
 
       Button("Thinking Session", systemImage: "brain.head.profile") {
         controller.startRecording(mode: .thinkingSession)
@@ -83,9 +85,11 @@ struct MainWindow: View {
       Spacer()
 
       Button("Polish") { controller.polish() }
-        .disabled(controller.cleanTranscript.isEmpty || controller.isProcessing)
+        .disabled(
+          controller.cleanTranscript.isEmpty || controller.isRecording || controller.isProcessing)
       Button("Synthesize") { controller.synthesizeCurrent() }
-        .disabled(controller.cleanTranscript.isEmpty || controller.isProcessing)
+        .disabled(
+          controller.cleanTranscript.isEmpty || controller.isRecording || controller.isProcessing)
       Menu("Outputs") {
         Button("Detailed Notes") { controller.showDetailedNotes() }
         Button("Action List") { controller.showActionList() }
@@ -105,12 +109,16 @@ struct MainWindow: View {
       }
       .pickerStyle(.segmented)
 
-      ScrollView {
-        Text(visibleText.isEmpty ? placeholder : visibleText)
-          .foregroundStyle(visibleText.isEmpty ? .secondary : .primary)
-          .textSelection(.enabled)
-          .frame(maxWidth: .infinity, alignment: .topLeading)
-          .padding(4)
+      if level == .feedback {
+        feedbackEditor
+      } else {
+        ScrollView {
+          Text(visibleText.isEmpty ? placeholder : visibleText)
+            .foregroundStyle(visibleText.isEmpty ? .secondary : .primary)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(4)
+        }
       }
 
       if !controller.partialTranscript.isEmpty {
@@ -141,11 +149,60 @@ struct MainWindow: View {
     .padding(.vertical, 9)
   }
 
+  private var feedbackEditor: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("Correct recognition errors to help build your personal speech dataset.")
+      Text("Raw and Clean transcripts stay unchanged. Saved corrections remain on this Mac.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      if controller.hasFeedbackSource {
+        HStack {
+          Picker("Speech condition", selection: $controller.speechCondition) {
+            ForEach(SpeechCondition.allCases, id: \.self) { condition in
+              Text(condition.rawValue.capitalized).tag(condition)
+            }
+          }
+          .frame(maxWidth: 280)
+          Menu("Saved corrections (\(controller.feedbackSamples.count))") {
+            ForEach(Array(controller.feedbackSamples.reversed())) { sample in
+              Button(
+                "\(sample.createdAt.formatted(date: .abbreviated, time: .standard)) — \(sample.speechCondition.rawValue)"
+              ) { controller.useFeedback(sample) }
+            }
+          }
+          .disabled(controller.feedbackSamples.isEmpty)
+        }
+        .disabled(!controller.canSaveFeedback)
+        TextEditor(text: $controller.correctedTranscript)
+          .font(.body)
+          .accessibilityLabel("Corrected transcript")
+          .disabled(!controller.canSaveFeedback)
+        Text(
+          "Save to keep this revision after quitting. Empty text can mark an incorrect speech detection."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      } else {
+        Text("Finish a transcription or select a recorded session to add a correction.")
+          .foregroundStyle(.secondary)
+        Spacer()
+      }
+      HStack {
+        Button("Save correction") { controller.saveFeedback() }
+          .buttonStyle(.borderedProminent)
+          .disabled(!controller.canSaveFeedback)
+        Spacer()
+        Button("Export all corrections…") { controller.exportFeedback() }
+      }
+    }
+  }
+
   private var visibleText: String {
     switch level {
     case .raw: controller.rawTranscript
     case .clean: controller.cleanTranscript
     case .output: controller.displayedOutput
+    case .feedback: ""
     }
   }
 
@@ -154,6 +211,7 @@ struct MainWindow: View {
     case .raw: "Raw ASR segments will appear here."
     case .clean: "Conservatively cleaned transcript will appear here."
     case .output: "Polished text and synthesis outputs never overwrite source transcripts."
+    case .feedback: ""
     }
   }
 

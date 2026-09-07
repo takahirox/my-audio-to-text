@@ -12,6 +12,10 @@ final class AppController: ObservableObject {
   @Published private(set) var partialTranscript = ""
   @Published private(set) var displayedOutput = ""
   @Published private(set) var synthesis: StructuredSessionModel?
+  @Published var correctedTranscript = ""
+  @Published var speechCondition: SpeechCondition = .unknown
+  @Published private(set) var feedbackSamples: [PersonalizationFeedback] = []
+  @Published private(set) var hasFeedbackSource = false
   @Published private(set) var isRecording = false
   @Published private(set) var isProcessing = false
   @Published private(set) var activeMode: SessionMode?
@@ -26,8 +30,19 @@ final class AppController: ObservableObject {
   private var timeline = TranscriptTimeline()
   private var activeSession: SessionRecord?
   private var hotKey: GlobalHotKey?
+  private var feedbackDrafts: [UUID: (text: String, condition: SpeechCondition)] = [:]
 
-  init() {
+  var canSaveFeedback: Bool {
+    selectedSessionID != nil && hasFeedbackSource && !isRecording && !isProcessing
+  }
+
+  init(store: SessionStore? = nil) {
+    // An injected store allows controller tests without accessing user data or registering hotkeys.
+    if let store {
+      self.store = store
+      refreshSessions()
+      return
+    }
     do {
       let support = try ApplicationPaths.supportDirectory()
       supportDirectory = support
@@ -38,7 +53,7 @@ final class AppController: ObservableObject {
       } else {
         try configuration.save(to: configURL)
       }
-      store = try SessionStore(databaseURL: support.appendingPathComponent("sessions.sqlite3"))
+      self.store = try SessionStore(databaseURL: support.appendingPathComponent("sessions.sqlite3"))
       refreshSessions()
     } catch {
       errorMessage = error.localizedDescription
@@ -68,7 +83,9 @@ final class AppController: ObservableObject {
 
   func startRecording(mode: SessionMode) {
     guard !isRecording, !isProcessing else { return }
+    rememberFeedbackDraft()
     errorMessage = nil
+    isProcessing = true
     Task {
       do {
         guard let store, let supportDirectory else {
@@ -121,15 +138,21 @@ final class AppController: ObservableObject {
         self.partialTranscript = ""
         self.displayedOutput = ""
         self.synthesis = nil
+        self.correctedTranscript = ""
+        self.speechCondition = .unknown
+        self.feedbackSamples = []
+        self.hasFeedbackSource = false
         self.activeSession = session
         self.selectedSessionID = session.id
         self.activeMode = mode
         self.pipeline = pipeline
         self.capture = capture
         self.isRecording = true
+        self.isProcessing = false
         self.message = mode == .quickDictation ? "Listening…" : "Thinking Session recording…"
         refreshSessions()
       } catch {
+        isProcessing = false
         errorMessage = error.localizedDescription
         message = "Could not start recording"
       }
@@ -150,15 +173,19 @@ final class AppController: ObservableObject {
   }
 
   func selectSession(_ id: UUID?) {
-    guard !isRecording, let id, let store else { return }
+    guard !isRecording, !isProcessing, let id, let store else { return }
+    rememberFeedbackDraft()
     do {
       let segments = try store.segments(sessionID: id)
+      let loadedSynthesis = try store.latestSynthesis(sessionID: id)
+      let loadedOutput = try store.outputs(sessionID: id).first?.body
       rawTranscript = segments.map(\.rawText).joined(separator: "\n")
       cleanTranscript = segments.map(\.cleanText).filter { !$0.isEmpty }.joined(separator: "\n")
       partialTranscript = ""
-      synthesis = try store.latestSynthesis(sessionID: id)
-      displayedOutput = try store.outputs(sessionID: id).first?.body ?? cleanTranscript
+      synthesis = loadedSynthesis
+      displayedOutput = loadedOutput ?? cleanTranscript
       selectedSessionID = id
+      try loadFeedback(sessionID: id, hasSource: !segments.isEmpty)
       message = "Loaded session"
     } catch {
       errorMessage = error.localizedDescription
@@ -166,7 +193,9 @@ final class AppController: ObservableObject {
   }
 
   func polish() {
-    guard let selectedSessionID, !cleanTranscript.isEmpty else { return }
+    guard let selectedSessionID, !cleanTranscript.isEmpty, !isRecording, !isProcessing else {
+      return
+    }
     isProcessing = true
     message = "Polishing locally…"
     let configuration = configuration
@@ -191,7 +220,7 @@ final class AppController: ObservableObject {
   }
 
   func synthesizeCurrent() {
-    guard let selectedSessionID, let store else { return }
+    guard let selectedSessionID, let store, !isRecording, !isProcessing else { return }
     isProcessing = true
     message = "Running FULL synthesis locally…"
     let configuration = configuration
@@ -255,6 +284,59 @@ final class AppController: ObservableObject {
     message = "Copied to clipboard"
   }
 
+  func saveFeedback() {
+    guard canSaveFeedback, let selectedSessionID, let store else { return }
+    do {
+      let sample = try store.saveFeedback(
+        sessionID: selectedSessionID,
+        correctedTranscript: correctedTranscript,
+        speechCondition: speechCondition
+      )
+      feedbackSamples.append(sample)
+      rememberFeedbackDraft()
+      message = "Correction saved locally (\(feedbackSamples.count) saved)"
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  func useFeedback(_ sample: PersonalizationFeedback) {
+    guard canSaveFeedback, sample.sessionID == selectedSessionID else { return }
+    correctedTranscript = sample.correctedTranscript
+    speechCondition = sample.speechCondition
+  }
+
+  func exportFeedback() {
+    guard let store else { return }
+    let panel = NSSavePanel()
+    panel.title = "Export personalization feedback"
+    panel.nameFieldStringValue = "personalization-feedback.jsonl"
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+      try store.exportFeedback(to: url)
+      message = "Feedback corpus exported"
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  private func rememberFeedbackDraft() {
+    guard let selectedSessionID, hasFeedbackSource else { return }
+    feedbackDrafts[selectedSessionID] = (correctedTranscript, speechCondition)
+  }
+
+  private func loadFeedback(sessionID: UUID, hasSource: Bool) throws {
+    hasFeedbackSource = false
+    feedbackSamples = []
+    guard let store else { return }
+    feedbackSamples = try store.feedbackSamples(sessionID: sessionID)
+    let draft = feedbackDrafts[sessionID]
+    correctedTranscript =
+      draft?.text ?? feedbackSamples.last?.correctedTranscript ?? cleanTranscript
+    speechCondition = draft?.condition ?? feedbackSamples.last?.speechCondition ?? .unknown
+    hasFeedbackSource = hasSource
+  }
+
   private func acceptCommitted(_ segments: [TranscriptSegment]) {
     do {
       for segment in segments { try timeline.apply(.final(segment)) }
@@ -292,6 +374,8 @@ final class AppController: ObservableObject {
       partialTranscript = ""
       displayedOutput = cleanTranscript
       refreshSessions()
+
+      try loadFeedback(sessionID: session.id, hasSource: !segments.isEmpty)
 
       if !session.retainAudio,
         let parent = captureTemporaryDirectory(for: session.id)

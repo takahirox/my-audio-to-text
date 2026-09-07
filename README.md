@@ -9,6 +9,8 @@ The application implements two workflows:
 
 Raw Transcript, Clean Transcript, Polished Text, and Synthesis are stored as separate information levels. Derived output never overwrites its source, and every substantive synthesis item must reference valid source segment IDs.
 
+After transcription, use **Corrections** to edit recognition errors, label the speech condition, and save local personalization feedback. Each revision preserves its source transcript and can be reloaded or exported as JSONL. See [personalization feedback](docs/PERSONALIZATION.md) for the workflow and corpus API.
+
 ## Requirements
 
 - Apple Silicon Mac running macOS 14 or newer
