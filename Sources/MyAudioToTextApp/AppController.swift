@@ -12,6 +12,9 @@ final class AppController: ObservableObject {
   @Published private(set) var partialTranscript = ""
   @Published private(set) var displayedOutput = ""
   @Published private(set) var synthesis: StructuredSessionModel?
+  @Published var correctionDraft = ""
+  @Published var speechCondition: SpeechCondition = .normal
+  @Published private(set) var hasSavedFeedback = false
   @Published private(set) var isRecording = false
   @Published private(set) var isProcessing = false
   @Published private(set) var activeMode: SessionMode?
@@ -19,6 +22,7 @@ final class AppController: ObservableObject {
   @Published var errorMessage: String?
 
   private var store: SessionStore?
+  private var personalizationStore: PersonalizationStore?
   private var supportDirectory: URL?
   private var configurationURL: URL?
   private var capture: AudioCaptureService?
@@ -39,6 +43,9 @@ final class AppController: ObservableObject {
         try configuration.save(to: configURL)
       }
       store = try SessionStore(databaseURL: support.appendingPathComponent("sessions.sqlite3"))
+      personalizationStore = try PersonalizationStore(
+        databaseURL: support.appendingPathComponent("personalization.sqlite3")
+      )
       refreshSessions()
     } catch {
       errorMessage = error.localizedDescription
@@ -121,6 +128,8 @@ final class AppController: ObservableObject {
         self.partialTranscript = ""
         self.displayedOutput = ""
         self.synthesis = nil
+        self.correctionDraft = ""
+        self.hasSavedFeedback = false
         self.activeSession = session
         self.selectedSessionID = session.id
         self.activeMode = mode
@@ -159,7 +168,34 @@ final class AppController: ObservableObject {
       synthesis = try store.latestSynthesis(sessionID: id)
       displayedOutput = try store.outputs(sessionID: id).first?.body ?? cleanTranscript
       selectedSessionID = id
+      loadFeedbackDraft(sessionID: id)
       message = "Loaded session"
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  func savePersonalizationFeedback() {
+    guard let selectedSessionID, let personalizationStore else { return }
+    let corrected = correctionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !corrected.isEmpty else {
+      errorMessage = "Corrected transcript cannot be empty."
+      return
+    }
+    do {
+      try personalizationStore.save(
+        PersonalizationFeedback(
+          sessionID: selectedSessionID,
+          rawTranscript: rawTranscript,
+          cleanTranscript: cleanTranscript,
+          correctedTranscript: corrected,
+          speechCondition: speechCondition
+        )
+      )
+      hasSavedFeedback = true
+      message = corrected == cleanTranscript
+        ? "Feedback saved for personalization"
+        : "Correction saved for personalization"
     } catch {
       errorMessage = error.localizedDescription
     }
@@ -272,6 +308,8 @@ final class AppController: ObservableObject {
       let segments = try store.segments(sessionID: session.id)
       rawTranscript = segments.map(\.rawText).joined(separator: "\n")
       cleanTranscript = segments.map(\.cleanText).filter { !$0.isEmpty }.joined(separator: "\n")
+      correctionDraft = cleanTranscript
+      hasSavedFeedback = false
       let digest = TranscriptDigest.sha256(cleanTranscript)
       if !cleanTranscript.isEmpty {
         try store.saveOutput(
@@ -312,6 +350,25 @@ final class AppController: ObservableObject {
       }
     } catch {
       completeProcessing(error: error)
+    }
+  }
+
+  private func loadFeedbackDraft(sessionID: UUID) {
+    do {
+      if let feedback = try personalizationStore?.latestFeedback(sessionID: sessionID) {
+        correctionDraft = feedback.correctedTranscript
+        speechCondition = feedback.speechCondition
+        hasSavedFeedback = true
+      } else {
+        correctionDraft = cleanTranscript
+        speechCondition = .normal
+        hasSavedFeedback = false
+      }
+    } catch {
+      correctionDraft = cleanTranscript
+      speechCondition = .normal
+      hasSavedFeedback = false
+      errorMessage = error.localizedDescription
     }
   }
 
