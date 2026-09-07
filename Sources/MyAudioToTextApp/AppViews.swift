@@ -4,6 +4,7 @@ import SwiftUI
 private enum TranscriptLevel: String, CaseIterable, Identifiable {
   case raw = "Raw Transcript"
   case clean = "Clean Transcript"
+  case correction = "Correction"
   case output = "Polished / Synthesis"
 
   var id: String { rawValue }
@@ -105,12 +106,16 @@ struct MainWindow: View {
       }
       .pickerStyle(.segmented)
 
-      ScrollView {
-        Text(visibleText.isEmpty ? placeholder : visibleText)
-          .foregroundStyle(visibleText.isEmpty ? .secondary : .primary)
-          .textSelection(.enabled)
-          .frame(maxWidth: .infinity, alignment: .topLeading)
-          .padding(4)
+      if level == .correction {
+        correctionEditor
+      } else {
+        ScrollView {
+          Text(visibleText.isEmpty ? placeholder : visibleText)
+            .foregroundStyle(visibleText.isEmpty ? .secondary : .primary)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(4)
+        }
       }
 
       if !controller.partialTranscript.isEmpty {
@@ -125,6 +130,46 @@ struct MainWindow: View {
     }
     .padding()
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private var correctionEditor: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text(
+        "Correct recognition mistakes below. The original transcript is preserved; this correction is stored locally as personalization data."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+
+      TextEditor(text: $controller.correctionDraft)
+        .font(.body)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay {
+          RoundedRectangle(cornerRadius: 6)
+            .stroke(.separator, lineWidth: 1)
+        }
+
+      HStack {
+        Picker("Voice", selection: $controller.speechCondition) {
+          ForEach(SpeechCondition.allCases) { condition in
+            Text(condition.displayName).tag(condition)
+          }
+        }
+        .frame(width: 210)
+
+        Spacer()
+
+        if controller.hasSavedFeedback {
+          Label("Saved locally", systemImage: "checkmark.circle")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Button("Save correction for personalization") {
+          controller.savePersonalizationFeedback()
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(controller.selectedSessionID == nil || controller.correctionDraft.isEmpty)
+      }
+    }
   }
 
   private var status: some View {
@@ -145,6 +190,7 @@ struct MainWindow: View {
     switch level {
     case .raw: controller.rawTranscript
     case .clean: controller.cleanTranscript
+    case .correction: controller.correctionDraft
     case .output: controller.displayedOutput
     }
   }
@@ -153,6 +199,7 @@ struct MainWindow: View {
     switch level {
     case .raw: "Raw ASR segments will appear here."
     case .clean: "Conservatively cleaned transcript will appear here."
+    case .correction: "Finish a transcription, then correct recognition mistakes here."
     case .output: "Polished text and synthesis outputs never overwrite source transcripts."
     }
   }
