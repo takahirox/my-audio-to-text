@@ -1,0 +1,239 @@
+{
+  "applicationMillisecondsPerSample" : 0.004842586349695921,
+  "byCondition" : {
+    "normal" : {
+      "appliedCorrections" : 2,
+      "baselineCER" : 0.16831683168316833,
+      "baselineErrors" : 17,
+      "improvedSamples" : 2,
+      "personalizedCER" : 0.07920792079207921,
+      "personalizedErrors" : 8,
+      "referenceCharacters" : 101,
+      "regressedSamples" : 0,
+      "relativeErrorReduction" : 0.5294117647058824,
+      "samples" : 6
+    },
+    "quiet" : {
+      "appliedCorrections" : 3,
+      "baselineCER" : 0.14772727272727273,
+      "baselineErrors" : 13,
+      "improvedSamples" : 3,
+      "personalizedCER" : 0.022727272727272728,
+      "personalizedErrors" : 2,
+      "referenceCharacters" : 88,
+      "regressedSamples" : 0,
+      "relativeErrorReduction" : 0.8461538461538461,
+      "samples" : 6
+    },
+    "whisper" : {
+      "appliedCorrections" : 1,
+      "baselineCER" : 0.09183673469387756,
+      "baselineErrors" : 9,
+      "improvedSamples" : 1,
+      "personalizedCER" : 0.061224489795918366,
+      "personalizedErrors" : 6,
+      "referenceCharacters" : 98,
+      "regressedSamples" : 0,
+      "relativeErrorReduction" : 0.3333333333333333,
+      "samples" : 6
+    }
+  },
+  "memoryBuildMilliseconds" : 0.7916666800156236,
+  "memoryDigest" : "d2e673db8876fbc1089424e56a63124bbf2a2615f3c1da872e9844000fe5fa3e",
+  "memorySessions" : 10,
+  "overall" : {
+    "appliedCorrections" : 6,
+    "baselineCER" : 0.13588850174216027,
+    "baselineErrors" : 39,
+    "improvedSamples" : 6,
+    "personalizedCER" : 0.05574912891986063,
+    "personalizedErrors" : 16,
+    "referenceCharacters" : 287,
+    "regressedSamples" : 0,
+    "relativeErrorReduction" : 0.5897435897435898,
+    "samples" : 18
+  },
+  "predictions" : [
+    {
+      "appliedRuleIDs" : [
+        "31ab3ab1011febc3dc63cf3ccec134934a97b807bb49b604b318b5fccda98e82"
+      ],
+      "baseline" : "新しい処理は音声任式を使います",
+      "condition" : "quiet",
+      "personalized" : "新しい処理は音声認識を使います",
+      "reference" : "新しい処理は音声認識を使います",
+      "sessionID" : "043C87B6-8CCA-5630-8529-7328D035BF89"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "音声認識の仕組みを調べます",
+      "condition" : "normal",
+      "personalized" : "音声認識の仕組みを調べます",
+      "reference" : "音声認識の仕組みを調べます",
+      "sessionID" : "2683E468-9894-5F27-97B9-49661898233C"
+    },
+    {
+      "appliedRuleIDs" : [
+        "8433b747c909b3f348d19ff5e69510fb4d3729f31687b50f184f11dfc6099d2d"
+      ],
+      "baseline" : "それはオープン英愛のモデルかもしれない",
+      "condition" : "normal",
+      "personalized" : "それはOpenAIのモデルかもしれない",
+      "reference" : "それはOpenAIのモデルかもしれない",
+      "sessionID" : "476BE5C8-A2AF-5F26-A90D-3F6AEB9DFC6E"
+    },
+    {
+      "appliedRuleIDs" : [
+        "c162d9b8feccf30c6e1b792efd5193d3f9f9c8be63630ae9a32fc1440a7463e1"
+      ],
+      "baseline" : "今回は今日と市に向かうつもりです",
+      "condition" : "quiet",
+      "personalized" : "今回は京都市に向かうつもりです",
+      "reference" : "今回は京都市に向かうつもりです",
+      "sessionID" : "582161F9-4D1B-511F-85A3-F0BB304A2108"
+    },
+    {
+      "appliedRuleIDs" : [
+        "8433b747c909b3f348d19ff5e69510fb4d3729f31687b50f184f11dfc6099d2d"
+      ],
+      "baseline" : "それはオープン英愛のモデルでしょう",
+      "condition" : "quiet",
+      "personalized" : "それはOpenAIのモデルでしょう",
+      "reference" : "それはOpenAIのモデルでしょう",
+      "sessionID" : "69B47AF8-D381-5BC0-AE3C-3C2A00035E31"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "それはオープン英愛という架空の名前です",
+      "condition" : "whisper",
+      "personalized" : "それはオープン英愛という架空の名前です",
+      "reference" : "それはオープン英愛という架空の名前です",
+      "sessionID" : "6BAABF57-E253-5CE2-A674-44E4FED1955A"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "今回は今日と明日の予定を確認します",
+      "condition" : "whisper",
+      "personalized" : "今回は今日と明日の予定を確認します",
+      "reference" : "今回は今日と明日の予定を確認します",
+      "sessionID" : "7E56D061-48EC-586C-B59C-069981CA80D6"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "次はニューラルネットわくを試しましょう",
+      "condition" : "normal",
+      "personalized" : "次はニューラルネットわくを試しましょう",
+      "reference" : "次はニューラルネットワークを試しましょう",
+      "sessionID" : "86361C12-A3E7-5603-BB65-B5B40A988EC7"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "昨日はGPTソールについて話しました",
+      "condition" : "normal",
+      "personalized" : "昨日はGPTソールについて話しました",
+      "reference" : "昨日はGPT Solについて話しました",
+      "sessionID" : "89442C9B-1A39-5A83-90FC-16A418DA83B3"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "今日はGPT Solを使います",
+      "condition" : "quiet",
+      "personalized" : "今日はGPT Solを使います",
+      "reference" : "今日はGPT Solを使います",
+      "sessionID" : "92A245AC-5C9D-54DA-B065-2F14BDC3C8EC"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "古い処理は音声任式を使い続けます",
+      "condition" : "normal",
+      "personalized" : "古い処理は音声任式を使い続けます",
+      "reference" : "古い処理は音声認識を使い続けます",
+      "sessionID" : "9F5BC361-4F8C-585B-A95F-31A1EB8A6600"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "静かな部屋で録音します",
+      "condition" : "whisper",
+      "personalized" : "静かな部屋で録音します",
+      "reference" : "静かな部屋で録音します",
+      "sessionID" : "A6E3C2E1-E995-5AD7-AD6C-88F6B5E753DC"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "今日は靴のソールを洗います",
+      "condition" : "quiet",
+      "personalized" : "今日は靴のソールを洗います",
+      "reference" : "今日は靴のソールを洗います",
+      "sessionID" : "BDB67248-93B6-5888-BEBA-CDB3AC3742A3"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "この処理は音声任式で動きます",
+      "condition" : "quiet",
+      "personalized" : "この処理は音声任式で動きます",
+      "reference" : "この処理は音声認識で動きます",
+      "sessionID" : "C24668C7-96BD-56B2-9807-410F793CD576"
+    },
+    {
+      "appliedRuleIDs" : [
+        "c162d9b8feccf30c6e1b792efd5193d3f9f9c8be63630ae9a32fc1440a7463e1"
+      ],
+      "baseline" : "今回は今日と市に向かいますよ",
+      "condition" : "whisper",
+      "personalized" : "今回は京都市に向かいますよ",
+      "reference" : "今回は京都市に向かいますよ",
+      "sessionID" : "C6DE71FC-DECD-5612-A9E6-6784963D91F6"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "今週はGPTソールを使い始めます",
+      "condition" : "whisper",
+      "personalized" : "今週はGPTソールを使い始めます",
+      "reference" : "今週はGPT Solを使い始めます",
+      "sessionID" : "CBB403C3-62F9-59DB-BD87-9B7639066C2D"
+    },
+    {
+      "appliedRuleIDs" : [
+
+      ],
+      "baseline" : "次はニューラルネットわくを試したことがある",
+      "condition" : "whisper",
+      "personalized" : "次はニューラルネットわくを試したことがある",
+      "reference" : "次はニューラルネットワークを試したことがある",
+      "sessionID" : "D9193BB1-1788-57B2-A072-D9786109C1AC"
+    },
+    {
+      "appliedRuleIDs" : [
+        "e749814b4bf69251634b6aeb6209fc5d974d91da01fb9bc366205d459ba9065e"
+      ],
+      "baseline" : "今夜はGPTソールを使いますよ",
+      "condition" : "normal",
+      "personalized" : "今夜はGPT Solを使いますよ",
+      "reference" : "今夜はGPT Solを使いますよ",
+      "sessionID" : "FD3CDB10-27BD-55C0-BEDD-F7865585429B"
+    }
+  ],
+  "ruleCount" : 4
+}

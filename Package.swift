@@ -7,10 +7,12 @@ let package = Package(
   products: [
     .library(name: "AudioTextCore", targets: ["AudioTextCore"]),
     .executable(name: "MyAudioToText", targets: ["MyAudioToTextApp"]),
+    .executable(name: "PersonalizationEval", targets: ["PersonalizationEval"]),
   ],
   targets: [
     .systemLibrary(name: "CSQLite"),
     .target(name: "AudioTextCore", dependencies: ["CSQLite"]),
+    .executableTarget(name: "PersonalizationEval", dependencies: ["AudioTextCore"]),
     .executableTarget(
       name: "MyAudioToTextApp",
       dependencies: ["AudioTextCore"],

@@ -141,6 +141,7 @@ final class PersonalizationFeedbackTests: XCTestCase {
       sqlite3_exec(
         database,
         """
+        DROP TABLE personalization_runs;
         DROP TABLE personalization_feedback;
         UPDATE schema_metadata SET value = '1' WHERE key = 'schema_version';
         """, nil, nil, nil), SQLITE_OK)

@@ -9,6 +9,8 @@ final class AppController: ObservableObject {
   @Published var selectedSessionID: UUID?
   @Published private(set) var rawTranscript = ""
   @Published private(set) var cleanTranscript = ""
+  @Published private(set) var personalizationRun: PersonalizationRun?
+  var personalizedTranscript: String { personalizationRun?.transcript ?? cleanTranscript }
   @Published private(set) var partialTranscript = ""
   @Published private(set) var displayedOutput = ""
   @Published private(set) var synthesis: StructuredSessionModel?
@@ -110,7 +112,9 @@ final class AppController: ObservableObject {
         let pipeline = TranscriptionPipeline(
           backend: backend,
           store: store,
-          sessionID: sessionID
+          sessionID: sessionID,
+          memory: configuration.personalizationEnabled
+            ? try store.personalizationMemory(excludingSessionIDs: [sessionID]) : nil
         )
         pipeline.onPartial = { [weak self] value in
           Task { @MainActor in self?.partialTranscript = value }
@@ -135,6 +139,7 @@ final class AppController: ObservableObject {
         self.timeline = TranscriptTimeline()
         self.rawTranscript = ""
         self.cleanTranscript = ""
+        self.personalizationRun = nil
         self.partialTranscript = ""
         self.displayedOutput = ""
         self.synthesis = nil
@@ -179,8 +184,10 @@ final class AppController: ObservableObject {
       let segments = try store.segments(sessionID: id)
       let loadedSynthesis = try store.latestSynthesis(sessionID: id)
       let loadedOutput = try store.outputs(sessionID: id).first?.body
+      let loadedPersonalization = try store.latestPersonalizationRun(sessionID: id)
       rawTranscript = segments.map(\.rawText).joined(separator: "\n")
       cleanTranscript = segments.map(\.cleanText).filter { !$0.isEmpty }.joined(separator: "\n")
+      personalizationRun = loadedPersonalization
       partialTranscript = ""
       synthesis = loadedSynthesis
       displayedOutput = loadedOutput ?? cleanTranscript
@@ -284,6 +291,11 @@ final class AppController: ObservableObject {
     message = "Copied to clipboard"
   }
 
+  func copyTranscript(_ text: String) {
+    TextInserter.copy(text)
+    message = "Copied to clipboard"
+  }
+
   func saveFeedback() {
     guard canSaveFeedback, let selectedSessionID, let store else { return }
     do {
@@ -332,7 +344,7 @@ final class AppController: ObservableObject {
     feedbackSamples = try store.feedbackSamples(sessionID: sessionID)
     let draft = feedbackDrafts[sessionID]
     correctedTranscript =
-      draft?.text ?? feedbackSamples.last?.correctedTranscript ?? cleanTranscript
+      draft?.text ?? feedbackSamples.last?.correctedTranscript ?? personalizedTranscript
     speechCondition = draft?.condition ?? feedbackSamples.last?.speechCondition ?? .unknown
     hasFeedbackSource = hasSource
   }
@@ -354,6 +366,7 @@ final class AppController: ObservableObject {
       let segments = try store.segments(sessionID: session.id)
       rawTranscript = segments.map(\.rawText).joined(separator: "\n")
       cleanTranscript = segments.map(\.cleanText).filter { !$0.isEmpty }.joined(separator: "\n")
+      personalizationRun = try store.latestPersonalizationRun(sessionID: session.id)
       let digest = TranscriptDigest.sha256(cleanTranscript)
       if !cleanTranscript.isEmpty {
         try store.saveOutput(
@@ -388,7 +401,7 @@ final class AppController: ObservableObject {
         return
       }
       if session.mode == .quickDictation {
-        let result = TextInserter.insertOrCopy(cleanTranscript)
+        let result = TextInserter.insertOrCopy(personalizedTranscript)
         message = result == .pasted ? "Inserted into the focused app" : "Copied to clipboard"
       } else {
         message = "Transcript complete; ready for FULL synthesis"

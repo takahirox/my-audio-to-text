@@ -4,7 +4,7 @@ After finishing Quick Dictation or a Thinking Session, open **Corrections**. Rev
 
 Every save appends a revision. The latest saved correction loads when selecting a session after restarting; **Saved corrections** also loads earlier revisions into the editor. Unsaved drafts survive switching sessions during the current app run, but must be saved before quitting. Interrupted or failed sessions with committed segments can also receive feedback; recording/processing sessions cannot.
 
-Feedback is local to this installation in `sessions.sqlite3`, in a dedicated `personalization_feedback` table. Schema version 2 adds this table transactionally when opening an existing version 1 database. Raw/Clean segments, synthesis, and polished output remain unchanged. Saving does not train a model or change subsequent recognition yet.
+Feedback is local to this installation in `sessions.sqlite3`, in a dedicated `personalization_feedback` table. Schema version 2 adds this table transactionally when opening an existing version 1 database; version 3 adds separate personalization run audits. Raw/Clean segments, synthesis, and polished output remain unchanged. Saving does not train a model. When [correction memory](issue-6/README.md) is enabled, saved feedback can influence subsequent recordings.
 
 ## Corpus and export
 

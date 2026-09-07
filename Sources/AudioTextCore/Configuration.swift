@@ -11,6 +11,12 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
   public var partialIntervalSeconds: Double
   public var synthesisContextTokens: Int
   public var synthesisOutputTokens: Int
+  // Optional storage keeps config.json files from older versions decodable.
+  private var personalization: Bool?
+  public var personalizationEnabled: Bool {
+    get { personalization ?? false }
+    set { personalization = newValue ? true : nil }
+  }
 
   public init(
     whisperExecutable: String = "/opt/homebrew/bin/whisper-cli",
@@ -22,7 +28,8 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
     chunkSeconds: Double = 8,
     partialIntervalSeconds: Double = 2,
     synthesisContextTokens: Int = 16_384,
-    synthesisOutputTokens: Int = 2_048
+    synthesisOutputTokens: Int = 2_048,
+    personalizationEnabled: Bool = false
   ) {
     self.whisperExecutable = whisperExecutable
     self.whisperModel = whisperModel
@@ -34,6 +41,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
     self.partialIntervalSeconds = partialIntervalSeconds
     self.synthesisContextTokens = synthesisContextTokens
     self.synthesisOutputTokens = synthesisOutputTokens
+    self.personalization = personalizationEnabled ? true : nil
   }
 
   public static func load(from url: URL) throws -> AppConfiguration {

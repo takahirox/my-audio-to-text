@@ -1,7 +1,20 @@
 import AudioTextCore
+import Foundation
 import XCTest
 
 final class ConfigurationTests: XCTestCase {
+  func testLegacyConfigurationDefaultsOffAndPersonalizationRoundTrips() throws {
+    let legacy = try JSONEncoder().encode(AppConfiguration())
+    XCTAssertFalse(
+      try JSONDecoder().decode(AppConfiguration.self, from: legacy).personalizationEnabled)
+    var enabled = AppConfiguration()
+    enabled.personalizationEnabled = true
+    let data = try JSONEncoder().encode(enabled)
+    XCTAssertTrue(
+      try JSONDecoder().decode(AppConfiguration.self, from: data).personalizationEnabled)
+    enabled.personalizationEnabled = false
+    XCTAssertEqual(enabled, AppConfiguration())
+  }
   func testRejectsUnsafeCaptureIntervalsBeforeCheckingExecutables() {
     var configuration = AppConfiguration()
     configuration.chunkSeconds = 0

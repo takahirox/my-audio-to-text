@@ -396,6 +396,49 @@ public final class SessionStore: @unchecked Sendable {
     }
   }
 
+  public func personalizationMemory(excludingSessionIDs: Set<UUID> = []) throws
+    -> PersonalizationMemory
+  {
+    PersonalizationMemory(samples: try feedbackSamples(), excludingSessionIDs: excludingSessionIDs)
+  }
+
+  /// Called after all final ASR segments commit. Baseline/source tables are never updated.
+  @discardableResult
+  public func savePersonalizationRun(
+    sessionID: UUID, memory: PersonalizationMemory?
+  ) throws -> PersonalizationRun {
+    try transaction {
+      let run = PersonalizationRun(
+        sessionID: sessionID, source: try segments(sessionID: sessionID), memory: memory)
+      let json = String(decoding: try encoder.encode(run), as: UTF8.self)
+      try withStatement(
+        "INSERT INTO personalization_runs (id, session_id, run_json) VALUES (?, ?, ?)"
+      ) { statement in
+        bind(run.id.uuidString, at: 1, to: statement)
+        bind(sessionID.uuidString, at: 2, to: statement)
+        bind(json, at: 3, to: statement)
+        try stepDone(statement)
+      }
+      return run
+    }
+  }
+
+  public func latestPersonalizationRun(sessionID: UUID) throws -> PersonalizationRun? {
+    try withLock {
+      try withStatement(
+        "SELECT run_json FROM personalization_runs WHERE session_id = ? ORDER BY sequence DESC LIMIT 1"
+      ) { statement in
+        bind(sessionID.uuidString, at: 1, to: statement)
+        switch sqlite3_step(statement) {
+        case SQLITE_ROW:
+          return try decoder.decode(PersonalizationRun.self, from: Data(text(statement, 0).utf8))
+        case SQLITE_DONE: return nil
+        default: throw databaseError()
+        }
+      }
+    }
+  }
+
   private func migrate() throws {
     try execute(
       """
@@ -456,7 +499,7 @@ public final class SessionStore: @unchecked Sendable {
       }
       return text(statement, 0)
     }
-    guard version == "1" || version == "2" else {
+    guard ["1", "2", "3"].contains(version) else {
       throw AudioTextError.persistence("unsupported schema version \(version)")
     }
     if version == "1" {
@@ -471,6 +514,23 @@ public final class SessionStore: @unchecked Sendable {
           );
           CREATE INDEX feedback_by_session ON personalization_feedback(session_id, sequence);
           UPDATE schema_metadata SET value = '2' WHERE key = 'schema_version';
+          """
+        )
+      }
+    }
+    if version != "3" {
+      try transaction {
+        try execute(
+          """
+          CREATE TABLE IF NOT EXISTS personalization_runs (
+              sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+              id TEXT NOT NULL UNIQUE,
+              session_id TEXT NOT NULL REFERENCES sessions(id),
+              run_json TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS personalization_runs_by_session
+              ON personalization_runs(session_id, sequence);
+          UPDATE schema_metadata SET value = '3' WHERE key = 'schema_version';
           """
         )
       }

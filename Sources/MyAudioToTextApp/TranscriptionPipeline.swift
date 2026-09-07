@@ -5,6 +5,7 @@ final class TranscriptionPipeline: @unchecked Sendable {
   private let backend: any TranscriptionBackend
   private let store: SessionStore
   private let sessionID: UUID
+  private let memory: PersonalizationMemory?
   private let queue = DispatchQueue(label: "my-audio-to-text.asr", qos: .userInitiated)
   private let group = DispatchGroup()
   private let lock = NSLock()
@@ -15,10 +16,14 @@ final class TranscriptionPipeline: @unchecked Sendable {
   var onFinal: (@Sendable ([TranscriptSegment]) -> Void)?
   var onWarning: (@Sendable (Error) -> Void)?
 
-  init(backend: any TranscriptionBackend, store: SessionStore, sessionID: UUID) {
+  init(
+    backend: any TranscriptionBackend, store: SessionStore, sessionID: UUID,
+    memory: PersonalizationMemory? = nil
+  ) {
     self.backend = backend
     self.store = store
     self.sessionID = sessionID
+    self.memory = memory
   }
 
   func enqueuePartial(_ chunk: AudioChunk) {
@@ -98,8 +103,13 @@ final class TranscriptionPipeline: @unchecked Sendable {
   func finish(_ completion: @escaping @Sendable ([Error]) -> Void) {
     group.notify(queue: queue) { [self] in
       lock.lock()
-      let errors = finalErrors
+      var errors = finalErrors
       lock.unlock()
+      do {
+        try store.savePersonalizationRun(sessionID: sessionID, memory: memory)
+      } catch {
+        errors.append(error)
+      }
       completion(errors)
     }
   }
