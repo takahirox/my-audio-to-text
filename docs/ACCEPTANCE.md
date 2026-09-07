@@ -17,6 +17,7 @@ This builds both debug and release configurations without network access and ver
 - feedback revision persistence across restarts, source immutability, version 1 database migration, speech conditions, retained-audio references, and complete JSONL export;
 - context-matched correction memory, independent-session support, conflict/ambiguity abstention, version 2 database migration, audited personalized runs, and enabled/disabled ASR pipeline behavior;
 - reproducible baseline/personalized CER evaluation with per-condition results and session-overlap rejection;
+- real-audio manifest/audio integrity, session/prompt/PCM leakage checks, Raw/Clean separation, explicit incomplete runs, adapted-result import, and nested group learning curves through the real Swift ASR bridge with a generated non-speech fixture;
 - parsing the current whisper.cpp full JSON shape, offsets, confidence, and empty segments;
 - FULL synthesis behavior, revisions, context overflow refusal, and evidence validation;
 - regeneration of Markdown, JSON, and action outputs from one source model.

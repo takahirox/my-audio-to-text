@@ -8,11 +8,13 @@ let package = Package(
     .library(name: "AudioTextCore", targets: ["AudioTextCore"]),
     .executable(name: "MyAudioToText", targets: ["MyAudioToTextApp"]),
     .executable(name: "PersonalizationEval", targets: ["PersonalizationEval"]),
+    .executable(name: "AudioBenchmarkBridge", targets: ["AudioBenchmarkBridge"]),
   ],
   targets: [
     .systemLibrary(name: "CSQLite"),
     .target(name: "AudioTextCore", dependencies: ["CSQLite"]),
     .executableTarget(name: "PersonalizationEval", dependencies: ["AudioTextCore"]),
+    .executableTarget(name: "AudioBenchmarkBridge", dependencies: ["AudioTextCore"]),
     .executableTarget(
       name: "MyAudioToTextApp",
       dependencies: ["AudioTextCore"],
