@@ -13,6 +13,8 @@ After transcription, use **Corrections** to edit recognition errors, label the s
 
 Enable **Settings → Personalization** to use recurring, context-matched corrections in future dictation. The **Personalized** tab shows the result and applied corrections; Raw/Clean remain available for comparison. See [correction memory and evaluation](docs/issue-6/README.md) and the [measured synthetic-data report](docs/issue-6/EVALUATION.md).
 
+For real recorded speech, the [local audio benchmark](docs/issue-9/README.md) imports immutable datasets, runs the current ASR, reports Raw/Clean CER, and compares contextual or future adapted systems on the same held-out audio. It includes leakage checks, failure reporting, and nested learning curves. Private datasets and reports belong in the ignored `local-benchmarks/` directory.
+
 ## Requirements
 
 - Apple Silicon Mac running macOS 14 or newer
