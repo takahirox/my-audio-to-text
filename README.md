@@ -8,7 +8,9 @@ Speech input should work well for the person using it, including their language,
 
 This repository is a minimal product and vision baseline, ready for a new design from first principles. The previous macOS prototype, experiments, evaluation harnesses, and implementation documents have been removed from the active tree. All previous work remains recoverable from Git history.
 
-There is no application implementation in this baseline. Backward compatibility with the prototype's APIs, storage, configuration, architecture, or platform behavior is not a requirement. Web implementation will begin in separate follow-up issues.
+There is no production application implementation in this baseline. The disposable [browser Speech-to-Text playground](docs/asr-manual-testing.md) compares Moonshine Voice, sherpa-onnx/ReazonSpeech, and Whisper for Japanese manual testing. No production backend is selected. Backward compatibility with the prototype's APIs, storage, configuration, architecture, or platform behavior is not a requirement.
+
+The intended playground URL is [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/). Publication and real-device validation remain pending in [#17](https://github.com/takahirox/my-audio-to-text/issues/17). See the playground instructions for local setup, deployment, model limitations, and the manual-results template.
 
 ## Vision
 
