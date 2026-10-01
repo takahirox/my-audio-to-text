@@ -41,7 +41,7 @@ Live validation recorded on October 2, 2026 (JST; check times below use UTC):
 | Actual mobile browser | **Pending — requires physical-device evidence.** No device model, browser/version, check time, or rendering result at the canonical published URL has been recorded. This revision environment has no actual mobile-browser access; desktop viewport emulation cannot complete this check. |
 | Subsequent reviewed change and automatic redeployment | **Pending — requires review and merge.** [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) proposes `The Web playground is deployed. Placeholder revision 2.` in `web/index.html`. The revision is not on `main`; its deployed commit, successful automatic Pages run URL, and browser result showing the changed text remain unrecorded. |
 
-Follow-up checks at `2026-10-01T16:04:48Z` confirmed that the canonical URL
+Follow-up checks at `2026-10-01T16:12:24Z` confirmed that the canonical URL
 still returns HTTPS **200** with successful TLS certificate verification and
 serves `The Web playground is deployed.` without the revision 2 text. GitHub
 still reports `main` at `d3a600c76c8dc0bb11d91e440073ecec2e227bbb` and only
@@ -49,20 +49,29 @@ the initial successful `push` run linked above. PR #19 is open and unmerged;
 Issue #17 is open and has no comments supplying the missing mobile evidence.
 These checks do not complete either pending acceptance criterion.
 
-To finish Issue #17:
+Complete Issue #17 in two stages, following the
+[partial-work rule](docs/development-flow.md#implement-and-propose-a-pull-request)
+and [merge criteria](docs/review-guidelines.md#merge-criteria):
 
-1. Open the published URL on an actual phone or tablet and record the device
-   model, browser/version, check time, and rendered text/result.
-2. Review and merge the placeholder revision into `main`. Record the resulting
-   deployed commit SHA and successful automatic Pages run URL (`push` event).
+1. Review PR #19 as **intentional partial work**: it records the initial
+   deployment and prepares the small placeholder revision needed for the
+   subsequent deployment check. Its description must link Issue #17 without
+   a closing keyword and identify the two pending live checks. Once this partial
+   scope passes review, it can be marked ready and merged into `main` while
+   Issue #17 stays open. The checks that require this merge are follow-up work,
+   not prerequisites for taking this partial PR out of draft.
+2. After that reviewed merge, record the resulting deployed commit SHA and
+   successful automatic Pages run URL (`push` event).
 3. Reload the same public URL in a browser and confirm the full revision 2 text
    above appears. Pages responses can be cached for ten minutes; recheck after
    cache expiry if the previous text is still served. Record the browser/version,
    check time, and changed text actually seen.
-4. Update this validation record with that evidence before closing Issue #17.
-   Keep PR #19 as a draft described as partial work until all five checks have
-   recorded evidence, following
-   the [development flow](docs/development-flow.md#implement-and-propose-a-pull-request).
+4. Open the published URL on an actual phone or tablet and record the device
+   model, browser/version, check time with timezone, and rendered text/result.
+   This check can also be recorded before the partial merge; it still requires
+   access to the published URL on a real device.
+5. Submit a follow-up evidence update to this README for review. Close Issue #17
+   only after all five live checks have recorded evidence.
 
 The initial screenshot records the previously published text. Local rendering
 of revision 2 does not establish its publication. All five live checks are
