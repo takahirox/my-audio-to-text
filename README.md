@@ -12,43 +12,32 @@ There is no production application implementation in this baseline. The disposab
 
 ## Web playground
 
-Target public URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
+Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
 
-The playground replaces the static placeholder from [#15](https://github.com/takahirox/my-audio-to-text/issues/15)
-with three disposable ASR PoCs for [#18](https://github.com/takahirox/my-audio-to-text/issues/18).
-Publication of the three ASR candidates and real-device validation are explicitly split into
-[#21](https://github.com/takahirox/my-audio-to-text/issues/21); #18 remains open pending that
-acceptance evidence. [#17](https://github.com/takahirox/my-audio-to-text/issues/17) covers only
-publication and validation of the earlier static placeholder from #15.
-See the [manual-testing instructions](docs/asr-manual-testing.md) for local setup,
-model limitations, and the manual-results template.
+[PR #20](https://github.com/takahirox/my-audio-to-text/pull/20) prepares three disposable ASR PoCs for [Issue #18](https://github.com/takahirox/my-audio-to-text/issues/18). The page compares Moonshine Voice, sherpa-onnx/ReazonSpeech, and Whisper without selecting a production backend. See the [manual-testing instructions](docs/asr-manual-testing.md) for model limitations, local setup, and the results template.
 
-The [Pages workflow](.github/workflows/pages.yml) prepares pinned runtime assets
-and deploys the contents of `web/`
-after every push or merge to `main`. It can also be run manually from the Actions
-tab with a reviewed branch selected and allowed by the `github-pages` environment.
-For #18, [publish the PR branch and record human acceptance before merge](docs/asr-manual-testing.md#publish-for-acceptance-before-merge).
-Inference runs in the browser; no ASR server is required.
+Publish the reviewed PR branch and record human acceptance **before merge**, as tracked in [Issue #21](https://github.com/takahirox/my-audio-to-text/issues/21) and [the acceptance record](docs/asr-acceptance.md). Keep PR #20 draft and Issues #18/#21 open while required evidence is missing. Wait for human results rather than repeating an AI review/fix loop.
 
-For repository setup, select **Settings → Pages → Build and deployment → Source →
-GitHub Actions**. Deployment uses the `github-pages` environment and the built-in
-`GITHUB_TOKEN`; no additional secret is needed. The deployment's environment URL
-in Actions reports the canonical Pages URL.
+The [Pages workflow](.github/workflows/pages.yml) prepares pinned runtime assets and deploys `web/` automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. The ASR deployment replaces the static placeholder. Inference runs in the browser; models download from third-party hosts and may use hundreds of MB. No ASR server is required.
 
-Outstanding live validation tracked in Issue #17:
+For setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the `github-pages` environment and built-in `GITHUB_TOKEN`.
 
-- [ ] Confirm the Pages workflow succeeds on `main`.
-- [ ] Confirm the public URL is reachable over HTTPS.
-- [ ] Confirm the published playground renders in a desktop browser.
-- [ ] Open the same published URL from a mobile browser; local mobile viewport
-  emulation does not verify live mobile access.
-- [ ] After a subsequent change to `web/index.html` reaches `main`, confirm the
-  next deployment succeeds and the updated content appears at the same URL.
+### Completed static-placeholder validation (#17)
 
-Record both deployment run URLs and commit SHAs, the HTTPS result, desktop and
-mobile browser/device details, and the updated content seen after redeployment
-in Issue #17 before closing that follow-up. Local rendering and mobile viewport
-emulation do not complete these live checks.
+[Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17) is completed. Its static-placeholder validation is separate from ASR acceptance: Pixel 7a / Chrome displaying placeholder text does not establish model loading, microphone capture, or recognition for Issue #18. The table below preserves the verified placeholder results; publishing the ASR branch supersedes the placeholder content without invalidating that historical evidence.
+
+Validation evidence recorded on October 2, 2026 (JST; evidence timestamps use UTC):
+
+| Issue #17 acceptance check | Result and evidence |
+| --- | --- |
+| Initial Pages workflow on `main` | **Passed.** [Run 36886759434](https://github.com/takahirox/my-audio-to-text/actions/runs/36886759434), event `push`, succeeded at `2026-10-01T15:45:54Z` for commit `d3a600c76c8dc0bb11d91e440073ecec2e227bbb`. |
+| Canonical public URL over HTTPS | **Passed.** HTTP 200 with normal TLS certificate verification. The initial check was at `2026-10-01T15:53:40Z`; [post-merge evidence](docs/evidence/pages-redeployment.md) confirms revision 2 at the same URL. |
+| Published placeholder in a desktop browser | **Passed.** Chrome `154.0.8037.58` on macOS rendered the initial page at `2026-10-01T15:55:59Z` ([historical screenshot](docs/evidence/pages-desktop-initial.png)). A fresh isolated headless desktop check also rendered revision 2 ([evidence and screenshot](docs/evidence/pages-redeployment.md)). Neither check claims physical-mobile validation. |
+| Actual mobile browser | **Passed — user-reported physical-device check.** Pixel 7a with Chrome rendered `my-audio-to-text` and `The Web playground is deployed. Placeholder revision 2.` at the canonical URL. The report was recorded at `2026-10-01T22:01:26.247000+00:00` (UTC; October 2, 2026 JST). Browser version was not supplied. See [mobile evidence](docs/evidence/pages-redeployment.md#actual-mobile-browser). |
+| Subsequent reviewed change and automatic redeployment | **Passed.** PR #19 merged as `28f0badabb1834a1a8fe15dc248aaeebbb393412`. Automatic [push run 36931736950](https://github.com/takahirox/my-audio-to-text/actions/runs/36931736950) succeeded. The canonical URL rendered `The Web playground is deployed. Placeholder revision 2.`; see [the recorded browser check](docs/evidence/pages-redeployment.md). |
+
+
+[PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) supplied the reviewed placeholder revision; [PR #22](https://github.com/takahirox/my-audio-to-text/pull/22) recorded its successful automatic redeployment, desktop screenshot, and user-reported physical-mobile result. The [redeployment evidence](docs/evidence/pages-redeployment.md) and [original partial PR description](docs/evidence/pages-validation-pr.md) retain those historical checks.
 
 ## Vision
 

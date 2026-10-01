@@ -1,12 +1,29 @@
 # Issue #18 publication and device acceptance status
 
 PR #20 remains partial work until the required human test results exist.
-The reviewed PR commit is now published over HTTPS; publication and automated checks do
-not establish physical-device compatibility or human recognition quality.
+The earlier ASR deployment was superseded by the completed #17 placeholder validation. This branch now incorporates that main evidence and prepares a fresh reviewed ASR deployment. Publication and automated checks do not establish physical-device compatibility or human recognition quality.
 
-## Verified publication (2026-10-02 JST)
+## Current branch preparation (2026-10-01T22:10:11.892Z)
 
-- HTTPS URL: https://takahirox.github.io/my-audio-to-text/ now serves
+Latest `main` was merged into the PR branch, retaining all completed Issue #17 placeholder evidence. README and page conflicts were resolved in favor of the ASR interface with a separate historical #17 evidence section. The browser's instructions link points to this reviewed PR branch so it is available before merge.
+
+Checks passed: four audio tests; ten Chromium/WebKit lifecycle tests. Six opt-in real-inference tests were skipped without a supplied Japanese WAV. Pinned Moonshine and sherpa asset checksums and staging passed.
+
+A separate automated Chromium check loaded the **real** models through the actual page and reached Ready for all three backends:
+
+| Backend | Model loading | Initialization in this run | Browser/runtime errors |
+| --- | --- | --- | --- |
+| moonshine | Ready | 8.83 s | None |
+| sherpa | Ready | 1.10 s | None |
+| whisper | Ready | 6.92 s | None |
+
+These durations include this desktop environment's loading conditions and are not mobile performance measurements. Model loading does not verify real microphone capture, Japanese recognition, or physical-device compatibility. Pixel 7a / Chrome is available to the operator; ASR acceptance on it is still not recorded. Human desktop and physical iPhone results also remain pending. Keep PR #20 draft and Issues #18/#21 open; wait for human results instead of repeating an AI review/fix loop.
+
+A fresh reviewed-branch deployment will replace the temporary placeholder currently on Pages. Record the new run and deployed SHA after publication below.
+
+## Historical publication (2026-10-02 JST)
+
+- At the historical check time, https://takahirox.github.io/my-audio-to-text/ served
   **Japanese Speech-to-Text playground** with Moonshine Voice, sherpa-onnx/ReazonSpeech,
   and Whisper in its selector.
 - Pages run [36894283644](https://github.com/takahirox/my-audio-to-text/actions/runs/36894283644)
@@ -41,7 +58,7 @@ errors using the [manual results template](asr-manual-testing.md#results-to-carr
 | Three-backend HTTPS deployment: run URL, commit SHA, check time, staged asset checks | Passed; evidence above |
 | Desktop Chromium: all three real models, microphone, Japanese recognition, Stop, repeat, switching | Not tested by a human; results requested |
 | Physical iPhone Safari: all three real models and the same capture/recognition lifecycle | Not tested; physical device and human tester unavailable to this node |
-| Physical Android Chrome when available | Not tested; no physical Android device available to this node; operator device availability unconfirmed |
+| Physical Android Chrome when available | Not tested; Pixel 7a / Chrome is available to the operator; ASR testing not yet recorded |
 
 The required per-backend human evidence is still missing:
 
