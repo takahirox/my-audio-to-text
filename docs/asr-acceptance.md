@@ -1,7 +1,16 @@
-# Issue #18 publication and device acceptance status
+# Issue #18 publication and acceptance status
 
-PR #20 remains partial work until the required human test results exist.
-The earlier ASR deployment was superseded by the completed #17 placeholder validation. This branch incorporates that main evidence and the reviewed ASR application is now published again. Publication and automated checks do not establish physical-device compatibility or human recognition quality.
+## Maintainer decision
+
+On 2026-10-01T23:18:07.476082+00:00, the maintainer instructed us to proceed on the assumption that the playground works, and to file and fix subsequent problems as separate Issues. This explicitly removes the pending human/device-test merge gate for PR #20 and permits completion of #18/#21 based on the implemented, published comparison environment and available automated checks.
+
+No physical-device ASR result is claimed. Desktop human microphone/Japanese recognition, physical iPhone Safari, and Pixel 7a Chrome ASR acceptance remain **not tested**. The Pixel check for #17 established only the earlier placeholder text. Production backend selection remains a separate decision after actual comparison results exist.
+
+The verified pre-merge application deployment is commit `6888cca542e3d9131d727f9b40f0f2c96e65d6a1`, [Pages run 36933623325](https://github.com/takahirox/my-audio-to-text/actions/runs/36933623325). All three real models reached Ready in automated Chromium with no page/runtime errors; four audio and ten lifecycle tests passed. Six opt-in inference tests were skipped without a Japanese WAV. Merge to main triggers the normal Pages deployment. Missing human evidence must not be converted into a passing test result.
+
+## Historical preparation and acceptance checkpoints
+
+The following records describe the earlier publication and human-testing gate before the maintainer's decision above. Their instructions to keep the PR draft or wait for human evidence are superseded by that decision; their test observations remain unchanged.
 
 ## Current branch preparation (2026-10-01T22:10:11.892Z)
 

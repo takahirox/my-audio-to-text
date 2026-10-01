@@ -12,10 +12,8 @@ The live page, runtime scripts, and manifest matched the reviewed files, and all
 [publication evidence and pending human acceptance](asr-acceptance.md).
 In repository Settings → Pages, select **GitHub Actions** as the source. The workflow stages
 the pinned runtime assets and deploys `web/` on pushes to `main` or an explicit manual dispatch.
-For PR #20, **publish its reviewed branch and complete acceptance before merging** using the
-procedure below. Publication and real-device acceptance are tracked in
-[#21](https://github.com/takahirox/my-audio-to-text/issues/21). This is partial work against #18;
-#18 remains open until its remaining acceptance evidence is recorded. The older
+PR #20 was published from its reviewed branch before merge. The maintainer subsequently waived the human-test merge gate; see the acceptance decision below. Publication and real-device acceptance are tracked in
+[#21](https://github.com/takahirox/my-audio-to-text/issues/21). The maintainer accepts the implemented comparison environment for #18, with later defects handled in separate Issues. Physical-device ASR compatibility remains unverified. The older
 [#17](https://github.com/takahirox/my-audio-to-text/issues/17) covers the static placeholder from #15,
 not the three-backend ASR environment.
 Do not interpret the documented URL as evidence that deployment succeeded.
@@ -48,25 +46,14 @@ Do not interpret the documented URL as evidence that deployment succeeded.
 5. Run the human test procedure below on desktop Chromium and physical iPhone Safari against
    this deployment. Record each candidate's load, microphone capture, Japanese output, Stop,
    repeat, and switching results; test Android when available, otherwise mark it not tested.
-   Keep PR #20 in draft and #18 open while these required results are missing.
+   Record missing results as not tested; the maintainer waived these as merge prerequisites.
 6. After acceptance and review, merge may proceed in the normal repository workflow. The push
    to `main` redeploys the same environment. Remove the temporary PR-branch permission once
    it is no longer needed.
 
-The sequence for this work is **reviewed branch → manual publication → recorded human acceptance
-→ final review → merge**, with #21 tracking the pre-merge work. #21 already documents this
-sequence. Publication is complete for the commit above; desktop and physical-device human
-results are still required. Retain the acceptance gate and do not describe #18 as complete
-while evidence is missing.
+The reviewed branch was published before merge. The maintainer has now chosen to proceed assuming it works and to track later defects in separate Issues. Human tests below remain useful for comparison and backend selection, but are no longer a prerequisite to merging PR #20 or completing #18/#21. No human microphone or physical-device ASR test has been claimed as passing.
 
-Current evidence and remaining blockers are recorded in [ASR acceptance status](asr-acceptance.md).
-
-Before completing #21, record a successful deployment run and commit SHA, verify that the HTTPS
-URL serves all three candidates and their required assets, and exercise load/capture/Japanese
-recognition/Stop/repeat/switch on desktop Chromium and a physical iPhone Safari. Test Android Chrome
-when a device is available, or record it as not tested. Use the results template below and record
-errors or demonstrated limitations; then reassess #18's complete Definition of done. Do not close
-#18 based only on the implementation PR or #17's placeholder checks.
+Publication evidence and the explicit acceptance decision are recorded in [ASR acceptance status](asr-acceptance.md). Selecting a production backend still requires a separate decision; this change selects none.
 
 For local desktop development (Python 3.12+):
 
