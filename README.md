@@ -26,7 +26,9 @@ model limitations, and the manual-results template.
 The [Pages workflow](.github/workflows/pages.yml) prepares pinned runtime assets
 and deploys the contents of `web/`
 after every push or merge to `main`. It can also be run manually from the Actions
-tab with `main` selected. Inference runs in the browser; no ASR server is required.
+tab with a reviewed branch selected and allowed by the `github-pages` environment.
+For #18, [publish the PR branch and record human acceptance before merge](docs/asr-manual-testing.md#publish-for-acceptance-before-merge).
+Inference runs in the browser; no ASR server is required.
 
 For repository setup, select **Settings → Pages → Build and deployment → Source →
 GitHub Actions**. Deployment uses the `github-pages` environment and the built-in

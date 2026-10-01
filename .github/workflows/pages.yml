@@ -10,7 +10,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    # A maintainer can publish a reviewed PR branch for acceptance before merge.
+    # The github-pages environment's branch/deployment protections still apply.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

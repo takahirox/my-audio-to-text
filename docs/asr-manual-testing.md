@@ -7,14 +7,56 @@ It does not select a production backend. Record human observations before a sepa
 
 The intended Pages URL is **https://takahirox.github.io/my-audio-to-text/**.
 This checkpoint supplies `web/` and `.github/workflows/pages.yml`; it does not publish the site.
-In repository Settings → Pages, select **GitHub Actions** as the source. After the change is
-merged into `main`, the workflow stages the pinned runtime assets and deploys `web/`.
-Publication of all three ASR candidates and real-device acceptance are explicitly split into
+In repository Settings → Pages, select **GitHub Actions** as the source. The workflow stages
+the pinned runtime assets and deploys `web/` on pushes to `main` or an explicit manual dispatch.
+For PR #20, **publish its reviewed branch and complete acceptance before merging** using the
+procedure below. Publication and real-device acceptance are tracked in
 [#21](https://github.com/takahirox/my-audio-to-text/issues/21). This is partial work against #18;
 #18 remains open until its remaining acceptance evidence is recorded. The older
 [#17](https://github.com/takahirox/my-audio-to-text/issues/17) covers the static placeholder from #15,
 not the three-backend ASR environment.
 Do not interpret the documented URL as evidence that deployment succeeded.
+
+### Publish for acceptance before merge
+
+1. The PR branch must contain this revised workflow and the reviewed code. A local checkpoint
+   is not available to GitHub Actions until the publication step updates the branch. Confirm
+   the PR head SHA before deployment. This fix node does not push or merge.
+2. In **Settings → Environments → github-pages → Deployment branches and tags**, retain `main`
+   and allow the exact branch `codex/issue-18-browser-asr-pocs` for this acceptance deployment.
+   Keep the environment's other protections. The policy observed on 2026-10-02 permits only
+   `main`; changing the workflow alone does not authorize the PR branch to deploy.
+3. Run the existing Pages workflow with the PR branch selected in Actions, or use:
+
+   ```sh
+   gh workflow run pages.yml --repo takahirox/my-audio-to-text --ref codex/issue-18-browser-asr-pocs
+   ```
+
+   The workflow already exists on the default branch with `workflow_dispatch`; the selected
+   branch supplies the workflow revision for this run. See GitHub's
+   [manual dispatch instructions](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
+   and [Pages deployment requirements](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+   This deploys to the canonical Pages URL, replacing the placeholder, rather than creating a
+   separate preview URL. No pull-request event automatically deploys code.
+4. Wait for both build and deploy to succeed. Record the run URL, its head SHA, the HTTPS URL,
+   and check time in #21. Confirm that the page title is **Japanese Speech-to-Text playground**,
+   the selector contains all three candidates, and `vendor/manifest.json` plus the staged
+   Moonshine and sherpa files load successfully. A successful placeholder deployment is insufficient.
+5. Run the human test procedure below on desktop Chromium and physical iPhone Safari against
+   this deployment. Record each candidate's load, microphone capture, Japanese output, Stop,
+   repeat, and switching results; test Android when available, otherwise mark it not tested.
+   Keep PR #20 in draft and #18 open while these required results are missing.
+6. After acceptance and review, merge may proceed in the normal repository workflow. The push
+   to `main` redeploys the same environment. Remove the temporary PR-branch permission once
+   it is no longer needed.
+
+#21's instruction to publish only after PR #20 merges conflicts with the PR's acceptance gate.
+The sequence for this work is **reviewed branch → manual publication → recorded human acceptance
+→ final review → merge**, with #21 tracking the pre-merge work. When publishing this checkpoint,
+update #21's scheduling paragraph and PR #20's description to this sequence; retain the acceptance
+gate and do not describe #18 as complete while evidence is missing.
+
+Current evidence and remaining blockers are recorded in [ASR acceptance status](asr-acceptance.md).
 
 Before completing #21, record a successful deployment run and commit SHA, verify that the HTTPS
 URL serves all three candidates and their required assets, and exercise load/capture/Japanese
