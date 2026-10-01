@@ -14,88 +14,27 @@ There is no application implementation in this baseline. Backward compatibility 
 
 Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
 
-[PR #16](https://github.com/takahirox/my-audio-to-text/pull/16) merged the
-[Issue #15](https://github.com/takahirox/my-audio-to-text/issues/15) infrastructure
-into `main` on October 2, 2026 (JST). The initial deployment succeeded and its
-placeholder was publicly available at the historical check times below. A later
-manual branch deployment superseded it; the latest HTTPS check returned the ASR
-playground described below. [Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17)
-remains **partially validated**: actual mobile access and a subsequent reviewed
-change appearing after automatic redeployment are still unverified.
+[PR #16](https://github.com/takahirox/my-audio-to-text/pull/16) supplied the Pages infrastructure. The initial deployment succeeded on `main`. After a temporary manual deployment of the ASR branch, reviewed [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) merged the small placeholder revision and its automatic deployment restored the static page.
 
-This PR contains a static placeholder in `web/index.html`; the live site's
-content has since been replaced by a deployment from another branch.
-The [Pages workflow in this PR](.github/workflows/pages.yml) deploys the contents of `web/`
-after every push or merge to `main`. It can also be run manually from the Actions
-tab with `main` selected. No build step, framework, or ASR backend is required.
+The public page now shows `The Web playground is deployed. Placeholder revision 2.` as verified on October 2, 2026 (JST). [Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17) has evidence for **all five acceptance checks**, including the user’s physical-device confirmation on Pixel 7a with Chrome.
 
-For repository setup, select **Settings → Pages → Build and deployment → Source →
-GitHub Actions**. Deployment uses the `github-pages` environment and the built-in
-`GITHUB_TOKEN`; no additional secret is needed. The deployment's environment URL
-in Actions reports the canonical Pages URL.
+The repository contains a static placeholder in `web/index.html`. The [Pages workflow](.github/workflows/pages.yml) deploys `web/` after every push or merge to `main`; it can also be dispatched with `main` selected. There is no build step, framework, or ASR backend in this baseline.
 
-Historical initial-placeholder validation recorded on October 2, 2026
-(JST; check times below use UTC). These results describe the initial deployment,
-not the content served after the superseding deployment:
+For repository setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. Deployment uses the `github-pages` environment and built-in `GITHUB_TOKEN`; no additional secret is needed. Actions reports the canonical Pages URL.
+
+Validation evidence recorded on October 2, 2026 (JST; evidence timestamps use UTC):
 
 | Issue #17 acceptance check | Result and evidence |
 | --- | --- |
-| Initial Pages workflow on `main` | **Passed.** [Run 36886759434](https://github.com/takahirox/my-audio-to-text/actions/runs/36886759434), triggered by `push`, completed successfully at `2026-10-01T15:45:54Z`. Deployed commit: `d3a600c76c8dc0bb11d91e440073ecec2e227bbb`. All deployment job steps succeeded. |
-| Canonical public URL over HTTPS | **Passed.** The published URL above returned HTTP **200** with TLS certificate verification successful at `2026-10-01T15:53:40Z`. The response contained `my-audio-to-text` and `The Web playground is deployed.` |
-| Published placeholder in a desktop browser | **Passed.** Google Chrome `154.0.8037.58` on macOS, in headless desktop mode with a fresh isolated profile and a 1280 × 800 viewport. The live URL rendered the heading and initial deployment text correctly; the DOM and [screenshot](docs/evidence/pages-desktop-initial.png) were inspected at `2026-10-01T15:55:59Z`. |
-| Actual mobile browser | **Pending — requires physical-device evidence.** No device model, browser/version, check time, or rendering result at the canonical published URL has been recorded. This revision environment has no actual mobile-browser access; desktop viewport emulation cannot complete this check. |
-| Subsequent reviewed change and automatic redeployment | **Pending — requires review and merge.** [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) proposes `The Web playground is deployed. Placeholder revision 2.` in `web/index.html`. The revision is not on `main`; its deployed commit, successful automatic Pages run URL, and browser result showing the changed text remain unrecorded. |
+| Initial Pages workflow on `main` | **Passed.** [Run 36886759434](https://github.com/takahirox/my-audio-to-text/actions/runs/36886759434), event `push`, succeeded at `2026-10-01T15:45:54Z` for commit `d3a600c76c8dc0bb11d91e440073ecec2e227bbb`. |
+| Canonical public URL over HTTPS | **Passed.** HTTP 200 with normal TLS certificate verification. The initial check was at `2026-10-01T15:53:40Z`; [post-merge evidence](docs/evidence/pages-redeployment.md) confirms revision 2 at the same URL. |
+| Published placeholder in a desktop browser | **Passed.** Chrome `154.0.8037.58` on macOS rendered the initial page at `2026-10-01T15:55:59Z` ([historical screenshot](docs/evidence/pages-desktop-initial.png)). A fresh isolated headless desktop check also rendered revision 2 ([evidence and screenshot](docs/evidence/pages-redeployment.md)). Neither check claims physical-mobile validation. |
+| Actual mobile browser | **Passed — user-reported physical-device check.** Pixel 7a with Chrome rendered `my-audio-to-text` and `The Web playground is deployed. Placeholder revision 2.` at the canonical URL. The report was recorded at `2026-10-01T22:01:26.247000+00:00` (UTC; October 2, 2026 JST). Browser version was not supplied. See [mobile evidence](docs/evidence/pages-redeployment.md#actual-mobile-browser). |
+| Subsequent reviewed change and automatic redeployment | **Passed.** PR #19 merged as `28f0badabb1834a1a8fe15dc248aaeebbb393412`. Automatic [push run 36931736950](https://github.com/takahirox/my-audio-to-text/actions/runs/36931736950) succeeded. The canonical URL rendered `The Web playground is deployed. Placeholder revision 2.`; see [the recorded browser check](docs/evidence/pages-redeployment.md). |
 
-Historical follow-up checks at `2026-10-01T16:31:37Z` confirmed that the canonical
-URL still returned HTTPS **200** with successful TLS certificate verification and
-served `The Web playground is deployed.` without the revision 2 text. At that
-time, GitHub reported `main` at `d3a600c76c8dc0bb11d91e440073ecec2e227bbb`,
-only the initial successful `push` run linked above, PR #19 open and unmerged,
-and Issue #17 open without comments supplying the missing mobile evidence.
+The [original PR description](docs/evidence/pages-validation-pr.md) preserves historical checks and the earlier manual [ASR deployment](https://github.com/takahirox/my-audio-to-text/actions/runs/36894283644). Its pending statements describe the pre-merge state; the table above and [redeployment evidence](docs/evidence/pages-redeployment.md) record the subsequent reviewed-main result.
 
-Superseding deployment: [Run 36894283644](https://github.com/takahirox/my-audio-to-text/actions/runs/36894283644)
-succeeded via `workflow_dispatch` on branch `codex/issue-18-browser-asr-pocs`,
-deploying commit `66fb43f82b5a29df7c3e96efc9e0dfe3bb33a444`; the run completed
-at `2026-10-01T16:45:43Z`. The review check at `2026-10-01T16:48:58Z` and a
-fresh HTTPS check at `2026-10-01T16:51:01Z` returned HTTP **200** with
-`Japanese Speech-to-Text playground` and ASR controls. The fresh check verified
-TLS successfully and found neither the initial placeholder text nor revision 2.
-GitHub still reported `main` at `d3a600c76c8dc0bb11d91e440073ecec2e227bbb`
-and PR #19 open and unmerged. This manual branch deployment supersedes the
-initial placeholder evidence for current content. It does **not** satisfy
-Issue #17's subsequent reviewed change merged into `main` and automatic
-redeployment criterion. Actual mobile-browser validation remains pending.
-
-Complete Issue #17 in two stages, following the
-[partial-work rule](docs/development-flow.md#implement-and-propose-a-pull-request)
-and [merge criteria](docs/review-guidelines.md#merge-criteria):
-
-1. Review PR #19 as **intentional partial work**: it records the initial
-   deployment and prepares the small placeholder revision needed for the
-   subsequent deployment check. Use the [checked-in PR description](docs/evidence/pages-validation-pr.md)
-   for publication updates and identify the two pending live checks. Keep its
-   Issue #17 reference non-closing in every publication update. Once this partial
-   scope passes review, PR #19 can be marked ready and merged while Issue #17
-   stays open. The subsequent
-   deployment check requires that reviewed merge; the proposed revision alone
-   does not complete it.
-2. After that reviewed merge, record the resulting deployed commit SHA and
-   successful automatic Pages run URL (`push` event).
-3. Reload the same public URL in a browser and confirm the full revision 2 text
-   above appears. Pages responses can be cached for ten minutes; recheck after
-   cache expiry if the previous text is still served. Record the browser/version,
-   check time, and changed text actually seen.
-4. Open the published URL on an actual phone or tablet and record the device
-   model, browser/version, check time with timezone, and rendered text/result.
-   This check can also be recorded before the partial merge; it still requires
-   access to the published URL on a real device.
-5. Submit a follow-up evidence update to this README for review. Close Issue #17
-   only after all five live checks have recorded evidence.
-
-The initial screenshot is historical evidence of the previously published
-placeholder, which the manual branch deployment superseded. Local rendering
-of revision 2 does not establish its publication. All five live checks are
-required to complete Issue #17; automatic redeployment remains unverified.
+All five checks now have recorded evidence. The physical-device result was supplied by the user; the automated headless desktop check does not substitute for it. This documentation update completes the evidence required by Issue #17 and follows the [development flow](docs/development-flow.md) and [merge criteria](docs/review-guidelines.md#merge-criteria).
 
 ## Vision
 
