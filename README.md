@@ -16,8 +16,10 @@ Target public URL: [https://takahirox.github.io/my-audio-to-text/](https://takah
 
 The playground replaces the static placeholder from [#15](https://github.com/takahirox/my-audio-to-text/issues/15)
 with three disposable ASR PoCs for [#18](https://github.com/takahirox/my-audio-to-text/issues/18).
-Publication and real-device validation remain pending in
-[#17](https://github.com/takahirox/my-audio-to-text/issues/17).
+Publication of the three ASR candidates and real-device validation are explicitly split into
+[#21](https://github.com/takahirox/my-audio-to-text/issues/21); #18 remains open pending that
+acceptance evidence. [#17](https://github.com/takahirox/my-audio-to-text/issues/17) covers only
+publication and validation of the earlier static placeholder from #15.
 See the [manual-testing instructions](docs/asr-manual-testing.md) for local setup,
 model limitations, and the manual-results template.
 

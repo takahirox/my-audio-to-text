@@ -82,21 +82,28 @@ $('load').onclick = async () => {
 $('start').onclick = async () => {
   setState('starting', 'Requesting microphone…');
   const init = $('init').textContent; resetOutput(); $('init').textContent = init;
-  worker.postMessage({ type: 'start' });
-  mic = new Microphone(audio, () => void stop());
-  const session = generation;
+  const activeWorker = worker, session = ++generation;
+  const isCurrent = () => worker === activeWorker && generation === session;
+  activeWorker.postMessage({ type: 'start' });
+  mic = new Microphone(
+    (chunk) => { if (isCurrent()) audio(chunk); },
+    () => { if (isCurrent()) void stop(); },
+  );
   try {
     startedAt = performance.now();
     await mic.start();
-    if (generation === session && state === 'starting') setState('recording', 'Listening. Speak Japanese, pause, then Stop.');
-  } catch (error) { if (generation === session) await fail(error); }
+    if (isCurrent() && state === 'starting') setState('recording', 'Listening. Speak Japanese, pause, then Stop.');
+  } catch (error) { if (isCurrent()) await fail(error); }
 };
 async function stop() {
   if (state !== 'recording') return;
   stopAt = performance.now(); setState('stopping', 'Finalizing…');
-  const previousMic = mic; mic = null;
-  await previousMic?.stop(); $('level').value = 0;
-  worker?.postMessage({ type: 'stop' });
+  const previousMic = mic, activeWorker = worker, session = generation; mic = null;
+  await previousMic?.stop();
+  // Cancel/reload can finish while the old worklet is still flushing.
+  if (worker !== activeWorker || generation !== session) return;
+  $('level').value = 0;
+  activeWorker.postMessage({ type: 'stop' });
 }
 $('stop').onclick = () => void stop();
 $('cancel').onclick = async () => { setState('booting', 'Releasing…'); await release(); setState('idle', 'Canceled. Load a model to continue.'); };

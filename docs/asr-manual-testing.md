@@ -1,6 +1,6 @@
 # Browser Speech-to-Text manual comparison
 
-This disposable playground implements [Issue #18](https://github.com/takahirox/my-audio-to-text/issues/18).
+This disposable playground supplies the implementation portion of [Issue #18](https://github.com/takahirox/my-audio-to-text/issues/18).
 It does not select a production backend. Record human observations before a separate selection issue.
 
 ## Open the playground
@@ -9,8 +9,19 @@ The intended Pages URL is **https://takahirox.github.io/my-audio-to-text/**.
 This checkpoint supplies `web/` and `.github/workflows/pages.yml`; it does not publish the site.
 In repository Settings → Pages, select **GitHub Actions** as the source. After the change is
 merged into `main`, the workflow stages the pinned runtime assets and deploys `web/`.
-Publication and real-device acceptance remain pending under [#17](https://github.com/takahirox/my-audio-to-text/issues/17).
+Publication of all three ASR candidates and real-device acceptance are explicitly split into
+[#21](https://github.com/takahirox/my-audio-to-text/issues/21). This is partial work against #18;
+#18 remains open until its remaining acceptance evidence is recorded. The older
+[#17](https://github.com/takahirox/my-audio-to-text/issues/17) covers the static placeholder from #15,
+not the three-backend ASR environment.
 Do not interpret the documented URL as evidence that deployment succeeded.
+
+Before completing #21, record a successful deployment run and commit SHA, verify that the HTTPS
+URL serves all three candidates and their required assets, and exercise load/capture/Japanese
+recognition/Stop/repeat/switch on desktop Chromium and a physical iPhone Safari. Test Android Chrome
+when a device is available, or record it as not tested. Use the results template below and record
+errors or demonstrated limitations; then reassess #18's complete Definition of done. Do not close
+#18 based only on the implementation PR or #17's placeholder checks.
 
 For local desktop development (Python 3.12+):
 
@@ -123,7 +134,12 @@ npm run test:browser
 ```
 
 Browser tests check isolation on a plain static server, switching, microphone denial, real Web Audio
-capture with a generated test source, Stop/repeat/release, and cancellation during pending permission.
+capture with a generated test source, Stop/repeat/release, cancellation during pending permission,
+and Stop → Cancel → reload during delayed worklet flushing. Chromium checks that old audio and
+Stop callbacks cannot affect a new recording and that both captures are eventually released.
+WebKit checks that the old Stop cannot affect the replacement worker at Ready; the rapid capture
+replacement case intermittently encounters native `NotAllowedError` in headless WebKit and still
+requires real Safari validation under #21.
 They substitute tiny model workers to keep routine checks free of model downloads. Unit tests cover
 resampling continuity and audio retention at segmentation boundaries. No physical microphone/device
 is exercised by these automated checks.
