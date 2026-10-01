@@ -61,3 +61,46 @@ Separate issues should define and implement:
 ## Contributing
 
 See the [development flow](docs/development-flow.md) for workflow and language policy, and the [review guidelines](docs/review-guidelines.md) for review and merge criteria.
+
+## Pages publication validation
+
+Canonical public URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
+Publication and automatic redeployment are **unverified**. This is a partial
+validation record for [Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17),
+which remains incomplete until all five live checks pass.
+
+Checks on October 2, 2026 (JST) found that the prerequisite
+[PR #16](https://github.com/takahirox/my-audio-to-text/pull/16) is still an open,
+unmerged draft. Its inspected head is
+`6d442b917ac72800bf65966bdb841995c1ed69a8`; it proposes
+`.github/workflows/pages.yml` and the static placeholder in `web/index.html`.
+Neither file is present on the inspected `main` commit,
+`271e7f9b16d3865d8914767954a9d590831a80f4`.
+GitHub's Pages API reports `build_type: workflow`, `https_enforced: true`,
+and the canonical URL above. These settings alone do not establish publication.
+
+| Required live check | Observed result / outstanding evidence |
+| --- | --- |
+| Pages workflow succeeds on `main` | Blocked by PR #16. The Actions runs API returned zero runs for `main`, and the workflows API listed only `CI`, with no Pages workflow. No successful run URL or deployed commit SHA is available. |
+| Canonical URL returns HTTP 200 over HTTPS | Failed: an HTTPS GET returned **HTTP 404** at **2026-10-01T15:31:27Z** (October 2, 00:31:27 JST). TLS certificate verification succeeded; the URL did not redirect. |
+| Published placeholder renders in a desktop browser | Unverified. The Chrome DevTools connector could not connect. An isolated headless Google Chrome **154.0.8037.58** attempt timed out after 30 seconds without a rendering result. No successful desktop rendering is claimed. |
+| Same URL renders in an actual mobile browser | Unverified. No physical mobile device/browser result is available. Viewport emulation does not satisfy this check. |
+| Subsequent reviewed change automatically redeploys and appears at the same URL | Blocked by the initial publication. No subsequent reviewed/merged commit, deployment run URL, changed text, or browser result is available. |
+
+Continue validation after PR #16 is reviewed and merged:
+
+1. Inspect the Pages run triggered on `main`. If it fails, inspect the failed
+   job and correct the deployment failure. If necessary, manually dispatch the
+   existing `pages.yml` workflow with `main` selected. Record the successful run
+   URL and deployed commit SHA.
+2. Repeat the HTTPS GET to the canonical URL and record HTTP 200 with the check
+   time. Open that URL in a desktop browser and record its name/version and the
+   visible placeholder text: `The Web playground is deployed.`
+3. Open the same URL on a physical mobile device. Record the device, browser,
+   check time, and rendered text.
+4. Make a small plain HTML text change in `web/index.html`, have it reviewed
+   and merged into `main`, and inspect the automatic deployment triggered by
+   that merge. Record the subsequent commit SHA, successful run URL, exact
+   changed text, and the browser result showing it at the same canonical URL.
+5. Update this validation record and the README publication status with the
+   observed evidence. Keep Issue #17 open until all five live checks pass.
