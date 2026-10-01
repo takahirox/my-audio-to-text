@@ -72,6 +72,27 @@ No human result has been inferred from either kind of automation.
 
 ## Handoff
 
+### Review finding recheck (2026-10-02 JST)
+
+Read-only GitHub checks for this fix attempt confirmed that PR #20 is open and draft at
+`0af9bac44290c78c41ab216fc587e6d9637eec74`, and #18 and #21 remain open. #21's sole
+comment records publication and explicitly reports missing human acceptance; no desktop
+Chromium or physical iPhone Safari results were present. Human evidence was requested
+again in this node, but none was available at checkpoint time. Android remains not tested,
+with device availability unknown.
+
+`npm ci` succeeded with no reported vulnerabilities. Four audio tests and ten automated
+Chromium/WebKit lifecycle tests passed again; six real-model tests were skipped because
+`ASR_TEST_WAV` was not supplied. These checks do not resolve the P1 human acceptance finding.
+The manual results template now explicitly records deployment identity, partial transcripts,
+Stop outcome, repeat, and switching so a tester can supply all required evidence.
+
+**The P1 finding remains unresolved.** This node has no human tester or physical iPhone
+available. The next required action is human testing of the published deployment, followed
+by recording evidence and fixing any observed comparison blockers. Further automated checks,
+documentation commits, or redeployment cannot substitute for that evidence. Do not advance
+this checkpoint as accepted or ready to merge.
+
 Publication finding: resolved for the reviewed PR commit above. Human acceptance finding:
 **unresolved**. The operator was asked for desktop Chromium and physical iPhone results;
 none were available at checkpoint time. A human tester must run each backend against the

@@ -156,9 +156,17 @@ silence-to-final latency measurement. Unsupported partials show explicitly as un
 
 Copy one row per utterance and candidate. Use `not tested` instead of inferring device support.
 
-| Date / device / OS / browser | Backend / first or repeat load | Utterance / volume | Permission and meter | Init (s) | First partial / text (s) | Stop latency (s) | Final transcript | Accuracy, responsiveness, heat, stability, errors |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| | | | | | | | | |
+For each test session, record the tester, test time, HTTPS URL, deployment run URL, and
+deployed commit SHA. Use the deployment's SHA, rather than a later documentation-only PR
+head. Record whether an Android device was available; if it was not tested, say so explicitly.
+Include partial transcript observations for Moonshine and mark partials unsupported for the
+other candidates. For Stop, note whether the microphone was released and finalization reached
+**Stopped**, alongside its latency. For repeat and switching, record the observed outcome,
+including the next backend, rather than leaving success implicit in a transcript.
+
+| Date / device / OS / browser | Backend / first or repeat load | Utterance / volume | Permission and meter | Init (s) | First partial / text (s) | Stop outcome / latency (s) | Partial / final transcript | Repeat outcome | Switch to / outcome | Accuracy, responsiveness, heat, stability, errors |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| | | | | | | | | | | |
 
 Suggested samples (edit the on-page utterance as needed):
 
