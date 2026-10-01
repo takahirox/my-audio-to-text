@@ -87,11 +87,10 @@ and the canonical URL above. These settings alone do not establish publication.
 | Same URL renders in an actual mobile browser | Unverified. No physical mobile device/browser result is available. Viewport emulation does not satisfy this check. |
 | Subsequent reviewed change automatically redeploys and appears at the same URL | Blocked by the initial publication. No subsequent reviewed/merged commit, deployment run URL, changed text, or browser result is available. |
 
-The review follow-up corrected [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19)
-to use a non-closing reference to Issue #17, in accordance with the
-[partial-work rule](docs/development-flow.md#implement-and-propose-a-pull-request).
-The live acceptance findings remain unresolved; this documentation update does
-not establish successful publication or redeployment.
+[PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) tracks this partial
+validation record and must remain a draft until all five live checks have
+recorded evidence. The live acceptance findings remain unresolved; this
+documentation update does not establish successful publication or redeployment.
 
 Continue validation after PR #16 is reviewed and merged:
 
