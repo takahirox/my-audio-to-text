@@ -12,7 +12,11 @@ There is no application implementation in this baseline. Backward compatibility 
 
 ## Web playground
 
-Public URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
+Target public URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
+
+This is a **partial implementation of [Issue #15](https://github.com/takahirox/my-audio-to-text/issues/15)**:
+the static placeholder and deployment workflow are ready, but live deployment
+validation remains pending. Keep Issue #15 open until all checks below pass.
 
 The playground currently contains only a static placeholder in `web/index.html`.
 The [Pages workflow](.github/workflows/pages.yml) deploys the contents of `web/`
@@ -24,10 +28,17 @@ GitHub Actions**. Deployment uses the `github-pages` environment and the built-i
 `GITHUB_TOKEN`; no additional secret is needed. The deployment's environment URL
 in Actions reports the canonical Pages URL.
 
-After merging, confirm the workflow succeeds and open the public HTTPS URL in a
-desktop browser and a mobile browser. After a later change to `web/index.html`
-reaches `main`, confirm the next deployment succeeds and refresh the same URL to
-verify the updated content.
+Outstanding validation after merging:
+
+- [ ] Confirm the Pages workflow succeeds on `main`.
+- [ ] Confirm the public URL is reachable over HTTPS.
+- [ ] Confirm the published placeholder renders in a desktop browser.
+- [ ] Open the same published URL from a mobile browser; local mobile viewport
+  emulation does not verify live mobile access.
+- [ ] After a subsequent change to `web/index.html` reaches `main`, confirm the
+  next deployment succeeds and the updated content appears at the same URL.
+
+Record the deployment runs and browser results in Issue #15 before closing it.
 
 ## Vision
 
