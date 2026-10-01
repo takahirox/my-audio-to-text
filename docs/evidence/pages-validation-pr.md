@@ -6,9 +6,9 @@ Record the initial live Pages deployment, HTTPS access, and desktop rendering fo
 
 The initial placeholder is publicly available at https://takahirox.github.io/my-audio-to-text/ following the merge of PR #16. This is **intentional partial work for Issue #17**: three live checks have evidence; actual mobile-browser validation and the subsequent automatic redeployment check remain pending.
 
-Review this PR as intentional partial work under the repository's development flow. Keep it in draft while the closing reference below and the pending checks remain. Before merging this partial scope, remove the closing reference so Issue #17 stays open. Record the two pending live checks in a follow-up evidence update; claim completion only after all five acceptance checks have recorded evidence.
+Review this PR as intentional partial work under the repository's development flow. After this partial scope passes review, it can be marked ready and merged while Issue #17 stays open. Record the two pending live checks in a follow-up evidence update; claim completion only after all five acceptance checks have recorded evidence.
 
-Use this checked-in description as PR #19's complete body for publication updates. Both pending checks must remain explicit. The required publication closing reference does not establish completion; merging with it would close Issue #17 despite the missing evidence. The README links this description for subsequent updates.
+Use this checked-in description as PR #19's complete body for publication updates. Both pending checks must remain explicit, and the Issue #17 reference must remain non-closing. The README links this description for subsequent updates.
 
 ## Validation
 
@@ -22,15 +22,15 @@ Use this checked-in description as PR #19's complete body for publication update
 
 ## Related issues
 
-Closes #17
+Related to #17 (intentional partial work).
 
-Issue #17 remains open while this PR is draft and unmerged. Actual mobile-browser evidence and the subsequent reviewed deployment with changed content confirmed in a browser remain pending. Remove the closing reference before a partial merge, as described above.
+Issue #17 must remain open after this partial PR merges. Actual mobile-browser evidence and the subsequent reviewed deployment with changed content confirmed in a browser remain pending.
 
 PR #16 supplied the merged infrastructure. This continues the live validation scope split from #15.
 
 ## Scope check
 
-- [ ] This PR fully addresses each Issue it claims to resolve. (Issue #17 still has two pending live checks; the closing reference must be removed before a partial merge.)
+- [ ] This PR fully addresses each Issue it claims to resolve. (No resolution of Issue #17 is claimed; two live checks remain pending.)
 - [x] This PR does not include unrelated work.
 - [x] This PR does not add speculative abstractions, extensibility, frameworks, or subsystems that are not needed by the Issue.
 - [x] Any intentionally partial implementation is clearly stated, and the parent Issue is not presented as fully resolved unless the remaining scope has been explicitly split out.
