@@ -1,56 +1,59 @@
 # my-audio-to-text
 
-Local-first speech-to-text and thought-synthesis for Apple Silicon macOS.
+A local-first speech input system that turns natural speech into useful text and learns to recognize each individual user better over time.
 
-The application implements two workflows:
+## Motivation and current status
 
-- **Quick Dictation** — press `⌥Space`, speak, stop, and receive conservatively cleaned text in the focused app or clipboard.
-- **Thinking Session** — record a long session, preserve committed transcript segments continuously, then run whole-session FULL synthesis into topics, ideas, decisions, questions, actions, revisions, examples, and detailed notes.
+Speech input should work well for the person using it, including their language, vocabulary, pronunciation, and speaking conditions. Corrections should help improve future recognition while keeping the original speech and transcript available.
 
-Raw Transcript, Clean Transcript, Polished Text, and Synthesis are stored as separate information levels. Derived output never overwrites its source, and every substantive synthesis item must reference valid source segment IDs.
+This repository is a minimal product and vision baseline, ready for a new design from first principles. The previous macOS prototype, experiments, evaluation harnesses, and implementation documents have been removed from the active tree. All previous work remains recoverable from Git history.
 
-After transcription, use **Corrections** to edit recognition errors, label the speech condition, and save local personalization feedback. Each revision preserves its source transcript and can be reloaded or exported as JSONL. See [personalization feedback](docs/PERSONALIZATION.md) for the workflow and corpus API.
+There is no application implementation in this baseline. Backward compatibility with the prototype's APIs, storage, configuration, architecture, or platform behavior is not a requirement. Web implementation will begin in separate follow-up issues.
 
-Enable **Settings → Personalization** to use recurring, context-matched corrections in future dictation. The **Personalized** tab shows the result and applied corrections; Raw/Clean remain available for comparison. See [correction memory and evaluation](docs/issue-6/README.md) and the [measured synthetic-data report](docs/issue-6/EVALUATION.md).
+## Vision
 
-For real recorded speech, the [local audio benchmark](docs/issue-9/README.md) imports immutable datasets, runs the current ASR, reports Raw/Clean CER, and compares contextual or future adapted systems on the same held-out audio. It includes leakage checks, failure reporting, and nested learning curves. Private datasets and reports belong in the ignored `local-benchmarks/` directory.
+Build a speech input system that:
 
-## Requirements
+1. Turns natural speech into useful text.
+2. Becomes better at recognizing the individual user over time.
+3. Preserves source audio and original transcripts separately from derived or corrected output; derived output never overwrites its source.
+4. Can eventually work across Web, desktop, and mobile, without being tied to macOS.
 
-- Apple Silicon Mac running macOS 14 or newer
-- Xcode 16+ command-line tools / Swift 6
-- a local [`whisper.cpp`](https://github.com/ggml-org/whisper.cpp) `whisper-cli` executable and multilingual GGML model
-- optionally, a local [`llama.cpp`](https://github.com/ggml-org/llama.cpp) `llama-cli` executable and instruct GGUF model for polishing and synthesis
+## Near-term priorities
 
-Models are intentionally not bundled. Once the executables and models are installed, the primary workflow does not require a network connection.
+### 1. Speech-to-Text
 
-## Build and run
+- Realtime, low-latency recognition.
+- Good Japanese recognition.
+- Usable from mobile and desktop browsers.
 
-```bash
-swift test
-./scripts/build-app.sh
-open "dist/My Audio to Text.app"
-```
+### 2. Personalized ASR
 
-On first launch:
+Personalized automatic speech recognition (ASR) should:
 
-1. Allow microphone access.
-2. Open Settings and select the `whisper-cli` executable and GGML model.
-3. Select `llama-cli` and a GGUF instruct model to enable polishing and synthesis.
-4. If focused-app paste automation is wanted, allow Accessibility access. Without it, completed text remains safely on the clipboard.
+- Learn from user corrections.
+- Improve recognition of personal vocabulary, pronunciation, recurring mistakes, and quiet speech, eventually extending to whisper speech.
+- Demonstrate improvement on held-out real audio that was not used for personalization.
 
-The app stores configuration, SQLite data, and retained recordings under:
+## Deferred priority
 
-```text
-~/Library/Application Support/MyAudioToText/
-```
+**Speech → Thought / synthesis** remains part of the broader vision. It comes after robust Web Speech-to-Text and Personalized ASR, rather than being the next implementation priority.
 
-## Verification
+## Design principles
 
-```bash
-./scripts/verify.sh
-```
+- Local-first where practical.
+- Web-first for the next development cycle, with a path to desktop and mobile beyond the Web.
+- Keep models and runtimes replaceable; the vision does not depend on Whisper, llama.cpp, Swift, or any specific model or runtime.
+- Measure accuracy, latency, memory, CPU/GPU usage, battery impact, and personalization learning curves.
+- Prefer a small, understandable baseline over historical implementation complexity.
 
-The offline suite covers conservative cleaning, unstable partial replacement, final-segment durability, crash recovery, whisper.cpp JSON parsing, evidence validation, context refusal for oversized FULL synthesis, and regenerating multiple output formats.
+## Follow-up work
 
-See [the implementation design](docs/IMPLEMENTATION.md), [product specification](docs/PRODUCT_SPEC.md), and [acceptance guide](docs/ACCEPTANCE.md).
+Separate issues should define and implement:
+
+- Web/PWA foundation.
+- GitHub Pages automatic deployment.
+- Browser microphone and audio pipeline.
+- Web ASR technology evaluation, including sherpa-onnx/WASM and alternatives.
+- Personalized ASR data and feedback loop.
+- Cross-platform product contracts.
