@@ -8,19 +8,23 @@ Speech input should work well for the person using it, including their language,
 
 This repository is a minimal product and vision baseline, ready for a new design from first principles. The previous macOS prototype, experiments, evaluation harnesses, and implementation documents have been removed from the active tree. All previous work remains recoverable from Git history.
 
-There is no application implementation in this baseline. Backward compatibility with the prototype's APIs, storage, configuration, architecture, or platform behavior is not a requirement. Web implementation will begin in separate follow-up issues.
+There is no production application implementation in this baseline. The disposable [browser Speech-to-Text playground](docs/asr-manual-testing.md) compares Moonshine Voice, sherpa-onnx/ReazonSpeech, and Whisper for Japanese manual testing. No production backend is selected. Backward compatibility with the prototype's APIs, storage, configuration, architecture, or platform behavior is not a requirement.
 
 ## Web playground
 
 Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
 
-[PR #16](https://github.com/takahirox/my-audio-to-text/pull/16) supplied the Pages infrastructure. The initial deployment succeeded on `main`. After a temporary manual deployment of the ASR branch, reviewed [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) merged the small placeholder revision and its automatic deployment restored the static page.
+[PR #20](https://github.com/takahirox/my-audio-to-text/pull/20) prepares three disposable ASR PoCs for [Issue #18](https://github.com/takahirox/my-audio-to-text/issues/18). The page compares Moonshine Voice, sherpa-onnx/ReazonSpeech, and Whisper without selecting a production backend. See the [manual-testing instructions](docs/asr-manual-testing.md) for model limitations, local setup, and the results template.
 
-The public page now shows `The Web playground is deployed. Placeholder revision 2.` as verified on October 2, 2026 (JST). [Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17) has evidence for **all five acceptance checks**, including the user’s physical-device confirmation on Pixel 7a with Chrome.
+Publish the reviewed PR branch and record human acceptance **before merge**, as tracked in [Issue #21](https://github.com/takahirox/my-audio-to-text/issues/21) and [the acceptance record](docs/asr-acceptance.md). Keep PR #20 draft and Issues #18/#21 open while required evidence is missing. Wait for human results rather than repeating an AI review/fix loop.
 
-The repository contains a static placeholder in `web/index.html`. The [Pages workflow](.github/workflows/pages.yml) deploys `web/` after every push or merge to `main`; it can also be dispatched with `main` selected. There is no build step, framework, or ASR backend in this baseline.
+The [Pages workflow](.github/workflows/pages.yml) prepares pinned runtime assets and deploys `web/` automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. The ASR deployment replaces the static placeholder. Inference runs in the browser; models download from third-party hosts and may use hundreds of MB. No ASR server is required.
 
-For repository setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. Deployment uses the `github-pages` environment and built-in `GITHUB_TOKEN`; no additional secret is needed. Actions reports the canonical Pages URL.
+For setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the `github-pages` environment and built-in `GITHUB_TOKEN`.
+
+### Completed static-placeholder validation (#17)
+
+[Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17) is completed. Its static-placeholder validation is separate from ASR acceptance: Pixel 7a / Chrome displaying placeholder text does not establish model loading, microphone capture, or recognition for Issue #18. The table below preserves the verified placeholder results; publishing the ASR branch supersedes the placeholder content without invalidating that historical evidence.
 
 Validation evidence recorded on October 2, 2026 (JST; evidence timestamps use UTC):
 
@@ -32,9 +36,8 @@ Validation evidence recorded on October 2, 2026 (JST; evidence timestamps use UT
 | Actual mobile browser | **Passed — user-reported physical-device check.** Pixel 7a with Chrome rendered `my-audio-to-text` and `The Web playground is deployed. Placeholder revision 2.` at the canonical URL. The report was recorded at `2026-10-01T22:01:26.247000+00:00` (UTC; October 2, 2026 JST). Browser version was not supplied. See [mobile evidence](docs/evidence/pages-redeployment.md#actual-mobile-browser). |
 | Subsequent reviewed change and automatic redeployment | **Passed.** PR #19 merged as `28f0badabb1834a1a8fe15dc248aaeebbb393412`. Automatic [push run 36931736950](https://github.com/takahirox/my-audio-to-text/actions/runs/36931736950) succeeded. The canonical URL rendered `The Web playground is deployed. Placeholder revision 2.`; see [the recorded browser check](docs/evidence/pages-redeployment.md). |
 
-The [original PR description](docs/evidence/pages-validation-pr.md) preserves historical checks and the earlier manual [ASR deployment](https://github.com/takahirox/my-audio-to-text/actions/runs/36894283644). Its pending statements describe the pre-merge state; the table above and [redeployment evidence](docs/evidence/pages-redeployment.md) record the subsequent reviewed-main result.
 
-All five checks now have recorded evidence. The physical-device result was supplied by the user; the automated headless desktop check does not substitute for it. This documentation update completes the evidence required by Issue #17 and follows the [development flow](docs/development-flow.md) and [merge criteria](docs/review-guidelines.md#merge-criteria).
+[PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) supplied the reviewed placeholder revision; [PR #22](https://github.com/takahirox/my-audio-to-text/pull/22) recorded its successful automatic redeployment, desktop screenshot, and user-reported physical-mobile result. The [redeployment evidence](docs/evidence/pages-redeployment.md) and [original partial PR description](docs/evidence/pages-validation-pr.md) retain those historical checks.
 
 ## Vision
 
