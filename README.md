@@ -19,7 +19,8 @@ the static placeholder and deployment workflow are ready. The remaining live
 publication and validation scope is explicitly split into
 [Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17), which tracks
 all five checks below after the infrastructure reaches `main`.
-PR #16 references Issue #15 without closing it automatically.
+PR #16 addresses the infrastructure scope of Issue #15; live publication and
+acceptance validation remain tracked separately in Issue #17.
 
 Checks on October 2, 2026 (JST) confirmed that Pages is configured for GitHub
 Actions with HTTPS enforced, but there are no Actions runs on `main` and the
