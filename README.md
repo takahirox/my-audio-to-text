@@ -10,6 +10,47 @@ This repository is a minimal product and vision baseline, ready for a new design
 
 There is no application implementation in this baseline. Backward compatibility with the prototype's APIs, storage, configuration, architecture, or platform behavior is not a requirement. Web implementation will begin in separate follow-up issues.
 
+## Web playground
+
+Target public URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
+
+This is a **partial implementation of [Issue #15](https://github.com/takahirox/my-audio-to-text/issues/15)**:
+the static placeholder and deployment workflow are ready. The remaining live
+publication and validation scope is explicitly split into
+[Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17), which tracks
+all five checks below after the infrastructure reaches `main`.
+PR #16 addresses the infrastructure scope of Issue #15; live publication and
+acceptance validation remain tracked separately in Issue #17.
+
+Checks on October 2, 2026 (JST) confirmed that Pages is configured for GitHub
+Actions with HTTPS enforced, but there are no Actions runs on `main` and the
+target URL returns HTTP 404. The placeholder has not yet been published.
+
+The playground currently contains only a static placeholder in `web/index.html`.
+The [Pages workflow](.github/workflows/pages.yml) deploys the contents of `web/`
+after every push or merge to `main`. It can also be run manually from the Actions
+tab with `main` selected. No build step, framework, or ASR backend is required.
+
+For repository setup, select **Settings → Pages → Build and deployment → Source →
+GitHub Actions**. Deployment uses the `github-pages` environment and the built-in
+`GITHUB_TOKEN`; no additional secret is needed. The deployment's environment URL
+in Actions reports the canonical Pages URL.
+
+Outstanding validation in Issue #17 after merging the infrastructure:
+
+- [ ] Confirm the Pages workflow succeeds on `main`.
+- [ ] Confirm the public URL is reachable over HTTPS.
+- [ ] Confirm the published placeholder renders in a desktop browser.
+- [ ] Open the same published URL from a mobile browser; local mobile viewport
+  emulation does not verify live mobile access.
+- [ ] After a subsequent change to `web/index.html` reaches `main`, confirm the
+  next deployment succeeds and the updated content appears at the same URL.
+
+Record both deployment run URLs and commit SHAs, the HTTPS result, desktop and
+mobile browser/device details, and the updated content seen after redeployment
+in Issue #17 before closing that follow-up. Local rendering and mobile viewport
+emulation do not complete these live checks.
+
 ## Vision
 
 Build a speech input system that:
@@ -52,7 +93,6 @@ Personalized automatic speech recognition (ASR) should:
 Separate issues should define and implement:
 
 - Web/PWA foundation.
-- GitHub Pages automatic deployment.
 - Browser microphone and audio pipeline.
 - Web ASR technology evaluation, including sherpa-onnx/WASM and alternatives.
 - Personalized ASR data and feedback loop.
