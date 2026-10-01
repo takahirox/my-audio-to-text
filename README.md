@@ -56,11 +56,12 @@ and [merge criteria](docs/review-guidelines.md#merge-criteria):
 1. Review PR #19 as **intentional partial work**: it records the initial
    deployment and prepares the small placeholder revision needed for the
    subsequent deployment check. Use the [checked-in PR description](docs/evidence/pages-validation-pr.md)
-   for publication updates; its issue reference must remain `Related to #17`
-   without a closing keyword and identify the two pending live checks. Once this
-   partial scope passes review, it can be marked ready and merged into `main` while
-   Issue #17 stays open. The checks that require this merge are follow-up work,
-   not prerequisites for taking this partial PR out of draft.
+   for publication updates and identify the two pending live checks. The publication
+   instruction requires `Closes #17`, so PR #19 remains a draft: merging it would
+   close the Issue before validation is complete. A reviewer must reconcile that
+   closing directive with the [partial-work rule](docs/development-flow.md#implement-and-propose-a-pull-request)
+   before approving a merge. The subsequent deployment check requires a reviewed
+   merge; publication of this draft does not complete it.
 2. After that reviewed merge, record the resulting deployed commit SHA and
    successful automatic Pages run URL (`push` event).
 3. Reload the same public URL in a browser and confirm the full revision 2 text

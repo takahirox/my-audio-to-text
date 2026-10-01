@@ -6,9 +6,9 @@ Record the initial live Pages deployment, HTTPS access, and desktop rendering fo
 
 The initial placeholder is publicly available at https://takahirox.github.io/my-audio-to-text/ following the merge of PR #16. This is **intentional partial work for Issue #17**: three live checks have evidence; actual mobile-browser validation and the subsequent automatic redeployment check remain pending.
 
-Review this PR as intentional partial work under the repository's development flow. Once this partial scope passes review, it can be marked ready and merged while Issue #17 stays open. Record the two pending live checks in a follow-up evidence update; claim completion only after all five acceptance checks have recorded evidence.
+Keep this PR in draft while the two live checks remain pending. The publication instruction requires a closing reference, so merging this PR would close Issue #17 even though its acceptance criteria are not yet complete. A reviewer must resolve that conflict before approving a merge. Record the two pending live checks in a follow-up evidence update; claim completion only after all five acceptance checks have recorded evidence.
 
-The README links this checked-in PR description so later publication updates preserve the non-closing issue reference and pending checks.
+The README links this checked-in PR description so later publication updates preserve the pending checks and draft status.
 
 ## Validation
 
@@ -22,15 +22,15 @@ The README links this checked-in PR description so later publication updates pre
 
 ## Related issues
 
-Related to #17
+Closes #17
 
-Issue #17 remains open for actual mobile-browser evidence and the subsequent reviewed deployment with changed content confirmed in a browser.
+The closing directive is required by the publication instruction; it does not establish completion. Issue #17 remains open until merge, and actual mobile-browser evidence and the subsequent reviewed deployment with changed content confirmed in a browser remain pending.
 
 PR #16 supplied the merged infrastructure. This continues the live validation scope split from #15.
 
 ## Scope check
 
-- [x] This PR fully addresses each Issue it claims to resolve. (No Issue is claimed as resolved; Issue #17 remains open for the two pending live checks.)
+- [ ] This PR fully addresses each Issue it claims to resolve. (Issue #17 still has two pending live checks; the required closing directive must be reconciled before merge.)
 - [x] This PR does not include unrelated work.
 - [x] This PR does not add speculative abstractions, extensibility, frameworks, or subsystems that are not needed by the Issue.
 - [x] Any intentionally partial implementation is clearly stated, and the parent Issue is not presented as fully resolved unless the remaining scope has been explicitly split out.
