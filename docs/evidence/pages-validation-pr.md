@@ -26,6 +26,12 @@ Related to #17 (intentional partial work).
 
 Issue #17 must remain open after this partial PR merges. Actual mobile-browser evidence and the subsequent reviewed deployment with changed content confirmed in a browser remain pending.
 
+Only after all five live checks have recorded evidence should the completion PR use this closing reference:
+
+```text
+Closes #17
+```
+
 PR #16 supplied the merged infrastructure. This continues the live validation scope split from #15.
 
 ## Scope check
