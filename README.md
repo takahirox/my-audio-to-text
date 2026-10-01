@@ -57,3 +57,7 @@ Separate issues should define and implement:
 - Web ASR technology evaluation, including sherpa-onnx/WASM and alternatives.
 - Personalized ASR data and feedback loop.
 - Cross-platform product contracts.
+
+## Contributing
+
+See the [development flow](docs/development-flow.md) for workflow and language policy, and the [review guidelines](docs/review-guidelines.md) for review and merge criteria.
