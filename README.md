@@ -10,7 +10,41 @@ This repository is a minimal product and vision baseline, ready for a new design
 
 There is no production application implementation in this baseline. The disposable [browser Speech-to-Text playground](docs/asr-manual-testing.md) compares Moonshine Voice, sherpa-onnx/ReazonSpeech, and Whisper for Japanese manual testing. No production backend is selected. Backward compatibility with the prototype's APIs, storage, configuration, architecture, or platform behavior is not a requirement.
 
-The intended playground URL is [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/). Publication and real-device validation remain pending in [#17](https://github.com/takahirox/my-audio-to-text/issues/17). See the playground instructions for local setup, deployment, model limitations, and the manual-results template.
+## Web playground
+
+Target public URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
+
+The playground replaces the static placeholder from [#15](https://github.com/takahirox/my-audio-to-text/issues/15)
+with three disposable ASR PoCs for [#18](https://github.com/takahirox/my-audio-to-text/issues/18).
+Publication and real-device validation remain pending in
+[#17](https://github.com/takahirox/my-audio-to-text/issues/17).
+See the [manual-testing instructions](docs/asr-manual-testing.md) for local setup,
+model limitations, and the manual-results template.
+
+The [Pages workflow](.github/workflows/pages.yml) prepares pinned runtime assets
+and deploys the contents of `web/`
+after every push or merge to `main`. It can also be run manually from the Actions
+tab with `main` selected. Inference runs in the browser; no ASR server is required.
+
+For repository setup, select **Settings → Pages → Build and deployment → Source →
+GitHub Actions**. Deployment uses the `github-pages` environment and the built-in
+`GITHUB_TOKEN`; no additional secret is needed. The deployment's environment URL
+in Actions reports the canonical Pages URL.
+
+Outstanding live validation tracked in Issue #17:
+
+- [ ] Confirm the Pages workflow succeeds on `main`.
+- [ ] Confirm the public URL is reachable over HTTPS.
+- [ ] Confirm the published playground renders in a desktop browser.
+- [ ] Open the same published URL from a mobile browser; local mobile viewport
+  emulation does not verify live mobile access.
+- [ ] After a subsequent change to `web/index.html` reaches `main`, confirm the
+  next deployment succeeds and the updated content appears at the same URL.
+
+Record both deployment run URLs and commit SHAs, the HTTPS result, desktop and
+mobile browser/device details, and the updated content seen after redeployment
+in Issue #17 before closing that follow-up. Local rendering and mobile viewport
+emulation do not complete these live checks.
 
 ## Vision
 
@@ -54,7 +88,6 @@ Personalized automatic speech recognition (ASR) should:
 Separate issues should define and implement:
 
 - Web/PWA foundation.
-- GitHub Pages automatic deployment.
 - Browser microphone and audio pipeline.
 - Web ASR technology evaluation, including sherpa-onnx/WASM and alternatives.
 - Personalized ASR data and feedback loop.
