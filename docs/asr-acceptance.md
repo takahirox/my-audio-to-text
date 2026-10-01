@@ -41,7 +41,7 @@ errors using the [manual results template](asr-manual-testing.md#results-to-carr
 | Three-backend HTTPS deployment: run URL, commit SHA, check time, staged asset checks | Passed; evidence above |
 | Desktop Chromium: all three real models, microphone, Japanese recognition, Stop, repeat, switching | Not tested by a human; results requested |
 | Physical iPhone Safari: all three real models and the same capture/recognition lifecycle | Not tested; physical device and human tester unavailable to this node |
-| Physical Android Chrome when available | Not tested; device availability unknown |
+| Physical Android Chrome when available | Not tested; no physical Android device available to this node; operator device availability unconfirmed |
 
 The required per-backend human evidence is still missing:
 
@@ -72,21 +72,23 @@ No human result has been inferred from either kind of automation.
 
 ## Handoff
 
-### Review finding recheck (2026-10-02 02:02 JST)
+### Review finding recheck (2026-10-02 02:07 JST / 2026-10-01 17:07 UTC)
 
 Read-only GitHub checks for this fix attempt confirmed that PR #20 is open and draft at
-`be15bf98a84e44610b89ca5f173c88b74c428f74`, and #18 and #21 remain open. #21's sole
+`0b064033612fb6f174d5f295c914f9095a3f86db`, and #18 and #21 remain open. #21's sole
 comment records publication and explicitly reports missing human acceptance. #18 and PR #20
 have no conversation comments; no new desktop Chromium or physical iPhone Safari results
 were available in these records. Human evidence was requested again in this node, but none
-was supplied at checkpoint time. Android remains not tested, with device availability unknown.
+was supplied at checkpoint time. No physical iPhone or Android device is available to this
+node. Android remains not tested; the operator's device availability is unconfirmed.
 
 `npm ci` succeeded with no reported vulnerabilities. Four audio tests and ten automated
 Chromium/WebKit lifecycle tests passed again; six real-model tests were skipped because
 `ASR_TEST_WAV` was not supplied. These checks do not resolve the P1 human acceptance finding.
 The existing manual results template records deployment identity, partial transcripts, Stop
 outcome, repeat, and switching so a tester can supply all required evidence. This checkpoint
-refreshes the handoff only; it does not add human acceptance or fix a demonstrated code defect.
+corrects the stale PR head and consolidates the blocker handoff; it does not add human
+acceptance or fix a demonstrated code defect.
 
 **The P1 finding remains unresolved.** This node has no human tester or physical iPhone
 available. The next required action is human testing of the published deployment, followed
@@ -94,11 +96,11 @@ by recording evidence and fixing any observed comparison blockers. Further autom
 documentation commits, or redeployment cannot substitute for that evidence. Do not advance
 this checkpoint as accepted or ready to merge.
 
-Publication finding: resolved for the reviewed PR commit above. Human acceptance finding:
-**unresolved**. The operator was asked for desktop Chromium and physical iPhone results;
-none were available at checkpoint time. A human tester must run each backend against the
-live deployment, record the results here and in #21, and resolve failures that prevent
-comparison. Test Android when available or record it as not tested.
+Resume the fix when a human tester supplies results for all three backends on desktop
+Chromium and physical iPhone Safari against the published deployment. Record those results
+here and in #21 using the manual results template, and fix observed failures preventing
+comparison. Test Android when available or explicitly record its unavailability. Preserve
+the verified publication evidence above while acceptance remains pending.
 
 This checkpoint changes documentation only; its later publication to PR #20 does not change
 the deployed page, scripts, or staged assets. Keep the deployed SHA distinct from the later
