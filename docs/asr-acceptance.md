@@ -72,17 +72,17 @@ No human result has been inferred from either kind of automation.
 
 ## Handoff
 
-### Review finding recheck (2026-10-02 02:13 JST / 2026-10-01 17:13 UTC)
+### Review finding recheck (2026-10-02 02:19 JST / 2026-10-01 17:19 UTC)
 
 Read-only GitHub checks for this fix attempt confirmed that PR #20 is open and draft at
-`55f1746c051c0963bf58ad429e01a745b84b4bb4`, and #18 and #21 remain open. #21's sole
+`58134b0be48fce0ec5fe6796e400f126ceae4ff4`, and #18 and #21 remain open. #21's sole
 comment records publication and explicitly reports missing human acceptance. #18 and PR #20
 have no conversation comments; no new desktop Chromium or physical iPhone Safari results
 were available in these records. Human evidence was requested again in this node, but none
 was supplied at checkpoint time. No physical iPhone or Android device is available to this
 node. Android remains not tested; the operator's device availability is unconfirmed.
 
-The incoming review checkpoint `7054485b80e0683a6a5226d878b4182939a17d68` reports the
+The incoming review checkpoint `30f23a2517cf042cf95bee03b138a56edb6ac93a` reports the
 same unresolved P1 finding. No demonstrated implementation defect or new human evidence
 was supplied. All six required backend/device combinations above remain not tested.
 
@@ -112,3 +112,8 @@ documentation commit. Keep PR #20 in draft and #18/#21 open until the remaining 
 gate is met. Do not repeatedly redeploy to address missing human evidence, merge first, or
 treat automated WebKit as a physical iPhone. No production backend is selected. Do not reset
 usage limits, buy allowance, or switch models/providers to evade a limit.
+
+The downstream result must retain this unresolved P1 blocker. Resume acceptance work when
+human results or access to a human tester with the required devices becomes available;
+another documentation publication or automated review cycle cannot complete it. This
+checkpoint only refreshes the handoff and check results; no acceptance finding was fixed.
