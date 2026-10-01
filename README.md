@@ -41,7 +41,7 @@ Live validation recorded on October 2, 2026 (JST; check times below use UTC):
 | Actual mobile browser | **Pending — requires physical-device evidence.** No device model, browser/version, check time, or rendering result at the canonical published URL has been recorded. This revision environment has no actual mobile-browser access; desktop viewport emulation cannot complete this check. |
 | Subsequent reviewed change and automatic redeployment | **Pending — requires review and merge.** [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) proposes `The Web playground is deployed. Placeholder revision 2.` in `web/index.html`. The revision is not on `main`; its deployed commit, successful automatic Pages run URL, and browser result showing the changed text remain unrecorded. |
 
-Follow-up checks at `2026-10-01T16:12:24Z` confirmed that the canonical URL
+Follow-up checks at `2026-10-01T16:31:37Z` confirmed that the canonical URL
 still returns HTTPS **200** with successful TLS certificate verification and
 serves `The Web playground is deployed.` without the revision 2 text. GitHub
 still reports `main` at `d3a600c76c8dc0bb11d91e440073ecec2e227bbb` and only
@@ -56,12 +56,11 @@ and [merge criteria](docs/review-guidelines.md#merge-criteria):
 1. Review PR #19 as **intentional partial work**: it records the initial
    deployment and prepares the small placeholder revision needed for the
    subsequent deployment check. Use the [checked-in PR description](docs/evidence/pages-validation-pr.md)
-   for publication updates and identify the two pending live checks. The publication
-   instruction requires `Closes #17`, so PR #19 remains a draft: merging it would
-   close the Issue before validation is complete. A reviewer must reconcile that
-   closing directive with the [partial-work rule](docs/development-flow.md#implement-and-propose-a-pull-request)
-   before approving a merge. The subsequent deployment check requires a reviewed
-   merge; publication of this draft does not complete it.
+   for publication updates; reference the Issue with `Related to #17` and identify
+   the two pending live checks. Once this partial scope passes review, PR #19 can
+   be marked ready and merged while Issue #17 stays open. The subsequent
+   deployment check requires that reviewed merge; the proposed revision alone
+   does not complete it.
 2. After that reviewed merge, record the resulting deployed commit SHA and
    successful automatic Pages run URL (`push` event).
 3. Reload the same public URL in a browser and confirm the full revision 2 text
