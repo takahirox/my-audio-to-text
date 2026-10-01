@@ -5,8 +5,11 @@ It does not select a production backend. Record human observations before a sepa
 
 ## Open the playground
 
-The intended Pages URL is **https://takahirox.github.io/my-audio-to-text/**.
-This checkpoint supplies `web/` and `.github/workflows/pages.yml`; it does not publish the site.
+The Pages URL is **https://takahirox.github.io/my-audio-to-text/**. The reviewed PR #20 commit
+`66fb43f82b5a29df7c3e96efc9e0dfe3bb33a444` is published by successful
+[run 36894283644](https://github.com/takahirox/my-audio-to-text/actions/runs/36894283644).
+The page and all staged assets were verified on 2026-10-02 JST; see
+[publication evidence and pending human acceptance](asr-acceptance.md).
 In repository Settings → Pages, select **GitHub Actions** as the source. The workflow stages
 the pinned runtime assets and deploys `web/` on pushes to `main` or an explicit manual dispatch.
 For PR #20, **publish its reviewed branch and complete acceptance before merging** using the
@@ -24,8 +27,8 @@ Do not interpret the documented URL as evidence that deployment succeeded.
    the PR head SHA before deployment. This fix node does not push or merge.
 2. In **Settings → Environments → github-pages → Deployment branches and tags**, retain `main`
    and allow the exact branch `codex/issue-18-browser-asr-pocs` for this acceptance deployment.
-   Keep the environment's other protections. The policy observed on 2026-10-02 permits only
-   `main`; changing the workflow alone does not authorize the PR branch to deploy.
+   Keep the environment's other protections. This exact branch permission was added on
+   2026-10-02 JST, retaining `main`; changing the workflow alone does not authorize a branch.
 3. Run the existing Pages workflow with the PR branch selected in Actions, or use:
 
    ```sh
@@ -50,11 +53,11 @@ Do not interpret the documented URL as evidence that deployment succeeded.
    to `main` redeploys the same environment. Remove the temporary PR-branch permission once
    it is no longer needed.
 
-#21's instruction to publish only after PR #20 merges conflicts with the PR's acceptance gate.
 The sequence for this work is **reviewed branch → manual publication → recorded human acceptance
-→ final review → merge**, with #21 tracking the pre-merge work. When publishing this checkpoint,
-update #21's scheduling paragraph and PR #20's description to this sequence; retain the acceptance
-gate and do not describe #18 as complete while evidence is missing.
+→ final review → merge**, with #21 tracking the pre-merge work. #21 already documents this
+sequence. Publication is complete for the commit above; desktop and physical-device human
+results are still required. Retain the acceptance gate and do not describe #18 as complete
+while evidence is missing.
 
 Current evidence and remaining blockers are recorded in [ASR acceptance status](asr-acceptance.md).
 
