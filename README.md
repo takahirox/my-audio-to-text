@@ -55,9 +55,9 @@ and [merge criteria](docs/review-guidelines.md#merge-criteria):
 
 1. Review PR #19 as **intentional partial work**: it records the initial
    deployment and prepares the small placeholder revision needed for the
-   subsequent deployment check. Its description must link Issue #17 without
-   a closing keyword and identify the two pending live checks. Once this partial
-   scope passes review, it can be marked ready and merged into `main` while
+   subsequent deployment check. Its description must use `Related to #17`
+   without a closing keyword and identify the two pending live checks. Once this
+   partial scope passes review, it can be marked ready and merged into `main` while
    Issue #17 stays open. The checks that require this merge are follow-up work,
    not prerequisites for taking this partial PR out of draft.
 2. After that reviewed merge, record the resulting deployed commit SHA and
