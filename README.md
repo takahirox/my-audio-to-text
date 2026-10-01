@@ -47,8 +47,7 @@ serves `The Web playground is deployed.` without the revision 2 text. GitHub
 still reports `main` at `d3a600c76c8dc0bb11d91e440073ecec2e227bbb` and only
 the initial successful `push` run linked above. PR #19 is open and unmerged;
 Issue #17 is open and has no comments supplying the missing mobile evidence.
-These checks do not complete either pending acceptance criterion. This revision
-node is authorized to commit locally, but must not push or merge.
+These checks do not complete either pending acceptance criterion.
 
 To finish Issue #17:
 
@@ -61,8 +60,8 @@ To finish Issue #17:
    cache expiry if the previous text is still served. Record the browser/version,
    check time, and changed text actually seen.
 4. Update this validation record with that evidence before closing Issue #17.
-   Keep PR #19 described as partial work and reference Issue #17 without a
-   closing keyword until all five checks have recorded evidence, as required by
+   Keep PR #19 as a draft described as partial work until all five checks have
+   recorded evidence, following
    the [development flow](docs/development-flow.md#implement-and-propose-a-pull-request).
 
 The initial screenshot records the previously published text. Local rendering
