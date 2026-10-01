@@ -10,6 +10,25 @@ This repository is a minimal product and vision baseline, ready for a new design
 
 There is no application implementation in this baseline. Backward compatibility with the prototype's APIs, storage, configuration, architecture, or platform behavior is not a requirement. Web implementation will begin in separate follow-up issues.
 
+## Web playground
+
+Public URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
+
+The playground currently contains only a static placeholder in `web/index.html`.
+The [Pages workflow](.github/workflows/pages.yml) deploys the contents of `web/`
+after every push or merge to `main`. It can also be run manually from the Actions
+tab with `main` selected. No build step, framework, or ASR backend is required.
+
+For repository setup, select **Settings → Pages → Build and deployment → Source →
+GitHub Actions**. Deployment uses the `github-pages` environment and the built-in
+`GITHUB_TOKEN`; no additional secret is needed. The deployment's environment URL
+in Actions reports the canonical Pages URL.
+
+After merging, confirm the workflow succeeds and open the public HTTPS URL in a
+desktop browser and a mobile browser. After a later change to `web/index.html`
+reaches `main`, confirm the next deployment succeeds and refresh the same URL to
+verify the updated content.
+
 ## Vision
 
 Build a speech input system that:
@@ -52,7 +71,6 @@ Personalized automatic speech recognition (ASR) should:
 Separate issues should define and implement:
 
 - Web/PWA foundation.
-- GitHub Pages automatic deployment.
 - Browser microphone and audio pipeline.
 - Web ASR technology evaluation, including sherpa-onnx/WASM and alternatives.
 - Personalized ASR data and feedback loop.
