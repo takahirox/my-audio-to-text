@@ -69,7 +69,7 @@ Publication and automatic redeployment are **unverified**. This is a partial
 validation record for [Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17),
 which remains incomplete until all five live checks pass.
 
-Checks on October 2, 2026 (JST) found that the prerequisite
+Review follow-up checks on October 2, 2026 (JST) confirmed that the prerequisite
 [PR #16](https://github.com/takahirox/my-audio-to-text/pull/16) is still an open,
 unmerged draft. Its inspected head is
 `6d442b917ac72800bf65966bdb841995c1ed69a8`; it proposes
@@ -82,10 +82,16 @@ and the canonical URL above. These settings alone do not establish publication.
 | Required live check | Observed result / outstanding evidence |
 | --- | --- |
 | Pages workflow succeeds on `main` | Blocked by PR #16. The Actions runs API returned zero runs for `main`, and the workflows API listed only `CI`, with no Pages workflow. No successful run URL or deployed commit SHA is available. |
-| Canonical URL returns HTTP 200 over HTTPS | Failed: an HTTPS GET returned **HTTP 404** at **2026-10-01T15:31:27Z** (October 2, 00:31:27 JST). TLS certificate verification succeeded; the URL did not redirect. |
-| Published placeholder renders in a desktop browser | Unverified. The Chrome DevTools connector could not connect. An isolated headless Google Chrome **154.0.8037.58** attempt timed out after 30 seconds without a rendering result. No successful desktop rendering is claimed. |
+| Canonical URL returns HTTP 200 over HTTPS | Failed again: an HTTPS GET returned **HTTP 404** at **2026-10-01T15:39:12Z** (October 2, 00:39:12 JST). TLS certificate verification succeeded; the URL did not redirect. |
+| Published placeholder renders in a desktop browser | Unverified. The Chrome DevTools connector again could not connect because Chrome's DevTools port was unavailable. No successful desktop rendering is claimed. |
 | Same URL renders in an actual mobile browser | Unverified. No physical mobile device/browser result is available. Viewport emulation does not satisfy this check. |
 | Subsequent reviewed change automatically redeploys and appears at the same URL | Blocked by the initial publication. No subsequent reviewed/merged commit, deployment run URL, changed text, or browser result is available. |
+
+The review follow-up corrected [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19)
+to use a non-closing reference to Issue #17, in accordance with the
+[partial-work rule](docs/development-flow.md#implement-and-propose-a-pull-request).
+The live acceptance findings remain unresolved; this documentation update does
+not establish successful publication or redeployment.
 
 Continue validation after PR #16 is reviewed and merged:
 
