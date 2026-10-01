@@ -6,9 +6,9 @@ It does not select a production backend. Record human observations before a sepa
 ## Open the playground
 
 The Pages URL is **https://takahirox.github.io/my-audio-to-text/**. The reviewed PR #20 commit
-`66fb43f82b5a29df7c3e96efc9e0dfe3bb33a444` is published by successful
-[run 36894283644](https://github.com/takahirox/my-audio-to-text/actions/runs/36894283644).
-The page and all staged assets were verified on 2026-10-02 JST; see
+`6888cca542e3d9131d727f9b40f0f2c96e65d6a1` is published by successful
+[run 36933623325](https://github.com/takahirox/my-audio-to-text/actions/runs/36933623325).
+The live page, runtime scripts, and manifest matched the reviewed files, and all three real models reached Ready in automated Chromium on 2026-10-02 JST. This does not verify human microphone or recognition acceptance; see
 [publication evidence and pending human acceptance](asr-acceptance.md).
 In repository Settings → Pages, select **GitHub Actions** as the source. The workflow stages
 the pinned runtime assets and deploys `web/` on pushes to `main` or an explicit manual dispatch.

@@ -1,7 +1,7 @@
 # Issue #18 publication and device acceptance status
 
 PR #20 remains partial work until the required human test results exist.
-The earlier ASR deployment was superseded by the completed #17 placeholder validation. This branch now incorporates that main evidence and prepares a fresh reviewed ASR deployment. Publication and automated checks do not establish physical-device compatibility or human recognition quality.
+The earlier ASR deployment was superseded by the completed #17 placeholder validation. This branch incorporates that main evidence and the reviewed ASR application is now published again. Publication and automated checks do not establish physical-device compatibility or human recognition quality.
 
 ## Current branch preparation (2026-10-01T22:10:11.892Z)
 
@@ -19,7 +19,13 @@ A separate automated Chromium check loaded the **real** models through the actua
 
 These durations include this desktop environment's loading conditions and are not mobile performance measurements. Model loading does not verify real microphone capture, Japanese recognition, or physical-device compatibility. Pixel 7a / Chrome is available to the operator; ASR acceptance on it is still not recorded. Human desktop and physical iPhone results also remain pending. Keep PR #20 draft and Issues #18/#21 open; wait for human results instead of repeating an AI review/fix loop.
 
-A fresh reviewed-branch deployment will replace the temporary placeholder currently on Pages. Record the new run and deployed SHA after publication below.
+## Current verified publication
+
+- [Pages run 36933623325](https://github.com/takahirox/my-audio-to-text/actions/runs/36933623325) succeeded for reviewed application commit `6888cca542e3d9131d727f9b40f0f2c96e65d6a1` on `codex/issue-18-browser-asr-pocs`.
+- At 2026-10-01T22:14:04.213532Z, the live HTTPS page, seven runtime/style files, and `vendor/manifest.json` returned HTTP 200 and matched the reviewed local files by SHA-256. The successful build prepared the pinned staged assets.
+- At 2026-10-01T22:14:37.481Z, a separate isolated Chromium check loaded each **real** model from the live page. All reached Ready with cross-origin isolation enabled and no page/runtime errors: Moonshine 10.75 s, sherpa 21.55 s, Whisper 7.01 s initialization. These are desktop loading observations, not mobile performance or human recognition results.
+- This replaces the #17 placeholder. Later documentation-only commits do not change the deployed application SHA above. Physical microphone, Japanese recognition, and required human acceptance remain pending; do not infer them from model loading.
+
 
 ## Historical publication (2026-10-02 JST)
 
@@ -55,7 +61,7 @@ errors using the [manual results template](asr-manual-testing.md#results-to-carr
 
 | Required evidence | Status |
 | --- | --- |
-| Three-backend HTTPS deployment: run URL, commit SHA, check time, staged asset checks | Passed; evidence above |
+| Three-backend HTTPS deployment: run URL, commit SHA, check time, staged asset checks | Passed; current verified publication above |
 | Desktop Chromium: all three real models, microphone, Japanese recognition, Stop, repeat, switching | Not tested by a human; results requested |
 | Physical iPhone Safari: all three real models and the same capture/recognition lifecycle | Not tested; physical device and human tester unavailable to this node |
 | Physical Android Chrome when available | Not tested; Pixel 7a / Chrome is available to the operator; ASR testing not yet recorded |
