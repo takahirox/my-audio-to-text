@@ -8,7 +8,7 @@ The initial placeholder is publicly available at https://takahirox.github.io/my-
 
 Review this PR as intentional partial work under the repository's development flow. Once this partial scope passes review, it can be marked ready and merged while Issue #17 stays open. Record the two pending live checks in a follow-up evidence update; claim completion only after all five acceptance checks have recorded evidence.
 
-The README links this checked-in PR description so later publication updates preserve the non-closing issue reference and pending checks.
+Use this checked-in description as PR #19's complete body for publication updates. Preserve `Related to #17` and both pending checks; do not append an Issue-closing directive while either check lacks evidence. The README links this description for subsequent updates.
 
 ## Validation
 
