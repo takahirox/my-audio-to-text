@@ -38,8 +38,17 @@ Live validation recorded on October 2, 2026 (JST; check times below use UTC):
 | Initial Pages workflow on `main` | **Passed.** [Run 36886759434](https://github.com/takahirox/my-audio-to-text/actions/runs/36886759434), triggered by `push`, completed successfully at `2026-10-01T15:45:54Z`. Deployed commit: `d3a600c76c8dc0bb11d91e440073ecec2e227bbb`. All deployment job steps succeeded. |
 | Canonical public URL over HTTPS | **Passed.** The published URL above returned HTTP **200** with TLS certificate verification successful at `2026-10-01T15:53:40Z`. The response contained `my-audio-to-text` and `The Web playground is deployed.` |
 | Published placeholder in a desktop browser | **Passed.** Google Chrome `154.0.8037.58` on macOS, in headless desktop mode with a fresh isolated profile and a 1280 × 800 viewport. The live URL rendered the heading and initial deployment text correctly; the DOM and [screenshot](docs/evidence/pages-desktop-initial.png) were inspected at `2026-10-01T15:55:59Z`. |
-| Actual mobile browser | **Pending.** No physical mobile device/browser result has been recorded. Desktop viewport emulation cannot complete this check. |
-| Subsequent reviewed change and automatic redeployment | **Pending.** `web/index.html` now prepares the text `The Web playground is deployed. Placeholder revision 2.` for review. This worktree change has not reached `main`; no subsequent deployment or live browser result is claimed. |
+| Actual mobile browser | **Pending — requires physical-device evidence.** No device model, browser/version, check time, or rendering result at the canonical published URL has been recorded. This revision environment has no actual mobile-browser access; desktop viewport emulation cannot complete this check. |
+| Subsequent reviewed change and automatic redeployment | **Pending — requires review and merge.** [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) proposes `The Web playground is deployed. Placeholder revision 2.` in `web/index.html`. The revision is not on `main`; its deployed commit, successful automatic Pages run URL, and browser result showing the changed text remain unrecorded. |
+
+Follow-up checks at `2026-10-01T16:04:48Z` confirmed that the canonical URL
+still returns HTTPS **200** with successful TLS certificate verification and
+serves `The Web playground is deployed.` without the revision 2 text. GitHub
+still reports `main` at `d3a600c76c8dc0bb11d91e440073ecec2e227bbb` and only
+the initial successful `push` run linked above. PR #19 is open and unmerged;
+Issue #17 is open and has no comments supplying the missing mobile evidence.
+These checks do not complete either pending acceptance criterion. This revision
+node is authorized to commit locally, but must not push or merge.
 
 To finish Issue #17:
 
@@ -52,6 +61,9 @@ To finish Issue #17:
    cache expiry if the previous text is still served. Record the browser/version,
    check time, and changed text actually seen.
 4. Update this validation record with that evidence before closing Issue #17.
+   Keep PR #19 described as partial work and reference Issue #17 without a
+   closing keyword until all five checks have recorded evidence, as required by
+   the [development flow](docs/development-flow.md#implement-and-propose-a-pull-request).
 
 The initial screenshot records the previously published text. Local rendering
 of revision 2 does not establish its publication. All five live checks are
