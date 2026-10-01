@@ -12,19 +12,14 @@ There is no application implementation in this baseline. Backward compatibility 
 
 ## Web playground
 
-Target public URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
+Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
 
-This is a **partial implementation of [Issue #15](https://github.com/takahirox/my-audio-to-text/issues/15)**:
-the static placeholder and deployment workflow are ready. The remaining live
-publication and validation scope is explicitly split into
-[Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17), which tracks
-all five checks below after the infrastructure reaches `main`.
-PR #16 addresses the infrastructure scope of Issue #15; live publication and
-acceptance validation remain tracked separately in Issue #17.
-
-Checks on October 2, 2026 (JST) confirmed that Pages is configured for GitHub
-Actions with HTTPS enforced, but there are no Actions runs on `main` and the
-target URL returns HTTP 404. The placeholder has not yet been published.
+[PR #16](https://github.com/takahirox/my-audio-to-text/pull/16) merged the
+[Issue #15](https://github.com/takahirox/my-audio-to-text/issues/15) infrastructure
+into `main` on October 2, 2026 (JST). The initial deployment succeeded and the
+placeholder is publicly available. [Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17)
+remains **partially validated**: actual mobile access and a subsequent reviewed
+change appearing after automatic redeployment are still unverified.
 
 The playground currently contains only a static placeholder in `web/index.html`.
 The [Pages workflow](.github/workflows/pages.yml) deploys the contents of `web/`
@@ -36,20 +31,31 @@ GitHub Actions**. Deployment uses the `github-pages` environment and the built-i
 `GITHUB_TOKEN`; no additional secret is needed. The deployment's environment URL
 in Actions reports the canonical Pages URL.
 
-Outstanding validation in Issue #17 after merging the infrastructure:
+Live validation recorded on October 2, 2026 (JST; check times below use UTC):
 
-- [ ] Confirm the Pages workflow succeeds on `main`.
-- [ ] Confirm the public URL is reachable over HTTPS.
-- [ ] Confirm the published placeholder renders in a desktop browser.
-- [ ] Open the same published URL from a mobile browser; local mobile viewport
-  emulation does not verify live mobile access.
-- [ ] After a subsequent change to `web/index.html` reaches `main`, confirm the
-  next deployment succeeds and the updated content appears at the same URL.
+| Issue #17 acceptance check | Result and evidence |
+| --- | --- |
+| Initial Pages workflow on `main` | **Passed.** [Run 36886759434](https://github.com/takahirox/my-audio-to-text/actions/runs/36886759434), triggered by `push`, completed successfully at `2026-10-01T15:45:54Z`. Deployed commit: `d3a600c76c8dc0bb11d91e440073ecec2e227bbb`. All deployment job steps succeeded. |
+| Canonical public URL over HTTPS | **Passed.** The published URL above returned HTTP **200** with TLS certificate verification successful at `2026-10-01T15:53:40Z`. The response contained `my-audio-to-text` and `The Web playground is deployed.` |
+| Published placeholder in a desktop browser | **Passed.** Google Chrome `154.0.8037.58` on macOS, in headless desktop mode with a fresh isolated profile and a 1280 × 800 viewport. The live URL rendered the heading and initial deployment text correctly; the DOM and [screenshot](docs/evidence/pages-desktop-initial.png) were inspected at `2026-10-01T15:55:59Z`. |
+| Actual mobile browser | **Pending.** No physical mobile device/browser result has been recorded. Desktop viewport emulation cannot complete this check. |
+| Subsequent reviewed change and automatic redeployment | **Pending.** `web/index.html` now prepares the text `The Web playground is deployed. Placeholder revision 2.` for review. This worktree change has not reached `main`; no subsequent deployment or live browser result is claimed. |
 
-Record both deployment run URLs and commit SHAs, the HTTPS result, desktop and
-mobile browser/device details, and the updated content seen after redeployment
-in Issue #17 before closing that follow-up. Local rendering and mobile viewport
-emulation do not complete these live checks.
+To finish Issue #17:
+
+1. Open the published URL on an actual phone or tablet and record the device
+   model, browser/version, check time, and rendered text/result.
+2. Review and merge the placeholder revision into `main`. Record the resulting
+   deployed commit SHA and successful automatic Pages run URL (`push` event).
+3. Reload the same public URL in a browser and confirm the full revision 2 text
+   above appears. Pages responses can be cached for ten minutes; recheck after
+   cache expiry if the previous text is still served. Record the browser/version,
+   check time, and changed text actually seen.
+4. Update this validation record with that evidence before closing Issue #17.
+
+The initial screenshot records the previously published text. Local rendering
+of revision 2 does not establish its publication. All five live checks are
+required to complete Issue #17; automatic redeployment remains unverified.
 
 ## Vision
 
