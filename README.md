@@ -56,8 +56,9 @@ and [merge criteria](docs/review-guidelines.md#merge-criteria):
 1. Review PR #19 as **intentional partial work**: it records the initial
    deployment and prepares the small placeholder revision needed for the
    subsequent deployment check. Use the [checked-in PR description](docs/evidence/pages-validation-pr.md)
-   for publication updates; reference the Issue with `Related to #17` and identify
-   the two pending live checks. Once this partial scope passes review, PR #19 can
+   for publication updates and identify the two pending live checks. PR #19
+   currently remains draft with a publication-required closing reference; remove
+   that reference before a partial merge so Issue #17 stays open. Once this partial scope passes review, PR #19 can
    be marked ready and merged while Issue #17 stays open. The subsequent
    deployment check requires that reviewed merge; the proposed revision alone
    does not complete it.
