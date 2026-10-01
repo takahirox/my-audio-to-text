@@ -16,13 +16,16 @@ Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox
 
 [PR #16](https://github.com/takahirox/my-audio-to-text/pull/16) merged the
 [Issue #15](https://github.com/takahirox/my-audio-to-text/issues/15) infrastructure
-into `main` on October 2, 2026 (JST). The initial deployment succeeded and the
-placeholder is publicly available. [Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17)
+into `main` on October 2, 2026 (JST). The initial deployment succeeded and its
+placeholder was publicly available at the historical check times below. A later
+manual branch deployment superseded it; the latest HTTPS check returned the ASR
+playground described below. [Issue #17](https://github.com/takahirox/my-audio-to-text/issues/17)
 remains **partially validated**: actual mobile access and a subsequent reviewed
 change appearing after automatic redeployment are still unverified.
 
-The playground currently contains only a static placeholder in `web/index.html`.
-The [Pages workflow](.github/workflows/pages.yml) deploys the contents of `web/`
+This PR contains a static placeholder in `web/index.html`; the live site's
+content has since been replaced by a deployment from another branch.
+The [Pages workflow in this PR](.github/workflows/pages.yml) deploys the contents of `web/`
 after every push or merge to `main`. It can also be run manually from the Actions
 tab with `main` selected. No build step, framework, or ASR backend is required.
 
@@ -31,7 +34,9 @@ GitHub Actions**. Deployment uses the `github-pages` environment and the built-i
 `GITHUB_TOKEN`; no additional secret is needed. The deployment's environment URL
 in Actions reports the canonical Pages URL.
 
-Live validation recorded on October 2, 2026 (JST; check times below use UTC):
+Historical initial-placeholder validation recorded on October 2, 2026
+(JST; check times below use UTC). These results describe the initial deployment,
+not the content served after the superseding deployment:
 
 | Issue #17 acceptance check | Result and evidence |
 | --- | --- |
@@ -41,13 +46,25 @@ Live validation recorded on October 2, 2026 (JST; check times below use UTC):
 | Actual mobile browser | **Pending — requires physical-device evidence.** No device model, browser/version, check time, or rendering result at the canonical published URL has been recorded. This revision environment has no actual mobile-browser access; desktop viewport emulation cannot complete this check. |
 | Subsequent reviewed change and automatic redeployment | **Pending — requires review and merge.** [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) proposes `The Web playground is deployed. Placeholder revision 2.` in `web/index.html`. The revision is not on `main`; its deployed commit, successful automatic Pages run URL, and browser result showing the changed text remain unrecorded. |
 
-Follow-up checks at `2026-10-01T16:31:37Z` confirmed that the canonical URL
-still returns HTTPS **200** with successful TLS certificate verification and
-serves `The Web playground is deployed.` without the revision 2 text. GitHub
-still reports `main` at `d3a600c76c8dc0bb11d91e440073ecec2e227bbb` and only
-the initial successful `push` run linked above. PR #19 is open and unmerged;
-Issue #17 is open and has no comments supplying the missing mobile evidence.
-These checks do not complete either pending acceptance criterion.
+Historical follow-up checks at `2026-10-01T16:31:37Z` confirmed that the canonical
+URL still returned HTTPS **200** with successful TLS certificate verification and
+served `The Web playground is deployed.` without the revision 2 text. At that
+time, GitHub reported `main` at `d3a600c76c8dc0bb11d91e440073ecec2e227bbb`,
+only the initial successful `push` run linked above, PR #19 open and unmerged,
+and Issue #17 open without comments supplying the missing mobile evidence.
+
+Superseding deployment: [Run 36894283644](https://github.com/takahirox/my-audio-to-text/actions/runs/36894283644)
+succeeded via `workflow_dispatch` on branch `codex/issue-18-browser-asr-pocs`,
+deploying commit `66fb43f82b5a29df7c3e96efc9e0dfe3bb33a444`; the run completed
+at `2026-10-01T16:45:43Z`. The review check at `2026-10-01T16:48:58Z` and a
+fresh HTTPS check at `2026-10-01T16:51:01Z` returned HTTP **200** with
+`Japanese Speech-to-Text playground` and ASR controls. The fresh check verified
+TLS successfully and found neither the initial placeholder text nor revision 2.
+GitHub still reported `main` at `d3a600c76c8dc0bb11d91e440073ecec2e227bbb`
+and PR #19 open and unmerged. This manual branch deployment supersedes the
+initial placeholder evidence for current content. It does **not** satisfy
+Issue #17's subsequent reviewed change merged into `main` and automatic
+redeployment criterion. Actual mobile-browser validation remains pending.
 
 Complete Issue #17 in two stages, following the
 [partial-work rule](docs/development-flow.md#implement-and-propose-a-pull-request)
@@ -75,7 +92,8 @@ and [merge criteria](docs/review-guidelines.md#merge-criteria):
 5. Submit a follow-up evidence update to this README for review. Close Issue #17
    only after all five live checks have recorded evidence.
 
-The initial screenshot records the previously published text. Local rendering
+The initial screenshot is historical evidence of the previously published
+placeholder, which the manual branch deployment superseded. Local rendering
 of revision 2 does not establish its publication. All five live checks are
 required to complete Issue #17; automatic redeployment remains unverified.
 
