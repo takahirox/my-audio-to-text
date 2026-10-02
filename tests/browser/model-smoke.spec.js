@@ -20,12 +20,12 @@ function readWav(path) {
 
 // Opt-in integration check using caller-supplied Japanese 16 kHz mono PCM WAV.
 // Nothing is uploaded: bytes are transferred directly to the browser worker.
-test.skip(!process.env.ASR_TEST_WAV, 'Set ASR_TEST_WAV to run real model downloads/inference.');
 for (const backend of ['moonshine', 'sherpa', 'whisper']) {
   test(`${backend}: real Japanese inference and finalization`, async ({ page }) => {
+    test.skip(!process.env.ASR_TEST_WAV, 'Set ASR_TEST_WAV to run real model downloads/inference.');
     test.setTimeout(240000);
     const samples = readWav(process.env.ASR_TEST_WAV);
-    await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+    await page.goto('./'); await expect(page.locator('#load')).toBeEnabled();
     const result = await page.evaluate(async ({ backend, samples }) => {
       const worker = new Worker(backend === 'sherpa' ? './sherpa-worker.js' : './model-worker.js', { type: backend === 'sherpa' ? 'classic' : 'module' });
       const finals = [], partials = [], speech = [];
@@ -75,6 +75,7 @@ const evaluations = [
   { name: 'English only', language: 'en', wav: 'ASR_ENGLISH_WAV', gain: 1 },
   { name: 'Japanese model English only', language: 'ja', wav: 'ASR_ENGLISH_WAV', gain: 1 },
   { name: 'Japanese whisper recording', language: 'ja', wav: 'ASR_WHISPER_WAV', gain: 1 },
+  { name: 'Japanese whisper recording sensitive', language: 'ja', wav: 'ASR_WHISPER_WAV', gain: 1, vadThreshold: '0.2' },
   { name: 'Japanese silence', language: 'ja', wav: 'ASR_TEST_WAV', gain: 0 },
 ];
 for (const entry of evaluations) {
@@ -82,7 +83,8 @@ for (const entry of evaluations) {
     test.skip(!process.env[entry.wav], `Set ${entry.wav} for this evaluation.`);
     test.setTimeout(240000);
     const samples = readWav(process.env[entry.wav]).map((sample) => sample * entry.gain);
-    await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+    await page.goto('./'); await expect(page.locator('#load')).toBeEnabled();
+    await expect(page.locator('#description')).toContainText('Small Streaming');
     const result = await page.evaluate(async ({ samples, entry }) => {
       const worker = new Worker('./model-worker.js', { type: 'module' });
       const started = performance.now(), finals = [], partials = [], speech = [];

@@ -14,6 +14,31 @@ async function fakeBackend(page) {
   ` }));
 }
 
+async function fakeMicrophone(page, gain = 1) {
+  await page.addInitScript((gain) => {
+    // Retain the MediaDevices wrapper: WebKit can collect it and lose an
+    // instance-level getUserMedia override between captures.
+    const mediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { value: mediaDevices });
+    window.trackStops = 0;
+    mediaDevices.getUserMedia = async () => {
+      const context = new AudioContext();
+      const source = context.createOscillator(), volume = context.createGain();
+      const destination = context.createMediaStreamDestination();
+      volume.gain.value = gain;
+      source.connect(volume); volume.connect(destination); source.start();
+      const stream = destination.stream, tracks = stream.getTracks();
+      // Retain the instrumented track wrappers across getTracks calls in WebKit.
+      stream.getTracks = () => tracks;
+      const track = tracks[0], stop = track.stop.bind(track);
+      track.stop = () => {
+        window.trackStops++; stop(); source.stop(); void context.close();
+      };
+      return stream;
+    };
+  }, gain);
+}
+
 test('Pages isolation activates; selection keeps the repeatable utterance', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#load')).toBeEnabled();
@@ -42,18 +67,7 @@ test('capture, Stop, repeat, and release on a mobile-sized page', async ({ brows
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   await fakeBackend(page);
-  await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = async () => {
-      const context = new AudioContext();
-      const source = context.createOscillator();
-      const destination = context.createMediaStreamDestination();
-      source.connect(destination); source.start();
-      const track = destination.stream.getTracks()[0], originalStop = track.stop.bind(track);
-      window.stops = 0;
-      track.stop = () => { window.stops++; originalStop(); source.stop(); void context.close(); };
-      return destination.stream;
-    };
-  });
+  await fakeMicrophone(page);
   await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
   await page.locator('#load').click(); await page.locator('#start').click();
   await expect(page.locator('#status')).toContainText('Listening');
@@ -62,10 +76,14 @@ test('capture, Stop, repeat, and release on a mobile-sized page', async ({ brows
   await page.locator('#stop').click();
   await expect(page.locator('#final')).toContainText('日本語のテスト');
   await expect(page.locator('#latency')).not.toHaveText('—');
-  expect(await page.evaluate(() => window.stops)).toBe(1);
-  await page.locator('#start').click(); await expect(page.locator('#final')).toBeEmpty();
+  expect(await page.evaluate(() => window.trackStops)).toBe(1);
+  await page.locator('#start').click();
+  await expect(page.locator('#status')).toContainText('Listening');
+  await expect(page.locator('#audio')).not.toHaveText('—');
+  await expect(page.locator('#errors')).toBeEmpty();
+  await expect(page.locator('#final')).toBeEmpty();
   await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
-  expect(await page.evaluate(() => window.stops)).toBe(1);
+  expect(await page.evaluate(() => window.trackStops)).toBe(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await context.close();
 });
@@ -86,18 +104,10 @@ test('canceling pending microphone permission releases a late-granted track', as
   await expect(page.locator('#status')).toContainText('Canceled');
 });
 
-test('Stop then Cancel/reload discards the old capture flush and Stop', async ({ page, browserName }) => {
+test('Stop then Cancel/reload discards the old capture flush and Stop', async ({ page }) => {
   await fakeBackend(page);
+  await fakeMicrophone(page);
   await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = async () => {
-      const context = new AudioContext(), source = context.createOscillator();
-      const destination = context.createMediaStreamDestination();
-      source.connect(destination); source.start();
-      const track = destination.stream.getTracks()[0], originalStop = track.stop.bind(track);
-      window.trackStops = (window.trackStops || 0);
-      track.stop = () => { window.trackStops++; originalStop(); source.stop(); void context.close(); };
-      return destination.stream;
-    };
     // Hold actual worklet replies until the replacement worker is ready or recording.
     // Extend the flush fallback so UI/test scheduling cannot win the race.
     const timeout = window.setTimeout.bind(window);
@@ -147,24 +157,16 @@ test('Stop then Cancel/reload discards the old capture flush and Stop', async ({
   await expect.poll(() => page.evaluate(() => window.flushReady?.())).toBe(true);
   await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
   await page.locator('#load').click(); await expect(page.locator('#status')).toContainText('Ready');
-  // Chromium also exercises stale audio during a new recording. Headless WebKit
-  // intermittently rejects rapid capture replacement, so test its worker at Ready.
-  if (browserName === 'chromium') {
-    await page.locator('#start').click();
-    await expect(page.locator('#status')).toContainText('Listening');
-    await expect(page.locator('#audio')).not.toHaveText('—');
-  }
+  await page.locator('#start').click();
+  await expect(page.locator('#status')).toContainText('Listening');
+  await expect(page.locator('#audio')).not.toHaveText('—');
+  await expect(page.locator('#errors')).toBeEmpty();
   await page.evaluate(() => window.finishFlush());
   await expect.poll(() => page.evaluate(() => window.trackStops)).toBe(1);
   expect(await page.evaluate(() => window.workerMessages.filter((message) => message.oldFlush))).toEqual([]);
   expect(await page.evaluate(() => window.workerMessages.filter((message) => message.id === 2 && message.type === 'stop'))).toEqual([]);
-  await expect(page.locator('#status')).toContainText(browserName === 'chromium' ? 'Listening' : 'Ready');
+  await expect(page.locator('#status')).toContainText('Listening');
   await expect(page.locator('#final')).toBeEmpty();
-  if (browserName === 'webkit') {
-    await page.locator('#cancel').click();
-    await expect(page.locator('#load')).toBeEnabled();
-    return;
-  }
   await page.locator('#stop').click();
   await expect.poll(() => page.evaluate(() => window.flushReady?.())).toBe(true);
   await page.evaluate(() => window.finishFlush());
@@ -226,17 +228,7 @@ for (const outcome of ['rejected', 'accepted without text', 'transcribed']) {
         }
       };`,
     }));
-    await page.addInitScript(() => {
-      navigator.mediaDevices.getUserMedia = async () => {
-        const context = new AudioContext(), source = context.createOscillator();
-        const gain = context.createGain(), destination = context.createMediaStreamDestination();
-        gain.gain.value = 0.0001;
-        source.connect(gain); gain.connect(destination); source.start();
-        const track = destination.stream.getTracks()[0], stop = track.stop.bind(track);
-        track.stop = () => { stop(); source.stop(); void context.close(); };
-        return destination.stream;
-      };
-    });
+    await fakeMicrophone(page, 0.0001);
     await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
     await page.locator('#load').click(); await page.locator('#start').click();
     await expect(page.locator('#status')).toContainText('Listening');
@@ -251,9 +243,15 @@ for (const outcome of ['rejected', 'accepted without text', 'transcribed']) {
     // Evidence survives Stop but resets for a repeat.
     await expect(page.locator('#signal')).toContainText('session peak RMS');
     await page.locator('#start').click();
+    await expect(page.locator('#status')).toContainText('Listening');
+    await expect(page.locator('#signal')).toContainText('Nonzero microphone signal');
+    await expect(page.locator('#errors')).toBeEmpty();
     await expect(page.locator('#speech')).toContainText('0 native VAD');
     await expect(page.locator('#asr-events')).toContainText('0 nonempty partial');
+    await expect(page.locator('#final')).toBeEmpty();
     await page.locator('#cancel').click();
+    await expect(page.locator('#status')).toContainText('Canceled');
+    expect(await page.evaluate(() => window.trackStops)).toBe(2);
   });
 }
 

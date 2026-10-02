@@ -208,7 +208,7 @@ Suggested samples (edit the on-page utterance as needed):
 - Whisper-like speech: repeat the ordinary sample with whisper-like phonation at the same distance, with both thresholds. Reducing a recording's amplitude is a quiet-signal proxy and does not reproduce whisper phonation.
 - Longer speech: dictate a paragraph for 30–60 seconds, with and without pauses.
 
-For #25, run the five conditions above on the published revision once deployed. Record the deployed commit, device/browser, microphone signal, VAD segments, partial/final text, obvious errors, first/repeat load time, and responsiveness. This node does not publish; local synthetic validation is recorded in [Moonshine #25 evidence](#moonshine-25-validation). Human whisper/microphone and physical-mobile observations remain additional validation; an agent cannot reproduce the tester's phonation or physical microphone.
+For #25, the five conditions above on the published reviewed revision are **required for Issue completion**. Record the deployed commit, device/browser, microphone signal, VAD segments, partial/final text, obvious errors, first/repeat load time, and responsiveness. Local synthetic validation is recorded in [Moonshine #25 evidence](#moonshine-25-validation); it does not replace this comparison. Actual whisper phonation requires a real recording or microphone utterance. Physical mobile testing is optional. The earlier acceptance waiver for #18/#21 does not waive #25's explicit real-speech and published-site requirements.
 
 ## Developer checks
 
@@ -221,11 +221,12 @@ npm run test:browser
 
 Browser tests check isolation on a plain static server, language/sensitivity reloads and recording locks, explicit model-load failures without fallback, quiet capture with VAD rejection/acceptance and empty/nonempty ASR text, switching, microphone denial, real Web Audio
 capture with a generated test source, Stop/repeat/release, cancellation during pending permission,
-and Stop → Cancel → reload during delayed worklet flushing. Chromium checks that old audio and
+and Stop → Cancel → reload during delayed worklet flushing. Both browsers check that old audio and
 Stop callbacks cannot affect a new recording and that both captures are eventually released.
-WebKit checks that the old Stop cannot affect the replacement worker at Ready; the rapid capture
-replacement case intermittently encounters native `NotAllowedError` in headless WebKit and still
-requires real Safari validation under #21.
+The synthetic microphone retains its `MediaDevices` and instrumented track wrappers so WebKit
+does not lose the mock between captures and invoke native permission handling. Repeat checks wait
+for Listening and nonzero captured audio before asserting reset behavior or canceling. AudioContext
+creation/closure, audio graphs, worklets, and resampling remain real; no context-lifetime mock is used.
 They substitute tiny model workers to keep routine checks free of model downloads. Unit tests cover
 resampling continuity and audio retention at segmentation boundaries. The incompatible binding mock runs in Chromium only: Playwright WebKit cannot reliably intercept nested module-worker imports. Real Moonshine model loading and event checks run in both browsers. No physical microphone/device
 is exercised by these automated checks.
@@ -238,7 +239,8 @@ ASR_TEST_WAV=/absolute/path/to/japanese.wav npm run test:browser -- --project=ch
 ```
 
 The Moonshine evaluation matrix additionally accepts `ASR_MIXED_WAV`, `ASR_ENGLISH_WAV`,
-and optionally `ASR_WHISPER_WAV` (same PCM format). For example:
+and `ASR_WHISPER_WAV` (same PCM format). Inputs are opt-in for routine automated checks;
+a skipped whisper case leaves a required #25 validation gap. For example:
 
 ```sh
 ASR_TEST_WAV=/path/japanese.wav ASR_MIXED_WAV=/path/mixed.wav ASR_ENGLISH_WAV=/path/english.wav \
@@ -252,6 +254,30 @@ that silence produces no segments/text. Whisper is skipped unless a real recordi
 Mixed-term results are observations, not hardcoded accuracy requirements. The normal Japanese
 and English cases must emit nonempty partials/finals and completed speech events.
 
+Run an actual whisper recording at **both** VAD thresholds independently of the other WAVs:
+
+```sh
+ASR_WHISPER_WAV=/path/actual-whisper.wav \
+  npm run test:browser -- --grep 'Moonshine evaluation: Japanese whisper recording' --workers=1
+```
+
+After the reviewed revision is deployed, the same real-worker checks can target Pages instead
+of localhost. `ASR_BASE_URL` disables the local web server; include the trailing slash to preserve
+the repository subpath. The evaluation checks require the Small Streaming description before
+loading the worker, so the older deployed page cannot pass as the revised implementation:
+
+```sh
+ASR_BASE_URL=https://takahirox.github.io/my-audio-to-text/ \
+  ASR_TEST_WAV=/path/japanese.wav ASR_MIXED_WAV=/path/mixed.wav \
+  ASR_ENGLISH_WAV=/path/english.wav ASR_WHISPER_WAV=/path/actual-whisper.wav \
+  npm run test:browser -- --grep 'Moonshine evaluation' --workers=1
+```
+
+Record the deployment run/SHA and compare published page scripts, `moonshine-config.js`, and
+the staged runtime manifest/checksums to the reviewed files first. Direct-worker checks verify
+loading/events and recording input, but the published microphone/meter and five-condition human
+comparison still require the procedure above. Do not treat a skipped condition as passing.
+
 The smoke test feeds that WAV through each real backend worker and checks Japanese final output and
 Moonshine partial events. It downloads models and takes longer. It checks integration, not accuracy or
 realtime pacing. No test WAV is committed or uploaded. The implementation was smoke-tested in
@@ -262,6 +288,12 @@ output. Current Moonshine results are recorded below; passing smoke checks estab
 not transcription quality. Actual human/device results still need to be recorded.
 
 ## Moonshine #25 validation
+
+**Intentional partial work. Issue #25 remains open.** Implementation and synthetic local checks
+are recorded below; the required published-revision and real-speech comparison is unfinished.
+The [PR description](evidence/moonshine-25-pr.md) uses a non-closing Issue reference and separates
+completed implementation from the remaining scope. No follow-up Issue has been created to remove
+these requirements from #25.
 
 On 2026-10-02 JST, the official release runtime loaded Japanese and English Small Streaming
 in Chromium 153.0.8010.12 and Playwright WebKit 26.6. Tests used the plain local static
@@ -299,9 +331,54 @@ Both browsers produced the same finals and event counts for these samples:
 Initialization including model downloads ranged from 8.41–12.71 seconds. Unpaced inference
 and Stop for voiced samples took 0.48–3.05 seconds, with every sample acknowledged and Stop
 completed. This does not measure real-time responsiveness, repeat-load caching, or human
-first-text latency. Physical mobile compatibility is unverified. The published-revision five-condition
-comparison remains useful follow-up validation after deployment, using the human procedure above;
+first-text latency. Physical mobile compatibility is unverified and optional. The published-revision five-condition
+comparison remains required to complete #25 after deployment, using the human procedure above;
 no human recognition result or production backend selection is inferred from these synthetic checks.
+
+### Remaining required scope for #25
+
+- Publish the reviewed revision over HTTPS and verify deployment identity, staged runtime/model
+  loading, partial/final events, Stop/repeat, and responsiveness on the canonical Pages URL.
+- Record the five-condition comparison: normal Japanese, Japanese with English terms, English-only,
+  actual quiet Japanese, and actual whisper-like Japanese. Use both whisper VAD thresholds and
+  record input signal, accepted/completed VAD segments, partial/final events/text, and errors.
+- Keep #25 open until those records exist. Synthetic voices and attenuation do not establish human
+  phonation, microphone capture, or whisper recognition; physical mobile testing may remain not tested.
+
+At 2026-10-02 08:23 UTC, read-only checks confirmed Pages still served the successful main
+deployment `8c4e44b36ad3999042e2d192b8708bd1913ec010`
+([run 36959071356](https://github.com/takahirox/my-audio-to-text/actions/runs/36959071356)).
+`app.js`, `model-worker.js`, and `vendor/manifest.json` returned 200 but differed from this
+revision; `moonshine-config.js` returned 404. The `github-pages` environment permits only `main`.
+Published validation is blocked until the reviewed revision can be deployed; allowing the exact
+PR branch `codex/issue-25-moonshine-streaming-diagnostics` requires maintainer approval while
+retaining `main` and the other environment protections. No approval was received. This fix node
+does not push or merge. No real whisper
+recording is available in the worktree; no whisper result is inferred from the amplitude proxies.
+
+### Review-fix checks (2026-10-02)
+
+The three diagnostic WebKit repeat failures were reproduced before the fix. Retaining the
+synthetic microphone's MediaDevices/track wrappers prevents garbage collection from discarding
+the getUserMedia mock. Afterward all four audio tests and 19 routine browser checks passed;
+29 cases were skipped (28 opt-in real-model cases without their WAVs and one WebKit binding mock).
+All five WebKit repeat cases passed five runs each (25 checks). Both browsers now test a new
+recording during the old delayed worklet flush, with successful capture and eventual track release.
+
+Separately, four selected real-model checks passed for synthesized normal Japanese and English
+in Chromium and WebKit. Both current Small Streaming models loaded and emitted nonempty
+partials/finals and completed native speech events. Asset preparation and archive verification
+also passed. These local checks do not fill the remaining published or actual whisper requirements.
+The external-base harness also passed real Japanese inference in Chromium through a separate
+localhost server at `/my-audio-to-text/`, with no Playwright-managed server. This checks repository
+subpath handling, not the public HTTPS deployment.
+The refreshed structured check record is in [the evidence JSON](evidence/moonshine-25.json).
+
+When the checkpoint is published, use [the checked-in PR description](evidence/moonshine-25-pr.md)
+as PR #26's body, replacing the existing closing Issue reference. This fix node changes repository
+files only; the live PR body still needs that downstream update. Keep the PR draft and #25 open
+until the required evidence is recorded. No push, merge, deployment, environment-policy change,
+or GitHub write was performed, and no usage limits were reset or bypassed.
 
 ## Upstream references
 

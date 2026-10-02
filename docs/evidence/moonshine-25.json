@@ -24,7 +24,7 @@
   },
   "limitations": [
     "No human speech, real whisper phonation, physical microphone, or physical mobile testing.",
-    "This revision was not published; deployed-revision validation remains for the downstream publication step.",
+    "This revision is not deployed on Pages; published-revision validation remains required for Issue #25 completion.",
     "Attenuated speech is a quiet-signal proxy, not whisper speech.",
     "Load includes downloads; inference timing uses unpaced audio and is not live latency.",
     "RMS is computed from worker input, not measured through a physical microphone meter.",
@@ -639,5 +639,128 @@
       "speech": [],
       "browser": "Playwright WebKit 26.6"
     }
-  ]
+  ],
+  "review_fix": {
+    "checked_at_utc": "2026-10-02T08:41:09.298086+00:00",
+    "status": "intentional partial work; Issue #25 remains open",
+    "finding_status": {
+      "published_revision": "unresolved; required reviewed-revision HTTPS validation is blocked by Pages branch policy",
+      "whisper": "no actual recording supplied; remaining validation explicitly separated within open Issue #25; non-closing replacement PR body prepared",
+      "webkit_repeat": "fixed; stable MediaDevices/track wrappers and assertions await successful capture before checking reset/cancel"
+    },
+    "checks": {
+      "audio_tests_passed": 4,
+      "routine_browser_checks_passed": 19,
+      "routine_browser_checks_skipped": 29,
+      "skips": "28 opt-in real-model cases without recordings; one WebKit binding-mock harness limitation",
+      "webkit_repeat_checks_passed": 25,
+      "webkit_repeat_command": "npx playwright test tests/browser/playground.spec.js --project=webkit --grep 'quiet microphone|capture, Stop|Stop then' --repeat-each=5 --workers=1",
+      "selected_real_model_checks_passed": 4,
+      "input": "macOS say Kyoko/Samantha, 16 kHz mono signed 16-bit PCM; synthetic voiced speech, not whisper; direct-worker input on localhost",
+      "asset_preparation": "passed; pinned archive checksums verified",
+      "external_base_subpath_check": "passed; Chromium real Japanese normal evaluation using ASR_BASE_URL=http://127.0.0.1:8001/my-audio-to-text/ with no Playwright-managed server; this is a local harness check, not published HTTPS validation"
+    },
+    "published_probe": {
+      "checked_at_utc": "2026-10-02T08:23:41Z",
+      "url": "https://takahirox.github.io/my-audio-to-text/",
+      "deployed_sha": "8c4e44b36ad3999042e2d192b8708bd1913ec010",
+      "run_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/36959071356",
+      "deployment_id": 6800391340,
+      "matching_reviewed_revision": false,
+      "responses": {
+        "app.js": 200,
+        "model-worker.js": 200,
+        "vendor/manifest.json": 200,
+        "moonshine-config.js": 404
+      },
+      "note": "The three successful responses differ from reviewed files; Pages environment permits only main.",
+      "branch_policy_approval": "requested for the exact PR branch; no approval received; no policy change or deployment performed"
+    },
+    "real_model_results": [
+      {
+        "browser": "chromium",
+        "name": "Japanese normal",
+        "language": "ja",
+        "rmsDbfs": -25.02664036845783,
+        "loadMs": 9347.810000419617,
+        "inferenceAndStopMs": 1137.1849999427795,
+        "acked": 116572,
+        "finals": [
+          "今日は東京で音声認識を試しています明日の午後3時に会議を予約してください"
+        ],
+        "partial_count": 14,
+        "accepted_segments": 1,
+        "completed_segments": 1
+      },
+      {
+        "browser": "chromium",
+        "name": "English only",
+        "language": "en",
+        "rmsDbfs": -16.07122086494486,
+        "loadMs": 11829.554999828339,
+        "inferenceAndStopMs": 733.704999923706,
+        "acked": 72884,
+        "finals": [
+          "Use the github api with javascript, web assembly, and open ai."
+        ],
+        "partial_count": 8,
+        "accepted_segments": 1,
+        "completed_segments": 1
+      },
+      {
+        "browser": "webkit",
+        "name": "Japanese normal",
+        "language": "ja",
+        "rmsDbfs": -25.02664036845783,
+        "loadMs": 8238.720000000001,
+        "inferenceAndStopMs": 1768.2000000000007,
+        "acked": 116572,
+        "finals": [
+          "今日は東京で音声認識を試しています明日の午後3時に会議を予約してください"
+        ],
+        "partial_count": 14,
+        "accepted_segments": 1,
+        "completed_segments": 1
+      },
+      {
+        "browser": "webkit",
+        "name": "English only",
+        "language": "en",
+        "rmsDbfs": -16.07122086494486,
+        "loadMs": 11166.12,
+        "inferenceAndStopMs": 1039.0999999999985,
+        "acked": 72884,
+        "finals": [
+          "Use the github api with javascript, web assembly, and open ai."
+        ],
+        "partial_count": 8,
+        "accepted_segments": 1,
+        "completed_segments": 1
+      }
+    ],
+    "local_subpath_result": [
+      {
+        "browser": "chromium",
+        "name": "Japanese normal",
+        "language": "ja",
+        "rmsDbfs": -25.02664036845783,
+        "loadMs": 12631.004999637604,
+        "inferenceAndStopMs": 1119.2650003433228,
+        "acked": 116572,
+        "finals": [
+          "今日は東京で音声認識を試しています明日の午後3時に会議を予約してください"
+        ],
+        "partial_count": 14,
+        "accepted_segments": 1,
+        "completed_segments": 1
+      }
+    ],
+    "remaining_required_scope": [
+      "Deploy reviewed revision and verify HTTPS identity, runtime/model loading, partial/final events, Stop/repeat, and responsiveness.",
+      "Record normal Japanese, Japanese with English terms, English-only, actual quiet Japanese, and actual whisper-like Japanese with signal/VAD/transcript observations.",
+      "Use an actual whisper recording or microphone utterance at VAD thresholds 0.5 and 0.2; amplitude attenuation does not establish whisper validation."
+    ],
+    "publication_handoff": "Publish this checkpoint and replace PR #26 body with docs/evidence/moonshine-25-pr.md to remove the existing closing Issue reference. Keep #25 open and PR draft while required evidence is missing. The live PR body was not edited by this fix node.",
+    "constraints": "No push, merge, deployment, environment-policy change, GitHub write, usage reset, allowance purchase, or model/provider switch was performed. Physical mobile testing remains optional."
+  }
 }

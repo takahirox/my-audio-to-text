@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+const publishedURL = process.env.ASR_BASE_URL;
 export default defineConfig({
   testDir: './tests/browser',
   timeout: 30000,
@@ -6,6 +7,6 @@ export default defineConfig({
     { name: 'chromium', use: { browserName: 'chromium' } },
     { name: 'webkit', use: { browserName: 'webkit' } },
   ],
-  use: { baseURL: 'http://127.0.0.1:8000', headless: true },
-  webServer: { command: 'npm run serve', url: 'http://127.0.0.1:8000', reuseExistingServer: false },
+  use: { baseURL: publishedURL || 'http://127.0.0.1:8000', headless: true },
+  webServer: publishedURL ? undefined : { command: 'npm run serve', url: 'http://127.0.0.1:8000', reuseExistingServer: false },
 });
