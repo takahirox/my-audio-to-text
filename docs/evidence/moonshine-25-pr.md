@@ -55,8 +55,16 @@ node. Keep this PR draft and #25 open while the remaining scope is unfinished.
 Related to #25 (intentional partial work).
 
 Keep Issue #25 open and this PR draft until the required published-revision and
-real-speech evidence is recorded. Preserve this non-closing reference when updating
-the PR body; publication does not complete the remaining validation scope.
+real-speech evidence is recorded. Publication does not complete the remaining
+validation scope.
+
+The publication request includes the following completion reference. It is deferred
+until all required evidence is recorded, following the repository's partial-work
+convention; no completion of Issue #25 is claimed by this draft:
+
+```text
+Closes #25
+```
 
 ## Scope check
 
