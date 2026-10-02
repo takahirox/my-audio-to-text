@@ -8,12 +8,16 @@ Review scope in both directions. Prefer the smallest coherent change that fully 
 
 ## No missing scope
 
-Do not approve a PR as completing an Issue when required work is still missing. Check for:
+Do not approve a PR when required implementation or pre-merge validation is still missing. Check for:
 
-- incomplete acceptance criteria;
+- incomplete pre-merge acceptance criteria;
 - only one part of a multi-part Issue being implemented;
-- missing validation for a required behavior;
+- missing applicable pre-merge validation for a required behavior;
 - documentation or migration work omitted when explicitly required by the Issue.
+
+Mandatory pre-merge acceptance criteria must be achievable and verifiable before merge. Checks possible only after merge must not be prerequisites for pre-merge PR approval. Confirm that required post-merge verification is recorded separately with expected results and a **pending** status until performed, following the [acceptance and verification guidance](development-flow.md#pre-merge-acceptance-and-post-merge-verification). Approval does not establish that those checks passed or that the Issue is fully verified.
+
+For a merge-triggered deployment, review the code/configuration, local build results, and applicable automated tests before merge. Verify deployment and the newly published site after merge. This preserves implementation requirements and applicable pre-merge tests; failures, skips, or unperformed checks must not be reported as passed.
 
 For intentional partial work, verify that the PR clearly states what remains and follows the [partial-work rule](development-flow.md#implement-and-propose-a-pull-request).
 
@@ -43,9 +47,10 @@ Also review:
 
 A PR is ready to merge only after review and when:
 
-- it fully satisfies each Issue it claims to resolve, or accurately identifies intentional partial work;
+- it fully implements the required scope and satisfies pre-merge acceptance criteria, or accurately identifies intentional partial work;
 - it has no unjustified scope or complexity;
-- the implementation is correct and validation is sufficient;
+- the implementation is correct and applicable pre-merge validation is sufficient;
+- required post-merge verification is recorded separately as pending, with expected results, and the Issue remains open until it is performed and recorded;
 - review feedback has been resolved;
 - the PR description accurately reflects what was implemented.
 
