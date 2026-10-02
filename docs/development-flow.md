@@ -20,6 +20,10 @@ Merge
 
 Work starts from an Issue using the [Issue template](../.github/ISSUE_TEMPLATE/issue.md). The Issue defines the intended problem, expected outcome, and scope. Clarify ambiguous requirements before implementation; do not invent requirements during the change.
 
+By default, completion criteria should be executable and verifiable by an AI agent. Require human checks, such as physical-device testing, subjective evaluation, or external approval, only when there is a necessary reason to do so.
+
+When human work is required, state why it is necessary and what result is expected. Distinguish optional additional validation from mandatory completion criteria.
+
 ## Implement and propose a Pull Request
 
 Make the smallest coherent change that fully solves the Issue. Validate it against the expected outcome and any acceptance criteria.
