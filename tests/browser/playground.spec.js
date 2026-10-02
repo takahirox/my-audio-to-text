@@ -172,3 +172,112 @@ test('Stop then Cancel/reload discards the old capture flush and Stop', async ({
   await expect(page.locator('#final')).toContainText('日本語のテスト');
   expect(await page.evaluate(() => window.trackStops)).toBe(2);
 });
+
+test('Moonshine language and sensitivity changes release the model and reach the worker', async ({ page }) => {
+  await fakeBackend(page);
+  await page.addInitScript(() => {
+    const Worker = window.Worker;
+    window.loads = []; window.terminated = 0;
+    window.Worker = class extends Worker {
+      postMessage(message, ...args) {
+        if (message.type === 'load') window.loads.push(message);
+        super.postMessage(message, ...args);
+      }
+      terminate() { window.terminated++; super.terminate(); }
+    };
+  });
+  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
+  await page.locator('#language').selectOption('en');
+  await expect(page.locator('#load')).toBeEnabled();
+  await expect(page.locator('#start')).toBeDisabled();
+  expect(await page.evaluate(() => window.terminated)).toBe(1);
+  await page.locator('#vad-threshold').selectOption('0.2');
+  await expect(page.locator('#description')).toContainText('English Small Streaming');
+  await expect(page.locator('#description')).toContainText('quantized_26_08_21');
+  await expect(page.locator('#description')).toContainText('threshold 0.2');
+  await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
+  expect(await page.evaluate(() => window.loads)).toEqual([
+    { type: 'load', backend: 'moonshine', language: 'ja', vadThreshold: '0.5' },
+    { type: 'load', backend: 'moonshine', language: 'en', vadThreshold: '0.2' },
+  ]);
+  await page.locator('#backend').selectOption('whisper');
+  await expect(page.locator('#moonshine-options')).toBeHidden();
+  await expect(page.locator('#speech')).toContainText('all captured audio is retained');
+});
+
+for (const outcome of ['rejected', 'accepted without text', 'transcribed']) {
+  test(`quiet microphone signal can be distinguished from VAD ${outcome}`, async ({ page }) => {
+    await page.context().route('**/model-worker.js', (route) => route.fulfill({
+      contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
+      body: `self.onmessage = ({data}) => {
+        if (data.type === 'load') postMessage({type:'ready'});
+        if (data.type === 'audio') postMessage({type:'ack',samples:data.audio.length});
+        if (data.type === 'stop') {
+          if (${JSON.stringify(outcome)} !== 'rejected') {
+            postMessage({type:'speech',event:'started',id:'1'});
+            postMessage({type:'speech',event:'completed',id:'1'});
+          }
+          if (${JSON.stringify(outcome)} === 'transcribed') {
+            postMessage({type:'partial',text:'静かな声'});
+            postMessage({type:'final',text:'静かな声'});
+          }
+          postMessage({type:'stopped'});
+        }
+      };`,
+    }));
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const context = new AudioContext(), source = context.createOscillator();
+        const gain = context.createGain(), destination = context.createMediaStreamDestination();
+        gain.gain.value = 0.0001;
+        source.connect(gain); gain.connect(destination); source.start();
+        const track = destination.stream.getTracks()[0], stop = track.stop.bind(track);
+        track.stop = () => { stop(); source.stop(); void context.close(); };
+        return destination.stream;
+      };
+    });
+    await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+    await page.locator('#load').click(); await page.locator('#start').click();
+    await expect(page.locator('#status')).toContainText('Listening');
+    await expect(page.locator('#language')).toBeDisabled();
+    await expect(page.locator('#vad-threshold')).toBeDisabled();
+    await expect(page.locator('#signal')).toContainText('Nonzero microphone signal');
+    await expect(page.locator('#signal')).toContainText('dBFS');
+    await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
+    await expect(page.locator('#speech')).toContainText(outcome === 'rejected' ? '0 native VAD' : '1 native VAD');
+    await expect(page.locator('#asr-events')).toHaveText(outcome === 'transcribed'
+      ? '1 nonempty partial(s); 1 nonempty final(s).' : '0 nonempty partial(s); 0 nonempty final(s).');
+    // Evidence survives Stop but resets for a repeat.
+    await expect(page.locator('#signal')).toContainText('session peak RMS');
+    await page.locator('#start').click();
+    await expect(page.locator('#speech')).toContainText('0 native VAD');
+    await expect(page.locator('#asr-events')).toContainText('0 nonempty partial');
+    await page.locator('#cancel').click();
+  });
+}
+
+test('an incompatible Moonshine runtime reports the intended model and never falls back', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit', 'WebKit cannot reliably intercept imported module-worker bindings; real model loading is tested separately.');
+  const binding = `export const ModelArch = { SmallStreaming: 4 };
+      export const Transcriber = {
+        loadFromUrls: async (files, options) => {
+          if (options.modelArch !== 4 || options.options.vad_threshold !== '0.5'
+            || Object.keys(files).length !== 8
+            || !Object.values(files).every(url => url.includes('/small-streaming-ja/quantized_26_08_23/'))) {
+            throw new Error('Wrong model configuration');
+          }
+          throw new Error('Streaming model unsupported by test runtime');
+        },
+        load: async () => { throw new Error('Unexpected fallback attempt'); },
+      };`;
+  await page.context().route('**/vendor/moonshine/index.js', (route) => route.fulfill({
+    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' }, body: binding,
+  }));
+  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.locator('#load').click();
+  await expect(page.locator('#errors')).toContainText('Japanese Small Streaming');
+  await expect(page.locator('#errors')).toContainText('No fallback is used. Streaming model unsupported');
+  await expect(page.locator('#load')).toBeEnabled();
+  await expect(page.locator('#start')).toBeDisabled();
+});

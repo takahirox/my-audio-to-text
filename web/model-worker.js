@@ -1,4 +1,5 @@
 import { Segmenter } from './audio.js';
+import { moonshineFiles, moonshineModels } from './moonshine-config.js';
 
 let backend, model, stream, segmenter;
 const send = (type, values = {}) => postMessage({ type, ...values });
@@ -16,12 +17,17 @@ async function handle(data) {
   if (data.type === 'load') {
     backend = data.backend;
     if (backend === 'moonshine') {
-      const { Transcriber, ModelArch } = await import('./vendor/moonshine/index.js');
-      // The published 0.1.5 WASM catalog has Japanese Tiny, but rejects Japanese
-      // TinyStreaming/SmallStreaming. Exercise its live Stream API honestly.
-      model = await Transcriber.load({ language: 'ja', modelArch: ModelArch.Tiny,
-        onProgress: (loaded, total, file) => send('progress', { message: `${file}: ${(loaded / 1e6).toFixed(1)} / ${total ? (total / 1e6).toFixed(1) : '?'} MB` }),
-      });
+      const language = data.language ?? 'ja', vadThreshold = data.vadThreshold ?? '0.5';
+      if (!['0.5', '0.2'].includes(vadThreshold)) throw new Error('Unsupported VAD threshold');
+      try {
+        const { Transcriber, ModelArch } = await import('./vendor/moonshine/index.js');
+        model = await Transcriber.loadFromUrls(moonshineFiles(language), { modelArch: ModelArch.SmallStreaming,
+          options: { vad_threshold: vadThreshold },
+          onProgress: (loaded, total, file) => send('progress', { message: `${file}: ${(loaded / 1e6).toFixed(1)} / ${total ? (total / 1e6).toFixed(1) : '?'} MB` }),
+        });
+      } catch (error) {
+        throw new Error(`Moonshine ${moonshineModels[language]?.name || language} could not load in the v0.1.5 release WASM runtime. No fallback is used. ${error.message}`);
+      }
     } else {
       const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
       env.allowLocalModels = false;
@@ -37,8 +43,13 @@ async function handle(data) {
     if (backend === 'moonshine') {
       stream = model.createStream();
       stream.addListener({
+        // Lines are created from native VAD segments, even when ASR text is empty.
+        onLineStarted: ({ line }) => send('speech', { event: 'started', id: line.id }),
         onLineTextChanged: ({ line }) => send('partial', { text: line.text }),
-        onLineCompleted: ({ line }) => send('final', { text: line.text }),
+        onLineCompleted: ({ line }) => {
+          send('speech', { event: 'completed', id: line.id });
+          send('final', { text: line.text });
+        },
         onError: ({ error }) => fail(error),
       });
       stream.start();

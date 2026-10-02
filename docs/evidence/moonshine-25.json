@@ -1,0 +1,643 @@
+{
+  "issue": 25,
+  "date": "2026-10-02",
+  "origin": "localhost static server with Pages isolation service worker",
+  "input": "macOS say synthesized PCM WAV, 16 kHz mono signed 16-bit; direct real-worker input, unpaced blocks of 2048 samples; no physical microphone",
+  "voices": {
+    "Japanese": "Kyoko",
+    "English": "Samantha"
+  },
+  "utterances": {
+    "ASR_TEST_WAV": "今日は東京で音声認識を試しています。明日の午後三時に会議を予約してください。",
+    "ASR_MIXED_WAV": "GitHub の API を JavaScript で呼び出します。WebAssembly と OpenAI を試します。",
+    "ASR_ENGLISH_WAV": "Use the GitHub API with JavaScript, WebAssembly, and OpenAI."
+  },
+  "runtime": {
+    "api": "@moonshine-ai/moonshine-wasm 0.1.5",
+    "distribution": "official v0.1.5 moonshine-voice-wasm.tar.gz",
+    "source_commit": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+    "archive_sha256": "c515bf7691e12048f70a92cc82b3b0894c16c3773ffcacb7d48944fb150e4837",
+    "architecture": "SmallStreaming (4)",
+    "japanese_release": "quantized_26_08_23",
+    "english_release": "quantized_26_08_21",
+    "execution": "WASM CPU SIMD + threads"
+  },
+  "limitations": [
+    "No human speech, real whisper phonation, physical microphone, or physical mobile testing.",
+    "This revision was not published; deployed-revision validation remains for the downstream publication step.",
+    "Attenuated speech is a quiet-signal proxy, not whisper speech.",
+    "Load includes downloads; inference timing uses unpaced audio and is not live latency.",
+    "RMS is computed from worker input, not measured through a physical microphone meter.",
+    "null rmsDbfs denotes digital silence (-infinity dBFS)."
+  ],
+  "results": [
+    {
+      "name": "Japanese normal",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 1,
+      "rmsDbfs": -25.02664036845783,
+      "loadMs": 8680.264999866486,
+      "inferenceAndStopMs": 1132.8049998283386,
+      "acked": 116572,
+      "finals": [
+        "今日は東京で音声認識を試しています明日の午後3時に会議を予約してください"
+      ],
+      "partials": [
+        "今日は",
+        "今日は、どう?",
+        "今日は東京で",
+        "今日は東京で音声",
+        "今日は東京で音声認識",
+        "今日は東京で音声認識を試して",
+        "今日は東京で音声認識を試しています",
+        "今日は東京で音声認識を試しています。",
+        "今日は東京で音声認識を試しています明日の午後",
+        "今日は東京で音声認識を試しています明日の午後3時",
+        "今日は東京で音声認識を試しています明日の午後3時に会",
+        "今日は東京で音声認識を試しています明日の午後3時に会議を予約",
+        "今日は、東京で音声認識を試しています。明日の午後3時に会議を予約して、",
+        "今日は東京で音声認識を試しています明日の午後3時に会議を予約してください"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "17605993996466435889"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "17605993996466435889"
+        }
+      ],
+      "browser": "Chromium 153.0.8010.12"
+    },
+    {
+      "name": "Japanese quiet proxy",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 0.01,
+      "rmsDbfs": -65.02664036845724,
+      "loadMs": 8890.029999732971,
+      "inferenceAndStopMs": 958.0650000572205,
+      "acked": 116572,
+      "finals": [
+        "東京で音声認識を試しています明日の午後3時に会議を予約してください"
+      ],
+      "partials": [
+        "東京で",
+        "東京で温泉",
+        "東京で音声認識",
+        "東京で音声認識を試して",
+        "東京で音声認識を試しています",
+        "東京で音声認識を試しています。",
+        "東京で音声認識を試しています。明日の午後",
+        "東京で音声認識を試しています。明日の午後3時、",
+        "東京で音声認識を試しています。明日の午後3時に、午後3時に、",
+        "東京で音声認識を試しています。明日の午後3時に会議を予約。",
+        "東京で音声認識を試しています。明日の午後3時に会議を予約して、",
+        "東京で音声認識を試しています明日の午後3時に会議を予約してください"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "5571893962435396109"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "5571893962435396109"
+        }
+      ],
+      "browser": "Chromium 153.0.8010.12"
+    },
+    {
+      "name": "Japanese very quiet proxy",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 0.001,
+      "rmsDbfs": -85.02664036845765,
+      "loadMs": 8807.130000114441,
+      "inferenceAndStopMs": 57.375,
+      "acked": 116572,
+      "finals": [],
+      "partials": [],
+      "speech": [],
+      "browser": "Chromium 153.0.8010.12"
+    },
+    {
+      "name": "Japanese very quiet sensitive",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 0.001,
+      "vadThreshold": "0.2",
+      "rmsDbfs": -85.02664036845765,
+      "loadMs": 8414.150000095367,
+      "inferenceAndStopMs": 478.28000020980835,
+      "acked": 116572,
+      "finals": [
+        "ありがとうございました",
+        "ありがとうございました"
+      ],
+      "partials": [
+        "ありがとうございました",
+        "ありがとうございました"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "1131012447565896969"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "1131012447565896969"
+        },
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "1131012447565896970"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "1131012447565896970"
+        }
+      ],
+      "browser": "Chromium 153.0.8010.12"
+    },
+    {
+      "name": "Japanese mixed terms",
+      "language": "ja",
+      "wav": "ASR_MIXED_WAV",
+      "gain": 1,
+      "rmsDbfs": -24.352356038565823,
+      "loadMs": 8546.030000209808,
+      "inferenceAndStopMs": 1108.1299996376038,
+      "acked": 107572,
+      "finals": [
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembridをPeneiをお試します。"
+      ],
+      "partials": [
+        "GitHu",
+        "GitHubのA",
+        "GitHubのAPIは",
+        "GitHubのAPIをJava",
+        "GitHubのAPIをJavaScri",
+        "GitHubのAPIをJavaScriptが",
+        "GitHubのAPIをJavaScriptが呼び出します。",
+        "GitHubのAPIをJavaScriptが呼び出します。What",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSem",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembrid",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembrid.fen",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembrid.feneioを",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembridをPeneiをお試します。"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "16541704652237322218"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "16541704652237322218"
+        }
+      ],
+      "browser": "Chromium 153.0.8010.12"
+    },
+    {
+      "name": "English model mixed terms",
+      "language": "en",
+      "wav": "ASR_MIXED_WAV",
+      "gain": 1,
+      "rmsDbfs": -24.352356038565823,
+      "loadMs": 12706.140000343323,
+      "inferenceAndStopMs": 2205.8150000572205,
+      "acked": 107572,
+      "finals": [
+        "The first is the 10th of July, 2021. The first is the 10th of July, 2021. The first is the 10th of July"
+      ],
+      "partials": [
+        "You're so happy",
+        "The first thing you need to do is",
+        "The first one is the first one.",
+        "The first is the first of the three types of food.",
+        "The first is the 10th of July, 2023. The first is the 10th",
+        "The 2022-2023-2024-2024-2024-2",
+        "The 2022-2023-2024-2024-2024-2024-",
+        "The 2022-2023-2024-2024-2024-2024-202",
+        "The first is the 10th of July, 2021. The first is the 10th of July, 2021. The first is the",
+        "The first is the 10th of July, 2023. The first is the 10th of July, 2023. The first is the 10th",
+        "The first is the 10th of July, 2021. The first is the 10th of July, 2021. The first is the 10th of July"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "2883725269363780952"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "2883725269363780952"
+        }
+      ],
+      "browser": "Chromium 153.0.8010.12"
+    },
+    {
+      "name": "English only",
+      "language": "en",
+      "wav": "ASR_ENGLISH_WAV",
+      "gain": 1,
+      "rmsDbfs": -16.07122086494486,
+      "loadMs": 9823.545000076294,
+      "inferenceAndStopMs": 718.6000003814697,
+      "acked": 72884,
+      "finals": [
+        "Use the github api with javascript, web assembly, and open ai."
+      ],
+      "partials": [
+        "Use the get out",
+        "Use the GitHub API",
+        "Use the github api with java",
+        "Use the github api with javascript",
+        "Use the github api with javascript, web api",
+        "Use the github api with javascript, web assembly",
+        "Use the github api with javascript, web assembly, and auto-assembly.",
+        "Use the github api with javascript, web assembly, and open ai."
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "2179789468735351240"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "2179789468735351240"
+        }
+      ],
+      "browser": "Chromium 153.0.8010.12"
+    },
+    {
+      "name": "Japanese model English only",
+      "language": "ja",
+      "wav": "ASR_ENGLISH_WAV",
+      "gain": 1,
+      "rmsDbfs": -16.07122086494486,
+      "loadMs": 8746.06500005722,
+      "inferenceAndStopMs": 863.914999961853,
+      "acked": 72884,
+      "finals": [
+        "Use the GitHub API with Job Ascript, Web Assem"
+      ],
+      "partials": [
+        "ユースタケ",
+        "ユースタゲタベイ",
+        "ユースのゲートウェイPIは、",
+        "Get Hawaii PI with Job",
+        "Get Hub API with Job Ascrip",
+        "Get Hab API with Job Ascript Wh",
+        "Get Hub API with Job Ascript Wherever Sam",
+        "Use the GitHub API with Job Ascript, Web Assem"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "10156236767864143351"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "10156236767864143351"
+        }
+      ],
+      "browser": "Chromium 153.0.8010.12"
+    },
+    {
+      "name": "Japanese silence",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 0,
+      "rmsDbfs": null,
+      "loadMs": 8514.719999790192,
+      "inferenceAndStopMs": 55.989999771118164,
+      "acked": 116572,
+      "finals": [],
+      "partials": [],
+      "speech": [],
+      "browser": "Chromium 153.0.8010.12"
+    },
+    {
+      "name": "Japanese normal",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 1,
+      "rmsDbfs": -25.02664036845783,
+      "loadMs": 9525.560000000001,
+      "inferenceAndStopMs": 1801.42,
+      "acked": 116572,
+      "finals": [
+        "今日は東京で音声認識を試しています明日の午後3時に会議を予約してください"
+      ],
+      "partials": [
+        "今日は",
+        "今日は、どう?",
+        "今日は東京で",
+        "今日は東京で音声",
+        "今日は東京で音声認識",
+        "今日は東京で音声認識を試して",
+        "今日は東京で音声認識を試しています",
+        "今日は東京で音声認識を試しています。",
+        "今日は東京で音声認識を試しています明日の午後",
+        "今日は東京で音声認識を試しています明日の午後3時",
+        "今日は東京で音声認識を試しています明日の午後3時に会",
+        "今日は東京で音声認識を試しています明日の午後3時に会議を予約",
+        "今日は、東京で音声認識を試しています。明日の午後3時に会議を予約して、",
+        "今日は東京で音声認識を試しています明日の午後3時に会議を予約してください"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "15520004175400779729"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "15520004175400779729"
+        }
+      ],
+      "browser": "Playwright WebKit 26.6"
+    },
+    {
+      "name": "Japanese quiet proxy",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 0.01,
+      "rmsDbfs": -65.02664036845724,
+      "loadMs": 9255.44,
+      "inferenceAndStopMs": 1529.0599999999995,
+      "acked": 116572,
+      "finals": [
+        "東京で音声認識を試しています明日の午後3時に会議を予約してください"
+      ],
+      "partials": [
+        "東京で",
+        "東京で温泉",
+        "東京で音声認識",
+        "東京で音声認識を試して",
+        "東京で音声認識を試しています",
+        "東京で音声認識を試しています。",
+        "東京で音声認識を試しています。明日の午後",
+        "東京で音声認識を試しています。明日の午後3時、",
+        "東京で音声認識を試しています。明日の午後3時に、午後3時に、",
+        "東京で音声認識を試しています。明日の午後3時に会議を予約。",
+        "東京で音声認識を試しています。明日の午後3時に会議を予約して、",
+        "東京で音声認識を試しています明日の午後3時に会議を予約してください"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "8136704922297604693"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "8136704922297604693"
+        }
+      ],
+      "browser": "Playwright WebKit 26.6"
+    },
+    {
+      "name": "Japanese very quiet proxy",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 0.001,
+      "rmsDbfs": -85.02664036845765,
+      "loadMs": 8988.62,
+      "inferenceAndStopMs": 61.42000000000007,
+      "acked": 116572,
+      "finals": [],
+      "partials": [],
+      "speech": [],
+      "browser": "Playwright WebKit 26.6"
+    },
+    {
+      "name": "Japanese very quiet sensitive",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 0.001,
+      "vadThreshold": "0.2",
+      "rmsDbfs": -85.02664036845765,
+      "loadMs": 9094.519999999999,
+      "inferenceAndStopMs": 663.8799999999992,
+      "acked": 116572,
+      "finals": [
+        "ありがとうございました",
+        "ありがとうございました"
+      ],
+      "partials": [
+        "ありがとうございました",
+        "ありがとうございました"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "14055466134783065283"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "14055466134783065283"
+        },
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "14055466134783065284"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "14055466134783065284"
+        }
+      ],
+      "browser": "Playwright WebKit 26.6"
+    },
+    {
+      "name": "Japanese mixed terms",
+      "language": "ja",
+      "wav": "ASR_MIXED_WAV",
+      "gain": 1,
+      "rmsDbfs": -24.352356038565823,
+      "loadMs": 9062.019999999999,
+      "inferenceAndStopMs": 1775.3999999999996,
+      "acked": 107572,
+      "finals": [
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembridをPeneiをお試します。"
+      ],
+      "partials": [
+        "GitHu",
+        "GitHubのA",
+        "GitHubのAPIは",
+        "GitHubのAPIをJava",
+        "GitHubのAPIをJavaScri",
+        "GitHubのAPIをJavaScriptが",
+        "GitHubのAPIをJavaScriptが呼び出します。",
+        "GitHubのAPIをJavaScriptが呼び出します。What",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSem",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembrid",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembrid.fen",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembrid.feneioを",
+        "GitHubのAPIをJavaScriptが呼び出します。WavaSembridをPeneiをお試します。"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "17474925384572654899"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "17474925384572654899"
+        }
+      ],
+      "browser": "Playwright WebKit 26.6"
+    },
+    {
+      "name": "English model mixed terms",
+      "language": "en",
+      "wav": "ASR_MIXED_WAV",
+      "gain": 1,
+      "rmsDbfs": -24.352356038565823,
+      "loadMs": 10167.02,
+      "inferenceAndStopMs": 3051.8999999999996,
+      "acked": 107572,
+      "finals": [
+        "The first is the 10th of July, 2021. The first is the 10th of July, 2021. The first is the 10th of July"
+      ],
+      "partials": [
+        "You're so happy",
+        "The first thing you need to do is",
+        "The first one is the first one.",
+        "The first is the first of the three types of food.",
+        "The first is the 10th of July, 2023. The first is the 10th",
+        "The 2022-2023-2024-2024-2024-2",
+        "The 2022-2023-2024-2024-2024-2024-",
+        "The 2022-2023-2024-2024-2024-2024-202",
+        "The first is the 10th of July, 2021. The first is the 10th of July, 2021. The first is the",
+        "The first is the 10th of July, 2023. The first is the 10th of July, 2023. The first is the 10th",
+        "The first is the 10th of July, 2021. The first is the 10th of July, 2021. The first is the 10th of July"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "11576735859017465367"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "11576735859017465367"
+        }
+      ],
+      "browser": "Playwright WebKit 26.6"
+    },
+    {
+      "name": "English only",
+      "language": "en",
+      "wav": "ASR_ENGLISH_WAV",
+      "gain": 1,
+      "rmsDbfs": -16.07122086494486,
+      "loadMs": 11064.78,
+      "inferenceAndStopMs": 1048.3600000000006,
+      "acked": 72884,
+      "finals": [
+        "Use the github api with javascript, web assembly, and open ai."
+      ],
+      "partials": [
+        "Use the get out",
+        "Use the GitHub API",
+        "Use the github api with java",
+        "Use the github api with javascript",
+        "Use the github api with javascript, web api",
+        "Use the github api with javascript, web assembly",
+        "Use the github api with javascript, web assembly, and auto-assembly.",
+        "Use the github api with javascript, web assembly, and open ai."
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "2430477457642147285"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "2430477457642147285"
+        }
+      ],
+      "browser": "Playwright WebKit 26.6"
+    },
+    {
+      "name": "Japanese model English only",
+      "language": "ja",
+      "wav": "ASR_ENGLISH_WAV",
+      "gain": 1,
+      "rmsDbfs": -16.07122086494486,
+      "loadMs": 12253.36,
+      "inferenceAndStopMs": 1205.699999999999,
+      "acked": 72884,
+      "finals": [
+        "Use the GitHub API with Job Ascript, Web Assem"
+      ],
+      "partials": [
+        "ユースタケ",
+        "ユースタゲタベイ",
+        "ユースのゲートウェイPIは、",
+        "Get Hawaii PI with Job",
+        "Get Hub API with Job Ascrip",
+        "Get Hab API with Job Ascript Wh",
+        "Get Hub API with Job Ascript Wherever Sam",
+        "Use the GitHub API with Job Ascript, Web Assem"
+      ],
+      "speech": [
+        {
+          "type": "speech",
+          "event": "started",
+          "id": "1695903473922065875"
+        },
+        {
+          "type": "speech",
+          "event": "completed",
+          "id": "1695903473922065875"
+        }
+      ],
+      "browser": "Playwright WebKit 26.6"
+    },
+    {
+      "name": "Japanese silence",
+      "language": "ja",
+      "wav": "ASR_TEST_WAV",
+      "gain": 0,
+      "rmsDbfs": null,
+      "loadMs": 9695.26,
+      "inferenceAndStopMs": 60.219999999999345,
+      "acked": 116572,
+      "finals": [],
+      "partials": [],
+      "speech": [],
+      "browser": "Playwright WebKit 26.6"
+    }
+  ]
+}
