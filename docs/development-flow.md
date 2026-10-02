@@ -14,6 +14,8 @@ Review
 Revision if needed
   ↓
 Merge
+  ↓
+Required post-merge verification
 ```
 
 ## Start with an Issue
@@ -24,13 +26,21 @@ By default, completion criteria should be executable and verifiable by an AI age
 
 When human work is required, state why it is necessary and what result is expected. Distinguish optional additional validation from mandatory completion criteria.
 
+### Pre-merge acceptance and post-merge verification
+
+Mandatory pre-merge acceptance criteria must be achievable and verifiable before merge. Checks possible only after merge must not be prerequisites for pre-merge PR approval; requiring them would create a review/merge/verification dependency cycle.
+
+For example, when merging triggers deployment, validate the code and configuration, local builds, and applicable automated tests before merge. After merge, verify that deployment succeeded and that the newly published site serves the intended revision and behaves as expected. The existing site or a local build does not establish that the merged revision was published successfully.
+
+Record required post-merge verification separately in the Issue and PR validation report, with the expected result and a **pending** status until performed. After merge, perform those checks and record their results and evidence. Pending post-merge verification does not block pre-merge approval, but remains required work and must not be reported as passed or as fully verified Issue completion. This distinction does not relax implementation requirements or applicable pre-merge tests; report failures, skipped checks, and unperformed checks accurately.
+
 ## Implement and propose a Pull Request
 
-Make the smallest coherent change that fully solves the Issue. Validate it against the expected outcome and any acceptance criteria.
+Make the smallest coherent change that fully solves the Issue. Validate it against the expected outcome and pre-merge acceptance criteria, and record required post-merge verification as described above.
 
 Use the [PR template](../.github/pull_request_template.md) to explain what changed, the resulting behavior, validation, and related Issues. Keep the description accurate as the implementation changes.
 
-A PR may claim to close an Issue only when it fully addresses that Issue. Intentional partial work is allowed, but label it clearly as partial, describe what remains, and avoid closing the parent Issue unless the remaining scope has been explicitly split into follow-up Issues.
+A PR may claim to close an Issue only when it fully addresses that Issue. If required post-merge verification remains pending, keep the Issue open until it is performed and recorded. Intentional partial work is allowed, but label it clearly as partial, describe what remains, and avoid closing the parent Issue unless the remaining scope has been explicitly split into follow-up Issues.
 
 ## Review, revise, and merge
 
