@@ -374,11 +374,46 @@ localhost server at `/my-audio-to-text/`, with no Playwright-managed server. Thi
 subpath handling, not the public HTTPS deployment.
 The refreshed structured check record is in [the evidence JSON](evidence/moonshine-25.json).
 
-When the checkpoint is published, use [the checked-in PR description](evidence/moonshine-25-pr.md)
-as PR #26's body, replacing the existing closing Issue reference. This fix node changes repository
-files only; the live PR body still needs that downstream update. Keep the PR draft and #25 open
-until the required evidence is recorded. No push, merge, deployment, environment-policy change,
-or GitHub write was performed, and no usage limits were reset or bypassed.
+### Review findings follow-up (2026-10-02)
+
+The non-closing reference was restored in [the checked-in PR description](evidence/moonshine-25-pr.md)
+and applied to [PR #26](https://github.com/takahirox/my-audio-to-text/pull/26). The live body was
+read back and matched the file; PR #26 remained draft with head
+`68bd23570bf205602a0181f283120941882b912d`, and Issue #25 remained open. Preserve the non-closing
+reference during downstream publication. Publishing a checkpoint does not complete validation.
+
+At 08:49 UTC, fresh HTTPS checks found `app.js` and `model-worker.js` returned 200 but differed
+from this worktree. `vendor/manifest.json` returned 200; `moonshine-config.js` still returned 404.
+The latest successful Pages run remained
+[36959071356](https://github.com/takahirox/my-audio-to-text/actions/runs/36959071356), at main commit
+`8c4e44b36ad3999042e2d192b8708bd1913ec010`. A fresh read of the deployment branch policies found
+only `main`. Therefore the reviewed HTTPS revision's model loading, partial/final events,
+and responsiveness remain **not tested**, rather than passing based on the older deployment.
+
+No speech recordings were present in the assigned worktree, and no human microphone utterances
+were supplied. The five real-speech conditions below remain required; none has new observations.
+For each, record the deployed SHA, language/model and threshold, microphone signal and peak,
+accepted/completed VAD segments, partial/final text, obvious errors, first/repeat load time, and
+responsiveness. Actual quiet speech and whisper phonation cannot be inferred from attenuation.
+
+| Required real-speech condition | Current status |
+| --- | --- |
+| Normal Japanese | Not tested |
+| Japanese containing GitHub, WebAssembly, API, JavaScript, and OpenAI | Not tested |
+| English-only | Not tested |
+| Actual quiet Japanese at the same microphone distance | Not tested |
+| Actual whisper-like Japanese at VAD thresholds 0.5 and 0.2 | Not tested |
+
+The closing-reference finding is resolved. The published-revision and real-speech findings
+remain unresolved until a permitted deployment and actual speech input are available.
+Four unit tests and 19 Chromium/WebKit checks passed again; 29 browser cases were skipped
+(28 opt-in model checks without recordings and one WebKit binding mock). Skips are not validation
+evidence. Current responses, checksums, PR state, and blockers are recorded under
+`review_findings_followup` in [the evidence JSON](evidence/moonshine-25.json).
+
+Keep the PR draft and #25 open until the required evidence is recorded. Only the PR description
+was changed on GitHub; no push, merge, deployment, environment-policy change, usage reset,
+allowance purchase, or model/provider switch was performed.
 
 ## Upstream references
 

@@ -52,11 +52,11 @@ node. Keep this PR draft and #25 open while the remaining scope is unfinished.
 
 ## Related issues
 
-Closes #25
+Related to #25 (intentional partial work).
 
-This closing reference is required by the publication request. Issue #25 remains
-incomplete; keep this PR draft and do not merge until the required evidence above
-is recorded.
+Keep Issue #25 open and this PR draft until the required published-revision and
+real-speech evidence is recorded. Preserve this non-closing reference when updating
+the PR body; publication does not complete the remaining validation scope.
 
 ## Scope check
 

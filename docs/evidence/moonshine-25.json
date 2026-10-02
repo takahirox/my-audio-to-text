@@ -762,5 +762,85 @@
     ],
     "publication_handoff": "Publish this checkpoint and replace PR #26 body with docs/evidence/moonshine-25-pr.md to remove the existing closing Issue reference. Keep #25 open and PR draft while required evidence is missing. The live PR body was not edited by this fix node.",
     "constraints": "No push, merge, deployment, environment-policy change, GitHub write, usage reset, allowance purchase, or model/provider switch was performed. Physical mobile testing remains optional."
+  },
+  "review_findings_followup": {
+    "checked_at_utc": "2026-10-02T08:49:53.250887+00:00",
+    "base_url": "https://takahirox.github.io/my-audio-to-text/",
+    "responses": {
+      "app.js": {
+        "status": 200,
+        "sha256": "ec273c9b5e183f2273eab0091e05a361494b772541019cfc2643b705f850726f",
+        "matches_worktree": false
+      },
+      "model-worker.js": {
+        "status": 200,
+        "sha256": "5154a83a39b35dae6eac2927b549662f1eac56eadd4bc5c87cb0eac258d4a827",
+        "matches_worktree": false
+      },
+      "vendor/manifest.json": {
+        "status": 200,
+        "sha256": "d722dd5bfc7346de7d1559881d8372050f9548b0716e4f1e4024a46c72e10943",
+        "matches_worktree": null
+      },
+      "moonshine-config.js": {
+        "status": 404,
+        "matches_worktree": false
+      }
+    },
+    "source_checkpoint": "af91ba6c82e94b77f73a8178f01b11addcff8e6c",
+    "status": "partial: closing-reference finding fixed; published and real-speech findings remain unresolved",
+    "latest_successful_pages_run": {
+      "url": "https://github.com/takahirox/my-audio-to-text/actions/runs/36959071356",
+      "head_sha": "8c4e44b36ad3999042e2d192b8708bd1913ec010"
+    },
+    "deployment_branch_policies": [
+      {
+        "name": "main",
+        "type": "branch"
+      }
+    ],
+    "published_revision_validation": {
+      "status": "blocked",
+      "reason": "The public scripts differ from this worktree and moonshine-config.js returns 404. The reviewed branch is not deployed; the environment permits only main. This node must not push or merge.",
+      "model_loading": "not tested on reviewed HTTPS revision",
+      "partial_final_events": "not tested on reviewed HTTPS revision",
+      "responsiveness": "not tested on reviewed HTTPS revision"
+    },
+    "real_speech_validation": {
+      "status": "blocked",
+      "reason": "No speech recordings are present in the assigned worktree and no human microphone utterances were supplied. Synthetic voices, amplitude attenuation, and mocked outcomes do not satisfy real-speech validation.",
+      "conditions": {
+        "normal Japanese": "not tested",
+        "Japanese with English words": "not tested",
+        "English-only": "not tested",
+        "actual quiet Japanese": "not tested",
+        "actual whisper-like Japanese": "not tested"
+      }
+    },
+    "closing_reference_fix": {
+      "status": "resolved",
+      "pr_number": 26,
+      "local_description": "docs/evidence/moonshine-25-pr.md",
+      "live_body_matches_file": true,
+      "head_sha_unchanged": "68bd23570bf205602a0181f283120941882b912d",
+      "is_draft": true,
+      "issue_state": "OPEN"
+    },
+    "checks": {
+      "unit": {
+        "passed": 4,
+        "failed": 0
+      },
+      "browser": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 29,
+        "duration_seconds": 9.6,
+        "command": "npm run test:browser -- --workers=2",
+        "skip_reasons": "28 opt-in real-model cases without recordings; one WebKit nested-module interception case"
+      }
+    },
+    "handoff": "Preserve the non-closing Issue reference in PR #26. Keep the PR draft and #25 open. Publish the checkpoint through the authorized downstream node, arrange a permitted HTTPS deployment of that revision, then record all five real-speech conditions with signal/VAD/transcript/error/load/responsiveness observations. Verify whisper at VAD thresholds 0.5 and 0.2.",
+    "constraints": "Only the live PR description was changed on GitHub. No push, merge, deployment, environment-policy change, usage reset, allowance purchase, or model/provider switch."
   }
 }
