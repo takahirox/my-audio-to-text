@@ -8,9 +8,11 @@ import tarfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
+# The v0.1.5 release WASM supports split-frontend Japanese streaming models.
+# The npm 0.1.5 archive contains an older binary despite the identical version.
 ASSETS = [
-    ("moonshine.tgz", "https://registry.npmjs.org/@moonshine-ai/moonshine-wasm/-/moonshine-wasm-0.1.5.tgz",
-     "502f257a2b2a05ff28c815d5c74ffd0e9a341b0c214c6eabb11b428c7b895552", "moonshine"),
+    ("moonshine-v0.1.5-release.tar.gz", "https://github.com/moonshine-ai/moonshine/releases/download/v0.1.5/moonshine-voice-wasm.tar.gz",
+     "c515bf7691e12048f70a92cc82b3b0894c16c3773ffcacb7d48944fb150e4837", "moonshine"),
     ("sherpa.tar.bz2", "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.2/sherpa-onnx-wasm-simd-1.13.2-vad-asr-ja-zipformer_reazonspeech.tar.bz2",
      "49c26de5550b2e1fec3e322b1fa909331ff027a4c0c76954f6d793102a4f4204", "sherpa"),
 ]
@@ -37,9 +39,9 @@ def main():
                     continue
                 # Only stage runtime files; keep upstream names and relative imports.
                 if name == "moonshine":
-                    if path.parts[:2] != ("package", "dist"):
+                    if path.parts[:1] != ("dist",):
                         continue
-                    relative = Path(*path.parts[2:])
+                    relative = Path(*path.parts[1:])
                 else:
                     if path.name not in {"sherpa-onnx-asr.js", "sherpa-onnx-wasm-main-vad-asr.js",
                                          "sherpa-onnx-wasm-main-vad-asr.wasm", "sherpa-onnx-wasm-main-vad-asr.data"}:

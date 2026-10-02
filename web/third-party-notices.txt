@@ -1,10 +1,11 @@
 Moonshine Voice
-  @moonshine-ai/moonshine-wasm 0.1.5, source commit
+  @moonshine-ai/moonshine-wasm 0.1.5 API, official v0.1.5 release WASM archive, source commit
   234f60faa0eb388b01cdf7e60aca232af37aefda
   https://github.com/moonshine-ai/moonshine
   Runtime code: MIT (apart from upstream third-party code).
-  Japanese Tiny model: Moonshine AI Community License,
-  Copyright © Moonshine AI Ltd. All Rights Reserved.
+  Japanese/English Small Streaming models: MIT.
+  Japanese release quantized_26_08_23; English release quantized_26_08_21.
+  Distribution: https://github.com/moonshine-ai/moonshine/releases/download/v0.1.5/moonshine-voice-wasm.tar.gz
   Full code/model license: ./licenses/moonshine.txt
   Third-party sources/notices: https://github.com/moonshine-ai/moonshine/tree/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party
 

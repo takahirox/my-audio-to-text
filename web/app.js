@@ -1,12 +1,27 @@
 import { Microphone } from './audio.js';
+import { moonshineModels } from './moonshine-config.js';
 const $ = (id) => document.getElementById(id);
 const descriptions = {
-  moonshine: 'Moonshine Voice 0.1.5, Japanese tiny through the live Stream API with built-in speech detection. Displays runtime partials and finals. The published WASM catalog has a non-streaming Japanese model; Japanese streaming architectures are unavailable in this package.',
   sherpa: 'sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized). Non-streaming: finals after a pause, every 20 seconds, or Stop. No partials. About 183 MB of runtime/model files.',
   whisper: 'Transformers.js 3.8.1, multilingual Whisper tiny q8 on WASM CPU. Non-streaming: finals after a pause, every 20 seconds, or Stop. No partials.',
 };
 let worker, mic, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
-let firstText = false, firstPartial = false;
+let firstText = false, firstPartial = false, peakRms = 0, speechStarted = 0, speechCompleted = 0, partialCount = 0, finalCount = 0;
+function describe() {
+  const moonshine = $('backend').value === 'moonshine';
+  $('moonshine-options').hidden = !moonshine;
+  const model = moonshineModels[$('language').value];
+  $('description').textContent = moonshine
+    ? `@moonshine-ai/moonshine-wasm 0.1.5 API, official v0.1.5 release runtime, WASM SIMD + threads, ${model.name} (ModelArch.SmallStreaming / 4), ${model.release}. Named model-file loader; no fallback. VAD threshold ${$('vad-threshold').value}. Native partial/final events. No automatic language detection.`
+    : descriptions[$('backend').value];
+  for (const id of ['partial', 'final']) $(id).lang = moonshine ? $('language').value : 'ja';
+}
+function diagnostics() {
+  $('speech').textContent = $('backend').value === 'moonshine'
+    ? `${speechStarted} native VAD segment(s) accepted; ${speechCompleted} completed. ${speechStarted ? 'Speech detected.' : 'No speech segment reported.'}`
+    : 'Native VAD state unavailable for this backend; all captured audio is retained for segmentation.';
+  $('asr-events').textContent = `${partialCount} nonempty partial(s); ${finalCount} nonempty final(s).`;
+}
 const time = (ms) => `${(ms / 1000).toFixed(2)} s`;
 function setState(next, message) {
   state = next; $('status').textContent = message;
@@ -14,13 +29,14 @@ function setState(next, message) {
   $('start').disabled = state !== 'ready';
   $('stop').disabled = state !== 'recording';
   $('cancel').disabled = !worker;
-  $('backend').disabled = ['starting', 'recording', 'stopping'].includes(state);
+  for (const id of ['backend', 'language', 'vad-threshold']) $(id).disabled = ['booting', 'starting', 'recording', 'stopping'].includes(state);
 }
 function resetOutput() {
   for (const id of ['init', 'first-partial', 'first-text', 'latency', 'audio']) $(id).textContent = '—';
   $('partial').textContent = $('backend').value === 'moonshine' ? 'Waiting for speech…' : 'Unsupported by this non-streaming model.';
   $('final').textContent = ''; $('progress').textContent = ''; $('errors').textContent = '';
-  captured = queued = 0; firstText = firstPartial = false;
+  captured = queued = peakRms = speechStarted = speechCompleted = partialCount = finalCount = 0;
+  firstText = firstPartial = false; $('signal').textContent = 'No capture yet.'; diagnostics();
 }
 async function release() {
   generation++;
@@ -38,7 +54,10 @@ function audio(audio) {
   if (!worker || !['starting', 'recording', 'stopping'].includes(state)) return;
   if (!captured) startedAt = performance.now();
   captured += audio.length; queued += audio.length;
-  $('level').value = Math.sqrt(audio.reduce((sum, sample) => sum + sample * sample, 0) / audio.length);
+  const rms = Math.sqrt(audio.reduce((sum, sample) => sum + sample * sample, 0) / audio.length);
+  peakRms = Math.max(peakRms, rms); $('level').value = rms;
+  const db = (value) => value > 0 ? `${(20 * Math.log10(value)).toFixed(1)} dBFS` : '−∞ dBFS';
+  $('signal').textContent = `RMS ${db(rms)}; session peak RMS ${db(peakRms)}. ${peakRms > 0 ? 'Nonzero microphone signal reached the app (may be noise).' : 'Audio frames received, but signal is zero.'}`;
   $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
   // Fail visibly rather than letting a slow phone queue unbounded microphone audio.
   if (queued > 30 * 16000) { void fail(new Error('Backend is over 30 seconds behind. Capture stopped; retry with shorter utterances.')); return; }
@@ -53,7 +72,15 @@ function receive({ data }) {
   } else if (data.type === 'ack') {
     queued -= data.samples;
     $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
+  } else if (data.type === 'speech') {
+    if (data.event === 'started') speechStarted++;
+    else if (data.event === 'completed') speechCompleted++;
+    diagnostics();
   } else if (['partial', 'final'].includes(data.type)) {
+    if (data.text.trim()) {
+      if (data.type === 'partial') partialCount++; else finalCount++;
+      diagnostics();
+    }
     if (data.text.trim() && !firstText) { firstText = true; $('first-text').textContent = time(performance.now() - startedAt); }
     if (data.type === 'partial') {
       if (data.text.trim() && !firstPartial) { firstPartial = true; $('first-partial').textContent = time(performance.now() - startedAt); }
@@ -76,7 +103,7 @@ $('load').onclick = async () => {
     const activeWorker = worker;
     worker.onmessage = (event) => { if (worker === activeWorker) receive(event); };
     worker.onerror = (event) => { event.preventDefault(); if (worker === activeWorker) void fail(new Error(event.message)); };
-    worker.postMessage({ type: 'load', backend }); setState('loading', 'Loading model…');
+    worker.postMessage({ type: 'load', backend, language: $('language').value, vadThreshold: $('vad-threshold').value }); setState('loading', 'Loading model…');
   } catch (error) { await fail(error); }
 };
 $('start').onclick = async () => {
@@ -92,7 +119,7 @@ $('start').onclick = async () => {
   try {
     startedAt = performance.now();
     await mic.start();
-    if (isCurrent() && state === 'starting') setState('recording', 'Listening. Speak Japanese, pause, then Stop.');
+    if (isCurrent() && state === 'starting') setState('recording', 'Listening. Speak the test utterance, pause, then Stop.');
   } catch (error) { if (isCurrent()) await fail(error); }
 };
 async function stop() {
@@ -107,16 +134,17 @@ async function stop() {
 }
 $('stop').onclick = () => void stop();
 $('cancel').onclick = async () => { setState('booting', 'Releasing…'); await release(); setState('idle', 'Canceled. Load a model to continue.'); };
-$('backend').onchange = async () => {
+async function changeConfiguration() {
   setState('booting', 'Switching…'); await release(); resetOutput();
-  $('description').textContent = descriptions[$('backend').value]; setState('idle', 'Load this model to begin.');
-};
+  describe(); setState('idle', 'Load this model to begin.');
+}
+for (const id of ['backend', 'language', 'vad-threshold']) $(id).onchange = changeConfiguration;
 document.addEventListener('visibilitychange', () => { if (document.hidden) void stop(); });
 window.addEventListener('pagehide', () => { worker?.terminate(); mic?.media?.getTracks().forEach((track) => track.stop()); });
 window.addEventListener('unhandledrejection', (event) => void fail(event.reason));
 
 async function boot() {
-  $('description').textContent = descriptions[$('backend').value]; resetOutput();
+  describe(); resetOutput();
   if (!isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('Microphone requires HTTPS or localhost and browser audio capture support.');
   if (!crossOriginIsolated) {
     if (!navigator.serviceWorker) throw new Error('This browser cannot enable the isolation required by the WASM runtimes. Use a server with COOP/COEP headers.');

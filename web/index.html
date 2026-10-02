@@ -14,10 +14,17 @@
   <p>Audio stays in this browser. Loading downloads models from third-party hosts and may use hundreds of MB. Keep this tab in the foreground.</p>
   <label for="backend">Backend</label>
   <select id="backend">
-    <option value="moonshine">Moonshine Voice — Japanese tiny / live Stream API</option>
+    <option value="moonshine">Moonshine Voice — Small Streaming / Japanese or English</option>
     <option value="sherpa">sherpa-onnx — Japanese ReazonSpeech</option>
     <option value="whisper">Whisper tiny multilingual — WASM baseline</option>
   </select>
+  <div id="moonshine-options">
+    <label for="language">Moonshine language (changing releases the model)</label>
+    <select id="language"><option value="ja">Japanese</option><option value="en">English</option></select>
+    <label for="vad-threshold">Moonshine speech detection threshold (reload required)</label>
+    <select id="vad-threshold"><option value="0.5">Default — 0.5</option><option value="0.2">More sensitive — 0.2 (may accept noise)</option></select>
+    <p>Language selects a monolingual model; Auto is unavailable. Try Japanese speech with English terms in both models.</p>
+  </div>
   <p id="description"></p>
   <div class="controls">
     <button id="load" disabled>Load model</button>
@@ -29,6 +36,12 @@
   <p id="progress"></p>
   <label for="level">Microphone level</label>
   <meter id="level" min="0" max="0.1" value="0"></meter>
+  <p id="signal">No capture yet.</p>
+  <dl>
+    <dt>Speech detection</dt><dd id="speech">—</dd>
+    <dt>ASR transcript events</dt><dd id="asr-events">—</dd>
+  </dl>
+  <p>When there is no runtime error, after Stop and a drained audio queue: zero signal suggests capture trouble; signal with no VAD segments suggests speech detection did not accept it; accepted segments with no text suggest recognizer failure. A nonzero signal may be room noise. Segment events are reported on transcription passes, not as instantaneous VAD probabilities.</p>
   <h2>Partial transcript</h2>
   <p id="partial" lang="ja" aria-live="polite"></p>
   <h2>Final transcript</h2>
@@ -48,7 +61,7 @@
   </ol>
   <label for="utterance">Utterance to repeat (kept while switching)</label>
   <textarea id="utterance" rows="3" lang="ja">今日は東京で音声認識を試しています。明日の午後三時に会議を予約してください。</textarea>
-  <p>Also try names and technical terms, quiet speech, and a longer utterance. Note responsiveness, accuracy, heat, and browser stability.</p>
+  <p>Try “GitHub の API を JavaScript で呼び出します。WebAssembly と OpenAI を試します。” and “Use the GitHub API with JavaScript, WebAssembly, and OpenAI.” Repeat Japanese at normal volume, quietly, and with whisper-like speech. Note responsiveness, accuracy, heat, and browser stability.</p>
   <p><a href="https://github.com/takahirox/my-audio-to-text/blob/main/docs/asr-manual-testing.md">Full instructions and results template</a></p>
   <details><summary>Browser and runtime errors</summary><pre id="errors"></pre></details>
   <p><a href="./third-party-notices.txt">Runtime and model notices</a></p>

@@ -18,7 +18,10 @@ PR #20 was published from its reviewed branch before merge. The maintainer subse
 not the three-backend ASR environment.
 Do not interpret the documented URL as evidence that deployment succeeded.
 
-### Publish for acceptance before merge
+### Historical #18/#21 publication procedure
+
+This procedure records the earlier PR #20 acceptance deployment. Issue #25 requires
+compatibility with the existing Pages build/deploy workflow, not publication before merge.
 
 1. The PR branch must contain this revised workflow and the reviewed code. A local checkpoint
    is not available to GitHub Actions until the publication step updates the branch. Confirm
@@ -85,18 +88,62 @@ restrict service workers or model caches.
 
 | Candidate | Pinned configuration | What the page shows |
 | --- | --- | --- |
-| Moonshine Voice | `@moonshine-ai/moonshine-wasm` 0.1.5, Japanese Tiny, live `Stream` API | Incremental partials and completed lines emitted by the runtime; native speech detection |
+| Moonshine Voice | `@moonshine-ai/moonshine-wasm` 0.1.5, Japanese/English Small Streaming, native `Stream` API; official v0.1.5 release WASM runtime | Incremental partials and completed lines emitted by the runtime; native speech detection |
 | sherpa-onnx | 1.13.2 SIMD WASM, quantized Japanese ReazonSpeech Zipformer 2024-08-01 | Segment finals; no native partials |
 | Whisper | Transformers.js 3.8.1, `Xenova/whisper-tiny` multilingual q8, revision `5332fcc35e32a33b86612b9a57a89be7906102b1`, WASM CPU, one thread | Segment finals; no native partials |
 
-**Moonshine Japanese streaming availability:** the published 0.1.5 WASM catalog rejects Japanese
-`TinyStreaming` and `SmallStreaming` even though current upstream source documentation describes
-Japanese streaming releases. This PoC uses the published Japanese `Tiny` architecture and exercises
-its live `Stream` API, which does emit partial/final events. It is a non-streaming model with
-incremental decoding; it is not evidence that the new Japanese streaming architecture works in
-this published binary. The model manifest selects runtime downloads, and upstream models may
-change independently of the pinned npm package. The Japanese Tiny model has the upstream
-Moonshine Community License; it is an evaluation candidate, not a production licensing decision.
+**Moonshine configuration for #25:** the latest npm package is still
+`@moonshine-ai/moonshine-wasm` 0.1.5, but its WASM binary predates Japanese streaming
+and fails to load the current split-frontend models. The playground stages the official
+[v0.1.5 release](https://github.com/moonshine-ai/moonshine/releases/tag/v0.1.5)
+`moonshine-voice-wasm.tar.gz` instead, from source commit
+`234f60faa0eb388b01cdf7e60aca232af37aefda`. This release includes the same 0.1.5 JS API
+and a newer, compatible WASM binary. Do not substitute the npm archive based on version
+number alone. The preparation script verifies archive SHA-256
+`c515bf7691e12048f70a92cc82b3b0894c16c3773ffcacb7d48944fb150e4837`;
+release `moonshine.wasm` SHA-256 is
+`22fca4a5b2dc50fe36dc68e4d25fab73b0250b71f744d9fea511c3a308b2420a`.
+Runtime: CPU WebAssembly with SIMD and threads, requiring cross-origin isolation.
+
+Both language choices use `ModelArch.SmallStreaming` (numeric value `4`):
+
+- Japanese (default): `https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/`
+- English: `https://download.moonshine.ai/model/small-streaming-en/quantized_26_08_21/`
+
+`web/moonshine-config.js` pins the eight canonical filenames and dated release URLs
+from the [upstream model catalog](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-model-catalog.cpp).
+`Transcriber.loadFromUrls` loads them through the supported in-memory file-map API,
+with native partial/final events. The dated model URLs identify the tested releases;
+model bytes are fetched and cached by the upstream downloader, without local checksum
+verification. Load failures name the intended configuration and stop; there is no fallback.
+Japanese and English streaming models are MIT under the [upstream license](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/LICENSE).
+
+**Language evaluation:** Japanese and English are separate monolingual models. This API
+does not provide automatic language detection, so no Auto option is shown. The control
+applies only to Moonshine; the other candidates retain their Japanese configuration.
+Changing language or VAD threshold releases the loaded model and requires Load again;
+both controls are locked during capture/finalization. Test mixed Japanese/English speech
+in both models, rather than assuming either routes languages automatically.
+
+**Quiet/whisper diagnosis:** the meter remains live; numeric RMS dBFS and session peak
+RMS reveal signals too small to see on the meter. A nonzero signal can be room noise,
+not necessarily usable speech. Native `onLineStarted` and `onLineCompleted` report
+accepted VAD segments independently of nonempty ASR text. Segment counts and nonempty
+partial/final counts remain visible after Stop and reset at the next Start. These are
+segment events reported on transcription passes, not instantaneous VAD probabilities.
+Use a several-second utterance, Stop, and wait for Stopped and a drained queue:
+
+1. No captured frames or zero signal: inspect microphone permission/device/capture.
+2. Nonzero signal, zero native VAD segments: speech detection did not accept a segment.
+3. Accepted segments, zero nonempty transcript events: the recognizer emitted no useful text.
+4. Text events: inspect the actual partial/final text for recognition errors.
+
+Runtime errors take precedence over these interpretations. The UI reports them separately;
+a failed transcription pass may prevent segment events from reaching the page.
+The minimum sensitivity control forwards native `vad_threshold`: default `0.5` or
+more sensitive `0.2`. Lowering it may accept noise and does not guarantee whisper recognition.
+Keep other settings at upstream defaults, including the 0.5-second VAD averaging window.
+See [native options](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/api/options.md).
 
 **ReazonSpeech is non-streaming.** Both ReazonSpeech and Whisper receive the same 16 kHz mono
 capture and simple segmentation: decode after 0.8 seconds of low audio energy following speech,
@@ -114,7 +161,10 @@ If the backend accumulates over 30 seconds of unprocessed audio, capture stops w
 error to prevent an unbounded queue. Switching or Cancel terminates the model worker and releases
 capture. Leaving the foreground stops and finalizes a recording where the browser permits it.
 
-## Human test procedure
+## Optional human test procedure
+
+For #25, human speech and physical-device testing are optional follow-up validation.
+Use this procedure to record observations when a tester and deployment are available.
 
 1. Use one foreground tab and one backend at a time. Plug in the phone if necessary and start on Wi-Fi.
 2. Select a backend and tap **Load model**. Wait for **Ready**. Note first-load progress and initialization
@@ -123,7 +173,7 @@ capture. Leaving the foreground stops and finalizes a recording where the browse
    the upstream runtime, not a complete network byte benchmark.
 3. Tap **Start microphone**, grant permission, and check that the meter responds. Speak the utterance
    displayed in the text box. Keep distance, volume, room, and utterance consistent between candidates.
-4. Pause for about one second. Observe incremental partials (Moonshine), segment finals, and responsiveness.
+4. For Moonshine, record language/model and VAD threshold, the numeric microphone level, accepted/completed VAD segment counts, and nonempty partial/final counts. Pause for about one second. Observe incremental partials (Moonshine), segment finals, and responsiveness.
    Tap **Stop and finalize** and wait for **Stopped**. The microphone is released immediately while pending
    inference finishes. **Cancel / release model** abandons pending inference if necessary.
 5. Copy results and timings into the template below before changing backend. The utterance text is kept
@@ -149,7 +199,7 @@ head. Record whether an Android device was available; if it was not tested, say 
 Include partial transcript observations for Moonshine and mark partials unsupported for the
 other candidates. For Stop, note whether the microphone was released and finalization reached
 **Stopped**, alongside its latency. For repeat and switching, record the observed outcome,
-including the next backend, rather than leaving success implicit in a transcript.
+including the next backend, rather than leaving success implicit in a transcript. For Moonshine, also record the selected language/model release and VAD threshold, numeric signal/peak RMS, accepted/completed speech segment counts, and nonempty partial/final counts. These distinguish capture, detection, and ASR failures.
 
 | Date / device / OS / browser | Backend / first or repeat load | Utterance / volume | Permission and meter | Init (s) | First partial / text (s) | Stop outcome / latency (s) | Partial / final transcript | Repeat outcome | Switch to / outcome | Accuracy, responsiveness, heat, stability, errors |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -158,11 +208,13 @@ including the next backend, rather than leaving success implicit in a transcript
 Suggested samples (edit the on-page utterance as needed):
 
 - Ordinary Japanese: `今日は東京で音声認識を試しています。明日の午後三時に会議を予約してください。`
-- Names/terms: `高橋さんに、GitHub ActionsとWebAssemblyの設定を確認してもらいます。`
-- Quiet speech: repeat the ordinary sample softly at the same microphone distance.
+- Japanese with English terms: `GitHub の API を JavaScript で呼び出します。WebAssembly と OpenAI を試します。` Record each term as preserved in Latin spelling, transliterated, wrong, or missing under both language choices.
+- English only: `Use the GitHub API with JavaScript, WebAssembly, and OpenAI.` Test English and Japanese models explicitly.
+- Quiet speech: repeat the ordinary sample softly at the same microphone distance, first at threshold 0.5, then 0.2.
+- Whisper-like speech: repeat the ordinary sample with whisper-like phonation at the same distance, with both thresholds. Reducing a recording's amplitude is a quiet-signal proxy and does not reproduce whisper phonation.
 - Longer speech: dictate a paragraph for 30–60 seconds, with and without pauses.
 
-No human accuracy results or production recommendation are claimed by this change.
+For #25, these five conditions are **optional follow-up validation**, under the updated Issue acceptance criteria. When testing, record the deployed commit, device/browser, microphone signal, VAD segments, partial/final text, obvious errors, first/repeat load time, and responsiveness. [Moonshine #25 evidence](#moonshine-25-validation) records agent-verifiable integration and diagnostics checks. Actual whisper phonation needs a real recording or microphone utterance; synthetic attenuation does not establish whisper recognition. Human speech, physical-device testing, and publication of the reviewed revision before merge are not completion gates.
 
 ## Developer checks
 
@@ -173,15 +225,16 @@ npx playwright install chromium webkit
 npm run test:browser
 ```
 
-Browser tests check isolation on a plain static server, switching, microphone denial, real Web Audio
+Browser tests check isolation on a plain static server, language/sensitivity reloads and recording locks, explicit model-load failures without fallback, quiet capture with VAD rejection/acceptance and empty/nonempty ASR text, switching, microphone denial, real Web Audio
 capture with a generated test source, Stop/repeat/release, cancellation during pending permission,
-and Stop → Cancel → reload during delayed worklet flushing. Chromium checks that old audio and
+and Stop → Cancel → reload during delayed worklet flushing. Both browsers check that old audio and
 Stop callbacks cannot affect a new recording and that both captures are eventually released.
-WebKit checks that the old Stop cannot affect the replacement worker at Ready; the rapid capture
-replacement case intermittently encounters native `NotAllowedError` in headless WebKit and still
-requires real Safari validation under #21.
+The synthetic microphone retains its `MediaDevices` and instrumented track wrappers so WebKit
+does not lose the mock between captures and invoke native permission handling. Repeat checks wait
+for Listening and nonzero captured audio before asserting reset behavior or canceling. AudioContext
+creation/closure, audio graphs, worklets, and resampling remain real; no context-lifetime mock is used.
 They substitute tiny model workers to keep routine checks free of model downloads. Unit tests cover
-resampling continuity and audio retention at segmentation boundaries. No physical microphone/device
+resampling continuity and audio retention at segmentation boundaries. The incompatible binding mock runs in Chromium only: Playwright WebKit cannot reliably intercept nested module-worker imports. Real Moonshine model loading and event checks run in both browsers. No physical microphone/device
 is exercised by these automated checks.
 
 Opt in to real Japanese inference with your own **16 kHz mono, signed 16-bit PCM WAV**:
@@ -191,13 +244,204 @@ python3 scripts/prepare-assets.py
 ASR_TEST_WAV=/absolute/path/to/japanese.wav npm run test:browser -- --project=chromium
 ```
 
+The Moonshine evaluation matrix additionally accepts `ASR_MIXED_WAV`, `ASR_ENGLISH_WAV`,
+and `ASR_WHISPER_WAV` (same PCM format). Inputs are opt-in for routine automated checks;
+a skipped whisper case leaves optional whisper accuracy untested, without blocking #25. For example:
+
+```sh
+ASR_TEST_WAV=/path/japanese.wav ASR_MIXED_WAV=/path/mixed.wav ASR_ENGLISH_WAV=/path/english.wav \
+  npm run test:browser -- --grep 'Moonshine evaluation' --workers=1
+```
+
+It logs selected language, threshold, RMS, accepted/completed VAD events, partials/finals,
+load time, and unpaced inference/finalization time, and attaches JSON to Playwright results.
+Quiet cases attenuate the Japanese recording by 0.01 and 0.001; a zero-gain case checks
+that silence produces no segments/text. Whisper is skipped unless a real recording is supplied.
+Mixed-term results are observations, not hardcoded accuracy requirements. The normal Japanese
+and English cases must emit nonempty partials/finals and completed speech events.
+
+Run an actual whisper recording at **both** VAD thresholds independently of the other WAVs:
+
+```sh
+ASR_WHISPER_WAV=/path/actual-whisper.wav \
+  npm run test:browser -- --grep 'Moonshine evaluation: Japanese whisper recording' --workers=1
+```
+
+After the reviewed revision is deployed, the same real-worker checks can target Pages instead
+of localhost. `ASR_BASE_URL` disables the local web server; include the trailing slash to preserve
+the repository subpath. The evaluation checks require the Small Streaming description before
+loading the worker, so the older deployed page cannot pass as the revised implementation:
+
+```sh
+ASR_BASE_URL=https://takahirox.github.io/my-audio-to-text/ \
+  ASR_TEST_WAV=/path/japanese.wav ASR_MIXED_WAV=/path/mixed.wav \
+  ASR_ENGLISH_WAV=/path/english.wav ASR_WHISPER_WAV=/path/actual-whisper.wav \
+  npm run test:browser -- --grep 'Moonshine evaluation' --workers=1
+```
+
+Record the deployment run/SHA and compare published page scripts, `moonshine-config.js`, and
+the staged runtime manifest/checksums to the reviewed files first. Direct-worker checks verify
+loading/events and recording input. Optional published microphone/meter and human comparison
+checks use the procedure above. Do not treat a skipped condition as passing.
+
 The smoke test feeds that WAV through each real backend worker and checks Japanese final output and
 Moonshine partial events. It downloads models and takes longer. It checks integration, not accuracy or
 realtime pacing. No test WAV is committed or uploaded. The implementation was smoke-tested in
 Chromium 153 and Playwright WebKit 26.6 with locally synthesized Japanese speech. All three
-emitted Japanese finals and Moonshine emitted partials. This sample also produced spaced/truncated
-Moonshine text and a missing first clause in ReazonSpeech output; passing smoke checks establishes
-integration, not transcription quality. Actual human/device results still need to be recorded.
+emitted Japanese finals and Moonshine emitted partials. The earlier #18 smoke check, using
+Japanese Tiny, produced spaced/truncated Moonshine text and a missing first clause in ReazonSpeech
+output. Current Moonshine results are recorded below; passing smoke checks establishes integration,
+not transcription quality. Actual human/device results remain untested unless separately recorded.
+
+## Moonshine #25 validation
+
+**Acceptance follows the updated Issue #25.** Completion is based on agent-verifiable
+model/runtime selection and browser loading, deterministic partial/final events, language
+controls, low-amplitude capture, observable microphone/VAD/ASR states, VAD threshold
+configuration, existing functionality, and Pages build/deploy compatibility. The checks
+below cover these criteria. The [PR description](evidence/moonshine-25-pr.md) reflects this
+scope. Human speech, whisper accuracy, physical-device testing, and a pre-merge deployment
+are optional follow-up validation and do not require keeping PR #26 draft or #25 open.
+No production backend is selected.
+
+The results below and [evidence JSON](evidence/moonshine-25.json) retain historical
+observations. Earlier partial-work statuses, deployment blockers, and handoff instructions
+in that record reflect the previous acceptance criteria and are superseded by this guidance.
+
+On 2026-10-02 JST, the official release runtime loaded Japanese and English Small Streaming
+in Chromium 153.0.8010.12 and Playwright WebKit 26.6. Tests used the plain local static
+server and the same isolation service worker used on Pages. The archive and staged runtime
+were checksum-verified. These files remain deployable by the existing Pages preparation workflow;
+this node did **not** publish a revision or verify it at the public URL.
+
+All four audio unit tests passed, and routine browser checks passed (19 checks; the WebKit
+incompatible-binding mock is skipped for the harness limitation above). Real Japanese
+inference/finalization also passed for all three backends in both browsers (6 checks). The
+Moonshine real-model check and evaluation matrix passed in both browsers (20 checks, 2 whisper
+cases skipped without a recording). macOS `say` voices Kyoko/Samantha synthesized the
+samples above, converted with ffmpeg to 16 kHz mono signed 16-bit PCM. Input was sent
+directly to the real worker in unpaced 2048-sample blocks, without a physical microphone.
+The separate UI tests use a quiet Web Audio oscillator and controlled worker outcomes to
+verify the actual capture/meter path and the three diagnostic states. They do not establish
+speech accuracy. Raw observations, partials/finals, configuration, RMS, and timings are in
+[the evaluation record](evidence/moonshine-25.json).
+
+Both browsers produced the same finals and event counts for these samples:
+
+| Input / model language / VAD threshold | Worker input RMS (dBFS) | Accepted / completed segments | Nonempty partial / final events | Final transcript / observation |
+| --- | --- | --- | --- | --- |
+| Normal Japanese / ja / 0.5 | −25.0 | 1 / 1 | 14 / 1 | `今日は東京で音声認識を試しています明日の午後3時に会議を予約してください` — punctuation differs. |
+| Quiet proxy (gain 0.01) / ja / 0.5 | −65.0 | 1 / 1 | 12 / 1 | `東京で音声認識を試しています明日の午後3時に会議を予約してください` — opening words missing. |
+| Very quiet proxy (gain 0.001) / ja / 0.5 | −85.0 | 0 / 0 | 0 / 0 | Nonzero audio delivered/acknowledged; speech detection accepted no segment. |
+| Same very quiet proxy / ja / 0.2 | −85.0 | 2 / 2 | 2 / 2 | `ありがとうございました` twice — VAD accepts, but ASR text is wrong. More sensitivity does not ensure usable recognition. |
+| Japanese with English terms / ja / 0.5 | −24.4 | 1 / 1 | 13 / 1 | `GitHubのAPIをJavaScriptが呼び出します。WavaSembridをPeneiをお試します。` — GitHub/API/JavaScript preserved; WebAssembly/OpenAI wrong; Japanese particle error. |
+| Same mixed sample / en / 0.5 | −24.4 | 1 / 1 | 11 / 1 | Repeated English date text, beginning `The first is the 10th of July, 2021.` — incorrect; switching to English did not preserve the Japanese content or terms. |
+| English only / en / 0.5 | −16.1 | 1 / 1 | 8 / 1 | `Use the github api with javascript, web assembly, and open ai.` — terms recognizable; casing and word boundaries differ. |
+| Same English sample / ja / 0.5 | −16.1 | 1 / 1 | 8 / 1 | `Use the GitHub API with Job Ascript, Web Assem` — incorrect/truncated. |
+| Digital silence / ja / 0.5 | −∞ | 0 / 0 | 0 / 0 | No segments or transcripts. |
+| Human whisper-like Japanese / ja / 0.5 and 0.2 | Not tested | Not tested | Not tested | Requires a real recording or microphone observation; attenuation does not reproduce whisper phonation. |
+
+Initialization including model downloads ranged from 8.41–12.71 seconds. Unpaced inference
+and Stop for voiced samples took 0.48–3.05 seconds, with every sample acknowledged and Stop
+completed. This does not measure real-time responsiveness, repeat-load caching, or human
+first-text latency. Physical mobile compatibility and the published-revision five-condition
+human comparison remain unverified and optional. No human recognition result or production
+backend selection is inferred from these synthetic checks.
+
+### Optional follow-up validation for #25
+
+- After deployment, verify HTTPS deployment identity, staged runtime/model
+  loading, partial/final events, Stop/repeat, and responsiveness on the canonical Pages URL.
+- Record the five-condition comparison: normal Japanese, Japanese with English terms, English-only,
+  actual quiet Japanese, and actual whisper-like Japanese. Use both whisper VAD thresholds and
+  record input signal, accepted/completed VAD segments, partial/final events/text, and errors.
+- These observations do not block merge or completion. Synthetic voices and attenuation do not
+  establish human phonation or whisper recognition; human and physical-device results may remain not tested.
+
+### Historical publication observation (2026-10-02 08:23 UTC)
+
+At 2026-10-02 08:23 UTC, read-only checks confirmed Pages still served the successful main
+deployment `8c4e44b36ad3999042e2d192b8708bd1913ec010`
+([run 36959071356](https://github.com/takahirox/my-audio-to-text/actions/runs/36959071356)).
+`app.js`, `model-worker.js`, and `vendor/manifest.json` returned 200 but differed from this
+revision; `moonshine-config.js` returned 404. At that time, the `github-pages` environment permitted
+only `main`, so a PR-branch deployment would have required a separately approved branch permission.
+No approval or deployment was recorded. This historical observation does not block #25 under the
+updated criteria; the existing main deployment path remains available after merge. No real whisper
+recording was available in the worktree; no whisper result is inferred from the amplitude proxies.
+
+### Historical review-fix checks (2026-10-02)
+
+The three diagnostic WebKit repeat failures were reproduced before the fix. Retaining the
+synthetic microphone's MediaDevices/track wrappers prevents garbage collection from discarding
+the getUserMedia mock. Afterward all four audio tests and 19 routine browser checks passed;
+29 cases were skipped (28 opt-in real-model cases without their WAVs and one WebKit binding mock).
+All five WebKit repeat cases passed five runs each (25 checks). Both browsers now test a new
+recording during the old delayed worklet flush, with successful capture and eventual track release.
+
+Separately, four selected real-model checks passed for synthesized normal Japanese and English
+in Chromium and WebKit. Both current Small Streaming models loaded and emitted nonempty
+partials/finals and completed native speech events. Asset preparation and archive verification
+also passed. These local checks do not establish published-site or actual whisper observations.
+The external-base harness also passed real Japanese inference in Chromium through a separate
+localhost server at `/my-audio-to-text/`, with no Playwright-managed server. This checks repository
+subpath handling, not the public HTTPS deployment.
+The refreshed structured check record is in [the evidence JSON](evidence/moonshine-25.json).
+
+### Historical review findings follow-up (2026-10-02)
+
+This review used the previous acceptance criteria. The updated Issue makes its outstanding
+published-revision and human-speech checks optional; the observations below remain historical.
+
+The non-closing reference was restored in [the checked-in PR description](evidence/moonshine-25-pr.md)
+and applied to [PR #26](https://github.com/takahirox/my-audio-to-text/pull/26). The live body was
+read back and matched the file; PR #26 remained draft with head
+`68bd23570bf205602a0181f283120941882b912d`, and Issue #25 remained open. The instruction to preserve
+the non-closing reference is superseded by the updated scope and current PR description.
+
+At 08:49 UTC, fresh HTTPS checks found `app.js` and `model-worker.js` returned 200 but differed
+from this worktree. `vendor/manifest.json` returned 200; `moonshine-config.js` still returned 404.
+The latest successful Pages run remained
+[36959071356](https://github.com/takahirox/my-audio-to-text/actions/runs/36959071356), at main commit
+`8c4e44b36ad3999042e2d192b8708bd1913ec010`. A fresh read of the deployment branch policies found
+only `main`. Therefore the reviewed HTTPS revision's model loading, partial/final events,
+and responsiveness were **not tested**, rather than passing based on the older deployment.
+
+No speech recordings were present in the assigned worktree, and no human microphone utterances
+were supplied. The five real-speech conditions below were not tested and are now optional.
+For each, record the deployed SHA, language/model and threshold, microphone signal and peak,
+accepted/completed VAD segments, partial/final text, obvious errors, first/repeat load time, and
+responsiveness. Actual quiet speech and whisper phonation cannot be inferred from attenuation.
+
+| Optional real-speech condition | Recorded status |
+| --- | --- |
+| Normal Japanese | Not tested |
+| Japanese containing GitHub, WebAssembly, API, JavaScript, and OpenAI | Not tested |
+| English-only | Not tested |
+| Actual quiet Japanese at the same microphone distance | Not tested |
+| Actual whisper-like Japanese at VAD thresholds 0.5 and 0.2 | Not tested |
+
+The closing-reference finding was resolved under the earlier scope. Published-revision and
+real-speech evidence was missing; the updated Issue removes those checks as completion gates.
+Four unit tests and 19 Chromium/WebKit checks passed again; 29 browser cases were skipped
+(28 opt-in model checks without recordings and one WebKit binding mock). Skips are not validation
+evidence. Historical responses, checksums, PR state, and blockers are recorded under
+`review_findings_followup` in [the evidence JSON](evidence/moonshine-25.json).
+
+The earlier instruction to keep PR #26 draft and #25 open pending human or published-site
+evidence is superseded. During that historical follow-up, only the PR description was changed
+on GitHub; no push, merge, deployment, environment-policy change, usage reset, allowance
+purchase, or model/provider switch was performed.
+
+### Acceptance-guidance fix checks (2026-10-02)
+
+After aligning this guidance with the updated Issue snapshot, asset preparation and archive
+checksum verification passed, as did four audio unit tests and 19 Chromium/WebKit browser
+checks. The 29 skipped cases were 28 opt-in real-model checks without WAV inputs and one
+WebKit binding mock. Real-model checks were not rerun for this documentation change; their
+earlier results remain recorded above. The existing Pages workflow runs the same preparation
+and uploads `web/` before deployment. No human speech, physical-device, or public-site result
+is claimed by these checks.
 
 ## Upstream references
 
