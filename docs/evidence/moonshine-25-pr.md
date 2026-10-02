@@ -52,7 +52,11 @@ node. Keep this PR draft and #25 open while the remaining scope is unfinished.
 
 ## Related issues
 
-Related to #25.
+Closes #25
+
+This closing reference is required by the publication request. Issue #25 remains
+incomplete; keep this PR draft and do not merge until the required evidence above
+is recorded.
 
 ## Scope check
 
