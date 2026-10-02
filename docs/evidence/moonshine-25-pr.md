@@ -18,22 +18,19 @@ The browser fixture retains WebKit's MediaDevices/track wrappers, awaits success
 repeat capture, and verifies both tracks are released. Both browsers exercise delayed
 Stop → Cancel → reload while a replacement capture is recording.
 
-**This is intentional partial work for #25.** Completed scope is the streaming/runtime
-update, language controls, diagnostics, documentation, and local synthetic checks.
-Remaining scope stays in #25: publish and verify the reviewed revision over HTTPS,
-then record normal Japanese, Japanese with English terms, English-only, actual quiet
-Japanese, and actual whisper-like Japanese with signal/VAD/transcript observations and
-load/responsiveness results. Real whisper phonation needs a recording or microphone
-utterance; attenuation does not reproduce it. Physical mobile testing is optional.
+This addresses the updated #25 scope through agent-verifiable implementation and tests.
+Human speech, actual whisper phonation, physical-device testing, and published-site checks
+are optional follow-up validation. The existing Pages workflow must remain able to build
+and deploy the playground; deployment of this revision before merge is not required.
 No production backend is selected.
 
 ## Validation
 
 - Four audio unit tests and 19 routine Chromium/WebKit checks pass. One WebKit binding
   mock and 28 opt-in real-model checks are skipped without their recordings.
-- All five WebKit repeat cases passed five runs each (25 checks), including repeat
+- Previously recorded: all five WebKit repeat cases passed five runs each (25 checks), including repeat
   startup, nonzero audio, diagnostics reset, track release, and stale flush isolation.
-- Four selected real-model checks passed: Japanese and English Small Streaming in
+- Previously recorded: four selected real-model checks passed: Japanese and English Small Streaming in
   Chromium and WebKit, using newly synthesized speech on localhost. Both languages
   emitted nonempty partials/finals and completed native speech events.
 - Historical real-model/synthetic observations are retained in
@@ -43,33 +40,23 @@ No production backend is selected.
   target the published repository subpath with `ASR_BASE_URL`, without a localhost server.
   A separate localhost subpath check passed real Japanese inference in Chromium; the
   actual public HTTPS revision remains unverified.
+- Asset preparation and archive checksum verification pass. The existing Pages workflow
+  runs that preparation and uploads `web/`, including the pinned runtime assets, then
+  deploys on pushes to main. No workflow or deployment-policy change is needed for #25.
 
-**Required evidence still missing:** the reviewed revision on Pages and the real-speech
-five-condition comparison. At the read-only check on 2026-10-02, Pages served main commit
-`8c4e44b36ad3999042e2d192b8708bd1913ec010`; `moonshine-config.js` returned 404. The
-github-pages environment permits only main. No whisper recording is available to this
-node. Keep this PR draft and #25 open while the remaining scope is unfinished.
+Human microphone, actual quiet/whisper speech, physical-device behavior, and this revision
+on the public HTTPS site have not been verified. Synthetic input validates integration and
+diagnostics without establishing human accuracy. These optional observations do not block
+merge or Issue completion under the updated #25 criteria.
 
 ## Related issues
 
-Related to #25 (intentional partial work).
-
-Keep Issue #25 open and this PR draft until the required published-revision and
-real-speech evidence is recorded. Publication does not complete the remaining
-validation scope.
-
-The publication request includes the following completion reference. It is deferred
-until all required evidence is recorded, following the repository's partial-work
-convention; no completion of Issue #25 is claimed by this draft:
-
-```text
 Closes #25
-```
 
 ## Scope check
 
-- [ ] Issue #25 is fully addressed; required published and real-speech validation remains open.
+- [x] This PR fully addresses the updated Issue #25 agent-verifiable criteria.
 - [x] This PR does not include unrelated work.
 - [x] This PR adds no speculative frameworks or subsystems.
-- [x] Intentional partial work and remaining scope are explicit; the parent Issue remains open.
-- [x] Validation maps to the Issue's expected outcome, with missing evidence stated above.
+- [x] Optional human and published-site validation is explicitly identified without claiming unperformed checks.
+- [x] Validation maps to the updated Issue's expected outcome and acceptance criteria.
