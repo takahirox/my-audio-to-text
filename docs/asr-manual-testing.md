@@ -105,8 +105,11 @@ pause/20-second/Stop policy and does not initialize VAD.
 
 Silero VAD and its ONNX model are already included in the checksum-pinned sherpa 1.13.2
 WASM distribution. Asset preparation now stages its small JavaScript wrapper and scopes
-its helpers to avoid overwriting ASR's `freeConfig`. No additional runtime or model
-download is needed. The VAD model's MIT notice is included with the existing notices.
+its helpers to avoid overwriting ASR's `freeConfig`. Issue #37 reuses those same
+runtime/model files in separate VAD and ASR workers.
+Each worker initializes its own WASM instance; the combined upstream distribution also
+loads its bundled model data in each instance, increasing memory use. No new model or
+runtime version is introduced. The VAD model's MIT notice is included with the existing notices.
 
 At 16 kHz mono, Silero classifies 512-sample (32 ms) frames at threshold 0.5. The worker
 retains fewer than 512 samples between microphone callbacks. Stop pads the last short
@@ -134,20 +137,22 @@ transcript. Finals use the complete utterance, including its pre-roll and traili
 a final is at most 12.8 seconds. Pre-roll after a committed endpoint contains only new
 idle audio, avoiding overlap with the preceding final.
 
-VAD and synchronous offline ASR run sequentially in the same worker. This keeps the
-existing WASM/model allocation and keeps inference off the UI thread. Slow inference
-also delays VAD processing; the interval is an audio eligibility policy, not a guarantee
-of visible wall-clock updates. Pending VAD audio, active utterances, pending finals, and
-the final in flight share a 30-second cap. The bounded idle pre-roll and one provisional
+Silero VAD runs in a dedicated worker while synchronous offline ReazonSpeech runs in
+its own inference worker (#37). VAD continues classifying microphone frames and the page
+retains detected endpoints while ASR is busy. Both workers must be ready before Start.
+The interval remains an audio eligibility policy, not a guarantee of visible wall-clock
+updates. Pending VAD audio, active utterances, pending finals, and the final in flight share a 30-second cap. The bounded idle pre-roll and one provisional
 snapshot (at most 12.8 seconds) are additional. Exceeding the cap reports an error, stops
-capture, and terminates the worker. Native VAD segment storage is flushed/cleared after
+capture, and terminates both workers. Native VAD segment storage is flushed/cleared after
 each frame, without resetting Silero's recurrent/threshold state; the page owns ASR audio.
 
 **Stop** flushes the microphone and VAD tails, waits for in-flight decoding, and commits
 all completed and active utterances. Idle pre-roll is discarded. Start remains disabled
-until this drains. **Cancel** terminates the worker, discards pending audio, and clears
-the experiment's transcripts. Repeat resets VAD/buffers/session state. Backend switching
-releases the worker. Session checks reject stale VAD, transcript, and completion messages.
+until this drains. VAD resets after its final frame; each ASR stream is freed after
+decoding. Loaded workers remain available for repeat recording. **Cancel** terminates
+both workers, discards pending audio, and clears the experiment's transcripts. Repeat
+resets VAD/buffers/session state. Backend switching and page teardown release both workers.
+Worker identity and session checks reject stale VAD, transcript, and completion messages.
 
 Run deterministic unit and Chromium/WebKit coverage without model downloads:
 
@@ -160,9 +165,10 @@ npm run test:browser -- --workers=2
 Policy tests compare every final sample across arbitrary 2,048-sample boundaries and
 verify silence, available pre-roll, preview eligibility/coalescing, pause reset/endpoints,
 12-second finals, exact boundary continuity, Stop, and the backlog limit. Browser tests
-exercise the actual worker with controlled Silero/recognizer fixtures, including VAD frame
-and Stop tails, stale ended previews, Cancel/reload/repeat/switching, empty recognition,
-stream cleanup/errors, and unchanged offline segmentation. The existing suite checks
+exercise both actual worker paths with controlled Silero/recognizer fixtures, including
+classification and retained endpoints while the ASR message sequence is held in flight,
+coalesced previews, readiness, VAD frame and Stop tails, stale ended previews,
+Cancel/reload/repeat/switching/teardown, empty recognition, stream cleanup/errors, and unchanged offline segmentation. The existing suite checks
 Moonshine, two-pass, Whisper, and actual Web Audio capture/resampling.
 
 Opt-in checks use the pinned real runtime, with generated silence or a supplied Japanese
@@ -179,7 +185,8 @@ no committed silence, and no runtime errors. The WAV check also expects Japanese
 text. Neither is a subjective accuracy comparison. Optional manual comparison can record
 first-preview latency, update frequency, clipped beginnings, pause latency, offline versus
 simulated recognition, long speech behavior, responsiveness, and thermal behavior.
-No post-merge verification is required for #35.
+See the [Issue #37 validation record](evidence/reazon-37.md) for the worker-isolation
+checks and memory tradeoff. No post-merge verification is required for #35 or #37.
 
 ### Japanese two-pass experiment (#31)
 

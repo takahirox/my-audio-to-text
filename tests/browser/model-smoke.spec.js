@@ -163,7 +163,7 @@ test('ReazonSpeech simulated: real Silero runtime, Stop and repeat', async ({ pa
   await expect(page.locator('#start')).toBeEnabled({ timeout: 120000 });
   for (let repeat = 0; repeat < 2; repeat++) {
     await page.locator('#start').click();
-    // Yield between microphone callbacks; VAD and ASR share the worker. The page
+    // Yield between microphone callbacks; VAD and ASR use separate workers. The page
     // retains its normal backlog cap, session checks and coalescing policy.
     await page.evaluate(async samples => {
       for (let offset = 0; offset < samples.length; offset += 2048) {

@@ -537,7 +537,7 @@ for (const duringSecondPass of [false, true]) {
 for (const backend of ['moonshine', 'sherpa', 'sherpa-simulated', 'whisper']) {
   test(`${backend}-only still loads, captures, stops and repeats`, async ({ page }) => {
     await fakeBackend(page); await fakeMicrophone(page);
-    await page.context().route('**/sherpa-worker.js', (route) => route.fulfill({
+    await page.context().route(/\/(sherpa|silero)-worker\.js$/, (route) => route.fulfill({
       contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
       body: `self.onmessage = ({data}) => {
         if (data.type === 'load') postMessage({type:'ready'});
