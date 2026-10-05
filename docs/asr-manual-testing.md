@@ -3,6 +3,62 @@
 This disposable playground supplies the implementation portion of [Issue #18](https://github.com/takahirox/my-audio-to-text/issues/18).
 It does not select a production backend. Record human observations before a separate selection issue.
 
+## ReazonSpeech inference threading (#38)
+
+The ReazonSpeech thread count is explicit in `web/reazon-config.js` and shared by
+offline, simulated-streaming and two-pass final recognition. The selected count
+and measurements are recorded in [the threading evidence](evidence/reazon-38.md).
+The worker emits a `configuration` diagnostic containing the actual `numThreads`.
+There is no page control for threading; Silero VAD retains its existing one thread.
+Selection respects `navigator.hardwareConcurrency`, worker isolation, shared WASM
+memory and the pinned runtime's four-thread pool. Unknown core capacity selects one.
+An explicit unsupported benchmark request fails before constructing a recognizer.
+The existing runtime itself still requires browser isolation/shared memory to load;
+selecting one ONNX thread does not make that runtime compatible with an unisolated page.
+
+Reproduce the comparison on an otherwise idle machine:
+
+```sh
+npm ci
+npx playwright install chromium webkit
+npm run prepare:assets
+npm run benchmark:reazon
+```
+
+The benchmark starts a loopback server with COOP/COEP response headers. This is
+needed for WebKit's nested pthread workers in the available automated environment;
+service-worker-only isolation stalled its real runtime before inference. This
+measurement server does not alter Pages deployment. See the evidence for the
+compatibility limitation; a passing header-enabled run does not verify Pages Safari.
+
+The command verifies and caches the upstream Japanese `ja.wav` by SHA-256, converts
+44.1 kHz mono PCM16 to 16 kHz using the playground's existing deterministic resampler,
+and tests both the first two seconds (provisional snapshot) and the full utterance.
+It uses fresh instances of the actual pinned browser worker/model for 1, 2 and 4
+threads where supported, in ascending then descending order. Each instance has one
+warm-up per input followed by three measured runs per input, giving six measured
+runs per input/count. Decode timing excludes initialization, transfer, stream creation
+and result extraction. Tests require exact transcript equality across all measured
+runs and warm-ups and nonempty Japanese output for the full utterance.
+
+Playwright writes a `reazon-threads.json` attachment under `test-results/` for each
+browser, including the environment, source/model checksums, timings, transcripts,
+unsupported/failed counts and recommendation. The selection rule is fixed before
+measurement: the smallest supported count with at least 10% lower median decode time
+on **both** inputs, otherwise one. The committed default must meet that rule in both
+tested browsers; a fresh benchmark reports a recommendation and does not rewrite it.
+Record new results before revising the default. This experiment changes no VAD policy,
+model, segmentation, transcript handling or provisional interval.
+
+Use `npm test` and `npm run test:browser` for configuration and behavior checks.
+The real timing experiment is opt-in to keep ordinary tests independent of model
+downloads and machine performance. If port 8000 is occupied, run
+`python3 scripts/serve-reazon-benchmark.py --port 8001` and set
+`ASR_BASE_URL=http://127.0.0.1:8001` for the benchmark. For ordinary behavior tests,
+`npm run serve` retains the existing service-worker isolation setup. A desktop/mobile
+microphone comparison is optional; required
+post-merge verification: none.
+
 ## Open the playground
 
 The Pages URL is **https://takahirox.github.io/my-audio-to-text/**. The reviewed PR #20 commit
