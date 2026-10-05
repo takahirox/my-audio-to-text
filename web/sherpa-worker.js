@@ -1,6 +1,6 @@
 /* global OfflineRecognizer */
-let recognizer, segmenter;
-const send = (type, values = {}) => postMessage({ type, ...values });
+let recognizer, segmenter, session;
+const send = (type, values = {}) => postMessage({ type, session, ...values });
 const fail = (error) => send('error', { message: error.message || String(error) });
 let sequence = Promise.resolve();
 self.onmessage = ({ data }) => { sequence = sequence.then(() => handle(data)).catch(fail); };
@@ -41,6 +41,7 @@ function recognize(audio) {
 async function handle(data) {
   if (data.type === 'load') { await load(); send('ready'); }
   else if (data.type === 'start') {
+    session = data.session;
     const { Segmenter } = await import('./audio.js');
     segmenter = new Segmenter(); send('started');
   } else if (data.type === 'audio') {
@@ -48,6 +49,12 @@ async function handle(data) {
     send('ack', { samples: data.audio.length });
   } else if (data.type === 'stop') {
     const audio = segmenter.flush(); if (audio) recognize(audio);
+    send('stopped');
+  } else if (data.type === 'utterance') {
+    // Two-pass mode sends the complete recording only after Stop, bypassing
+    // live segmentation while reusing the same recognizer and stream cleanup.
+    session = data.session;
+    if (data.audio.length) recognize(data.audio);
     send('stopped');
   }
 }

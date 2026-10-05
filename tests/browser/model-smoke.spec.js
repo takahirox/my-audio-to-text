@@ -20,7 +20,7 @@ function readWav(path) {
 
 // Opt-in integration check using caller-supplied Japanese 16 kHz mono PCM WAV.
 // Nothing is uploaded: bytes are transferred directly to the browser worker.
-for (const backend of ['moonshine', 'sherpa', 'whisper']) {
+for (const backend of ['moonshine', 'sherpa', 'whisper', 'two-pass']) {
   test(`${backend}: real Japanese inference and finalization`, async ({ page }) => {
     test.skip(!process.env.ASR_TEST_WAV, 'Set ASR_TEST_WAV to run real model downloads/inference.');
     test.setTimeout(240000);
@@ -28,13 +28,15 @@ for (const backend of ['moonshine', 'sherpa', 'whisper']) {
     await page.goto('./'); await expect(page.locator('#load')).toBeEnabled();
     const result = await page.evaluate(async ({ backend, samples }) => {
       const worker = new Worker(backend === 'sherpa' ? './sherpa-worker.js' : './model-worker.js', { type: backend === 'sherpa' ? 'classic' : 'module' });
-      const finals = [], partials = [], speech = [];
+      const secondWorker = backend === 'two-pass' ? new Worker('./sherpa-worker.js') : null;
+      const finals = [], firstPassFinals = [], partials = [], speech = [];
+      let pendingLoads = secondWorker ? 2 : 1;
       try {
         await new Promise((resolve, reject) => {
           worker.onerror = (event) => reject(new Error(event.message));
-          worker.onmessage = ({ data }) => {
+          const receive = ({ data }, second = false) => {
             if (data.type === 'error') reject(new Error(data.message));
-            if (data.type === 'ready') {
+            if (data.type === 'ready' && --pendingLoads === 0) {
               worker.postMessage({ type: 'start' });
               // Feed blocks so streaming and segmentation use their actual paths.
               for (let i = 0; i < samples.length; i += 2048) {
@@ -45,21 +47,33 @@ for (const backend of ['moonshine', 'sherpa', 'whisper']) {
             }
             if (data.type === 'speech') speech.push(data);
             if (data.type === 'partial') partials.push(data.text);
-            if (data.type === 'final') finals.push(data.text);
-            if (data.type === 'stopped') resolve();
+            if (data.type === 'final') (secondWorker && !second ? firstPassFinals : finals).push(data.text);
+            if (data.type === 'stopped') {
+              if (secondWorker && !second) {
+                const audio = Float32Array.from(samples);
+                secondWorker.postMessage({ type: 'utterance', audio }, [audio.buffer]);
+              } else resolve();
+            }
           };
-          worker.postMessage({ type: 'load', backend });
+          worker.onmessage = receive;
+          if (secondWorker) {
+            secondWorker.onmessage = (event) => receive(event, true);
+            secondWorker.onerror = (event) => reject(new Error(event.message));
+            secondWorker.postMessage({ type: 'load' });
+          }
+          worker.postMessage({ type: 'load', backend: secondWorker ? 'moonshine' : backend });
         });
-        return { finals, partials, speech };
-      } finally { worker.terminate(); }
+        return { finals, firstPassFinals, partials, speech };
+      } finally { worker.terminate(); secondWorker?.terminate(); }
     }, { backend, samples });
     console.log(`${backend}: ${JSON.stringify(result)}`);
     expect(result.finals.join('')).toMatch(/[\u3040-\u30ff\u4e00-\u9fff]/);
-    if (backend === 'moonshine') {
+    if (['moonshine', 'two-pass'].includes(backend)) {
       expect(result.partials.length).toBeGreaterThan(0);
       expect(result.speech.filter((event) => event.event === 'started').length).toBeGreaterThan(0);
       expect(result.speech.filter((event) => event.event === 'completed').length).toBeGreaterThan(0);
     }
+    if (backend === 'two-pass') expect(result.firstPassFinals.join('')).toMatch(/[\u3040-\u30ff\u4e00-\u9fff]/);
   });
 }
 

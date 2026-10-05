@@ -10,11 +10,12 @@
 <body>
 <main>
   <h1>Japanese Speech-to-Text playground</h1>
-  <p>Three disposable experiments. No production backend has been selected.</p>
+  <p>Disposable ASR experiments. No production backend has been selected.</p>
   <p>Audio stays in this browser. Loading downloads models from third-party hosts and may use hundreds of MB. Keep this tab in the foreground.</p>
   <label for="backend">Backend</label>
   <select id="backend">
     <option value="moonshine">Moonshine Voice — Small Streaming / Japanese or English</option>
+    <option value="two-pass">Moonshine + ReazonSpeech — two-pass Japanese</option>
     <option value="sherpa">sherpa-onnx — Japanese ReazonSpeech</option>
     <option value="whisper">Whisper tiny multilingual — WASM baseline</option>
   </select>
@@ -23,7 +24,7 @@
     <select id="language"><option value="ja">Japanese</option><option value="en">English</option></select>
     <label for="vad-threshold">Moonshine speech detection threshold (reload required)</label>
     <select id="vad-threshold"><option value="0.5">Default — 0.5</option><option value="0.2">More sensitive — 0.2 (may accept noise)</option></select>
-    <p>Language selects a monolingual model; Auto is unavailable. Try Japanese speech with English terms in both models.</p>
+    <p id="language-help">Language selects a monolingual model; Auto is unavailable. Try Japanese speech with English terms in both models.</p>
   </div>
   <p id="description"></p>
   <div class="controls">
@@ -42,9 +43,10 @@
     <dt>ASR transcript events</dt><dd id="asr-events">—</dd>
   </dl>
   <p>When there is no runtime error, after Stop and a drained audio queue: zero signal suggests capture trouble; signal with no VAD segments suggests speech detection did not accept it; accepted segments with no text suggest recognizer failure. A nonzero signal may be room noise. Segment events are reported on transcription passes, not as instantaneous VAD probabilities.</p>
-  <h2>Partial transcript</h2>
+  <h2 id="partial-heading">Partial transcript</h2>
+  <pre id="first-pass-lines" lang="ja" aria-live="polite" hidden></pre>
   <p id="partial" lang="ja" aria-live="polite"></p>
-  <h2>Final transcript</h2>
+  <h2 id="final-heading">Final transcript</h2>
   <pre id="final" lang="ja" aria-live="polite"></pre>
   <dl>
     <dt>Model initialization (includes download)</dt><dd id="init">—</dd>
