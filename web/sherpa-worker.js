@@ -1,12 +1,11 @@
-/* global OfflineRecognizer, createVad */
-let recognizer, segmenter, session, vad;
-let vadTail = new Float32Array();
+/* global OfflineRecognizer */
+let recognizer, segmenter, session;
 const send = (type, values = {}) => postMessage({ type, session, ...values });
 const fail = (error) => send('error', { message: error.message || String(error) });
 let sequence = Promise.resolve();
 self.onmessage = ({ data }) => { sequence = sequence.then(() => handle(data)).catch(fail); };
 
-async function load(backend) {
+async function load() {
   const base = new URL('./vendor/sherpa/', self.location.href);
   const script = new URL('sherpa-onnx-wasm-main-vad-asr.js', base).href;
   await new Promise((resolve, reject) => {
@@ -20,7 +19,6 @@ async function load(backend) {
       onRuntimeInitialized: resolve,
     };
     importScripts(new URL('sherpa-onnx-asr.js', base).href, script);
-    if (backend === 'sherpa-simulated') importScripts(new URL('sherpa-onnx-vad.js', base).href);
   });
   recognizer = new OfflineRecognizer({
     featConfig: { sampleRate: 16000, featureDim: 80 },
@@ -40,40 +38,9 @@ function recognize(audio, type = 'final', emitEmpty = false, id) {
     if (emitEmpty || result.text.trim()) send(type, { text: result.text.trim(), id });
   } finally { stream.free(); }
 }
-function classify(audio, flush = false) {
-  const input = new Float32Array(vadTail.length + audio.length);
-  input.set(vadTail); input.set(audio, vadTail.length);
-  const frames = []; let offset = 0;
-  while (offset + 512 <= input.length || (flush && offset < input.length)) {
-    const frame = input.slice(offset, offset + 512);
-    const padded = new Float32Array(512); padded.set(frame);
-    vad.acceptWaveform(padded);
-    frames.push({ audio: frame, speaking: vad.isDetected() });
-    // Avoid retaining duplicate native utterance buffers during long speech.
-    // flush/clear do not reset the Silero model's recurrent or threshold state.
-    vad.flush(); vad.clear(); offset += frame.length;
-  }
-  vadTail = input.slice(offset);
-  if (frames.length) postMessage({ type: 'vad', session, frames }, frames.map(frame => frame.audio.buffer));
-}
 async function handle(data) {
   if (data.type === 'load') {
-    await load(data.backend);
-    if (data.backend === 'sherpa-simulated') {
-      vad = createVad(self.Module, {
-        sileroVad: { model: './silero_vad.onnx', threshold: 0.5, windowSize: 512,
-          minSpeechDuration: 1 / 16000, minSilenceDuration: 1 / 16000, maxSpeechDuration: 12 },
-        sampleRate: 16000, numThreads: 1, provider: 'cpu', debug: 0, bufferSizeInSeconds: 2,
-      });
-      if (!vad.handle) throw new Error('Silero VAD initialization failed');
-    }
-    send('ready');
-  } else if (data.type === 'vad-start') {
-    session = data.session; vad.reset(); vadTail = new Float32Array();
-  } else if (data.type === 'vad-audio') {
-    classify(data.audio);
-  } else if (data.type === 'vad-stop') {
-    classify(new Float32Array(), true); send('vad-stopped');
+    await load(); send('ready');
   } else if (data.type === 'start') {
     session = data.session;
     const { Segmenter } = await import('./audio.js');
