@@ -20,11 +20,11 @@ Required post-merge verification remains **pending**:
 - Confirm the GitHub Pages deployment succeeds for the merged revision.
 - Confirm the published playground serves that revision and successfully loads the Japanese Moonshine model.
 
-These checks have not been performed and are not established by local validation. Keep Issue #29 open until they are performed and their results are recorded after merge.
+These checks have not been performed and are not established by local validation. Merging this PR will close Issue #29; the required post-merge checks still need to be performed and their results recorded.
 
 ## Related issues
 
-Refs #29
+Closes #29
 
 Implementation and pre-merge scope are complete; the required post-merge verification above remains pending.
 
