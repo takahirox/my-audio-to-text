@@ -9,7 +9,8 @@ async function configuration(page, { backend, requested, cores = 16, shared = tr
   await page.context().route('**/sherpa-worker.js', route => route.fulfill({
     contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' }, body: source + `
       Object.defineProperty(self.navigator, 'hardwareConcurrency', {value:${cores}});
-      self.importScripts = () => {
+      self.importScripts = (...scripts) => {
+        postMessage({type:'test-assets', scripts, wasm:self.Module.locateFile('sherpa-onnx-wasm-main-vad-asr.wasm'), data:self.Module.locateFile('sherpa-onnx-wasm-main-vad-asr.data')});
         self.OfflineRecognizer = class {
           constructor(config) { this.handle = 1; postMessage({type:'test-config', config}); }
         };
@@ -36,12 +37,20 @@ async function configuration(page, { backend, requested, cores = 16, shared = tr
   }, { backend, requested });
 }
 
-for (const backend of ['sherpa', 'sherpa-simulated', undefined]) {
+for (const backend of ['sherpa', 'sherpa-simulated', 'sherpa-ja-en-simulated', undefined]) {
   test(`selected thread count reaches ${backend ?? 'two-pass second stage'} recognizer`, async ({ page }) => {
     const events = await configuration(page, { backend });
     expect(events.some(e => e.type === 'ready'), JSON.stringify(events)).toBe(true);
     expect(events.find(e => e.type === 'test-config').config.modelConfig.numThreads).toBe(REAZON_NUM_THREADS);
     expect(events.find(e => e.type === 'configuration').numThreads).toBe(REAZON_NUM_THREADS);
+    const bilingual = backend === 'sherpa-ja-en-simulated';
+    expect(events.find(e => e.type === 'configuration').model).toBe(bilingual ? 'ja-en' : 'ja');
+    const assets = events.find(e => e.type === 'test-assets');
+    const directory = bilingual ? '/vendor/sherpa-ja-en/' : '/vendor/sherpa/';
+    for (const url of [...assets.scripts, assets.wasm, assets.data]) expect(new URL(url).pathname).toContain(directory);
+    expect(events.find(e => e.type === 'test-config').config.modelConfig.transducer).toEqual({
+      encoder: './transducer-encoder.onnx', decoder: './transducer-decoder.onnx', joiner: './transducer-joiner.onnx',
+    });
   });
 }
 for (const requested of [1, 2, 4]) {

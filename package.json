@@ -6,6 +6,7 @@
     "prepare:assets": "python3 scripts/prepare-assets.py",
     "test": "node --test tests/*.test.js",
     "test:browser": "playwright test",
+    "test:reazon-ja-en": "python3 scripts/prepare-reazon-ja-en-fixtures.py && ASR_REAZON_JA_EN=1 ASR_BENCHMARK=1 playwright test tests/browser/reazon-ja-en.spec.js --workers=1",
     "benchmark:reazon": "python3 scripts/prepare-reazon-benchmark.py && ASR_BENCHMARK=1 playwright test tests/browser/reazon-threads-benchmark.spec.js --workers=1",
     "serve": "python3 -m http.server 8000 --directory web --bind 127.0.0.1"
   },
