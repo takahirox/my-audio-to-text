@@ -8,5 +8,8 @@ export default defineConfig({
     { name: 'webkit', use: { browserName: 'webkit' } },
   ],
   use: { baseURL: publishedURL || 'http://127.0.0.1:8000', headless: true },
-  webServer: publishedURL ? undefined : { command: 'npm run serve', url: 'http://127.0.0.1:8000', reuseExistingServer: false },
+  webServer: publishedURL ? undefined : {
+    command: process.env.ASR_BENCHMARK ? 'python3 scripts/serve-reazon-benchmark.py' : 'npm run serve',
+    url: 'http://127.0.0.1:8000', reuseExistingServer: false,
+  },
 });
