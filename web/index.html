@@ -18,6 +18,7 @@
     <option value="two-pass">Moonshine + ReazonSpeech — two-pass Japanese</option>
     <option value="sherpa">sherpa-onnx — Japanese ReazonSpeech</option>
     <option value="sherpa-simulated">sherpa-onnx — Japanese ReazonSpeech (simulated streaming)</option>
+    <option value="sherpa-ja-en-simulated">sherpa-onnx — ReazonSpeech ja-en (simulated streaming)</option>
     <option value="whisper">Whisper tiny multilingual — WASM baseline</option>
   </select>
   <div id="moonshine-options">
@@ -40,6 +41,7 @@
   <meter id="level" min="0" max="0.1" value="0"></meter>
   <p id="signal">No capture yet.</p>
   <dl>
+    <dt>ReazonSpeech model / inference threads</dt><dd id="reazon-model">—</dd>
     <dt>Speech detection</dt><dd id="speech">—</dd>
     <dt>ASR transcript events</dt><dd id="asr-events">—</dd>
   </dl>

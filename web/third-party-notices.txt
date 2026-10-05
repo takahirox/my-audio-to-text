@@ -17,7 +17,21 @@ sherpa-onnx 1.13.2 and Japanese ReazonSpeech Zipformer
   License: ./licenses/sherpa-onnx.txt
   Dependencies: https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.2/cmake
 
-Silero VAD (simulated ReazonSpeech mode)
+ReazonSpeech ja-en bilingual Zipformer (simulated-streaming comparison)
+  ReazonSpeech project / model license: Apache License 2.0.
+  https://github.com/reazon-research/ReazonSpeech
+  https://huggingface.co/reazon-research/reazonspeech-k2-v2-ja-en
+  ONNX weights mirrored from that model by sherpa-onnx maintainer csukuangfj:
+  https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en/tree/12b44671ff48b9aed622551d64e02fea9a2cf870
+  Epoch 35: int8 encoder/joiner, fp32 decoder, bilingual tokens.txt.
+  Per-file SHA-256 pins: scripts/reazon-ja-en-assets.json in the source repository.
+  Asset preparation repackages the model into a separate Emscripten preload data
+  bundle and updates only its file offsets/sizes in the 1.13.2 JavaScript loader.
+  The ASR wrapper and WASM binary are unchanged from the pinned Japanese release.
+  Full license: ./licenses/sherpa-onnx.txt
+  Evaluation audio stays in the ignored development cache and is not deployed.
+
+Silero VAD (both simulated ReazonSpeech modes)
   https://github.com/snakers4/silero-vad
   Copyright (c) 2020-present Silero Team. MIT License.
   Model: silero_vad.onnx already embedded in the pinned sherpa-onnx 1.13.2 archive.

@@ -1,17 +1,20 @@
 import { Microphone, joinAudio } from './audio.js';
 import { moonshineModels } from './moonshine-config.js';
 import { ReazonSimulation, BUFFER_LIMIT } from './reazon-simulation.js';
+import { isReazonSimulated } from './reazon-config.js';
 const $ = (id) => document.getElementById(id);
+const simulationDescription = 'Simulated streaming, not native streaming: Silero VAD utterances with 0.8 seconds of pre-roll, provisional (unstable) previews about every 0.5 seconds of active speech, finals after about 0.35 seconds of silence or 12 seconds of speech. Stop finalizes active speech. One decode at a time; slow devices skip superseded previews. Capture stops visibly at 30 seconds of pending audio.';
 const descriptions = {
   sherpa: 'sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized). Non-streaming: finals after a pause, every 20 seconds, or Stop. No partials. About 183 MB of runtime/model files.',
-  'sherpa-simulated': 'sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized), same offline model/runtime. Simulated streaming, not native streaming: Silero VAD utterances with 0.8 seconds of pre-roll, provisional (unstable) previews about every 0.5 seconds of active speech, finals after about 0.35 seconds of silence or 12 seconds of speech. Stop finalizes active speech. One decode at a time; slow devices skip superseded previews. Capture stops visibly at 30 seconds of pending audio. About 183 MB of runtime/model files.',
+  'sherpa-simulated': `sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized), same offline model/runtime. ${simulationDescription} About 183 MB of runtime/model files.`,
+  'sherpa-ja-en-simulated': `sherpa-onnx 1.13.2, ReazonSpeech ja-en bilingual Zipformer (epoch 35, int8 encoder/joiner, fp32 decoder). Japanese and English share one model; no language switching. ${simulationDescription} About 91 MB of ASR runtime/model files, plus 183 MB of shared Japanese/Silero VAD worker assets.`,
   whisper: 'Transformers.js 3.8.1, multilingual Whisper tiny q8 on WASM CPU. Non-streaming: finals after a pause, every 20 seconds, or Stop. No partials.',
 };
 let worker, secondWorker, vadWorker, mic, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
 let retainedAudio = [], firstReady = false, secondReady = false, vadReady = false;
 let simulation, vadQueued = 0, simulationStopping = false;
 const twoPass = () => $('backend').value === 'two-pass';
-const simulated = () => $('backend').value === 'sherpa-simulated';
+const simulated = () => isReazonSimulated($('backend').value);
 const streaming = () => ['moonshine', 'two-pass'].includes($('backend').value);
 let firstText = false, firstPartial = false, peakRms = 0, speechStarted = 0, speechCompleted = 0, partialCount = 0, finalCount = 0;
 function describe() {
@@ -29,7 +32,7 @@ function describe() {
   $('partial-heading').textContent = twoPass() ? 'Moonshine streaming transcript (first pass)' : simulated() ? 'Provisional transcript (unstable, simulated streaming)' : 'Partial transcript';
   $('first-pass-lines').hidden = !twoPass();
   $('final-heading').textContent = twoPass() ? 'ReazonSpeech final transcript (second pass)' : 'Final transcript';
-  for (const id of ['partial', 'final']) $(id).lang = moonshine ? $('language').value : 'ja';
+  for (const id of ['partial', 'final']) $(id).lang = moonshine ? $('language').value : $('backend').value === 'sherpa-ja-en-simulated' ? '' : 'ja';
 }
 function diagnostics() {
   $('speech').textContent = streaming()
@@ -63,6 +66,7 @@ async function release() {
   vadWorker?.terminate(); vadWorker = null;
   simulation = null; vadQueued = 0; simulationStopping = false;
   retainedAudio = []; firstReady = secondReady = vadReady = false;
+  $('reazon-model').textContent = '—';
   const previousMic = mic; mic = null;
   await previousMic?.stop(); $('level').value = 0;
 }
@@ -102,7 +106,8 @@ function audio(audio) {
 function receive({ data }, second = false, vad = false) {
   if (data.session !== undefined && data.session !== generation) return;
   if (data.type === 'error') { void fail(new Error(data.message)); return; }
-  if (data.type === 'progress') $('progress').textContent = data.message;
+  if (data.type === 'configuration') $('reazon-model').textContent = `${data.modelName} (${data.model}); ${data.numThreads} thread(s)`;
+  else if (data.type === 'progress') $('progress').textContent = data.message;
   else if (data.type === 'ready') {
     if (vad) vadReady = true; else if (second) secondReady = true; else firstReady = true;
     if (!firstReady || (twoPass() && !secondReady) || (simulated() && !vadReady)) return;

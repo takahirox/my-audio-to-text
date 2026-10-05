@@ -122,8 +122,8 @@ python3 -m http.server 8000 --directory web --bind 127.0.0.1
 ```
 
 Open http://localhost:8000/. No application build or npm install is needed to serve it.
-The preparation script downloads about 150 MB of compressed distributions, verifies SHA-256
-checksums, and stages about 197 MB in ignored `web/vendor/`. These files must be included in
+The preparation script downloads about 227 MB of runtime distributions and model weights, verifies SHA-256
+checksums, and stages about 287 MB in ignored `web/vendor/`. These files must be included in
 the served directory and Pages artifact; copying only tracked files will not load the models.
 The script uses `.cache/` on subsequent runs. A corrupt cached archive fails visibly; remove
 that archive before retrying. Whisper's runtime and model are downloaded by the browser.
@@ -147,8 +147,68 @@ restrict service workers or model caches.
 | Moonshine Voice | `@moonshine-ai/moonshine-wasm` 0.1.5, Japanese/English Small Streaming, native `Stream` API; official v0.1.5 release WASM runtime | Incremental partials and completed lines emitted by the runtime; native speech detection |
 | sherpa-onnx | 1.13.2 SIMD WASM, quantized Japanese ReazonSpeech Zipformer 2024-08-01 | Segment finals; no native partials |
 | sherpa-onnx (simulated streaming) | Same offline ReazonSpeech model/runtime and 16 kHz mono capture | Unstable utterance previews; Silero VAD pause/12-second finals and active speech flushed on Stop |
+| sherpa-onnx ja-en (simulated streaming) | Bilingual ReazonSpeech epoch 35, int8 encoder/joiner, fp32 decoder; same 1.13.2 WASM binary | Japanese and English without language switching; the same VAD and provisional/final policy |
 | Whisper | Transformers.js 3.8.1, `Xenova/whisper-tiny` multilingual q8, revision `5332fcc35e32a33b86612b9a57a89be7906102b1`, WASM CPU, one thread | Segment finals; no native partials |
 | Moonshine + ReazonSpeech | Existing Japanese Small Streaming and Japanese ReazonSpeech configurations | Moonshine streaming text; ReazonSpeech final only after Stop |
+
+### ReazonSpeech ja-en comparison (#41)
+
+Select **sherpa-onnx — ReazonSpeech ja-en (simulated streaming)** to compare with
+**sherpa-onnx — Japanese ReazonSpeech (simulated streaming)**. Both use the existing
+`ReazonSimulation` controller, separate Silero worker, 0.8-second pre-roll,
+approximately 0.5-second provisional interval, 0.35-second silence endpoint,
+12-second speech limit, bounded/coalesced inference, and Stop/Cancel lifecycle.
+The bilingual recognizer handles both languages in one model; the Moonshine language
+control is hidden and has no effect. The description and model/thread diagnostic
+identify the selected recognizer. The one-thread default from #38 is reused;
+that Japanese benchmark does not establish the optimal bilingual thread count.
+The original Japanese offline, simulated-streaming, and two-pass models are retained.
+
+`prepare-assets.py` downloads epoch-35 ONNX weights and tokens from the
+[sherpa maintainer's mirror](https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en/tree/12b44671ff48b9aed622551d64e02fea9a2cf870)
+of `reazon-research/reazonspeech-k2-v2-ja-en`. The revision and individual SHA-256
+digests are pinned in `scripts/reazon-ja-en-assets.json`. The script writes a separate
+`vendor/sherpa-ja-en/` bundle with bilingual weights at the same virtual filenames.
+Only Emscripten's preload file table and data are repackaged; the ASR wrapper and
+WASM binary are byte-identical to the pinned 1.13.2 release. The original Japanese
+bundle is untouched. `vendor/manifest.json` records the source, revision, model
+digests, generated bundle digest, and size. Weights and generated runtime files
+remain ignored. Pages' existing preparation step includes this bundle automatically.
+
+The bilingual ASR assets total approximately 91 MB. The separate VAD worker still
+loads the original combined Japanese/Silero bundle (183 MB), so both workers consume
+substantial memory. All inference stays in the browser after assets load; audio is
+never sent to an ASR service. Runtime/model notices include the bilingual source and
+packaging change. Evaluation audio is cached only under `.cache/`, never deployed.
+
+Run the executable acceptance checks:
+
+```sh
+npm install
+npx playwright install chromium webkit
+npm run prepare:assets
+npm test
+npm run test:browser
+npm run test:reazon-ja-en
+```
+
+Ordinary tests cover both selector choices, model configuration, shared timing/VAD
+policy, bounded/coalesced previews, Stop, Cancel, repeat, switching, stale results,
+and existing backends using controlled native initialization. The opt-in ja-en check
+verifies checksum-pinned upstream Japanese, English, and actual mixed-language WAVs
+through the real page, Silero worker, controller, and WASM recognizer. Only the
+microphone source is replaced. It resamples 48 kHz fixtures with the existing
+resampler, checks nonempty final transcripts and language scripts, provisional text,
+drained Stop, repeated recordings in one model, Cancel, and switching to the Japanese
+model. It saves a `reazon-ja-en.json` attachment for each browser in `test-results/`.
+
+The integration command uses the same COOP/COEP loopback server as #38 because of
+WebKit's existing nested-worker limitation with service-worker-only isolation.
+It verifies local browser inference, not Pages Safari or physical-device compatibility.
+[Recorded results](evidence/reazon-41.md) include both tested browsers. Optional human
+comparisons can use Japanese, English-only, and Japanese with GitHub, API, JavaScript,
+WebAssembly, and OpenAI. Quality superiority is not an acceptance requirement.
+Required post-merge verification: none.
 
 ### ReazonSpeech simulated-streaming comparison (#33)
 

@@ -5,9 +5,10 @@ const fail = (error) => send('error', { message: error.message || String(error) 
 let sequence = Promise.resolve();
 self.onmessage = ({ data }) => { sequence = sequence.then(() => handle(data)).catch(fail); };
 
-async function load(requestedThreads) {
-  const { selectReazonThreads } = await import('./reazon-config.js');
-  const base = new URL('./vendor/sherpa/', self.location.href);
+async function load(requestedThreads, backend) {
+  const { selectReazonThreads, selectReazonModel } = await import('./reazon-config.js');
+  const model = selectReazonModel(backend);
+  const base = new URL(model.assets, self.location.href);
   const script = new URL('sherpa-onnx-wasm-main-vad-asr.js', base).href;
   await new Promise((resolve, reject) => {
     self.Module = {
@@ -35,7 +36,7 @@ async function load(requestedThreads) {
     decodingMethod: 'greedy_search',
   }, self.Module);
   if (!recognizer.handle) throw new Error('ReazonSpeech recognizer initialization failed');
-  send('configuration', { numThreads });
+  send('configuration', { numThreads, model: model.id, modelName: model.name });
 }
 function recognize(audio, type = 'final', emitEmpty = false, id) {
   const stream = recognizer.createStream();
@@ -47,7 +48,7 @@ function recognize(audio, type = 'final', emitEmpty = false, id) {
 }
 async function handle(data) {
   if (data.type === 'load') {
-    await load(data.numThreads); send('ready');
+    await load(data.numThreads, data.backend); send('ready');
   } else if (data.type === 'start') {
     session = data.session;
     const { Segmenter } = await import('./audio.js');
