@@ -332,3 +332,341 @@ test('an incompatible Moonshine runtime reports the intended model and never fal
   await expect(page.locator('#load')).toBeEnabled();
   await expect(page.locator('#start')).toBeDisabled();
 });
+
+// Controlled workers keep the real page, microphone, resampler and transfer
+// paths, but make both transcripts and the second-pass completion deterministic.
+async function twoPassFixtures(page, { holdReady = false, holdFinal = false } = {}) {
+  await fakeMicrophone(page);
+  await page.addInitScript(() => {
+    const Worker = window.Worker;
+    window.asrWorkers = []; window.asrMessages = []; window.asrTerminated = [];
+    window.Worker = class extends Worker {
+      constructor(url, options) {
+        super(url, options);
+        this.testId = window.asrWorkers.length;
+        window.asrWorkers.push(this);
+      }
+      postMessage(message, ...args) {
+        window.asrMessages.push({ id: this.testId, ...message,
+          audio: message.audio ? Array.from(message.audio) : undefined });
+        super.postMessage(message, ...args);
+      }
+      terminate() { window.asrTerminated.push(this.testId); super.terminate(); }
+    };
+  });
+  await page.context().route('**/model-worker.js', (route) => route.fulfill({
+    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
+    body: `let session, previousSession;
+      self.onmessage = ({data}) => {
+        if (data.type === 'load') postMessage({type:'ready'});
+        if (data.type === 'start') { previousSession = session; session = data.session; }
+        if (data.type === 'audio') {
+          postMessage({type:'partial', text:'話しています', session});
+          postMessage({type:'ack', samples:data.audio.length, session});
+        }
+        if (data.type === 'stop') {
+          postMessage({type:'final', text:'月の第一パス', session});
+          postMessage({type:'stopped', session});
+        }
+        if (data.type === 'test-late') {
+          postMessage({type:'partial', text:'古い途中結果', session:previousSession});
+          postMessage({type:'final', text:'古い第一パス', session:previousSession});
+          postMessage({type:'stopped', session:previousSession});
+          postMessage({type:'error', message:'Old stream error', session:previousSession});
+        }
+        if (data.type === 'test-line') postMessage({type:'final', text:'途中で完了した行', session});
+      };`,
+  }));
+  await page.context().route('**/sherpa-worker.js', (route) => route.fulfill({
+    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
+    body: `let session;
+      const finish = () => {
+        postMessage({type:'final', text:'日本語の最終結果', session});
+        postMessage({type:'stopped', session});
+      };
+      self.onmessage = ({data}) => {
+        if (data.type === 'test-ready' || (data.type === 'load' && !${holdReady})) postMessage({type:'ready'});
+        if (data.type === 'utterance') { session = data.session; if (!${holdFinal}) finish(); }
+        if (data.type === 'test-finish') finish();
+        if (data.type === 'test-late') {
+          postMessage({type:'final', text:'古い第二パス', session});
+          postMessage({type:'stopped', session});
+        }
+      };`,
+  }));
+}
+
+async function loadTwoPass(page) {
+  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.locator('#language').selectOption('en');
+  await expect(page.locator('#load')).toBeEnabled();
+  await page.locator('#backend').selectOption('two-pass');
+  await expect(page.locator('#load')).toBeEnabled();
+  await expect(page.locator('#language')).toHaveValue('ja');
+  await expect(page.locator('#language')).toBeDisabled();
+  await expect(page.locator('#description')).toContainText('max_tokens_per_second=13');
+  await expect(page.locator('#partial-heading')).toHaveText('Moonshine streaming transcript (first pass)');
+  await expect(page.locator('#final-heading')).toHaveText('ReazonSpeech final transcript (second pass)');
+  await page.locator('#load').click();
+}
+
+test('two-pass loads both Japanese models and waits for both to be ready', async ({ page }) => {
+  await twoPassFixtures(page, { holdReady: true });
+  await loadTwoPass(page);
+  await expect.poll(() => page.evaluate(() => window.asrMessages.filter(m => m.type === 'load').length)).toBe(2);
+  await expect(page.locator('#start')).toBeDisabled();
+  await page.evaluate(() => window.asrWorkers[1].postMessage({ type: 'test-ready' }));
+  await expect(page.locator('#start')).toBeEnabled();
+  await expect(page.locator('#progress')).toHaveText('Both models loaded.');
+  const loads = await page.evaluate(() => window.asrMessages.filter(m => m.type === 'load'));
+  expect(loads[0]).toEqual({ id: 1, type: 'load' });
+  expect(loads[1]).toEqual({ id: 0, type: 'load', backend: 'moonshine', language: 'ja', vadThreshold: '0.5' });
+  await page.locator('#cancel').click();
+  expect(await page.evaluate(() => window.asrTerminated)).toEqual([0, 1]);
+});
+
+test('two-pass streams before Stop and sends exactly the retained recording after Stop', async ({ page }) => {
+  await twoPassFixtures(page, { holdFinal: true });
+  await loadTwoPass(page); await expect(page.locator('#start')).toBeEnabled();
+  await page.locator('#start').click();
+  await expect(page.locator('#partial')).toHaveText('話しています');
+  await expect(page.locator('#final')).toBeEmpty();
+  expect(await page.evaluate(() => window.asrMessages.filter(m => m.id === 1 && m.type !== 'load'))).toEqual([]);
+  await page.locator('#stop').click();
+  await expect(page.locator('#status')).toContainText('Decoding ReazonSpeech');
+  await expect(page.locator('#first-pass-lines')).toContainText('月の第一パス');
+  await expect(page.locator('#final')).toBeEmpty();
+  await expect(page.locator('#start')).toBeDisabled();
+  const recording = await page.evaluate(() => {
+    const first = window.asrMessages.filter(m => m.id === 0 && m.type === 'audio');
+    const second = window.asrMessages.filter(m => m.id === 1 && m.type === 'utterance');
+    return { first: first.flatMap(m => m.audio), second };
+  });
+  expect(recording.first.length).toBeGreaterThan(0);
+  expect(recording.second).toHaveLength(1);
+  expect(recording.second[0].audio).toEqual(recording.first);
+  expect(await page.evaluate(() => window.trackStops)).toBe(1);
+  await page.evaluate(() => window.asrWorkers[1].postMessage({ type: 'test-finish' }));
+  await expect(page.locator('#status')).toContainText('Stopped');
+  await expect(page.locator('#final')).toHaveText('日本語の最終結果\n');
+  await expect(page.locator('#latency')).not.toHaveText('—');
+  await page.locator('#start').click();
+  await expect(page.locator('#partial')).toHaveText('話しています');
+  await expect(page.locator('#first-pass-lines')).toBeEmpty();
+  await expect(page.locator('#final')).toBeEmpty();
+  // Delayed callbacks from either completed pass cannot finalize this recording.
+  await page.evaluate(() => {
+    window.asrWorkers[0].postMessage({ type: 'test-late' });
+    window.asrWorkers[1].postMessage({ type: 'test-late' });
+  });
+  await expect(page.locator('#status')).toContainText('Listening');
+  await page.locator('#stop').click();
+  await expect(page.locator('#status')).toContainText('Decoding ReazonSpeech');
+  const repeat = await page.evaluate(() => {
+    const second = window.asrMessages.filter(m => m.type === 'utterance');
+    const first = window.asrMessages.filter(m => m.type === 'audio' && m.session === second[1].session);
+    return { first: first.flatMap(m => m.audio), second };
+  });
+  expect(repeat.second).toHaveLength(2);
+  expect(repeat.second[1].audio).toEqual(repeat.first);
+  await expect(page.locator('#first-pass-lines')).toHaveText('月の第一パス\n');
+  await expect(page.locator('#final')).toBeEmpty();
+  await page.evaluate(() => window.asrWorkers[1].postMessage({ type: 'test-finish' }));
+  await expect(page.locator('#final')).toHaveText('日本語の最終結果\n');
+  expect(await page.evaluate(() => window.trackStops)).toBe(2);
+  await page.locator('#cancel').click();
+  expect(await page.evaluate(() => window.asrTerminated)).toEqual([0, 1]);
+});
+
+test('two-pass preserves completed Moonshine lines during recording without a second-pass result', async ({ page }) => {
+  await twoPassFixtures(page);
+  await loadTwoPass(page); await expect(page.locator('#start')).toBeEnabled();
+  await page.locator('#start').click();
+  await expect(page.locator('#partial')).toHaveText('話しています');
+  await page.evaluate(() => window.asrWorkers[0].postMessage({ type: 'test-line' }));
+  await expect(page.locator('#first-pass-lines')).toHaveText('途中で完了した行\n');
+  await expect(page.locator('#partial')).toHaveText('話しています');
+  await expect(page.locator('#final')).toBeEmpty();
+  expect(await page.evaluate(() => window.asrMessages.filter(m => m.id === 1 && m.type !== 'load'))).toEqual([]);
+  await page.locator('#cancel').click();
+  await expect(page.locator('#first-pass-lines')).toBeEmpty();
+});
+
+for (const duringSecondPass of [false, true]) {
+  test(`two-pass Cancel ${duringSecondPass ? 'during final decode' : 'while recording'} and switching discard both passes`, async ({ page }) => {
+    await twoPassFixtures(page, { holdFinal: true });
+    await loadTwoPass(page); await expect(page.locator('#start')).toBeEnabled();
+    await page.locator('#start').click();
+    await expect(page.locator('#partial')).toHaveText('話しています');
+    if (duringSecondPass) {
+      await page.locator('#stop').click();
+      await expect(page.locator('#status')).toContainText('Decoding ReazonSpeech');
+    }
+    // Save callbacks to emulate messages already dispatched before termination.
+    await page.evaluate(() => { window.oldAsrCallbacks = window.asrWorkers.map(w => w.onmessage); });
+    await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
+    expect(await page.evaluate(() => window.asrTerminated)).toEqual([0, 1]);
+    expect(await page.evaluate(() => window.trackStops)).toBe(1);
+    expect(await page.evaluate(() => window.asrMessages.filter(m => m.type === 'utterance').length)).toBe(duringSecondPass ? 1 : 0);
+    await expect(page.locator('#first-pass-lines')).toBeEmpty();
+    await expect(page.locator('#final')).toBeEmpty();
+    await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
+    await page.locator('#start').click();
+    await expect(page.locator('#partial')).toHaveText('話しています');
+    await page.evaluate(() => {
+      for (const callback of window.oldAsrCallbacks) {
+        callback({ data: { type: 'partial', text: '古い途中結果' } });
+        callback({ data: { type: 'final', text: '古い最終結果' } });
+        callback({ data: { type: 'stopped' } });
+      }
+    });
+    await expect(page.locator('#partial')).toHaveText('話しています');
+    await expect(page.locator('#final')).toBeEmpty();
+    await expect(page.locator('#status')).toContainText('Listening');
+    await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
+    await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
+    await page.locator('#backend').selectOption('whisper');
+    await expect(page.locator('#load')).toBeEnabled();
+    await expect(page.locator('#first-pass-lines')).toBeHidden();
+    await expect(page.locator('#final')).toBeEmpty();
+    expect(await page.evaluate(() => window.asrTerminated)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(await page.evaluate(() => window.trackStops)).toBe(2);
+  });
+}
+
+for (const backend of ['moonshine', 'sherpa', 'whisper']) {
+  test(`${backend}-only still loads, captures, stops and repeats`, async ({ page }) => {
+    await fakeBackend(page); await fakeMicrophone(page);
+    await page.context().route('**/sherpa-worker.js', (route) => route.fulfill({
+      contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
+      body: `self.onmessage = ({data}) => {
+        if (data.type === 'load') postMessage({type:'ready'});
+        if (data.type === 'audio') postMessage({type:'ack',samples:data.audio.length});
+        if (data.type === 'stop') { postMessage({type:'final',text:'日本語のテスト'}); postMessage({type:'stopped'}); }
+      };`,
+    }));
+    await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+    await page.locator('#backend').selectOption(backend); await expect(page.locator('#load')).toBeEnabled();
+    await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
+    for (let i = 0; i < 2; i++) {
+      await page.locator('#start').click(); await expect(page.locator('#status')).toContainText('Listening');
+      await expect(page.locator('#audio')).not.toHaveText('—');
+      await expect(page.locator('#final')).toBeEmpty();
+      await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
+      await expect(page.locator('#final')).toHaveText('日本語のテスト\n');
+    }
+    await expect(page.locator('#errors')).toBeEmpty();
+    expect(await page.evaluate(() => window.trackStops)).toBe(2);
+  });
+}
+
+test('ReazonSpeech whole-utterance worker path reuses the recognizer and frees streams', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit', 'WebKit bypasses interception for importScripts; controlled two-pass workers are tested on both browsers.');
+  // Stub only the upstream runtime: exercise the actual sherpa-worker.js path.
+  await page.context().route('**/vendor/sherpa/sherpa-onnx-asr.js', (route) => route.fulfill({
+    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
+    body: `self.OfflineRecognizer = class {
+      constructor(config) { this.handle = 1; postMessage({type:'test-config', config}); }
+      createStream() {
+        return {
+          acceptWaveform(rate, audio) { this.audio = audio; postMessage({type:'test-waveform', rate, audio:Array.from(audio)}); },
+          free() { postMessage({type:'test-freed'}); },
+        };
+      }
+      decode(stream) { if (stream.audio[0] === -1) throw new Error('Test decode failure'); }
+      getResult() { return {text:' 日本語の最終結果 '}; }
+    };`,
+  }));
+  await page.context().route('**/vendor/sherpa/sherpa-onnx-wasm-main-vad-asr.js', (route) => route.fulfill({
+    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
+    body: 'self.Module.onRuntimeInitialized();',
+  }));
+  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  const events = await page.evaluate(async () => {
+    const worker = new Worker('./sherpa-worker.js'), events = [];
+    let resolveNext;
+    worker.onmessage = ({ data }) => {
+      events.push(data);
+      if (['ready', 'stopped', 'error'].includes(data.type)) resolveNext(data);
+    };
+    const request = (message) => new Promise((resolve) => { resolveNext = resolve; worker.postMessage(message); });
+    try {
+      await request({ type: 'load' });
+      await request({ type: 'utterance', audio: new Float32Array([0.001, 0, 0.05]), session: 1 });
+      await request({ type: 'utterance', audio: new Float32Array([0.02, 0.01]), session: 2 });
+      await request({ type: 'utterance', audio: new Float32Array(), session: 3 });
+      await request({ type: 'utterance', audio: new Float32Array([-1]), session: 4 });
+      return events;
+    } finally { worker.terminate(); }
+  });
+  const config = events.filter(e => e.type === 'test-config');
+  expect(config).toHaveLength(1);
+  expect(config[0].config.featConfig.sampleRate).toBe(16000);
+  expect(config[0].config.modelConfig.transducer.encoder).toBe('./transducer-encoder.onnx');
+  expect(events.filter(e => e.type === 'test-waveform').map(e => [e.rate, e.audio])).toEqual([
+    [16000, Array.from(new Float32Array([0.001, 0, 0.05]))],
+    [16000, Array.from(new Float32Array([0.02, 0.01]))],
+    [16000, [-1]],
+  ]);
+  expect(events.filter(e => e.type === 'test-freed')).toHaveLength(3);
+  expect(events.filter(e => e.type === 'final')).toEqual([
+    { type: 'final', session: 1, text: '日本語の最終結果' },
+    { type: 'final', session: 2, text: '日本語の最終結果' },
+  ]);
+  expect(events.filter(e => e.type === 'stopped').map(e => e.session)).toEqual([1, 2, 3]);
+  expect(events.filter(e => e.type === 'error')).toEqual([{ type: 'error', session: 4, message: 'Test decode failure' }]);
+});
+
+test('Moonshine stream callbacks retain their recording session and Stop closes each stream', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit', 'WebKit bypasses interception for imported worker bindings; controlled two-pass workers are tested on both browsers.');
+  await page.context().route('**/vendor/moonshine/index.js', (route) => route.fulfill({
+    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
+    body: `export const ModelArch = {SmallStreaming:4};
+      const listeners = [];
+      export const Transcriber = { loadFromUrls: async () => ({
+        createStream() {
+          const index = listeners.length;
+          return {
+            addListener(listener) { listeners.push(listener); },
+            start() { listeners[index].onLineStarted({line:{id:index}}); },
+            addAudio() {},
+            transcribe() {
+              if (index) {
+                listeners[0].onLineTextChanged({line:{text:'古い途中結果'}});
+                listeners[0].onError({error:new Error('Old stream error')});
+              }
+              listeners[index].onLineTextChanged({line:{text:'話しています'}});
+            },
+            stop() { listeners[index].onLineCompleted({line:{id:index, text:'月の第一パス'}}); },
+            close() { postMessage({type:'test-closed'}); },
+          };
+        },
+      }) };`,
+  }));
+  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  const events = await page.evaluate(async () => {
+    const worker = new Worker('./model-worker.js', {type:'module'}), events = [];
+    let resolveNext, expected;
+    worker.onmessage = ({data}) => { events.push(data); if (data.type === expected) resolveNext(); };
+    const request = (message, type) => new Promise((resolve) => {
+      expected = type; resolveNext = resolve; worker.postMessage(message);
+    });
+    try {
+      await request({type:'load', backend:'moonshine', language:'ja'}, 'ready');
+      for (const session of [1, 2]) {
+        await request({type:'start', session}, 'started');
+        await request({type:'audio', audio:new Float32Array([0.05]), session}, 'ack');
+        await request({type:'stop', session}, 'stopped');
+      }
+      return events;
+    } finally { worker.terminate(); }
+  });
+  expect(events.filter(e => e.type === 'test-closed')).toHaveLength(2);
+  expect(events.filter(e => e.type === 'partial').map(e => [e.session, e.text])).toEqual([
+    [1, '話しています'], [1, '古い途中結果'], [2, '話しています'],
+  ]);
+  expect(events.filter(e => e.type === 'final').map(e => [e.session, e.text])).toEqual([
+    [1, '月の第一パス'], [2, '月の第一パス'],
+  ]);
+  expect(events.filter(e => e.type === 'error')).toEqual([{type:'error', session:1, message:'Old stream error'}]);
+});

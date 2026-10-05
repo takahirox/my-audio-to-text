@@ -1,8 +1,8 @@
 import { Segmenter } from './audio.js';
 import { moonshineFiles, moonshineModels } from './moonshine-config.js';
 
-let backend, model, stream, segmenter;
-const send = (type, values = {}) => postMessage({ type, ...values });
+let backend, model, stream, segmenter, session;
+const send = (type, values = {}, sessionId = session) => postMessage({ type, session: sessionId, ...values });
 const fail = (error) => send('error', { message: error.message || String(error) });
 let sequence = Promise.resolve();
 // Serializing async Whisper inference preserves audio order and Stop semantics.
@@ -40,17 +40,19 @@ async function handle(data) {
     }
     send('ready');
   } else if (data.type === 'start') {
+    session = data.session;
     if (backend === 'moonshine') {
+      const streamSession = session;
       stream = model.createStream();
       stream.addListener({
         // Lines are created from native VAD segments, even when ASR text is empty.
-        onLineStarted: ({ line }) => send('speech', { event: 'started', id: line.id }),
-        onLineTextChanged: ({ line }) => send('partial', { text: line.text }),
+        onLineStarted: ({ line }) => send('speech', { event: 'started', id: line.id }, streamSession),
+        onLineTextChanged: ({ line }) => send('partial', { text: line.text }, streamSession),
         onLineCompleted: ({ line }) => {
-          send('speech', { event: 'completed', id: line.id });
-          send('final', { text: line.text });
+          send('speech', { event: 'completed', id: line.id }, streamSession);
+          send('final', { text: line.text }, streamSession);
         },
-        onError: ({ error }) => fail(error),
+        onError: ({ error }) => send('error', { message: error.message || String(error) }, streamSession),
       });
       stream.start();
     } else segmenter = new Segmenter();

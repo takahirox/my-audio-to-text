@@ -91,6 +91,54 @@ restrict service workers or model caches.
 | Moonshine Voice | `@moonshine-ai/moonshine-wasm` 0.1.5, Japanese/English Small Streaming, native `Stream` API; official v0.1.5 release WASM runtime | Incremental partials and completed lines emitted by the runtime; native speech detection |
 | sherpa-onnx | 1.13.2 SIMD WASM, quantized Japanese ReazonSpeech Zipformer 2024-08-01 | Segment finals; no native partials |
 | Whisper | Transformers.js 3.8.1, `Xenova/whisper-tiny` multilingual q8, revision `5332fcc35e32a33b86612b9a57a89be7906102b1`, WASM CPU, one thread | Segment finals; no native partials |
+| Moonshine + ReazonSpeech | Existing Japanese Small Streaming and Japanese ReazonSpeech configurations | Moonshine streaming text; ReazonSpeech final only after Stop |
+
+### Japanese two-pass experiment (#31)
+
+Select **Moonshine + ReazonSpeech — two-pass Japanese**, then **Load model**. Start becomes
+available after both existing models finish loading. Language is fixed to Japanese; Moonshine
+keeps its Japanese Small Streaming release, `max_tokens_per_second=13`, and existing speech
+detection threshold choices.
+
+During recording, **Moonshine streaming transcript (first pass)** shows the active partial and
+preserves completed Moonshine lines. Every resampled 16 kHz mono microphone block is copied
+before transfer to Moonshine, including quiet samples and the capture worklet's Stop flush.
+ReazonSpeech receives no recording audio and runs no inference before Stop.
+
+**Stop and finalize** releases microphone capture and closes the Moonshine stream, then sends
+the whole retained recording once to the existing sherpa-onnx/ReazonSpeech recognizer. This
+path bypasses its live pause/20-second segmentation. **ReazonSpeech final transcript (second
+pass)** is the final experiment result, separate from Moonshine's completed lines. The existing
+**Stop to all final results** metric includes microphone flushing and both passes' finalization.
+An empty recording or a decode producing no text leaves the final transcript empty.
+
+Start resets both transcripts and retained audio for a repeat. Loaded models remain available
+for repeated recordings; per-recording recognition streams are closed/freed after Stop. Cancel
+clears the two-pass results and audio, stops capture, and terminates both model workers.
+Switching backends or Moonshine threshold releases both workers; during recording/finalization,
+use Cancel before switching. Recording session IDs and worker identity checks discard stale
+events after repeat, Cancel, or switching. Backgrounding uses the existing Stop behavior.
+
+Both models coexist in memory, and the complete utterance is retained until Stop, so use short
+utterances for this experiment, especially on phones. Audio remains local. No model, VAD,
+token-rate, or transcript-selection tuning is introduced.
+
+Automated acceptance uses controlled workers with the real microphone/resampling/transfer
+paths in Chromium and WebKit; [the validation record](evidence/two-pass-31.md) lists coverage
+and limits. For optional real inference, stage assets and supply a Japanese 16 kHz mono PCM16
+WAV:
+
+```sh
+npm ci
+npm run prepare:assets
+ASR_TEST_WAV=/absolute/path/japanese.wav npm run test:browser -- --grep 'two-pass: real Japanese'
+```
+
+This opt-in check loads both real backends, feeds the same WAV to Moonshine in blocks and
+ReazonSpeech as one utterance after Moonshine Stop, and requires Japanese text from both plus
+Moonshine partial/speech events. It does not assert subjective accuracy improvement. Optional
+manual comparison can record both texts and Stop latency for the same spoken Japanese utterance.
+Issue #31 requires no post-merge verification or human accuracy judgment.
 
 **Moonshine configuration for #25:** the latest npm package is still
 `@moonshine-ai/moonshine-wasm` 0.1.5, but its WASM binary predates Japanese streaming
