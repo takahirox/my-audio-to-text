@@ -124,3 +124,20 @@ weights, runtime binaries and audio stay outside the committed tree. Human micro
 physical mobile and published-site verification were not performed; these are optional
 for #38. Required post-merge verification: none. No GitHub writes or publication were
 performed.
+
+## PR preparation validation
+
+Integrated `main` at `0830490bdb91b8d02fa06a741c9d9a9d98f7b187`, which includes
+the separate Silero VAD worker from #37. Resolved the ASR worker load conflict by
+forwarding the experiment's thread request to the ReazonSpeech loader while
+preserving the upstream VAD separation. No VAD worker configuration changed.
+
+- `npm test`: 17 passed after integration.
+- `npm run test:browser -- --workers=2`: 80 passed, 38 skipped (27.7 seconds),
+  including all 16 thread configuration/capability checks in Chromium and WebKit
+  and the upstream separate-worker simulated-streaming regressions.
+- Skips: 32 opt-in model checks without supplied audio/runtime flags, two opt-in
+  benchmarks and four existing WebKit interception checks.
+- ASR worker syntax and `git diff --check` against current `main`: passed.
+- Real-model timings and Japanese smoke results above are implementation-stage
+  evidence; they were not rerun during PR preparation.
