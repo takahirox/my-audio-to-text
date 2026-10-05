@@ -7,8 +7,8 @@ const descriptions = {
   'sherpa-simulated': 'sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized), same offline model/runtime. Simulated streaming, not native streaming: Silero VAD utterances with 0.8 seconds of pre-roll, provisional (unstable) previews about every 0.5 seconds of active speech, finals after about 0.35 seconds of silence or 12 seconds of speech. Stop finalizes active speech. One decode at a time; slow devices skip superseded previews. Capture stops visibly at 30 seconds of pending audio. About 183 MB of runtime/model files.',
   whisper: 'Transformers.js 3.8.1, multilingual Whisper tiny q8 on WASM CPU. Non-streaming: finals after a pause, every 20 seconds, or Stop. No partials.',
 };
-let worker, secondWorker, mic, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
-let retainedAudio = [], firstReady = false, secondReady = false;
+let worker, secondWorker, vadWorker, mic, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
+let retainedAudio = [], firstReady = false, secondReady = false, vadReady = false;
 let simulation, vadQueued = 0, simulationStopping = false;
 const twoPass = () => $('backend').value === 'two-pass';
 const simulated = () => $('backend').value === 'sherpa-simulated';
@@ -60,8 +60,9 @@ async function release() {
   // Terminate first, so in-flight results cannot repopulate a canceled session.
   worker?.terminate(); worker = null;
   secondWorker?.terminate(); secondWorker = null;
+  vadWorker?.terminate(); vadWorker = null;
   simulation = null; vadQueued = 0; simulationStopping = false;
-  retainedAudio = []; firstReady = secondReady = false;
+  retainedAudio = []; firstReady = secondReady = vadReady = false;
   const previousMic = mic; mic = null;
   await previousMic?.stop(); $('level').value = 0;
 }
@@ -85,7 +86,7 @@ function audio(audio) {
         throw new Error('Backend is over 30 seconds behind. Capture stopped; retry with shorter utterances.');
       }
       vadQueued += audio.length; queued = vadQueued + simulation.waiting;
-      worker.postMessage({ type: 'vad-audio', audio, session: generation }, [audio.buffer]);
+      vadWorker.postMessage({ type: 'vad-audio', audio, session: generation }, [audio.buffer]);
     }
     catch (error) { void fail(error); return; }
     $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
@@ -98,13 +99,13 @@ function audio(audio) {
   if (twoPass()) retainedAudio.push(audio.slice());
   worker.postMessage({ type: 'audio', audio, session: generation }, [audio.buffer]);
 }
-function receive({ data }, second = false) {
+function receive({ data }, second = false, vad = false) {
   if (data.session !== undefined && data.session !== generation) return;
   if (data.type === 'error') { void fail(new Error(data.message)); return; }
   if (data.type === 'progress') $('progress').textContent = data.message;
   else if (data.type === 'ready') {
-    if (second) secondReady = true; else firstReady = true;
-    if (!firstReady || (twoPass() && !secondReady)) return;
+    if (vad) vadReady = true; else if (second) secondReady = true; else firstReady = true;
+    if (!firstReady || (twoPass() && !secondReady) || (simulated() && !vadReady)) return;
     $('init').textContent = time(performance.now() - loadAt);
     $('progress').textContent = twoPass() ? 'Both models loaded.' : 'Model loaded.'; setState('ready', 'Ready. Tap Start microphone.');
   } else if (data.type === 'ack') {
@@ -181,6 +182,13 @@ $('load').onclick = async () => {
       secondWorker.onerror = (event) => { event.preventDefault(); if (secondWorker === activeSecondWorker) void fail(new Error(event.message)); };
       secondWorker.postMessage({ type: 'load' });
     }
+    if (simulated()) {
+      vadWorker = new Worker('./silero-worker.js');
+      const activeVadWorker = vadWorker;
+      vadWorker.onmessage = (event) => { if (vadWorker === activeVadWorker) receive(event, false, true); };
+      vadWorker.onerror = (event) => { event.preventDefault(); if (vadWorker === activeVadWorker) void fail(new Error(event.message)); };
+      vadWorker.postMessage({ type: 'load' });
+    }
     worker.postMessage({ type: 'load', backend: twoPass() ? 'moonshine' : backend, language: twoPass() ? 'ja' : $('language').value, vadThreshold: $('vad-threshold').value }); setState('loading', 'Loading model…');
   } catch (error) { await fail(error); }
 };
@@ -191,7 +199,7 @@ $('start').onclick = async () => {
   const isCurrent = () => worker === activeWorker && generation === session;
   if (simulated()) {
     vadQueued = 0; simulationStopping = false;
-    activeWorker.postMessage({ type: 'vad-start', session });
+    vadWorker.postMessage({ type: 'vad-start', session });
     simulation = new ReazonSimulation(
       (message) => activeWorker.postMessage({ ...message, session }, [message.audio.buffer]),
       () => { if (isCurrent()) receive({ data: { type: 'stopped', session } }); },
@@ -217,7 +225,7 @@ async function stop() {
   // Cancel/reload can finish while the old worklet is still flushing.
   if (worker !== activeWorker || generation !== session) return;
   $('level').value = 0;
-  if (simulated()) activeWorker.postMessage({ type: 'vad-stop', session });
+  if (simulated()) vadWorker.postMessage({ type: 'vad-stop', session });
   else activeWorker.postMessage({ type: 'stop', session });
 }
 $('stop').onclick = () => void stop();
@@ -228,7 +236,11 @@ async function changeConfiguration() {
 }
 for (const id of ['backend', 'language', 'vad-threshold']) $(id).onchange = changeConfiguration;
 document.addEventListener('visibilitychange', () => { if (document.hidden) void stop(); });
-window.addEventListener('pagehide', () => { worker?.terminate(); secondWorker?.terminate(); retainedAudio = []; mic?.media?.getTracks().forEach((track) => track.stop()); });
+window.addEventListener('pagehide', () => {
+  const media = mic?.media;
+  void release();
+  media?.getTracks().forEach((track) => { track.onended = null; track.stop(); });
+});
 window.addEventListener('unhandledrejection', (event) => void fail(event.reason));
 
 async function boot() {

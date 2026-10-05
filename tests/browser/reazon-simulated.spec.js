@@ -1,17 +1,17 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-async function setup(page, { hold = false } = {}) {
+async function setup(page, { hold = false, holdReady = null } = {}) {
   await page.addInitScript(() => {
     const Worker = window.Worker;
     window.testWorkers = []; window.requests = []; window.terminated = []; window.workerEvents = [];
     window.Worker = class extends Worker {
       constructor(...args) {
-        super(...args); this.id = window.testWorkers.length; window.testWorkers.push(this);
-        this.addEventListener('message', ({data}) => window.workerEvents.push(data));
+        super(...args); this.url = args[0]; this.id = window.testWorkers.length; window.testWorkers.push(this);
+        this.addEventListener('message', ({data}) => window.workerEvents.push({ ...data, workerId: this.id }));
       }
       postMessage(message, ...args) {
-        window.requests.push({ ...message, id: this.id, audio: message.audio ? {
+        window.requests.push({ ...message, workerId: this.id, audio: message.audio ? {
           length: message.audio.length, first: message.audio[0], last: message.audio.at(-1), samples: message.final ? Array.from(message.audio) : undefined,
         } : undefined });
         super.postMessage(message, ...args);
@@ -32,6 +32,25 @@ async function setup(page, { hold = false } = {}) {
         getResult(stream) { return {text:stream.audio.every(sample => Math.abs(sample) < 0.03) ? '' : ' 日本語' + stream.audio.length + ' '}; },
       };
     };
+    const originalHandle = handle;
+    let unblock;
+    handle = async (data) => {
+      if (data.type === 'decode' && ${hold}) {
+        postMessage({type:'test-decode-held'});
+        await new Promise(resolve => { unblock = resolve; });
+        unblock = null;
+      }
+      if (data.type === 'test-asr-ping') postMessage({type:'test-asr-pong'});
+      else await originalHandle(data);
+    };
+    const originalOnmessage = self.onmessage;
+    self.onmessage = event => {
+      // Only this test control bypasses the serialized production message path.
+      if (event.data.type === 'test-finish') unblock();
+      else originalOnmessage(event);
+    };`;
+  const actualVadWorker = readFileSync(new URL('../../web/silero-worker.js', import.meta.url), 'utf8') + `
+    self.importScripts = () => self.Module.onRuntimeInitialized();
     self.createVad = (module, config) => {
       postMessage({type:'test-vad-config', config});
       return { handle:1,
@@ -39,20 +58,27 @@ async function setup(page, { hold = false } = {}) {
         acceptWaveform(frame) { this.speech = frame.some(sample => sample !== 0); },
         isDetected() { return this.speech; }, flush() {}, clear() {},
       };
-    };
-    const originalHandle = handle;
-    let pending;
-    handle = async (data) => {
-      if (data.type === 'decode' && ${hold}) {
-        if (pending) throw new Error('Overlapping decode');
-        pending = data;
-      } else if (data.type === 'test-finish') {
-        const request = pending; pending = null; await originalHandle(request);
-      } else await originalHandle(data);
     };`;
+  const gateReady = (body, role) => body + `
+    if (${JSON.stringify(holdReady)} === ${JSON.stringify(role)}) {
+      const originalPost = self.postMessage.bind(self), originalReceive = self.onmessage;
+      let ready;
+      self.postMessage = (message, ...args) => {
+        if (message.type === 'ready') { ready = message; originalPost({type:'test-ready-held'}); }
+        else originalPost(message, ...args);
+      };
+      self.onmessage = event => {
+        if (event.data.type === 'test-ready') originalPost(ready);
+        else originalReceive(event);
+      };
+    }`;
+  await page.context().route('**/silero-worker.js', route => route.fulfill({
+    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
+    body: gateReady(actualVadWorker, 'vad'),
+  }));
   await page.context().route('**/sherpa-worker.js', route => route.fulfill({
     contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
-    body: actualWorker,
+    body: gateReady(actualWorker, 'asr'),
   }));
   await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
   // Deterministic 16 kHz audio at the microphone callback boundary. Existing
@@ -70,12 +96,54 @@ async function setup(page, { hold = false } = {}) {
   });
   await page.locator('#backend').selectOption('sherpa-simulated');
   await expect(page.locator('#load')).toBeEnabled();
-  await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
+  await page.locator('#load').click();
+  if (holdReady) await expect.poll(() => page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-ready-held').length)).toBe(1);
+  else await expect(page.locator('#start')).toBeEnabled();
 }
 
 const feed = (page, length, value = 0.05) => page.evaluate(({ length, value }) => window.feed(length, value), { length, value });
 const decodes = page => page.evaluate(() => window.requests.filter(m => m.type === 'decode'));
-const finish = page => page.evaluate(() => window.testWorkers.at(-1).postMessage({ type: 'test-finish' }));
+const finish = async page => {
+  // Wait for the decode to enter the actual worker handler, not just be posted.
+  await expect.poll(() => page.evaluate(() => {
+    const id = window.testWorkers.filter(w => w.url === './sherpa-worker.js').at(-1).id;
+    const events = window.workerEvents.filter(e => e.workerId === id);
+    return events.filter(e => e.type === 'test-decode-held').length - events.filter(e => e.type === 'test-freed').length;
+  })).toBe(1);
+  await page.evaluate(() => window.testWorkers.filter(w => w.url === './sherpa-worker.js').at(-1).postMessage({ type: 'test-finish' }));
+};
+const classified = page => page.evaluate(() => window.workerEvents.filter(e => e.type === 'vad')
+  .reduce((sum, e) => sum + e.frames.reduce((count, f) => count + f.audio.length, 0), 0));
+
+for (const role of ['asr', 'vad']) {
+  test(`simulated recording waits for the ${role} worker to become ready`, async ({ page }) => {
+    await setup(page, { holdReady: role });
+    await expect.poll(() => page.evaluate(() => window.workerEvents.filter(e => e.type === 'ready').length)).toBe(1);
+    await expect(page.locator('#start')).toBeDisabled();
+    await expect(page.locator('#status')).toContainText('Loading');
+    await page.evaluate(role => window.testWorkers[role === 'asr' ? 0 : 1].postMessage({type:'test-ready'}), role);
+    await expect(page.locator('#start')).toBeEnabled();
+  });
+}
+
+test('VAD errors and page teardown release both workers and capture', async ({ page }) => {
+  await setup(page); await page.locator('#start').click();
+  await page.evaluate(() => window.testWorkers[1].onerror({preventDefault() {}, message:'Controlled VAD failure'}));
+  await expect(page.locator('#errors')).toContainText('Controlled VAD failure');
+  await expect(page.locator('#load')).toBeEnabled();
+  expect(await page.evaluate(() => window.terminated)).toEqual([0, 1]);
+  expect(await page.evaluate(() => window.captureStops)).toBe(1);
+  await page.locator('#load').click(); await page.locator('#start').click(); await feed(page, 8192);
+  await expect(page.locator('#partial')).toHaveText('日本語8192');
+  await page.evaluate(() => {
+    const callbacks = window.testWorkers.slice(-2).map(w => w.onmessage);
+    window.dispatchEvent(new Event('pagehide'));
+    for (const callback of callbacks) callback({data:{type:'final',text:'古い結果'}});
+  });
+  expect(await page.evaluate(() => window.terminated)).toEqual([0, 1, 2, 3]);
+  expect(await page.evaluate(() => window.captureStops)).toBe(2);
+  await expect(page.locator('#final')).toBeEmpty();
+});
 
 test('half-second provisional text, final worklet tail and repeat use the real worker paths', async ({ page }) => {
   await setup(page);
@@ -101,14 +169,18 @@ test('half-second provisional text, final worklet tail and repeat use the real w
   expect(await page.evaluate(() => window.captureStops)).toBe(1);
   expect(await page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-rate').map(e => e.rate))).toEqual([16000, 16000, 16000]);
   expect(await page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-freed').length)).toBe(3);
-  expect(await page.evaluate(() => window.workerEvents.find(e => e.type === 'test-vad-config').config.sileroVad.model)).toBe('./silero_vad.onnx');
+  expect(await page.evaluate(() => window.workerEvents.find(e => e.type === 'test-vad-config').config)).toEqual({
+    sileroVad: {model:'./silero_vad.onnx', threshold:0.5, windowSize:512,
+      minSpeechDuration:1 / 16000, minSilenceDuration:1 / 16000, maxSpeechDuration:12},
+    sampleRate:16000, numThreads:1, provider:'cpu', debug:0, bufferSizeInSeconds:2,
+  });
   await page.evaluate(() => { window.flushSamples = 0; });
   await page.locator('#start').click();
   await expect(page.locator('#final')).toBeEmpty();
   await expect(page.locator('#partial')).toHaveText('Waiting for speech…');
   await feed(page, 8192); await expect(page.locator('#partial')).toHaveText('日本語8192');
   await page.locator('#stop').click(); await expect(page.locator('#final')).toHaveText('日本語8192\n');
-  expect(await page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-vad-reset').length)).toBe(2);
+  expect(await page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-vad-reset').length)).toBe(4);
 });
 
 test('silence stays bounded, speech includes 0.8-second pre-roll and a 0.35-second endpoint', async ({ page }) => {
@@ -149,13 +221,20 @@ test('continuous speech forces 12-second finals without losing or repeating boun
   }
 });
 
-test('slow inference coalesces previews, ignores ended previews and drains utterances on Stop', async ({ page }) => {
+test('VAD classifies during a blocked ASR decode, coalesces previews and retains endpoints for Stop', async ({ page }) => {
   await setup(page, { hold: true }); await page.locator('#start').click();
   await feed(page, 8192);
-  await expect.poll(async () => (await decodes(page)).length).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-decode-held').length)).toBe(1);
+  await page.evaluate(() => window.testWorkers[0].postMessage({type:'test-asr-ping'}));
   for (let i = 0; i < 8; i++) await feed(page, 8192);
+  await expect.poll(() => classified(page)).toBe(9 * 8192);
   expect(await decodes(page)).toHaveLength(1);
+  expect(await page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-asr-pong'))).toHaveLength(0);
+  expect(await page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-freed'))).toHaveLength(0);
+  expect(await page.evaluate(() => window.requests.filter(m => m.type === 'vad-audio').every(m => m.workerId === 1))).toBe(true);
+  expect((await decodes(page))[0].workerId).toBe(0);
   await finish(page);
+  await expect.poll(() => page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-asr-pong').length)).toBe(1);
   await expect.poll(async () => (await decodes(page)).length).toBe(2);
   expect((await decodes(page))[1].audio.length).toBe(9 * 8192);
   await feed(page, 5632, 0); await feed(page, 8192, 0.06);
@@ -185,7 +264,7 @@ test('buffer limit fails visibly and terminates a stalled decode', async ({ page
   await feed(page, 1);
   await expect(page.locator('#errors')).toContainText('over 30 seconds behind');
   await expect(page.locator('#load')).toBeEnabled();
-  expect(await page.evaluate(() => window.terminated)).toEqual([0]);
+  expect(await page.evaluate(() => window.terminated)).toEqual([0, 1]);
   expect(await page.evaluate(() => window.captureStops)).toBe(1);
 });
 
@@ -194,7 +273,7 @@ for (const stopping of [false, true]) {
     await setup(page, { hold: true }); await page.locator('#start').click(); await feed(page, 8192);
     await expect.poll(async () => (await decodes(page)).length).toBe(1);
     if (stopping) await page.locator('#stop').click();
-    await page.evaluate(() => { window.oldCallback = window.testWorkers[0].onmessage; });
+    await page.evaluate(() => { window.oldCallbacks = window.testWorkers.map(w => w.onmessage); });
     await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
     await expect(page.locator('#final')).toBeEmpty();
     await page.locator('#load').click(); await page.locator('#start').click(); await feed(page, 8192);
@@ -202,8 +281,8 @@ for (const stopping of [false, true]) {
     const session = (await decodes(page))[1].session;
     await page.evaluate((session) => {
       for (const type of ['partial', 'final', 'decoded', 'stopped', 'error', 'vad', 'vad-stopped']) {
-        window.oldCallback({data:{type, text:'古い結果', message:'Old error', session}});
-        window.testWorkers[1].onmessage({data:{type, text:'古い結果', message:'Old error', session:session - 1}});
+        for (const callback of window.oldCallbacks) callback({data:{type, text:'古い結果', message:'Old error', session}});
+        for (const worker of window.testWorkers.slice(-2)) worker.onmessage({data:{type, text:'古い結果', message:'Old error', session:session - 1}});
       }
     }, session);
     await expect(page.locator('#final')).toBeEmpty();
@@ -217,17 +296,21 @@ for (const stopping of [false, true]) {
     await expect(page.locator('#final')).toHaveText('日本語8192\n');
     await page.locator('#start').click();
     await page.evaluate((session) => {
-      window.testWorkers[1].onmessage({data:{type:'final',text:'古い結果',session}});
+      for (const worker of window.testWorkers.slice(-2)) {
+        for (const type of ['final', 'decoded', 'vad', 'vad-stopped', 'error']) {
+          worker.onmessage({data:{type, text:'古い結果', message:'Old error', session}});
+        }
+      }
     }, session);
     await expect(page.locator('#final')).toBeEmpty();
     await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
     await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
-    await page.evaluate(() => { window.oldCallback = window.testWorkers.at(-1).onmessage; });
+    await page.evaluate(() => { window.oldCallbacks = window.testWorkers.slice(-2).map(w => w.onmessage); });
     await page.locator('#backend').selectOption('sherpa'); await expect(page.locator('#load')).toBeEnabled();
-    await page.evaluate(() => window.oldCallback({data:{type:'final',text:'古い結果'}}));
+    await page.evaluate(() => window.oldCallbacks.forEach(callback => callback({data:{type:'final',text:'古い結果'}})));
     await expect(page.locator('#partial')).toContainText('Unsupported');
     await expect(page.locator('#final')).toBeEmpty();
-    expect(await page.evaluate(() => window.terminated)).toEqual([0, 1, 2]);
+    expect(await page.evaluate(() => window.terminated)).toEqual([0, 1, 2, 3, 4, 5]);
   });
 }
 
@@ -243,7 +326,7 @@ test('empty Stop, empty recognition and decode errors release correctly', async 
   await page.locator('#start').click(); await feed(page, 8192, -1);
   await expect(page.locator('#errors')).toContainText('Controlled decode failure');
   await expect(page.locator('#load')).toBeEnabled();
-  expect(await page.evaluate(() => window.terminated)).toEqual([0]);
+  expect(await page.evaluate(() => window.terminated)).toEqual([0, 1]);
 });
 
 test('offline ReazonSpeech keeps pause/20-second segmentation and no previews', async ({ page }) => {
