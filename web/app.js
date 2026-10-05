@@ -1,13 +1,17 @@
 import { Microphone, joinAudio } from './audio.js';
 import { moonshineModels } from './moonshine-config.js';
+import { ReazonSimulation } from './reazon-simulation.js';
 const $ = (id) => document.getElementById(id);
 const descriptions = {
   sherpa: 'sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized). Non-streaming: finals after a pause, every 20 seconds, or Stop. No partials. About 183 MB of runtime/model files.',
+  'sherpa-simulated': 'sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized), same offline model/runtime. Simulated streaming, not native streaming: cumulative provisional text after each additional 1 second of 16 kHz mono audio, with disjoint 10-second windows committed as finals. Stop finalizes the remaining audio. One decode at a time; slow devices skip superseded previews. Capture stops visibly at 30 seconds of buffered audio. About 183 MB of runtime/model files.',
   whisper: 'Transformers.js 3.8.1, multilingual Whisper tiny q8 on WASM CPU. Non-streaming: finals after a pause, every 20 seconds, or Stop. No partials.',
 };
 let worker, secondWorker, mic, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
 let retainedAudio = [], firstReady = false, secondReady = false;
+let simulation;
 const twoPass = () => $('backend').value === 'two-pass';
+const simulated = () => $('backend').value === 'sherpa-simulated';
 const streaming = () => ['moonshine', 'two-pass'].includes($('backend').value);
 let firstText = false, firstPartial = false, peakRms = 0, speechStarted = 0, speechCompleted = 0, partialCount = 0, finalCount = 0;
 function describe() {
@@ -22,7 +26,7 @@ function describe() {
     ? `@moonshine-ai/moonshine-wasm 0.1.5 API, official v0.1.5 release runtime, WASM SIMD + threads, ${model.name} (ModelArch.SmallStreaming / 4), ${model.release}. Named model-file loader; no fallback. max_tokens_per_second=${model.options?.max_tokens_per_second ?? 'upstream default'}. VAD threshold ${$('vad-threshold').value}. Native partial/final events. No automatic language detection.`
     : descriptions[$('backend').value];
   if (twoPass()) $('description').textContent += ' Japanese-only two-pass experiment: retain the same 16 kHz microphone audio; after Stop, sherpa-onnx 1.13.2 / ReazonSpeech decodes the whole utterance. Both models are loaded; no second-pass inference while recording.';
-  $('partial-heading').textContent = twoPass() ? 'Moonshine streaming transcript (first pass)' : 'Partial transcript';
+  $('partial-heading').textContent = twoPass() ? 'Moonshine streaming transcript (first pass)' : simulated() ? 'Provisional transcript (simulated streaming)' : 'Partial transcript';
   $('first-pass-lines').hidden = !twoPass();
   $('final-heading').textContent = twoPass() ? 'ReazonSpeech final transcript (second pass)' : 'Final transcript';
   for (const id of ['partial', 'final']) $(id).lang = moonshine ? $('language').value : 'ja';
@@ -30,7 +34,7 @@ function describe() {
 function diagnostics() {
   $('speech').textContent = streaming()
     ? `${speechStarted} native VAD segment(s) accepted; ${speechCompleted} completed. ${speechStarted ? 'Speech detected.' : 'No speech segment reported.'}`
-    : 'Native VAD state unavailable for this backend; all captured audio is retained for segmentation.';
+    : simulated() ? 'No native VAD: all captured audio is retained in fixed 10-second windows.' : 'Native VAD state unavailable for this backend; all captured audio is retained for segmentation.';
   $('asr-events').textContent = `${partialCount} nonempty partial(s); ${finalCount} nonempty final(s).`;
 }
 const time = (ms) => `${(ms / 1000).toFixed(2)} s`;
@@ -45,7 +49,7 @@ function setState(next, message) {
 }
 function resetOutput() {
   for (const id of ['init', 'first-partial', 'first-text', 'latency', 'audio']) $(id).textContent = '—';
-  $('partial').textContent = streaming() ? 'Waiting for speech…' : 'Unsupported by this non-streaming model.';
+  $('partial').textContent = streaming() || simulated() ? 'Waiting for speech…' : 'Unsupported by this non-streaming model.';
   $('first-pass-lines').textContent = ''; retainedAudio = [];
   $('final').textContent = ''; $('progress').textContent = ''; $('errors').textContent = '';
   captured = queued = peakRms = speechStarted = speechCompleted = partialCount = finalCount = 0;
@@ -56,6 +60,7 @@ async function release() {
   // Terminate first, so in-flight results cannot repopulate a canceled session.
   worker?.terminate(); worker = null;
   secondWorker?.terminate(); secondWorker = null;
+  simulation = null;
   retainedAudio = []; firstReady = secondReady = false;
   const previousMic = mic; mic = null;
   await previousMic?.stop(); $('level').value = 0;
@@ -68,11 +73,18 @@ async function fail(error) {
 function audio(audio) {
   if (!worker || !['starting', 'recording', 'stopping'].includes(state)) return;
   if (!captured) startedAt = performance.now();
-  captured += audio.length; queued += audio.length;
+  captured += audio.length;
+  if (!simulated()) queued += audio.length;
   const rms = Math.sqrt(audio.reduce((sum, sample) => sum + sample * sample, 0) / audio.length);
   peakRms = Math.max(peakRms, rms); $('level').value = rms;
   const db = (value) => value > 0 ? `${(20 * Math.log10(value)).toFixed(1)} dBFS` : '−∞ dBFS';
   $('signal').textContent = `RMS ${db(rms)}; session peak RMS ${db(peakRms)}. ${peakRms > 0 ? 'Nonzero microphone signal reached the app (may be noise).' : 'Audio frames received, but signal is zero.'}`;
+  if (simulated()) {
+    try { simulation.push(audio); queued = simulation.waiting; }
+    catch (error) { void fail(error); return; }
+    $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
+    return;
+  }
   $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
   // Fail visibly rather than letting a slow phone queue unbounded microphone audio.
   if (queued > 30 * 16000) { void fail(new Error('Backend is over 30 seconds behind. Capture stopped; retry with shorter utterances.')); return; }
@@ -91,6 +103,9 @@ function receive({ data }, second = false) {
     $('progress').textContent = twoPass() ? 'Both models loaded.' : 'Model loaded.'; setState('ready', 'Ready. Tap Start microphone.');
   } else if (data.type === 'ack') {
     queued -= data.samples;
+    $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
+  } else if (data.type === 'decoded' && simulated()) {
+    simulation.decoded(); queued = simulation.waiting;
     $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
   } else if (data.type === 'speech') {
     if (data.event === 'started') speechStarted++;
@@ -111,7 +126,8 @@ function receive({ data }, second = false) {
         $('partial').textContent = 'Waiting for speech…';
         return;
       }
-      $('final').textContent += `${data.text}\n`;
+      if (!simulated() || data.text.trim()) $('final').textContent += `${data.text}\n`;
+      if (simulated()) $('partial').textContent = '';
       if ($('backend').value === 'moonshine') $('partial').textContent = 'Waiting for speech…';
     }
   } else if (data.type === 'stopped') {
@@ -131,7 +147,8 @@ $('load').onclick = async () => {
   await release(); resetOutput(); loadAt = performance.now();
   try {
     const backend = $('backend').value;
-    worker = new Worker(backend === 'sherpa' ? './sherpa-worker.js' : './model-worker.js', { type: backend === 'sherpa' ? 'classic' : 'module' });
+    const sherpa = backend === 'sherpa' || simulated();
+    worker = new Worker(sherpa ? './sherpa-worker.js' : './model-worker.js', { type: sherpa ? 'classic' : 'module' });
     const activeWorker = worker;
     worker.onmessage = (event) => { if (worker === activeWorker) receive(event); };
     worker.onerror = (event) => { event.preventDefault(); if (worker === activeWorker) void fail(new Error(event.message)); };
@@ -150,7 +167,12 @@ $('start').onclick = async () => {
   const init = $('init').textContent; resetOutput(); $('init').textContent = init;
   const activeWorker = worker, session = ++generation;
   const isCurrent = () => worker === activeWorker && generation === session;
-  activeWorker.postMessage({ type: 'start', session });
+  if (simulated()) {
+    simulation = new ReazonSimulation(
+      (message) => activeWorker.postMessage({ ...message, session }, [message.audio.buffer]),
+      () => { if (isCurrent()) receive({ data: { type: 'stopped', session } }); },
+    );
+  } else activeWorker.postMessage({ type: 'start', session });
   mic = new Microphone(
     (chunk) => { if (isCurrent()) audio(chunk); },
     () => { if (isCurrent()) void stop(); },
@@ -169,10 +191,11 @@ async function stop() {
   // Cancel/reload can finish while the old worklet is still flushing.
   if (worker !== activeWorker || generation !== session) return;
   $('level').value = 0;
-  activeWorker.postMessage({ type: 'stop', session });
+  if (simulated()) simulation.stop();
+  else activeWorker.postMessage({ type: 'stop', session });
 }
 $('stop').onclick = () => void stop();
-$('cancel').onclick = async () => { setState('booting', 'Releasing…'); await release(); if (twoPass()) resetOutput(); setState('idle', 'Canceled. Load a model to continue.'); };
+$('cancel').onclick = async () => { setState('booting', 'Releasing…'); await release(); if (twoPass() || simulated()) resetOutput(); setState('idle', 'Canceled. Load a model to continue.'); };
 async function changeConfiguration() {
   setState('booting', 'Switching…'); await release(); resetOutput();
   describe(); setState('idle', 'Load this model to begin.');

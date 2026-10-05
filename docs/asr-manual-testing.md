@@ -90,8 +90,64 @@ restrict service workers or model caches.
 | --- | --- | --- |
 | Moonshine Voice | `@moonshine-ai/moonshine-wasm` 0.1.5, Japanese/English Small Streaming, native `Stream` API; official v0.1.5 release WASM runtime | Incremental partials and completed lines emitted by the runtime; native speech detection |
 | sherpa-onnx | 1.13.2 SIMD WASM, quantized Japanese ReazonSpeech Zipformer 2024-08-01 | Segment finals; no native partials |
+| sherpa-onnx (simulated streaming) | Same offline ReazonSpeech model/runtime and 16 kHz mono capture | Cumulative provisional previews; disjoint 10-second window finals and a final tail on Stop |
 | Whisper | Transformers.js 3.8.1, `Xenova/whisper-tiny` multilingual q8, revision `5332fcc35e32a33b86612b9a57a89be7906102b1`, WASM CPU, one thread | Segment finals; no native partials |
 | Moonshine + ReazonSpeech | Existing Japanese Small Streaming and Japanese ReazonSpeech configurations | Moonshine streaming text; ReazonSpeech final only after Stop |
+
+### ReazonSpeech simulated-streaming comparison (#33)
+
+Select **sherpa-onnx — Japanese ReazonSpeech (simulated streaming)** and load the model.
+This is simulated streaming around the existing offline model, with no native streaming
+or VAD. The original ReazonSpeech option retains its pause/20-second/Stop policy.
+
+The new option decodes a cumulative snapshot of the current window after each additional
+second (16,000 samples) of captured audio. Provisional text replaces the previous preview;
+it can change as more context arrives. At 10 seconds, that window is decoded as a final,
+appended once, and its provisional text is cleared. Subsequent windows do not overlap.
+Fixed boundaries can split words and lose context; this deliberately simple experiment
+does not claim the quality of whole-utterance recognition. Quiet audio is retained too.
+
+Only one decode is in flight. While it runs, capture buffers audio locally, and superseded
+preview opportunities are skipped. Completed windows take priority over previews. Each
+decode covers at most 10 seconds; up to 30 seconds of uncommitted source audio is retained
+(including a final window in flight), plus the in-flight snapshot of at most 10 seconds.
+Exceeding that source buffer limit reports an error, stops capture, and terminates the worker.
+This bounds work and memory even if inference cannot keep up; the interval is an audio
+policy, not a promise of one visible update per wall-clock second.
+
+**Stop** flushes the microphone's last block, waits for the current decode, then commits
+all buffered windows and the short remaining tail. Start stays disabled until this drains.
+**Cancel** terminates the worker, discards buffered audio, and clears the experiment's
+transcripts. Repeat creates fresh buffer/session state; switching releases the old worker.
+
+Run the deterministic browser coverage without downloading models:
+
+```sh
+npm test
+npm run test:browser -- tests/browser/reazon-simulated.spec.js
+```
+
+Both Chromium and WebKit check previews before Stop, cumulative replacement, window
+commit/preview clearing, the microphone flush tail, Stop drainage behind held inference,
+preview coalescing, the 30-second cap, empty audio/text, decode failure, repeated recording,
+Cancel during recording/finalization, and rejection of stale results after reload/switching.
+Tests inject deterministic audio at the microphone callback and controlled workers, or the
+actual sherpa worker with only WASM initialization replaced by a controlled recognizer.
+The latter checks 16 kHz input, stream cleanup, and unchanged offline segmentation.
+Unit coverage compares every final audio sample across arbitrary 2,048-sample boundaries.
+The existing browser suite separately exercises real Web Audio capture/resampling and all
+other modes. These checks establish lifecycle/policy behavior, not real-model speech quality.
+
+Local validation on 2026-10-05: `npm test` passed all 6 unit checks;
+`npm run test:browser -- --workers=2` passed 56 checks across Chromium and WebKit,
+including simulated-streaming previews/Stop/repeat through real Web Audio capture with a
+generated oscillator and controlled recognition. There were 34 skips: 30 opt-in real-model
+WAV checks without supplied recordings and 4 existing WebKit imported-binding fixtures.
+No real-model latency, human microphone comparison, or deployment is claimed by this run.
+
+Optionally compare the two ReazonSpeech modes with the same Japanese utterance and record
+first-text time, update frequency/stability, final text, responsiveness, and buffer behavior.
+Real-model/human latency observations are optional, and no post-merge verification is required.
 
 ### Japanese two-pass experiment (#31)
 
