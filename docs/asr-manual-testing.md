@@ -151,11 +151,10 @@ unchanged. Keep other settings at upstream defaults, including the 0.5-second VA
 averaging window.
 See [native options](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/api/options.md).
 
-Required post-merge verification for #29 remains **pending**: confirm the Pages
-deployment succeeds for the merged revision, then confirm the published playground
-serves that revision and successfully loads the Japanese Moonshine model. Local build
-and test results do not establish these deployment results; keep #29 open until they
-are performed and recorded.
+Issue #29 now specifies required post-merge verification as **None**. The previously
+listed Pages deployment and published-revision/Japanese-model checks were not performed
+and are no longer acceptance requirements for #29. Local build and test results do not
+establish those published-site results.
 
 **ReazonSpeech is non-streaming.** Both ReazonSpeech and Whisper receive the same 16 kHz mono
 capture and simple segmentation: decode after 0.8 seconds of low audio energy following speech,

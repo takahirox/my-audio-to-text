@@ -8,30 +8,30 @@ Japanese Small Streaming previously used the upstream token-rate default; it now
 
 ## Validation
 
-Validation reported by the implementation node for the published changes:
+Local pre-merge checks re-run during recovery on 2026-10-05 UTC:
 
-- Unit tests: **4 passed**.
-- Browser tests: **20 passed, 30 documented skips**. The new runtime interception test checks the default Japanese language, explicit Japanese with both existing VAD thresholds, and unchanged English defaults. It also checks model architecture and file URLs. WebKit skips module-worker interception; real model smoke tests require explicit opt-in.
-- Pages asset preparation: **passed**, using the existing preparation script.
-- Publication check: `git diff --check` passed; the diff is limited to configuration, runtime option forwarding, diagnostics, documentation, and browser tests.
+- `npm test`: **4 passed**.
+- `npm run test:browser -- --reporter=line`: **20 passed, 30 documented skips**. The new runtime interception test checks the default Japanese language, explicit Japanese with both existing VAD thresholds, and unchanged English defaults. It also checks model architecture and file URLs. WebKit skips two module-worker interception tests; 28 opt-in real model tests were skipped without recordings.
+- `npm run prepare:assets`: **passed**, using the same pinned asset preparation script as the unchanged Pages workflow.
+- `git diff --check`: **passed**.
+- Scope review: the diff from the PR base is limited to configuration, runtime option forwarding, diagnostics, documentation/evidence, and browser tests. No unrelated ASR tuning or backend changes are included.
 
-Required post-merge verification remains **pending**:
+## Required post-merge verification
 
-- Confirm the GitHub Pages deployment succeeds for the merged revision.
-- Confirm the published playground serves that revision and successfully loads the Japanese Moonshine model.
+**None**, as specified by the current [Issue #29](https://github.com/takahirox/my-audio-to-text/issues/29).
 
-These checks have not been performed and are not established by local validation. Merging this PR will close Issue #29; the required post-merge checks still need to be performed and their results recorded.
+The earlier deployment and published-revision/Japanese-model checks were not performed. They are superseded requirements, not pending acceptance work for #29; local validation does not establish those published-site results.
 
 ## Related issues
 
 Closes #29
 
-Implementation and pre-merge scope are complete; the required post-merge verification above remains pending.
+The implementation and current pre-merge acceptance criteria are satisfied. Ordinary PR review determines merge readiness.
 
 ## Scope check
 
-- [ ] This PR fully addresses each Issue it claims to resolve. Implementation is complete; full verification remains pending until the required post-merge checks are recorded.
+- [x] This PR fully addresses each Issue it claims to resolve, under the current Issue #29 criteria.
 - [x] This PR does not include unrelated work.
 - [x] This PR does not add speculative abstractions, extensibility, frameworks, or subsystems that are not needed by the Issue.
-- [x] Any intentionally partial implementation is clearly stated, and the parent Issue is not presented as fully resolved unless the remaining scope has been explicitly split out. No implementation scope is deferred; required post-merge verification is explicitly pending.
+- [x] Any intentionally partial implementation is clearly stated, and the parent Issue is not presented as fully resolved unless the remaining scope has been explicitly split out. No implementation scope is deferred.
 - [x] Validation maps to the Issue's expected outcome / acceptance criteria.
