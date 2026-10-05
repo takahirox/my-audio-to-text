@@ -142,8 +142,20 @@ Runtime errors take precedence over these interpretations. The UI reports them s
 a failed transcription pass may prevent segment events from reaching the page.
 The minimum sensitivity control forwards native `vad_threshold`: default `0.5` or
 more sensitive `0.2`. Lowering it may accept noise and does not guarantee whisper recognition.
-Keep other settings at upstream defaults, including the 0.5-second VAD averaging window.
+Japanese recognition passes `max_tokens_per_second=13` (as the string `'13'` in the
+runtime options map), following the upstream recommendation for non-Latin languages
+in [Issue #29](https://github.com/takahirox/my-audio-to-text/issues/29). English leaves
+this option unset and uses the upstream default. The model description displays the
+selected token-rate setting. The Small Streaming models and pinned v0.1.5 runtime are
+unchanged. Keep other settings at upstream defaults, including the 0.5-second VAD
+averaging window.
 See [native options](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/docs/api/options.md).
+
+Required post-merge verification for #29 remains **pending**: confirm the Pages
+deployment succeeds for the merged revision, then confirm the published playground
+serves that revision and successfully loads the Japanese Moonshine model. Local build
+and test results do not establish these deployment results; keep #29 open until they
+are performed and recorded.
 
 **ReazonSpeech is non-streaming.** Both ReazonSpeech and Whisper receive the same 16 kHz mono
 capture and simple segmentation: decode after 0.8 seconds of low audio energy following speech,

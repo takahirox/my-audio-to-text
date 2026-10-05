@@ -189,6 +189,7 @@ test('Moonshine language and sensitivity changes release the model and reach the
     };
   });
   await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await expect(page.locator('#description')).toContainText('max_tokens_per_second=13');
   await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
   await page.locator('#language').selectOption('en');
   await expect(page.locator('#load')).toBeEnabled();
@@ -196,6 +197,7 @@ test('Moonshine language and sensitivity changes release the model and reach the
   expect(await page.evaluate(() => window.terminated)).toBe(1);
   await page.locator('#vad-threshold').selectOption('0.2');
   await expect(page.locator('#description')).toContainText('English Small Streaming');
+  await expect(page.locator('#description')).toContainText('max_tokens_per_second=upstream default');
   await expect(page.locator('#description')).toContainText('quantized_26_08_21');
   await expect(page.locator('#description')).toContainText('threshold 0.2');
   await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
@@ -255,12 +257,63 @@ for (const outcome of ['rejected', 'accepted without text', 'transcribed']) {
   });
 }
 
+test('Moonshine forwards the Japanese token rate to the runtime and preserves English defaults', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit', 'WebKit cannot reliably intercept imported module-worker bindings; real model loading is tested separately.');
+  await page.context().route('**/vendor/moonshine/index.js', (route) => route.fulfill({
+    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
+    body: `export const ModelArch = { SmallStreaming: 4 };
+      export const Transcriber = {
+        loadFromUrls: async (files, config) => {
+          postMessage({ type: 'runtime-config', files, modelArch: config.modelArch, options: config.options });
+          return {};
+        },
+      };`,
+  }));
+  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  const loads = [
+    {}, // The worker's default language is Japanese.
+    { language: 'ja', vadThreshold: '0.5' },
+    { language: 'ja', vadThreshold: '0.2' },
+    { language: 'en', vadThreshold: '0.5' },
+    { language: 'en', vadThreshold: '0.2' },
+  ];
+  for (const load of loads) {
+    const config = await page.evaluate(async (load) => {
+      const worker = new Worker('./model-worker.js', { type: 'module' });
+      try {
+        return await new Promise((resolve, reject) => {
+          let config;
+          worker.onerror = (event) => reject(new Error(event.message));
+          worker.onmessage = ({ data }) => {
+            if (data.type === 'runtime-config') config = data;
+            if (data.type === 'error') reject(new Error(data.message));
+            if (data.type === 'ready') resolve(config);
+          };
+          worker.postMessage({ type: 'load', backend: 'moonshine', ...load });
+        });
+      } finally { worker.terminate(); }
+    }, load);
+    const language = load.language ?? 'ja';
+    expect(config.options).toEqual(language === 'ja'
+      ? { max_tokens_per_second: '13', vad_threshold: load.vadThreshold ?? '0.5' }
+      : { vad_threshold: load.vadThreshold });
+    expect(config.modelArch).toBe(4);
+    expect(Object.keys(config.files)).toEqual(['adapter.ort', 'cross_kv.ort', 'decoder_kv.ort',
+      'encoder.ort', 'frontend.model.ort', 'frontend.weights.ort', 'streaming_config.json', 'tokenizer.bin']);
+    const release = language === 'ja' ? 'quantized_26_08_23' : 'quantized_26_08_21';
+    for (const [file, url] of Object.entries(config.files)) {
+      expect(url).toBe(`https://download.moonshine.ai/model/small-streaming-${language}/${release}/${file}`);
+    }
+  }
+});
+
 test('an incompatible Moonshine runtime reports the intended model and never falls back', async ({ page, browserName }) => {
   test.skip(browserName === 'webkit', 'WebKit cannot reliably intercept imported module-worker bindings; real model loading is tested separately.');
   const binding = `export const ModelArch = { SmallStreaming: 4 };
       export const Transcriber = {
         loadFromUrls: async (files, options) => {
           if (options.modelArch !== 4 || options.options.vad_threshold !== '0.5'
+            || options.options.max_tokens_per_second !== '13'
             || Object.keys(files).length !== 8
             || !Object.values(files).every(url => url.includes('/small-streaming-ja/quantized_26_08_23/'))) {
             throw new Error('Wrong model configuration');

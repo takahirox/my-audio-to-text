@@ -22,7 +22,7 @@ async function handle(data) {
       try {
         const { Transcriber, ModelArch } = await import('./vendor/moonshine/index.js');
         model = await Transcriber.loadFromUrls(moonshineFiles(language), { modelArch: ModelArch.SmallStreaming,
-          options: { vad_threshold: vadThreshold },
+          options: { ...moonshineModels[language].options, vad_threshold: vadThreshold },
           onProgress: (loaded, total, file) => send('progress', { message: `${file}: ${(loaded / 1e6).toFixed(1)} / ${total ? (total / 1e6).toFixed(1) : '?'} MB` }),
         });
       } catch (error) {

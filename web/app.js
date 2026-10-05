@@ -12,7 +12,7 @@ function describe() {
   $('moonshine-options').hidden = !moonshine;
   const model = moonshineModels[$('language').value];
   $('description').textContent = moonshine
-    ? `@moonshine-ai/moonshine-wasm 0.1.5 API, official v0.1.5 release runtime, WASM SIMD + threads, ${model.name} (ModelArch.SmallStreaming / 4), ${model.release}. Named model-file loader; no fallback. VAD threshold ${$('vad-threshold').value}. Native partial/final events. No automatic language detection.`
+    ? `@moonshine-ai/moonshine-wasm 0.1.5 API, official v0.1.5 release runtime, WASM SIMD + threads, ${model.name} (ModelArch.SmallStreaming / 4), ${model.release}. Named model-file loader; no fallback. max_tokens_per_second=${model.options?.max_tokens_per_second ?? 'upstream default'}. VAD threshold ${$('vad-threshold').value}. Native partial/final events. No automatic language detection.`
     : descriptions[$('backend').value];
   for (const id of ['partial', 'final']) $(id).lang = moonshine ? $('language').value : 'ja';
 }
