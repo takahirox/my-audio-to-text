@@ -1,0 +1,24 @@
+{
+  "issue": 29,
+  "pr": {
+    "number": 30,
+    "url": "https://github.com/takahirox/my-audio-to-text/pull/30",
+    "head_sha": "64317dcf4b44b022719dcbcc242cc43deb7238e5"
+  },
+  "verified_at": "2026-10-05 05:57:33 UTC",
+  "correction": "Updated the live PR description to match docs/evidence/moonshine-29-pr.md: replaced the automatic closing reference with Refs #29 and explicitly kept the Issue open until required post-merge verification is performed and recorded.",
+  "checks": {
+    "live_body_matches_checked_in_description": true,
+    "non_closing_issue_reference": true,
+    "issue_kept_open_until_verification": true,
+    "post_merge_verification_pending": true,
+    "head_unchanged": true,
+    "pr_open_and_unmerged": true
+  },
+  "post_merge_verification": {
+    "pages_deployment": "pending",
+    "published_revision_and_japanese_model_load": "pending"
+  },
+  "publication_instruction": "Preserve the non-closing Refs #29 reference and pending verification language when publishing this checkpoint. Use docs/evidence/moonshine-29-pr.md as the PR body.",
+  "scope": "Only the live PR description was updated. No push, merge, deployment, or ASR implementation changes."
+}
