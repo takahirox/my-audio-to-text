@@ -22,6 +22,8 @@ The Moonshine evaluation improvements in [Issue #25](https://github.com/takahiro
 
 [Issue #31](https://github.com/takahirox/my-audio-to-text/issues/31) adds an explicit [Japanese two-pass experiment](docs/asr-manual-testing.md#japanese-two-pass-experiment-31): Moonshine streams while recording, then ReazonSpeech decodes the same retained audio after Stop. Both transcripts remain separately labeled; this experiment selects no production architecture.
 
+[Issue #33](https://github.com/takahirox/my-audio-to-text/issues/33) adds a separate [ReazonSpeech simulated-streaming comparison](docs/asr-manual-testing.md#reazonspeech-simulated-streaming-comparison-33): the same offline model produces cumulative provisional previews within bounded 10-second windows, then finalizes each window and the Stop tail. The original offline option remains available for comparison.
+
 The [Pages workflow](.github/workflows/pages.yml) prepares pinned runtime assets and deploys `web/` automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. The ASR deployment replaces the static placeholder. Inference runs in the browser; models download from third-party hosts and may use hundreds of MB. No ASR server is required.
 
 For setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the `github-pages` environment and built-in `GITHUB_TOKEN`.

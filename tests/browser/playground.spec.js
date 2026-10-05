@@ -534,7 +534,7 @@ for (const duringSecondPass of [false, true]) {
   });
 }
 
-for (const backend of ['moonshine', 'sherpa', 'whisper']) {
+for (const backend of ['moonshine', 'sherpa', 'sherpa-simulated', 'whisper']) {
   test(`${backend}-only still loads, captures, stops and repeats`, async ({ page }) => {
     await fakeBackend(page); await fakeMicrophone(page);
     await page.context().route('**/sherpa-worker.js', (route) => route.fulfill({
@@ -542,6 +542,10 @@ for (const backend of ['moonshine', 'sherpa', 'whisper']) {
       body: `self.onmessage = ({data}) => {
         if (data.type === 'load') postMessage({type:'ready'});
         if (data.type === 'audio') postMessage({type:'ack',samples:data.audio.length});
+        if (data.type === 'decode') {
+          postMessage({type:data.final ? 'final' : 'partial',text:data.final ? '日本語のテスト' : '日本語の途中',session:data.session});
+          postMessage({type:'decoded',session:data.session});
+        }
         if (data.type === 'stop') { postMessage({type:'final',text:'日本語のテスト'}); postMessage({type:'stopped'}); }
       };`,
     }));
@@ -551,6 +555,7 @@ for (const backend of ['moonshine', 'sherpa', 'whisper']) {
     for (let i = 0; i < 2; i++) {
       await page.locator('#start').click(); await expect(page.locator('#status')).toContainText('Listening');
       await expect(page.locator('#audio')).not.toHaveText('—');
+      if (backend === 'sherpa-simulated') await expect(page.locator('#partial')).toHaveText('日本語の途中');
       await expect(page.locator('#final')).toBeEmpty();
       await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
       await expect(page.locator('#final')).toHaveText('日本語のテスト\n');

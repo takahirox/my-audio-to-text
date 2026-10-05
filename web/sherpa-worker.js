@@ -30,12 +30,12 @@ async function load() {
   }, self.Module);
   if (!recognizer.handle) throw new Error('ReazonSpeech recognizer initialization failed');
 }
-function recognize(audio) {
+function recognize(audio, type = 'final', emitEmpty = false) {
   const stream = recognizer.createStream();
   try {
     stream.acceptWaveform(16000, audio); recognizer.decode(stream);
     const result = recognizer.getResult(stream);
-    if (result.text.trim()) send('final', { text: result.text.trim() });
+    if (emitEmpty || result.text.trim()) send(type, { text: result.text.trim() });
   } finally { stream.free(); }
 }
 async function handle(data) {
@@ -50,6 +50,12 @@ async function handle(data) {
   } else if (data.type === 'stop') {
     const audio = segmenter.flush(); if (audio) recognize(audio);
     send('stopped');
+  } else if (data.type === 'decode') {
+    // Simulated streaming sends one bounded snapshot at a time. The main page
+    // owns buffering/coalescing; this remains the existing offline recognizer.
+    session = data.session;
+    recognize(data.audio, data.final ? 'final' : 'partial', true);
+    send('decoded');
   } else if (data.type === 'utterance') {
     // Two-pass mode sends the complete recording only after Stop, bypassing
     // live segmentation while reusing the same recognizer and stream cleanup.
