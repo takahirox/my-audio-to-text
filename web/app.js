@@ -1,15 +1,15 @@
 import { Microphone, joinAudio } from './audio.js';
 import { moonshineModels } from './moonshine-config.js';
-import { ReazonSimulation } from './reazon-simulation.js';
+import { ReazonSimulation, BUFFER_LIMIT } from './reazon-simulation.js';
 const $ = (id) => document.getElementById(id);
 const descriptions = {
   sherpa: 'sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized). Non-streaming: finals after a pause, every 20 seconds, or Stop. No partials. About 183 MB of runtime/model files.',
-  'sherpa-simulated': 'sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized), same offline model/runtime. Simulated streaming, not native streaming: cumulative provisional text after each additional 1 second of 16 kHz mono audio, with disjoint 10-second windows committed as finals. Stop finalizes the remaining audio. One decode at a time; slow devices skip superseded previews. Capture stops visibly at 30 seconds of buffered audio. About 183 MB of runtime/model files.',
+  'sherpa-simulated': 'sherpa-onnx 1.13.2, Japanese ReazonSpeech Zipformer (quantized), same offline model/runtime. Simulated streaming, not native streaming: Silero VAD utterances with 0.8 seconds of pre-roll, provisional (unstable) previews about every 0.5 seconds of active speech, finals after about 0.35 seconds of silence or 12 seconds of speech. Stop finalizes active speech. One decode at a time; slow devices skip superseded previews. Capture stops visibly at 30 seconds of pending audio. About 183 MB of runtime/model files.',
   whisper: 'Transformers.js 3.8.1, multilingual Whisper tiny q8 on WASM CPU. Non-streaming: finals after a pause, every 20 seconds, or Stop. No partials.',
 };
 let worker, secondWorker, mic, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
 let retainedAudio = [], firstReady = false, secondReady = false;
-let simulation;
+let simulation, vadQueued = 0, simulationStopping = false;
 const twoPass = () => $('backend').value === 'two-pass';
 const simulated = () => $('backend').value === 'sherpa-simulated';
 const streaming = () => ['moonshine', 'two-pass'].includes($('backend').value);
@@ -26,7 +26,7 @@ function describe() {
     ? `@moonshine-ai/moonshine-wasm 0.1.5 API, official v0.1.5 release runtime, WASM SIMD + threads, ${model.name} (ModelArch.SmallStreaming / 4), ${model.release}. Named model-file loader; no fallback. max_tokens_per_second=${model.options?.max_tokens_per_second ?? 'upstream default'}. VAD threshold ${$('vad-threshold').value}. Native partial/final events. No automatic language detection.`
     : descriptions[$('backend').value];
   if (twoPass()) $('description').textContent += ' Japanese-only two-pass experiment: retain the same 16 kHz microphone audio; after Stop, sherpa-onnx 1.13.2 / ReazonSpeech decodes the whole utterance. Both models are loaded; no second-pass inference while recording.';
-  $('partial-heading').textContent = twoPass() ? 'Moonshine streaming transcript (first pass)' : simulated() ? 'Provisional transcript (simulated streaming)' : 'Partial transcript';
+  $('partial-heading').textContent = twoPass() ? 'Moonshine streaming transcript (first pass)' : simulated() ? 'Provisional transcript (unstable, simulated streaming)' : 'Partial transcript';
   $('first-pass-lines').hidden = !twoPass();
   $('final-heading').textContent = twoPass() ? 'ReazonSpeech final transcript (second pass)' : 'Final transcript';
   for (const id of ['partial', 'final']) $(id).lang = moonshine ? $('language').value : 'ja';
@@ -34,7 +34,7 @@ function describe() {
 function diagnostics() {
   $('speech').textContent = streaming()
     ? `${speechStarted} native VAD segment(s) accepted; ${speechCompleted} completed. ${speechStarted ? 'Speech detected.' : 'No speech segment reported.'}`
-    : simulated() ? 'No native VAD: all captured audio is retained in fixed 10-second windows.' : 'Native VAD state unavailable for this backend; all captured audio is retained for segmentation.';
+    : simulated() ? `${speechStarted} Silero VAD utterance(s) accepted; ${speechCompleted} completed. ${speechStarted ? 'Speech detected.' : 'Waiting for speech.'}` : 'Native VAD state unavailable for this backend; all captured audio is retained for segmentation.';
   $('asr-events').textContent = `${partialCount} nonempty partial(s); ${finalCount} nonempty final(s).`;
 }
 const time = (ms) => `${(ms / 1000).toFixed(2)} s`;
@@ -60,7 +60,7 @@ async function release() {
   // Terminate first, so in-flight results cannot repopulate a canceled session.
   worker?.terminate(); worker = null;
   secondWorker?.terminate(); secondWorker = null;
-  simulation = null;
+  simulation = null; vadQueued = 0; simulationStopping = false;
   retainedAudio = []; firstReady = secondReady = false;
   const previousMic = mic; mic = null;
   await previousMic?.stop(); $('level').value = 0;
@@ -80,7 +80,13 @@ function audio(audio) {
   const db = (value) => value > 0 ? `${(20 * Math.log10(value)).toFixed(1)} dBFS` : '−∞ dBFS';
   $('signal').textContent = `RMS ${db(rms)}; session peak RMS ${db(peakRms)}. ${peakRms > 0 ? 'Nonzero microphone signal reached the app (may be noise).' : 'Audio frames received, but signal is zero.'}`;
   if (simulated()) {
-    try { simulation.push(audio); queued = simulation.waiting; }
+    try {
+      if (vadQueued + simulation.waiting + audio.length > BUFFER_LIMIT) {
+        throw new Error('Backend is over 30 seconds behind. Capture stopped; retry with shorter utterances.');
+      }
+      vadQueued += audio.length; queued = vadQueued + simulation.waiting;
+      worker.postMessage({ type: 'vad-audio', audio, session: generation }, [audio.buffer]);
+    }
     catch (error) { void fail(error); return; }
     $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
     return;
@@ -104,14 +110,30 @@ function receive({ data }, second = false) {
   } else if (data.type === 'ack') {
     queued -= data.samples;
     $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
+  } else if (data.type === 'vad' && simulated()) {
+    try {
+      for (const frame of data.frames) {
+        vadQueued -= frame.audio.length;
+        simulation.push(frame.audio, frame.speaking);
+        if (vadQueued + simulation.waiting > BUFFER_LIMIT) {
+          throw new Error('Backend is over 30 seconds behind. Capture stopped; retry with shorter utterances.');
+        }
+      }
+      queued = vadQueued + simulation.waiting;
+    } catch (error) { void fail(error); return; }
+    $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
+  } else if (data.type === 'vad-stopped' && simulated()) {
+    simulation.stop();
   } else if (data.type === 'decoded' && simulated()) {
-    simulation.decoded(); queued = simulation.waiting;
+    simulation.decoded(); queued = vadQueued + simulation.waiting;
     $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
   } else if (data.type === 'speech') {
     if (data.event === 'started') speechStarted++;
     else if (data.event === 'completed') speechCompleted++;
     diagnostics();
   } else if (['partial', 'final'].includes(data.type)) {
+    if (simulated() && data.type === 'partial' &&
+        (simulationStopping || !simulation.acceptsPartial(data.id))) return;
     if (data.text.trim()) {
       if (data.type === 'partial') partialCount++; else finalCount++;
       diagnostics();
@@ -168,9 +190,12 @@ $('start').onclick = async () => {
   const activeWorker = worker, session = ++generation;
   const isCurrent = () => worker === activeWorker && generation === session;
   if (simulated()) {
+    vadQueued = 0; simulationStopping = false;
+    activeWorker.postMessage({ type: 'vad-start', session });
     simulation = new ReazonSimulation(
       (message) => activeWorker.postMessage({ ...message, session }, [message.audio.buffer]),
       () => { if (isCurrent()) receive({ data: { type: 'stopped', session } }); },
+      (event) => { if (isCurrent()) receive({ data: { type: 'speech', event, session } }); },
     );
   } else activeWorker.postMessage({ type: 'start', session });
   mic = new Microphone(
@@ -185,13 +210,14 @@ $('start').onclick = async () => {
 };
 async function stop() {
   if (state !== 'recording') return;
+  if (simulated()) simulationStopping = true;
   stopAt = performance.now(); setState('stopping', 'Finalizing…');
   const previousMic = mic, activeWorker = worker, session = generation; mic = null;
   await previousMic?.stop();
   // Cancel/reload can finish while the old worklet is still flushing.
   if (worker !== activeWorker || generation !== session) return;
   $('level').value = 0;
-  if (simulated()) simulation.stop();
+  if (simulated()) activeWorker.postMessage({ type: 'vad-stop', session });
   else activeWorker.postMessage({ type: 'stop', session });
 }
 $('stop').onclick = () => void stop();

@@ -542,8 +542,11 @@ for (const backend of ['moonshine', 'sherpa', 'sherpa-simulated', 'whisper']) {
       body: `self.onmessage = ({data}) => {
         if (data.type === 'load') postMessage({type:'ready'});
         if (data.type === 'audio') postMessage({type:'ack',samples:data.audio.length});
+        if (data.type === 'vad-start') self.session = data.session;
+        if (data.type === 'vad-audio') postMessage({type:'vad',session:self.session,frames:[{audio:data.audio,speaking:true}]});
+        if (data.type === 'vad-stop') postMessage({type:'vad-stopped',session:self.session});
         if (data.type === 'decode') {
-          postMessage({type:data.final ? 'final' : 'partial',text:data.final ? '日本語のテスト' : '日本語の途中',session:data.session});
+          postMessage({type:data.final ? 'final' : 'partial',text:data.final ? '日本語のテスト' : '日本語の途中',session:data.session,id:data.id});
           postMessage({type:'decoded',session:data.session});
         }
         if (data.type === 'stop') { postMessage({type:'final',text:'日本語のテスト'}); postMessage({type:'stopped'}); }

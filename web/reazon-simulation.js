@@ -1,55 +1,76 @@
 import { joinAudio } from './audio.js';
 
-// ReazonSpeech-only experiment: cumulative 1-second previews of disjoint
-// 10-second windows. Capture continues while one offline decode is in flight.
+const RATE = 16000;
+export const PRE_ROLL = 0.8 * RATE;
+export const PREVIEW_INTERVAL = 0.5 * RATE;
+export const TRAILING_SILENCE = 0.35 * RATE;
+export const MAX_SPEECH = 12 * RATE;
+export const BUFFER_LIMIT = 30 * RATE;
+
+// ReazonSpeech-only policy. Input blocks have already been classified by Silero.
+// Finals take priority; there is no provisional queue, just the latest snapshot.
 export class ReazonSimulation {
-  constructor(send, drained) {
-    this.send = send; this.drained = drained;
-    this.chunks = []; this.length = 0; this.previewLength = 0;
-    this.inFlight = null; this.stopping = false; this.finished = false;
+  constructor(send, drained, speech = () => {}) {
+    this.send = send; this.drained = drained; this.speech = speech;
+    this.preRoll = new Float32Array(); this.active = null; this.nextId = 0;
+    this.finals = []; this.inFlight = null; this.stopping = false; this.finished = false;
   }
-  get waiting() { return this.length + (this.inFlight?.final ? this.inFlight.length : 0); }
-  push(audio) {
-    if (this.waiting + audio.length > 30 * 16000) {
+  get waiting() {
+    return (this.active?.length || 0) + this.finals.reduce((sum, item) => sum + item.audio.length, 0)
+      + (this.inFlight?.final ? this.inFlight.length : 0);
+  }
+  push(audio, speaking) {
+    if (this.stopping || this.finished) return;
+    if (this.waiting + audio.length + (!this.active && speaking ? this.preRoll.length : 0) > BUFFER_LIMIT) {
       throw new Error('Backend is over 30 seconds behind. Capture stopped; retry with shorter utterances.');
     }
-    this.chunks.push(audio); this.length += audio.length;
+    let offset = 0;
+    while (offset < audio.length) {
+      if (!this.active) {
+        if (!speaking) {
+          // Only idle audio enters pre-roll; never repeat a committed boundary.
+          this.preRoll = joinAudio([this.preRoll, audio.subarray(offset)]).slice(-PRE_ROLL);
+          break;
+        }
+        this.active = { id: ++this.nextId, chunks: [this.preRoll], length: this.preRoll.length,
+          duration: 0, silence: 0, previewDuration: 0, speaking: true };
+        this.preRoll = new Float32Array(); this.speech('started');
+      }
+      const item = this.active;
+      const count = Math.min(audio.length - offset, MAX_SPEECH - item.duration,
+        speaking ? Infinity : TRAILING_SILENCE - item.silence);
+      const chunk = audio.slice(offset, offset + count);
+      item.chunks.push(chunk); item.length += count; item.duration += count;
+      item.silence = speaking ? 0 : item.silence + count; item.speaking = speaking;
+      offset += count;
+      if (item.duration === MAX_SPEECH || item.silence === TRAILING_SILENCE) this.finalize();
+    }
     this.pump();
   }
-  snapshot(length, consume) {
-    const chunks = []; let remaining = length;
-    for (const chunk of this.chunks) {
-      if (!remaining) break;
-      const count = Math.min(remaining, chunk.length);
-      chunks.push(chunk.subarray(0, count)); remaining -= count;
-    }
-    const audio = joinAudio(chunks);
-    if (consume) {
-      remaining = length;
-      while (remaining) {
-        const chunk = this.chunks.shift();
-        if (remaining < chunk.length) {
-          this.chunks.unshift(chunk.slice(remaining)); remaining = 0;
-        } else remaining -= chunk.length;
-      }
-      this.length -= length;
-    }
-    return audio;
+  finalize() {
+    if (!this.active) return;
+    this.finals.push({ id: this.active.id, audio: joinAudio(this.active.chunks) });
+    this.active = null; this.speech('completed');
   }
+  acceptsPartial(id) { return !this.stopping && this.active?.id === id; }
   pump() {
     if (this.inFlight || this.finished) return;
-    const final = this.length >= 10 * 16000 || this.stopping;
-    if (!this.length) {
-      if (this.stopping) { this.finished = true; this.drained(); }
+    const final = this.finals.shift();
+    if (final) {
+      this.inFlight = { id: final.id, length: final.audio.length, final: true };
+      this.send({ type: 'decode', ...final, final: true });
       return;
     }
-    if (!final && this.length - this.previewLength < 16000) return;
-    const length = Math.min(this.length, 10 * 16000);
-    const audio = this.snapshot(length, final);
-    this.previewLength = final ? 0 : length;
-    this.inFlight = { length, final };
-    this.send({ type: 'decode', audio, final });
+    const item = this.active;
+    if (this.stopping) {
+      this.finished = true; this.drained(); return;
+    }
+    if (!item?.speaking || item.duration - item.previewDuration < PREVIEW_INTERVAL) return;
+    item.previewDuration = item.duration;
+    const audio = joinAudio(item.chunks);
+    this.inFlight = { id: item.id, length: audio.length, final: false };
+    this.send({ type: 'decode', audio, id: item.id, final: false });
   }
   decoded() { this.inFlight = null; this.pump(); }
-  stop() { this.stopping = true; this.pump(); }
+  stop() { this.stopping = true; this.preRoll = new Float32Array(); this.finalize(); this.pump(); }
 }

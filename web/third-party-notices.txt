@@ -17,6 +17,14 @@ sherpa-onnx 1.13.2 and Japanese ReazonSpeech Zipformer
   License: ./licenses/sherpa-onnx.txt
   Dependencies: https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.2/cmake
 
+Silero VAD (simulated ReazonSpeech mode)
+  https://github.com/snakers4/silero-vad
+  Copyright (c) 2020-present Silero Team. MIT License.
+  Model: silero_vad.onnx already embedded in the pinned sherpa-onnx 1.13.2 archive.
+  Browser wrapper from that same checksum-verified archive; scoped during staging
+  to avoid colliding with ASR's global configuration cleanup helpers.
+  License: ./licenses/silero-vad.txt
+
 Transformers.js 3.8.1 and Xenova/whisper-tiny
   https://github.com/huggingface/transformers.js/tree/3.8.1
   https://huggingface.co/Xenova/whisper-tiny/tree/5332fcc35e32a33b86612b9a57a89be7906102b1
