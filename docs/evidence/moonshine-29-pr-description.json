@@ -1,0 +1,74 @@
+{
+  "issue": 29,
+  "pr": {
+    "number": 30,
+    "url": "https://github.com/takahirox/my-audio-to-text/pull/30",
+    "head_sha": "895d740889611ae81afda1f6ddaca8bb9ff70ba6"
+  },
+  "verified_at": "2026-10-05 06:27:50 UTC",
+  "source_issue": {
+    "url": "https://github.com/takahirox/my-audio-to-text/issues/29",
+    "state": "OPEN",
+    "implementation_and_pre_merge_criteria": "unchanged",
+    "required_post_merge_verification": "None"
+  },
+  "correction": "Prepared the PR body and corrected PR-specific documentation to match the current Issue: deployment and published-model checks are no longer required pending work for #29. Their unperformed status is preserved as historical evidence.",
+  "checks": {
+    "implementation_and_pr_base_diff_reviewed": true,
+    "japanese_token_rate_forwarded_to_runtime": true,
+    "model_runtime_and_vad_preserved": true,
+    "current_pre_merge_acceptance_satisfied": true,
+    "live_body_matches_checked_in_description": false,
+    "pr_open_and_unmerged": true
+  },
+  "local_validation": {
+    "npm test": {
+      "passed": 4,
+      "failed": 0
+    },
+    "npm run test:browser -- --reporter=line": {
+      "passed": 20,
+      "skipped": 30,
+      "failed": 0,
+      "skip_reasons": "28 opt-in real model tests lack recordings; WebKit skips two module-worker interception tests."
+    },
+    "npm run prepare:assets": "passed; unchanged Pages workflow uses this pinned asset preparation script",
+    "git diff --check": "passed"
+  },
+  "post_merge_verification": {
+    "required": "None",
+    "historical_unperformed_checks": {
+      "pages_deployment": "not performed; requirement superseded",
+      "published_revision_and_japanese_model_load": "not performed; requirement superseded"
+    }
+  },
+  "publication_instruction": "Update existing PR #30 using docs/evidence/moonshine-29-pr.md as its full body. Keep Closes #29 and Required post-merge verification: None. The superseded historical report below is not current publication guidance. Ordinary review determines merge readiness.",
+  "scope": "Only PR-specific tracked documentation/evidence was corrected in this worktree. No live PR edit, push, merge, deployment, implementation/test change, or repository-wide policy change.",
+  "historical_report": {
+    "status": "Superseded snapshot from before the Issue changed to required post-merge verification: None. Its instructions and pending requirements do not apply to current acceptance or publication.",
+    "record": {
+      "issue": 29,
+      "pr": {
+        "number": 30,
+        "url": "https://github.com/takahirox/my-audio-to-text/pull/30",
+        "head_sha": "64317dcf4b44b022719dcbcc242cc43deb7238e5"
+      },
+      "verified_at": "2026-10-05 05:57:33 UTC",
+      "correction": "Updated the live PR description to match docs/evidence/moonshine-29-pr.md: replaced the automatic closing reference with Refs #29 and explicitly kept the Issue open until required post-merge verification is performed and recorded.",
+      "checks": {
+        "live_body_matches_checked_in_description": true,
+        "non_closing_issue_reference": true,
+        "issue_kept_open_until_verification": true,
+        "post_merge_verification_pending": true,
+        "head_unchanged": true,
+        "pr_open_and_unmerged": true
+      },
+      "post_merge_verification": {
+        "pages_deployment": "pending",
+        "published_revision_and_japanese_model_load": "pending"
+      },
+      "publication_instruction": "Preserve the non-closing Refs #29 reference and pending verification language when publishing this checkpoint. Use docs/evidence/moonshine-29-pr.md as the PR body.",
+      "scope": "Only the live PR description was updated. No push, merge, deployment, or ASR implementation changes."
+    }
+  }
+}
