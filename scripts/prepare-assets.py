@@ -43,7 +43,7 @@ def main():
                         continue
                     relative = Path(*path.parts[1:])
                 else:
-                    if path.name not in {"sherpa-onnx-asr.js", "sherpa-onnx-wasm-main-vad-asr.js",
+                    if path.name not in {"sherpa-onnx-asr.js", "sherpa-onnx-vad.js", "sherpa-onnx-wasm-main-vad-asr.js",
                                          "sherpa-onnx-wasm-main-vad-asr.wasm", "sherpa-onnx-wasm-main-vad-asr.data"}:
                         continue
                     relative = Path(path.name)
@@ -51,7 +51,12 @@ def main():
                     raise RuntimeError("Unsafe archive path")
                 destination = target / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(package.extractfile(member).read())
+                content = package.extractfile(member).read()
+                if name == "sherpa" and path.name == "sherpa-onnx-vad.js":
+                    # Both upstream wrappers define freeConfig globally. Isolate VAD's
+                    # helpers so ASR configuration cleanup keeps its original function.
+                    content = b"(function () {\n" + content + b"\nself.createVad = createVad;\n})();\n"
+                destination.write_bytes(content)
         size = sum(p.stat().st_size for p in target.rglob("*") if p.is_file())
         print(f"Staged {name}: {size / 1_000_000:.1f} MB", flush=True)
     (ROOT / "web" / "vendor" / "manifest.json").write_text(json.dumps({

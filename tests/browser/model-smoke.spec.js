@@ -145,3 +145,40 @@ for (const entry of evaluations) {
     }
   });
 }
+
+// Opt-in pinned Silero + ReazonSpeech integration through the actual page policy.
+// ASR_TEST_VAD alone uses deterministic silence, with no external ASR downloads.
+test('ReazonSpeech simulated: real Silero runtime, Stop and repeat', async ({ page }) => {
+  test.skip(!process.env.ASR_TEST_WAV && !process.env.ASR_TEST_VAD, 'Set ASR_TEST_VAD=1 (silence) or ASR_TEST_WAV (Japanese speech).');
+  test.setTimeout(240000);
+  const samples = process.env.ASR_TEST_WAV ? readWav(process.env.ASR_TEST_WAV) : Array(16037).fill(0);
+  await page.goto('./'); await expect(page.locator('#load')).toBeEnabled();
+  await page.evaluate(async () => {
+    const { Microphone } = await import('./audio.js');
+    Microphone.prototype.start = async function () { window.feedSmoke = chunk => this.onAudio(chunk); };
+    Microphone.prototype.stop = async function () {};
+  });
+  await page.locator('#backend').selectOption('sherpa-simulated');
+  await expect(page.locator('#load')).toBeEnabled(); await page.locator('#load').click();
+  await expect(page.locator('#start')).toBeEnabled({ timeout: 120000 });
+  for (let repeat = 0; repeat < 2; repeat++) {
+    await page.locator('#start').click();
+    // Yield between microphone callbacks; VAD and ASR share the worker. The page
+    // retains its normal backlog cap, session checks and coalescing policy.
+    await page.evaluate(async samples => {
+      for (let offset = 0; offset < samples.length; offset += 2048) {
+        window.feedSmoke(Float32Array.from(samples.slice(offset, offset + 2048)));
+        await new Promise(resolve => setTimeout(resolve, 16));
+      }
+    }, samples);
+    await page.locator('#stop').click();
+    await expect(page.locator('#status')).toContainText('Stopped', { timeout: 120000 });
+    await expect(page.locator('#errors')).toBeEmpty();
+    if (process.env.ASR_TEST_WAV) await expect(page.locator('#final')).toContainText(/[\u3040-\u30ff\u4e00-\u9fff]/);
+    else {
+      await expect(page.locator('#final')).toBeEmpty();
+      await expect(page.locator('#speech')).toContainText('0 Silero VAD utterance(s)');
+    }
+    await expect(page.locator('#audio')).toContainText('/ 0.0 s');
+  }
+});

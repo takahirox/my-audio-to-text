@@ -90,64 +90,96 @@ restrict service workers or model caches.
 | --- | --- | --- |
 | Moonshine Voice | `@moonshine-ai/moonshine-wasm` 0.1.5, Japanese/English Small Streaming, native `Stream` API; official v0.1.5 release WASM runtime | Incremental partials and completed lines emitted by the runtime; native speech detection |
 | sherpa-onnx | 1.13.2 SIMD WASM, quantized Japanese ReazonSpeech Zipformer 2024-08-01 | Segment finals; no native partials |
-| sherpa-onnx (simulated streaming) | Same offline ReazonSpeech model/runtime and 16 kHz mono capture | Cumulative provisional previews; disjoint 10-second window finals and a final tail on Stop |
+| sherpa-onnx (simulated streaming) | Same offline ReazonSpeech model/runtime and 16 kHz mono capture | Unstable utterance previews; Silero VAD pause/12-second finals and active speech flushed on Stop |
 | Whisper | Transformers.js 3.8.1, `Xenova/whisper-tiny` multilingual q8, revision `5332fcc35e32a33b86612b9a57a89be7906102b1`, WASM CPU, one thread | Segment finals; no native partials |
 | Moonshine + ReazonSpeech | Existing Japanese Small Streaming and Japanese ReazonSpeech configurations | Moonshine streaming text; ReazonSpeech final only after Stop |
 
 ### ReazonSpeech simulated-streaming comparison (#33)
 
 Select **sherpa-onnx — Japanese ReazonSpeech (simulated streaming)** and load the model.
-This is simulated streaming around the existing offline model, with no native streaming
-or VAD. The original ReazonSpeech option retains its pause/20-second/Stop policy.
+[Issue #35](https://github.com/takahirox/my-audio-to-text/issues/35) replaces #33's fixed
+10-second windows with the focused utterance policy inspired by
+[hayamimi](https://github.com/oboroge0/hayamimi). The ReazonSpeech model, recognizer
+configuration and WASM runtime are unchanged. The original offline option retains its
+pause/20-second/Stop policy and does not initialize VAD.
 
-The new option decodes a cumulative snapshot of the current window after each additional
-second (16,000 samples) of captured audio. Provisional text replaces the previous preview;
-it can change as more context arrives. At 10 seconds, that window is decoded as a final,
-appended once, and its provisional text is cleared. Subsequent windows do not overlap.
-Fixed boundaries can split words and lose context; this deliberately simple experiment
-does not claim the quality of whole-utterance recognition. Quiet audio is retained too.
+Silero VAD and its ONNX model are already included in the checksum-pinned sherpa 1.13.2
+WASM distribution. Asset preparation now stages its small JavaScript wrapper and scopes
+its helpers to avoid overwriting ASR's `freeConfig`. No additional runtime or model
+download is needed. The VAD model's MIT notice is included with the existing notices.
 
-Only one decode is in flight. While it runs, capture buffers audio locally, and superseded
-preview opportunities are skipped. Completed windows take priority over previews. Each
-decode covers at most 10 seconds; up to 30 seconds of uncommitted source audio is retained
-(including a final window in flight), plus the in-flight snapshot of at most 10 seconds.
-Exceeding that source buffer limit reports an error, stops capture, and terminates the worker.
-This bounds work and memory even if inference cannot keep up; the interval is an audio
-policy, not a promise of one visible update per wall-clock second.
+At 16 kHz mono, Silero classifies 512-sample (32 ms) frames at threshold 0.5. The worker
+retains fewer than 512 samples between microphone callbacks. Stop pads the last short
+frame only for classification; ASR receives its original samples, without padding.
+Silero uses minimal onset/offset hold times (one sample), with its built-in hysteresis:
+onset and offset decisions can lag by a frame. The page implements the utterance policy:
 
-**Stop** flushes the microphone's last block, waits for the current decode, then commits
-all buffered windows and the short remaining tail. Start stays disabled until this drains.
-**Cancel** terminates the worker, discards buffered audio, and clears the experiment's
-transcripts. Repeat creates fresh buffer/session state; switching releases the old worker.
+- Keep at most 12,800 samples (0.8 seconds) of idle pre-roll. On speech onset, prepend
+  the available pre-roll to the utterance. Silence alone never creates an utterance.
+- While speaking, make a cumulative preview eligible after each additional 8,000
+  samples (0.5 seconds) from onset, excluding pre-roll. At 32 ms frame resolution the
+  first opportunity is normally 0.512 seconds after detection. Provisional text is
+  explicitly labeled unstable, replaces earlier text, and may change with more context.
+- Finalize after 5,600 samples (0.35 seconds) classified as trailing silence, including
+  that audio in the final. Detection has 32 ms resolution plus Silero's offset latency;
+  this is approximately 0.4 seconds after a clear pause, before ASR inference time.
+- Force-finalize 192,000 samples (12 seconds) after onset, excluding pre-roll. Split an
+  input frame exactly when necessary. A continuing utterance starts at the next sample,
+  with no repeated pre-roll, so forced boundaries lose or duplicate no audio.
 
-Run the deterministic browser coverage without downloading models:
+Only one ReazonSpeech decode is in flight. There is no queue of previews: inference
+completion uses the latest eligible active snapshot, and completed utterances take
+priority. A result from a preview of an ended utterance cannot repopulate the provisional
+transcript. Finals use the complete utterance, including its pre-roll and trailing audio;
+a final is at most 12.8 seconds. Pre-roll after a committed endpoint contains only new
+idle audio, avoiding overlap with the preceding final.
+
+VAD and synchronous offline ASR run sequentially in the same worker. This keeps the
+existing WASM/model allocation and keeps inference off the UI thread. Slow inference
+also delays VAD processing; the interval is an audio eligibility policy, not a guarantee
+of visible wall-clock updates. Pending VAD audio, active utterances, pending finals, and
+the final in flight share a 30-second cap. The bounded idle pre-roll and one provisional
+snapshot (at most 12.8 seconds) are additional. Exceeding the cap reports an error, stops
+capture, and terminates the worker. Native VAD segment storage is flushed/cleared after
+each frame, without resetting Silero's recurrent/threshold state; the page owns ASR audio.
+
+**Stop** flushes the microphone and VAD tails, waits for in-flight decoding, and commits
+all completed and active utterances. Idle pre-roll is discarded. Start remains disabled
+until this drains. **Cancel** terminates the worker, discards pending audio, and clears
+the experiment's transcripts. Repeat resets VAD/buffers/session state. Backend switching
+releases the worker. Session checks reject stale VAD, transcript, and completion messages.
+
+Run deterministic unit and Chromium/WebKit coverage without model downloads:
 
 ```sh
+npm ci
 npm test
-npm run test:browser -- tests/browser/reazon-simulated.spec.js
+npm run test:browser -- --workers=2
 ```
 
-Both Chromium and WebKit check previews before Stop, cumulative replacement, window
-commit/preview clearing, the microphone flush tail, Stop drainage behind held inference,
-preview coalescing, the 30-second cap, empty audio/text, decode failure, repeated recording,
-Cancel during recording/finalization, and rejection of stale results after reload/switching.
-Tests inject deterministic audio at the microphone callback and controlled workers, or the
-actual sherpa worker with only WASM initialization replaced by a controlled recognizer.
-The latter checks 16 kHz input, stream cleanup, and unchanged offline segmentation.
-Unit coverage compares every final audio sample across arbitrary 2,048-sample boundaries.
-The existing browser suite separately exercises real Web Audio capture/resampling and all
-other modes. These checks establish lifecycle/policy behavior, not real-model speech quality.
+Policy tests compare every final sample across arbitrary 2,048-sample boundaries and
+verify silence, available pre-roll, preview eligibility/coalescing, pause reset/endpoints,
+12-second finals, exact boundary continuity, Stop, and the backlog limit. Browser tests
+exercise the actual worker with controlled Silero/recognizer fixtures, including VAD frame
+and Stop tails, stale ended previews, Cancel/reload/repeat/switching, empty recognition,
+stream cleanup/errors, and unchanged offline segmentation. The existing suite checks
+Moonshine, two-pass, Whisper, and actual Web Audio capture/resampling.
 
-Local validation on 2026-10-05: `npm test` passed all 6 unit checks;
-`npm run test:browser -- --workers=2` passed 56 checks across Chromium and WebKit,
-including simulated-streaming previews/Stop/repeat through real Web Audio capture with a
-generated oscillator and controlled recognition. There were 34 skips: 30 opt-in real-model
-WAV checks without supplied recordings and 4 existing WebKit imported-binding fixtures.
-No real-model latency, human microphone comparison, or deployment is claimed by this run.
+Opt-in checks use the pinned real runtime, with generated silence or a supplied Japanese
+16 kHz mono PCM WAV. Run asset staging first:
 
-Optionally compare the two ReazonSpeech modes with the same Japanese utterance and record
-first-text time, update frequency/stability, final text, responsiveness, and buffer behavior.
-Real-model/human latency observations are optional, and no post-merge verification is required.
+```sh
+npm run prepare:assets
+ASR_TEST_VAD=1 npm run test:browser -- tests/browser/model-smoke.spec.js --grep 'ReazonSpeech simulated'
+ASR_TEST_WAV=/absolute/path/japanese.wav npm run test:browser -- tests/browser/model-smoke.spec.js --grep 'ReazonSpeech simulated'
+```
+
+The silence check verifies actual Silero initialization, frame processing, Stop/repeat,
+no committed silence, and no runtime errors. The WAV check also expects Japanese final
+text. Neither is a subjective accuracy comparison. Optional manual comparison can record
+first-preview latency, update frequency, clipped beginnings, pause latency, offline versus
+simulated recognition, long speech behavior, responsiveness, and thermal behavior.
+No post-merge verification is required for #35.
 
 ### Japanese two-pass experiment (#31)
 
