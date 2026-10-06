@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { REAZON_NUM_THREADS } from '../../web/reazon-config.js';
 
-async function configuration(page, { backend, requested, cores = 16, shared = true } = {}) {
+async function configuration(page, { requested, cores = 16, shared = true } = {}) {
   // Stub native initialization inside the actual worker, so both browsers run
   // its real load/configuration path without importScripts interception.
   const source = readFileSync(new URL('../../web/sherpa-worker.js', import.meta.url), 'utf8');
@@ -21,7 +21,7 @@ async function configuration(page, { backend, requested, cores = 16, shared = tr
       };`,
   }));
   await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
-  return page.evaluate(async ({ backend, requested }) => {
+  return page.evaluate(async ({ requested }) => {
     const worker = new Worker('./sherpa-worker.js'), events = [];
     try {
       await new Promise((resolve, reject) => {
@@ -30,29 +30,24 @@ async function configuration(page, { backend, requested, cores = 16, shared = tr
           events.push(data);
           if (['ready', 'error'].includes(data.type)) resolve();
         };
-        worker.postMessage({ type: 'load', backend, numThreads: requested });
+        worker.postMessage({ type: 'load', numThreads: requested });
       });
       return events;
     } finally { worker.terminate(); }
-  }, { backend, requested });
+  }, { requested });
 }
 
-for (const backend of ['sherpa', 'sherpa-simulated', 'sherpa-ja-en-simulated', undefined]) {
-  test(`selected thread count reaches ${backend ?? 'two-pass second stage'} recognizer`, async ({ page }) => {
-    const events = await configuration(page, { backend });
-    expect(events.some(e => e.type === 'ready'), JSON.stringify(events)).toBe(true);
-    expect(events.find(e => e.type === 'test-config').config.modelConfig.numThreads).toBe(REAZON_NUM_THREADS);
-    expect(events.find(e => e.type === 'configuration').numThreads).toBe(REAZON_NUM_THREADS);
-    const bilingual = backend === 'sherpa-ja-en-simulated';
-    expect(events.find(e => e.type === 'configuration').model).toBe(bilingual ? 'ja-en' : 'ja');
-    const assets = events.find(e => e.type === 'test-assets');
-    const directory = bilingual ? '/vendor/sherpa-ja-en/' : '/vendor/sherpa/';
-    for (const url of [...assets.scripts, assets.wasm, assets.data]) expect(new URL(url).pathname).toContain(directory);
-    expect(events.find(e => e.type === 'test-config').config.modelConfig.transducer).toEqual({
-      encoder: './transducer-encoder.onnx', decoder: './transducer-decoder.onnx', joiner: './transducer-joiner.onnx',
-    });
+test('selected thread count and Japanese assets reach the baseline recognizer', async ({ page }) => {
+  const events = await configuration(page);
+  expect(events.some(e => e.type === 'ready'), JSON.stringify(events)).toBe(true);
+  expect(events.find(e => e.type === 'test-config').config.modelConfig.numThreads).toBe(REAZON_NUM_THREADS);
+  expect(events.find(e => e.type === 'configuration')).toMatchObject({ numThreads: REAZON_NUM_THREADS, model: 'ja' });
+  const assets = events.find(e => e.type === 'test-assets');
+  for (const url of [...assets.scripts, assets.wasm, assets.data]) expect(new URL(url).pathname).toContain('/vendor/sherpa/');
+  expect(events.find(e => e.type === 'test-config').config.modelConfig.transducer).toEqual({
+    encoder: './transducer-encoder.onnx', decoder: './transducer-decoder.onnx', joiner: './transducer-joiner.onnx',
   });
-}
+});
 for (const requested of [1, 2, 4]) {
   test(`benchmark request for ${requested} thread(s) reaches recognizer`, async ({ page }) => {
     const events = await configuration(page, { requested });

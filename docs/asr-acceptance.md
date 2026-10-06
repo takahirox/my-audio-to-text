@@ -1,4 +1,6 @@
-# Issue #18 publication and acceptance status
+# Historical Issue #18 publication and acceptance status
+
+This document records the completed comparison experiment at its historical revisions. Its backend choices and testing instructions are superseded by the [current Japanese ReazonSpeech baseline instructions](asr-manual-testing.md). Removed experiments remain recoverable from Git history.
 
 ## Maintainer decision
 
@@ -66,7 +68,7 @@ These durations include this desktop environment's loading conditions and are no
 
 Fill in actual human results from the deployed reviewed commit. Leave missing evidence as
 `not tested`. Include device and OS/browser versions, utterance, transcripts, timings, and
-errors using the [manual results template](asr-manual-testing.md#results-to-carry-into-a-separate-backend-selection-issue).
+errors using the [manual results template](asr-manual-testing.md#manual-check-and-results-template).
 
 | Required evidence | Status |
 | --- | --- |

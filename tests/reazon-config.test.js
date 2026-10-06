@@ -1,20 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { REAZON_NUM_THREADS, supportedReazonThreads, selectReazonThreads, selectReazonModel, isReazonSimulated } from '../web/reazon-config.js';
-
-test('bilingual comparison selects distinct assets while all existing ReazonSpeech modes keep Japanese', () => {
-  const japanese = selectReazonModel('sherpa');
-  assert.equal(japanese.assets, './vendor/sherpa/');
-  assert.equal(japanese.id, 'ja');
-  for (const backend of ['sherpa-simulated', undefined]) assert.equal(selectReazonModel(backend), japanese);
-  const bilingual = selectReazonModel('sherpa-ja-en-simulated');
-  assert.equal(bilingual.id, 'ja-en');
-  assert.equal(bilingual.assets, './vendor/sherpa-ja-en/');
-  for (const backend of ['sherpa-simulated', 'sherpa-ja-en-simulated']) assert.equal(isReazonSimulated(backend), true);
-  for (const backend of ['moonshine', 'two-pass', 'whisper', 'sherpa', undefined]) assert.equal(isReazonSimulated(backend), false);
-  assert.throws(() => selectReazonModel('misspelled-backend'), /Unsupported ReazonSpeech backend/);
-});
+import { REAZON_NUM_THREADS, supportedReazonThreads, selectReazonThreads } from '../web/reazon-config.js';
 
 const desktop = { hardwareConcurrency: 16, crossOriginIsolated: true, sharedMemory: true };
 test('ReazonSpeech selection stays within browser cores and the pinned runtime pool', () => {

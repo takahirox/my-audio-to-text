@@ -88,7 +88,7 @@ itself is unchanged. There is no thread-count UI; Silero VAD still uses one thre
 
 ## Reproduction and validation
 
-See the [executable benchmark commands](../asr-manual-testing.md#reazonspeech-inference-threading-38).
+See the [executable benchmark commands](https://github.com/takahirox/my-audio-to-text/blob/a05dc1558318c9b3ca0ba6c7c5fc8fded1e18e64/docs/asr-manual-testing.md#reazonspeech-inference-threading-38).
 The recorded run used a worktree-local header-enabled server on a free loopback port:
 
 ```sh

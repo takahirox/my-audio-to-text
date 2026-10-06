@@ -23,25 +23,6 @@ export function joinAudio(chunks) {
   return result;
 }
 
-// A deliberately simple, visible segmentation policy for both offline models.
-// Retain all audio, including quiet speech; never gate recording on loudness.
-export class Segmenter {
-  constructor() { this.reset(); }
-  reset() { this.chunks = []; this.length = 0; this.silence = 0; this.speech = false; }
-  push(chunk) {
-    this.chunks.push(chunk); this.length += chunk.length;
-    const rms = Math.sqrt(chunk.reduce((sum, value) => sum + value * value, 0) / chunk.length);
-    if (rms >= 0.008) { this.speech = true; this.silence = 0; }
-    else this.silence += chunk.length;
-    if ((this.speech && this.silence >= 12800) || this.length >= 320000) return this.flush();
-    return null;
-  }
-  flush() {
-    const result = this.length ? joinAudio(this.chunks) : null;
-    this.reset(); return result;
-  }
-}
-
 export class Microphone {
   constructor(onAudio, onEnded) { this.onAudio = onAudio; this.onEnded = onEnded; }
   async start() {

@@ -44,7 +44,7 @@ Whisper, including generated Web Audio capture and resampling.
 Silero decisions have 32 ms frame resolution and minimal onset/offset hold times. VAD
 and ASR share the worker, so a slow offline decode delays speech detection as well as
 visible provisional/final results. The source audio remains bounded while it waits.
-See the [policy and reproducible commands](../asr-manual-testing.md#reazonspeech-simulated-streaming-comparison-33).
+See the [policy and reproducible commands](https://github.com/takahirox/my-audio-to-text/blob/a05dc1558318c9b3ca0ba6c7c5fc8fded1e18e64/docs/asr-manual-testing.md#reazonspeech-simulated-streaming-comparison-33).
 
 Japanese real-model recognition/accuracy, human microphone comparisons, physical mobile
 performance, and deployment were not tested. A Japanese WAV integration test is available
