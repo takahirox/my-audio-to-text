@@ -94,7 +94,7 @@ test('real ja-en model recognizes Japanese, English and mixed speech through the
     };
     Microphone.prototype.stop = async function () {};
   });
-  await expect(page.locator('select')).toHaveCount(0);
+  await expect(page.locator('select:not(#source)')).toHaveCount(0);
   for (const id of ['partial', 'final']) await expect(page.locator(`#${id}`)).toHaveAttribute('lang', '');
   await expect(page.locator('#description')).toContainText('epoch 35');
   await page.locator('#load').click();
@@ -121,7 +121,7 @@ test('real ja-en model recognizes Japanese, English and mixed speech through the
     if (fixture.name.includes('English')) expect(text).toMatch(/[a-z]/i);
     await expect(page.locator('#partial')).toBeEmpty();
     await expect(page.locator('#audio')).toContainText('/ 0.0 s');
-    await expect(page.locator('select')).toHaveCount(0);
+    await expect(page.locator('select:not(#source)')).toHaveCount(0);
     await expect(page.locator('#errors')).toBeEmpty();
     results.push({ name: fixture.name, source: fixture.path, sha256: fixture.sha256, samples: samples.length, transcript: text });
   }

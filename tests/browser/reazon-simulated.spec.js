@@ -147,7 +147,7 @@ test.describe('ReazonSpeech ja-en baseline', () => {
 
     test('half-second provisional text, final worklet tail and repeat use the real worker paths', async ({ page }) => {
       await setup(page);
-      await expect(page.locator('select')).toHaveCount(0);
+      await expect(page.locator('select:not(#source)')).toHaveCount(0);
       await expect(page.locator('#description')).toContainText('not native streaming');
       await expect(page.locator('#description')).toContainText('Silero');
       await expect(page.locator('#partial-heading')).toContainText('unstable');

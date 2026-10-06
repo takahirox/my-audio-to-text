@@ -16,7 +16,7 @@ Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox
 
 The retained hayamimi-inspired path uses 0.8-second pre-roll, provisional recognition about every 0.5 seconds of active speech, a 0.35-second trailing-silence endpoint, and a 12-second maximum utterance duration. Stop finalizes active speech. Silero VAD and ASR run in separate workers; inference is serialized, superseded previews are coalesced, and pending audio is bounded at 30 seconds. ReazonSpeech uses the evidence-based one-thread default from [Issue #38](docs/evidence/reazon-38.md).
 
-The microphone feeds normalized PCM into the documented [local ASR core boundary](docs/local-asr-core.md); capture/resampling stays outside recognition orchestration.
+Microphone or browser-tab audio feeds normalized PCM into the documented [local ASR core boundary](docs/local-asr-core.md); capture/resampling stays outside recognition orchestration. For tab audio, use a desktop Chromium browser and choose a tab with “Share tab audio” enabled in the browser sharing picker.
 
 See [setup, testing, and limitations](docs/asr-manual-testing.md). Automated Chromium/WebKit checks cover loading, provisional/final output, Stop, Cancel, repeat, worker isolation, and stale-result rejection. The [Issue #45 validation record](docs/evidence/reazon-45.md) records the current local checks. The [historical acceptance record](docs/asr-acceptance.md) and [experiment evidence](docs/evidence/) preserve completed comparisons and publication observations; they are not instructions for the current baseline.
 

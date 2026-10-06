@@ -38,7 +38,7 @@ core. Worker/pipeline errors release both workers before emitting `error`.
 
 Stop accepts no more PCM after the call, suppresses pending provisional results,
 waits for VAD's final short frame, and emits `stopped` only after all finals drain.
-The browser app first stops/flushes its microphone, then calls `core.stop()`.
+The browser app first stops/flushes its selected audio source, then calls `core.stop()`.
 The app suppresses provisional display while the source is flushing. Cancel and
 page teardown call `release()` immediately, then release capture separately.
 Capture callbacks carry their own session guard so a canceled source cannot feed
@@ -85,8 +85,28 @@ isolation, input backpressure, Stop/draining, and release/error handling.
 `ReazonSimulation` is its internal utterance policy: finals take priority over
 the latest eligible preview, with one decode in flight. The workers own only
 runtime loading, VAD classification, and individual offline decodes.
-`web/app.js` owns source lifetime, UI state, microphone signal and elapsed-time
+`web/app.js` owns source lifetime, UI state, audio signal and elapsed-time
 diagnostics, and rendering the recognition events.
+
+## Browser audio sources
+
+`web/audio.js` exports `Microphone` and `BrowserTab`, which share Web Audio
+capture and resampling. Each accepts `onAudio(pcm)` and `onEnded()` callbacks.
+`start()` requests permission directly from the Start gesture. `stop()` stops
+all capture tracks, flushes the worklet and resampler tails, disconnects nodes,
+and closes the context. `stop(false)` discards tails for Cancel, source switching,
+errors and teardown. Cancellation is checked after asynchronous permission and
+worklet initialization so a late stream cannot resurrect a released source.
+The app retains the source while Stop flushes so Cancel can interrupt cleanup.
+
+`BrowserTab` uses `getDisplayMedia()` with audio and required video, suggesting
+a browser tab and excluding system/window audio in browsers that support those
+hints. The native picker always owns selection and permission. Only audio tracks
+enter Web Audio; video is neither rendered nor recorded, and is released with
+the audio. Both audio and video track ending finalize recognition. A missing
+audio track fails with guidance to choose a tab and enable audio sharing.
+Tab capture continues when the playground loses visibility; microphone capture
+retains its existing stop-on-hide behavior.
 
 ## Executable verification
 

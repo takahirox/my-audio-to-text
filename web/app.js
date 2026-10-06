@@ -1,7 +1,7 @@
-import { Microphone } from './audio.js';
+import { Microphone, BrowserTab } from './audio.js';
 import { LocalAsrCore } from './local-asr-core.js';
 const $ = (id) => document.getElementById(id);
-let core, mic, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
+let core, source, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
 let firstText = false, firstPartial = false, peakRms = 0, speechStarted = 0, speechCompleted = 0, partialCount = 0, finalCount = 0;
 function diagnostics() {
   $('speech').textContent = `${speechStarted} Silero VAD utterance(s) accepted; ${speechCompleted} completed. ${speechStarted ? 'Speech detected.' : 'Waiting for speech.'}`;
@@ -14,6 +14,7 @@ function setState(next, message) {
   $('start').disabled = state !== 'ready';
   $('stop').disabled = state !== 'recording';
   $('cancel').disabled = !core;
+  $('source').disabled = ['booting', 'loading', 'unavailable'].includes(state);
 }
 function resetOutput() {
   for (const id of ['init', 'first-partial', 'first-text', 'latency', 'audio']) $(id).textContent = '—';
@@ -26,8 +27,10 @@ async function release() {
   generation++;
   core?.release(); core = null;
   $('reazon-model').textContent = '—';
-  const previousMic = mic; mic = null;
-  await previousMic?.stop(); $('level').value = 0;
+  const previousSource = source; source = null;
+  try { await previousSource?.stop(false); }
+  catch (error) { $('errors').textContent += `${new Date().toISOString()} Audio capture cleanup: ${error.message || error}\n`; }
+  $('level').value = 0;
 }
 async function fail(error) {
   setState('booting', 'Releasing after error…');
@@ -41,7 +44,7 @@ function audio(audio) {
   const rms = Math.sqrt(audio.reduce((sum, sample) => sum + sample * sample, 0) / audio.length);
   peakRms = Math.max(peakRms, rms); $('level').value = rms;
   const db = (value) => value > 0 ? `${(20 * Math.log10(value)).toFixed(1)} dBFS` : '−∞ dBFS';
-  $('signal').textContent = `RMS ${db(rms)}; session peak RMS ${db(peakRms)}. ${peakRms > 0 ? 'Nonzero microphone signal reached the app (may be noise).' : 'Audio frames received, but signal is zero.'}`;
+  $('signal').textContent = `RMS ${db(rms)}; session peak RMS ${db(peakRms)}. ${peakRms > 0 ? `Nonzero ${$('source').value === 'tab' ? 'tab audio' : 'microphone'} signal reached the app (may be noise).` : 'Audio frames received, but signal is zero.'}`;
   core.push(audio);
   audioDiagnostics();
 }
@@ -54,7 +57,7 @@ function receive(data) {
   else if (data.type === 'progress') $('progress').textContent = data.message;
   else if (data.type === 'ready') {
     $('init').textContent = time(performance.now() - loadAt);
-    $('progress').textContent = 'Model loaded.'; setState('ready', 'Ready. Tap Start microphone.');
+    $('progress').textContent = 'Model loaded.'; setState('ready', 'Ready. Choose an audio source and tap Start.');
   } else if (data.type === 'diagnostics') {
     queued = data.pendingSamples; audioDiagnostics();
   } else if (data.type === 'speech') {
@@ -91,40 +94,44 @@ $('load').onclick = async () => {
   } catch (error) { await fail(error); }
 };
 $('start').onclick = async () => {
-  setState('starting', 'Requesting microphone…');
+  const tab = $('source').value === 'tab';
+  setState('starting', tab ? 'Choose a browser tab and share its audio…' : 'Requesting microphone…');
   const init = $('init').textContent; resetOutput(); $('init').textContent = init;
   const activeCore = core, session = ++generation;
   const isCurrent = () => core === activeCore && generation === session;
   core.start();
   if (!isCurrent()) return;
-  mic = new Microphone(
+  source = new (tab ? BrowserTab : Microphone)(
     (chunk) => { if (isCurrent()) audio(chunk); },
     () => { if (isCurrent()) void stop(); },
   );
   try {
     startedAt = performance.now();
-    await mic.start();
-    if (isCurrent() && state === 'starting') setState('recording', 'Listening. Speak the test utterance, pause, then Stop.');
-  } catch (error) { if (isCurrent()) await fail(error); }
+    await source.start();
+    if (isCurrent() && state === 'starting') setState('recording', tab ? 'Listening to tab audio. Stop to finalize, or stop sharing in the browser.' : 'Listening. Speak the test utterance, pause, then Stop.');
+  } catch (error) { if (isCurrent() && state === 'starting') await fail(error); }
 };
 async function stop() {
-  if (state !== 'recording') return;
+  if (!['starting', 'recording'].includes(state)) return;
   stopAt = performance.now(); setState('stopping', 'Finalizing…');
-  const previousMic = mic, activeCore = core, session = generation; mic = null;
-  await previousMic?.stop();
+  const previousSource = source, activeCore = core, session = generation;
+  try { await previousSource?.stop(); }
+  catch (error) { if (core === activeCore && generation === session) await fail(error); return; }
   // Cancel/reload can finish while the old worklet is still flushing.
   if (core !== activeCore || generation !== session) return;
-  $('level').value = 0;
+  source = null; $('level').value = 0;
   core.stop();
 }
 $('stop').onclick = () => void stop();
-$('cancel').onclick = async () => { setState('booting', 'Releasing…'); await release(); resetOutput(); setState('idle', 'Canceled. Load a model to continue.'); };
-document.addEventListener('visibilitychange', () => { if (document.hidden) void stop(); });
-window.addEventListener('pagehide', () => {
-  const media = mic?.media;
-  void release();
-  media?.getTracks().forEach((track) => { track.onended = null; track.stop(); });
-});
+async function cancel(message) {
+  setState('booting', 'Releasing…'); await release(); resetOutput(); setState('idle', message);
+}
+$('cancel').onclick = () => cancel('Canceled. Load a model to continue.');
+$('source').onchange = () => {
+  if (core) void cancel('Audio source changed. Load a model to continue.');
+};
+document.addEventListener('visibilitychange', () => { if (document.hidden && $('source').value === 'microphone') void stop(); });
+window.addEventListener('pagehide', () => { void release(); });
 window.addEventListener('unhandledrejection', (event) => void fail(event.reason));
 
 async function boot() {
