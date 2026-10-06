@@ -11,17 +11,23 @@
 <main>
   <h1>Japanese/English Speech-to-Text playground</h1>
   <p>Current development baseline: ReazonSpeech ja-en with hayamimi-inspired utterance handling. The ASR implementation remains replaceable; previous experiments are recoverable from Git history.</p>
-  <p>Audio stays in this browser. Loading downloads models from third-party hosts and may use hundreds of MB. Keep this tab in the foreground.</p>
+  <p>Audio stays in this browser. Loading downloads models from third-party hosts and may use hundreds of MB. Keep this tab in the foreground for microphone capture. Tab audio continues when you switch tabs.</p>
   <p id="description">sherpa-onnx 1.13.2, ReazonSpeech ja-en Zipformer (epoch 35, int8 encoder/joiner, fp32 decoder). Simulated streaming, not native streaming: Silero VAD utterances with 0.8 seconds of pre-roll, provisional (unstable) previews about every 0.5 seconds of active speech, finals after about 0.35 seconds of silence or 12 seconds of speech. Stop finalizes active speech. One decode at a time; slow devices skip superseded previews. Capture stops visibly at 30 seconds of pending audio. About 91 MB of runtime/model files.</p>
+  <label for="source">Audio input</label>
+  <select id="source" aria-describedby="tab-help">
+    <option value="microphone">Microphone</option>
+    <option value="tab">Browser-tab audio</option>
+  </select>
+  <p id="tab-help">For tab audio, use a desktop Chromium browser. Choose a browser tab in the sharing picker and enable “Share tab audio”. Sharing requires video permission, but only audio is processed; video is not displayed or recorded. Changing the input releases the current session and model.</p>
   <div class="controls">
     <button id="load" disabled>Load model</button>
-    <button id="start" disabled>Start microphone</button>
+    <button id="start" disabled>Start capture</button>
     <button id="stop" disabled>Stop and finalize</button>
     <button id="cancel" disabled>Cancel / release model</button>
   </div>
   <p id="status" role="status">Preparing browser…</p>
   <p id="progress"></p>
-  <label for="level">Microphone level</label>
+  <label for="level">Audio input level</label>
   <meter id="level" min="0" max="0.1" value="0"></meter>
   <p id="signal">No capture yet.</p>
   <dl>
@@ -43,8 +49,8 @@
   </dl>
   <h2>Repeatable manual test</h2>
   <ol>
-    <li>Load a model, wait for Ready, then tap Start and allow the microphone.</li>
-    <li>Speak a Japanese, English, or mixed utterance. Watch the provisional text, pause for about one second to finalize, then tap Stop.</li>
+    <li>Choose an audio input, load a model, wait for Ready, then tap Start and allow the microphone or share a tab with audio.</li>
+    <li>Speak a Japanese, English, or mixed utterance, or play speech in the shared tab. Watch the provisional text, pause for about one second to finalize, then tap Stop.</li>
     <li>Copy the transcript and timings into your notes. Tap Start to repeat, or Cancel to release the model.</li>
   </ol>
   <label for="utterance">Utterance to repeat</label>

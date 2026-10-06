@@ -52,7 +52,7 @@ test('Pages isolation activates and only the current baseline is exposed', async
   await page.goto('/');
   await expect(page.locator('#load')).toBeEnabled();
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
-  await expect(page.locator('select')).toHaveCount(0);
+  await expect(page.locator('select:not(#source)')).toHaveCount(0);
   await expect(page.locator('#description')).toContainText('ReazonSpeech ja-en');
   for (const id of ['partial', 'final']) await expect(page.locator(`#${id}`)).toHaveAttribute('lang', '');
   await expect(page.locator('main')).toContainText('Current development baseline');
