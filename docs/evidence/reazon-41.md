@@ -68,7 +68,7 @@ ASR_TEST_WAV="$PWD/.cache/reazon-ja-16k.wav" ASR_BENCHMARK=1 \
 
 ## Reproduction and limits
 
-Follow the [setup and acceptance commands](../asr-manual-testing.md#reazonspeech-ja-en-comparison-41).
+Follow the [setup and acceptance commands](https://github.com/takahirox/my-audio-to-text/blob/a05dc1558318c9b3ca0ba6c7c5fc8fded1e18e64/docs/asr-manual-testing.md#reazonspeech-ja-en-comparison-41).
 Evaluation WAVs remain only in `.cache/` and are not part of the Pages artifact.
 The real checks use the existing header-enabled loopback server for WebKit's nested
 pthread workers. Ordinary lifecycle tests use the existing service-worker isolation

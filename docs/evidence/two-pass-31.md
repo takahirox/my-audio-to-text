@@ -45,7 +45,7 @@ they do not establish actual Japanese recognition accuracy or physical-device pe
 Real-model inference, human speech comparison, publication and physical-phone tests were
 not performed. These are optional for #31. A new opt-in `two-pass: real Japanese inference
 and finalization` test accepts `ASR_TEST_WAV`; see the
-[run instructions](../asr-manual-testing.md#japanese-two-pass-experiment-31).
+[run instructions](https://github.com/takahirox/my-audio-to-text/blob/a05dc1558318c9b3ca0ba6c7c5fc8fded1e18e64/docs/asr-manual-testing.md#japanese-two-pass-experiment-31).
 
 Both loaded models coexist in memory, and recording audio is retained until Stop. This
 experiment is intended for short utterances. No production architecture is selected.

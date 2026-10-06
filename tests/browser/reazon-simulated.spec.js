@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-async function setupSimulation(page, { hold = false, holdReady = null, backend } = {}) {
+async function setup(page, { hold = false, holdReady = null } = {}) {
   await page.addInitScript(() => {
     const Worker = window.Worker;
     window.testWorkers = []; window.requests = []; window.terminated = []; window.workerEvents = [];
@@ -94,8 +94,6 @@ async function setupSimulation(page, { hold = false, holdReady = null, backend }
       if (window.flushSamples) this.onAudio(new Float32Array(window.flushSamples).fill(0.01));
     };
   });
-  await page.locator('#backend').selectOption(backend);
-  await expect(page.locator('#load')).toBeEnabled();
   await page.locator('#load').click();
   if (holdReady) await expect.poll(() => page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-ready-held').length)).toBe(1);
   else await expect(page.locator('#start')).toBeEnabled();
@@ -115,10 +113,7 @@ const finish = async page => {
 const classified = page => page.evaluate(() => window.workerEvents.filter(e => e.type === 'vad')
   .reduce((sum, e) => sum + e.frames.reduce((count, f) => count + f.audio.length, 0), 0));
 
-for (const backend of ['sherpa-simulated', 'sherpa-ja-en-simulated']) {
-  test.describe(backend, () => {
-    const setup = (page, options = {}) => setupSimulation(page, { ...options, backend });
-
+test.describe('Japanese ReazonSpeech baseline', () => {
     for (const role of ['asr', 'vad']) {
       test(`simulated recording waits for the ${role} worker to become ready`, async ({ page }) => {
         await setup(page, { holdReady: role });
@@ -151,14 +146,10 @@ for (const backend of ['sherpa-simulated', 'sherpa-ja-en-simulated']) {
 
     test('half-second provisional text, final worklet tail and repeat use the real worker paths', async ({ page }) => {
       await setup(page);
-      await expect(page.locator('#backend option[value=sherpa-simulated]')).toHaveText('sherpa-onnx — Japanese ReazonSpeech (simulated streaming)');
-      await expect(page.locator('#backend option[value=sherpa-ja-en-simulated]')).toHaveText('sherpa-onnx — ReazonSpeech ja-en (simulated streaming)');
-      expect(await page.evaluate(() => window.requests.find(m => m.type === 'load' && m.workerId === 0).backend)).toBe(backend);
-      await expect(page.locator('#backend option[value=sherpa]')).toHaveText('sherpa-onnx — Japanese ReazonSpeech');
+      await expect(page.locator('select')).toHaveCount(0);
       await expect(page.locator('#description')).toContainText('not native streaming');
       await expect(page.locator('#description')).toContainText('Silero');
       await expect(page.locator('#partial-heading')).toContainText('unstable');
-      await expect(page.locator('#moonshine-options')).toBeHidden();
       await page.locator('#start').click();
       await feed(page, 8191); expect(await decodes(page)).toHaveLength(0);
       await feed(page, 1); await expect(page.locator('#partial')).toHaveText('日本語8192');
@@ -276,7 +267,7 @@ for (const backend of ['sherpa-simulated', 'sherpa-ja-en-simulated']) {
     });
 
     for (const stopping of [false, true]) {
-      test(`Cancel ${stopping ? 'during Stop' : 'during recording'}, reload and backend switching reject stale results`, async ({ page }) => {
+      test(`Cancel ${stopping ? 'during Stop' : 'during recording'}, reload and repeat reject stale results`, async ({ page }) => {
         await setup(page, { hold: true }); await page.locator('#start').click(); await feed(page, 8192);
         await expect.poll(async () => (await decodes(page)).length).toBe(1);
         if (stopping) await page.locator('#stop').click();
@@ -313,9 +304,9 @@ for (const backend of ['sherpa-simulated', 'sherpa-ja-en-simulated']) {
         await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
         await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
         await page.evaluate(() => { window.oldCallbacks = window.testWorkers.slice(-2).map(w => w.onmessage); });
-        await page.locator('#backend').selectOption('sherpa'); await expect(page.locator('#load')).toBeEnabled();
+        await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
         await page.evaluate(() => window.oldCallbacks.forEach(callback => callback({data:{type:'final',text:'古い結果'}})));
-        await expect(page.locator('#partial')).toContainText('Unsupported');
+        await expect(page.locator('#partial')).toHaveText('Waiting for speech…');
         await expect(page.locator('#final')).toBeEmpty();
         expect(await page.evaluate(() => window.terminated)).toEqual([0, 1, 2, 3, 4, 5]);
       });
@@ -330,25 +321,13 @@ for (const backend of ['sherpa-simulated', 'sherpa-ja-en-simulated']) {
       await expect(page.locator('#partial')).toBeEmpty();
       await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
       await expect(page.locator('#final')).toBeEmpty();
+      await expect(page.locator('#signal')).toContainText('Nonzero microphone signal');
+      await expect(page.locator('#speech')).toContainText('1 Silero VAD utterance(s) accepted; 1 completed');
+      await expect(page.locator('#asr-events')).toHaveText('0 nonempty partial(s); 0 nonempty final(s).');
       await page.locator('#start').click(); await feed(page, 8192, -1);
       await expect(page.locator('#errors')).toContainText('Controlled decode failure');
       await expect(page.locator('#load')).toBeEnabled();
       expect(await page.evaluate(() => window.terminated)).toEqual([0, 1]);
     });
 
-    test('offline ReazonSpeech keeps pause/20-second segmentation and no previews', async ({ page }) => {
-      await setup(page);
-      await page.locator('#backend').selectOption('sherpa'); await expect(page.locator('#load')).toBeEnabled();
-      await page.locator('#load').click(); await page.locator('#start').click();
-      await feed(page, 16000);
-      await expect(page.locator('#final')).toBeEmpty(); await expect(page.locator('#partial')).toContainText('Unsupported');
-      await feed(page, 12800, 0); await expect(page.locator('#final')).toHaveText('日本語28800\n');
-      await feed(page, 320000); await expect(page.locator('#final')).toHaveText('日本語28800\n日本語320000\n');
-      await feed(page, 123); await page.locator('#stop').click();
-      await expect(page.locator('#status')).toContainText('Stopped');
-      await expect(page.locator('#final')).toHaveText('日本語28800\n日本語320000\n日本語123\n');
-      expect(await decodes(page)).toHaveLength(0);
-    });
-
-  });
-}
+});

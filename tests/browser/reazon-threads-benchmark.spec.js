@@ -96,7 +96,7 @@ test('deterministic Japanese ReazonSpeech thread comparison', async ({ page, bro
           text = decodeMs = undefined; worker.postMessage(message);
         });
         try {
-          await request({ type: 'load', backend: 'sherpa', numThreads });
+          await request({ type: 'load', numThreads });
           const runs = fixtures.map(() => ({ timingsMs: [], transcripts: [], warmup: null }));
           for (let i = 0; i < fixtures.length; i++) runs[i].warmup = await request({ type: 'decode', audio: Float32Array.from(fixtures[i].audio), session: 1 });
           for (let round = 0; round < 3; round++) {
