@@ -4,7 +4,7 @@
 
 The playground exposes only **ReazonSpeech ja-en simulated streaming**, using sherpa-onnx 1.13.2 (epoch-35 bilingual Zipformer, int8 encoder/joiner and fp32 decoder) and Silero VAD. Its utterance policy is inspired by hayamimi. This is the current development baseline, not an irreversible production-backend decision. Removed Moonshine, two-pass, Japanese-only ReazonSpeech, and Whisper experiments remain recoverable from Git history.
 
-The model itself is an offline recognizer. The [local ASR core](local-asr-core.md) repeatedly decodes bounded utterance snapshots to produce unstable provisional text; this is not native streaming. Provisional text may change and is cleared when an utterance finalizes. Only final text is appended to the final transcript.
+The model itself is an offline recognizer. The [local ASR core](local-asr-core.md) repeatedly decodes bounded utterance snapshots to produce unstable provisional text; this is not native streaming. Provisional text may change and is cleared when an utterance finalizes. Only final text is appended to the final transcript. When the fresh final decode is empty or whitespace-only, the core commits the latest nonempty provisional text from that utterance as its final result. A nonempty final decode always wins; if neither stage has usable text, nothing is appended. This behavior applies to both microphone and browser-tab audio.
 
 | Policy | Retained behavior |
 | --- | --- |

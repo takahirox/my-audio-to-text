@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-async function setup(page, { hold = false, holdReady = null } = {}) {
+async function setup(page, { hold = false, holdReady = null, emptyFinal = false } = {}) {
   await page.addInitScript(() => {
     const Worker = window.Worker;
     window.testWorkers = []; window.requests = []; window.terminated = []; window.workerEvents = [];
@@ -30,12 +30,13 @@ async function setup(page, { hold = false, holdReady = null } = {}) {
           free() { postMessage({type:'test-freed'}); },
         }; },
         decode(stream) { if (stream.audio[0] === -1) throw new Error('Controlled decode failure'); },
-        getResult(stream) { return {text:stream.audio.every(sample => Math.abs(sample) < 0.03) ? '' : ' 日本語' + stream.audio.length + ' '}; },
+        getResult(stream) { return {text:${emptyFinal} && finalDecode ? ' \t ' : stream.audio.every(sample => Math.abs(sample) < 0.03) ? '' : ' 日本語' + stream.audio.length + ' '}; },
       };
     };
     const originalHandle = handle;
-    let unblock;
+    let unblock, finalDecode;
     handle = async (data) => {
+      finalDecode = data.final;
       if (data.type === 'decode' && ${hold}) {
         postMessage({type:'test-decode-held'});
         await new Promise(resolve => { unblock = resolve; });
@@ -115,6 +116,28 @@ const classified = page => page.evaluate(() => window.workerEvents.filter(e => e
   .reduce((sum, e) => sum + e.frames.reduce((count, f) => count + f.audio.length, 0), 0));
 
 test.describe('ReazonSpeech ja-en baseline', () => {
+    for (const endpoint of ['silence', 'Stop']) {
+      test(`empty final at ${endpoint} commits the latest provisional and clears its display`, async ({ page }) => {
+        await setup(page, { emptyFinal: true }); await page.locator('#start').click();
+        await feed(page, 8192); await expect(page.locator('#partial')).toHaveText('日本語8192');
+        await feed(page, 8192); await expect(page.locator('#partial')).toHaveText('日本語16384');
+        await expect(page.locator('#final')).toBeEmpty();
+        if (endpoint === 'silence') await feed(page, 5632, 0);
+        else await page.locator('#stop').click();
+        await expect(page.locator('#final')).toHaveText('日本語16384\n');
+        await expect(page.locator('#partial')).toBeEmpty();
+        await expect(page.locator('#asr-events')).toHaveText('2 nonempty partial(s); 1 nonempty final(s).');
+        expect(await page.evaluate(() => window.workerEvents.filter(e => e.type === 'final').map(e => e.text))).toEqual(['']);
+        if (endpoint === 'silence') await page.locator('#stop').click();
+        await expect(page.locator('#status')).toContainText('Stopped');
+        await page.locator('#start').click(); await feed(page, 8192, 0.01);
+        await expect(page.locator('#partial')).toBeEmpty();
+        await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
+        await expect(page.locator('#final')).toBeEmpty();
+        await expect(page.locator('#errors')).toBeEmpty();
+      });
+    }
+
     for (const role of ['asr', 'vad']) {
       test(`simulated recording waits for the ${role} worker to become ready`, async ({ page }) => {
         await setup(page, { holdReady: role });
