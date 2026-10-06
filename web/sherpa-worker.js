@@ -7,7 +7,7 @@ self.onmessage = ({ data }) => { sequence = sequence.then(() => handle(data)).ca
 
 async function load(requestedThreads) {
   const { selectReazonThreads } = await import('./reazon-config.js');
-  const base = new URL('./vendor/sherpa/', self.location.href);
+  const base = new URL('./vendor/sherpa-ja-en/', self.location.href);
   const script = new URL('sherpa-onnx-wasm-main-vad-asr.js', base).href;
   await new Promise((resolve, reject) => {
     self.Module = {
@@ -35,7 +35,7 @@ async function load(requestedThreads) {
     decodingMethod: 'greedy_search',
   }, self.Module);
   if (!recognizer.handle) throw new Error('ReazonSpeech recognizer initialization failed');
-  send('configuration', { numThreads, model: 'ja', modelName: 'Japanese ReazonSpeech' });
+  send('configuration', { numThreads, model: 'ja-en', modelName: 'ReazonSpeech ja-en' });
 }
 function recognize(audio, type, id) {
   const stream = recognizer.createStream();

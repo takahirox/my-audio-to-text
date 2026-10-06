@@ -37,13 +37,13 @@ async function configuration(page, { requested, cores = 16, shared = true } = {}
   }, { requested });
 }
 
-test('selected thread count and Japanese assets reach the baseline recognizer', async ({ page }) => {
+test('selected thread count and ja-en assets reach the baseline recognizer', async ({ page }) => {
   const events = await configuration(page);
   expect(events.some(e => e.type === 'ready'), JSON.stringify(events)).toBe(true);
   expect(events.find(e => e.type === 'test-config').config.modelConfig.numThreads).toBe(REAZON_NUM_THREADS);
-  expect(events.find(e => e.type === 'configuration')).toMatchObject({ numThreads: REAZON_NUM_THREADS, model: 'ja' });
+  expect(events.find(e => e.type === 'configuration')).toMatchObject({ numThreads: REAZON_NUM_THREADS, model: 'ja-en', modelName: 'ReazonSpeech ja-en' });
   const assets = events.find(e => e.type === 'test-assets');
-  for (const url of [...assets.scripts, assets.wasm, assets.data]) expect(new URL(url).pathname).toContain('/vendor/sherpa/');
+  for (const url of [...assets.scripts, assets.wasm, assets.data]) expect(new URL(url).pathname).toContain('/vendor/sherpa-ja-en/');
   expect(events.find(e => e.type === 'test-config').config.modelConfig.transducer).toEqual({
     encoder: './transducer-encoder.onnx', decoder: './transducer-decoder.onnx', joiner: './transducer-joiner.onnx',
   });

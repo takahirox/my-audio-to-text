@@ -1,7 +1,8 @@
-sherpa-onnx 1.13.2 and Japanese ReazonSpeech Zipformer
+sherpa-onnx 1.13.2 and ReazonSpeech ja-en Zipformer (epoch 35)
   https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.2
   Copyright (c) 2022-2026, the sherpa-onnx authors.
-  https://huggingface.co/reazon-research/reazonspeech-k2-v2
+  https://huggingface.co/reazon-research/reazonspeech-k2-v2-ja-en
+  Pinned mirror: https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en/tree/12b44671ff48b9aed622551d64e02fea9a2cf870
   Runtime and model: Apache License 2.0.
   License: ./licenses/sherpa-onnx.txt
   Dependencies: https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.2/cmake

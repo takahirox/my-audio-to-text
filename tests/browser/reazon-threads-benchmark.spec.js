@@ -13,7 +13,7 @@ const median = values => {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 };
 
-test('deterministic Japanese ReazonSpeech thread comparison', async ({ page, browser }, testInfo) => {
+test('deterministic ReazonSpeech ja-en thread comparison on Japanese audio', async ({ page, browser }, testInfo) => {
   test.skip(!process.env.ASR_BENCHMARK, 'Run npm run benchmark:reazon after preparing runtime assets.');
   test.setTimeout(600000);
   const wav = readFileSync(new URL('../../.cache/reazon-ja.wav', import.meta.url));
@@ -137,9 +137,9 @@ test('deterministic Japanese ReazonSpeech thread comparison', async ({ page, bro
   }
   const selected = results.find(r => r.status === 'tested' && r.numThreads > 1 && r.fixtures.every(f => f.equivalentTranscript && f.improvement >= minimumImprovement))?.numThreads ?? 1;
   const evidence = {
-    recordedAt: new Date().toISOString(), issue: 38,
+    recordedAt: new Date().toISOString(), issue: 45, threadPolicyIssue: 38,
     environment: { ...environment, browser: testInfo.project.name, browserVersion: browser.version(), os: `${os.type()} ${os.release()} ${os.arch()}`, cpu: os.cpus()[0].model, logicalCores: os.cpus().length, memoryBytes: os.totalmem(), node: process.version },
-    runtime: JSON.parse(readFileSync(new URL('../../web/vendor/manifest.json', import.meta.url))).sherpa,
+    runtime: JSON.parse(readFileSync(new URL('../../web/vendor/manifest.json', import.meta.url)))['sherpa-ja-en'],
     audio: { source: audioURL, sha256: audioSHA256, sourceRate: rate, rate: 16000, resampler: 'web/audio.js Resampler', pcmFloat32SHA256: createHash('sha256').update(new Uint8Array(audio.buffer)).digest('hex') },
     method: { metric: 'recognizer.decode only; excludes model load, transfer, stream creation and result extraction', sweeps: ['ascending', 'descending'], warmupsPerFixturePerSweep: 1, measuredRunsPerFixture: 6, minimumImprovement, selection: 'smallest supported count with identical transcripts and >=10% median improvement on BOTH inputs, otherwise 1' },
     results, selectedNumThreads: selected, configuredNumThreadsAtMeasurement: REAZON_NUM_THREADS,

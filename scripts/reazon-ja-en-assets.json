@@ -1,0 +1,15 @@
+{
+  "source": "https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en",
+  "revision": "12b44671ff48b9aed622551d64e02fea9a2cf870",
+  "models": [
+    {"path": "encoder-epoch-35-avg-1.int8.onnx", "virtualPath": "/transducer-encoder.onnx", "sha256": "ead1579e118b821a767242a8eb9272634b0e63ba16f8dfc4d126732406eae268"},
+    {"path": "decoder-epoch-35-avg-1.onnx", "virtualPath": "/transducer-decoder.onnx", "sha256": "90b60985672df5023e187e9d25aa2dc93abc4286bfacf71a35a78a6b76d88df5"},
+    {"path": "joiner-epoch-35-avg-1.int8.onnx", "virtualPath": "/transducer-joiner.onnx", "sha256": "c7f4ba40a8ae307a6c30b5c06e2570add04466bcb45bab62699f0ec5d00ed495"},
+    {"path": "tokens.txt", "virtualPath": "/tokens.txt", "sha256": "144f8a4f639373a1bdf7eabb2437482ef64b0cc5db24ad27cce65f293e4faa24"}
+  ],
+  "fixtures": [
+    {"name": "Japanese", "path": "test_wavs/test_ja_1.wav", "sha256": "09abd330ce706a6e6969fe6bbc8275314af631fcee4e536afd0626570d263fbf"},
+    {"name": "English", "path": "test_wavs/test_en_1.wav", "sha256": "02de9b0bea3d4cf7d0d92d2b2de023bbbaa1c952d27e1ab1483e04bb10494ae4"},
+    {"name": "Mixed Japanese/English", "path": "test_wavs/test_ja_en.wav", "sha256": "177d6b91fb387d46aff455ec86fb972597740cc066377c3b2aaa0d41c5bfa976"}
+  ]
+}

@@ -2,7 +2,7 @@
 
 ## Current baseline
 
-The playground exposes only **Japanese ReazonSpeech simulated streaming**, using sherpa-onnx 1.13.2 (quantized Japanese Zipformer) and Silero VAD. Its utterance policy is inspired by hayamimi. This is the current development baseline, not an irreversible production-backend decision. Removed Moonshine, two-pass, offline-only ReazonSpeech, ReazonSpeech ja-en, and Whisper experiments remain recoverable from Git history.
+The playground exposes only **ReazonSpeech ja-en simulated streaming**, using sherpa-onnx 1.13.2 (epoch-35 bilingual Zipformer, int8 encoder/joiner and fp32 decoder) and Silero VAD. Its utterance policy is inspired by hayamimi. This is the current development baseline, not an irreversible production-backend decision. Removed Moonshine, two-pass, Japanese-only ReazonSpeech, and Whisper experiments remain recoverable from Git history.
 
 The model itself is an offline recognizer. The page repeatedly decodes bounded utterance snapshots to produce unstable provisional text; this is not native streaming. Provisional text may change and is cleared when an utterance finalizes. Only final text is appended to the final transcript.
 
@@ -35,7 +35,7 @@ npm run serve
 
 Open `http://127.0.0.1:8000`. Microphone capture requires HTTPS or localhost. The page's service worker enables cross-origin isolation on the static Pages host and local server; allow the initial reload. If isolation fails, close other playground tabs and reload, or serve with COOP/COEP headers. Keep the tab in the foreground.
 
-Asset preparation checksum-verifies the pinned Japanese sherpa-onnx distribution and stages only its ASR/VAD wrappers, JavaScript loader, WASM, and model data. Generated `web/vendor/` and `.cache/` are ignored by Git. The prepared distribution is about 183 MB. VAD uses a second worker with that same distribution, so browser memory use can be substantial. The preparation step rebuilds the generated vendor directory, removing obsolete staged assets from earlier experiments.
+Asset preparation checksum-verifies the epoch-35 ja-en weights and tokens at mirror revision `12b44671ff48b9aed622551d64e02fea9a2cf870`, pinned in [`scripts/reazon-ja-en-assets.json`](../scripts/reazon-ja-en-assets.json). It obtains sherpa-onnx 1.13.2 runtime files and Silero from the checksum-pinned upstream English Moonshine archive, discards its ASR weights, and replaces only the loader's preload table and data with ja-en/Silero. The runtime, wrappers, and Silero are byte-identical to those evaluated in #41. No Japanese-only ReazonSpeech archive is downloaded or staged. Only `web/vendor/sherpa-ja-en/` and its manifest are generated. Generated `web/vendor/` and `.cache/` are ignored by Git. The prepared distribution is about 91 MB. VAD uses a second worker with that same distribution, so browser memory use can be substantial. The preparation step rebuilds the generated vendor directory, removing obsolete staged assets from earlier experiments.
 
 The existing [Pages workflow](../.github/workflows/pages.yml) prepares these assets and deploys `web/`. No server-side recognition is required, and microphone samples stay in the browser. See [runtime/model notices](../web/third-party-notices.txt).
 
@@ -44,20 +44,24 @@ The existing [Pages workflow](../.github/workflows/pages.yml) prepares these ass
 ```sh
 npm test
 npm run test:browser -- --workers=2
+npm run prepare:assets
+npm run test:reazon-ja-en
 ```
 
 Unit tests cover resampling continuity, pre-roll, provisional scheduling/coalescing, trailing silence, maximum duration, Stop draining, buffer caps, and evidence-based thread selection. Browser tests in Chromium and WebKit exercise the real page and actual worker message/cleanup paths with controlled native initialization. They verify Load readiness for both workers, Start, provisional output, utterance finalization, Stop, Cancel, repeat, stale results, worker isolation, bounded inference, and errors. Capture tests use generated Web Audio streams and the real microphone pipeline, including worklet flushing and pending permission cancellation. These deterministic tests do not establish human speech accuracy or physical-device performance.
 
-Opt-in integration uses the actual pinned runtime/models and the page's utterance policy:
+`npm run test:reazon-ja-en` downloads the three checksum-pinned #41 fixtures to `.cache/`, serves with COOP/COEP headers, and runs real inference in Chromium and WebKit. It verifies the packaged model hashes, manifest, unchanged runtime/Silero identity, absence of obsolete bundles and selectors, provisional text, trailing-silence finalization, Stop, Cancel, reload, and repeat. Japanese, English, and mixed input must produce nonempty final text with the expected scripts through one model load, without any language switching. JSON transcripts and model identity are attached to Playwright results. Fixtures are never included in the Pages artifact. Without the command's `ASR_REAZON_JA_EN` flag, this test is explicitly skipped in the ordinary lifecycle suite.
+
+Additional opt-in integration uses the actual pinned runtime/models and the page's utterance policy:
 
 ```sh
 npm run prepare:assets
-ASR_TEST_VAD=1 npm run test:browser -- tests/browser/model-smoke.spec.js --workers=1
-# Japanese 16 kHz mono, 16-bit PCM WAV, kept local:
-ASR_TEST_WAV=/absolute/path/japanese.wav npm run test:browser -- tests/browser/model-smoke.spec.js --workers=1
+ASR_TEST_VAD=1 ASR_BENCHMARK=1 npm run test:browser -- tests/browser/model-smoke.spec.js --workers=1
+# Japanese or English 16 kHz mono, 16-bit PCM WAV, kept local:
+ASR_TEST_WAV=/absolute/path/speech.wav ASR_BENCHMARK=1 npm run test:browser -- tests/browser/model-smoke.spec.js --workers=1
 ```
 
-The silence check verifies real Silero initialization, Stop, and repeat. The WAV check additionally requires Japanese final text. Supply speech longer than 0.5 seconds to observe provisional output; recognition accuracy depends on the fixture. Without these environment variables the real-runtime smoke test is explicitly skipped, rather than reported as passed.
+The silence check verifies real Silero initialization, Stop, and repeat. `ASR_BENCHMARK=1` uses the header-enabled loopback server required by the pinned runtime in automated WebKit; the ordinary browser suite exercises service-worker isolation. The WAV check additionally requires nonempty final text. Supply speech longer than 0.5 seconds to observe provisional output; recognition accuracy depends on the fixture. Without these environment variables the real-runtime smoke test is explicitly skipped, rather than reported as passed.
 
 The retained threading benchmark is optional:
 
@@ -70,8 +74,8 @@ It downloads a checksum-pinned Japanese fixture, serves COOP/COEP headers, and c
 
 ## Manual check and results template
 
-1. Load the model and wait for Ready. Note initialization time and the Japanese model/thread diagnostic.
-2. Start microphone capture, allow permission, and speak the sample Japanese utterance. Watch microphone RMS, accepted VAD utterances, and provisional text.
+1. Load the model and wait for Ready. Note initialization time and the ja-en model/thread diagnostic.
+2. Start microphone capture, allow permission, and speak Japanese, English, or mixed speech. Watch microphone RMS, accepted VAD utterances, and provisional text.
 3. Pause for about one second. Verify the utterance appears once as final text and provisional text clears.
 4. Speak again, then Stop during speech. Verify final results drain and the microphone stops.
 5. Start again and verify the old transcript resets. Cancel during capture, reload, and repeat; canceled text must not return.
@@ -92,7 +96,7 @@ Record results without inferring unperformed checks:
 | Stop / Cancel / repeat / runtime errors | |
 | Accuracy / responsiveness / heat / stability | |
 
-Human and physical-device checks are optional follow-up for Issue #43, not merge gates. No post-merge verification is required by this issue.
+Human and physical-device checks are optional follow-up for Issue #45, not merge gates. No post-merge verification is required by this issue.
 
 ## Historical evidence
 
