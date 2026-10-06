@@ -8,7 +8,7 @@ Speech input should work well for the person using it, including their language,
 
 This repository is a minimal product and vision baseline, ready for a new design from first principles. The previous macOS prototype, experiments, evaluation harnesses, and implementation documents have been removed from the active tree. All previous work remains recoverable from Git history.
 
-The browser Speech-to-Text playground uses **Japanese ReazonSpeech simulated streaming as the current development baseline**, with sherpa-onnx and Silero VAD. This is a replaceable baseline for continued product work, not an irreversible production-backend decision. Previous Moonshine, two-pass, offline-only ReazonSpeech, bilingual ReazonSpeech, and Whisper experiments remain recoverable from Git history. Backward compatibility with removed experiments is not required.
+The browser Speech-to-Text playground uses **ReazonSpeech ja-en simulated streaming as the current development baseline**, with sherpa-onnx and Silero VAD. This is a replaceable baseline for continued product work, not an irreversible production-backend decision. Previous Moonshine, two-pass, Japanese-only ReazonSpeech, and Whisper experiments remain recoverable from Git history. Backward compatibility with removed experiments is not required.
 
 ## Web playground
 
@@ -16,9 +16,9 @@ Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox
 
 The retained hayamimi-inspired path uses 0.8-second pre-roll, provisional recognition about every 0.5 seconds of active speech, a 0.35-second trailing-silence endpoint, and a 12-second maximum utterance duration. Stop finalizes active speech. Silero VAD and ASR run in separate workers; inference is serialized, superseded previews are coalesced, and pending audio is bounded at 30 seconds. ReazonSpeech uses the evidence-based one-thread default from [Issue #38](docs/evidence/reazon-38.md).
 
-See [setup, testing, and limitations](docs/asr-manual-testing.md). Automated Chromium/WebKit checks cover loading, provisional/final output, Stop, Cancel, repeat, worker isolation, and stale-result rejection. The [Issue #43 validation record](docs/evidence/reazon-43.md) records the local checks. The [historical acceptance record](docs/asr-acceptance.md) and [experiment evidence](docs/evidence/) preserve completed comparisons and publication observations; they are not instructions for the current baseline.
+See [setup, testing, and limitations](docs/asr-manual-testing.md). Automated Chromium/WebKit checks cover loading, provisional/final output, Stop, Cancel, repeat, worker isolation, and stale-result rejection. The [Issue #45 validation record](docs/evidence/reazon-45.md) records the current local checks. The [historical acceptance record](docs/asr-acceptance.md) and [experiment evidence](docs/evidence/) preserve completed comparisons and publication observations; they are not instructions for the current baseline.
 
-The [Pages workflow](.github/workflows/pages.yml) prepares only the pinned Japanese ReazonSpeech/Silero runtime assets and deploys `web/` automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. Inference runs in the browser; loading about 183 MB of model/runtime assets needs no ASR server.
+The [Pages workflow](.github/workflows/pages.yml) prepares only the pinned ReazonSpeech ja-en/Silero runtime assets and deploys `web/` automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. Inference runs in the browser; loading about 91 MB of model/runtime assets needs no ASR server.
 
 For setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the `github-pages` environment and built-in `GITHUB_TOKEN`.
 

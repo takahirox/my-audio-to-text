@@ -9,7 +9,7 @@ self.onmessage = ({ data }) => { sequence = sequence.then(() => handle(data)).ca
 
 // Reuse the pinned Silero runtime in its own worker. No ASR recognizer is created.
 async function load() {
-  const base = new URL('./vendor/sherpa/', self.location.href);
+  const base = new URL('./vendor/sherpa-ja-en/', self.location.href);
   const script = new URL('sherpa-onnx-wasm-main-vad-asr.js', base).href;
   await new Promise((resolve, reject) => {
     self.Module = {

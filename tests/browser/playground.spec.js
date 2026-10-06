@@ -53,7 +53,8 @@ test('Pages isolation activates and only the current baseline is exposed', async
   await expect(page.locator('#load')).toBeEnabled();
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
   await expect(page.locator('select')).toHaveCount(0);
-  await expect(page.locator('#description')).toContainText('Japanese ReazonSpeech');
+  await expect(page.locator('#description')).toContainText('ReazonSpeech ja-en');
+  for (const id of ['partial', 'final']) await expect(page.locator(`#${id}`)).toHaveAttribute('lang', '');
   await expect(page.locator('main')).toContainText('Current development baseline');
   await page.locator('#utterance').fill('今日は東京でテストします。');
   await expect(page.locator('#utterance')).toHaveValue('今日は東京でテストします。');

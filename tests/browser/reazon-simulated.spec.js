@@ -113,7 +113,7 @@ const finish = async page => {
 const classified = page => page.evaluate(() => window.workerEvents.filter(e => e.type === 'vad')
   .reduce((sum, e) => sum + e.frames.reduce((count, f) => count + f.audio.length, 0), 0));
 
-test.describe('Japanese ReazonSpeech baseline', () => {
+test.describe('ReazonSpeech ja-en baseline', () => {
     for (const role of ['asr', 'vad']) {
       test(`simulated recording waits for the ${role} worker to become ready`, async ({ page }) => {
         await setup(page, { holdReady: role });

@@ -21,7 +21,7 @@ function readWav(path) {
 // Opt-in pinned Silero + ReazonSpeech integration through the actual page policy.
 // ASR_TEST_VAD uses deterministic silence. Both checks require prepared assets.
 test('ReazonSpeech simulated: real Silero runtime, Stop and repeat', async ({ page }) => {
-  test.skip(!process.env.ASR_TEST_WAV && !process.env.ASR_TEST_VAD, 'Set ASR_TEST_VAD=1 (silence) or ASR_TEST_WAV (Japanese speech).');
+  test.skip(!process.env.ASR_TEST_WAV && !process.env.ASR_TEST_VAD, 'Set ASR_TEST_VAD=1 (silence) or ASR_TEST_WAV (Japanese or English speech).');
   test.setTimeout(240000);
   const samples = process.env.ASR_TEST_WAV ? readWav(process.env.ASR_TEST_WAV) : Array(16037).fill(0);
   await page.goto('./'); await expect(page.locator('#load')).toBeEnabled();
@@ -32,7 +32,7 @@ test('ReazonSpeech simulated: real Silero runtime, Stop and repeat', async ({ pa
   });
   await expect(page.locator('#load')).toBeEnabled(); await page.locator('#load').click();
   await expect(page.locator('#start')).toBeEnabled({ timeout: 120000 });
-  await expect(page.locator('#reazon-model')).toContainText('Japanese ReazonSpeech (ja); 1 thread(s)');
+  await expect(page.locator('#reazon-model')).toContainText('ReazonSpeech ja-en (ja-en); 1 thread(s)');
   for (let repeat = 0; repeat < 2; repeat++) {
     await page.locator('#start').click();
     // Yield between microphone callbacks; VAD and ASR use separate workers. The page
@@ -47,7 +47,7 @@ test('ReazonSpeech simulated: real Silero runtime, Stop and repeat', async ({ pa
     await page.locator('#stop').click();
     await expect(page.locator('#status')).toContainText('Stopped', { timeout: 120000 });
     await expect(page.locator('#errors')).toBeEmpty();
-    if (process.env.ASR_TEST_WAV) await expect(page.locator('#final')).toContainText(/[\u3040-\u30ff\u4e00-\u9fff]/);
+    if (process.env.ASR_TEST_WAV) await expect(page.locator('#final')).toContainText(/\S/);
     else {
       await expect(page.locator('#final')).toBeEmpty();
       await expect(page.locator('#speech')).toContainText('0 Silero VAD utterance(s)');
