@@ -65,6 +65,13 @@ One callback receives small objects with a `type` field; there is no event bus.
 A forced duration endpoint starts a new utterance if speech continues. Transcript
 IDs match speech IDs and restart with each session. Empty transcripts still
 represent completed recognition work; the UI counts only nonempty text.
+The core retains the latest nonempty accepted provisional text for each utterance.
+A nonempty final decode is emitted unchanged; an empty or whitespace-only final
+uses that utterance's retained provisional text, if any, as the committed `final`.
+Empty provisional updates still reach the UI but do not erase the fallback.
+Fallback state is removed after the final result, after Stop drains, on a new
+session, and on release (including errors). Pending or stale previews rejected
+by the core cannot populate the fallback.
 Idle pre-roll is bounded separately and excluded from `pendingSamples`. Pending
 previews are coalesced rather than queued. Stale sessions, results for an ended
 utterance preview, and messages from old workers never reach the event callback.

@@ -112,6 +112,98 @@ test('Stop waits for VAD tail and finals, suppresses previews, drains once and s
   assert.equal(f.replies('stopped').length, 2); assert.equal(f.decodes().length, 2);
 });
 
+for (const final of ['better final', '  better final  ', '', ' \t\n ']) {
+  test(`final ${JSON.stringify(final)} preserves useful final text or the latest nonempty provisional`, () => {
+    const f = fixture(); f.ready(); f.core.start();
+    for (const text of ['first provisional', 'latest provisional', '', ' \t ']) {
+      f.feed(PREVIEW_INTERVAL); f.finish(undefined, text);
+    }
+    assert.deepEqual(f.replies('partial').map(e => e.text), ['first provisional', 'latest provisional', '', ' \t ']);
+    assert.equal(f.replies('final').length, 0);
+    f.feed(TRAILING_SILENCE, 0); f.finish(undefined, final);
+    assert.deepEqual(f.replies('final'), [{ type: 'final', id: 1,
+      text: final.trim() ? final : 'latest provisional' }]);
+    // A following utterance with no provisional cannot inherit the fallback.
+    f.feed(37); f.core.stop(); f.stopped(); f.finish(undefined, '');
+    assert.deepEqual(f.replies('final').at(-1), { type: 'final', id: 2, text: '' });
+  });
+}
+
+for (const partials of [[], ['', ' \t\n ']]) {
+  test(`empty final with ${partials.length ? 'only blank' : 'no'} provisional commits no text`, () => {
+    const f = fixture(); f.ready(); f.core.start();
+    for (const text of partials) { f.feed(PREVIEW_INTERVAL); f.finish(undefined, text); }
+    f.feed(37); f.core.stop(); f.stopped(); f.finish(undefined, ' \t ');
+    assert.deepEqual(f.replies('final'), [{ type: 'final', id: 1, text: ' \t ' }]);
+    assert.equal(f.replies('final').filter(e => e.text.trim()).length, 0);
+  });
+}
+
+test('Stop preserves an accepted fallback, ignores pending previews and isolates repeat sessions', () => {
+  const f = fixture(); f.ready(); f.core.start(); f.feed(PREVIEW_INTERVAL);
+  f.finish(undefined, 'accepted provisional');
+  f.feed(PREVIEW_INTERVAL); const oldSession = f.core.session;
+  f.core.stop(); f.stopped(); f.finish(undefined, 'suppressed provisional');
+  assert.deepEqual(f.replies('partial').map(e => e.text), ['accepted provisional']);
+  f.finish(undefined, '');
+  assert.equal(f.replies('final')[0].text, 'accepted provisional');
+  assert.equal(f.replies('stopped').length, 1);
+
+  f.core.start(); f.feed(PREVIEW_INTERVAL);
+  // Old messages have the same utterance ID and retained worker identity.
+  for (const type of ['partial', 'final', 'decoded']) {
+    f.asr.reply({ type, id: 1, text: 'old session', session: oldSession });
+  }
+  f.finish(undefined, ''); f.core.stop(); f.stopped(); f.finish(undefined, '');
+  assert.deepEqual(f.replies('final').map(e => e.text), ['accepted provisional', '']);
+  assert.equal(f.replies('stopped').length, 2);
+});
+
+test('stale and mismatched previews cannot replace a fallback or cross utterance IDs', () => {
+  const f = fixture(); f.ready(); f.core.start(); f.feed(PREVIEW_INTERVAL);
+  f.finish(undefined, 'utterance one'); f.feed(PREVIEW_INTERVAL);
+  f.asr.reply({ type: 'partial', id: 2, text: 'wrong ID', session: f.core.session });
+  f.feed(TRAILING_SILENCE, 0); f.feed(PREVIEW_INTERVAL);
+  f.finish(undefined, 'ended utterance preview');
+  // A preview for the final in flight is also ineligible.
+  f.asr.reply({ type: 'partial', id: 1, text: 'wrong stage', session: f.core.session });
+  f.finish(undefined, '');
+  assert.deepEqual(f.replies('final'), [{ type: 'final', id: 1, text: 'utterance one' }]);
+  f.asr.reply({ type: 'partial', id: 1, text: 'completed utterance', session: f.core.session });
+  f.finish(undefined, ''); f.core.stop(); f.stopped(); f.finish(undefined, '');
+  assert.deepEqual(f.replies('partial').map(e => e.text), ['utterance one', '']);
+  assert.deepEqual(f.replies('final').at(-1), { type: 'final', id: 2, text: '' });
+});
+
+for (const reset of ['release', 'release during Stop', 'asr error', 'vad error', 'worker exception', 'input error']) {
+  test(`${reset} clears usable fallback before reload, even with stale worker results`, () => {
+    const f = fixture(); f.ready(); f.core.start(); f.feed(PREVIEW_INTERVAL);
+    f.finish(undefined, 'discarded provisional'); f.feed(PREVIEW_INTERVAL);
+    const oldCallbacks = f.workers.map(w => w.onmessage), oldSession = f.core.session;
+    if (reset === 'release during Stop') { f.core.stop(); f.stopped(); }
+    if (reset.startsWith('release')) f.core.release();
+    else if (reset === 'worker exception') f.asr.onerror({ preventDefault() {}, message: 'controlled failure' });
+    else if (reset === 'input error') f.core.push([0]);
+    else f[reset.split(' ')[0]].reply({ type: 'error', session: oldSession, message: 'controlled failure' });
+    assert.equal(f.core.state, 'released'); assert.ok(f.workers.every(w => w.terminated));
+    f.core.load(); const [asr, vad] = f.workers.slice(-2);
+    asr.reply({ type: 'ready' }); vad.reply({ type: 'ready' }); f.core.start();
+    const session = f.core.session;
+    f.core.push(new Float32Array(37).fill(0.05));
+    vad.reply({ type: 'vad', session, frames: [{ audio: new Float32Array(37).fill(0.05), speaking: true }] });
+    f.core.stop(); vad.reply({ type: 'vad-stopped', session });
+    for (const type of ['partial', 'final', 'decoded']) {
+      // Old workers are rejected even if their callback carries the current session.
+      for (const callback of oldCallbacks) callback({ data: { type, id: 1, text: 'stale', session } });
+      asr.reply({ type, id: 1, text: 'stale', session: oldSession });
+    }
+    asr.reply({ type: 'final', id: 1, session, text: '' });
+    asr.reply({ type: 'decoded', session });
+    assert.deepEqual(f.replies('final'), [{ type: 'final', id: 1, text: '' }]);
+    assert.equal(f.replies('stopped').length, 1);
+  });
+}
+
 for (const duringStop of [false, true]) {
   test(`release ${duringStop ? 'during Stop' : 'during recognition'} rejects old callbacks and sessions`, () => {
     const f = fixture(); f.ready(); f.core.start(); f.feed(8000);

@@ -9,6 +9,7 @@ export class LocalAsrCore {
     this.onEvent = onEvent;
     this.workerFactory = workerFactory;
     this.state = 'released'; this.session = 0;
+    this.latestPartials = new Map();
   }
   emit(type, values = {}) { this.onEvent({ type, ...values }); }
   diagnostics() {
@@ -41,9 +42,10 @@ export class LocalAsrCore {
     if (this.state !== 'ready') throw new Error('ASR core must be ready before starting.');
     const session = ++this.session;
     this.state = 'running'; this.vadQueued = 0;
+    this.latestPartials.clear();
     this.simulation = new ReazonSimulation(
       message => this.worker.postMessage({ ...message, session }, [message.audio.buffer]),
-      () => { this.state = 'ready'; this.diagnostics(); this.emit('stopped'); },
+      () => { this.latestPartials.clear(); this.state = 'ready'; this.diagnostics(); this.emit('stopped'); },
       (event, id) => this.emit('speech', { event, id }),
     );
     try { this.vadWorker.postMessage({ type: 'vad-start', session }); }
@@ -97,11 +99,20 @@ export class LocalAsrCore {
       const request = this.simulation.inFlight;
       if (!request || request.id !== data.id || request.final !== (data.type === 'final')) return;
       if (data.type === 'partial' && (this.state === 'stopping' || !this.simulation.acceptsPartial(data.id))) return;
-      this.emit(data.type, { text: data.text, id: data.id });
+      let text = data.text;
+      if (data.type === 'partial') {
+        if (text.trim()) this.latestPartials.set(data.id, text);
+      } else {
+        // Keep the fresh final authoritative unless it contains no usable text.
+        if (!text.trim()) text = this.latestPartials.get(data.id) ?? text;
+        this.latestPartials.delete(data.id);
+      }
+      this.emit(data.type, { text, id: data.id });
     }
   }
   release() {
     ++this.session; this.state = 'released';
+    this.latestPartials.clear();
     this.worker?.terminate(); this.worker = null;
     this.vadWorker?.terminate(); this.vadWorker = null;
     this.simulation = null; this.vadQueued = 0;

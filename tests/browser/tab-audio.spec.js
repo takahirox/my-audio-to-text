@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-async function setup(page, { mode = 'audio', fallback = false, holdModule = false } = {}) {
+async function setup(page, { mode = 'audio', fallback = false, holdModule = false, emptyFinal = false } = {}) {
   for (const role of ['sherpa', 'silero']) {
     await page.context().route(`**/${role}-worker.js`, route => route.fulfill({
       contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
@@ -9,7 +9,7 @@ async function setup(page, { mode = 'audio', fallback = false, holdModule = fals
         if (data.type === 'vad-audio') postMessage({type:'vad',session:data.session,frames:[{audio:data.audio,speaking:true}]});
         if (data.type === 'vad-stop') postMessage({type:'vad-stopped',session:data.session});
         if (data.type === 'decode') {
-          postMessage({type:data.final ? 'final' : 'partial',text:'tab transcript',id:data.id,session:data.session});
+          postMessage({type:data.final ? 'final' : 'partial',text:data.final && ${emptyFinal} ? ' \t ' : 'tab transcript',id:data.id,session:data.session});
           postMessage({type:'decoded',session:data.session});
         }
       };`,
@@ -95,31 +95,34 @@ async function released(page, count = 1) {
 }
 
 for (const fallback of [false, true]) {
-  test(`tab audio uses the picker API and real ${fallback ? 'fallback' : 'worklet'} capture, then Stop/repeat`, async ({ page }) => {
-    await setup(page, { fallback }); await page.locator('#start').click();
-    await expect(page.locator('#status')).toContainText('Listening to tab audio');
-    await expect(page.locator('#partial')).toHaveText('tab transcript');
-    const request = await page.evaluate(() => window.displayRequests[0]);
-    expect(request.active).toBe(true);
-    expect(request.options).toEqual({ video: { displaySurface: 'browser' }, audio: true,
-      systemAudio: 'exclude', windowAudio: 'exclude' });
-    await expect(page.locator('#signal')).toContainText('Nonzero tab audio signal');
-    const input = await page.evaluate(() => window.workerMessages.filter(m => m.type === 'vad-audio'));
-    expect(input.length).toBeGreaterThan(0);
-    expect(input.every(m => m.float32 && m.length < 2048)).toBe(true);
-    expect(input.some(m => Math.abs(m.last - 0.05) < 1e-5)).toBe(true);
-    await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
-    await expect(page.locator('#final')).toHaveText('tab transcript\n');
-    await released(page);
-    const messages = await page.evaluate(() => window.workerMessages);
-    expect(messages.filter(m => m.type === 'vad-stop')).toHaveLength(1);
-    expect(messages.filter(m => m.type === 'decode' && m.final)).toHaveLength(1);
-    await page.locator('#start').click(); await expect(page.locator('#partial')).toHaveText('tab transcript');
-    await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
-    await released(page, 2); await expect(page.locator('#final')).toBeEmpty();
-    expect(await page.evaluate(() => window.terminated)).toBe(2);
-    await expect(page.locator('#errors')).toBeEmpty();
-  });
+  for (const emptyFinal of [false, true]) {
+    test(`tab audio uses the picker API and real ${fallback ? 'fallback' : 'worklet'} capture, then Stop/repeat${emptyFinal ? ' with empty final decoding' : ''}`, async ({ page }) => {
+      await setup(page, { fallback, emptyFinal }); await page.locator('#start').click();
+      await expect(page.locator('#status')).toContainText('Listening to tab audio');
+      await expect(page.locator('#partial')).toHaveText('tab transcript');
+      const request = await page.evaluate(() => window.displayRequests[0]);
+      expect(request.active).toBe(true);
+      expect(request.options).toEqual({ video: { displaySurface: 'browser' }, audio: true,
+        systemAudio: 'exclude', windowAudio: 'exclude' });
+      await expect(page.locator('#signal')).toContainText('Nonzero tab audio signal');
+      const input = await page.evaluate(() => window.workerMessages.filter(m => m.type === 'vad-audio'));
+      expect(input.length).toBeGreaterThan(0);
+      expect(input.every(m => m.float32 && m.length < 2048)).toBe(true);
+      expect(input.some(m => Math.abs(m.last - 0.05) < 1e-5)).toBe(true);
+      await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
+      await expect(page.locator('#final')).toHaveText('tab transcript\n');
+      await expect(page.locator('#partial')).toBeEmpty();
+      await released(page);
+      const messages = await page.evaluate(() => window.workerMessages);
+      expect(messages.filter(m => m.type === 'vad-stop')).toHaveLength(1);
+      expect(messages.filter(m => m.type === 'decode' && m.final)).toHaveLength(1);
+      await page.locator('#start').click(); await expect(page.locator('#partial')).toHaveText('tab transcript');
+      await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
+      await released(page, 2); await expect(page.locator('#final')).toBeEmpty();
+      expect(await page.evaluate(() => window.terminated)).toBe(2);
+      await expect(page.locator('#errors')).toBeEmpty();
+    });
+  }
 }
 
 for (const mode of ['denied', 'aborted', 'no-audio', 'unsupported']) {
