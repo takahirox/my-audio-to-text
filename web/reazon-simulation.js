@@ -1,11 +1,12 @@
 import { joinAudio } from './audio.js';
+import { ASR_CONFIG } from './local-asr-config.js';
 
-const RATE = 16000;
-export const PRE_ROLL = 0.8 * RATE;
-export const PREVIEW_INTERVAL = 0.5 * RATE;
-export const TRAILING_SILENCE = 0.35 * RATE;
-export const MAX_SPEECH = 12 * RATE;
-export const BUFFER_LIMIT = 30 * RATE;
+const RATE = ASR_CONFIG.sampleRate;
+export const PRE_ROLL = ASR_CONFIG.preRollSeconds * RATE;
+export const PREVIEW_INTERVAL = ASR_CONFIG.provisionalIntervalSeconds * RATE;
+export const TRAILING_SILENCE = ASR_CONFIG.trailingSilenceSeconds * RATE;
+export const MAX_SPEECH = ASR_CONFIG.maxUtteranceSeconds * RATE;
+export const BUFFER_LIMIT = ASR_CONFIG.pendingAudioSeconds * RATE;
 
 // ReazonSpeech-only policy. Input blocks have already been classified by Silero.
 // Finals take priority; there is no provisional queue, just the latest snapshot.
@@ -34,7 +35,7 @@ export class ReazonSimulation {
         }
         this.active = { id: ++this.nextId, chunks: [this.preRoll], length: this.preRoll.length,
           duration: 0, silence: 0, previewDuration: 0, speaking: true };
-        this.preRoll = new Float32Array(); this.speech('started');
+        this.preRoll = new Float32Array(); this.speech('started', this.active.id);
       }
       const item = this.active;
       const count = Math.min(audio.length - offset, MAX_SPEECH - item.duration,
@@ -50,7 +51,8 @@ export class ReazonSimulation {
   finalize() {
     if (!this.active) return;
     this.finals.push({ id: this.active.id, audio: joinAudio(this.active.chunks) });
-    this.active = null; this.speech('completed');
+    const id = this.active.id;
+    this.active = null; this.speech('completed', id);
   }
   acceptsPartial(id) { return !this.stopping && this.active?.id === id; }
   pump() {

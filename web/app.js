@@ -1,9 +1,7 @@
 import { Microphone } from './audio.js';
-import { ReazonSimulation, BUFFER_LIMIT } from './reazon-simulation.js';
+import { LocalAsrCore } from './local-asr-core.js';
 const $ = (id) => document.getElementById(id);
-let worker, vadWorker, mic, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
-let asrReady = false, vadReady = false;
-let simulation, vadQueued = 0, simulationStopping = false;
+let core, mic, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
 let firstText = false, firstPartial = false, peakRms = 0, speechStarted = 0, speechCompleted = 0, partialCount = 0, finalCount = 0;
 function diagnostics() {
   $('speech').textContent = `${speechStarted} Silero VAD utterance(s) accepted; ${speechCompleted} completed. ${speechStarted ? 'Speech detected.' : 'Waiting for speech.'}`;
@@ -15,7 +13,7 @@ function setState(next, message) {
   $('load').disabled = !['idle', 'error'].includes(state);
   $('start').disabled = state !== 'ready';
   $('stop').disabled = state !== 'recording';
-  $('cancel').disabled = !worker;
+  $('cancel').disabled = !core;
 }
 function resetOutput() {
   for (const id of ['init', 'first-partial', 'first-text', 'latency', 'audio']) $(id).textContent = '—';
@@ -26,11 +24,7 @@ function resetOutput() {
 }
 async function release() {
   generation++;
-  // Terminate first, so in-flight results cannot repopulate a canceled session.
-  worker?.terminate(); worker = null;
-  vadWorker?.terminate(); vadWorker = null;
-  simulation = null; vadQueued = 0; simulationStopping = false;
-  asrReady = vadReady = false;
+  core?.release(); core = null;
   $('reazon-model').textContent = '—';
   const previousMic = mic; mic = null;
   await previousMic?.stop(); $('level').value = 0;
@@ -41,57 +35,34 @@ async function fail(error) {
   await release(); setState('error', 'Error. See runtime errors below; load again to retry.');
 }
 function audio(audio) {
-  if (!worker || !['starting', 'recording', 'stopping'].includes(state)) return;
+  if (!core || !['starting', 'recording', 'stopping'].includes(state)) return;
   if (!captured) startedAt = performance.now();
   captured += audio.length;
   const rms = Math.sqrt(audio.reduce((sum, sample) => sum + sample * sample, 0) / audio.length);
   peakRms = Math.max(peakRms, rms); $('level').value = rms;
   const db = (value) => value > 0 ? `${(20 * Math.log10(value)).toFixed(1)} dBFS` : '−∞ dBFS';
   $('signal').textContent = `RMS ${db(rms)}; session peak RMS ${db(peakRms)}. ${peakRms > 0 ? 'Nonzero microphone signal reached the app (may be noise).' : 'Audio frames received, but signal is zero.'}`;
-  try {
-    if (vadQueued + simulation.waiting + audio.length > BUFFER_LIMIT) {
-      throw new Error('Backend is over 30 seconds behind. Capture stopped; retry with shorter utterances.');
-    }
-    vadQueued += audio.length; queued = vadQueued + simulation.waiting;
-    vadWorker.postMessage({ type: 'vad-audio', audio, session: generation }, [audio.buffer]);
-  } catch (error) { void fail(error); return; }
+  core.push(audio);
   audioDiagnostics();
 }
 function audioDiagnostics() {
   $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
 }
-function receive({ data }, vad = false) {
-  if (data.session !== undefined && data.session !== generation) return;
+function receive(data) {
   if (data.type === 'error') { void fail(new Error(data.message)); return; }
   if (data.type === 'configuration') $('reazon-model').textContent = `${data.modelName} (${data.model}); ${data.numThreads} thread(s)`;
   else if (data.type === 'progress') $('progress').textContent = data.message;
   else if (data.type === 'ready') {
-    if (vad) vadReady = true; else asrReady = true;
-    if (!asrReady || !vadReady) return;
     $('init').textContent = time(performance.now() - loadAt);
     $('progress').textContent = 'Model loaded.'; setState('ready', 'Ready. Tap Start microphone.');
-  } else if (data.type === 'vad') {
-    try {
-      for (const frame of data.frames) {
-        vadQueued -= frame.audio.length;
-        simulation.push(frame.audio, frame.speaking);
-        if (vadQueued + simulation.waiting > BUFFER_LIMIT) {
-          throw new Error('Backend is over 30 seconds behind. Capture stopped; retry with shorter utterances.');
-        }
-      }
-      queued = vadQueued + simulation.waiting;
-    } catch (error) { void fail(error); return; }
-    audioDiagnostics();
-  } else if (data.type === 'vad-stopped') {
-    simulation.stop();
-  } else if (data.type === 'decoded') {
-    simulation.decoded(); queued = vadQueued + simulation.waiting; audioDiagnostics();
+  } else if (data.type === 'diagnostics') {
+    queued = data.pendingSamples; audioDiagnostics();
   } else if (data.type === 'speech') {
     if (data.event === 'started') speechStarted++;
     else if (data.event === 'completed') speechCompleted++;
     diagnostics();
   } else if (['partial', 'final'].includes(data.type)) {
-    if (data.type === 'partial' && (simulationStopping || !simulation.acceptsPartial(data.id))) return;
+    if (data.type === 'partial' && state === 'stopping') return;
     if (data.text.trim()) {
       if (data.type === 'partial') partialCount++; else finalCount++;
       diagnostics();
@@ -114,30 +85,18 @@ $('load').onclick = async () => {
   setState('loading', 'Loading model…');
   await release(); resetOutput(); loadAt = performance.now();
   try {
-    worker = new Worker('./sherpa-worker.js');
-    const activeWorker = worker;
-    worker.onmessage = (event) => { if (worker === activeWorker) receive(event); };
-    worker.onerror = (event) => { event.preventDefault(); if (worker === activeWorker) void fail(new Error(event.message)); };
-    vadWorker = new Worker('./silero-worker.js');
-    const activeVadWorker = vadWorker;
-    vadWorker.onmessage = (event) => { if (vadWorker === activeVadWorker) receive(event, true); };
-    vadWorker.onerror = (event) => { event.preventDefault(); if (vadWorker === activeVadWorker) void fail(new Error(event.message)); };
-    vadWorker.postMessage({ type: 'load' });
-    worker.postMessage({ type: 'load' }); setState('loading', 'Loading model…');
+    core = new LocalAsrCore(receive);
+    setState('loading', 'Loading model…');
+    core.load();
   } catch (error) { await fail(error); }
 };
 $('start').onclick = async () => {
   setState('starting', 'Requesting microphone…');
   const init = $('init').textContent; resetOutput(); $('init').textContent = init;
-  const activeWorker = worker, session = ++generation;
-  const isCurrent = () => worker === activeWorker && generation === session;
-  vadQueued = 0; simulationStopping = false;
-  vadWorker.postMessage({ type: 'vad-start', session });
-  simulation = new ReazonSimulation(
-    (message) => activeWorker.postMessage({ ...message, session }, [message.audio.buffer]),
-    () => { if (isCurrent()) receive({ data: { type: 'stopped', session } }); },
-    (event) => { if (isCurrent()) receive({ data: { type: 'speech', event, session } }); },
-  );
+  const activeCore = core, session = ++generation;
+  const isCurrent = () => core === activeCore && generation === session;
+  core.start();
+  if (!isCurrent()) return;
   mic = new Microphone(
     (chunk) => { if (isCurrent()) audio(chunk); },
     () => { if (isCurrent()) void stop(); },
@@ -150,14 +109,13 @@ $('start').onclick = async () => {
 };
 async function stop() {
   if (state !== 'recording') return;
-  simulationStopping = true;
   stopAt = performance.now(); setState('stopping', 'Finalizing…');
-  const previousMic = mic, activeWorker = worker, session = generation; mic = null;
+  const previousMic = mic, activeCore = core, session = generation; mic = null;
   await previousMic?.stop();
   // Cancel/reload can finish while the old worklet is still flushing.
-  if (worker !== activeWorker || generation !== session) return;
+  if (core !== activeCore || generation !== session) return;
   $('level').value = 0;
-  vadWorker.postMessage({ type: 'vad-stop', session });
+  core.stop();
 }
 $('stop').onclick = () => void stop();
 $('cancel').onclick = async () => { setState('booting', 'Releasing…'); await release(); resetOutput(); setState('idle', 'Canceled. Load a model to continue.'); };
