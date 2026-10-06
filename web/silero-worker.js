@@ -9,6 +9,7 @@ self.onmessage = ({ data }) => { sequence = sequence.then(() => handle(data)).ca
 
 // Reuse the pinned Silero runtime in its own worker. No ASR recognizer is created.
 async function load() {
+  const { SILERO_CONFIG } = await import('./local-asr-config.js');
   const base = new URL('./vendor/sherpa-ja-en/', self.location.href);
   const script = new URL('sherpa-onnx-wasm-main-vad-asr.js', base).href;
   await new Promise((resolve, reject) => {
@@ -23,11 +24,8 @@ async function load() {
     };
     importScripts(new URL('sherpa-onnx-vad.js', base).href, script);
   });
-  vad = createVad(self.Module, {
-    sileroVad: { model: './silero_vad.onnx', threshold: 0.5, windowSize: 512,
-      minSpeechDuration: 1 / 16000, minSilenceDuration: 1 / 16000, maxSpeechDuration: 12 },
-    sampleRate: 16000, numThreads: 1, provider: 'cpu', debug: 0, bufferSizeInSeconds: 2,
-  });
+  // The pinned wrapper fills in unused detector defaults on its config object.
+  vad = createVad(self.Module, structuredClone(SILERO_CONFIG));
   if (!vad.handle) throw new Error('Silero VAD initialization failed');
 }
 function classify(audio, flush = false) {
@@ -54,7 +52,7 @@ async function handle(data) {
   } else if (running && data.session === session) {
     if (data.type === 'vad-audio') classify(data.audio);
     else if (data.type === 'vad-stop') {
-      // Publish the final short frame before acknowledging Stop. The page drains ASR.
+      // Publish the final short frame before acknowledging Stop. The core drains ASR.
       classify(new Float32Array(), true);
       running = false; vad.reset(); send('vad-stopped');
     }

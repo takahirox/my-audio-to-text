@@ -23,6 +23,7 @@ async function setup(page, { hold = false, holdReady = null } = {}) {
   // Replace only heavyweight initialization and optionally hold decode requests.
   const actualWorker = readFileSync(new URL('../../web/sherpa-worker.js', import.meta.url), 'utf8') + `
     load = async () => {
+      sampleRate = (await import('./local-asr-config.js')).ASR_CONFIG.sampleRate;
       recognizer = {
         createStream() { return {
           acceptWaveform(rate, audio) { this.audio = audio; postMessage({type:'test-rate', rate, length:audio.length}); },
