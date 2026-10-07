@@ -34,7 +34,7 @@ export function joinAudio(chunks) {
   return result;
 }
 
-class BrowserAudioSource {
+export class BrowserAudioSource {
   constructor(onAudio, onEnded) { this.onAudio = onAudio; this.onEnded = onEnded; }
   checkCanceled() {
     if (this.canceled) throw new DOMException('Capture canceled', 'AbortError');
@@ -49,7 +49,7 @@ class BrowserAudioSource {
       this.media = await this.getMedia();
       this.checkCanceled();
       const tracks = this.media.getAudioTracks();
-      if (!tracks.length) throw new Error('No audio was shared. Choose a browser tab and enable "Share tab audio" in the sharing picker, then try again.');
+      if (!tracks.length) throw new Error(this.noAudioMessage || 'No audio was shared. Choose a browser tab and enable "Share tab audio" in the sharing picker, then try again.');
       const ended = () => { if (!this.canceled) this.onEnded?.(); };
       for (const track of this.media.getTracks()) track.onended = ended;
       if (this.media.getTracks().some(track => track.readyState === 'ended')) {
@@ -64,7 +64,7 @@ class BrowserAudioSource {
         if (audio.length) this.onAudio(audio);
       };
       if (this.context.audioWorklet) {
-        await this.context.audioWorklet.addModule('./capture-worklet.js');
+        await this.context.audioWorklet.addModule(this.workletURL || './capture-worklet.js');
         this.checkCanceled();
         this.node = new AudioWorkletNode(this.context, 'capture');
         this.node.port.onmessage = ({ data }) => onChunk(data);

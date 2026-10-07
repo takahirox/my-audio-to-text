@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { BrowserTab, Microphone, Resampler, joinAudio } from '../web/audio.js';
 import { LocalAsrCore } from '../web/local-asr-core.js';
+import { ExtensionTab } from '../extension/tab-source.js';
 
 const deferred = () => {
   let resolve, reject;
@@ -20,7 +21,7 @@ function browser(t, { rate = 48000, worklet = true, permission, module } = {}) {
   }));
   const media = { getTracks: () => tracks, getAudioTracks: () => tracks.filter(t => t.kind === 'audio') };
   const requests = [], contexts = [];
-  const node = () => ({ connect() {}, disconnect() { this.disconnected = true; } });
+  const node = () => ({ connections: [], connect(target) { this.connections.push(target); }, disconnect() { this.disconnected = true; } });
   let Processor;
   runInNewContext(readFileSync(new URL('../web/capture-worklet.js', import.meta.url), 'utf8'), {
     Float32Array,
@@ -187,3 +188,52 @@ test('worklet setup errors release all allocated capture resources', async t => 
   assert.equal(b.contexts[0].state, 'closed');
   assert.ok(source.source.disconnected);
 });
+
+for (const rate of [16000, 44100, 48000]) {
+  test(`extension capture at ${rate} Hz shares mono resampling and restores playback once`, async t => {
+    const b = browser(t, { rate }), chunks = [], ids = [];
+    Object.defineProperty(globalThis, 'chrome', { configurable: true, value: { tabCapture: {
+      getMediaStreamId: async options => { ids.push(options); return 'single-use-id'; },
+    } } });
+    t.after(() => delete globalThis.chrome);
+    const source = new ExtensionTab(42, chunk => chunks.push(chunk));
+    await source.start();
+    assert.deepEqual(ids, [{ targetTabId: 42 }]);
+    assert.deepEqual(b.requests, [{ api: 'getUserMedia', options: { audio: {
+      mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: 'single-use-id' },
+    }, video: false } }]);
+    assert.ok(source.workletURL.endsWith('/web/capture-worklet.js'));
+    assert.deepEqual(source.source.connections, [source.node, source.context.destination]);
+    assert.equal(source.gain.gain.value, 0);
+    for (let offset = 0; offset < rate; offset += 128) {
+      const length = Math.min(128, rate - offset);
+      source.node.processor.process([[new Float32Array(length).fill(0.02), new Float32Array(length).fill(0.08)]]);
+    }
+    await source.stop();
+    const audio = joinAudio(chunks);
+    assert.ok(Math.abs(audio.length - 16000) <= 1);
+    assert.ok(audio.every(sample => Math.abs(sample - 0.05) < 1e-6));
+    assert.ok(source.source.disconnected && source.node.disconnected);
+    assert.ok(b.tracks.every(track => track.stops === 1));
+    assert.equal(b.contexts[0].state, 'closed');
+  });
+}
+
+for (const mode of ['api-error', 'no-audio', 'unavailable']) {
+  test(`extension ${mode} fails clearly and releases resources`, async t => {
+    const b = browser(t);
+    if (mode === 'no-audio') b.media.getAudioTracks = () => [];
+    Object.defineProperty(globalThis, 'chrome', { configurable: true, value: mode === 'unavailable' ? {} : {
+      tabCapture: { getMediaStreamId: async () => {
+        if (mode === 'api-error') throw new Error('Cannot capture this tab');
+        return 'id';
+      } },
+    } });
+    t.after(() => delete globalThis.chrome);
+    const source = new ExtensionTab(42, () => assert.fail('failed audio'));
+    await assert.rejects(source.start(), mode === 'api-error' ? /Cannot capture/ : mode === 'no-audio' ? /No tab audio/ : /unavailable/);
+    assert.equal(b.contexts[0].state, 'closed');
+    if (mode === 'no-audio') assert.ok(b.tracks.every(track => track.stops === 1));
+    else assert.equal(b.requests.length, 0);
+  });
+}

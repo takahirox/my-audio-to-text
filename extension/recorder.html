@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Current-tab transcription</title>
+  <link rel="stylesheet" href="recorder.css">
+</head>
+<body>
+  <h1>Current-tab transcription</h1>
+  <p>Local ReazonSpeech ja-en + Silero</p>
+  <p id="status" role="status"></p>
+  <p id="signal"></p>
+  <p id="errors" role="alert"></p>
+  <button id="start" disabled>Start again</button>
+  <button id="stop" disabled>Stop / finalize</button>
+  <h2>Provisional</h2>
+  <pre id="partial" aria-live="polite"></pre>
+  <h2>Final transcript</h2>
+  <pre id="final" aria-live="polite"></pre>
+  <p>Return to your meeting tab while this window stays open. Closing this window releases capture and discards pending recognition. Copy the final text before closing.</p>
+  <script type="module" src="recorder.js"></script>
+</body>
+</html>
