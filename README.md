@@ -20,6 +20,12 @@ Microphone or browser-tab audio feeds normalized PCM into the documented [local 
 
 See [setup, testing, and limitations](docs/asr-manual-testing.md). Automated Chromium/WebKit checks cover loading, provisional/final output, Stop, Cancel, repeat, worker isolation, and stale-result rejection. The [Issue #45 validation record](docs/evidence/reazon-45.md) records the current local checks. The [historical acceptance record](docs/asr-acceptance.md) and [experiment evidence](docs/evidence/) preserve completed comparisons and publication observations; they are not instructions for the current baseline.
 
+A minimal [Chrome extension PoC](docs/chrome-extension.md) starts current-tab
+transcription from the toolbar without the sharing picker. It reuses the Web
+ASR core and audio helpers, restores audible tab playback, and shows transcripts
+in a persistent window. See its guide for building/loading the unpacked extension,
+permissions, lifecycle behavior and automated tests.
+
 The [Pages workflow](.github/workflows/pages.yml) prepares only the pinned ReazonSpeech ja-en/Silero runtime assets and deploys `web/` automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. Inference runs in the browser; loading about 91 MB of model/runtime assets needs no ASR server.
 
 For setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the `github-pages` environment and built-in `GITHUB_TOKEN`.

@@ -1,5 +1,6 @@
 .DS_Store
 .cache/
+dist/
 web/vendor/
 node_modules/
 test-results/
