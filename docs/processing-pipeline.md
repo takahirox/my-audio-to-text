@@ -4,7 +4,8 @@
 long-lived product vision: reusable source and processing nodes connected into
 local-first pipelines. The [minimal Node/Port runtime](pipeline-runtime.md)
 implements code-level composition and an executable browser-tab transcription
-example. This document explains the longer-lived architecture; additional
+example, and powers the Web playground's microphone/tab transcription. This
+document explains the longer-lived architecture; additional
 processors and a universal plugin SDK remain future work.
 See the [README](../README.md#current-implemented-capabilities) for current status.
 
@@ -18,10 +19,11 @@ ReazonSpeech is an offline recognizer repeatedly decoding bounded snapshots;
 this is not native streaming recognition.
 
 The [Local ASR Core](local-asr-core.md) separates recognition from capture,
-resampling and UI. The [Web playground](asr-manual-testing.md) and
-[Chrome extension](chrome-extension.md) reuse this capability through its
-existing methods and event callback. The minimal runtime also exposes tab capture,
-speech-to-text and transcript sink nodes connected through named ports. Translation,
+resampling and UI. The [Web playground](asr-manual-testing.md) reuses this
+capability through
+microphone/tab source nodes, one speech-to-text node and a transcript sink
+connected by named ports. The [Chrome extension](chrome-extension.md) retains
+its direct core methods and event callback. Translation,
 summarization, topic processing, persistent history and personalized ASR are
 future capabilities.
 

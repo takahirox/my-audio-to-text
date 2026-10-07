@@ -90,6 +90,45 @@ a new run. Old context closures cannot feed a replacement graph. Graceful Stop
 does not itself dispose model resources. Restarting/rewiring graphs and sharing
 node instances between graphs are outside this contract.
 
+## Web playground integration
+
+[`web/app.js`](../web/app.js) uses the runtime for both input choices:
+
+```text
+MicrophoneAudioNode / BrowserTabAudioNode
+        ↓ audio (mono 16 kHz Float32Array)
+SpeechToTextNode
+        ├─ provisional → TranscriptOutputNode.provisional
+        └─ final       → TranscriptOutputNode.final
+```
+
+The source nodes wrap the existing capture/resampling helpers. Their optional
+`onAudio(pcm)` observer supplies signal/RMS and captured-duration diagnostics;
+PCM reaches ASR only through the connected audio port. `MicrophoneAudioNode`
+stops on page hiding, including during pending permission; tab capture continues
+in the background. Source end during setup closes capture and settles startup
+so downstream nodes can drain without waiting for a late grant/worklet setup.
+Both nodes discard late callbacks on disposal.
+
+Load preloads `SpeechToTextNode` before enabling Start. Start executes
+`pipeline.start()` from the capture gesture. The UI observes core configuration,
+loading, pending-audio and speech events, while transcript rendering consumes
+only the sink's provisional/final ports. Stop awaits `pipeline.stop()` through
+the source tail, ASR finals and sink before showing Ready or measuring Stop
+latency. Cancel, source changes, reload, errors and page teardown dispose the
+graph and invalidate its UI observer generation.
+
+Repeat uses fresh nodes and contexts without reloading the model. After a
+successful **whole-pipeline drain**, `speech.nextSession({ onEvent })` transfers
+sole ownership of its ready core to a fresh `SpeechToTextNode`. The old node
+loses the core and cannot transfer it again; disposing its old graph releases
+source/sink resources without terminating the transferred workers. The new
+node's disposal owns worker release. This explicit adapter handoff retains the
+same two workers and the core's session checks; it is not graph restart, node
+reuse between graphs, worker pooling or a change to the generic runtime. Failed,
+canceled, already-transferred or undrained speech nodes cannot hand off a core.
+The playground builds its replacement graph before enabling Start again.
+
 ## Executable browser-tab transcription example
 
 [`web/transcription-nodes.js`](../web/transcription-nodes.js) exports the real
@@ -148,10 +187,10 @@ dispose the graph; a new run creates a new helper instance. Tab permissions,
 HTTPS/localhost, cross-origin isolation, model assets and browser limitations
 are the same as the playground. No external API integration is required.
 
-This executable integration leaves the existing playground and extension
-capture/core/UI paths intact. Deterministic tests exercise the helper using real
-`BrowserTab`, capture worklet, resampling and `LocalAsrCore`, with only browser
-permission APIs and model worker replies controlled. Browser tests execute the
+The Chrome extension retains its existing capture/core/UI path. Deterministic
+tests exercise the playground and adapters using real microphone/tab helpers,
+capture worklet, resampling and `LocalAsrCore`, with browser permission APIs and
+model worker replies controlled. Browser tests execute the playground and
 helper with native Web Audio, native worklet/fallback capture and real Worker
 messaging in Chromium and WebKit. They verify provisional/final fallback, PCM,
 draining and resource release. Unit tests additionally cover validation,

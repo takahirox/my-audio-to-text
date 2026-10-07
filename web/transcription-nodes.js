@@ -1,25 +1,79 @@
-import { BrowserTab } from './audio.js';
+import { BrowserTab, Microphone } from './audio.js';
 import { LocalAsrCore } from './local-asr-core.js';
 import { Pipeline, portContract } from './pipeline.js';
 
 export const MONO_16KHZ_PCM = portContract('mono 16 kHz Float32Array PCM');
 export const TRANSCRIPT = portContract('transcript { text, id }');
 
-export class BrowserTabAudioNode {
+// Capture and diagnostics remain source policy, outside the generic runtime.
+class BrowserAudioNode {
   inputs = {};
   outputs = { audio: MONO_16KHZ_PCM };
-  constructor({ onEnded, sourceFactory = (audio, ended) => new BrowserTab(audio, ended) } = {}) {
-    this.onEnded = onEnded; this.sourceFactory = sourceFactory;
+  constructor({ onEnded, onAudio = () => {}, sourceFactory }) {
+    this.onEnded = onEnded; this.onAudio = onAudio; this.sourceFactory = sourceFactory;
   }
   start(context) {
+    const ended = deferred();
+    this.endCapture = () => {
+      if (context.signal.aborted || this.ending || this.disposed || this.stopped) return;
+      this.ending = true;
+      // Sharing/hiding can end capture while permission or worklet setup is
+      // pending. Close now and let startup finish so the graph can drain.
+      this.stop().then(ended.resolve, ended.reject);
+      this.onEnded?.();
+    };
     this.source = this.sourceFactory(
-      audio => context.emit('audio', audio),
-      () => { if (!context.signal.aborted) this.onEnded?.(); },
+      audio => {
+        if (context.signal.aborted || this.disposed || this.stopped) return;
+        try { this.onAudio(audio); context.emit('audio', audio); }
+        catch (error) { context.fail(error); }
+      },
+      this.endCapture,
     );
-    return this.source.start();
+    return Promise.race([
+      Promise.resolve(this.source.start()).catch(error => {
+        if (this.ending) return ended.promise;
+        throw error;
+      }),
+      ended.promise,
+    ]);
   }
-  stop() { return this.source?.stop(); }
-  dispose() { return this.source?.stop(false); }
+  stop() {
+    return this.stopping ??= Promise.resolve().then(() => this.source?.stop()).then(() => { this.stopped = true; });
+  }
+  dispose() {
+    this.disposed = true;
+    // A completed graceful stop has already released capture. Cancellation
+    // during a pending flush must still interrupt it with stop(false).
+    if (!this.stopped) return this.source?.stop(false);
+  }
+}
+
+export class BrowserTabAudioNode extends BrowserAudioNode {
+  constructor({ sourceFactory = (audio, ended) => new BrowserTab(audio, ended), ...options } = {}) {
+    super({ ...options, sourceFactory });
+  }
+}
+
+export class MicrophoneAudioNode extends BrowserAudioNode {
+  constructor({ sourceFactory = (audio, ended) => new Microphone(audio, ended), ...options } = {}) {
+    super({ ...options, sourceFactory });
+  }
+  start(context) {
+    // Keep microphone stop-on-hide policy with the source, including while
+    // permission is pending. Tab nodes deliberately have no visibility hook.
+    if (typeof document !== 'undefined') {
+      this.visibility = () => { if (document.hidden) this.endCapture(); };
+      document.addEventListener('visibilitychange', this.visibility);
+    }
+    return super.start(context);
+  }
+  removeVisibility() {
+    if (this.visibility) document.removeEventListener('visibilitychange', this.visibility);
+    this.visibility = null;
+  }
+  stop() { this.removeVisibility(); return super.stop(); }
+  dispose() { this.removeVisibility(); return super.dispose(); }
 }
 
 export class SpeechToTextNode {
@@ -31,6 +85,7 @@ export class SpeechToTextNode {
     this.core = new LocalAsrCore(event => this.receiveEvent(event), { workerFactory });
   }
   receiveEvent(event) {
+    if (this.disposed || !this.core) return;
     if (event.type === 'ready') this.loading?.resolve();
     else if (event.type === 'stopped') this.draining?.resolve();
     else if (event.type === 'error') {
@@ -46,7 +101,7 @@ export class SpeechToTextNode {
   }
   // Optional preloading lets the UI load models before the capture gesture.
   load() {
-    if (this.disposed) return Promise.reject(new DOMException('Node disposed.', 'AbortError'));
+    if (this.disposed || !this.core) return Promise.reject(new DOMException('Node disposed or transferred.', 'AbortError'));
     if (!this.loading) {
       this.loading = deferred();
       try { this.core.load(); } catch (error) { this.loading.reject(error); }
@@ -65,11 +120,23 @@ export class SpeechToTextNode {
       this.draining = deferred();
       this.core.stop();
     }
-    return this.draining.promise;
+    return this.draining.promise.then(() => { this.stopped = true; });
+  }
+  // A graph is single-use. After its graceful drain, move sole ownership of
+  // the warm core to a fresh node without reloading models or sharing workers.
+  nextSession({ onEvent = this.onEvent } = {}) {
+    if (!this.stopped || this.disposed || this.context?.signal.aborted || this.core?.state !== 'ready') {
+      throw new Error('A new speech session requires a successfully drained node.');
+    }
+    const next = new SpeechToTextNode({ onEvent });
+    next.core = this.core; next.loading = deferred(); next.loading.resolve();
+    next.core.onEvent = event => next.receiveEvent(event);
+    this.core = null; this.context = null;
+    return next;
   }
   dispose() {
     this.disposed = true; this.context = null;
-    this.core.release();
+    this.core?.release();
     const error = new DOMException('Node disposed.', 'AbortError');
     this.loading?.reject(error); this.draining?.reject(error);
   }

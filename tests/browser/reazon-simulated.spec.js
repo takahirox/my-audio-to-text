@@ -149,6 +149,39 @@ test.describe('ReazonSpeech ja-en baseline', () => {
       });
     }
 
+    test('Cancel during model preloading ignores late readiness and permits a fresh load', async ({ page }) => {
+      await setup(page, { holdReady: 'asr' });
+      await page.evaluate(() => { window.oldCallbacks = window.testWorkers.map(w => w.onmessage); });
+      await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
+      await page.evaluate(() => window.oldCallbacks.forEach(callback => callback({data:{type:'ready'}})));
+      await expect(page.locator('#status')).toContainText('Canceled');
+      await expect(page.locator('#start')).toBeDisabled();
+      expect(await page.evaluate(() => window.terminated)).toEqual([0, 1]);
+      expect(await page.evaluate(() => window.captureStops)).toBe(0);
+      await page.locator('#load').click();
+      await expect.poll(() => page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-ready-held').length)).toBe(2);
+      await page.evaluate(() => window.oldCallbacks.forEach(callback => callback({data:{type:'ready'}})));
+      await expect(page.locator('#start')).toBeDisabled();
+      await page.evaluate(() => window.testWorkers[2].postMessage({type:'test-ready'}));
+      await expect(page.locator('#start')).toBeEnabled();
+      await expect(page.locator('#errors')).toBeEmpty();
+    });
+
+    test('model preload errors release the idle graph without starting capture', async ({ page }) => {
+      await setup(page, { holdReady: 'vad' });
+      await page.evaluate(() => window.testWorkers[0].onerror({preventDefault() {}, message:'Controlled preload failure'}));
+      await expect(page.locator('#load')).toBeEnabled();
+      await expect(page.locator('#status')).toContainText('Error');
+      await expect(page.locator('#errors')).toContainText('Controlled preload failure');
+      expect(await page.evaluate(() => window.terminated)).toEqual([0, 1]);
+      expect(await page.evaluate(() => window.captureStops)).toBe(0);
+      await page.locator('#load').click();
+      await expect.poll(() => page.evaluate(() => window.workerEvents.filter(e => e.type === 'test-ready-held').length)).toBe(2);
+      await page.evaluate(() => window.testWorkers[3].postMessage({type:'test-ready'}));
+      await expect(page.locator('#start')).toBeEnabled();
+      await expect(page.locator('#errors')).toBeEmpty();
+    });
+
     test('VAD errors and page teardown release both workers and capture', async ({ page }) => {
       await setup(page); await page.locator('#start').click();
       await page.evaluate(() => window.testWorkers[1].onerror({preventDefault() {}, message:'Controlled VAD failure'}));

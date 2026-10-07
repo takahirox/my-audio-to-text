@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTabTranscriptionPipeline } from '../web/transcription-nodes.js';
+import { createTabTranscriptionPipeline, MicrophoneAudioNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
 import { LocalAsrCore } from '../web/local-asr-core.js';
+import { Pipeline } from '../web/pipeline.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture() {
@@ -100,3 +101,35 @@ for (const phase of ['load', 'running', 'draining']) {
     await f.pipeline.dispose();
   });
 }
+
+test('a drained speech node hands warm workers to a fresh graph with isolated ports and sessions', async () => {
+  const f = fixture(); await f.load();
+  assert.throws(() => f.speech.nextSession(), /successfully drained/);
+  f.capture.audio(new Float32Array(8000).fill(0.05)); await tick(); f.classify(); f.finish(0, 'first'); await tick();
+  const stopping = f.pipeline.stop(); await tick(); f.classify();
+  f.workers[1].reply({ type: 'vad-stopped', session: 1 }); f.finish(1, 'first final'); await stopping;
+  const values = [], core = f.speech.core;
+  const speech = f.speech.nextSession();
+  assert.notEqual(speech, f.speech); assert.equal(speech.core, core); assert.equal(f.speech.core, null);
+  assert.throws(() => f.speech.nextSession(), /successfully drained/);
+  await assert.rejects(f.speech.load(), /transferred/);
+  await f.pipeline.dispose(); assert.ok(f.workers.every(w => !w.terminated));
+  const transcript = new TranscriptOutputNode((port, value) => values.push([port, value]));
+  const source = new MicrophoneAudioNode({ sourceFactory: audio => ({ start() { this.audio = audio; }, stop() {} }) });
+  const pipeline = new Pipeline({ nodes: { source, speech, transcript }, connections: [
+    { from: ['source', 'audio'], to: ['speech', 'audio'] },
+    { from: ['speech', 'provisional'], to: ['transcript', 'provisional'] },
+    { from: ['speech', 'final'], to: ['transcript', 'final'] },
+  ] });
+  await speech.load(); await pipeline.start();
+  assert.equal(f.workers.length, 2);
+  assert.ok(f.workers.every(w => w.messages.filter(m => m.type === 'load').length === 1));
+  f.capture.audio(new Float32Array(8000)); // Old source/context cannot emit into the new graph.
+  f.speech.receiveEvent({ type: 'final', id: 1, text: 'stale' });
+  f.workers[0].reply({ type: 'final', session: 1, id: 1, text: 'stale' });
+  source.source.audio(new Float32Array(8000).fill(0.05)); await tick(); f.classify(); f.finish(2, 'second'); await tick();
+  assert.deepEqual(values, [['provisional', { text: 'second', id: 1 }]]);
+  assert.deepEqual(f.values.at(-1), ['final', { text: 'first final', id: 1 }]);
+  await pipeline.dispose(); assert.ok(f.workers.every(w => w.terminated));
+  assert.throws(() => speech.nextSession(), /successfully drained/);
+});

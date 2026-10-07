@@ -98,8 +98,10 @@ isolation, input backpressure, Stop/draining, and release/error handling.
 `ReazonSimulation` is its internal utterance policy: finals take priority over
 the latest eligible preview, with one decode in flight. The workers own only
 runtime loading, VAD classification, and individual offline decodes.
-`web/app.js` owns source lifetime, UI state, audio signal and elapsed-time
-diagnostics, and rendering the recognition events.
+`SpeechToTextNode` owns the core for the Web playground. Source nodes own
+capture lifetime; `web/app.js` composes their [pipeline](pipeline-runtime.md),
+observes signal/core diagnostics and renders provisional/final sink inputs.
+The Chrome extension continues to use the core directly.
 
 ## Browser audio sources
 
@@ -110,7 +112,9 @@ all capture tracks, flushes the worklet and resampler tails, disconnects nodes,
 and closes the context. `stop(false)` discards tails for Cancel, source switching,
 errors and teardown. Cancellation is checked after asynchronous permission and
 worklet initialization so a late stream cannot resurrect a released source.
-The app retains the source while Stop flushes so Cancel can interrupt cleanup.
+The source node retains the helper while Stop flushes so pipeline disposal can
+interrupt cleanup. The playground delegates graceful draining to `pipeline.stop()`
+and cancellation to `pipeline.dispose()`.
 
 `BrowserTab` uses `getDisplayMedia()` with audio and required video, suggesting
 a browser tab and excluding system/window audio in browsers that support those

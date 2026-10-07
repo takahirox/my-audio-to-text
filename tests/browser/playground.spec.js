@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { observePipeline, graphTypes } from './pipeline-observer.js';
 
 // Exercise the real page/capture lifecycle without downloading models in CI.
 // Real model inference is covered separately by the opt-in smoke test.
@@ -29,8 +30,9 @@ async function fakeMicrophone(page, gain = 1) {
     // instance-level getUserMedia override between captures.
     const mediaDevices = navigator.mediaDevices;
     Object.defineProperty(navigator, 'mediaDevices', { value: mediaDevices });
-    window.trackStops = 0;
+    window.trackStops = 0; window.microphoneRequests = [];
     mediaDevices.getUserMedia = async () => {
+      window.microphoneRequests.push({ active: navigator.userActivation.isActive });
       const context = new AudioContext();
       const source = context.createOscillator(), volume = context.createGain();
       const destination = context.createMediaStreamDestination();
@@ -181,4 +183,68 @@ test('Stop then Cancel/reload discards the old capture flush and Stop', async ({
   await expect(page.locator('#status')).toContainText('Stopped');
   await expect(page.locator('#final')).toContainText('日本語のテスト');
   expect(await page.evaluate(() => window.trackStops)).toBe(2);
+});
+
+for (const action of ['drain', 'cancel']) {
+  test(`microphone pipeline ${action} while final transcript output is pending`, async ({ page }) => {
+    await fakeBackend(page); await fakeMicrophone(page);
+    await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+    await observePipeline(page);
+    await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
+    expect(await page.evaluate(() => window.microphoneRequests)).toEqual([]);
+    await page.locator('#start').click();
+    await expect(page.locator('#partial')).toHaveText('日本語のテスト');
+    expect(await graphTypes(page)).toEqual(['MicrophoneAudioNode', 'SpeechToTextNode', 'TranscriptOutputNode']);
+    expect(await page.evaluate(() => window.microphoneRequests)).toEqual([{ active: true }]);
+    await page.evaluate(() => { window.holdTranscript = true; });
+    // Microphone visibility handling uses the same graceful pipeline stop.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(() => page.evaluate(() => !!window.heldTranscript)).toBe(true);
+    await expect(page.locator('#status')).toHaveText('Finalizing…');
+    await expect(page.locator('#start')).toBeDisabled();
+    await expect(page.locator('#final')).toBeEmpty();
+    if (action === 'cancel') {
+      await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
+      await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
+      await page.evaluate(() => window.releaseTranscript());
+      await expect(page.locator('#final')).toBeEmpty();
+      await expect(page.locator('#status')).toContainText('Ready');
+    } else {
+      await page.evaluate(() => window.releaseTranscript());
+      await expect(page.locator('#status')).toContainText('Stopped');
+      await expect(page.locator('#final')).toHaveText('日本語のテスト\n');
+      await expect(page.locator('#start')).toBeEnabled();
+    }
+    expect(await page.evaluate(() => window.pipelineCalls.filter(c => c.id === 0).map(c => c.hook)))
+      .toEqual(['start', 'stop', 'dispose']);
+    await expect(page.locator('#errors')).toBeEmpty();
+  });
+}
+
+test('hiding while microphone permission is pending drains and discards the late grant', async ({ page }) => {
+  await fakeBackend(page);
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getUserMedia = () => new Promise(resolve => {
+      window.grant = () => resolve({ getTracks: () => [{ stop: () => { window.lateTrackStopped = true; } }] });
+    });
+  });
+  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await observePipeline(page);
+  await page.locator('#load').click(); await page.locator('#start').click();
+  await expect.poll(() => page.evaluate(() => !!window.grant)).toBe(true);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.locator('#status')).toContainText('Stopped');
+  await expect(page.locator('#start')).toBeEnabled();
+  await page.evaluate(() => window.grant());
+  await expect.poll(() => page.evaluate(() => window.lateTrackStopped)).toBe(true);
+  await expect(page.locator('#errors')).toBeEmpty();
+  await expect(page.locator('#final')).toBeEmpty();
+  expect(await page.evaluate(() => window.pipelineCalls.filter(c => c.id === 0).map(c => c.hook)))
+    .toEqual(['start', 'stop', 'dispose']);
 });
