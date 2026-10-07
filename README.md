@@ -18,7 +18,7 @@ provisional / final transcript
 
 Capture helpers normalize audio to mono 16 kHz PCM before passing it to the [Local ASR Core](docs/local-asr-core.md). ReazonSpeech ja-en, sherpa-onnx, Silero VAD and the hayamimi-inspired simulated-streaming policy are the core's current implementation. This replaceable ASR baseline is one processing capability within the product vision.
 
-The broader Node/port composition model is future architectural direction, described in the [processing pipeline architecture](docs/processing-pipeline.md). A general pipeline runtime and additional processors are not implemented. Previous macOS, Moonshine, two-pass, Japanese-only ReazonSpeech and Whisper experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
+The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. Its executable browser-tab → speech-to-text → transcript example reuses the existing capture helper and `LocalAsrCore`, including separate provisional/final ports on one ASR node. The playground and extension retain their existing integrations. Additional processors remain future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass, Japanese-only ReazonSpeech and Whisper experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
 
 ## Web playground
 
@@ -81,7 +81,7 @@ See the [architecture guide](docs/processing-pipeline.md) for conceptual nodes, 
 
 - Continue improving the reusable speech-to-text capability, including Japanese recognition, latency and browser usability.
 - Prove a small number of real processors and useful pipelines. Candidates include speech-to-text → translation, committed transcript → incremental summary, or article/text → summary; each needs its own implementation Issue.
-- Define the minimum Node/port contract only when a concrete next processor requires it, using the existing audio-source and Local ASR Core boundaries as a foundation.
+- Extend the minimal Node/port contract only when a concrete next processor requires it, using the existing audio-source and Local ASR Core boundaries as a foundation.
 - Develop personalized ASR data, correction and evaluation work as an independently evolving capability.
 
 ## Deferred work
@@ -103,7 +103,7 @@ A graphical node editor, plugin marketplace and general workflow framework are n
 
 Separate issues should define and implement:
 
-- A concrete next processor and its useful pipeline, then the minimum composition contract it needs.
+- A concrete next processor and its useful pipeline, then any additional composition contract it needs.
 - Additional sources such as files or Web/article text when a real use case requires them.
 - Transcript/history storage and accumulated processing for summaries or topic analysis/visualization.
 - Personalized ASR data, feedback and held-out evaluation.

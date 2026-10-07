@@ -1,5 +1,63 @@
 import { test, expect } from '@playwright/test';
 
+for (const fallback of [false, true]) {
+  test(`composable tab pipeline uses native ${fallback ? 'fallback' : 'worklet'} capture and the real ASR boundary`, async ({ page }) => {
+    await setup(page, { fallback, emptyFinal: true });
+    // The playground supplies isolation; the example owns a separate graph/core.
+    await page.locator('#cancel').click();
+    await expect(page.locator('#load')).toBeEnabled();
+    await page.evaluate(async () => {
+      const { createTabTranscriptionPipeline } = await import('/transcription-nodes.js');
+      window.pipelineValues = []; window.pipelineErrors = [];
+      window.flow = createTabTranscriptionPipeline({
+        onTranscript: async (port, value) => {
+          await Promise.resolve(); window.pipelineValues.push({ port, ...value });
+        },
+        onError: error => window.pipelineErrors.push(error.message),
+      });
+      await window.flow.speech.load();
+      await window.flow.pipeline.start();
+    });
+    await expect.poll(() => page.evaluate(() => window.pipelineValues.filter(v => v.port === 'provisional').length)).toBeGreaterThan(0);
+    await page.evaluate(async () => { await window.flow.pipeline.stop(); });
+    expect(await page.evaluate(() => window.pipelineValues.filter(v => v.port === 'final'))).toEqual([
+      { port: 'final', text: 'tab transcript', id: 1 },
+    ]);
+    expect(await page.evaluate(() => window.flow.pipeline.state)).toBe('stopped');
+    await released(page);
+    await page.evaluate(async () => { await window.flow.pipeline.dispose(); });
+    expect(await page.evaluate(() => window.terminated)).toBe(4);
+    expect(await page.evaluate(() => window.pipelineErrors)).toEqual([]);
+    const pcm = await page.evaluate(() => window.workerMessages.filter(m => m.type === 'vad-audio'));
+    expect(pcm.length).toBeGreaterThan(0);
+    expect(pcm.every(m => m.float32)).toBe(true);
+    expect(pcm.some(m => Math.abs(m.last - 0.05) < 1e-5)).toBe(true);
+    expect(await page.evaluate(() => window.workerMessages.filter(m => m.type === 'vad-stop'))).toHaveLength(1);
+  });
+}
+
+test('composable tab pipeline cancels a pending native capture grant and releases late tracks', async ({ page }) => {
+  await setup(page, { mode: 'pending' });
+  await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
+  await page.evaluate(async () => {
+    const { createTabTranscriptionPipeline } = await import('/transcription-nodes.js');
+    window.pipelineValues = [];
+    window.flow = createTabTranscriptionPipeline({
+      onTranscript: (port, value) => window.pipelineValues.push(value),
+    });
+    await window.flow.speech.load();
+    window.flowStarting = window.flow.pipeline.start().catch(error => error.name);
+  });
+  await expect.poll(() => page.evaluate(() => !!window.grantTab)).toBe(true);
+  await page.evaluate(async () => { await window.flow.pipeline.dispose(); });
+  expect(await page.evaluate(() => window.flowStarting)).toBe('AbortError');
+  await page.evaluate(() => window.grantTab()); await released(page);
+  expect(await page.evaluate(() => window.terminated)).toBe(4);
+  expect(await page.evaluate(() => window.workerMessages.filter(m => m.type === 'vad-audio'))).toEqual([]);
+  expect(await page.evaluate(() => window.pipelineValues)).toEqual([]);
+  expect(await page.evaluate(() => window.flow.pipeline.state)).toBe('disposed');
+});
+
 async function setup(page, { mode = 'audio', fallback = false, holdModule = false, emptyFinal = false } = {}) {
   for (const role of ['sherpa', 'silero']) {
     await page.context().route(`**/${role}-worker.js`, route => route.fulfill({

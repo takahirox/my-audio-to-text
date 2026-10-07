@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import { BrowserTab, Microphone, Resampler, joinAudio } from '../web/audio.js';
 import { LocalAsrCore } from '../web/local-asr-core.js';
 import { ExtensionTab } from '../extension/tab-source.js';
+import { createTabTranscriptionPipeline } from '../web/transcription-nodes.js';
 
 const deferred = () => {
   let resolve, reject;
@@ -59,6 +60,55 @@ function browser(t, { rate = 48000, worklet = true, permission, module } = {}) {
     t.after(() => { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; });
   }
   return { tracks, media, requests, contexts };
+}
+
+for (const rate of [16000, 44100, 48000]) {
+  test(`Node pipeline composes real tab capture/resampling, ASR and async output at ${rate} Hz`, async t => {
+    const b = browser(t, { rate }), values = [], workers = [], pcm = [];
+    const flow = createTabTranscriptionPipeline({
+      onTranscript: async (port, value) => { await Promise.resolve(); values.push([port, value]); },
+      workerFactory(path) {
+        const worker = { terminated: false,
+          postMessage(message, transfer = []) {
+            const data = structuredClone(message, { transfer });
+            queueMicrotask(() => {
+              if (data.type === 'load') this.onmessage({ data: { type: 'ready' } });
+              if (data.type === 'vad-audio') {
+                pcm.push(data.audio);
+                this.onmessage({ data: { type: 'vad', session: data.session,
+                  frames: [{ audio: data.audio, speaking: true }] } });
+              }
+              if (data.type === 'vad-stop') this.onmessage({ data: { type: 'vad-stopped', session: data.session } });
+              if (data.type === 'decode') {
+                this.onmessage({ data: { type: data.final ? 'final' : 'partial', session: data.session,
+                  id: data.id, text: data.final ? 'committed' : 'provisional' } });
+                this.onmessage({ data: { type: 'decoded', session: data.session } });
+              }
+            });
+          },
+          terminate() { this.terminated = true; },
+        };
+        workers.push(worker); return worker;
+      },
+    });
+    await flow.pipeline.start();
+    assert.equal(b.requests[0].api, 'getDisplayMedia');
+    for (let offset = 0; offset < rate + 37; offset += 128) {
+      const count = Math.min(128, rate + 37 - offset);
+      flow.tab.source.node.processor.process([[new Float32Array(count).fill(0.02), new Float32Array(count).fill(0.08)]]);
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(values.some(([port]) => port === 'provisional'));
+    await flow.pipeline.stop();
+    const actual = joinAudio(pcm), resampler = new Resampler(rate);
+    const expected = joinAudio([resampler.push(new Float32Array(rate + 37).fill(0.05)), resampler.flush()]);
+    assert.equal(actual.length, expected.length);
+    assert.ok(actual.every((sample, i) => Math.abs(sample - expected[i]) < 1e-6));
+    assert.deepEqual(values.filter(([port]) => port === 'final'), [['final', { text: 'committed', id: 1 }]]);
+    assert.ok(b.tracks.every(track => track.stops === 1));
+    assert.equal(b.contexts[0].state, 'closed');
+    await flow.pipeline.dispose(); assert.ok(workers.every(worker => worker.terminated));
+  });
 }
 
 for (const rate of [16000, 44100, 48000]) {
