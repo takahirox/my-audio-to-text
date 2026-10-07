@@ -2,9 +2,10 @@
 
 [Issue #7](https://github.com/takahirox/my-audio-to-text/issues/7) defines the
 long-lived product vision: reusable source and processing nodes connected into
-local-first pipelines. This document describes the conceptual direction, not an
-implemented Node API, universal plugin SDK or pipeline runtime. A later Issue
-should define the minimum contract when a concrete next processor needs it.
+local-first pipelines. The [minimal Node/Port runtime](pipeline-runtime.md)
+implements code-level composition and an executable browser-tab transcription
+example. This document explains the longer-lived architecture; additional
+processors and a universal plugin SDK remain future work.
 See the [README](../README.md#current-implemented-capabilities) for current status.
 
 ## Implemented foundation
@@ -19,14 +20,14 @@ this is not native streaming recognition.
 The [Local ASR Core](local-asr-core.md) separates recognition from capture,
 resampling and UI. The [Web playground](asr-manual-testing.md) and
 [Chrome extension](chrome-extension.md) reuse this capability through its
-existing methods and event callback. They are interfaces around the processing
-capability. There is no general graph/port wiring API today, and translation,
+existing methods and event callback. The minimal runtime also exposes tab capture,
+speech-to-text and transcript sink nodes connected through named ports. Translation,
 summarization, topic processing, persistent history and personalized ASR are
 future capabilities.
 
 ## Node and port concepts
 
-Conceptually, a node is an independently executable, configurable and
+A node is an independently executable, configurable and
 replaceable processing unit:
 
 ```text
@@ -54,8 +55,8 @@ Composition connects a node's output port to another node's compatible input
 port. Contracts must describe the payload and meaning needed by the consumer:
 for example, PCM format for audio or replacement versus committed semantics for
 transcript events. Adjacent nodes should not need to know each other's model,
-worker arrangement or UI. Exact schemas and wiring mechanics remain to be
-defined by real processor requirements, not by a speculative universal SDK.
+worker arrangement or UI. The runtime uses shared contract tokens and explicit
+connections; new data contracts should follow real processor requirements.
 
 Node granularity follows real independent processing boundaries. Today's ASR
 core produces provisional and final text as part of one unit, even though it
@@ -73,7 +74,8 @@ larger input before processing. Future transport/orchestration should carry
 data and lifecycle signals without deciding ASR, translation or summarization
 policy for individual processors.
 
-These are architectural illustrations, not implemented port names or wiring:
+The first example is executable today; the other processors below are
+architectural illustrations:
 
 ```text
 Tab Audio → Speech-to-Text → Transcript
@@ -89,12 +91,13 @@ Speech-to-Text.final → Transcript/history → Rolling summary
 Transcript/history → Topic extraction/analysis → Visualization
 ```
 
-Only the first example represents an existing end-to-end capability, via the
-current capture/core/UI integration. All other processors, history storage,
-article/text inputs and connections above are future examples. In particular,
-`.provisional` illustrates the existing core's `partial` events conceptually;
-it is not an implemented port API. Provisional replacements and committed
-events may feed different consumers from the same speech-to-text unit.
+Only the first example represents an existing end-to-end capability, via both
+the capture/core/UI integration and the new Node/Port example. All other
+processors, history storage, article/text inputs and connections above are future
+examples. In particular,
+`.provisional` is the SpeechToTextNode port for the existing core's `partial`
+events. Provisional replacements and committed events may feed different
+consumers from the same speech-to-text unit.
 
 ## Local execution and platform direction
 
@@ -118,8 +121,8 @@ cross-platform runtime or native applications exist.
 ## Next architectural step
 
 Prove a small number of useful processors and pipelines before generalizing.
-The next concrete processor should determine the minimum Node/port contract;
-this documentation change introduces no runtime or processing node.
+The minimal runtime proves composition against the existing tab source and ASR
+core. Further contract changes should follow concrete processor requirements.
 
 A graphical node editor, plugin marketplace and general workflow framework are
 not current implementation priorities. A universal plugin SDK, workflow
