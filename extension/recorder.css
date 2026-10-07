@@ -1,7 +1,0 @@
-:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-body { max-width: 48rem; margin: 1.5rem auto; padding: 0 1.2rem; }
-h1 { font-size: 1.4rem; }
-h2 { font-size: 1.1rem; }
-button { padding: .6rem; margin-right: .5rem; }
-pre { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 2rem; }
-#errors { color: #d44; }

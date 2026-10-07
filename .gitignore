@@ -1,8 +1,0 @@
-.DS_Store
-.cache/
-dist/
-web/vendor/
-node_modules/
-test-results/
-playwright-report/
-__pycache__/
