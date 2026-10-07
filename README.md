@@ -1,14 +1,24 @@
 # my-audio-to-text
 
-A local-first speech input system that turns natural speech into useful text and learns to recognize each individual user better over time.
+A local-first composable processing system that connects reusable input and processing capabilities into pipelines for useful derived information.
 
-## Motivation and current status
+## Current implemented capabilities
 
-Speech input should work well for the person using it, including their language, vocabulary, pronunciation, and speaking conditions. Corrections should help improve future recognition while keeping the original speech and transcript available.
+Speech-to-text is the most-developed processing capability today. The Web playground and Chrome extension provide the **first concrete pipeline**:
 
-This repository is a minimal product and vision baseline, ready for a new design from first principles. The previous macOS prototype, experiments, evaluation harnesses, and implementation documents have been removed from the active tree. All previous work remains recoverable from Git history.
+```text
+Microphone / browser-tab / Chrome-extension tab audio
+        ↓
+Local ASR Core
+        ↓
+ReazonSpeech ja-en + Silero/hayamimi
+        ↓
+provisional / final transcript
+```
 
-The browser Speech-to-Text playground uses **ReazonSpeech ja-en simulated streaming as the current development baseline**, with sherpa-onnx and Silero VAD. This is a replaceable baseline for continued product work, not an irreversible production-backend decision. Previous Moonshine, two-pass, Japanese-only ReazonSpeech, and Whisper experiments remain recoverable from Git history. Backward compatibility with removed experiments is not required.
+Capture helpers normalize audio to mono 16 kHz PCM before passing it to the [Local ASR Core](docs/local-asr-core.md). ReazonSpeech ja-en, sherpa-onnx, Silero VAD and the hayamimi-inspired simulated-streaming policy are the core's current implementation. This replaceable ASR baseline is one processing capability within the product vision.
+
+The broader Node/port composition model is future architectural direction, described in the [processing pipeline architecture](docs/processing-pipeline.md). A general pipeline runtime and additional processors are not implemented. Previous macOS, Moonshine, two-pass, Japanese-only ReazonSpeech and Whisper experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
 
 ## Web playground
 
@@ -49,50 +59,55 @@ Validation evidence recorded on October 2, 2026 (JST; evidence timestamps use UT
 
 ## Vision
 
-Build a speech input system that:
+Following [Issue #7: Product vision](https://github.com/takahirox/my-audio-to-text/issues/7), build small reusable capabilities that compose into local processing pipelines:
 
-1. Turns natural speech into useful text.
-2. Becomes better at recognizing the individual user over time.
-3. Preserves source audio and original transcripts separately from derived or corrected output; derived output never overwrites its source.
-4. Can eventually work across Web, desktop, and mobile, without being tied to macOS.
+```text
+Input/source nodes
+        ↓
+reusable local processing nodes
+        ↓
+composable pipelines
+        ↓
+outputs / derived information
+```
 
-## Near-term priorities
+Future inputs may include files, Web/article text and platform-specific sources alongside today's microphone and tab audio. Future processing capabilities may include translation, summarization, topic extraction/analysis, storage and visualization. These are architectural examples, not implemented features.
 
-### 1. Speech-to-Text
+Personalized ASR remains an important future capability/node within this system. It should learn from corrections to improve personal vocabulary, pronunciation, recurring mistakes and quiet speech, eventually including whisper speech. Success requires improvement on held-out real audio without unacceptable regression; personalization is not implemented today.
 
-- Realtime, low-latency recognition.
-- Good Japanese recognition.
-- Usable from mobile and desktop browsers.
+See the [architecture guide](docs/processing-pipeline.md) for conceptual nodes, typed ports and examples that distinguish existing behavior from future composition.
 
-### 2. Personalized ASR
+## Near-term direction
 
-Personalized automatic speech recognition (ASR) should:
+- Continue improving the reusable speech-to-text capability, including Japanese recognition, latency and browser usability.
+- Prove a small number of real processors and useful pipelines. Candidates include speech-to-text → translation, committed transcript → incremental summary, or article/text → summary; each needs its own implementation Issue.
+- Define the minimum Node/port contract only when a concrete next processor requires it, using the existing audio-source and Local ASR Core boundaries as a foundation.
+- Develop personalized ASR data, correction and evaluation work as an independently evolving capability.
 
-- Learn from user corrections.
-- Improve recognition of personal vocabulary, pronunciation, recurring mistakes, and quiet speech, eventually extending to whisper speech.
-- Demonstrate improvement on held-out real audio that was not used for personalization.
+## Deferred work
 
-## Deferred priority
-
-**Speech → Thought / synthesis** remains part of the broader vision. It comes after robust Web Speech-to-Text and Personalized ASR, rather than being the next implementation priority.
+A graphical node editor, plugin marketplace and general workflow framework are not current implementation priorities. A universal plugin SDK, workflow language or distributed/cross-platform runtime is neither implemented nor required now. Consider broader orchestration or a generic node UI only after real processors and pipelines demonstrate a need.
 
 ## Design principles
 
-- Local-first where practical.
-- Web-first for the next development cycle, with a path to desktop and mobile beyond the Web.
-- Keep models and runtimes replaceable; the vision does not depend on Whisper, llama.cpp, Swift, or any specific model or runtime.
-- Measure accuracy, latency, memory, CPU/GPU usage, battery impact, and personalization learning curves.
-- Prefer a small, understandable baseline over historical implementation complexity.
+- Prefer execution and storage on the user's device where practical, without requiring a central processing server.
+- Choose node boundaries around independently executable, configurable and replaceable processing units. Provisional/realtime and final output do not inherently require separate nodes.
+- Compose through small typed input/output contracts; a node may expose multiple ports.
+- Allow streaming updates, committed events and accumulated/long-form processing to coexist. Each processor decides how to consume its inputs.
+- Keep models, implementations and runtimes replaceable across Web, browser extensions, desktop and mobile. Share useful contracts and behavior without requiring identical runtimes.
+- Preserve source data and original transcripts separately from derived or corrected output; derived output should not silently overwrite its source. Persistent source/history storage remains future work.
+- Measure accuracy, latency, memory, CPU/GPU usage, battery impact, long-session behavior and personalization improvement where relevant.
+- Extract small abstractions from working pipelines before adding generic infrastructure.
 
 ## Follow-up work
 
 Separate issues should define and implement:
 
-- Web/PWA foundation.
-- Browser microphone and audio pipeline.
-- Web ASR technology evaluation, including sherpa-onnx/WASM and alternatives.
-- Personalized ASR data and feedback loop.
-- Cross-platform product contracts.
+- A concrete next processor and its useful pipeline, then the minimum composition contract it needs.
+- Additional sources such as files or Web/article text when a real use case requires them.
+- Transcript/history storage and accumulated processing for summaries or topic analysis/visualization.
+- Personalized ASR data, feedback and held-out evaluation.
+- Platform-specific implementations across Web, extensions, desktop and mobile that reuse appropriate processing contracts.
 
 ## Contributing
 

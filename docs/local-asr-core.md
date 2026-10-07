@@ -8,6 +8,12 @@ the hayamimi-inspired utterance policy. A future native implementation can
 reproduce this behavioral contract with a platform-appropriate runtime; this
 boundary does not require sharing browser WASM across platforms.
 
+This is the reusable speech-to-text capability in the first concrete pipeline of
+the [composable processing vision](processing-pipeline.md). The operations and
+events below describe the implemented ASR boundary; they are not a general
+Node/port SDK. Its provisional and final outputs belong to the same processing
+unit.
+
 ## Operations
 
 ```js
