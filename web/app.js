@@ -1,7 +1,7 @@
-import { Microphone, BrowserTab } from './audio.js';
-import { LocalAsrCore } from './local-asr-core.js';
+import { Pipeline } from './pipeline.js';
+import { MicrophoneAudioNode, BrowserTabAudioNode, SpeechToTextNode, TranscriptOutputNode } from './transcription-nodes.js';
 const $ = (id) => document.getElementById(id);
-let core, source, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
+let flow, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
 let firstText = false, firstPartial = false, peakRms = 0, speechStarted = 0, speechCompleted = 0, partialCount = 0, finalCount = 0;
 function diagnostics() {
   $('speech').textContent = `${speechStarted} Silero VAD utterance(s) accepted; ${speechCompleted} completed. ${speechStarted ? 'Speech detected.' : 'Waiting for speech.'}`;
@@ -13,7 +13,7 @@ function setState(next, message) {
   $('load').disabled = !['idle', 'error'].includes(state);
   $('start').disabled = state !== 'ready';
   $('stop').disabled = state !== 'recording';
-  $('cancel').disabled = !core;
+  $('cancel').disabled = !flow;
   $('source').disabled = ['booting', 'loading', 'unavailable'].includes(state);
 }
 function resetOutput() {
@@ -23,114 +23,136 @@ function resetOutput() {
   captured = queued = peakRms = speechStarted = speechCompleted = partialCount = finalCount = 0;
   firstText = firstPartial = false; $('signal').textContent = 'No capture yet.'; diagnostics();
 }
+function createFlow(speech = new SpeechToTextNode()) {
+  const session = ++generation;
+  const isCurrent = () => generation === session;
+  speech.onEvent = event => { if (isCurrent()) receive(event); };
+  const SourceNode = $('source').value === 'tab' ? BrowserTabAudioNode : MicrophoneAudioNode;
+  const source = new SourceNode({
+    onAudio: chunk => { if (isCurrent()) audio(chunk); },
+    onEnded: () => { if (isCurrent()) void stop(); },
+  });
+  const transcript = new TranscriptOutputNode((port, value) => {
+    if (isCurrent()) receiveTranscript(port, value);
+  });
+  const pipeline = new Pipeline({ nodes: { source, speech, transcript }, connections: [
+    { from: ['source', 'audio'], to: ['speech', 'audio'] },
+    { from: ['speech', 'provisional'], to: ['transcript', 'provisional'] },
+    { from: ['speech', 'final'], to: ['transcript', 'final'] },
+  ], onError: error => { if (isCurrent()) void fail(error); } });
+  return { pipeline, speech, isCurrent };
+}
 async function release() {
-  generation++;
-  core?.release(); core = null;
-  $('reazon-model').textContent = '—';
-  const previousSource = source; source = null;
-  try { await previousSource?.stop(false); }
-  catch (error) { $('errors').textContent += `${new Date().toISOString()} Audio capture cleanup: ${error.message || error}\n`; }
-  $('level').value = 0;
+  const session = ++generation;
+  const previous = flow; flow = null;
+  $('reazon-model').textContent = '—'; $('level').value = 0;
+  try { await previous?.pipeline.dispose(); }
+  catch (error) {
+    if (generation === session) $('errors').textContent += `${new Date().toISOString()} Pipeline cleanup: ${error.message || error}\n`;
+  }
+  return session;
 }
 async function fail(error) {
   setState('booting', 'Releasing after error…');
   $('errors').textContent += `${new Date().toISOString()} ${error.message || error}\n`;
-  await release(); setState('error', 'Error. See runtime errors below; load again to retry.');
+  const session = await release();
+  if (generation === session) setState('error', 'Error. See runtime errors below; load again to retry.');
 }
 function audio(audio) {
-  if (!core || !['starting', 'recording', 'stopping'].includes(state)) return;
+  if (!flow || !['starting', 'recording', 'stopping'].includes(state)) return;
   if (!captured) startedAt = performance.now();
   captured += audio.length;
   const rms = Math.sqrt(audio.reduce((sum, sample) => sum + sample * sample, 0) / audio.length);
   peakRms = Math.max(peakRms, rms); $('level').value = rms;
   const db = (value) => value > 0 ? `${(20 * Math.log10(value)).toFixed(1)} dBFS` : '−∞ dBFS';
   $('signal').textContent = `RMS ${db(rms)}; session peak RMS ${db(peakRms)}. ${peakRms > 0 ? `Nonzero ${$('source').value === 'tab' ? 'tab audio' : 'microphone'} signal reached the app (may be noise).` : 'Audio frames received, but signal is zero.'}`;
-  core.push(audio);
   audioDiagnostics();
 }
 function audioDiagnostics() {
   $('audio').textContent = `${(captured / 16000).toFixed(1)} s / ${(queued / 16000).toFixed(1)} s`;
 }
 function receive(data) {
-  if (data.type === 'error') { void fail(new Error(data.message)); return; }
+  // Before Start there is no active node context to report preload errors.
+  if (data.type === 'error') { if (flow?.pipeline.state === 'idle') void fail(new Error(data.message)); return; }
   if (data.type === 'configuration') $('reazon-model').textContent = `${data.modelName} (${data.model}); ${data.numThreads} thread(s)`;
   else if (data.type === 'progress') $('progress').textContent = data.message;
-  else if (data.type === 'ready') {
-    $('init').textContent = time(performance.now() - loadAt);
-    $('progress').textContent = 'Model loaded.'; setState('ready', 'Ready. Choose an audio source and tap Start.');
-  } else if (data.type === 'diagnostics') {
+  else if (data.type === 'diagnostics') {
     queued = data.pendingSamples; audioDiagnostics();
   } else if (data.type === 'speech') {
     if (data.event === 'started') speechStarted++;
     else if (data.event === 'completed') speechCompleted++;
     diagnostics();
-  } else if (['partial', 'final'].includes(data.type)) {
-    if (data.type === 'partial' && state === 'stopping') return;
-    if (data.text.trim()) {
-      if (data.type === 'partial') partialCount++; else finalCount++;
-      diagnostics();
-    }
-    if (data.text.trim() && !firstText) { firstText = true; $('first-text').textContent = time(performance.now() - startedAt); }
-    if (data.type === 'partial') {
-      if (data.text.trim() && !firstPartial) { firstPartial = true; $('first-partial').textContent = time(performance.now() - startedAt); }
-      $('partial').textContent = data.text;
-    } else {
-      if (data.text.trim()) $('final').textContent += `${data.text}\n`;
-      $('partial').textContent = '';
-    }
-  } else if (data.type === 'stopped') {
-    if (state !== 'stopping') return;
-    $('latency').textContent = time(performance.now() - stopAt);
-    setState('ready', 'Stopped. Results are final; tap Start to repeat.');
+  }
+}
+function receiveTranscript(port, data) {
+  const type = port === 'provisional' ? 'partial' : 'final';
+  if (type === 'partial' && state === 'stopping') return;
+  if (data.text.trim()) {
+    if (type === 'partial') partialCount++; else finalCount++;
+    diagnostics();
+  }
+  if (data.text.trim() && !firstText) { firstText = true; $('first-text').textContent = time(performance.now() - startedAt); }
+  if (type === 'partial') {
+    if (data.text.trim() && !firstPartial) { firstPartial = true; $('first-partial').textContent = time(performance.now() - startedAt); }
+    $('partial').textContent = data.text;
+  } else {
+    if (data.text.trim()) $('final').textContent += `${data.text}\n`;
+    $('partial').textContent = '';
   }
 }
 $('load').onclick = async () => {
   setState('loading', 'Loading model…');
-  await release(); resetOutput(); loadAt = performance.now();
+  const session = await release();
+  if (generation !== session) return;
+  resetOutput(); loadAt = performance.now();
+  let active;
   try {
-    core = new LocalAsrCore(receive);
+    flow = active = createFlow();
     setState('loading', 'Loading model…');
-    core.load();
-  } catch (error) { await fail(error); }
+    await active.speech.load();
+    if (!active.isCurrent()) return;
+    $('init').textContent = time(performance.now() - loadAt);
+    $('progress').textContent = 'Model loaded.';
+    setState('ready', 'Ready. Choose an audio source and tap Start.');
+  } catch (error) { if (active?.isCurrent() ?? generation === session) await fail(error); }
 };
 $('start').onclick = async () => {
-  const tab = $('source').value === 'tab';
+  const tab = $('source').value === 'tab', active = flow;
   setState('starting', tab ? 'Choose a browser tab and share its audio…' : 'Requesting microphone…');
   const init = $('init').textContent; resetOutput(); $('init').textContent = init;
-  const activeCore = core, session = ++generation;
-  const isCurrent = () => core === activeCore && generation === session;
-  core.start();
-  if (!isCurrent()) return;
-  source = new (tab ? BrowserTab : Microphone)(
-    (chunk) => { if (isCurrent()) audio(chunk); },
-    () => { if (isCurrent()) void stop(); },
-  );
   try {
     startedAt = performance.now();
-    await source.start();
-    if (isCurrent() && state === 'starting') setState('recording', tab ? 'Listening to tab audio. Stop to finalize, or stop sharing in the browser.' : 'Listening. Speak the test utterance, pause, then Stop.');
-  } catch (error) { if (isCurrent() && state === 'starting') await fail(error); }
+    await active.pipeline.start();
+    if (active.isCurrent() && state === 'starting') setState('recording', tab ? 'Listening to tab audio. Stop to finalize, or stop sharing in the browser.' : 'Listening. Speak the test utterance, pause, then Stop.');
+  } catch (error) { if (active.isCurrent()) await fail(error); }
 };
 async function stop() {
   if (!['starting', 'recording'].includes(state)) return;
   stopAt = performance.now(); setState('stopping', 'Finalizing…');
-  const previousSource = source, activeCore = core, session = generation;
-  try { await previousSource?.stop(); }
-  catch (error) { if (core === activeCore && generation === session) await fail(error); return; }
-  // Cancel/reload can finish while the old worklet is still flushing.
-  if (core !== activeCore || generation !== session) return;
-  source = null; $('level').value = 0;
-  core.stop();
+  const active = flow;
+  let current = active;
+  try {
+    await active.pipeline.stop();
+    if (!active.isCurrent()) return;
+    $('latency').textContent = time(performance.now() - stopAt); $('level').value = 0;
+    // Each run gets fresh nodes/contexts, retaining the loaded models through
+    // the speech adapter only after every final output has reached the sink.
+    flow = createFlow(active.speech.nextSession());
+    current = flow;
+    await active.pipeline.dispose();
+    if (current.isCurrent()) setState('ready', 'Stopped. Results are final; tap Start to repeat.');
+  } catch (error) { if (current.isCurrent()) await fail(error); }
 }
 $('stop').onclick = () => void stop();
 async function cancel(message) {
-  setState('booting', 'Releasing…'); await release(); resetOutput(); setState('idle', message);
+  setState('booting', 'Releasing…');
+  const session = await release();
+  if (generation === session) { resetOutput(); setState('idle', message); }
 }
 $('cancel').onclick = () => cancel('Canceled. Load a model to continue.');
 $('source').onchange = () => {
-  if (core) void cancel('Audio source changed. Load a model to continue.');
+  if (flow) void cancel('Audio source changed. Load a model to continue.');
 };
-document.addEventListener('visibilitychange', () => { if (document.hidden && $('source').value === 'microphone') void stop(); });
 window.addEventListener('pagehide', () => { void release(); });
 window.addEventListener('unhandledrejection', (event) => void fail(event.reason));
 

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { observePipeline, graphTypes } from './pipeline-observer.js';
 
 for (const fallback of [false, true]) {
   test(`composable tab pipeline uses native ${fallback ? 'fallback' : 'worklet'} capture and the real ASR boundary`, async ({ page }) => {
@@ -301,3 +302,39 @@ test('a worklet flush error releases capture and workers and leaves retry availa
   expect(await page.evaluate(() => window.terminated)).toBe(2);
   expect(await page.evaluate(() => window.workerMessages.filter(m => m.type === 'vad-stop'))).toEqual([]);
 });
+
+for (const action of ['drain', 'cancel']) {
+  test(`tab pipeline ${action} while final transcript output is pending`, async ({ page }) => {
+    await setup(page, { emptyFinal: true }); await observePipeline(page);
+    await page.locator('#start').click(); await expect(page.locator('#partial')).toHaveText('tab transcript');
+    expect(await graphTypes(page)).toEqual(['BrowserTabAudioNode', 'SpeechToTextNode', 'TranscriptOutputNode']);
+    await page.evaluate(() => { window.holdTranscript = true; });
+    await page.locator('#stop').click();
+    await expect.poll(() => page.evaluate(() => !!window.heldTranscript)).toBe(true);
+    await expect(page.locator('#status')).toHaveText('Finalizing…');
+    await expect(page.locator('#start')).toBeDisabled();
+    await expect(page.locator('#final')).toBeEmpty();
+    await released(page);
+    if (action === 'cancel') {
+      await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
+      await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
+      await page.evaluate(() => window.releaseTranscript());
+      await expect(page.locator('#status')).toContainText('Ready');
+      await expect(page.locator('#final')).toBeEmpty();
+    } else {
+      await page.evaluate(() => window.releaseTranscript());
+      await expect(page.locator('#status')).toContainText('Stopped');
+      await expect(page.locator('#final')).toHaveText('tab transcript\n');
+      await expect(page.locator('#start')).toBeEnabled();
+      // A repeat graph keeps the two preloaded workers, never captures on Load.
+      expect(await page.evaluate(() => window.workerMessages.filter(m => m.type === 'load'))).toHaveLength(2);
+      await page.locator('#start').click(); await expect(page.locator('#partial')).toHaveText('tab transcript');
+      expect(await page.evaluate(() => window.pipelineGraphs[1] !== window.pipelineGraphs[0])).toBe(true);
+      await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
+      await released(page, 2);
+    }
+    expect(await page.evaluate(() => window.pipelineCalls.filter(c => c.id === 0).map(c => c.hook)))
+      .toEqual(['start', 'stop', 'dispose']);
+    await expect(page.locator('#errors')).toBeEmpty();
+  });
+}
