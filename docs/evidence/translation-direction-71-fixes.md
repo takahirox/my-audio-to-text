@@ -109,7 +109,7 @@ regression tests passed; prior Japanese real-model evidence remains historical.
 
 ## PR and post-merge state
 
-PR #72 uses **Refs #71**, with no closing keyword or reopen-after-merge workaround.
+PR #72 uses active **Refs #71**, with no automatic closing reference or reopen-after-merge workaround.
 This fix node does not push or merge. Required Pages verification remains
 **pending**: after merge, record the successful Pages run URL, merged/deployed
 SHA, UTC time, canonical repository-prefixed new page/index link and valid
@@ -128,3 +128,16 @@ Local JSON/body/template checks and `git diff --check` passed. Runtime and
 real-model tests were not rerun for this metadata-only fix; the implementation
 and inference evidence above are unchanged. No push, merge or post-merge
 verification was performed.
+
+### Publication closure wording
+
+The publication request also requires the literal phrase `Closes #71`. The PR
+description now includes it in a fenced **future closure example**, to use only
+after the required Pages verification is performed and recorded. Active
+`Refs #71` remains. GitHub readback confirmed an exact body match and empty
+`closingIssuesReferences`; PR #72 was open and unmerged. This reconciles the
+requested phrase with the Issue and repository requirement to keep the Issue
+open until verification. The publication artifact matches that wording.
+
+This change only updates metadata/evidence; runtime and real-model tests were
+not rerun. Required post-merge Pages verification remains **pending**.
