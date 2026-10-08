@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { spawnSync } from 'node:child_process';
-import { LocalAsrCore } from '../web/local-asr-core.js';
+import { Pipeline } from '../web/pipeline.js';
+import { MONO_16KHZ_PCM, TRANSCRIPT } from '../web/transcription-nodes.js';
 import { TabSession } from '../extension/session.js';
 
 function fixture({ holdLoad = false, holdSource = false, sourceError, stopError } = {}) {
   const workers = [], sources = [], views = [];
   const session = new TabSession(view => views.push(view), {
-    coreFactory: callback => new LocalAsrCore(callback, { workerFactory(path) {
+    workerFactory(path) {
       const worker = { path, messages: [], terminated: false,
         postMessage(data) {
           this.messages.push(structuredClone(data));
@@ -29,7 +30,7 @@ function fixture({ holdLoad = false, holdSource = false, sourceError, stopError 
         terminate() { this.terminated = true; },
       };
       workers.push(worker); return worker;
-    } }),
+    },
     sourceFactory(tabId, onAudio, onEnded) {
       const source = { tabId, onAudio, onEnded, stops: [],
         start() {
@@ -47,12 +48,20 @@ function fixture({ holdLoad = false, holdSource = false, sourceError, stopError 
   });
   return { session, workers, sources, views };
 }
-const drain = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+const drain = () => new Promise(resolve => setImmediate(resolve));
 
 test('extension session emits provisional/final output, flushes once and clears repeat transcripts', async () => {
   const { session, workers, sources } = fixture();
   await session.start(42);
   assert.equal(session.view.state, 'running');
+  const graph = session.session.pipeline;
+  assert.ok(graph instanceof Pipeline);
+  assert.deepEqual(graph.order.map(entry => entry.node.constructor.name),
+    ['ExtensionTabAudioNode', 'SpeechToTextNode', 'TranscriptOutputNode']);
+  assert.equal(graph.entries.get('audio').outputs.audio, MONO_16KHZ_PCM);
+  assert.equal(graph.entries.get('speech').inputs.audio, MONO_16KHZ_PCM);
+  assert.equal(graph.entries.get('transcript').inputs.provisional, TRANSCRIPT);
+  assert.equal(graph.entries.get('transcript').inputs.final, TRANSCRIPT);
   sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
   assert.equal(session.view.partial, 'provisional text');
   await session.start(99); assert.equal(sources.length, 1, 'live capture cannot be retargeted');
@@ -117,6 +126,30 @@ test('late capture setup cannot revive a stopped or replacement session', async 
   assert.equal(f.session.view.error, ''); f.session.cancel();
 });
 
+test('Stop before the producer starts drains the graph without requesting capture', async () => {
+  const f = fixture();
+  const render = f.session.render;
+  f.session.render = view => {
+    render(view);
+    if (view.state === 'starting') queueMicrotask(() => { void f.session.stop(); });
+  };
+  await f.session.start(42); await f.session.stop();
+  assert.equal(f.sources.length, 0);
+  assert.equal(f.session.view.state, 'idle'); assert.equal(f.session.view.error, '');
+  assert.ok(f.workers.every(w => w.terminated));
+});
+
+test('stream end during pending capture setup settles startup and drains once', async () => {
+  const f = fixture({ holdSource: true }); const starting = f.session.start(42);
+  await drain(); f.sources[0].onEnded();
+  await starting; await f.session.stop();
+  assert.equal(f.session.view.state, 'idle'); assert.equal(f.session.view.error, '');
+  assert.deepEqual(f.sources[0].stops, [true]);
+  assert.ok(f.workers.every(w => w.terminated));
+  f.sources[0].grant(); await drain();
+  assert.equal(f.session.view.state, 'idle');
+});
+
 test('toolbar action passes the invoked tab to a persistent window and reuses it', async () => {
   let invoke; const created = [], sent = [], focused = []; let contexts = [];
   const chrome = {
@@ -160,6 +193,8 @@ with tempfile.TemporaryDirectory() as tmp:
     (vendor / 'sherpa-onnx-wasm-main-vad-asr.data').write_bytes(b'pinned model fixture')
     build.main()
     target = root / 'dist' / 'chrome-extension'
+    assert {'pipeline.js', 'transcription-nodes.js'} <= set(build.SHARED_FILES)
+    assert (target / 'extension' / 'tab-audio-node.js').is_file()
     for name in build.SHARED_FILES:
         assert (target / 'web' / name).read_bytes() == (original / 'web' / name).read_bytes()
     assert (target / 'web' / 'vendor' / 'sherpa-ja-en' / 'sherpa-onnx-wasm-main-vad-asr.data').read_bytes() == b'pinned model fixture'

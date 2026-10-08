@@ -1,8 +1,8 @@
 // Observe the production graph and optionally delay its real transcript sink.
-export async function observePipeline(page) {
-  await page.evaluate(async () => {
-    const { Pipeline } = await import('/pipeline.js');
-    const { TranscriptOutputNode } = await import('/transcription-nodes.js');
+export async function observePipeline(page, moduleRoot = '/') {
+  await page.evaluate(async moduleRoot => {
+    const { Pipeline } = await import(`${moduleRoot}pipeline.js`);
+    const { TranscriptOutputNode } = await import(`${moduleRoot}transcription-nodes.js`);
     window.pipelineCalls = [];
     window.pipelineGraphs = [];
     for (const hook of ['start', 'stop', 'dispose']) {
@@ -22,7 +22,7 @@ export async function observePipeline(page) {
       }
       if (!context.signal.aborted) return receive.call(this, port, value, context);
     };
-  });
+  }, moduleRoot);
 }
 
 export async function graphTypes(page) {

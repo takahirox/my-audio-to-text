@@ -5,6 +5,19 @@ on which you invoke its toolbar action. It uses the same ReazonSpeech ja-en,
 Silero VAD and hayamimi utterance policy as the Web playground. There is no
 recognition server, page injection, microphone capture or tab-selection picker.
 
+The extension uses the shared Node/Port runtime:
+
+```text
+ExtensionTab (chrome.tabCapture) → ExtensionTabAudioNode.audio
+  → SpeechToTextNode.audio
+    ├─ provisional → TranscriptOutputNode.provisional
+    └─ final       → TranscriptOutputNode.final
+```
+
+The small extension audio adapter reuses the Web capture lifecycle and mono
+16 kHz PCM contract. `TabSession` targets the invoked tab and renders the UI;
+the shared speech node owns the existing ASR core and workers.
+
 ## Build and load unpacked
 
 Requirements: Chrome 116 or later, Python 3 and Node.js/npm.
@@ -16,9 +29,9 @@ npm run build:extension
 ```
 
 Asset preparation downloads and verifies the existing pinned approximately
-91 MB runtime/model distribution. Building copies the maintained Web core,
-workers, configuration, capture helpers, models and license notices into
-`dist/chrome-extension/`. These generated files are ignored by Git. Rebuild
+91 MB runtime/model distribution. Building copies the maintained Web pipeline,
+nodes, core, workers, configuration, capture helpers, models and license notices
+into `dist/chrome-extension/`. These generated files are ignored by Git. Rebuild
 after source changes; reload the extension in Chrome after rebuilding.
 
 1. Open `chrome://extensions` and enable **Developer mode**.
@@ -31,7 +44,8 @@ after source changes; reload the extension in Chrome after rebuilding.
    before the active indication is not transcribed.
 5. Return to the meeting tab; keep the transcript window open. It shows the
    active state, audio-signal status, provisional text and committed final text.
-6. Click **Stop / finalize** to flush capture/VAD tails and drain final decoding.
+6. Click **Stop / finalize** to flush capture/VAD tails and drain final decoding
+   and transcript output ports before the UI reports completion.
    Copy the final text before closing the window.
 
 **Start again** retries the selected tab and clears the previous transcript.
@@ -91,17 +105,19 @@ exercise the extension page under its real CSP. This test-only debugger flag
 and profile do not change installed Chrome or the extension's permissions.
 The suite includes controlled API streams with real stereo Web Audio and
 AudioWorklet/fallback processing, the production ASR core with deterministic
-recognition workers, lifecycle/error/resource checks, and real pinned
-ReazonSpeech/Silero initialization and silence finalization under MV3 CSP.
+recognition workers, the actual shared pipeline graph, lifecycle/error/resource
+checks, delayed transcript delivery and disposal, and real pinned
+ReazonSpeech/Silero initialization and pipeline silence finalization under MV3 CSP.
 The real-toolbar test uses `Extensions.triggerAction` on a generated audio tab
 with native tab capture; deterministic decoding isolates capture behavior from
 speech accuracy. A native permission check verifies that opening the extension
 page without invoking its action cannot capture an arbitrary tab. Unit tests
 also verify normalized PCM at 16/44.1/48 kHz,
 playback routing, Stop/repeat, and stale-session rejection.
+See the [Issue #61 validation evidence](evidence/extension-pipeline-61.md).
 
 An optional manual speech check can use Google Meet, YouTube or another tab:
 confirm audible playback, evolving provisional text, final text after Stop,
 and cleanup after closing the tab/window. This PoC does not include participant
 labels, overlays, simultaneous microphone input, Web Store publication or
-cross-browser extension support. No post-merge verification is required by #53.
+cross-browser extension support. No post-merge verification is required by #61.
