@@ -1,0 +1,408 @@
+{
+  "revision": "3de5984b424ef17cbadfc65ef9a160d24b5dc6a3",
+  "base": "https://takahirox.github.io/my-audio-to-text/",
+  "startedAt": "2026-10-08T03:39:57.681Z",
+  "staticAssets": [
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+      "status": 200,
+      "bytes": 6868,
+      "sha256": "5fa80c42eb9e7b830ba45e28a341a0d97c851f451a6fba49e22b27314980220f",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/capture-worklet.js",
+      "status": 200,
+      "bytes": 813,
+      "sha256": "cf715ca9e3bfb2d1483c6727eb135a090d7d976e5d4a6e9150533bda92154b22",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/index.html",
+      "status": 200,
+      "bytes": 871,
+      "sha256": "ba4dc1f9e7562a1edfbe27b646feda2d7a513aefb06bd18178b0184208ff5f43",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/isolation-worker.js",
+      "status": 200,
+      "bytes": 879,
+      "sha256": "8c8574848a3b457a33a9e4c3040bc83ffb93653a8314fc092523f13cfbdc479c",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/sherpa-onnx.txt",
+      "status": 200,
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/silero-vad.txt",
+      "status": 200,
+      "bytes": 1075,
+      "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+      "status": 200,
+      "bytes": 824,
+      "sha256": "72429d7300f7a3f1701971ed77df2ae7e3ffdd6a2bc17f9b2b5239dc6e22705f",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+      "status": 200,
+      "bytes": 5837,
+      "sha256": "0c9b1076eabf5d5c3faf759bb332f4970c0bbe67b9567ad7ee3b323cc81ed35f",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+      "status": 200,
+      "bytes": 9454,
+      "sha256": "c40f0823211648a538f7067a84d4f0d90f05a5a502550be0d586e867693e68ff",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/index.html",
+      "status": 200,
+      "bytes": 5005,
+      "sha256": "40769db2feb64c9e7e4b0be6e72122ff658ecb454e53cb29a4fff500d41df669",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+      "status": 200,
+      "bytes": 7754,
+      "sha256": "210b277500bf9ccc1b33ee55aaef130cc82e36329ba0d9f9b77b9bc0a6ee93bb",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/reazon-config.js",
+      "status": 200,
+      "bytes": 1228,
+      "sha256": "9e2641ee2333dd2587b9d1695022ad259d5e1f0ced3b8b8cf5db363aacf2242d",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+      "status": 200,
+      "bytes": 3699,
+      "sha256": "abf9c53e84741ca166f1c19725b758125ebc77d42fb3687274e2b67c0c012d8c",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/sherpa-worker.js",
+      "status": 200,
+      "bytes": 2726,
+      "sha256": "59f388ed6c58a16de151b79919ac092a34f3788a9678a67cc28dccd83fe9f213",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/silero-worker.js",
+      "status": 200,
+      "bytes": 2823,
+      "sha256": "48e08d6d8e388e805e9b6a3d73ec318d8d28377d0f4e67b3c1d1f1cf174b618d",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "status": 200,
+      "bytes": 798,
+      "sha256": "1cc64ccd5f9d522b5131f6ab35adb0bf0b368be0adb0d4fe815bfd766754e412",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/third-party-notices.txt",
+      "status": 200,
+      "bytes": 1175,
+      "sha256": "a36083867b6c9223a8bc3a9ef1cc777f0158b3dcc29037def8cc3d174e349a24",
+      "matchesMergedRevision": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+      "status": 200,
+      "bytes": 6858,
+      "sha256": "e480cbbc351d0ec2b1259caf9606f4d0df7ff61e79572cc8984382268dbce13b",
+      "matchesMergedRevision": true
+    }
+  ],
+  "responses": [
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/silero-worker.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/sherpa-worker.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/reazon-config.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-vad.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.wasm",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.wasm",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.data",
+      "status": 200
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.data",
+      "status": 200
+    }
+  ],
+  "errors": [],
+  "repeats": [
+    {
+      "status": "Stopped. Results are final; tap Start to repeat.",
+      "speech": "0 Silero VAD utterance(s) accepted; 0 completed. Waiting for speech.",
+      "audio": "1.0 s / 0.0 s",
+      "final": ""
+    },
+    {
+      "status": "Stopped. Results are final; tap Start to repeat.",
+      "speech": "0 Silero VAD utterance(s) accepted; 0 completed. Waiting for speech.",
+      "audio": "1.0 s / 0.0 s",
+      "final": ""
+    }
+  ],
+  "browser": "153.0.8010.12",
+  "isolation": {
+    "isolated": true,
+    "scope": "https://takahirox.github.io/my-audio-to-text/"
+  },
+  "ready": {
+    "status": "Ready. Choose an audio source and tap Start.",
+    "model": "ReazonSpeech ja-en (ja-en); 1 thread(s)",
+    "init": "23.50 s"
+  },
+  "vendorManifest": {
+    "sherpa-ja-en": {
+      "source": "https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en",
+      "revision": "12b44671ff48b9aed622551d64e02fea9a2cf870",
+      "models": [
+        {
+          "path": "encoder-epoch-35-avg-1.int8.onnx",
+          "virtualPath": "/transducer-encoder.onnx",
+          "sha256": "ead1579e118b821a767242a8eb9272634b0e63ba16f8dfc4d126732406eae268"
+        },
+        {
+          "path": "decoder-epoch-35-avg-1.onnx",
+          "virtualPath": "/transducer-decoder.onnx",
+          "sha256": "90b60985672df5023e187e9d25aa2dc93abc4286bfacf71a35a78a6b76d88df5"
+        },
+        {
+          "path": "joiner-epoch-35-avg-1.int8.onnx",
+          "virtualPath": "/transducer-joiner.onnx",
+          "sha256": "c7f4ba40a8ae307a6c30b5c06e2570add04466bcb45bab62699f0ec5d00ed495"
+        },
+        {
+          "path": "tokens.txt",
+          "virtualPath": "/tokens.txt",
+          "sha256": "144f8a4f639373a1bdf7eabb2437482ef64b0cc5db24ad27cce65f293e4faa24"
+        }
+      ],
+      "runtime": {
+        "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.2/sherpa-onnx-wasm-simd-1.13.2-vad-asr-en-moonshine_tiny.tar.bz2",
+        "sha256": "c388d09c952557f0aeaf7a3c796d20143a2bbed7cb0fe2eca656c26dc8beb444"
+      },
+      "sha256": "900bca64640c969acdae920b4e797094a9169c5dffa780a3941e1c2659eabea7",
+      "bytes": 90822540
+    }
+  },
+  "passed": true,
+  "completedAt": "2026-10-08T03:40:25.482Z"
+}

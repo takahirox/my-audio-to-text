@@ -1,0 +1,56 @@
+{
+  "initial": {
+    "passed": 103,
+    "failed": 5,
+    "skipped": 8,
+    "workers": 2,
+    "duration": "1.9 minutes"
+  },
+  "rerun": {
+    "workers": 1,
+    "stats": {
+      "startTime": "2026-10-08T03:40:57.220Z",
+      "duration": 6830.161,
+      "expected": 3,
+      "skipped": 0,
+      "unexpected": 2,
+      "flaky": 0
+    },
+    "tests": [
+      {
+        "project": "chromium",
+        "test": "Stop then Cancel/reload discards the old capture flush and Stop",
+        "status": "passed",
+        "errors": []
+      },
+      {
+        "project": "webkit",
+        "test": "microphone denial is visible and leaves retry available",
+        "status": "passed",
+        "errors": []
+      },
+      {
+        "project": "webkit",
+        "test": "canceling pending microphone permission releases a late-granted track",
+        "status": "passed",
+        "errors": []
+      },
+      {
+        "project": "webkit",
+        "test": "cancel during the tab picker discards a late-granted stream",
+        "status": "failed",
+        "errors": [
+          "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: true\nReceived: false\n\n  150 |   await expect.poll(() => page.evaluate(() => window.tabStreams.map(s => s.tracks.map(t => t.stops))))\n  151 |     .toEqual(Array.from({ length: count }, () => [1, 1]));\n> 152 |   expect(await page.evaluate(() => window.captureContexts.every(c => c.state === 'closed'))).toBe(true);\n      |                                                                                              ^\n  153 |   expect(await page.evaluate(() => window.tabStreams.every(s => s.context.state === 'closed'))).toBe(true);\n  154 | }\n  155 |"
+        ]
+      },
+      {
+        "project": "webkit",
+        "test": "a canceled picker grant cannot feed or end a replacement tab session",
+        "status": "failed",
+        "errors": [
+          "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: true\nReceived: false\n\n  150 |   await expect.poll(() => page.evaluate(() => window.tabStreams.map(s => s.tracks.map(t => t.stops))))\n  151 |     .toEqual(Array.from({ length: count }, () => [1, 1]));\n> 152 |   expect(await page.evaluate(() => window.captureContexts.every(c => c.state === 'closed'))).toBe(true);\n      |                                                                                              ^\n  153 |   expect(await page.evaluate(() => window.tabStreams.every(s => s.context.state === 'closed'))).toBe(true);\n  154 | }\n  155 |"
+        ]
+      }
+    ]
+  }
+}

@@ -65,9 +65,11 @@ headers. Opt-in real-model checks use the migrated speech page too.
 
 ## Required post-merge verification
 
-**Pending for Issue #63.** Local tests do not establish deployment of the merged
-revision. Keep the Issue open until the following checks are performed and the
-evidence is recorded:
+**Completed for Issue #63 on 2026-10-08.** The published pages and assets were
+verified against merge commit `3de5984b424ef17cbadfc65ef9a160d24b5dc6a3`. See
+[deployment, browser and model-loading evidence](evidence/node-playground-pages.md),
+including the separate deterministic-suite results. Future changes should repeat
+these checks after deployment:
 
 1. Confirm the successful Pages push/deployment run belongs to the merged commit
    SHA; record the run URL, SHA and verification time.
