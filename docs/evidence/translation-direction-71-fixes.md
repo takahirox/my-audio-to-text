@@ -114,3 +114,17 @@ This fix node does not push or merge. Required Pages verification remains
 **pending**: after merge, record the successful Pages run URL, merged/deployed
 SHA, UTC time, canonical repository-prefixed new page/index link and valid
 script/Worker/runtime/model URLs. Keep Issue #71 open until it is recorded.
+
+### PR closure correction readback
+
+At **2026-10-08T10:42:32.772270+00:00**, PR #72's live description was changed to `Refs #71`
+and verified to match [the publication artifact](translation-direction-71-pr-description.json)
+exactly. GitHub returned an empty `closingIssuesReferences` list. PR #72 was open
+and unmerged; Issue #71 was open; the published head remained
+`18a9ee1dc0024ec089f7214bf5149e3f9c154db1`. The artifact now instructs publication
+to preserve this non-closing reference while Pages verification is pending.
+
+Local JSON/body/template checks and `git diff --check` passed. Runtime and
+real-model tests were not rerun for this metadata-only fix; the implementation
+and inference evidence above are unchanged. No push, merge or post-merge
+verification was performed.
