@@ -1,5 +1,13 @@
 # Issue #71 translation direction validation
 
+**Historical implementation evidence, superseded for English → Japanese.**
+Review rejected the Bible-domain checkpoint and Japanese-character-only smoke.
+See [the review fixes and current validation](translation-direction-71-fixes.md)
+for the replacement OPUS Tatoeba checkpoint, ASR case preparation and meaningful
+ordinary-English production-page/cache-only extension tests. The original
+results below are retained as evidence of the rejected implementation, not as
+acceptance evidence for the current English → Japanese path.
+
 Verified locally on **2026-10-08**, macOS, Chrome-for-Testing **153.0.8010.12**.
 This evidence covers the assigned worktree and unpacked MV3 extension. Nothing
 was pushed, published, merged or commented on GitHub.

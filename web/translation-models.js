@@ -4,10 +4,10 @@ export const OPUS_MT = Object.freeze({
   revision: '05470cd69b62aa32e3ee64ccfd41279789ee4b1e',
   dtype: 'q8', device: 'wasm',
 });
-// Upstream names Japanese `jap`; this is the verified en → ja conversion.
+// OPUS Tatoeba English → Japanese, verified with this pinned WASM runtime.
 export const OPUS_MT_EN_JA = Object.freeze({
-  id: 'Xenova/opus-mt-en-jap',
-  revision: '9d418190be3aa945eae5bab1bd96bc5e349ad784',
+  id: 'Kadonox/opus-tatoeba-en-ja-onnx',
+  revision: '225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e',
   dtype: 'q8', device: 'wasm',
 });
 export const TRANSLATE_GEMMA = Object.freeze({

@@ -145,7 +145,7 @@ transcripts are not saved. A new toolbar invocation uses the saved preferences.
 In the recorder window, select Japanese → English or English → Japanese, then
 click **Download / retry OPUS-MT** to explicitly download the pinned model data
 (Japanese → English: 238,978,729 bytes, about 239 MB; English → Japanese:
-98,933,843 bytes, about 99 MB; plus cache/write overhead). Progress, readiness,
+252,634,769 bytes, about 253 MB; plus cache/write overhead). Progress, readiness,
 failures and cancellation are visible. This control also retries missing,
 corrupt or evicted files and reuses verified complete files. Preparation can run
 while transcription remains active. Stop capture, check **Enable translation for
@@ -198,8 +198,8 @@ production OPUS tokenizer also enforces 512 tokens and caps output at 256 tokens
 revision `05470cd69b62aa32e3ee64ccfd41279789ee4b1e` with exact sizes and 1 MiB
 chunk SHA-256 hashes. `scripts/review-opus-mt-assets.py` reproduces this manifest
 via an explicit maintainer download; it is never invoked by build/install.
-`extension/opus-mt-en-ja-assets.json` separately pins `Xenova/opus-mt-en-jap` at
-`9d418190be3aa945eae5bab1bd96bc5e349ad784` with exact sizes, whole-file and chunk
+`extension/opus-mt-en-ja-assets.json` separately pins `Kadonox/opus-tatoeba-en-ja-onnx` at
+`225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e` with exact sizes, whole-file and chunk
 hashes. `python3 scripts/review-opus-mt-en-ja-assets.py` explicitly verifies its
 remote metadata and downloaded bytes. The immutable cache keys cannot overlap
 with Japanese → English assets.
@@ -243,14 +243,20 @@ EXTENSION_OPUS_SMOKE=en-ja npm run test:extension -- tests/extension/translation
 This launches an isolated Chrome-for-Testing profile, triggers the actual toolbar
 action on a tab playing checksum-pinned upstream Japanese or English WAV audio, explicitly
 downloads real OPUS assets under MV3 CSP, and checks original/provisional/final
-translations in the selected direction through production ASR and translation. It recreates the recorder window
+translations in the selected direction through production ASR and translation.
+The English → Japanese smoke uses the committed [ordinary-English synthetic
+speech fixture](../tests/fixtures/ordinary-english.md) and asserts meanings on
+the actual final rows; the Japanese smoke uses the pinned upstream speech fixture. It recreates the recorder window
 and repeats offline using cached
 bytes and records browser capabilities, paired output, requests and errors in
 `extension-opus-evidence.json`. Set `EXTENSION_HEADED=1` for headed testing.
 When opted in, fixture/network/device/model errors fail visibly; the default
 suite labels this large-download smoke opt-in. See [Issue #69 evidence](evidence/extension-translation-69.md)
 for the original execution result, and [Issue #71 evidence](evidence/translation-direction-71.md)
-for both-direction checks and real English → Japanese execution. The en-jap
-checkpoint has Bible-domain evaluation and can produce unrelated translations
-for general speech; execution tests do not establish semantic quality. No post-merge verification is required for the
+for both-direction checks and real English → Japanese execution. The production
+page smoke checks ordinary English meanings (greeting, meeting time, report,
+station and deadline, including ASR uppercase forms); Japanese characters alone
+do not establish translation. The English → Japanese Worker recases uppercase
+English for inference; the copyable original and paired source stay unchanged.
+No post-merge verification is required for the
 unpacked extension; Web Store distribution is separate future work.

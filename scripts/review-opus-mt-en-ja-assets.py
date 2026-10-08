@@ -11,8 +11,8 @@ from pathlib import Path
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = 'Xenova/opus-mt-en-jap'
-REVISION = '9d418190be3aa945eae5bab1bd96bc5e349ad784'
+MODEL = 'Kadonox/opus-tatoeba-en-ja-onnx'
+REVISION = '225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e'
 
 
 def main():
@@ -27,7 +27,7 @@ def main():
         remote = upstream[name]
         if remote['size'] != file['bytes'] or (remote.get('lfs') and remote['lfs']['sha256'] != file['sha256']):
             raise RuntimeError(f'Upstream metadata mismatch: {name}')
-        path = ROOT / '.cache' / 'opus-mt-en-ja' / name
+        path = ROOT / '.cache' / 'opus-tatoeba-en-ja' / name
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             temporary = path.with_suffix(path.suffix + '.partial')

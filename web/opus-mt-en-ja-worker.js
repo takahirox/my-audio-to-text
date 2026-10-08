@@ -18,9 +18,18 @@ serveTranslationWorker(async (progress, { cacheOnly = false } = {}) => {
     });
   } catch (error) { throw modelLoadError(error); }
   return async text => {
-    const tokens = translate.tokenizer(text).input_ids;
+    // ReazonSpeech emits uppercase English. This case-sensitive Marian
+    // tokenizer/model loses ordinary words in that form. Normalize only fully
+    // uppercase Latin input for inference; the source transcript stays intact.
+    const input = /[A-Z]/.test(text) && !/[a-z]/.test(text)
+      ? text.toLowerCase()
+        .replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, letter) => prefix + letter.toUpperCase())
+        .replace(/\b(?:i|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g,
+          word => word[0].toUpperCase() + word.slice(1))
+      : text;
+    const tokens = translate.tokenizer(input).input_ids;
     if (tokens.dims.at(-1) > 512) throw new RangeError('OPUS-MT input exceeds 512 tokens; use a shorter snippet.');
-    const result = await translate(text, { max_new_tokens: 256, do_sample: false });
+    const result = await translate(input, { max_new_tokens: 256, do_sample: false });
     return result.map(value => value.translation_text);
   };
 });

@@ -202,7 +202,7 @@ test('English → Japanese has a distinct pinned complete manifest and cache key
   const files = JSON.parse(readFileSync('extension/opus-mt-en-ja-assets.json'));
   const set = defineAssetSet({ ...OPUS_MT_EN_JA, files });
   const original = defineAssetSet({ ...OPUS_MT, files: JSON.parse(readFileSync('extension/opus-mt-assets.json')) });
-  assert.equal(set.bytes, 98933843);
+  assert.equal(set.bytes, 252634769);
   assert.equal(set.files.length, 7);
   assert.ok(set.files.every(file => file.url.includes(OPUS_MT_EN_JA.revision) && !original.files.some(old => old.url === file.url)));
   assert.ok(files.every(file => /^[a-f0-9]{64}$/.test(file.sha256) && file.sha256Chunks.length === Math.ceil(file.bytes / HASH_CHUNK_BYTES)));

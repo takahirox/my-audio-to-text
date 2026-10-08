@@ -59,7 +59,7 @@ const test = base.extend({
           const translate=async text=>{
             await new Promise(resolve=>setTimeout(resolve,text==='slow' ? 300 : 40));
             if(text==='fail')throw Error('Controlled inference failure');
-            return [{translation_text:(id==='Xenova/opus-mt-en-jap'?'Japanese: ':'English: ')+text}];
+            return [{translation_text:(id==='Kadonox/opus-tatoeba-en-ja-onnx'?'Japanese: ':'English: ')+text}];
           };
           translate.tokenizer=()=>({input_ids:{dims:[1,10]}});return translate;
         }`);

@@ -121,7 +121,7 @@ fixture tests alone do not verify them.
 
 Japanese → English OPUS-MT is approximately **239 MB**, with **CC BY 4.0** attribution to
 Helsinki-NLP/OPUS-MT and ONNX Community. English → Japanese uses its own
-`Xenova/opus-mt-en-jap` checkpoint/manifest/cache keys, approximately **99 MB**,
+`Kadonox/opus-tatoeba-en-ja-onnx` checkpoint/manifest/cache keys, approximately **253 MB**,
 with upstream **Apache 2.0** and Xenova conversion attribution. The selected
 direction alone downloads on explicit request; its state/progress never stands
 in for the other model. See [#71 evidence](evidence/translation-direction-71.md).

@@ -4,8 +4,10 @@ import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { ordinaryEnglishFixtures } from '../fixtures/translation-en-ja.js';
+import { OPUS_MT, OPUS_MT_EN_JA } from '../../web/translation-models.js';
 
-// Explicit opt-in: suitable Chrome, network and ~239 MB (ja-en) / ~99 MB (en-ja) cache space required.
+// Explicit opt-in: suitable Chrome, network and ~239 MB (ja-en) / ~253 MB (en-ja) cache space required.
 // Failures when opted in are reported; never silently skip a device/load error.
 for (const direction of ['ja-en', 'en-ja']) {
 const reverse = direction === 'en-ja';
@@ -13,9 +15,10 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
   test.skip(process.env.EXTENSION_OPUS_SMOKE !== (reverse ? 'en-ja' : '1'), 'Opt-in real extension OPUS-MT smoke. Set EXTENSION_OPUS_SMOKE=1 (ja-en) or en-ja.');
   test.setTimeout(900000);
   const specification = JSON.parse(await readFile('scripts/reazon-ja-en-assets.json', 'utf8'));
-  const fixture = specification.fixtures.find(value => value.name === (reverse ? 'English' : 'Japanese'));
-  const wav = await readFile(path.join('.cache/reazon-ja-en', fixture.path)).catch(error => {
-    throw new Error(`Real smoke fixture unavailable. Run python3 scripts/prepare-reazon-ja-en-fixtures.py: ${error.message}`);
+  const fixture = reverse ? { name: 'Ordinary English (synthetic speech)', path: 'tests/fixtures/ordinary-english.wav', sha256: '21212faed6ae5f5958603d4d7cf60a423f1090fb6542d00e3a826ebe6235a768' }
+    : specification.fixtures.find(value => value.name === 'Japanese');
+  const wav = await readFile(reverse ? fixture.path : path.join('.cache/reazon-ja-en', fixture.path)).catch(error => {
+    throw new Error(`Real smoke fixture unavailable. Restore the committed English fixture or run python3 scripts/prepare-reazon-ja-en-fixtures.py for Japanese: ${error.message}`);
   });
   expect(createHash('sha256').update(wav).digest('hex')).toBe(fixture.sha256);
   const profile = await mkdtemp(path.join(tmpdir(), 'extension-opus-real-'));
@@ -25,7 +28,7 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
       response.writeHead(200, { 'Content-Type': 'audio/wav' }); response.end(wav);
     } else {
       response.writeHead(200, { 'Content-Type': 'text/html' });
-      response.end('<button id="play">Play Japanese</button><audio id="audio" src="/speech.wav"></audio><script>document.querySelector("#play").onclick=()=>{const a=document.querySelector("audio");a.currentTime=0;a.play();};</script>');
+      response.end('<button id="play">Play speech</button><audio id="audio" src="/speech.wav"></audio><script>document.querySelector("#play").onclick=()=>{const a=document.querySelector("audio");a.currentTime=0;a.play();};</script>');
     }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -106,15 +109,49 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
       const finals = await recorder.locator('#paired-finals li').evaluateAll(rows => rows.map(row => ({
         original: row.children[0].textContent, translated: row.children[1].textContent,
       })));
-      runs.push({ run, offline: !!run, recreatedWindow: !!run, provisional, finals });
+      // Exercise representative ordinary English through the production Pipeline,
+      // Node/Worker and extension-only verified cache, online and after recreation
+      // offline. No ASR/model/runtime mocks or direct remote-model fallback.
+      const ordinaryTranslations = reverse ? await recorder.evaluate(async texts => {
+        const { Pipeline } = await import('../web/pipeline.js');
+        const { TEXT, EnglishToJapaneseOpusMtTranslationNode, TextOutputNode } = await import('../web/translation-nodes.js');
+        const outputs = [];
+        const source = { inputs: {}, outputs: { text: TEXT }, start(context) {
+          for (const text of texts) context.emit('text', text);
+        } };
+        const node = new EnglishToJapaneseOpusMtTranslationNode({ loadOptions: { cacheOnly: true } });
+        const sink = new TextOutputNode(text => outputs.push(text));
+        const graph = new Pipeline({ nodes: { source, translation: node, sink }, connections: [
+          { from: ['source', 'text'], to: ['translation', 'text'] },
+          { from: ['translation', 'text'], to: ['sink', 'text'] },
+        ] });
+        try { await graph.start(); await graph.stop(); return outputs; }
+        finally { await graph.dispose(); }
+      }, ordinaryEnglishFixtures.map(({ text }) => text)) : [];
+      runs.push({ run, offline: !!run, recreatedWindow: !!run, provisional, finals,
+        ordinaryTranslations: ordinaryTranslations.map((translated, index) => ({ original: ordinaryEnglishFixtures[index].text, translated })) });
+      if (reverse) {
+        expect(ordinaryTranslations).toHaveLength(ordinaryEnglishFixtures.length);
+        ordinaryEnglishFixtures.forEach(({ text, meanings }, index) => {
+          for (const meaning of meanings) expect(ordinaryTranslations[index], `Translation of ${text} must preserve ${meaning}`).toMatch(meaning);
+        });
+      }
       console.log(JSON.stringify(runs.at(-1)));
       expect(finals.length).toBeGreaterThan(0);
+      if (reverse) {
+        for (const [sourceWord, fixtureIndex] of [[/MEETING/i, 2], [/REPORT/i, 4], [/PROJECT/i, 8]]) {
+          const pair = finals.find(pair => sourceWord.test(pair.original));
+          expect(pair, `Recognized ordinary English ${sourceWord} must remain paired`).toBeDefined();
+          for (const meaning of ordinaryEnglishFixtures[fixtureIndex].meanings) expect(pair.translated).toMatch(meaning);
+        }
+      }
       expect(finals.some(pair => (reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/).test(pair.original))).toBe(true);
       for (const pair of finals) {
         // Bilingual ASR can emit a short other-language tail; retain it visibly.
         expect(pair.original.trim().length).toBeGreaterThan(0);
         if (!reverse) expect(pair.original).toMatch(/[\u3040-\u30ff\u4e00-\u9fff]/);
-        expect(pair.translated).toMatch(reverse ? /[\u3040-\u30ff\u4e00-\u9fff]/ : /[A-Za-z]/); expect(pair.translated).not.toMatch(/failed|Translating|canceled/i);
+        if (!reverse || /[A-Za-z]/.test(pair.original)) expect(pair.translated).toMatch(reverse ? /[\u3040-\u30ff\u4e00-\u9fff]/ : /[A-Za-z]/);
+        expect(pair.translated.trim()).not.toBe(''); expect(pair.translated).not.toMatch(/failed|Translating|canceled/i);
       }
       expect(requests.slice(before).every(request => request.url.startsWith('chrome-extension://') || request.url.startsWith('http://127.0.0.1:'))).toBe(true);
     }
@@ -126,7 +163,7 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
       expect(url.hostname === 'huggingface.co' || url.hostname.endsWith('.hf.co')).toBe(true);
     }
   } finally {
-    const evidence = { direction, time: new Date().toISOString(), browserVersion, capabilities, fixture: { name: fixture.name, path: fixture.path, sha256: fixture.sha256 }, cacheState, runs, errors, requests };
+    const evidence = { direction, model: reverse ? OPUS_MT_EN_JA : OPUS_MT, time: new Date().toISOString(), browserVersion, capabilities, fixture: { name: fixture.name, path: fixture.path, sha256: fixture.sha256 }, cacheState, runs, errors, requests };
     const file = testInfo.outputPath('extension-opus-evidence.json');
     await writeFile(file, JSON.stringify(evidence, null, 2) + '\n');
     await testInfo.attach('extension-opus-evidence', { path: file, contentType: 'application/json' });

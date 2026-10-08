@@ -1,0 +1,226 @@
+{
+  "choice": "opus-en-ja",
+  "time": "2026-10-08T10:03:33.577Z",
+  "browser": "153.0.8010.12",
+  "capabilities": {
+    "gpu": true,
+    "adapter": null,
+    "gpuInfo": null,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+    "secure": true,
+    "isolated": false
+  },
+  "fixtures": [
+    "Hello.",
+    "HELLO.",
+    "The meeting starts at ten.",
+    "THE MEETING STARTS AT TEN.",
+    "Please send me the report.",
+    "PLEASE SEND ME THE REPORT.",
+    "Where is the train station?",
+    "WHERE IS THE TRAIN STATION?",
+    "We need to finish this project by Friday.",
+    "WE NEED TO FINISH THIS PROJECT BY FRIDAY."
+  ],
+  "model": {
+    "id": "Kadonox/opus-tatoeba-en-ja-onnx",
+    "revision": "225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e",
+    "dtype": "q8",
+    "device": "wasm"
+  },
+  "runs": [
+    {
+      "run": 0,
+      "fixture": "Hello.",
+      "status": "Complete",
+      "errors": "",
+      "output": "こんにちは",
+      "load-time": "26527 ms",
+      "latency": "69 ms"
+    },
+    {
+      "run": 0,
+      "fixture": "HELLO.",
+      "status": "Complete",
+      "errors": "",
+      "output": "こんにちは",
+      "load-time": "887 ms",
+      "latency": "66 ms"
+    },
+    {
+      "run": 0,
+      "fixture": "The meeting starts at ten.",
+      "status": "Complete",
+      "errors": "",
+      "output": "集会は10時から開始する.",
+      "load-time": "886 ms",
+      "latency": "121 ms"
+    },
+    {
+      "run": 0,
+      "fixture": "THE MEETING STARTS AT TEN.",
+      "status": "Complete",
+      "errors": "",
+      "output": "集会は10時から開始する.",
+      "load-time": "903 ms",
+      "latency": "124 ms"
+    },
+    {
+      "run": 0,
+      "fixture": "Please send me the report.",
+      "status": "Complete",
+      "errors": "",
+      "output": "報告書を寄越して",
+      "load-time": "928 ms",
+      "latency": "115 ms"
+    },
+    {
+      "run": 0,
+      "fixture": "PLEASE SEND ME THE REPORT.",
+      "status": "Complete",
+      "errors": "",
+      "output": "報告書を寄越して",
+      "load-time": "916 ms",
+      "latency": "116 ms"
+    },
+    {
+      "run": 0,
+      "fixture": "Where is the train station?",
+      "status": "Complete",
+      "errors": "",
+      "output": "駅はどこだ?",
+      "load-time": "922 ms",
+      "latency": "90 ms"
+    },
+    {
+      "run": 0,
+      "fixture": "WHERE IS THE TRAIN STATION?",
+      "status": "Complete",
+      "errors": "",
+      "output": "駅はどこだ?",
+      "load-time": "909 ms",
+      "latency": "88 ms"
+    },
+    {
+      "run": 0,
+      "fixture": "We need to finish this project by Friday.",
+      "status": "Complete",
+      "errors": "",
+      "output": "金曜までにこのプロジェクトを完了しなければならない.",
+      "load-time": "905 ms",
+      "latency": "134 ms"
+    },
+    {
+      "run": 0,
+      "fixture": "WE NEED TO FINISH THIS PROJECT BY FRIDAY.",
+      "status": "Complete",
+      "errors": "",
+      "output": "金曜までにこのプロジェクトを完了しなければならない.",
+      "load-time": "922 ms",
+      "latency": "136 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "Hello.",
+      "status": "Complete",
+      "errors": "",
+      "output": "こんにちは",
+      "load-time": "920 ms",
+      "latency": "73 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "HELLO.",
+      "status": "Complete",
+      "errors": "",
+      "output": "こんにちは",
+      "load-time": "957 ms",
+      "latency": "70 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "The meeting starts at ten.",
+      "status": "Complete",
+      "errors": "",
+      "output": "集会は10時から開始する.",
+      "load-time": "925 ms",
+      "latency": "130 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "THE MEETING STARTS AT TEN.",
+      "status": "Complete",
+      "errors": "",
+      "output": "集会は10時から開始する.",
+      "load-time": "912 ms",
+      "latency": "123 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "Please send me the report.",
+      "status": "Complete",
+      "errors": "",
+      "output": "報告書を寄越して",
+      "load-time": "971 ms",
+      "latency": "114 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "PLEASE SEND ME THE REPORT.",
+      "status": "Complete",
+      "errors": "",
+      "output": "報告書を寄越して",
+      "load-time": "946 ms",
+      "latency": "116 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "Where is the train station?",
+      "status": "Complete",
+      "errors": "",
+      "output": "駅はどこだ?",
+      "load-time": "946 ms",
+      "latency": "91 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "WHERE IS THE TRAIN STATION?",
+      "status": "Complete",
+      "errors": "",
+      "output": "駅はどこだ?",
+      "load-time": "1084 ms",
+      "latency": "118 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "We need to finish this project by Friday.",
+      "status": "Complete",
+      "errors": "",
+      "output": "金曜までにこのプロジェクトを完了しなければならない.",
+      "load-time": "1090 ms",
+      "latency": "139 ms"
+    },
+    {
+      "run": 1,
+      "fixture": "WE NEED TO FINISH THIS PROJECT BY FRIDAY.",
+      "status": "Complete",
+      "errors": "",
+      "output": "金曜までにこのプロジェクトを完了しなければならない.",
+      "load-time": "961 ms",
+      "latency": "147 ms"
+    }
+  ],
+  "errors": [],
+  "requestsSummary": {
+    "count": 138,
+    "byHost": {
+      "playground-loopback": 126,
+      "huggingface.co": 10,
+      "us.aws.cdn.hf.co": 2
+    },
+    "allGetWithoutBody": true,
+    "noInputInUrlsOrBodies": true,
+    "immutableModelUrlsChecked": true,
+    "assertedBy": "tests/browser/translation-smoke.spec.js"
+  }
+}

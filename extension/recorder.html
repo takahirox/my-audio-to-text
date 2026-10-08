@@ -25,14 +25,14 @@
     </select>
     <p>Direction changes apply to the next session. The active session keeps its input/output languages. No automatic language detection.</p>
     <p id="session-direction"></p>
-    <p>Download only the selected direction on request: Japanese → English about 239 MB; English → Japanese about 99 MB, plus cache overhead. Text stays in this extension. Cache can be evicted; missing files need a new download.</p>
+    <p>Download only the selected direction on request: Japanese → English about 239 MB; English → Japanese about 253 MB, plus cache overhead. Text stays in this extension. Cache can be evicted; missing files need a new download.</p>
     <button id="prepare-opus">Download / retry OPUS-MT</button>
     <button id="cancel-download" disabled>Cancel download</button>
     <p id="model-status" role="status">Checking cached assets…</p>
     <progress id="model-progress" value="0" max="1"></progress> <span id="model-bytes"></span>
     <p id="translation-status" role="status"></p>
     <p id="model-direction"></p>
-    <p>Helsinki-NLP / OPUS-MT. Japanese → English: ONNX Community conversion, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. English → Japanese: Xenova conversion of the <a href="https://huggingface.co/Helsinki-NLP/opus-mt-en-jap">Apache 2.0 base model</a>; Bible-domain benchmark, limited general-purpose quality.</p>
+    <p>Helsinki-NLP / OPUS-MT. Japanese → English: ONNX Community conversion, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. English → Japanese: Kadonox ONNX conversion of the <a href="https://huggingface.co/Helsinki-NLP/opus-tatoeba-en-ja">Apache 2.0 OPUS Tatoeba base model</a>.</p>
   </fieldset>
   <h2 id="partial-source-label">Provisional Japanese original</h2>
   <pre id="partial" aria-live="polite"></pre>
