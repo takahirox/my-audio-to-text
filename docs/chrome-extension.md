@@ -219,7 +219,7 @@ under COEP; no host permissions, remote-script CSP allowances or new capture
 permissions are added. Runtime JS/MJS/WASM execute only from `chrome-extension:`.
 Input text is sent only to the owned local Worker. OPUS-MT / Helsinki-NLP and ONNX
 Community attribution and CC BY 4.0, plus English → Japanese base Apache 2.0
-terms and Xenova attribution, are shown next to the download control; see
+terms and Kadonox attribution, are shown next to the download control; see
 [translation nodes](translation-nodes.md) for the pinned runtime archive hashes,
 model limitations and license details. TranslateGemma is not integrated.
 

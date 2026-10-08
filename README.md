@@ -43,7 +43,7 @@ transcripts remain window-local. See its
 guide for building/loading the unpacked extension,
 permissions, lifecycle behavior and automated tests.
 
-The [Pages workflow](.github/workflows/pages.yml) prepares the pinned ReazonSpeech ja-en/Silero assets and translation runtimes and deploys the entire `web/` tree (the index, nested node pages and shared assets) automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. Inference runs in the browser; speech loading needs about 91 MB of model/runtime assets and no ASR server. Translation weights download explicitly on Run (about 239 MB for OPUS-MT ja-en, 99 MB for OPUS-MT en-ja and 3.112 GB for TranslateGemma); text stays local.
+The [Pages workflow](.github/workflows/pages.yml) prepares the pinned ReazonSpeech ja-en/Silero assets and translation runtimes and deploys the entire `web/` tree (the index, nested node pages and shared assets) automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. Inference runs in the browser; speech loading needs about 91 MB of model/runtime assets and no ASR server. Translation weights download explicitly on Run (about 239 MB for OPUS-MT ja-en, 253 MB for OPUS-MT en-ja and 3.112 GB for TranslateGemma); text stays local.
 
 For setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the `github-pages` environment and built-in `GITHUB_TOKEN`.
 
