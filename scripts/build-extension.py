@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Package the extension with the Web core and prepared local models, unchanged."""
+"""Package the extension with the shared pipeline and prepared local models."""
 from pathlib import Path
 import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_FILES = (
+    "pipeline.js", "transcription-nodes.js",
     "audio.js", "capture-worklet.js", "local-asr-core.js", "local-asr-config.js",
     "reazon-simulation.js", "reazon-config.js", "sherpa-worker.js", "silero-worker.js",
     "third-party-notices.txt",

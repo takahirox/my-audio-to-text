@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import { BrowserTab, Microphone, Resampler, joinAudio } from '../web/audio.js';
 import { LocalAsrCore } from '../web/local-asr-core.js';
 import { ExtensionTab } from '../extension/tab-source.js';
+import { ExtensionTabAudioNode } from '../extension/tab-audio-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { createTabTranscriptionPipeline, MicrophoneAudioNode, SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
 
@@ -63,7 +64,7 @@ function browser(t, { rate = 48000, worklet = true, permission, module } = {}) {
   return { tracks, media, requests, contexts };
 }
 
-for (const kind of ['tab', 'microphone']) for (const rate of [16000, 44100, 48000]) {
+for (const kind of ['tab', 'microphone', 'extension']) for (const rate of [16000, 44100, 48000]) {
   test(`Node pipeline composes real ${kind} capture/resampling, ASR and async output at ${rate} Hz`, async t => {
     const b = browser(t, { rate }), values = [], workers = [], pcm = [];
     const options = {
@@ -95,7 +96,13 @@ for (const kind of ['tab', 'microphone']) for (const rate of [16000, 44100, 4800
     let flow;
     if (kind === 'tab') flow = createTabTranscriptionPipeline(options);
     else {
-      const source = new MicrophoneAudioNode();
+      if (kind === 'extension') {
+        Object.defineProperty(globalThis, 'chrome', { configurable: true, value: { tabCapture: {
+          getMediaStreamId: async options => { assert.deepEqual(options, { targetTabId: 42 }); return 'id'; },
+        } } });
+        t.after(() => delete globalThis.chrome);
+      }
+      const source = kind === 'extension' ? new ExtensionTabAudioNode(42) : new MicrophoneAudioNode();
       const speech = new SpeechToTextNode(options), transcript = new TranscriptOutputNode(options.onTranscript);
       flow = { source, speech, transcript, pipeline: new Pipeline({ nodes: { source, speech, transcript }, connections: [
         { from: ['source', 'audio'], to: ['speech', 'audio'] },
@@ -105,6 +112,11 @@ for (const kind of ['tab', 'microphone']) for (const rate of [16000, 44100, 4800
     }
     await flow.pipeline.start();
     assert.equal(b.requests[0].api, kind === 'tab' ? 'getDisplayMedia' : 'getUserMedia');
+    if (kind === 'extension') {
+      assert.deepEqual(flow.source.source.source.connections,
+        [flow.source.source.node, b.contexts[0].destination]);
+      assert.equal(flow.source.source.gain.gain.value, 0);
+    }
     for (let offset = 0; offset < rate + 37; offset += 128) {
       const count = Math.min(128, rate + 37 - offset);
       (flow.source || flow.tab).source.node.processor.process([[new Float32Array(count).fill(0.02), new Float32Array(count).fill(0.08)]]);
