@@ -193,7 +193,9 @@ with tempfile.TemporaryDirectory() as tmp:
     (vendor / 'sherpa-onnx-wasm-main-vad-asr.data').write_bytes(b'pinned model fixture')
     translation = root / 'web' / 'vendor' / 'translation'
     translation.mkdir()
-    (translation / 'transformers.js').write_bytes(b'unrelated heavy runtime')
+    for name in ('transformers.js', 'ort-wasm-simd-threaded.asyncify.mjs',
+                 'ort-wasm-simd-threaded.asyncify.wasm', 'transformers-LICENSE'):
+        (translation / name).write_bytes(b'pinned runtime fixture')
     build.main()
     target = root / 'dist' / 'chrome-extension'
     assert {'pipeline.js', 'transcription-nodes.js'} <= set(build.SHARED_FILES)
@@ -203,7 +205,7 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in build.SHARED_FILES:
         assert (target / 'web' / name).read_bytes() == (original / 'web' / name).read_bytes()
     assert (target / 'web' / 'vendor' / 'sherpa-ja-en' / 'sherpa-onnx-wasm-main-vad-asr.data').read_bytes() == b'pinned model fixture'
-    assert not (target / 'web' / 'vendor' / 'translation').exists()
+    assert (target / 'web' / 'vendor' / 'translation' / 'transformers.js').read_bytes() == b'pinned runtime fixture'
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest['manifest_version'] == 3
     assert manifest['options_ui'] == {'page': 'extension/model-cache.html', 'open_in_tab': True}

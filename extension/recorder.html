@@ -14,10 +14,25 @@
   <p id="errors" role="alert"></p>
   <button id="start" disabled>Start again</button>
   <button id="stop" disabled>Stop / finalize</button>
-  <h2>Provisional</h2>
+  <button id="cancel-session" disabled>Cancel session</button>
+  <fieldset>
+    <legend>Optional local Japanese → English translation (OPUS-MT)</legend>
+    <label><input id="translation-enabled" type="checkbox"> Enable translation for the next session (Stop first)</label>
+    <p>Download once on request: about 239 MB, plus cache overhead. Text stays in this extension. Cache can be evicted; missing files need a new download.</p>
+    <button id="prepare-opus">Download / retry OPUS-MT</button>
+    <button id="cancel-download" disabled>Cancel download</button>
+    <p id="model-status" role="status">Checking cached assets…</p>
+    <progress id="model-progress" value="0" max="1"></progress> <span id="model-bytes"></span>
+    <p id="translation-status" role="status"></p>
+    <p>Helsinki-NLP / OPUS-MT; ONNX Community quantized conversion. <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</p>
+  </fieldset>
+  <h2>Provisional Japanese</h2>
   <pre id="partial" aria-live="polite"></pre>
-  <h2>Final transcript</h2>
+  <pre id="partial-english" lang="en" aria-live="polite"></pre>
+  <h2>Final original transcript</h2>
   <pre id="final" aria-live="polite"></pre>
+  <h2>Final utterances: original / English</h2>
+  <ol id="paired-finals" aria-live="polite"></ol>
   <p>Return to your meeting tab while this window stays open. Closing this window releases capture and discards pending recognition. Copy the final text before closing.</p>
   <script type="module" src="recorder.js"></script>
 </body>

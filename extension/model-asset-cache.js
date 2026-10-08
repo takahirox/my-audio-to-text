@@ -1,5 +1,5 @@
 // Asset storage only: no inference, Pipeline routing or background model manager.
-// Use Transformers.js's browser cache and canonical pinned URLs for future reuse.
+// Canonical pinned URLs share the extension-origin cache with translation Workers.
 export const MODEL_CACHE_NAME = 'transformers-cache';
 export const HASH_CHUNK_BYTES = 1024 * 1024;
 
@@ -119,11 +119,11 @@ export class ModelAssetCache {
     return files;
   }
 
-  inspect() {
+  inspect({ signal } = {}) {
     return this.exclusive(async () => {
       const cache = await this.cacheStorage.open(MODEL_CACHE_NAME);
-      return this.snapshot(await this.scan(cache));
-    }).catch(error => this.failure(error));
+      return this.snapshot(await this.scan(cache, signal));
+    }, signal).catch(error => this.failure(error));
   }
 
   failure(error, files = this.manifest.files.map(file => ({ path: file.path, cached: false }))) {

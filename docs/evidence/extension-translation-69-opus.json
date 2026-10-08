@@ -1,0 +1,100 @@
+{
+  "browserVersion": "153.0.8010.12",
+  "capabilities": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "isolated": true,
+    "wasm": true,
+    "worker": true,
+    "cache": true
+  },
+  "fixture": {
+    "name": "Japanese",
+    "path": "test_wavs/test_ja_1.wav",
+    "sha256": "09abd330ce706a6e6969fe6bbc8275314af631fcee4e536afd0626570d263fbf"
+  },
+  "cacheState": "Ready",
+  "runs": [
+    {
+      "run": 0,
+      "offline": false,
+      "recreatedWindow": false,
+      "provisional": {
+        "original": "日本語ちゃんと聞き取ってます",
+        "english": "I'm listening to you in Japanese."
+      },
+      "finals": [
+        {
+          "original": "あっ",
+          "english": "Oh, my God."
+        },
+        {
+          "original": "日本語ちゃんと聞き取れてますか",
+          "english": "Do you understand Japanese well?"
+        },
+        {
+          "original": "ちゃんと聞こえてんの",
+          "english": "I can hear you."
+        },
+        {
+          "original": "ちゃんと聞こえてんの",
+          "english": "I can hear you."
+        },
+        {
+          "original": "マイクを持ってもらって",
+          "english": "Take the microphone."
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "offline": true,
+      "recreatedWindow": true,
+      "provisional": {
+        "original": "日本はちゃんと",
+        "english": "Japan's good."
+      },
+      "finals": [
+        {
+          "original": "あっ",
+          "english": "Oh, my God."
+        },
+        {
+          "original": "日本語ちゃんと聞き取れますか",
+          "english": "Do you hear Japanese well?"
+        },
+        {
+          "original": "ちゃんと聞こえてんの",
+          "english": "I can hear you."
+        },
+        {
+          "original": "ちゃんと聞こえてんの",
+          "english": "I can hear you."
+        },
+        {
+          "original": "マイクを持ってもらって",
+          "english": "Take the microphone."
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "verification": "Native toolbar tab capture, production ReazonSpeech/Silero and OPUS-MT Workers; no inference/capture mocks.",
+  "model": {
+    "id": "onnx-community/opus-mt-ja-en",
+    "revision": "05470cd69b62aa32e3ee64ccfd41279789ee4b1e",
+    "bytes": 238978729,
+    "dtype": "q8",
+    "device": "wasm"
+  },
+  "requestSummary": {
+    "count": 160,
+    "allGet": true,
+    "allWithoutBody": true,
+    "externalHosts": {
+      "huggingface.co": 12,
+      "us.aws.cdn.hf.co": 2
+    },
+    "externalRequestsDuringInference": 0
+  },
+  "recordedAtUTC": "2026-10-08T09:01:11.891165+00:00"
+}

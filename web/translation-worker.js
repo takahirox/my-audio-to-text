@@ -7,7 +7,7 @@ export function serveTranslationWorker(load) {
       try {
         if (type === 'load') {
           if (translator) throw new Error('Worker already loaded.');
-          translator = await load(event => self.postMessage({ type: 'progress', ...event }));
+          translator = await load(event => self.postMessage({ type: 'progress', ...event }), data);
           self.postMessage({ type: 'ready', id });
         } else if (type === 'translate') {
           if (!translator) throw new Error('Translation model is not ready.');

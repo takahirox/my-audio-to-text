@@ -1,10 +1,18 @@
 import { OPUS_MT } from './translation-models.js';
 import { serveTranslationWorker, translationRuntime, modelLoadError } from './translation-worker.js';
 
-serveTranslationWorker(async progress => {
+serveTranslationWorker(async (progress, { cacheOnly = false } = {}) => {
   let translate;
   try {
-    const { pipeline } = await translationRuntime();
+    if (typeof WebAssembly !== 'object' || typeof WebAssembly.instantiate !== 'function') {
+      throw new Error('OPUS-MT requires WebAssembly support.');
+    }
+    const { pipeline, env } = await translationRuntime();
+    if (cacheOnly) {
+      if (self.location.protocol !== 'chrome-extension:') throw new Error('Extension cache requires an extension Worker.');
+      const { cacheOnlyOpusRuntime } = await import('../extension/opus-mt-cache.js');
+      await cacheOnlyOpusRuntime(env);
+    }
     translate = await pipeline('translation', OPUS_MT.id, {
       ...OPUS_MT, progress_callback: progress,
     });
