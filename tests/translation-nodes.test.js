@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
-import { TEXT, OpusMtTranslationNode, TranslateGemmaTranslationNode, TextOutputNode } from '../web/translation-nodes.js';
+import { TEXT, OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, TextOutputNode } from '../web/translation-nodes.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(Node, respond = message => {
@@ -31,7 +31,7 @@ function fixture(Node, respond = message => {
   return { pipeline, node, workers, output, errors, emit: value => context.emit('text', value) };
 }
 
-for (const Node of [OpusMtTranslationNode, TranslateGemmaTranslationNode]) {
+for (const Node of [OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode]) {
   test(`${Node.name}: typed ports, order, zero/multiple outputs and drain`, async () => {
     const f = fixture(Node, message => {
       if (message.type === 'load') return { type: 'ready' };
@@ -44,7 +44,7 @@ for (const Node of [OpusMtTranslationNode, TranslateGemmaTranslationNode]) {
     await f.pipeline.stop();
     assert.deepEqual(f.output, ['one', 'one second', 'two', 'two second']);
     assert.deepEqual(f.workers[0].messages.map(x => x.type), ['load', 'translate', 'translate', 'translate', 'drain']);
-    assert.equal(f.workers[0].url.pathname.endsWith(Node === OpusMtTranslationNode ? '/opus-mt-worker.js' : '/translategemma-worker.js'), true);
+    assert.equal(f.workers[0].url.pathname.endsWith(Node === OpusMtTranslationNode ? '/opus-mt-worker.js' : Node === EnglishToJapaneseOpusMtTranslationNode ? '/opus-mt-en-ja-worker.js' : '/translategemma-worker.js'), true);
     await f.pipeline.dispose(); await f.pipeline.dispose();
     assert.equal(f.workers[0].terminated, 1);
   });

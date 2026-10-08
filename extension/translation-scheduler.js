@@ -10,8 +10,8 @@ export const TRANSLATION = portContract('paired translation { source, text, stat
 export class TranslationSchedulerNode {
   inputs = { provisional: TRANSCRIPT, final: TRANSCRIPT };
   outputs = { provisional: TRANSLATION, final: TRANSLATION };
-  constructor({ prepare, workerFactory, onState = () => {} } = {}) {
-    this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
+  constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, onState = () => {} } = {}) {
+    this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
     this.finals = []; this.version = 0; this.finalIndex = 0;
   }
   start(context) {
@@ -23,7 +23,7 @@ export class TranslationSchedulerNode {
     await this.prepare?.(this.context.signal);
     this.context.signal.throwIfAborted();
     const source = { inputs: {}, outputs: { text: TEXT }, start: context => { this.send = text => context.emit('text', text); } };
-    const translator = new OpusMtTranslationNode({ workerFactory: this.workerFactory, loadOptions: { cacheOnly: true }, requireSingleOutput: true });
+    const translator = new this.TranslationNode({ workerFactory: this.workerFactory, loadOptions: { cacheOnly: true }, requireSingleOutput: true });
     const sink = new TextOutputNode(text => this.active?.resolve(text));
     this.translation = new Pipeline({ nodes: { source, translator, sink }, connections: [
       { from: ['source', 'text'], to: ['translator', 'text'] },

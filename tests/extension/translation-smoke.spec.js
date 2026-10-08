@@ -5,13 +5,15 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-// Explicit opt-in: suitable Chrome, network and ~239 MB cache space required.
+// Explicit opt-in: suitable Chrome, network and ~239 MB (ja-en) / ~99 MB (en-ja) cache space required.
 // Failures when opted in are reported; never silently skip a device/load error.
-test('real extension: native Japanese tab audio → ASR → provisional/final OPUS-MT English, offline repeat', async ({}, testInfo) => {
-  test.skip(process.env.EXTENSION_OPUS_SMOKE !== '1', 'Opt-in real extension OPUS-MT smoke. Set EXTENSION_OPUS_SMOKE=1.');
+for (const direction of ['ja-en', 'en-ja']) {
+const reverse = direction === 'en-ja';
+test(`real extension ${direction}: native tab audio → ASR → provisional/final OPUS-MT, offline repeat`, async ({}, testInfo) => {
+  test.skip(process.env.EXTENSION_OPUS_SMOKE !== (reverse ? 'en-ja' : '1'), 'Opt-in real extension OPUS-MT smoke. Set EXTENSION_OPUS_SMOKE=1 (ja-en) or en-ja.');
   test.setTimeout(900000);
   const specification = JSON.parse(await readFile('scripts/reazon-ja-en-assets.json', 'utf8'));
-  const fixture = specification.fixtures.find(value => value.name.includes('Japanese'));
+  const fixture = specification.fixtures.find(value => value.name === (reverse ? 'English' : 'Japanese'));
   const wav = await readFile(path.join('.cache/reazon-ja-en', fixture.path)).catch(error => {
     throw new Error(`Real smoke fixture unavailable. Run python3 scripts/prepare-reazon-ja-en-fixtures.py: ${error.message}`);
   });
@@ -58,6 +60,7 @@ test('real extension: native Japanese tab audio → ASR → provisional/final OP
         if (bucket !== last) { last = bucket; window.logPreparation(`${progress.value} / ${progress.max} bytes`); }
       }).observe(document.querySelector('#model-bytes'), { childList: true });
     });
+    await recorder.locator('#translation-direction').selectOption(direction);
     await recorder.locator('#prepare-opus').click();
     await expect(recorder.locator('#model-status')).toHaveText(/^(Ready|Error.*)$/, { timeout: 600000 });
     cacheState = await recorder.locator('#model-status').textContent();
@@ -85,30 +88,33 @@ test('real extension: native Japanese tab audio → ASR → provisional/final OP
       await recorder.evaluate(() => {
         window.completedProvisional = [];
         new MutationObserver(() => {
-          const english = document.querySelector('#partial-english');
-          if (english.dataset.status === 'complete') window.completedProvisional.push({
-            original: document.querySelector('#partial').textContent, english: english.textContent,
+          const translated = document.querySelector('#partial-english');
+          if (translated.dataset.status === 'complete') window.completedProvisional.push({
+            original: document.querySelector('#partial').textContent, translated: translated.textContent,
           });
         }).observe(document.querySelector('#partial-english'), { childList: true, attributes: true });
       });
       await meeting.locator('#play').click();
-      await expect(recorder.locator('#partial')).toHaveText(/[\u3040-\u30ff\u4e00-\u9fff]/, { timeout: 60000 });
+      await expect(recorder.locator('#partial')).toHaveText(reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/, { timeout: 60000 });
       await expect.poll(() => recorder.evaluate(() => window.completedProvisional.length), { timeout: 60000 }).toBeGreaterThan(0);
       const provisional = await recorder.evaluate(() => window.completedProvisional.at(-1));
-      expect(provisional.original).toMatch(/[\u3040-\u30ff\u4e00-\u9fff]/);
-      expect(provisional.english).toMatch(/[A-Za-z]/);
-      expect(provisional.english).not.toMatch(/^(Translating|Translation|Older interim)/);
+      expect(provisional.original).toMatch(reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/);
+      expect(provisional.translated).toMatch(reverse ? /[\u3040-\u30ff\u4e00-\u9fff]/ : /[A-Za-z]/);
+      expect(provisional.translated).not.toMatch(/^(Translating|Translation|Older interim)/);
       await expect.poll(() => meeting.locator('#audio').evaluate(audio => audio.ended), { timeout: 60000 }).toBe(true);
       await recorder.locator('#stop').click(); await expect(recorder.locator('#start')).toBeEnabled({ timeout: 120000 });
       const finals = await recorder.locator('#paired-finals li').evaluateAll(rows => rows.map(row => ({
-        original: row.children[0].textContent, english: row.children[1].textContent,
+        original: row.children[0].textContent, translated: row.children[1].textContent,
       })));
       runs.push({ run, offline: !!run, recreatedWindow: !!run, provisional, finals });
       console.log(JSON.stringify(runs.at(-1)));
       expect(finals.length).toBeGreaterThan(0);
+      expect(finals.some(pair => (reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/).test(pair.original))).toBe(true);
       for (const pair of finals) {
-        expect(pair.original).toMatch(/[\u3040-\u30ff\u4e00-\u9fff]/);
-        expect(pair.english).toMatch(/[A-Za-z]/); expect(pair.english).not.toMatch(/failed|Translating|canceled/i);
+        // Bilingual ASR can emit a short other-language tail; retain it visibly.
+        expect(pair.original.trim().length).toBeGreaterThan(0);
+        if (!reverse) expect(pair.original).toMatch(/[\u3040-\u30ff\u4e00-\u9fff]/);
+        expect(pair.translated).toMatch(reverse ? /[\u3040-\u30ff\u4e00-\u9fff]/ : /[A-Za-z]/); expect(pair.translated).not.toMatch(/failed|Translating|canceled/i);
       }
       expect(requests.slice(before).every(request => request.url.startsWith('chrome-extension://') || request.url.startsWith('http://127.0.0.1:'))).toBe(true);
     }
@@ -120,7 +126,7 @@ test('real extension: native Japanese tab audio → ASR → provisional/final OP
       expect(url.hostname === 'huggingface.co' || url.hostname.endsWith('.hf.co')).toBe(true);
     }
   } finally {
-    const evidence = { browserVersion, capabilities, fixture: { name: fixture.name, path: fixture.path, sha256: fixture.sha256 }, cacheState, runs, errors, requests };
+    const evidence = { direction, time: new Date().toISOString(), browserVersion, capabilities, fixture: { name: fixture.name, path: fixture.path, sha256: fixture.sha256 }, cacheState, runs, errors, requests };
     const file = testInfo.outputPath('extension-opus-evidence.json');
     await writeFile(file, JSON.stringify(evidence, null, 2) + '\n');
     await testInfo.attach('extension-opus-evidence', { path: file, contentType: 'application/json' });
@@ -128,3 +134,5 @@ test('real extension: native Japanese tab audio → ASR → provisional/final OP
     await context?.close(); await new Promise(resolve => server.close(resolve)); await rm(profile, { recursive: true, force: true });
   }
 });
+
+}

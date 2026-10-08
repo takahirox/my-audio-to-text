@@ -6,7 +6,7 @@ import shutil
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_FILES = (
     "pipeline.js", "transcription-nodes.js",
-    "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js",
+    "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js", "opus-mt-en-ja-worker.js",
     "audio.js", "capture-worklet.js", "local-asr-core.js", "local-asr-config.js",
     "reazon-simulation.js", "reazon-config.js", "sherpa-worker.js", "silero-worker.js",
     "third-party-notices.txt",

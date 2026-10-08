@@ -38,6 +38,16 @@ OPUS-MT Japanese to English
   https://creativecommons.org/licenses/by/4.0/
   q8 encoder/merged decoder downloaded on Run, not mirrored in this project.
 
+OPUS-MT English to Japanese
+  Helsinki-NLP / OPUS-MT; Xenova quantized ONNX conversion.
+  Base model declares Apache License 2.0; conversion card adds no separate license.
+  https://huggingface.co/Helsinki-NLP/opus-mt-en-jap/tree/a863894cdd2b80f3bc1c5966734aee9ffec207d1
+  https://huggingface.co/Xenova/opus-mt-en-jap/tree/9d418190be3aa945eae5bab1bd96bc5e349ad784
+  https://www.apache.org/licenses/LICENSE-2.0
+  Retain license and applicable upstream notices when redistributing derivatives.
+  q8 encoder/merged decoder downloaded on Run or explicit extension preparation;
+  not mirrored or bundled. Bible-domain model; general-purpose accuracy is limited.
+
 TranslateGemma 4B (text only)
   Google; ONNX Community text-only q4 conversion.
   https://huggingface.co/google/translategemma-4b-it

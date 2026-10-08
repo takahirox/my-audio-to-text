@@ -107,8 +107,8 @@ Cache API errors are surfaced instead of claiming a successful uncached download
 ## Optional large models and terms
 
 The options page remains the #67 fixture demo. The recorder now offers real
-OPUS-MT preparation and optional inference through #69; see
-[the extension guide](chrome-extension.md#optional-opus-mt-japanese--english-69).
+OPUS-MT preparation and optional inference through #69/#71; see
+[the extension guide](chrome-extension.md).
 It uses a complete reviewed immutable manifest and a deliberate download action.
 TranslateGemma remains outside the extension, and model weights are not bundled.
 Keep the pinned IDs, revisions and required files from
@@ -119,8 +119,13 @@ production host permission or CSP change. Real OPUS delivery and inference are
 recorded separately in the #69 evidence;
 fixture tests alone do not verify them.
 
-OPUS-MT is approximately **239 MB**, with **CC BY 4.0** attribution to
-Helsinki-NLP/OPUS-MT and ONNX Community. TranslateGemma 4B's selected ONNX assets
+Japanese → English OPUS-MT is approximately **239 MB**, with **CC BY 4.0** attribution to
+Helsinki-NLP/OPUS-MT and ONNX Community. English → Japanese uses its own
+`Xenova/opus-mt-en-jap` checkpoint/manifest/cache keys, approximately **99 MB**,
+with upstream **Apache 2.0** and Xenova conversion attribution. The selected
+direction alone downloads on explicit request; its state/progress never stands
+in for the other model. See [#71 evidence](evidence/translation-direction-71.md).
+TranslateGemma 4B's selected ONNX assets
 are approximately **3.112 GB**, subject to Google's
 [Gemma Terms of Use](https://ai.google.dev/gemma/terms) and
 [Prohibited Use Policy](https://ai.google.dev/gemma/prohibited_use_policy).

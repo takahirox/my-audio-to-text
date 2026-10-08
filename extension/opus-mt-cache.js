@@ -1,8 +1,8 @@
 import { ModelAssetCache, MODEL_CACHE_NAME } from './model-asset-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 
-export async function verifiedOpusCache(signal) {
-  const manifest = await opusMtManifest();
+export async function verifiedOpusCache(signal, loadManifest = opusMtManifest) {
+  const manifest = await loadManifest();
   signal?.throwIfAborted();
   const assets = new ModelAssetCache(manifest);
   const view = await assets.inspect({ signal });
@@ -14,8 +14,8 @@ export async function verifiedOpusCache(signal) {
 // Cache API belongs to the extension origin, even though its keys are pinned
 // HTTPS asset URLs. Runtime code and WASM remain packaged extension resources.
 // Transformers' optional lookups receive a local 404; no remote fallback.
-export async function cacheOnlyOpusRuntime(env) {
-  const manifest = await verifiedOpusCache();
+export async function cacheOnlyOpusRuntime(env, loadManifest = opusMtManifest) {
+  const manifest = await verifiedOpusCache(undefined, loadManifest);
   const cache = await caches.open(MODEL_CACHE_NAME);
   const allowed = new Set(manifest.files.map(file => file.url));
   env.allowLocalModels = true; env.allowRemoteModels = false;

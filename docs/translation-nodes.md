@@ -1,13 +1,16 @@
 # Browser-local translation nodes (#65)
 
-Checkpoint investigation preceded implementation. Both processors are scoped to
-**Japanese → English** with plain string input/output. No model selector or
-ASR integration is included. TranslateGemma's underlying multilingual checkpoint
+Checkpoint investigation preceded implementation. Each production processor has
+a fixed direction and plain string input/output. The original OPUS-MT and
+TranslateGemma nodes remain **Japanese → English**; #71 adds the independent
+`EnglishToJapaneseOpusMtTranslationNode` and `opus-mt-en-ja-worker.js`. The
+extension chooses one fixed Node before starting each session. TranslateGemma's underlying multilingual checkpoint
 can represent other directions, but this node exposes only the verified direction.
 
 | Node | Immutable checkpoint | Execution | Weight assets |
 | --- | --- | --- | --- |
 | OPUS-MT | `onnx-community/opus-mt-ja-en` at `05470cd69b62aa32e3ee64ccfd41279789ee4b1e` | Transformers.js translation/Marian, `q8`, WASM, one thread | `onnx/encoder_model_quantized.onnx` (50,681,158 bytes), `onnx/decoder_model_merged_quantized.onnx` (182,303,484 bytes) |
+| OPUS-MT English → Japanese | `Xenova/opus-mt-en-jap` at `9d418190be3aa945eae5bab1bd96bc5e349ad784` | Transformers.js translation/Marian, `q8`, WASM, one thread | `onnx/encoder_model_quantized.onnx` (43,312,542 bytes), `onnx/decoder_model_merged_quantized.onnx` (50,550,704 bytes) |
 | TranslateGemma 4B | `onnx-community/translategemma-text-4b-it-ONNX` at `f7874a1ac60758872a4f78aac0df95b17b776994` | Transformers.js text-generation/Gemma3ForCausalLM, `q4`, WebGPU | `onnx/model_q4.onnx` (456,583 bytes), `onnx/model_q4.onnx_data` (2,097,115,648 bytes), `onnx/model_q4.onnx_data_1` (993,976,320 bytes) |
 
 OPUS requires `config.json`, `generation_config.json`, `tokenizer_config.json`,
@@ -42,6 +45,33 @@ and [Helsinki-NLP original](https://huggingface.co/Helsinki-NLP/opus-mt-ja-en)
 identify **CC BY 4.0**. Credit Helsinki-NLP / OPUS-MT and ONNX Community for the
 quantized conversion; retain attribution and the
 [license](https://creativecommons.org/licenses/by/4.0/).
+
+The English → Japanese checkpoint is named **en-jap**, not en-ja upstream.
+Its [pinned conversion card](https://huggingface.co/Xenova/opus-mt-en-jap/blob/9d418190be3aa945eae5bab1bd96bc5e349ad784/README.md)
+identifies Transformers.js compatibility and the
+[Helsinki-NLP base model](https://huggingface.co/Helsinki-NLP/opus-mt-en-jap/blob/a863894cdd2b80f3bc1c5966734aee9ffec207d1/README.md).
+The base card declares **Apache 2.0**, English source and Japanese (`jap`) target.
+The conversion card supplies no separate license declaration; upstream terms
+continue to apply. Credit Helsinki-NLP / OPUS-MT and Xenova's ONNX conversion.
+Apache 2.0 permits use/modification/distribution under its conditions: retain
+license/attribution and applicable notices and identify modifications when
+redistributing derivatives. Public URLs are anonymous and ungated as reviewed;
+no account agreement or token is needed. This project neither mirrors nor bundles
+these weights. See the [Apache 2.0 terms](https://www.apache.org/licenses/LICENSE-2.0).
+
+Its seven-file size and whole-file plus 1 MiB chunk SHA-256 list are committed in
+[`extension/opus-mt-en-ja-assets.json`](../extension/opus-mt-en-ja-assets.json):
+**98,933,843 bytes** (about 99 MB). Converted tokenizer JSON is 5,068,572 bytes;
+config, generation config, tokenizer config and special tokens complete the set.
+`scripts/review-opus-mt-en-ja-assets.py` explicitly downloads/reviews that pinned
+revision, checks Hugging Face's file sizes/LFS hashes, then compares all bytes and
+hashes against the committed manifest. It is not part of build/installation.
+The Marian config/tokenizer declare English → Japanese; the quantized encoder
+and merged decoder ran with this repository's unchanged pinned runtime in real
+browser and MV3 smoke tests (see [#71 evidence](evidence/translation-direction-71.md)).
+Neither direction is reversible, and no automatic language detection is performed.
+The en-jap model's documented benchmark is Bible text; general-purpose speech
+can yield poor or unrelated output. The smoke proves execution, not quality.
 
 [Google TranslateGemma](https://huggingface.co/google/translategemma-4b-it)
 is subject to the [Gemma Terms of Use](https://ai.google.dev/gemma/terms) and
@@ -111,6 +141,7 @@ Opt-in real inference (no mocks):
 
 ```sh
 TRANSLATION_SMOKE=opus npm run test:browser -- tests/browser/translation-smoke.spec.js --project=chromium --workers=1
+TRANSLATION_SMOKE=opus-en-ja npm run test:browser -- tests/browser/translation-smoke.spec.js --project=chromium --workers=1
 TRANSLATION_SMOKE=gemma npm run test:browser -- tests/browser/translation-smoke.spec.js --project=chromium --workers=1
 ```
 
@@ -133,3 +164,18 @@ and run the real-model smokes on that origin if fetch restrictions differ.
 Use `ASR_BASE_URL=<published URL>` with the commands above. Local checks do not
 establish that this revision was deployed. Do not close #65 until required
 verification is performed and recorded.
+
+
+## Issue #71 post-merge verification
+
+**Pending.** After merge, verify GitHub Pages deployed the merged SHA and record
+successful workflow run URL, deployed SHA, UTC time and results in
+[evidence/translation-direction-71.md](evidence/translation-direction-71.md).
+Open the canonical new page
+`https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/` from the index;
+verify `app.js`, shared modules, `opus-mt-en-ja-worker.js`, packaged runtime URLs
+and immutable model URLs. All page/worker/runtime URLs must preserve
+`/my-audio-to-text/`. Run the opt-in `TRANSLATION_SMOKE=opus-en-ja` with
+`ASR_BASE_URL=https://takahirox.github.io/my-audio-to-text/` on the deployed origin
+if needed. Local prefix checks do not establish deployment. Do not close #71
+until this verification is recorded. The unpacked extension has no deployment gate.

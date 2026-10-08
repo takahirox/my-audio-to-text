@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Pipeline } from '../web/pipeline.js';
 import { TRANSCRIPT } from '../web/transcription-nodes.js';
-import { TEXT } from '../web/translation-nodes.js';
-import { OPUS_MT } from '../web/translation-models.js';
+import { TEXT, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
+import { OPUS_MT, OPUS_MT_EN_JA } from '../web/translation-models.js';
 import { TranslationSchedulerNode, TRANSLATION } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
@@ -13,8 +13,8 @@ import { translationLabel, provisionalLabel } from '../extension/translation-vie
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function workerFixture({ holdLoad = false, failLoad = false, failTranslate = false, empty = false } = {}) {
   const workers = [], requests = [];
-  const workerFactory = () => {
-    const worker = { messages: [], terminated: false,
+  const workerFactory = url => {
+    const worker = { url, messages: [], terminated: false,
       postMessage(data) {
         this.messages.push(data);
         if (data.type === 'load' && !holdLoad) queueMicrotask(() => this.reply({ id: data.id,
@@ -33,10 +33,11 @@ function workerFixture({ holdLoad = false, failLoad = false, failTranslate = fal
   };
   return { workers, requests, workerFactory, complete };
 }
-async function graph(options = {}) {
+async function schedulerGraph(options = {}) {
   const f = workerFixture(options), outputs = [], states = [];
   let emit;
   const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory, prepare: options.prepare,
+    TranslationNode: options.direction === 'en-ja' ? EnglishToJapaneseOpusMtTranslationNode : undefined,
     onState: state => states.push(state) });
   const pipeline = new Pipeline({ nodes: {
     source: { inputs: {}, outputs: { provisional: TRANSCRIPT, final: TRANSCRIPT }, start(context) { emit = context.emit; } },
@@ -58,7 +59,9 @@ test('production pinned manifest includes all seven runtime files and reviewed b
   assert.ok(set.files.every(file => file.url.includes(OPUS_MT.revision) && file.sha256Chunks.length === Math.ceil(file.bytes / HASH_CHUNK_BYTES)));
 });
 
-test('explicit Pipeline adapter coalesces rapid provisional updates and prioritizes ordered finals', async () => {
+for (const direction of ['ja-en', 'en-ja']) {
+const graph = options => schedulerGraph({ ...options, direction });
+test(`${direction}: explicit Pipeline adapter coalesces rapid provisional updates and prioritizes ordered finals`, async () => {
   const f = await graph();
   f.send('provisional', 'first'); await tick();
   assert.equal(f.requests.length, 1);
@@ -66,6 +69,7 @@ test('explicit Pipeline adapter coalesces rapid provisional updates and prioriti
   assert.equal(f.scheduler.translation.entries.get('translator').inputs.text, TEXT);
   assert.equal(f.scheduler.translation.entries.get('sink').inputs.text, TEXT);
   assert.equal(f.workers[0].messages[0].cacheOnly, true);
+  assert.ok(f.workers[0].url.pathname.endsWith(direction === 'en-ja' ? '/opus-mt-en-ja-worker.js' : '/opus-mt-worker.js'));
   for (let i = 0; i < 100; i++) f.send('provisional', `update ${i}`);
   await tick();
   assert.equal(f.requests.length, 1); assert.equal(f.scheduler.provisional.source.text, 'update 99');
@@ -83,7 +87,7 @@ test('explicit Pipeline adapter coalesces rapid provisional updates and prioriti
   await f.pipeline.stop(); await f.pipeline.dispose(); assert.ok(f.workers.every(worker => worker.terminated));
 });
 
-test('latest matching provisional completes; Stop drops queued interim and drains every final', async () => {
+test(`${direction}: latest matching provisional completes; Stop drops queued interim and drains every final`, async () => {
   const f = await graph();
   f.send('provisional', 'old'); await tick();
   f.send('provisional', 'latest'); await tick(); f.complete(0); await tick(); f.complete(1); await tick();
@@ -98,7 +102,7 @@ test('latest matching provisional completes; Stop drops queued interim and drain
 });
 
 for (const mode of ['load', 'translate', 'crash', 'empty']) {
-  test(`translation ${mode} failure marks all finals and remains isolated from upstream Pipeline`, async () => {
+  test(`${direction}: translation ${mode} failure marks all finals and remains isolated from upstream Pipeline`, async () => {
     const f = await graph({ failLoad: mode === 'load', failTranslate: mode === 'translate', empty: mode === 'empty' });
     f.send('final', 'one'); f.send('final', 'two'); await tick();
     if (mode === 'translate' || mode === 'empty') { f.complete(0); await tick(); }
@@ -112,7 +116,7 @@ for (const mode of ['load', 'translate', 'crash', 'empty']) {
 }
 
 for (const phase of ['prepare', 'load', 'translate']) {
-  test(`cancel during ${phase} releases owned Worker and rejects late output`, async () => {
+  test(`${direction}: cancel during ${phase} releases owned Worker and rejects late output`, async () => {
     let finish;
     const f = await graph({ holdLoad: phase === 'load', prepare: phase === 'prepare' ? () => new Promise(resolve => { finish = resolve; }) : undefined });
     f.send('final', 'one'); await tick();
@@ -126,13 +130,15 @@ for (const phase of ['prepare', 'load', 'translate']) {
   });
 }
 
-test('overlong final reports error without losing subsequent valid final', async () => {
+test(`${direction}: overlong final reports error without losing subsequent valid final`, async () => {
   const f = await graph(); f.send('final', 'x'.repeat(1001)); f.send('final', 'valid'); await tick();
   assert.equal(f.requests.length, 1); assert.equal(f.requests[0].text, 'valid');
   f.complete(0); await tick();
   assert.deepEqual(f.outputs.filter(value => value.status !== 'pending').map(value => value.status), ['error', 'complete']);
   await f.pipeline.stop(); await f.pipeline.dispose();
 });
+
+}
 
 test('UI distinguishes matching, pending, older interim, failed and canceled translation', () => {
   const complete = { status: 'complete', source: { text: 'old' }, text: 'English old' };
@@ -190,4 +196,41 @@ test('unavailable model never stops speech capture and final pairing reports acc
   assert.equal(f.session.view.final, '原文\n'); assert.equal(f.session.view.utterances[0].status, 'error');
   assert.equal(f.translation.workers.length, 0); assert.equal(f.session.view.error, '');
   await f.session.stop();
+});
+
+test('English → Japanese has a distinct pinned complete manifest and cache keys', () => {
+  const files = JSON.parse(readFileSync('extension/opus-mt-en-ja-assets.json'));
+  const set = defineAssetSet({ ...OPUS_MT_EN_JA, files });
+  const original = defineAssetSet({ ...OPUS_MT, files: JSON.parse(readFileSync('extension/opus-mt-assets.json')) });
+  assert.equal(set.bytes, 98933843);
+  assert.equal(set.files.length, 7);
+  assert.ok(set.files.every(file => file.url.includes(OPUS_MT_EN_JA.revision) && !original.files.some(old => old.url === file.url)));
+  assert.ok(files.every(file => /^[a-f0-9]{64}$/.test(file.sha256) && file.sha256Chunks.length === Math.ceil(file.bytes / HASH_CHUNK_BYTES)));
+});
+
+test('direction is captured before loading, applies next session, and never relabels old rows', async () => {
+  const f = sessionFixture(); const preparations = [];
+  f.session.prepareTranslation = async (signal, direction) => preparations.push(direction);
+  assert.equal(f.session.view.translationDirection, 'ja-en');
+  f.session.setTranslationDirection('en-ja');
+  await f.session.start(42); assert.equal(f.translation.workers.length, 0); await f.session.stop();
+  f.session.setTranslation(true);
+  const starting = f.session.start(42);
+  f.session.setTranslationDirection('ja-en');
+  await starting; await tick();
+  assert.deepEqual(preparations, ['en-ja']);
+  assert.ok(f.translation.workers[0].url.pathname.endsWith('/opus-mt-en-ja-worker.js'));
+  assert.equal(f.session.view.displayDirection, 'en-ja');
+  f.session.session.speech.receiveEvent({ type: 'partial', text: 'Hello', id: 0 }); await tick();
+  f.translation.complete(0, 'こんにちは'); await tick();
+  assert.equal(f.session.view.interimTranslation.text, 'こんにちは');
+  f.session.session.speech.receiveEvent({ type: 'final', text: 'Hello', id: 0 }); await tick();
+  f.translation.complete(1, 'こんにちは'); await tick(); await f.session.stop();
+  assert.equal(f.session.view.utterances[0].direction, 'en-ja');
+  assert.equal(f.session.view.displayDirection, 'en-ja');
+  await f.session.start(42); await tick();
+  assert.deepEqual(preparations, ['en-ja', 'ja-en']);
+  assert.ok(f.translation.workers[1].url.pathname.endsWith('/opus-mt-worker.js'));
+  assert.equal(f.session.view.displayDirection, 'ja-en'); assert.deepEqual(f.session.view.utterances, []);
+  f.session.cancel(); await tick(); assert.ok(f.translation.workers.every(worker => worker.terminated));
 });

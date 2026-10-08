@@ -11,6 +11,8 @@ practical status/errors. The list includes three independent entries:
 
 - [OPUS-MT Translation (Japanese → English)](https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/):
   plain text → `OpusMtTranslationNode` (local WASM) → translated string sink.
+- [OPUS-MT Translation (English → Japanese)](https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/):
+  plain text → `EnglishToJapaneseOpusMtTranslationNode` (local WASM) → Japanese string sink.
 - [TranslateGemma 4B Translation (Japanese → English)](https://takahirox.github.io/my-audio-to-text/nodes/translategemma/):
   plain text → `TranslateGemmaTranslationNode` (local WebGPU) → translated string sink.
 
@@ -103,3 +105,7 @@ For #65, also verify both translation pages and their Worker/runtime requests
 under the repository prefix, recording deployed SHA and Pages run URL. Run the
 opt-in real translation smokes on the deployed origin if needed and retain
 pending status until completed; see [translation verification](translation-nodes.md#required-post-merge-verification).
+
+For #71 the new canonical `/my-audio-to-text/nodes/opus-mt-en-ja/` page has a
+**pending** post-merge deployed-SHA/URL/worker/model verification gate; see
+[Issue #71 evidence](evidence/translation-direction-71.md).

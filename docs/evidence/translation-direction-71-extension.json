@@ -1,0 +1,79 @@
+{
+  "direction": "en-ja",
+  "time": "2026-10-08T09:44:16.338Z",
+  "browserVersion": "153.0.8010.12",
+  "capabilities": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "isolated": true,
+    "wasm": true,
+    "worker": true,
+    "cache": true
+  },
+  "fixture": {
+    "name": "English",
+    "path": "test_wavs/test_en_1.wav",
+    "sha256": "02de9b0bea3d4cf7d0d92d2b2de023bbbaa1c952d27e1ab1483e04bb10494ae4"
+  },
+  "cacheState": "Ready",
+  "runs": [
+    {
+      "run": 0,
+      "offline": false,
+      "recreatedWindow": false,
+      "provisional": {
+        "original": "CARIN",
+        "translated": "カボン を 打て."
+      },
+      "finals": [
+        {
+          "original": "CUTTING EDGE L M' EMPLOY TRANSFORMER ARCHITECTURES TO CAPTURE THE LONG RANGE DEPENDENCIES IN TEXT WHICH ALLOWS THEM TO GENERATE MORE CONTEXTALLY AWARE AND GRAMMATICALLY CONSISTENT OUTPUTS",
+          "translated": "\" カシ栄 を めぐら し, クシ \" ア \" と い う 者, クハレト \". \" カシフル \". \" カシフル \". \" カシフデ \" と い う 者, クハレト \". \" カシフデ,シフトン \". \" 人々 \" 人々, ア り,カシワン \"."
+        },
+        {
+          "original": "どう",
+          "translated": "マラテ."
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "offline": true,
+      "recreatedWindow": true,
+      "provisional": {
+        "original": "CARNA",
+        "translated": "カボン,アンムリム."
+      },
+      "finals": [
+        {
+          "original": "CUTTING EDGE L M EMPLOY TRANSFORMER ARCHITECTURES TO CAPTURE THE LONG RANGE DEPENDENCIES IN TEXT WHICH ALLOWS THEM TO GENERATE MORE CONTEXTURE AWARE AND GRAMMATICALLY CONSISTENT OUTPUTS",
+          "translated": "\" 寄 る べ な \" じ を ケげ, クシワン, クタア \". \" カシワン, クタ \" と い う 憎 む べ き 者, カフト \". \" カシワン \". \" ア産る者, カシフトン \". \" カシフカシワン \"."
+        },
+        {
+          "original": "えっ",
+          "translated": "マグブシ"
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "requestsSummary": {
+    "count": 184,
+    "byHost": {
+      "fixture-loopback": 2,
+      "chrome-extension": 168,
+      "huggingface.co": 12,
+      "us.aws.cdn.hf.co": 2
+    },
+    "allGetWithoutBody": true,
+    "noRemoteRequestsDuringInferenceOrOfflineRepeat": true,
+    "assertedBy": "tests/extension/translation-smoke.spec.js"
+  },
+  "model": {
+    "id": "Xenova/opus-mt-en-jap",
+    "revision": "9d418190be3aa945eae5bab1bd96bc5e349ad784",
+    "dtype": "q8",
+    "device": "wasm",
+    "bytes": 98933843
+  },
+  "quality": "Execution smoke only. General speech produced poor/unrelated Japanese; model has Bible-domain evaluation. Bilingual ASR also emitted a short Japanese tail, retained as original."
+}
