@@ -1,5 +1,11 @@
 # Issue #71 review fixes
 
+**Post-merge update:** the required Pages gate has now passed for merge commit
+`63de63a4803fd793669620da3b990fd8e0848908`. See the
+[post-merge verification](translation-direction-71-postmerge.md) for the run,
+deployment SHA, UTC times, live URLs and real browser inference results. Pending
+statements below describe the earlier publication state.
+
 Validation on **2026-10-08**, macOS, Chrome-for-Testing **153.0.8010.12**.
 This report supersedes the original English → Japanese evidence. The rejected
 Bible-domain checkpoint and its Japanese-character-only assertions are not

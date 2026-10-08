@@ -1,5 +1,10 @@
 # Issue #71 translation direction validation
 
+**Post-merge update:** the required Pages gate has passed. The
+[post-merge verification](translation-direction-71-postmerge.md) records the
+deployed merge SHA, run URL, UTC times, canonical page and real browser inference.
+Pending statements below are historical.
+
 **Historical implementation evidence, superseded for English → Japanese.**
 Review rejected the Bible-domain checkpoint and Japanese-character-only smoke.
 See [the review fixes and current validation](translation-direction-71-fixes.md)

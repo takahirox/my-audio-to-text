@@ -1,0 +1,238 @@
+{
+  "time": "2026-10-08T10:50:32.415Z",
+  "repository": "takahirox/my-audio-to-text",
+  "pullRequest": 72,
+  "mergeCommit": "63de63a4803fd793669620da3b990fd8e0848908",
+  "status": "passed",
+  "workflow": {
+    "id": 37765869426,
+    "url": "https://github.com/takahirox/my-audio-to-text/actions/runs/37765869426",
+    "event": "push",
+    "headSha": "63de63a4803fd793669620da3b990fd8e0848908",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-10-08T10:48:11Z",
+    "updatedAt": "2026-10-08T10:48:57Z"
+  },
+  "deployment": {
+    "id": 6933512365,
+    "sha": "63de63a4803fd793669620da3b990fd8e0848908",
+    "environment": "github-pages",
+    "status": "success",
+    "time": "2026-10-08T10:48:57Z",
+    "url": "https://takahirox.github.io/my-audio-to-text/",
+    "jobUrl": "https://github.com/takahirox/my-audio-to-text/actions/runs/37765869426/job/113273469123"
+  },
+  "assets": [
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/index.html",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 1545,
+      "blobSha": "dd1423a1505434028a08d45f67852182577c8946",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/index.html",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 1656,
+      "blobSha": "8b2320f2ae5647d9a328e3661d3933fb9e6bb43a",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/app.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "bytes": 241,
+      "blobSha": "a848dccae5cc6827c52c701c9a82a39dced1731d",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "bytes": 3283,
+      "blobSha": "34c5957c7941d62b001d78dffa3b6d727c731719",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "bytes": 5002,
+      "blobSha": "8a8f3840cddac1ede9a11fe586854e1d842f8a8e",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "bytes": 7754,
+      "blobSha": "7bf8254f38374f880049d8d83770f1b9d88b6f70",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/opus-mt-en-ja-worker.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "bytes": 1893,
+      "blobSha": "1f4bcc5fa8b47ae6c9ed662e61e197ffd4f83ebe",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/translation-worker.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "bytes": 2182,
+      "blobSha": "81e00a7a3993aa535d6aa11478d96a9e7517b051",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/translation-models.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "bytes": 694,
+      "blobSha": "e74279a9836713f6d4d2bee1ed72f9651b803636",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "status": 200,
+      "contentType": "text/css; charset=utf-8",
+      "bytes": 798,
+      "blobSha": "86f245d8003a68c1244408449e34f6a6697bbfa1",
+      "matchesMergedCommit": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/third-party-notices.txt",
+      "status": 200,
+      "contentType": "text/plain; charset=utf-8",
+      "bytes": 3559,
+      "blobSha": "5e60d6d734ca51d7ba17bbb1bfb080cdaf3ac37e",
+      "matchesMergedCommit": true
+    }
+  ],
+  "runtime": [
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/transformers.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "contentLength": "148074"
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.mjs",
+      "status": 200,
+      "contentType": "text/javascript; charset=utf-8",
+      "contentLength": "18046"
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.wasm",
+      "status": 200,
+      "contentType": "application/wasm",
+      "contentLength": "6556050"
+    }
+  ],
+  "modelAssets": [
+    {
+      "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/config.json",
+      "status": 200,
+      "bytes": 1086,
+      "matchesManifestSize": true,
+      "expectedSha256": "216181f6bb3caf782b1e9e5a737268164a7c71622f760609fcb2dd42c06eac23"
+    },
+    {
+      "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/generation_config.json",
+      "status": 200,
+      "bytes": 288,
+      "matchesManifestSize": true,
+      "expectedSha256": "93d7b54a8e68dc6594c759a1d5096bf8027a6d3027a177595ecbdd09661584c4"
+    },
+    {
+      "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/tokenizer_config.json",
+      "status": 200,
+      "bytes": 818,
+      "matchesManifestSize": true,
+      "expectedSha256": "c28fdff6b858f9e893a9bf4c696f3889f400ee59b943d520b9a6ad530e321213"
+    },
+    {
+      "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/tokenizer.json",
+      "status": 200,
+      "bytes": 6467201,
+      "matchesManifestSize": true,
+      "expectedSha256": "4fb4e062c49acf2dbb3fa60eee0e8fc133a9a06183aad9e71a90725c2493ec66"
+    },
+    {
+      "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/special_tokens_map.json",
+      "status": 200,
+      "bytes": 74,
+      "matchesManifestSize": true,
+      "expectedSha256": "5e4d1f5e759d74cb1c2fe1d165cfc62b5237aa904de759380cd6f43042eec723"
+    },
+    {
+      "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/onnx/encoder_model_quantized.onnx",
+      "status": 200,
+      "bytes": 52875078,
+      "matchesManifestSize": true,
+      "expectedSha256": "c212d5d3fd86f01c8d3ff58bdb5675483664721bdb688a711eb444f1cabd93d2"
+    },
+    {
+      "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/onnx/decoder_model_merged_quantized.onnx",
+      "status": 200,
+      "bytes": 193290224,
+      "matchesManifestSize": true,
+      "expectedSha256": "906fa187a520ee2189af5da0104bb09d6e3806b00c30655f278d5ae1503708d7"
+    }
+  ],
+  "browserPage": {
+    "browser": "153.0.8010.12",
+    "indexUrl": "https://takahirox.github.io/my-audio-to-text/",
+    "linkText": "OPUS-MT Translation (English → Japanese)",
+    "canonicalUrl": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+    "runEnabled": true,
+    "inputLanguage": "en",
+    "outputLanguage": "ja",
+    "status": "Ready to run",
+    "requests": [
+      "https://takahirox.github.io/my-audio-to-text/",
+      "https://takahirox.github.io/my-audio-to-text/style.css",
+      "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+      "https://takahirox.github.io/my-audio-to-text/style.css",
+      "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/app.js",
+      "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+      "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+      "https://takahirox.github.io/my-audio-to-text/pipeline.js"
+    ],
+    "errors": [],
+    "modelDownloadsBeforeRun": 0
+  },
+  "scope": "Deployment SHA, deployed source bytes, index navigation, script/Worker/runtime/model URL validity and real production-page inference",
+  "realInference": {
+    "status": "passed",
+    "time": "2026-10-08T10:52:23.440Z",
+    "browser": "153.0.8010.12",
+    "translations": 20,
+    "mocked": false,
+    "passedTests": 1,
+    "skippedTests": 2,
+    "skippedModels": [
+      "Japanese-to-English OPUS-MT",
+      "TranslateGemma"
+    ],
+    "evidence": "translation-direction-71-postmerge-inference.json",
+    "requests": 138,
+    "allRequestsGetWithoutInputOrBody": true,
+    "pageErrors": []
+  },
+  "issue": {
+    "url": "https://github.com/takahirox/my-audio-to-text/issues/71",
+    "state": "closed",
+    "stateReason": "completed",
+    "closedAt": "2026-10-08T10:54:03Z",
+    "verificationCommentUrl": "https://github.com/takahirox/my-audio-to-text/issues/71#issuecomment-6058291113",
+    "verificationRecordedAt": "2026-10-08T10:53:53Z",
+    "outcomeCommentUpdatedAt": "2026-10-08T10:54:07Z",
+    "verificationRecordedBeforeClosure": true,
+    "readbackTime": "2026-10-08T10:54:36.760565+00:00"
+  }
+}
