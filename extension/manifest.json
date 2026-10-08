@@ -3,7 +3,7 @@
   "name": "Local current-tab transcription",
   "version": "0.1.0",
   "minimum_chrome_version": "116",
-  "description": "Transcribe the user-invoked tab locally with ReazonSpeech ja-en and Silero; optionally translate Japanese to English with OPUS-MT.",
+  "description": "Transcribe the user-invoked tab locally with ReazonSpeech ja-en and Silero; optionally translate Japanese to English or English to Japanese with OPUS-MT.",
   "permissions": ["activeTab", "tabCapture"],
   "action": { "default_title": "Transcribe this tab" },
   "background": { "service_worker": "extension/background.js", "type": "module" },

@@ -137,32 +137,45 @@ and cleanup after closing the tab/window. This PoC does not include participant
 labels, overlays, simultaneous microphone input, Web Store publication or
 cross-browser extension support. No post-merge verification is required by #61.
 
-## Optional OPUS-MT Japanese → English (#69)
+## Optional OPUS-MT Japanese ↔ English (#69 / #71)
 
-The toolbar starts transcription with translation off. In the recorder window,
+Translation defaults off with Japanese → English selected. Both preferences
+persist in extension-origin localStorage across window recreation/profile restart;
+transcripts are not saved. A new toolbar invocation uses the saved preferences.
+In the recorder window, select Japanese → English or English → Japanese, then
 click **Download / retry OPUS-MT** to explicitly download the pinned model data
-(238,978,729 bytes, about 239 MB, plus cache/write overhead). Progress, readiness,
+(Japanese → English: 238,978,729 bytes, about 239 MB; English → Japanese:
+252,634,769 bytes, about 253 MB; plus cache/write overhead). Progress, readiness,
 failures and cancellation are visible. This control also retries missing,
 corrupt or evicted files and reuses verified complete files. Preparation can run
 while transcription remains active. Stop capture, check **Enable translation for
 the next session**, then **Start again**. The checkbox does not download assets;
 starting with missing assets reports translation unavailable while preserving ASR.
-Translation preferences are window-local and off on a new recorder window.
+The exclusive direction select can change during capture, but applies only to the
+**next session**: live Pipeline graphs are immutable. Current/last session labels
+and retained final rows keep their captured source/target direction. Model-cache
+readiness/progress describe the selection above, independently of the active graph.
+Only the selected model downloads; enabling translation never downloads either
+model implicitly. The transcription-only mode works without either translation cache.
 
-The original provisional text and English appear together. **Translating…**
+The original provisional text and translation appear together with explicit
+source/output language headings and `lang` attributes. **Translating…**
 means the current original has no completed translation. An **Older interim**
 translation includes its own original text and never claims to match the latest
-original. Each final original is also paired with its English/status in an ordered
+original. Each final original is also paired with its translation/status in an ordered
 utterance list; the original final transcript remains available for copying.
 Load/inference failures label affected translations and keep speech working.
-Stop drains final speech and English before reporting completion. **Cancel session**
+Stop drains final speech and translations before reporting completion. **Cancel session**
 or closing the
 window immediately cancels pending work; transcripts are not persisted.
 
 The outer graph explicitly connects `SpeechToTextNode.provisional/final` to
-`TranslationSchedulerNode.provisional/final`, and paired outputs to the English
+`TranslationSchedulerNode.provisional/final`, and paired outputs to the translated
 sink. This session-owned adapter bridges the transcript contract to an owned
-inner graph: `source.text → OpusMtTranslationNode.text → TextOutputNode.text`.
+inner graph: `source.text → OpusMtTranslationNode.text → TextOutputNode.text`
+for Japanese → English, or the independent `EnglishToJapaneseOpusMtTranslationNode`
+for English → Japanese. Each Node owns its direction-specific Worker; no switchable
+model is placed inside a Node.
 The production translation node owns its module Worker, loads the existing
 pinned checkpoint/runtime, and performs all inference in that Worker.
 There is no shared model manager, duplicate inference or remote inference call.
@@ -177,7 +190,7 @@ provisional requests behind inference. Stop rejects further provisional work,
 lets ASR finalize, then drains all finals and the translation graph. Dispose
 terminates its Worker and guards late output; a repeated session gets fresh nodes.
 Final rows have stable arrival indices, so asynchronous results cannot reorder
-original/English pairs. Text over 1,000 characters receives an explicit per-row
+original/translation pairs. Text over 1,000 characters receives an explicit per-row
 error; other model errors make translation unavailable for that session. The
 production OPUS tokenizer also enforces 512 tokens and caps output at 256 tokens.
 
@@ -185,6 +198,11 @@ production OPUS tokenizer also enforces 512 tokens and caps output at 256 tokens
 revision `05470cd69b62aa32e3ee64ccfd41279789ee4b1e` with exact sizes and 1 MiB
 chunk SHA-256 hashes. `scripts/review-opus-mt-assets.py` reproduces this manifest
 via an explicit maintainer download; it is never invoked by build/install.
+`extension/opus-mt-en-ja-assets.json` separately pins `Kadonox/opus-tatoeba-en-ja-onnx` at
+`225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e` with exact sizes, whole-file and chunk
+hashes. `python3 scripts/review-opus-mt-en-ja-assets.py` explicitly verifies its
+remote metadata and downloaded bytes. The immutable cache keys cannot overlap
+with Japanese → English assets.
 Preparation uses the #67 streaming validator and Web Locks. Cache Storage is
 owned by the extension origin even though keys are pinned HTTPS URLs. Opening
 or enabling translation never fetches remote assets. The Worker verifies cache
@@ -200,7 +218,8 @@ HTTPS asset-delivery redirects. Their CORS responses permit extension-page fetch
 under COEP; no host permissions, remote-script CSP allowances or new capture
 permissions are added. Runtime JS/MJS/WASM execute only from `chrome-extension:`.
 Input text is sent only to the owned local Worker. OPUS-MT / Helsinki-NLP and ONNX
-Community attribution and CC BY 4.0 are shown next to the download control; see
+Community attribution and CC BY 4.0, plus English → Japanese base Apache 2.0
+terms and Kadonox attribution, are shown next to the download control; see
 [translation nodes](translation-nodes.md) for the pinned runtime archive hashes,
 model limitations and license details. TranslateGemma is not integrated.
 
@@ -218,16 +237,26 @@ Opt-in real-model smoke (no inference, ASR or capture mocks):
 ```sh
 python3 scripts/prepare-reazon-ja-en-fixtures.py
 EXTENSION_OPUS_SMOKE=1 npm run test:extension -- tests/extension/translation-smoke.spec.js
+EXTENSION_OPUS_SMOKE=en-ja npm run test:extension -- tests/extension/translation-smoke.spec.js
 ```
 
 This launches an isolated Chrome-for-Testing profile, triggers the actual toolbar
-action on a tab playing checksum-pinned upstream Japanese WAV audio, explicitly
+action on a tab playing checksum-pinned upstream Japanese or English WAV audio, explicitly
 downloads real OPUS assets under MV3 CSP, and checks original/provisional/final
-English through production ASR and translation. It recreates the recorder window
+translations in the selected direction through production ASR and translation.
+The English → Japanese smoke uses the committed [ordinary-English synthetic
+speech fixture](../tests/fixtures/ordinary-english.md) and asserts meanings on
+the actual final rows; the Japanese smoke uses the pinned upstream speech fixture. It recreates the recorder window
 and repeats offline using cached
 bytes and records browser capabilities, paired output, requests and errors in
 `extension-opus-evidence.json`. Set `EXTENSION_HEADED=1` for headed testing.
 When opted in, fixture/network/device/model errors fail visibly; the default
 suite labels this large-download smoke opt-in. See [Issue #69 evidence](evidence/extension-translation-69.md)
-for the actual execution result. No post-merge verification is required for the
+for the original execution result, and [Issue #71 evidence](evidence/translation-direction-71.md)
+for both-direction checks and real English → Japanese execution. The production
+page smoke checks ordinary English meanings (greeting, meeting time, report,
+station and deadline, including ASR uppercase forms); Japanese characters alone
+do not establish translation. The English → Japanese Worker recases uppercase
+English for inference; the copyable original and paired source stay unchanged.
+No post-merge verification is required for the
 unpacked extension; Web Store distribution is separate future work.

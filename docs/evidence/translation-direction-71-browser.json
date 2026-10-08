@@ -1,0 +1,48 @@
+{
+  "choice": "opus-en-ja",
+  "time": "2026-10-08T09:43:31.108Z",
+  "browser": "153.0.8010.12",
+  "capabilities": {
+    "gpu": true,
+    "adapter": null,
+    "gpuInfo": null,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+    "secure": true,
+    "isolated": false
+  },
+  "fixture": "In the beginning God created the heavens and the earth.",
+  "runs": [
+    {
+      "status": "Complete",
+      "errors": "",
+      "output": "はじめに神は天と地とを創造された.",
+      "load-time": "10399 ms",
+      "latency": "131 ms"
+    },
+    {
+      "status": "Complete",
+      "errors": "",
+      "output": "はじめに神は天と地とを創造された.",
+      "load-time": "623 ms",
+      "latency": "125 ms"
+    }
+  ],
+  "errors": [],
+  "model": {
+    "id": "Xenova/opus-mt-en-jap",
+    "revision": "9d418190be3aa945eae5bab1bd96bc5e349ad784",
+    "dtype": "q8",
+    "device": "wasm"
+  },
+  "requestsSummary": {
+    "count": 30,
+    "byHost": {
+      "fixture-loopback": 18,
+      "huggingface.co": 10,
+      "us.aws.cdn.hf.co": 2
+    },
+    "allGetWithoutBody": true,
+    "noInputInUrlsOrBodies": true,
+    "immutableModelUrlsChecked": true
+  }
+}

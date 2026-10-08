@@ -23,7 +23,7 @@ async function modelFixture(page, mode = 'success') {
           }
           await new Promise(resolve => setTimeout(resolve, text === 'slow' ? 1000 : 10));
           if (text === 'zero') return [];
-          return (text === 'multi' ? ['first', 'second'] : ['English: ' + text]).map(output => task === 'translation'
+          return (text === 'multi' ? ['first', 'second'] : [(model === 'Kadonox/opus-tatoeba-en-ja-onnx' ? 'Japanese: ' : 'English: ') + text]).map(output => task === 'translation'
             ? { translation_text: output } : { generated_text: [...input, { role: 'assistant', content: output }] });
         };
         translate.tokenizer = text => ({ input_ids: { dims: [1, text === 'tokens' ? 513 : 10] } });
@@ -53,33 +53,34 @@ async function observe(page) {
     };
   });
 }
-for (const slug of ['opus-mt', 'translategemma']) {
+for (const slug of ['opus-mt', 'opus-mt-en-ja', 'translategemma']) {
   test(`${slug}: navigation, real node/worker pipeline, latency, repeat and prefix assets`, async ({ page }) => {
     await modelFixture(page); if (slug === 'translategemma') await workerGpuFixture(page);
     const prefix = !process.env.ASR_BASE_URL && !process.env.ASR_BENCHMARK ? './my-audio-to-text/' : './';
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(prefix);
-    await page.getByRole('link', { name: slug === 'opus-mt' ? 'OPUS-MT Translation (Japanese → English)' : 'TranslateGemma 4B Translation (Japanese → English)', exact: true }).click();
+    await page.getByRole('link', { name: slug === 'opus-mt' ? 'OPUS-MT Translation (Japanese → English)' : slug === 'opus-mt-en-ja' ? 'OPUS-MT Translation (English → Japanese)' : 'TranslateGemma 4B Translation (Japanese → English)', exact: true }).click();
     await expect(page.locator('#run')).toBeEnabled(); await expect(page.locator('select')).toHaveCount(0);
     await observe(page);
-    for (const input of ['今日は良い天気です。', 'multi', 'zero']) {
+    for (const input of ['今日は良い天気です。', 'multi', 'zero', ...(slug === 'opus-mt-en-ja' ? ['HELLO.', 'WE NEED TO FINISH THIS PROJECT BY FRIDAY.'] : [])]) {
       await page.locator('#input').fill(input); await page.locator('#run').click();
       await expect(page.locator('#status')).toHaveText('Complete');
-      await expect(page.locator('#output')).toHaveText(input === 'multi' ? 'first\nsecond' : input === 'zero' ? '' : 'English: ' + input);
+      await expect(page.locator('#output')).toHaveText(input === 'multi' ? 'first\nsecond' : input === 'zero' ? '' : (slug === 'opus-mt-en-ja' ? 'Japanese: ' : 'English: ') + (input === 'HELLO.' ? 'Hello.' : input === 'WE NEED TO FINISH THIS PROJECT BY FRIDAY.' ? 'We need to finish this project by Friday.' : input));
       await expect(page.locator('#latency')).toContainText('ms'); await expect(page.locator('#load-time')).toContainText('ms');
       await expect(page.locator('#run')).toBeEnabled();
+      await expect(page.locator('#input')).toHaveValue(input);
     }
     const evidence = await page.evaluate(() => ({
       workers: window.translationWorkers,
       types: [...window.translationGraphs[0].entries.values()].map(e => e.node.constructor.name),
       states: window.translationGraphs.map(g => g.state),
     }));
-    expect(evidence.types).toEqual(['TextInputNode', slug === 'opus-mt' ? 'OpusMtTranslationNode' : 'TranslateGemmaTranslationNode', 'TextOutputNode']);
-    expect(evidence.states).toEqual(['disposed', 'disposed', 'disposed']);
-    expect(evidence.workers).toHaveLength(3);
+    expect(evidence.types).toEqual(['TextInputNode', slug === 'opus-mt' ? 'OpusMtTranslationNode' : slug === 'opus-mt-en-ja' ? 'EnglishToJapaneseOpusMtTranslationNode' : 'TranslateGemmaTranslationNode', 'TextOutputNode']);
+    expect(evidence.states).toEqual(Array(slug === 'opus-mt-en-ja' ? 5 : 3).fill('disposed'));
+    expect(evidence.workers).toHaveLength(slug === 'opus-mt-en-ja' ? 5 : 3);
     for (const worker of evidence.workers) {
       expect(worker.terminated).toBe(1);
-      expect(worker.url).toBe(new URL(`../../${slug === 'opus-mt' ? 'opus-mt' : 'translategemma'}-worker.js`, page.url()).href);
+      expect(worker.url).toBe(new URL(`../../${slug === 'opus-mt' ? 'opus-mt' : slug === 'opus-mt-en-ja' ? 'opus-mt-en-ja' : 'translategemma'}-worker.js`, page.url()).href);
     }
     await page.getByRole('link', { name: 'Node Playground', exact: true }).click();
     await expect(page).toHaveTitle('Node Playground'); expect(errors).toEqual([]);
@@ -105,7 +106,7 @@ for (const slug of ['opus-mt', 'translategemma']) {
       await page.locator('#cancel').click(); await expect(page.locator('#status')).toHaveText('Canceled');
       await page.locator('#input').fill('fresh'); await page.locator('#run').click();
       await expect(page.locator('#status')).toHaveText('Complete');
-      await expect(page.locator('#output')).toHaveText('English: fresh');
+      await expect(page.locator('#output')).toHaveText(slug === 'opus-mt-en-ja' ? 'Japanese: fresh' : 'English: fresh');
       expect(await page.evaluate(() => window.translationWorkers.map(w => w.terminated))).toEqual([1, 1]);
     });
   }

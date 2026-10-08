@@ -2,7 +2,7 @@ import { Pipeline } from '../pipeline.js';
 import { TextInputNode, TextOutputNode } from '../translation-nodes.js';
 
 // UI plumbing only. Inference and model policy live in the production nodes.
-export function mountTranslationPage(Node) {
+export function mountTranslationPage(Node, { sourceLanguage = 'Japanese' } = {}) {
   const element = id => document.getElementById(id);
   let current, generation = 0;
   const busy = value => {
@@ -13,7 +13,7 @@ export function mountTranslationPage(Node) {
   element('run').onclick = async () => {
     const text = element('input').value;
     if (!text.trim()) {
-      element('errors').textContent = 'Enter Japanese text to translate.'; return;
+      element('errors').textContent = `Enter ${sourceLanguage} text to translate.`; return;
     }
     const ticket = ++generation, started = performance.now();
     let ready;

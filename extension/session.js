@@ -3,6 +3,9 @@ import { SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nod
 import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode, TRANSLATION } from './translation-scheduler.js';
 import { verifiedOpusCache } from './opus-mt-cache.js';
+import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
+import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
+import { translationDirection } from './translation-preferences.js';
 
 // Owns tab targeting and the window's UI. Nodes own capture and recognition.
 export class TabSession {
@@ -10,18 +13,20 @@ export class TabSession {
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
     sourceFactory,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
-    prepareTranslation = verifiedOpusCache,
+    prepareTranslation = (signal, direction) => direction === 'en-ja'
+      ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
   } = {}) {
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation;
-    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', partial: '', final: '', signal: '', translationEnabled: false, translationStatus: 'Translation off', interimTranslation: null, utterances: [] };
+    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', partial: '', final: '', signal: '', translationEnabled: false, translationDirection: 'ja-en', displayDirection: 'ja-en', displayTranslationEnabled: false, translationStatus: 'Translation off', interimTranslation: null, utterances: [] };
     this.update();
   }
   update(values = {}) { Object.assign(this.view, values); this.render({ ...this.view }); }
   async start(tabId) {
     if (this.session) return; // A second invocation never retargets live capture.
-    const session = { tabId }; this.session = session;
-    this.update({ state: 'loading', tabId, status: 'Loading ReazonSpeech ja-en + Silero…', error: '', partial: '', final: '', signal: '', interimTranslation: null, utterances: [] });
+    const session = { tabId, direction: this.view.translationDirection, translationEnabled: this.view.translationEnabled }; this.session = session;
+    this.update({ state: 'loading', tabId, displayDirection: session.direction, displayTranslationEnabled: session.translationEnabled,
+      translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: 'Loading ReazonSpeech ja-en + Silero…', error: '', partial: '', final: '', signal: '', interimTranslation: null, utterances: [] });
     try {
       session.speech = new SpeechToTextNode({ workerFactory: this.workerFactory, onEvent: event => {
         if (this.session !== session) return;
@@ -34,7 +39,7 @@ export class TabSession {
         if (port === 'provisional' && this.view.state !== 'stopping') this.update({ partial: text });
         else if (port === 'final') this.update({ partial: '', interimTranslation: null,
           final: this.view.final + (text.trim() ? `${text}\n` : ''),
-          utterances: text.trim() ? [...this.view.utterances, { source: text, status: session.translation ? 'pending' : 'off', text: '' }] : this.view.utterances });
+          utterances: text.trim() ? [...this.view.utterances, { source: text, direction: session.direction, status: session.translation ? 'pending' : 'off', text: '' }] : this.view.utterances });
       });
       session.audio = new ExtensionTabAudioNode(tabId, {
         sourceFactory: this.sourceFactory,
@@ -52,13 +57,14 @@ export class TabSession {
         { from: ['speech', 'provisional'], to: ['transcript', 'provisional'] },
         { from: ['speech', 'final'], to: ['transcript', 'final'] },
       ];
-      if (this.view.translationEnabled) {
-        session.translation = new TranslationSchedulerNode({ prepare: this.prepareTranslation,
+      if (session.translationEnabled) {
+        session.translation = new TranslationSchedulerNode({ prepare: signal => this.prepareTranslation(signal, session.direction),
+          TranslationNode: session.direction === 'en-ja' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
           workerFactory: this.translationWorkerFactory, onState: status => {
             if (this.session === session) this.update({ translationStatus: status });
           } });
         nodes.translation = session.translation;
-        nodes.english = { inputs: { provisional: TRANSLATION, final: TRANSLATION }, outputs: {},
+        nodes.translated = { inputs: { provisional: TRANSLATION, final: TRANSLATION }, outputs: {},
           receive: (port, value, context) => {
             if (this.session !== session || context.signal.aborted) return;
             if (port === 'provisional') {
@@ -71,7 +77,7 @@ export class TabSession {
           } };
         for (const port of ['provisional', 'final']) {
           connections.push({ from: ['speech', port], to: ['translation', port] },
-            { from: ['translation', port], to: ['english', port] });
+            { from: ['translation', port], to: ['translated', port] });
         }
       }
       session.pipeline = new Pipeline({ nodes, connections, onError: error => { if (this.session === session) this.fail(error.cause?.message || error.message); } });
@@ -123,6 +129,9 @@ export class TabSession {
   setTranslation(enabled) {
     if (this.session) return; // Apply to the next session; live graphs are immutable.
     this.update({ translationEnabled: !!enabled, translationStatus: enabled ? 'Translation enabled for the next session' : 'Translation off' });
+  }
+  setTranslationDirection(direction) {
+    this.update({ translationDirection: translationDirection(direction) });
   }
   tabEnded(tabId) { if (this.session?.tabId === tabId) void this.stop(); }
 }
