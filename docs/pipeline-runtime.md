@@ -218,3 +218,21 @@ requests without stale emission. Graphs are single-use and repeat creates fresh
 nodes. Model selection, tokenizer/template, inference and GPU checks live in the
 individual worker entry points. The generic runtime is unchanged. See
 [translation nodes](translation-nodes.md) for limits, runtime/model pins and tests.
+
+## Independent text-to-speech Nodes
+
+`Supertonic3TextToSpeechNode` and `KokoroTextToSpeechNode` in
+[`web/tts-nodes.js`](../web/tts-nodes.js) consume `text: TEXT` plain strings and
+emit `audio: SYNTHESIZED_AUDIO`. The new shared audio token carries
+`{ samples: Float32Array, sampleRate: positive integer, channels: 1 }`, a
+read-only, nonempty finite mono waveform at the model's own rate (44.1 kHz or
+24 kHz). It is separate from the bare 16 kHz capture/ASR token. No graph metadata
+is added. `AudioOutputNode` validates and delivers audio to an independent
+consumer; `audioToWav` supplies the pages' playback/download adapter.
+
+Each Node owns one inference Worker (including its frontend). Start loads on
+explicit Run, receive waits for generated audio, Stop drains and Dispose
+terminates pending inference/downloads and ignores stale replies. Repeat uses
+fresh graphs and cached assets. See [TTS Nodes](tts-nodes.md) for pins, languages,
+licenses, capability/errors and opt-in real-model tests. The generic runtime
+requires no TTS policy or modification.

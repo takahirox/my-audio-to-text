@@ -6,6 +6,7 @@
     "build:extension": "python3 scripts/build-extension.py",
     "test:extension": "playwright test --config playwright.extension.config.js",
     "prepare:translation-assets": "python3 scripts/prepare-translation-assets.py",
+    "prepare:tts-assets": "python3 scripts/prepare-tts-assets.py",
     "prepare:assets": "python3 scripts/prepare-assets.py",
     "test": "node --test tests/*.test.js",
     "test:browser": "playwright test",
