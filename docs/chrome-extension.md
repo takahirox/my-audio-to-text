@@ -20,6 +20,11 @@ the shared speech node owns the existing ASR core and workers.
 
 The extension keeps its own toolbar/transcript UI and packaging; it is not a Node Playground page.
 
+Its separate **Model asset cache** options page provides an explicitly initiated,
+small cache demo without starting capture or inference. See
+[extension model-asset caching](extension-model-cache.md) for the lifecycle,
+manifest API, storage limits and validation.
+
 ## Build and load unpacked
 
 Requirements: Chrome 116 or later, Python 3 and Node.js/npm.
@@ -85,7 +90,9 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 
 No host, `tabs`, storage, microphone or offscreen permission is requested. Basic
 tab IDs and lifecycle events are available without the `tabs` permission. All
-scripts and weights are packaged locally; no remote code is loaded. The toolbar
+scripts and ASR weights are packaged locally; no remote code is loaded. The
+cache demo reads only tiny packaged data files. Its extension options page uses
+Cache Storage without adding permissions or changing the existing CSP. The toolbar
 invocation grants capture authority; opening a window by itself does not grant
 access to an arbitrary tab. The persistent window avoids a toolbar popup's
 automatic teardown when the user returns to the meeting.

@@ -198,12 +198,15 @@ with tempfile.TemporaryDirectory() as tmp:
     target = root / 'dist' / 'chrome-extension'
     assert {'pipeline.js', 'transcription-nodes.js'} <= set(build.SHARED_FILES)
     assert (target / 'extension' / 'tab-audio-node.js').is_file()
+    assert (target / 'extension' / 'model-cache.html').is_file()
+    assert (target / 'extension' / 'cache-demo' / 'weights.bin').stat().st_size == 16384
     for name in build.SHARED_FILES:
         assert (target / 'web' / name).read_bytes() == (original / 'web' / name).read_bytes()
     assert (target / 'web' / 'vendor' / 'sherpa-ja-en' / 'sherpa-onnx-wasm-main-vad-asr.data').read_bytes() == b'pinned model fixture'
     assert not (target / 'web' / 'vendor' / 'translation').exists()
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest['manifest_version'] == 3
+    assert manifest['options_ui'] == {'page': 'extension/model-cache.html', 'open_in_tab': True}
     assert set(manifest['permissions']) == {'activeTab', 'tabCapture'}
     assert 'host_permissions' not in manifest and 'content_scripts' not in manifest
     assert (target / manifest['background']['service_worker']).is_file()

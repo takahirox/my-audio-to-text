@@ -185,6 +185,31 @@ test('canceling pending microphone permission releases a late-granted track', as
 test('Stop then Cancel/reload discards the old capture flush and Stop', async ({ page }) => {
   await fakeBackend(page);
   await fakeMicrophone(page);
+  // A real worklet can have no buffered tail at Stop. This lifecycle fixture
+  // always replies with PCM before the acknowledgment so both stale replies
+  // are exercised, independent of audio-render/UI scheduling.
+  await page.context().route('**/capture-worklet.js', route => route.fulfill({
+    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' }, body: `
+      class Capture extends AudioWorkletProcessor {
+        constructor() {
+          super();
+          this.port.onmessage = () => {
+            this.stopped = true;
+            const tail = new Float32Array(128).fill(0.01);
+            this.port.postMessage(tail, [tail.buffer]);
+            this.port.postMessage('flushed');
+          };
+        }
+        process(inputs) {
+          if (!this.stopped && inputs[0]?.[0]?.length) {
+            const audio = inputs[0][0].slice();
+            this.port.postMessage(audio, [audio.buffer]);
+          }
+          return true;
+        }
+      }
+      registerProcessor('capture', Capture);`,
+  }));
   await page.addInitScript(() => {
     // Hold actual worklet replies until the replacement worker is ready or recording.
     // Extend the flush fallback so UI/test scheduling cannot win the race.

@@ -7,6 +7,7 @@
   "permissions": ["activeTab", "tabCapture"],
   "action": { "default_title": "Transcribe this tab" },
   "background": { "service_worker": "extension/background.js", "type": "module" },
+  "options_ui": { "page": "extension/model-cache.html", "open_in_tab": true },
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; object-src 'self'"
   },
