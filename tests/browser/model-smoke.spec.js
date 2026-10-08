@@ -24,9 +24,9 @@ test('ReazonSpeech simulated: real Silero runtime, Stop and repeat', async ({ pa
   test.skip(!process.env.ASR_TEST_WAV && !process.env.ASR_TEST_VAD, 'Set ASR_TEST_VAD=1 (silence) or ASR_TEST_WAV (Japanese or English speech).');
   test.setTimeout(240000);
   const samples = process.env.ASR_TEST_WAV ? readWav(process.env.ASR_TEST_WAV) : Array(16037).fill(0);
-  await page.goto('./'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   await page.evaluate(async () => {
-    const { Microphone } = await import('./audio.js');
+    const { Microphone } = await import('../../audio.js');
     Microphone.prototype.start = async function () { window.feedSmoke = chunk => this.onAudio(chunk); };
     Microphone.prototype.stop = async function () {};
   });

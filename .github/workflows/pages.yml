@@ -1,4 +1,4 @@
-name: Deploy Speech-to-Text playground
+name: Deploy Node Playground
 on:
   push:
     branches: [main]

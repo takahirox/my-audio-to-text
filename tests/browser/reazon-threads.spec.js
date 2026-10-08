@@ -20,9 +20,9 @@ async function configuration(page, { requested, cores = 16, shared = true } = {}
         self.Module.onRuntimeInitialized();
       };`,
   }));
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   return page.evaluate(async ({ requested }) => {
-    const worker = new Worker('./sherpa-worker.js'), events = [];
+    const worker = new Worker('../../sherpa-worker.js'), events = [];
     try {
       await new Promise((resolve, reject) => {
         worker.onerror = event => reject(new Error(event.message));

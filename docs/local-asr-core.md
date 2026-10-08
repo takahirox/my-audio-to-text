@@ -44,9 +44,11 @@ core. Worker/pipeline errors release both workers before emitting `error`.
 
 Stop accepts no more PCM after the call, suppresses pending provisional results,
 waits for VAD's final short frame, and emits `stopped` only after all finals drain.
-The browser app first stops/flushes its selected audio source, then calls `core.stop()`.
-The app suppresses provisional display while the source is flushing. Cancel and
-page teardown call `release()` immediately, then release capture separately.
+The speech test page delegates this ordering to `pipeline.stop()`: source nodes
+stop/flush before the speech node calls `core.stop()`, and the transcript sink
+drains before the page reports completion. The page suppresses provisional
+display while the source is flushing. Cancel and page teardown call
+`pipeline.dispose()`, which releases capture and the speech node's core.
 Capture callbacks carry their own session guard so a canceled source cannot feed
 a new recognition session. Recognition generation and utterance filtering are
 owned by the core.
@@ -98,10 +100,14 @@ isolation, input backpressure, Stop/draining, and release/error handling.
 `ReazonSimulation` is its internal utterance policy: finals take priority over
 the latest eligible preview, with one decode in flight. The workers own only
 runtime loading, VAD classification, and individual offline decodes.
-`SpeechToTextNode` owns the core for the Web playground. Source nodes own
-capture lifetime; `web/app.js` composes their [pipeline](pipeline-runtime.md),
-observes signal/core diagnostics and renders provisional/final sink inputs.
-The Chrome extension continues to use the core directly.
+`SpeechToTextNode` owns the core for the Node Playground speech page. Source nodes
+own capture lifetime;
+[`web/nodes/speech-to-text/app.js`](../web/nodes/speech-to-text/app.js) composes their
+[pipeline](pipeline-runtime.md), observes signal/core diagnostics and renders
+provisional/final sink inputs.
+The Chrome extension uses the same speech node with its own source adapter and
+UI. Default worker and capture-worklet URLs resolve relative to the shared
+modules, so nested test pages and the extension load the same assets.
 
 ## Browser audio sources
 

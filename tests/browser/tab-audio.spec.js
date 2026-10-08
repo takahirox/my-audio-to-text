@@ -8,7 +8,7 @@ for (const fallback of [false, true]) {
     await page.locator('#cancel').click();
     await expect(page.locator('#load')).toBeEnabled();
     await page.evaluate(async () => {
-      const { createTabTranscriptionPipeline } = await import('/transcription-nodes.js');
+      const { createTabTranscriptionPipeline } = await import('../../transcription-nodes.js');
       window.pipelineValues = []; window.pipelineErrors = [];
       window.flow = createTabTranscriptionPipeline({
         onTranscript: async (port, value) => {
@@ -41,7 +41,7 @@ test('composable tab pipeline cancels a pending native capture grant and release
   await setup(page, { mode: 'pending' });
   await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
   await page.evaluate(async () => {
-    const { createTabTranscriptionPipeline } = await import('/transcription-nodes.js');
+    const { createTabTranscriptionPipeline } = await import('../../transcription-nodes.js');
     window.pipelineValues = [];
     window.flow = createTabTranscriptionPipeline({
       onTranscript: (port, value) => window.pipelineValues.push(value),
@@ -140,7 +140,7 @@ async function setup(page, { mode = 'audio', fallback = false, holdModule = fals
       return Promise.resolve(stream());
     };
   }, { mode, fallback, holdModule });
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   await expect(page.locator('#source')).toHaveValue('microphone');
   await page.locator('#source').selectOption('tab');
   await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();

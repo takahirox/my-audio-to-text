@@ -51,7 +51,12 @@ async function fakeMicrophone(page, gain = 1) {
 }
 
 test('Pages isolation activates and only the current baseline is exposed', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
+  await expect(page).toHaveTitle('Node Playground');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Node Playground');
+  await expect(page.locator('select, button, script')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Speech-to-Text (ReazonSpeech ja-en)', exact: true }).click();
+  await expect(page).toHaveURL(/\/nodes\/speech-to-text\/$/);
   await expect(page.locator('#load')).toBeEnabled();
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
   await expect(page.locator('select:not(#source)')).toHaveCount(0);
@@ -60,6 +65,69 @@ test('Pages isolation activates and only the current baseline is exposed', async
   await expect(page.locator('main')).toContainText('Current development baseline');
   await page.locator('#utterance').fill('今日は東京でテストします。');
   await expect(page.locator('#utterance')).toHaveValue('今日は東京でテストします。');
+  await page.getByRole('link', { name: 'Node Playground', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Node Playground');
+});
+
+test('Pages repository prefix preserves navigation, isolation, assets and the production pipeline', async ({ page }) => {
+  test.skip(!!process.env.ASR_BASE_URL || !!process.env.ASR_BENCHMARK, 'Repository-prefix alias is provided by the local test server.');
+  await fakeBackend(page);
+  await fakeMicrophone(page);
+  await page.addInitScript(() => {
+    const NativeContext = window.AudioContext, NativeWorker = window.Worker;
+    window.workletURLs = []; window.workerURLs = [];
+    window.AudioContext = class extends NativeContext {
+      constructor(...args) {
+        super(...args);
+        const addModule = this.audioWorklet.addModule.bind(this.audioWorklet);
+        this.audioWorklet.addModule = url => {
+          window.workletURLs.push(url);
+          return addModule(url);
+        };
+      }
+    };
+    window.Worker = class extends NativeWorker {
+      constructor(url, ...args) { super(url, ...args); window.workerURLs.push(url); }
+    };
+  });
+  const failures = [], assets = new Set();
+  page.on('pageerror', error => failures.push(error.message));
+  page.on('response', response => {
+    const path = new URL(response.url()).pathname;
+    assets.add(path);
+    if (response.status() >= 400) failures.push(`${response.status()} ${path}`);
+  });
+  await page.goto('./my-audio-to-text/');
+  await page.getByRole('link', { name: 'Speech-to-Text (ReazonSpeech ja-en)', exact: true }).click();
+  await expect(page.locator('#load')).toBeEnabled();
+  await expect(page).toHaveURL(/\/my-audio-to-text\/nodes\/speech-to-text\/$/);
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+  expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).scope))
+    .toBe(new URL('/my-audio-to-text/', page.url()).href);
+  await observePipeline(page);
+  await page.locator('#load').click();
+  await page.locator('#start').click();
+  await expect(page.locator('#partial')).toContainText('日本語のテスト');
+  await page.locator('#stop').click();
+  await expect(page.locator('#status')).toContainText('Stopped');
+  await expect(page.locator('#final')).toContainText('日本語のテスト');
+  expect(await graphTypes(page)).toEqual(['MicrophoneAudioNode', 'SpeechToTextNode', 'TranscriptOutputNode']);
+  for (const name of ['style.css', 'pipeline.js', 'transcription-nodes.js', 'local-asr-core.js', 'audio.js']) {
+    expect(assets.has(`/my-audio-to-text/${name}`), name).toBe(true);
+  }
+  expect(await page.evaluate(() => window.workletURLs)).toEqual([
+    new URL('/my-audio-to-text/capture-worklet.js', page.url()).href,
+  ]);
+  expect(await page.evaluate(() => window.workerURLs)).toEqual([
+    new URL('/my-audio-to-text/sherpa-worker.js', page.url()).href,
+    new URL('/my-audio-to-text/silero-worker.js', page.url()).href,
+  ]);
+  expect((await page.request.get(new URL('../../capture-worklet.js', page.url()).href)).status()).toBe(200);
+  expect(await page.evaluate(() => window.trackStops)).toBe(1);
+  await page.locator('#cancel').click();
+  await page.getByRole('link', { name: 'Runtime and model notices' }).click();
+  await expect(page).toHaveURL(/\/my-audio-to-text\/third-party-notices\.txt$/);
+  expect(failures).toEqual([]);
 });
 
 test('microphone denial is visible and leaves retry available', async ({ page }) => {
@@ -67,7 +135,7 @@ test('microphone denial is visible and leaves retry available', async ({ page })
   await page.addInitScript(() => {
     navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
   });
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   await page.locator('#load').click(); await page.locator('#start').click();
   await expect(page.locator('#errors')).toContainText('Permission denied');
   await expect(page.locator('#load')).toBeEnabled();
@@ -79,7 +147,7 @@ test('capture, Stop, repeat, and release on a mobile-sized page', async ({ brows
   const page = await context.newPage();
   await fakeBackend(page);
   await fakeMicrophone(page);
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   await page.locator('#load').click(); await page.locator('#start').click();
   await expect(page.locator('#status')).toContainText('Listening');
   await expect(page.locator('#audio')).not.toHaveText('—');
@@ -105,7 +173,7 @@ test('canceling pending microphone permission releases a late-granted track', as
       window.grant = () => resolve({ getTracks: () => [{ stop: () => { window.lateTrackStopped = true; } }] });
     });
   });
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   await page.locator('#load').click(); await page.locator('#start').click();
   await expect(page.locator('#status')).toContainText('Requesting');
   await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
@@ -159,7 +227,7 @@ test('Stop then Cancel/reload discards the old capture flush and Stop', async ({
       }
     };
   });
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   await page.locator('#load').click(); await page.locator('#start').click();
   await expect(page.locator('#status')).toContainText('Listening');
   await expect(page.locator('#audio')).not.toHaveText('—');
@@ -188,7 +256,7 @@ test('Stop then Cancel/reload discards the old capture flush and Stop', async ({
 for (const action of ['drain', 'cancel']) {
   test(`microphone pipeline ${action} while final transcript output is pending`, async ({ page }) => {
     await fakeBackend(page); await fakeMicrophone(page);
-    await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+    await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
     await observePipeline(page);
     await page.locator('#load').click(); await expect(page.locator('#start')).toBeEnabled();
     expect(await page.evaluate(() => window.microphoneRequests)).toEqual([]);
@@ -231,7 +299,7 @@ test('hiding while microphone permission is pending drains and discards the late
       window.grant = () => resolve({ getTracks: () => [{ stop: () => { window.lateTrackStopped = true; } }] });
     });
   });
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   await observePipeline(page);
   await page.locator('#load').click(); await page.locator('#start').click();
   await expect.poll(() => page.evaluate(() => !!window.grant)).toBe(true);
