@@ -1,0 +1,57 @@
+{
+  "choice": "opus",
+  "browser": "153.0.8010.12",
+  "capabilities": {
+    "gpu": true,
+    "adapter": null,
+    "gpuInfo": null,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+    "secure": true,
+    "isolated": false,
+    "gpuProbe": "not needed for WASM"
+  },
+  "fixture": "今日は良い天気です。",
+  "runs": [
+    {
+      "status": "Complete",
+      "errors": "",
+      "output": "It's a nice day today.",
+      "load-time": "87281 ms",
+      "latency": "133 ms"
+    },
+    {
+      "status": "Complete",
+      "errors": "",
+      "output": "It's a nice day today.",
+      "load-time": "881 ms",
+      "latency": "128 ms"
+    }
+  ],
+  "errors": [],
+  "network": {
+    "request_count": 30,
+    "methods": [
+      "GET"
+    ],
+    "hosts": [
+      "127.0.0.1",
+      "huggingface.co",
+      "us.aws.cdn.hf.co"
+    ],
+    "with_body": 0,
+    "containing_input": 0
+  },
+  "result": "passed",
+  "verified_at_utc": "2026-10-08T04:24:08.935970+00:00",
+  "model": {
+    "id": "onnx-community/opus-mt-ja-en",
+    "revision": "05470cd69b62aa32e3ee64ccfd41279789ee4b1e",
+    "dtype": "q8",
+    "device": "wasm"
+  },
+  "runtime": {
+    "transformers": "4.0.0-next.3",
+    "onnxruntime_web": "1.25.0-dev.20260212-1a71a5f46e",
+    "wasm_loader": "asyncify"
+  }
+}

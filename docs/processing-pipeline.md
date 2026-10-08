@@ -5,8 +5,9 @@ long-lived product vision: reusable source and processing nodes connected into
 local-first pipelines. The [minimal Node/Port runtime](pipeline-runtime.md)
 implements code-level composition and an executable browser-tab transcription
 example, and powers the Node Playground speech page's microphone/tab
-transcription. This document explains the longer-lived architecture; additional
-processors and a universal plugin SDK remain future work.
+transcription. Independent [OPUS-MT and TranslateGemma translation nodes](translation-nodes.md)
+also compose text source → processor → text sink graphs. This document explains
+the longer-lived architecture; further processors and a universal plugin SDK remain future work.
 See the [README](../README.md#current-implemented-capabilities) for current status.
 
 ## Implemented foundation
@@ -23,9 +24,10 @@ resampling and UI. The [Node Playground speech test page](node-playground.md)
 reuses this capability through microphone/tab source nodes, one speech-to-text
 node and a transcript sink connected by named ports. The
 [Chrome extension](chrome-extension.md) uses the
-same runtime and speech node with its own tab source and UI. Translation,
-summarization, topic processing, persistent history and personalized ASR are
-future capabilities.
+same runtime and speech node with its own tab source and UI. OPUS-MT and
+TranslateGemma provide separate local Japanese → English text nodes and test
+pages. Realtime ASR-to-translation integration, summarization, topic processing,
+persistent history and personalized ASR remain future capabilities.
 
 ## Node and port concepts
 
@@ -76,8 +78,9 @@ larger input before processing. Future transport/orchestration should carry
 data and lifecycle signals without deciding ASR, translation or summarization
 policy for individual processors.
 
-The first example is executable today; the other processors below are
-architectural illustrations:
+The transcription example is executable today. The connections to translation
+and other processors below are architectural illustrations; independent text
+translation pages do not implement realtime ASR-to-translation integration:
 
 ```text
 Tab Audio → Speech-to-Text → Transcript
@@ -95,7 +98,7 @@ Transcript/history → Topic extraction/analysis → Visualization
 
 Only the first example represents an existing end-to-end capability, via both
 the capture/core/UI integration and the new Node/Port example. All other
-processors, history storage, article/text inputs and connections above are future
+composed processors, history storage, article/text inputs and connections above are future
 examples. In particular,
 `.provisional` is the SpeechToTextNode port for the existing core's `partial`
 events. Provisional replacements and committed events may feed different

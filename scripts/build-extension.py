@@ -25,7 +25,10 @@ def main():
     for name in SHARED_FILES:
         shutil.copy2(ROOT / "web" / name, target / "web" / name)
     for name in ("vendor", "licenses"):
-        shutil.copytree(ROOT / "web" / name, target / "web" / name)
+        # Translation is a separate Playground capability; keep its heavy
+        # runtime out of the ASR-only extension package.
+        shutil.copytree(ROOT / "web" / name, target / "web" / name,
+                        ignore=shutil.ignore_patterns("translation") if name == "vendor" else None)
     print(f"Load unpacked: {target}")
 
 
