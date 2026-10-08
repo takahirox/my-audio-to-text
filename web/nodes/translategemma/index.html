@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TranslateGemma 4B Translation · Node Playground</title>
+  <link rel="stylesheet" href="../../style.css">
+</head>
+<body>
+<main>
+  <p><a href="../../">Node Playground</a></p>
+  <h1>TranslateGemma 4B Translation</h1>
+  <p>Japanese → English. Google TranslateGemma 4B text-only ONNX, q4, local WebGPU execution. Run downloads about 3.112 GB of model assets from Hugging Face unless cached. Requires a supported GPU and several GB of available memory. The upstream Gemma terms apply.</p>
+  <p>Text stays on this device. Try a short snippet; generation is capped at 256 output tokens. Each Run initializes a fresh dedicated Worker. Cancel releases it immediately.</p>
+  <label for="input">Japanese text (up to 1,000 characters)</label>
+  <textarea id="input" lang="ja" rows="5" maxlength="1000">今日は良い天気です。</textarea>
+  <div class="controls">
+    <button id="run" disabled>Run</button>
+    <button id="cancel" disabled>Cancel</button>
+  </div>
+  <p id="status" role="status" aria-live="polite">Ready to run</p>
+  <p id="errors" role="alert"></p>
+  <h2>English translation</h2>
+  <pre id="output" lang="en" aria-live="polite"></pre>
+  <dl>
+    <dt>Model loading / initialization</dt><dd id="load-time">—</dd>
+    <dt>Translation / pipeline drain</dt><dd id="latency">—</dd>
+  </dl>
+  <p><a href="../../third-party-notices.txt">Runtime and model notices</a> · <a href="https://github.com/takahirox/my-audio-to-text/blob/main/docs/translation-nodes.md">Setup, checkpoints, terms and limitations</a></p>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

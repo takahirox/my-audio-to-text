@@ -22,8 +22,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .cache
-          key: asr-assets-${{ hashFiles('scripts/prepare-assets.py', 'scripts/reazon-ja-en-assets.json') }}
+          key: asr-assets-${{ hashFiles('scripts/prepare-assets.py', 'scripts/reazon-ja-en-assets.json', 'scripts/prepare-translation-assets.py') }}
       - run: python3 scripts/prepare-assets.py
+      - run: python3 scripts/prepare-translation-assets.py
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

@@ -203,3 +203,18 @@ failures, disposal during load/input/drain and stale output across fresh graphs.
 Run `npm test`, `npm run test:browser -- --workers=2` and the existing
 [extension checks](chrome-extension.md). These deterministic checks do not claim
 new recognition accuracy or physical-device performance.
+
+## Independent text translation nodes
+
+[`web/translation-nodes.js`](../web/translation-nodes.js) declares a shared `TEXT`
+contract for plain strings. `TextInputNode.text` connects to either
+`OpusMtTranslationNode.text` or `TranslateGemmaTranslationNode.text`, whose text
+output connects to `TextOutputNode.text`. Each translation node owns its dedicated
+module Worker. The adapters use correlated load/translate/drain replies;
+`receive()` waits for and emits all returned strings in order. Blank input has
+zero output. The worker serial queue and Pipeline queue preserve arrival order.
+`stop()` drains; signal abort/dispose terminates the Worker and settles pending
+requests without stale emission. Graphs are single-use and repeat creates fresh
+nodes. Model selection, tokenizer/template, inference and GPU checks live in the
+individual worker entry points. The generic runtime is unchanged. See
+[translation nodes](translation-nodes.md) for limits, runtime/model pins and tests.

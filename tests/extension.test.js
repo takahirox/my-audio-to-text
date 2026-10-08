@@ -191,6 +191,9 @@ with tempfile.TemporaryDirectory() as tmp:
     vendor = root / 'web' / 'vendor' / 'sherpa-ja-en'
     vendor.mkdir(parents=True)
     (vendor / 'sherpa-onnx-wasm-main-vad-asr.data').write_bytes(b'pinned model fixture')
+    translation = root / 'web' / 'vendor' / 'translation'
+    translation.mkdir()
+    (translation / 'transformers.js').write_bytes(b'unrelated heavy runtime')
     build.main()
     target = root / 'dist' / 'chrome-extension'
     assert {'pipeline.js', 'transcription-nodes.js'} <= set(build.SHARED_FILES)
@@ -198,6 +201,7 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in build.SHARED_FILES:
         assert (target / 'web' / name).read_bytes() == (original / 'web' / name).read_bytes()
     assert (target / 'web' / 'vendor' / 'sherpa-ja-en' / 'sherpa-onnx-wasm-main-vad-asr.data').read_bytes() == b'pinned model fixture'
+    assert not (target / 'web' / 'vendor' / 'translation').exists()
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest['manifest_version'] == 3
     assert set(manifest['permissions']) == {'activeTab', 'tabCapture'}

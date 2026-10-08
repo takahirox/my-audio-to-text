@@ -3,11 +3,21 @@
 The [published Web entry point](https://takahirox.github.io/my-audio-to-text/)
 lists available processor nodes. Each link opens a small, independent test page
 that supplies valid inputs to the actual node and displays its outputs and
-practical status/errors. The list currently has one entry:
+practical status/errors. The list includes three independent entries:
 
 - [Speech-to-Text (ReazonSpeech ja-en)](https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/):
   microphone or browser-tab audio → `SpeechToTextNode` → provisional/final
   transcript sink, connected through the shared Node/Port pipeline.
+
+- [OPUS-MT Translation (Japanese → English)](https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/):
+  plain text → `OpusMtTranslationNode` (local WASM) → translated string sink.
+- [TranslateGemma 4B Translation (Japanese → English)](https://takahirox.github.io/my-audio-to-text/nodes/translategemma/):
+  plain text → `TranslateGemmaTranslationNode` (local WebGPU) → translated string sink.
+
+The translation pages have text input, Run/Cancel, output, progress/errors and
+separate loading and inference/drain latencies. They run the production nodes
+through the Pipeline. Model downloads start only on Run. See
+[translation setup, pinned checkpoints, terms and validation](translation-nodes.md).
 
 The speech page preserves model loading, diagnostics, Stop/drain, Cancel/release,
 retry and repeat. ReazonSpeech ja-en + Silero/hayamimi is fixed to this node;
@@ -46,7 +56,9 @@ needed. Each page can differ according to its node's input/output needs.
 `npm run serve` serves `web/`; `/` is the list and `/nodes/speech-to-text/` is
 the speech page. The [Pages workflow](../.github/workflows/pages.yml) prepares
 the pinned runtime/models and uploads the entire `web/` directory recursively.
-There is no bundler or separate page build. Keep `web/vendor/`, shared modules,
+It also stages the pinned translation JS/MJS/WASM after speech preparation.
+Translation weights download on demand from immutable Hugging Face revisions;
+the Pages artifact does not include those weights. There is no bundler or separate page build. Keep `web/vendor/`, shared modules,
 workers, licenses and notices at the Web root. Extension packaging continues
 to copy the shared files and prepared assets without the Playground pages.
 
@@ -59,13 +71,13 @@ recognition runtime or isolation setup. Existing root worker registrations still
 use the same script/scope after upgrading from the dedicated demo.
 
 Run `npm test`, `npm run test:browser -- --workers=2`, `npm run prepare:assets`,
-`npm run build:extension` and `npm run test:extension`. The browser suite tests
+`npm run prepare:translation-assets`, `npm run build:extension` and `npm run test:extension`. The browser suite tests
 the plain static server and a repository-prefix alias without server isolation
 headers. Opt-in real-model checks use the migrated speech page too.
 
 ## Required post-merge verification
 
-**Pending for Issue #63.** Local tests do not establish deployment of the merged
+**Pending for Issues #63 and #65.** Local tests do not establish deployment of the merged
 revision. Keep the Issue open until the following checks are performed and the
 evidence is recorded:
 
@@ -86,3 +98,8 @@ for published deterministic checks (the local alias test is skipped), and
 `ASR_BASE_URL=https://takahirox.github.io/my-audio-to-text/ ASR_TEST_VAD=1 npm run test:browser -- tests/browser/model-smoke.spec.js --project=chromium --workers=1`
 for pinned model loading and silence Stop/repeat. These results supplement the
 deployment SHA and published navigation/asset evidence.
+
+For #65, also verify both translation pages and their Worker/runtime requests
+under the repository prefix, recording deployed SHA and Pages run URL. Run the
+opt-in real translation smokes on the deployed origin if needed and retain
+pending status until completed; see [translation verification](translation-nodes.md#required-post-merge-verification).
