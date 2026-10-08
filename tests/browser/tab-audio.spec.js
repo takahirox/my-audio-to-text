@@ -149,8 +149,9 @@ async function setup(page, { mode = 'audio', fallback = false, holdModule = fals
 async function released(page, count = 1) {
   await expect.poll(() => page.evaluate(() => window.tabStreams.map(s => s.tracks.map(t => t.stops))))
     .toEqual(Array.from({ length: count }, () => [1, 1]));
-  expect(await page.evaluate(() => window.captureContexts.every(c => c.state === 'closed'))).toBe(true);
-  expect(await page.evaluate(() => window.tabStreams.every(s => s.context.state === 'closed'))).toBe(true);
+  // Track.stop is synchronous; closing the capture and fixture contexts is not.
+  await expect.poll(() => page.evaluate(() => window.captureContexts.every(c => c.state === 'closed'))).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.tabStreams.every(s => s.context.state === 'closed'))).toBe(true);
 }
 
 for (const fallback of [false, true]) {
