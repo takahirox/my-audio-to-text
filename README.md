@@ -18,7 +18,7 @@ provisional / final transcript
 
 Capture helpers normalize audio to mono 16 kHz PCM before passing it to the [Local ASR Core](docs/local-asr-core.md). ReazonSpeech ja-en, sherpa-onnx, Silero VAD and the hayamimi-inspired simulated-streaming policy are the core's current implementation. This replaceable ASR baseline is one processing capability within the product vision.
 
-The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent Japanese → English OPUS-MT (WASM) and TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. Further composition remains future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass, Japanese-only ReazonSpeech and Whisper experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
+The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent Japanese → English OPUS-MT (WASM) and TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR with optional OPUS-MT through a provisional/final scheduling adapter. Further composition remains future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass, Japanese-only ReazonSpeech and Whisper experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
 
 ## Node Playground
 
@@ -35,7 +35,9 @@ See [setup, testing, and limitations](docs/asr-manual-testing.md). Automated Chr
 A minimal [Chrome extension PoC](docs/chrome-extension.md) starts current-tab
 transcription from the toolbar without the sharing picker. It reuses the Web
 ASR core and audio helpers, restores audible tab playback, and shows transcripts
-in a persistent window. See its guide for building/loading the unpacked extension,
+in a persistent window. Optional local OPUS-MT pairs provisional and final
+Japanese transcripts with English, after an explicit model-cache download. See its
+guide for building/loading the unpacked extension,
 permissions, lifecycle behavior and automated tests.
 
 The [Pages workflow](.github/workflows/pages.yml) prepares the pinned ReazonSpeech ja-en/Silero assets and translation runtimes and deploys the entire `web/` tree (the index, nested node pages and shared assets) automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. Inference runs in the browser; speech loading needs about 91 MB of model/runtime assets and no ASR server. Translation weights download explicitly on Run (about 239 MB for OPUS-MT and 3.112 GB for TranslateGemma); text stays local.

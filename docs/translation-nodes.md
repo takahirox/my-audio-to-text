@@ -89,8 +89,12 @@ OPUS 512-token limit checked before inference. Generation is deterministic
 (`do_sample: false`) with a 256-token output cap; longer translations may reach
 that cap. This is a smoke/comparison surface for short text, not long-document
 translation or a quality guarantee. Empty input emits zero outputs; nonempty
-input emits one completed string. Requests are processed serially in arrival
-order through the Pipeline and worker queue. Worker responses can contain zero
+input emits one completed string. Playground requests are processed serially in
+arrival
+order through the Pipeline and worker queue. The extension wraps the same OPUS
+node with a session-owned provisional/final scheduling adapter and verified
+cache-only loading; see [the extension guide](chrome-extension.md). Worker responses
+can contain zero
 or multiple strings; the adapter emits each in order before completing receive.
 Stop drains all receives and worker work before downstream sinks stop. Dispose
 is immediate cancellation. Nodes/graphs are single-use, matching the runtime.

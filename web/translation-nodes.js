@@ -7,8 +7,9 @@ export const TEXT = portContract('text');
 class WorkerTranslationNode {
   inputs = { text: TEXT };
   outputs = { text: TEXT };
-  constructor(url, { workerFactory = url => new Worker(url, { type: 'module' }), onEvent = () => {} } = {}) {
+  constructor(url, { workerFactory = url => new Worker(url, { type: 'module' }), onEvent = () => {}, loadOptions = {}, requireSingleOutput = false } = {}) {
     this.url = url; this.workerFactory = workerFactory; this.onEvent = onEvent;
+    this.loadOptions = loadOptions; this.requireSingleOutput = requireSingleOutput;
     this.pending = new Map(); this.sequence = 0;
   }
   async start(context) {
@@ -37,7 +38,7 @@ class WorkerTranslationNode {
     this.worker.onerror = workerError; this.worker.onmessageerror = workerError;
     this.abort = () => this.dispose();
     context.signal.addEventListener('abort', this.abort, { once: true });
-    await this.request('load', 'ready');
+    await this.request('load', 'ready', this.loadOptions);
     context.signal.throwIfAborted();
     try { this.onEvent({ type: 'ready' }); } catch { /* diagnostic observer only */ }
   }
@@ -60,6 +61,9 @@ class WorkerTranslationNode {
     context.signal.throwIfAborted();
     if (!Array.isArray(result.texts) || result.texts.some(value => typeof value !== 'string')) {
       throw new TypeError('Invalid translation Worker output.');
+    }
+    if (this.requireSingleOutput && (result.texts.length !== 1 || !result.texts[0].trim())) {
+      throw new Error('OPUS-MT returned no single nonempty translation.');
     }
     for (const value of result.texts) context.emit('text', value);
   }

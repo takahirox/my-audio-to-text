@@ -106,15 +106,18 @@ Cache API errors are surfaced instead of claiming a successful uncached download
 
 ## Optional large models and terms
 
-This foundation does not offer/download OPUS-MT or TranslateGemma, integrate
-translation inference, package translation runtimes, or mirror weights. A later
-integration needs a complete reviewed manifest and a deliberate user request.
+The options page remains the #67 fixture demo. The recorder now offers real
+OPUS-MT preparation and optional inference through #69; see
+[the extension guide](chrome-extension.md#optional-opus-mt-japanese--english-69).
+It uses a complete reviewed immutable manifest and a deliberate download action.
+TranslateGemma remains outside the extension, and model weights are not bundled.
 Keep the pinned IDs, revisions and required files from
 [translation nodes](translation-nodes.md); do not use floating `main` URLs.
-Future remote asset hosts must meet browser CORS/COEP rules under the current
-MV3 CSP. The loopback test server sends CORS and CORP headers; it requires no
-production host permission or CSP change. Real remote delivery remains future
-integration validation, not an assertion made by the fixture tests.
+Remote asset hosts must meet browser CORS/COEP rules under the current MV3 CSP.
+The loopback test server sends CORS and CORP headers; it requires no
+production host permission or CSP change. Real OPUS delivery and inference are
+recorded separately in the #69 evidence;
+fixture tests alone do not verify them.
 
 OPUS-MT is approximately **239 MB**, with **CC BY 4.0** attribution to
 Helsinki-NLP/OPUS-MT and ONNX Community. TranslateGemma 4B's selected ONNX assets

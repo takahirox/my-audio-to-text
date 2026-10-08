@@ -5,3 +5,7 @@ h2 { font-size: 1.1rem; }
 button { padding: .6rem; margin-right: .5rem; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 2rem; }
 #errors { color: #d44; }
+
+fieldset { margin-top: 1rem; }
+#paired-finals li { border-bottom: 1px solid #888; }
+#partial-english { border-left: 3px solid #888; padding-left: .7rem; }
