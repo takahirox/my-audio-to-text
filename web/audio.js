@@ -64,7 +64,7 @@ export class BrowserAudioSource {
         if (audio.length) this.onAudio(audio);
       };
       if (this.context.audioWorklet) {
-        await this.context.audioWorklet.addModule(this.workletURL || './capture-worklet.js');
+        await this.context.audioWorklet.addModule(this.workletURL || new URL('./capture-worklet.js', import.meta.url).href);
         this.checkCanceled();
         this.node = new AudioWorkletNode(this.context, 'capture');
         this.node.port.onmessage = ({ data }) => onChunk(data);

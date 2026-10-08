@@ -1,5 +1,5 @@
-import { Pipeline } from './pipeline.js';
-import { MicrophoneAudioNode, BrowserTabAudioNode, SpeechToTextNode, TranscriptOutputNode } from './transcription-nodes.js';
+import { Pipeline } from '../../pipeline.js';
+import { MicrophoneAudioNode, BrowserTabAudioNode, SpeechToTextNode, TranscriptOutputNode } from '../../transcription-nodes.js';
 const $ = (id) => document.getElementById(id);
 let flow, state = 'booting', startedAt, stopAt, captured = 0, queued = 0, loadAt, generation = 0;
 let firstText = false, firstPartial = false, peakRms = 0, speechStarted = 0, speechCompleted = 0, partialCount = 0, finalCount = 0;
@@ -161,7 +161,7 @@ async function boot() {
   if (!isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('Microphone requires HTTPS or localhost and browser audio capture support.');
   if (!crossOriginIsolated) {
     if (!navigator.serviceWorker) throw new Error('This browser cannot enable the isolation required by the WASM runtimes. Use a server with COOP/COEP headers.');
-    await navigator.serviceWorker.register('./isolation-worker.js');
+    await navigator.serviceWorker.register(new URL('../../isolation-worker.js', import.meta.url));
     await navigator.serviceWorker.ready;
     if (!navigator.serviceWorker.controller) await new Promise((resolve) => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
     const key = `asr-isolation:${location.pathname}`;

@@ -90,9 +90,10 @@ a new run. Old context closures cannot feed a replacement graph. Graceful Stop
 does not itself dispose model resources. Restarting/rewiring graphs and sharing
 node instances between graphs are outside this contract.
 
-## Web playground integration
+## Node Playground speech page integration
 
-[`web/app.js`](../web/app.js) uses the runtime for both input choices:
+[`web/nodes/speech-to-text/app.js`](../web/nodes/speech-to-text/app.js) uses the
+runtime for both input choices:
 
 ```text
 MicrophoneAudioNode / BrowserTabAudioNode
@@ -155,12 +156,13 @@ transcript processing belongs on the ports. `TranscriptOutputNode` accepts an
 async callback `(port, value, signal)` and can serve as a UI, storage or test sink.
 
 After [preparing assets and serving the playground](asr-manual-testing.md#local-setup),
-open it and allow its isolation setup to complete. The following executable
+open the Speech-to-Text test page from the Node Playground list and allow its
+isolation setup to complete. The following executable
 example can be entered in the browser console; leave the playground's own model
 unloaded. Load before clicking the example button to preserve the capture gesture:
 
 ```js
-const { createTabTranscriptionPipeline } = await import('./transcription-nodes.js');
+const { createTabTranscriptionPipeline } = await import('../../transcription-nodes.js');
 const flow = createTabTranscriptionPipeline({
   onTranscript: (port, transcript) => console.log(port, transcript),
   onEvent: event => { if (event.type === 'progress') console.log(event.message); },
@@ -187,7 +189,8 @@ dispose the graph; a new run creates a new helper instance. Tab permissions,
 HTTPS/localhost, cross-origin isolation, model assets and browser limitations
 are the same as the playground. No external API integration is required.
 
-The Chrome extension retains its existing capture/core/UI path. Deterministic
+The Chrome extension uses the same runtime and speech node with its own capture
+adapter and UI; the Node Playground does not host or package its UI. Deterministic
 tests exercise the playground and adapters using real microphone/tab helpers,
 capture worklet, resampling and `LocalAsrCore`, with browser permission APIs and
 model worker replies controlled. Browser tests execute the playground and

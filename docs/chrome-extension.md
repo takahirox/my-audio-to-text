@@ -2,7 +2,7 @@
 
 This desktop Chromium Manifest V3 PoC starts local transcription for the tab
 on which you invoke its toolbar action. It uses the same ReazonSpeech ja-en,
-Silero VAD and hayamimi utterance policy as the Web playground. There is no
+Silero VAD and hayamimi utterance policy as the [Node Playground speech test page](node-playground.md). There is no
 recognition server, page injection, microphone capture or tab-selection picker.
 
 The extension uses the shared Node/Port runtime:
@@ -17,6 +17,8 @@ ExtensionTab (chrome.tabCapture) → ExtensionTabAudioNode.audio
 The small extension audio adapter reuses the Web capture lifecycle and mono
 16 kHz PCM contract. `TabSession` targets the invoked tab and renders the UI;
 the shared speech node owns the existing ASR core and workers.
+
+The extension keeps its own toolbar/transcript UI and packaging; it is not a Node Playground page.
 
 ## Build and load unpacked
 

@@ -1,5 +1,5 @@
 // Observe the production graph and optionally delay its real transcript sink.
-export async function observePipeline(page, moduleRoot = '/') {
+export async function observePipeline(page, moduleRoot = '../../') {
   await page.evaluate(async moduleRoot => {
     const { Pipeline } = await import(`${moduleRoot}pipeline.js`);
     const { TranscriptOutputNode } = await import(`${moduleRoot}transcription-nodes.js`);

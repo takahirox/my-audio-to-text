@@ -58,7 +58,7 @@ test('deterministic ReazonSpeech ja-en thread comparison on Japanese audio', asy
         });
       };`,
   }));
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   const environment = await page.evaluate(() => ({
     userAgent: navigator.userAgent, hardwareConcurrency: navigator.hardwareConcurrency,
     crossOriginIsolated, sharedMemory: typeof SharedArrayBuffer !== 'undefined',
@@ -78,7 +78,7 @@ test('deterministic ReazonSpeech ja-en thread comparison on Japanese audio', asy
       const entry = results.find(r => r.numThreads === numThreads);
       if (entry.status === 'failed') continue;
       const measured = await page.evaluate(async ({ numThreads, fixtures }) => {
-        const worker = new Worker('./sherpa-worker.js');
+        const worker = new Worker('../../sherpa-worker.js');
         let resolve, reject, text, decodeMs, actualThreads, runtime;
         worker.onerror = e => reject(new Error(e.message));
         worker.onmessage = ({ data }) => {

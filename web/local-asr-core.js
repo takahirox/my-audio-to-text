@@ -5,7 +5,7 @@ const backlogError = () => new Error('Backend is over 30 seconds behind. Capture
 // Normalized 16 kHz mono Float32Array input -> recognition events. No capture or DOM.
 // workerFactory is the deterministic-test seam; production owns two isolated workers.
 export class LocalAsrCore {
-  constructor(onEvent, { workerFactory = path => new Worker(path) } = {}) {
+  constructor(onEvent, { workerFactory = path => new Worker(new URL(path, import.meta.url).href) } = {}) {
     this.onEvent = onEvent;
     this.workerFactory = workerFactory;
     this.state = 'released'; this.session = 0;

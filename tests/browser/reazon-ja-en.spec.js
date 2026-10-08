@@ -82,11 +82,11 @@ test('real ja-en model recognizes Japanese, English and mixed speech through the
       }
     };
   });
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   // Replace only the microphone source. VAD, controller, model loading, WASM
   // inference, Stop and repeat all run through the unmodified production page.
   await page.evaluate(async () => {
-    const { Microphone } = await import('./audio.js');
+    const { Microphone } = await import('../../audio.js');
     Microphone.prototype.start = async function () {
       window.feedFixture = samples => {
         for (let i = 0; i < samples.length; i += 2048) this.onAudio(Float32Array.from(samples.slice(i, i + 2048)));
@@ -127,10 +127,13 @@ test('real ja-en model recognizes Japanese, English and mixed speech through the
   }
   expect(await page.evaluate(() => window.modelEvents.filter(e => e.type === 'configuration').map(e => [e.model, e.numThreads]))).toEqual([['ja-en', REAZON_NUM_THREADS]]);
   const loadRequests = await page.evaluate(() => window.modelRequests.filter(e => e.type === 'load'));
-  expect(loadRequests.map(e => e.worker).sort()).toEqual(['./sherpa-worker.js', './silero-worker.js']);
+  expect(loadRequests.map(e => e.worker).sort()).toEqual([
+    new URL('../../sherpa-worker.js', page.url()).href,
+    new URL('../../silero-worker.js', page.url()).href,
+  ]);
   expect(loadRequests.every(e => e.backend === undefined)).toBe(true);
-  expect(loadRequests.find(e => e.worker === './silero-worker.js').backend).toBeUndefined();
-  expect(assetRequests).toContain('/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.data');
+  expect(loadRequests.find(e => new URL(e.worker).pathname.endsWith('/silero-worker.js')).backend).toBeUndefined();
+  expect(assetRequests).toContain(new URL('../../vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.data', page.url()).pathname);
   expect(assetRequests.every(path => path.includes('/vendor/sherpa-ja-en/'))).toBe(true);
   await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
   await expect(page.locator('#reazon-model')).toHaveText('—');

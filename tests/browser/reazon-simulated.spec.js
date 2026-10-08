@@ -82,11 +82,11 @@ async function setup(page, { hold = false, holdReady = null, emptyFinal = false 
     contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' },
     body: gateReady(actualWorker, 'asr'),
   }));
-  await page.goto('/'); await expect(page.locator('#load')).toBeEnabled();
+  await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   // Deterministic 16 kHz audio at the microphone callback boundary. Existing
   // playground tests separately exercise real Web Audio capture and resampling.
   await page.evaluate(async () => {
-    const { Microphone } = await import('./audio.js');
+    const { Microphone } = await import('../../audio.js');
     window.captureStops = 0;
     Microphone.prototype.start = async function () {
       window.feed = (length, value = 0.05) => this.onAudio(new Float32Array(length).fill(value));
@@ -106,11 +106,11 @@ const decodes = page => page.evaluate(() => window.requests.filter(m => m.type =
 const finish = async page => {
   // Wait for the decode to enter the actual worker handler, not just be posted.
   await expect.poll(() => page.evaluate(() => {
-    const id = window.testWorkers.filter(w => w.url === './sherpa-worker.js').at(-1).id;
+    const id = window.testWorkers.filter(w => w.url.endsWith('/sherpa-worker.js')).at(-1).id;
     const events = window.workerEvents.filter(e => e.workerId === id);
     return events.filter(e => e.type === 'test-decode-held').length - events.filter(e => e.type === 'test-freed').length;
   })).toBe(1);
-  await page.evaluate(() => window.testWorkers.filter(w => w.url === './sherpa-worker.js').at(-1).postMessage({ type: 'test-finish' }));
+  await page.evaluate(() => window.testWorkers.filter(w => w.url.endsWith('/sherpa-worker.js')).at(-1).postMessage({ type: 'test-finish' }));
 };
 const classified = page => page.evaluate(() => window.workerEvents.filter(e => e.type === 'vad')
   .reduce((sum, e) => sum + e.frames.reduce((count, f) => count + f.audio.length, 0), 0));
