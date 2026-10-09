@@ -44,7 +44,9 @@ See [setup, testing, and limitations](docs/asr-manual-testing.md). Automated Chr
 A minimal [Chrome extension PoC](docs/chrome-extension.md) starts current-tab
 transcription from the toolbar without the sharing picker. It reuses the Web
 ASR core and audio helpers, restores audible tab playback, and shows transcripts
-in a persistent window. Optional local OPUS-MT pairs provisional and final
+in a compact Live window. Separate Graph Editor and Models tabs provide
+executable graph editing and verified optional model preparation without
+interrupting capture. Optional local OPUS-MT pairs provisional and final
 Japanese transcripts with English or English transcripts with Japanese using an
 exclusive direction choice applied on the next session, after an explicit download
 of the selected model cache. Translation enablement and direction persist;

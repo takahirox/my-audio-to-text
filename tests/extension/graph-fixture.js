@@ -96,7 +96,9 @@ export async function openGraph(f) {
     ExtensionTabAudioNode.prototype.start = function() {};
     ExtensionTabAudioNode.prototype.stop = function() {};
   });
-  await page.locator('#graph-panel').evaluate(element => element.open = true); return page;
+  page.editor = await f.context.newPage(); await page.editor.goto(f.url.replace('recorder.html', 'graph-editor.html'));
+  page.models = await f.context.newPage(); await page.models.goto(f.url.replace('recorder.html', 'model-cache.html'));
+  return page;
 }
 export async function startGraph(page, timeout = 30000) {
   // Send through the recorder's registered production invocation listener.
@@ -107,14 +109,15 @@ export async function emitFinal(page, text) {
   await page.evaluate(text => window.speech.receiveEvent({ type: 'final', text }), text);
 }
 export async function addAudioPath(page, type) {
-  await page.locator('#translation-enabled').uncheck();
+  const editor = page.editor;
+  await editor.locator('#translation-enabled').uncheck();
   for (const node of ['FinalText', type, 'AudioOutput']) {
-    await page.locator('#graph-node-type').selectOption(node); await page.locator('#graph-add').click();
+    await editor.locator('#graph-node-type').selectOption(node); await editor.locator('#graph-add').click();
   }
   for (const [source, output, target, input] of [['speech', 'final', 'finaltext', 'final'], ['finaltext', 'text', type.toLowerCase(), 'text'], [type.toLowerCase(), 'audio', 'audiooutput', 'audio']]) {
-    await page.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
-    await page.getByRole('button', { name: `${target} input ${input}`, exact: true }).click();
+    await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
+    await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).click();
   }
-  await expect(page.locator('#graph-errors')).toBeEmpty(); await page.locator('#graph-save').click();
+  await expect(editor.locator('#graph-errors')).toBeEmpty(); await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
 }
 export { expect };

@@ -9,7 +9,8 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     const page = await openGraph(f), requests = [], runs = [], errors = [];
     const texts = { ja: 'こんにちは。今日は良い天気です。', en: 'Hello. It is a beautiful day today.' };
     page.on('pageerror', error => errors.push(error.message));
-    page.on('request', request => {
+    page.models.on('pageerror', error => errors.push(error.message));
+    f.context.on('request', request => {
       if (!request.url().startsWith('http')) return;
       const url = new URL(request.url());
       requests.push({ origin: url.origin, path: url.pathname, method: request.method(), hasBody: !!request.postData(), containsText: Object.values(texts).some(text => request.url().includes(text) || request.url().includes(encodeURIComponent(text))) });
@@ -18,12 +19,14 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     const device = await page.evaluate(() => ({ userAgent: navigator.userAgent, isolated: crossOriginIsolated, secure: isSecureContext, cores: navigator.hardwareConcurrency }));
     try {
       await addAudioPath(page, type);
+      await page.editor.getByRole('button', { name: `Select ${type.toLowerCase()}`, exact: true }).click();
       for (const language of ['ja', 'en', 'en']) {
-        if (type === 'Supertonic3') await page.getByLabel('supertonic3 language', { exact: true }).selectOption(language);
-        else await page.getByLabel('kokoro voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');
-        await page.locator('#graph-save').click();
-        await page.locator('#prepare-tts').click();
-        await expect(page.locator('#tts-model-status')).toContainText('Ready', { timeout: 600000 });
+        if (type === 'Supertonic3') await page.editor.getByLabel('supertonic3 language', { exact: true }).selectOption(language);
+        else await page.editor.getByLabel('kokoro voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');
+        await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
+        if (type === 'Kokoro') await page.models.getByLabel('Kokoro 82M voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');
+        await page.models.locator(`#${type.toLowerCase()} button:has-text("Download / retry")`).click();
+        await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Ready', { timeout: 600000 });
         const begin = Date.now(), before = requests.length;
         await startGraph(page, 300000);
         await expect(page.locator('#tts-status')).toContainText('ready (local)', { timeout: 300000 });

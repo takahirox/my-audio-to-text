@@ -1,23 +1,32 @@
-# Extension model-asset cache (#67)
+# Extension Models and model-asset cache (#67 / #77)
 
 Build/load the extension as described in [the extension guide](chrome-extension.md).
-Open **Extension options** from Chrome's extension menu, or **Details → Extension
-options** in `chrome://extensions`. The standalone **Model asset cache** page
-does not start tab capture, initialize ASR or translation, or change the toolbar
-transcription workflow.
+Open **Models** from Live or Graph Editor, or **Extension options** from Chrome's
+extension menu. The options page manages real OPUS-MT Japanese → English,
+OPUS-MT English → Japanese, Supertonic 3 and Kokoro in the existing verified cache.
+ReazonSpeech ja-en and Silero VAD are labeled **Bundled** because their assets
+are packaged with the extension, with no optional download lifecycle.
+Opening Models checks files only; preparation is explicitly user-initiated.
+No capture, inference, remote executable code or automatic weight downloads run.
+Each optional model has independent status, byte progress, error/retry, Cancel,
+Check cache and Delete controls. TTS voice selectors are initialized from saved
+Nodes where present, and never change graph settings. Choose a matching voice
+in Graph Editor, then Save to use it next session. Language/voice and terms are
+shown alongside preparation. Supertonic F1/M1 support Japanese and English;
+Kokoro jf_alpha is Japanese and af_heart is English.
 
-The current demo offers only project-owned `config.json` (46 bytes) and
-`weights.bin` (16,384 bytes), **16,430 bytes total**, plus browser storage overhead.
-These are packaged deterministic fixtures, not a usable model. Preparation reads
-them locally on explicit request; nothing is downloaded on installation or page
-opening. No raw text/audio, account token or inference request is sent anywhere.
+The original #67 project-owned `config.json` (46 bytes) and `weights.bin`
+(16,384 bytes) remain on the separate `extension/cache-demo.html` test fixture
+page. These are **not usable models**. Their cache keys do not establish
+readiness for any production model. They are not offered as installed models
+on the Models screen.
 
 ## Lifecycle and scope
 
 - **Not downloaded** means at least one required file is absent or invalid.
   Each file is shown as Cached or Missing; a partial set is never Ready.
-- **Prepare cache / retry** checks existing files, fetches only missing/invalid
-  files, shows **Downloading** with byte progress, and reports **Ready** after
+- **Download / retry** checks existing files, fetches only missing/invalid
+  files, shows **Downloading** with byte progress, and reports **Ready · Cached and verified** after
   every required file has passed size and hash validation and its write completed.
 - **Error** reports network, integrity, quota or storage access failures. Retry
   preserves valid completed files. An interrupted file is fetched from its start;
@@ -27,7 +36,9 @@ opening. No raw text/audio, account token or inference request is sent anywhere.
   completed write during teardown; the next inspection validates stored bytes.
 - **Check cache** revalidates all files; **Delete cached assets** removes only
   this pinned asset set, leaving other models/revisions intact. Another open
-  options page can refresh with Check cache after deletion or eviction.
+  Models page refreshes after preparation/deletion notifications, on focus, or
+  with Check cache after eviction. TTS voices share model files; deleting a
+  selected voice removes shared weights and may make other voices missing too.
 
 Cache Storage belongs to this **extension origin and Chrome profile**, separate
 from the published Node Playground's website origin. Closing pages or restarting
@@ -106,11 +117,10 @@ Cache API errors are surfaced instead of claiming a successful uncached download
 
 ## Optional large models and terms
 
-The options page remains the #67 fixture demo. The recorder now offers real
-OPUS-MT preparation and optional inference through #69/#71; see
-[the extension guide](chrome-extension.md).
-It uses a complete reviewed immutable manifest and a deliberate download action.
-TranslateGemma remains outside the extension, and model weights are not bundled.
+Models offers production OPUS-MT and TTS preparation through complete reviewed
+immutable manifests and deliberate download actions. Live uses these same cache
+keys for inference, with no redundant model store. TranslateGemma remains
+unavailable in the extension, and optional model weights are not bundled.
 Keep the pinned IDs, revisions and required files from
 [translation nodes](translation-nodes.md); do not use floating `main` URLs.
 Remote asset hosts must meet browser CORS/COEP rules under the current MV3 CSP.
@@ -146,6 +156,7 @@ There is no default multi-GB download or large-model CI smoke for this issue.
 npm ci
 npm run prepare:assets
 npm run prepare:translation-assets # existing Web browser suite prerequisites
+npm run prepare:tts-assets
 npm run build:extension
 npm test
 npm run test:browser

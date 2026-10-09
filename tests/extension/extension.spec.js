@@ -418,3 +418,27 @@ base('packaged extension initializes the real pinned ReazonSpeech/Silero workers
     expect(result.events).toContainEqual({ type: 'configuration', model: 'ja-en', modelName: 'ReazonSpeech ja-en', numThreads: 1 });
   } finally { await context.close(); await rm(profile, { recursive: true, force: true }); }
 });
+
+test('Live navigation opens separate extension pages without stopping or retargeting active native audio', async ({ extension }) => {
+  const page = await setup(extension);
+  await expect(page.locator('#partial')).toHaveText('extension transcript');
+  await page.setViewportSize({ width: 440, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  for (const [name, file] of [['Graph Editor', 'graph-editor.html'], ['Models', 'model-cache.html']]) {
+    const [opened] = await Promise.all([extension.context.waitForEvent('page'), page.getByRole('link', { name, exact: true }).click()]);
+    await opened.waitForURL(`**/extension/${file}`);
+    await expect(opened.getByRole('heading', { name, exact: true })).toBeVisible();
+    await opened.getByRole('button', { name: 'Live window' }).click();
+    await expect(page.locator('#status')).toHaveText('Transcription active');
+    expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);
+    expect(await page.evaluate(() => window.streams.map(s => s.stops))).toEqual([0]);
+    expect(await page.evaluate(() => window.contexts.every(c => c.state === 'running'))).toBe(true);
+    await opened.close();
+  }
+  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await released(page);
+  await page.locator('#copy-final').click(); await expect(page.locator('#copy-status')).toContainText('copied');
+  // Test-only read grant; the product needs no clipboard permission to copy
+  // during a user gesture and does not read the clipboard.
+  await extension.context.grantPermissions(['clipboard-read']);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('extension transcript\n');
+});
