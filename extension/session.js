@@ -1,7 +1,7 @@
 import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
 import { translationDirection } from './translation-preferences.js';
-import { assertGraph, defaultGraph, graphPreferences, withTranslation, FIELD_TYPES, INPUT_TYPES } from './graph.js';
+import { assertGraph, defaultGraph, graphPreferences, withTranslation, INPUT_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
 
 // Owns tab targeting and the window's UI. Nodes own capture and recognition.
@@ -33,13 +33,13 @@ export class TabSession {
     const hasTranslationView = graph.nodes.some(node => node.type === 'TranslationView');
     const sourceType = graph.nodes.find(n => INPUT_TYPES.includes(n.type)).type;
     if (sourceType === 'MicrophoneAudio' && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.' }); return; }
-    for (const node of graph.nodes.filter(n => FIELD_TYPES.includes(n.type) || n.type === 'SelectedPageMediaAudio')) {
+    for (const node of graph.nodes.filter(n => n.type === 'SelectedPageMediaAudio')) {
       const target = this.targets[node.id];
-      if (!target || (node.type === 'SelectedFormFieldTextOutputNode' && !target.fieldId) || (node.type === 'SelectedPageMediaAudio' && (!target.mediaId || target.tabId !== tabId))) {
+      if (!target || !target.mediaId || target.tabId !== tabId) {
         this.update({ tabId, error: `Select and authorize the target for ${node.id} in Live before Start.` }); return;
       }
     }
-    const session = { tabId, targets: structuredClone(this.targets), targetStates: {}, sourceType, direction: preferences.direction, translationEnabled: preferences.enabled }; this.session = session;
+    const session = { tabId, targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), sourceType, direction: preferences.direction, translationEnabled: preferences.enabled }; this.session = session;
     this.update({ state: 'loading', tabId, activeGraph: graph, ttsStatus: '', targetStatus: '', displayDirection: session.direction, displayTranslationEnabled: session.translationEnabled,
       translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: 'Loading ReazonSpeech ja-en + Silero…', error: '', partial: '', final: '', signal: '', interimTranslation: null, utterances: [] });
     try {
@@ -51,8 +51,15 @@ export class TabSession {
       }
       Object.assign(session, buildGraph(graph, {
         tabId, targets: session.targets, microphoneStream: session.microphoneStream, pageConnectionFactory: this.pageConnectionFactory,
-        onTargetState: (id, state) => {
-          if (this.session === session && state) { session.targetStates[id] = state; this.update({ targetStatus: Object.entries(session.targetStates).map(([id, status]) => `${id}: ${status}`).join('\n') }); }
+        onTargetState: (id, state, active) => {
+          if (this.session === session && state) {
+            session.targetStates[id] = state;
+            if (active === true) session.activeFieldOutputs.add(id);
+            else if (active === false) session.activeFieldOutputs.delete(id);
+            const statuses = Object.entries(session.targetStates).map(([id, status]) => `${id}: ${status}`);
+            if (!hasTranscriptView && !hasTranslationView && !session.activeFieldOutputs.size) statuses.push('No text destination is active. Select/authorize an output target in Input and output targets for the next session, or add a Live view in Graph Editor.');
+            this.update({ targetStatus: statuses.join('\n') });
+          }
         },
         workerFactory: this.workerFactory, sourceFactory: this.sourceFactory,
         translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
@@ -165,7 +172,7 @@ export class TabSession {
   tabEnded(tabId) {
     for (const [id, target] of Object.entries(this.targets)) if (target.tabId === tabId) delete this.targets[id];
     if (this.session?.tabId === tabId && this.session.sourceType !== 'MicrophoneAudio') void this.stop();
-    else if (this.session && Object.values(this.session.targets).some(target => target.tabId === tabId)) this.update({ targetStatus: 'Output page navigated or closed. Insertion detached; Stop and reselect.' });
+    // Each output port reports its own detachment; preserve peer/skip statuses.
     this.update();
   }
 }

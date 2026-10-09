@@ -6,10 +6,12 @@ import { spawnSync } from 'node:child_process';
 import { Pipeline } from '../web/pipeline.js';
 import { MONO_16KHZ_PCM, TRANSCRIPT } from '../web/transcription-nodes.js';
 import { TabSession } from '../extension/session.js';
+import { defaultGraph, graphNode, edge } from '../extension/graph.js';
 
-function fixture({ holdLoad = false, holdSource = false, sourceError, stopError } = {}) {
+function fixture({ holdLoad = false, holdSource = false, sourceError, stopError, graph, pageConnectionFactory } = {}) {
   const workers = [], sources = [], views = [];
   const session = new TabSession(view => views.push(view), {
+    graph, pageConnectionFactory,
     workerFactory(path) {
       const worker = { path, messages: [], terminated: false,
         postMessage(data) {
@@ -49,6 +51,85 @@ function fixture({ holdLoad = false, holdSource = false, sourceError, stopError 
   return { session, workers, sources, views };
 }
 const drain = () => new Promise(resolve => setImmediate(resolve));
+
+function fieldOutputs({ live = true } = {}) {
+  const graph = defaultGraph({ enabled: false });
+  if (!live) {
+    graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
+    graph.edges = graph.edges.filter(edge => edge.to[0] !== 'transcript');
+  }
+  for (const [id, type] of [['focused', 'FocusedInputTextOutputNode'], ['selected', 'SelectedFormFieldTextOutputNode']]) {
+    graph.nodes.push(graphNode(type, id)); graph.edges.push(edge('speech', 'final', id, 'final'));
+  }
+  return graph;
+}
+
+test('missing field targets start with actionable skip statuses; Stop drains Live, Cancel releases capture, and retry uses fresh targets', async () => {
+  const sent = [];
+  const f = fixture({ graph: fieldOutputs(), pageConnectionFactory: target => ({ request: async (action, value) => sent.push([target, action, value]), close() {} }) });
+  await f.session.start(42);
+  assert.equal(f.session.view.state, 'running'); assert.equal(f.session.view.error, '');
+  for (const label of ['Focused input', 'Selected field']) assert.match(f.session.view.targetStatus, new RegExp(`${label} output skipped: no authorized target`));
+  assert.match(f.session.view.targetStatus, /Input and output targets.*next session/);
+  assert.doesNotMatch(f.session.view.targetStatus, /No text destination/);
+  assert.throws(() => f.session.setTarget('focused', {}), /Stop before/);
+  f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
+  await f.session.stop();
+  assert.equal(f.session.view.final, 'final text\n'); assert.deepEqual(sent, []);
+  f.session.setTarget('focused', { tabId: 99, documentId: 'authorized', label: 'Page' });
+  f.session.setTarget('selected', { tabId: 99, documentId: 'authorized', label: 'Page' });
+  await f.session.start(42);
+  assert.match(f.session.view.targetStatus, /connected and authorized/);
+  assert.match(f.session.view.targetStatus, /Selected field output skipped: no selected field/);
+  f.sources[1].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop();
+  assert.deepEqual(sent.filter(([, action]) => action === 'append').map(([, , value]) => value.text), ['final text']);
+  f.session.setTarget('selected', { tabId: 99, documentId: 'authorized', fieldId: 'picked', label: 'Page', fieldLabel: 'Notes' });
+  await f.session.start(42); assert.doesNotMatch(f.session.view.targetStatus, /skipped/);
+  const before = sent.length; f.session.cancel(); f.sources[2].onAudio(new Float32Array(16000)); await drain();
+  assert.equal(sent.length, before); assert.ok(f.workers.every(worker => worker.terminated));
+  assert.equal(f.sources[2].stops.at(-1), false);
+});
+
+test('field-only graph starts without fallback views and reports when every text destination is inactive', async () => {
+  const f = fixture({ graph: fieldOutputs({ live: false }), pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
+  await f.session.start(42);
+  assert.equal(f.session.view.state, 'running'); assert.equal(f.session.view.error, '');
+  assert.match(f.session.view.targetStatus, /No text destination is active/);
+  assert.equal(f.session.session.pipeline.entries.has('transcript'), false);
+  f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop();
+  assert.equal(f.session.view.final, ''); assert.equal(f.session.view.state, 'idle');
+});
+
+test('target snapshot precedes model loading and stale field startup leaves an authorized peer running', async () => {
+  const sent = [], f = fixture({ graph: fieldOutputs({ live: false }), holdLoad: true,
+    pageConnectionFactory: target => ({ request: async (action, value) => {
+      if (target.documentId === 'stale') throw Error('Permission lost');
+      sent.push([target.documentId, action, value]);
+    }, close() {} }) });
+  f.session.setTarget('selected', { tabId: 99, documentId: 'stale', fieldId: 'picked', label: 'Page' });
+  const starting = f.session.start(42);
+  f.session.targets.focused = { tabId: 99, documentId: 'later', label: 'Page' };
+  f.session.targets.selected.documentId = 'later';
+  f.workers.forEach(worker => worker.reply({ type: 'ready' })); await starting;
+  assert.equal(f.session.view.state, 'running'); assert.deepEqual(sent, []);
+  assert.match(f.session.view.targetStatus, /Permission lost/); assert.match(f.session.view.targetStatus, /No text destination is active/);
+  await f.session.stop();
+  const retry = f.session.start(42); f.workers.slice(2).forEach(worker => worker.reply({ type: 'ready' })); await retry;
+  assert.doesNotMatch(f.session.view.targetStatus, /skipped|No text destination/);
+  const selected = f.session.session.pipeline.entries.get('selected').node;
+  selected.failure('Page removed');
+  assert.equal(f.session.view.state, 'running'); assert.doesNotMatch(f.session.view.targetStatus, /No text destination/);
+  f.session.session.pipeline.entries.get('focused').node.failure('Permission lost');
+  assert.match(f.session.view.targetStatus, /No text destination is active/);
+  f.session.cancel();
+});
+
+test('selected media input still requires its target before model or capture startup', async () => {
+  const graph = fieldOutputs(); graph.nodes[0].type = 'SelectedPageMediaAudio';
+  const f = fixture({ graph }); await f.session.start(42);
+  assert.match(f.session.view.error, /Select and authorize.*audio/);
+  assert.equal(f.workers.length, 0); assert.equal(f.sources.length, 0);
+});
 
 test('extension session emits provisional/final output, flushes once and clears repeat transcripts', async () => {
   const { session, workers, sources } = fixture();
