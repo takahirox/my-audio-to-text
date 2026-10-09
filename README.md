@@ -49,6 +49,12 @@ Microphone or browser-tab audio feeds normalized PCM into the documented [local 
 
 See [setup, testing, and limitations](docs/asr-manual-testing.md). Automated Chromium/WebKit checks cover list navigation, loading, provisional/final output, Stop, Cancel, repeat, worker isolation, and stale-result rejection. The [Issue #45 validation record](docs/evidence/reazon-45.md) records the baseline checks; [Issue #59 validation](docs/evidence/playground-pipeline-59.md) covers the pipeline migration; [Issue #63 validation](docs/evidence/node-playground-63.md) covers the node list and nested speech page, with required post-merge Pages verification pending. The [Issue #65 validation record](docs/evidence/translation-65.md) records deterministic translation checks and real OPUS-MT/TranslateGemma browser inference, with post-merge Pages verification pending. The [historical acceptance record](docs/asr-acceptance.md) and [experiment evidence](docs/evidence/) preserve completed comparisons and publication observations; they are not instructions for the current baseline.
 
+To build and install the Chrome extension from a fresh checkout, run
+`npm run setup:extension`, then open `chrome://extensions`, turn on Developer
+mode, and **Load unpacked** from `dist/chrome-extension/`. For subsequent code-only
+changes with prepared assets, use `npm run build:extension` and reload the extension.
+See the [full setup guide](docs/chrome-extension.md#build-and-load-unpacked).
+
 A minimal [Chrome extension PoC](docs/chrome-extension.md) starts current-tab
 transcription from the toolbar without the sharing picker. It reuses the Web
 ASR core and audio helpers, restores audible tab playback, and shows transcripts
