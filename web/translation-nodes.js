@@ -1,7 +1,5 @@
-import { portContract } from './pipeline.js';
-
-// Plain strings, no payload envelopes or graph metadata.
-export const TEXT = portContract('text');
+import { TEXT } from './port-contracts.js';
+export { TEXT } from './port-contracts.js';
 
 // Private transport only: every node instance owns its Worker and pending RPCs.
 class WorkerTranslationNode {

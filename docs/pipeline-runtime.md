@@ -245,3 +245,11 @@ builder constructs this shared Pipeline at each session boundary. ASR, OPUS-MT
 directions, Supertonic 3 and Kokoro remain independent production processors;
 final-text adapters and audio playback are separate Nodes. No editor, model
 selection, storage or inference policy is added to the generic Pipeline runtime.
+
+## Optional transcript correction
+
+`SpeechTranscriptCorrectionNode` owns a Qwen3 0.6B Worker and exposes plain
+`TEXT` input/output. Connect `SpeechToTextNode.final` through the explicit
+`FinalTranscriptTextNode` adapter; preserve a separate original transcript
+branch. It can be omitted or explicitly bypassed, with no default graph or
+extension change. See [model, lifecycle, conservative policy and evaluation](correction-node.md).

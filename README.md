@@ -26,6 +26,14 @@ Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox
 
 The published entry point lists available processor nodes. Select [Speech-to-Text (ReazonSpeech ja-en)](https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/) to open its individual test page. It runs the actual `SpeechToTextNode` through the Node/Port pipeline, with microphone or browser-tab sources and a transcript sink. The model and processing policy are fixed; there is no model comparison selector. The index also lists separate OPUS-MT Japanese → English / English → Japanese and TranslateGemma 4B Japanese → English pages, each running its production node in an owned Worker. See [pinned models, setup, terms and real-model tests](docs/translation-nodes.md) and the [page convention and how to add another node](docs/node-playground.md).
 
+The optional [Qwen3 transcript correction Node](docs/correction-node.md) runs
+text-only candidates in a dedicated local WebGPU Worker, with a separate
+original branch and explicit bypass. Its [Playground page](web/nodes/qwen3-correction/index.html)
+compares original and candidate text. Run `npm run prepare:correction-assets`;
+Generate downloads about 579 MB unless cached. This is an evaluation processor,
+not acoustic verification or a guaranteed quality improvement. See
+[real Japanese/English safety and error results](docs/evidence/correction-78.md).
+
 Independent [Supertonic 3](web/nodes/supertonic3/index.html) and
 [Kokoro 82M](web/nodes/kokoro/index.html) text-to-speech Nodes also run through
 the Pipeline, with Japanese/English input and playable mono audio at each

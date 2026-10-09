@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qwen3 Transcript Correction · Node Playground</title>
+  <link rel="stylesheet" href="../../style.css">
+  <style>
+    .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .comparison > section { min-width: 0; }
+    @media (max-width: 600px) { .comparison { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <p><a href="../../">Node Playground</a></p>
+  <h1>Qwen3 Transcript Correction</h1>
+  <p>Optional text-only suggestions for short final Japanese or English ASR transcripts. Qwen3 0.6B uses a dedicated local WebGPU Worker (shader-f16 required). Generate downloads about 579 MB of pinned model/tokenizer assets unless cached; cache availability depends on browser quota.</p>
+  <p>Text stays on this device. This processor has no audio and cannot verify words against a recording. Candidates can hallucinate or change meaning, names, numbers or negation. Compare with the original; bypass or remove the Node if it does not help.</p>
+  <label for="input">Final transcript (up to 500 characters)</label>
+  <textarea id="input" rows="4" maxlength="500">今日は良い天気です。</textarea>
+  <p><label for="language">Input language</label>
+    <select id="language"><option value="auto">Preserve input language</option><option value="ja">Japanese</option><option value="en">English</option></select></p>
+  <p><label><input type="checkbox" id="bypass"> Bypass correction (copy original, no model download)</label></p>
+  <div class="controls"><button id="run" disabled>Generate candidate</button><button id="cancel" disabled>Cancel</button></div>
+  <p id="status" role="status" aria-live="polite">Ready to run</p>
+  <p id="errors" role="alert"></p>
+  <p id="cache-status" role="status"></p>
+  <div class="comparison">
+    <section><h2>Original</h2><pre id="original"></pre></section>
+    <section><h2>Candidate / bypass output</h2><pre id="output" aria-live="polite"></pre></section>
+  </div>
+  <p id="change" aria-live="polite"></p>
+  <p>On error or cancellation the original remains available. Select bypass to pass it directly through the Pipeline.</p>
+  <dl><dt>Model loading / initialization</dt><dd id="load-time">—</dd><dt>Generation / pipeline drain</dt><dd id="latency">—</dd></dl>
+  <p><a href="../../third-party-notices.txt">Runtime and model notices</a> · <a href="https://github.com/takahirox/my-audio-to-text/blob/main/docs/correction-node.md">Checkpoint, prompt, limits and evaluation</a></p>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

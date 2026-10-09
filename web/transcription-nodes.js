@@ -1,9 +1,10 @@
 import { BrowserTab, Microphone } from './audio.js';
 import { LocalAsrCore } from './local-asr-core.js';
 import { Pipeline, portContract } from './pipeline.js';
+import { TRANSCRIPT } from './port-contracts.js';
+export { TRANSCRIPT } from './port-contracts.js';
 
 export const MONO_16KHZ_PCM = portContract('mono 16 kHz Float32Array PCM');
-export const TRANSCRIPT = portContract('transcript { text, id }');
 
 // Capture and diagnostics remain source policy, outside the generic runtime.
 class BrowserAudioNode {

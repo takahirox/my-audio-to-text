@@ -9,6 +9,10 @@ practical status/errors. The list includes independent entries:
   microphone or browser-tab audio → `SpeechToTextNode` → provisional/final
   transcript sink, connected through the shared Node/Port pipeline.
 
+- [Qwen3 Transcript Correction (Japanese / English)](https://takahirox.github.io/my-audio-to-text/nodes/qwen3-correction/):
+  final text → `SpeechTranscriptCorrectionNode` → candidate text, with a separate
+  original branch and explicit bypass. See [model, prompt, limits and evaluation](correction-node.md).
+
 - [OPUS-MT Translation (Japanese → English)](https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/):
   plain text → `OpusMtTranslationNode` (local WASM) → translated string sink.
 - [OPUS-MT Translation (English → Japanese)](https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/):
@@ -84,7 +88,10 @@ use the same script/scope after upgrading from the dedicated demo.
 
 Run `npm test`, `npm run test:browser -- --workers=2`, `npm run prepare:assets`,
 `npm run prepare:translation-assets`, `npm run build:extension` and `npm run test:extension`.
-For TTS pages also run `npm run prepare:tts-assets`. The browser suite tests
+For TTS pages also run `npm run prepare:tts-assets`.
+For correction also run `npm run prepare:correction-assets`; the opt-in real
+smoke is `npm run test:correction-real`. #78 deployed verification remains
+[pending](correction-node.md#required-post-merge-verification). The browser suite tests
 the plain static server and a repository-prefix alias without server isolation
 headers. Opt-in real-model checks use the migrated speech page too.
 
