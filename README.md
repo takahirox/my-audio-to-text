@@ -62,6 +62,21 @@ transcripts remain window-local. See its
 guide for building/loading the unpacked extension,
 permissions, lifecycle behavior and automated tests.
 
+From a fresh checkout, build the unpacked extension with one command:
+
+```sh
+npm run setup:extension
+```
+
+Setup installs npm dependencies, downloads/verifies the ASR models and prepares
+translation/TTS runtimes, then produces `dist/chrome-extension/`. Optional
+translation/TTS **weights** download only on demand through **Download / retry**
+in Models. Open `chrome://extensions`, enable **Developer mode**, choose
+**Load unpacked** and select `dist/chrome-extension`. With assets already
+prepared, run `npm run build:extension` after source changes, then click
+**Reload** on the extension's card. See the [extension guide](docs/chrome-extension.md)
+for requirements and usage.
+
 The [Pages workflow](.github/workflows/pages.yml) prepares the pinned ReazonSpeech ja-en/Silero assets and translation runtimes and deploys the entire `web/` tree (the index, nested node pages and shared assets) automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. Inference runs in the browser; speech loading needs about 91 MB of model/runtime assets and no ASR server. Translation weights download explicitly on Run (about 239 MB for OPUS-MT ja-en, 253 MB for OPUS-MT en-ja and 3.112 GB for TranslateGemma); text stays local.
 
 For setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the `github-pages` environment and built-in `GITHUB_TOKEN`.

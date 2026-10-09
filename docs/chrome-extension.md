@@ -48,22 +48,37 @@ and [#77 validation/screenshots](evidence/ui-77.md).
 
 Requirements: Chrome 116 or later, Python 3 and Node.js/npm.
 
+From a fresh checkout, run this single command in the repository root:
+
 ```sh
-npm ci
-npm run prepare:assets
-npm run prepare:translation-assets
-npm run prepare:tts-assets
-npm run build:extension
+npm run setup:extension
 ```
 
-Asset preparation downloads and verifies the existing pinned approximately
-91 MB runtime/model distribution. Building copies the maintained Web pipeline,
+It runs `npm ci`, `prepare:assets`, `prepare:translation-assets`,
+`prepare:tts-assets` and `build:extension` in that order, stopping at the first
+failure. ASR preparation recreates `web/vendor/`, so translation preparation
+must follow it. The individual npm scripts remain available.
+
+Asset preparation needs network access on a fresh checkout: it downloads and
+verifies the pinned ASR models and runtimes, staging an approximately
+91 MB ASR runtime/model distribution. Building copies the maintained Web pipeline,
 nodes, core, workers, configuration, capture helpers, models and license notices
 into `dist/chrome-extension/`. Translation preparation adds about 28 MB of
 checksum-pinned runtime JS/MJS/WASM. TTS preparation stages about 77 MB of reviewed
-runtimes/frontends plus corresponding source; OPUS-MT/TTS weights are not bundled. These
-generated files are ignored by Git. Rebuild
-after source changes; reload the extension in Chrome after rebuilding.
+runtimes/frontends plus corresponding source. Optional OPUS-MT translation and
+TTS **weights** are downloaded only on demand through **Download / retry** in
+Models; setup does not download or bundle them. These generated files are
+ignored by Git.
+
+Once assets are prepared, use the quick packaging command after source changes:
+
+```sh
+npm run build:extension
+```
+
+After rebuilding, open `chrome://extensions` and click **Reload** on the
+extension's card. This reloads the unpacked `dist/chrome-extension` directory;
+loading it again is unnecessary.
 
 1. Open `chrome://extensions` and enable **Developer mode**.
 2. Choose **Load unpacked** and select **`dist/chrome-extension`** (the directory
@@ -157,13 +172,10 @@ automatic teardown when the user returns to the meeting.
 ## Automated checks
 
 ```sh
+npm run setup:extension
 npx playwright install chromium webkit
 npm test
 npm run test:browser
-npm run prepare:assets
-npm run prepare:translation-assets
-npm run prepare:tts-assets
-npm run build:extension
 npm run test:extension
 ```
 

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "setup:extension": "npm ci && npm run prepare:assets && npm run prepare:translation-assets && npm run prepare:tts-assets && npm run build:extension",
     "build:extension": "python3 scripts/build-extension.py",
     "test:extension": "playwright test --config playwright.extension.config.js",
     "prepare:correction-assets": "python3 scripts/prepare-correction-assets.py",
