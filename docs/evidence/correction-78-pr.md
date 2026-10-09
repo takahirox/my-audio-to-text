@@ -28,6 +28,8 @@ Pin the Qwen3 checkpoint/tokenizer revision, q4f16 assets and existing verified 
 
 Related to #78
 
+Closing reference after required verification: `Closes #78`.
+
 The Issue is **not fully verified or resolved**: post-merge Pages verification is pending, and no correction-quality improvement is claimed. Keep the PR in draft during review of these limitations. Keep #78 open until the required post-merge verification has been performed and recorded.
 
 ## Scope check
