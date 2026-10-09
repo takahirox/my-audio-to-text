@@ -55,7 +55,7 @@ const test = base.extend({
       context = await launch(profile);
       const id = await load(context, root);
       const fixture = { context, id, requests, mode(value) { mode = value; },
-        url: `chrome-extension://${id}/extension/model-cache.html`,
+        url: `chrome-extension://${id}/extension/cache-demo.html`,
         async restart() {
           await context.close(); context = await launch(profile);
           expect(await load(context, root)).toBe(id);
@@ -192,7 +192,7 @@ test('two cache pages coordinate preparation and deletion through extension-orig
   await second.locator('#check').click(); await expect(second.locator('#cache-status')).toHaveText('Not downloaded');
 });
 
-base('unmodified packaged options page prepares project-owned fixtures without capture, inference or remote requests', async () => {
+base('unmodified packaged cache fixture page prepares project-owned fixtures without capture, inference or remote requests', async () => {
   const profile = await mkdtemp(path.join(tmpdir(), 'packaged-cache-demo-'));
   const context = await launch(profile);
   try {
@@ -200,7 +200,7 @@ base('unmodified packaged options page prepares project-owned fixtures without c
     const requests = [], errors = [];
     page.on('request', request => requests.push(request.url()));
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(`chrome-extension://${id}/extension/model-cache.html`);
+    await page.goto(`chrome-extension://${id}/extension/cache-demo.html`);
     await expect(page.locator('#cache-status')).toHaveText('Not downloaded');
     await prepare(page);
     expect(requests.every(url => url.startsWith(`chrome-extension://${id}/`))).toBe(true);

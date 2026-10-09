@@ -1,29 +1,44 @@
 # Executable extension processing graphs (#75)
 
-Open **Processing graph editor** in the recorder window. Choose a concrete Node
-and click **Add Node**; drag its heading (or use arrow keys) to move it. Click an
-output port, then a compatible named input port to connect them. Disconnect a
-link in the list below the canvas; Remove deletes a Node and its edges. Settings
-are the explicit language/voice of the concrete TTS Node and the transcript
-view's language direction. OPUS-MT directions are separate Node types.
+Open **Graph Editor** from Live or Models. It opens a separate full-size
+extension tab. The left **Nodes** palette lists every supported concrete Node;
+use its buttons or the Add Node selector. Drag a heading (or focus it and use
+arrow keys) to move a Node. Click an output then a compatible named input, or
+drag between ports, to connect. Ports show their contract types; incompatible
+inputs are disabled during connection. Escape cancels a selected port. Use the
+canvas scrollbars and **Canvas zoom** to navigate a large graph. Disconnect a
+link below the canvas; Remove deletes a Node and its edges. Select a heading to
+edit language/voice in the right **Settings** inspector. OPUS-MT directions are
+separate executable Node types.
 
-**Save graph** validates and stores the draft in extension-origin localStorage.
-**Load saved** discards unsaved edits; **Reset draft to default** creates a recovery
-draft, which still needs Save. The editor distinguishes unsaved draft, saved
-next-session graph and immutable active-session graph. Saving during capture
+**Validate draft** reports connection/settings errors. **Save graph** validates
+and stores the draft in extension-origin localStorage. **Load saved** discards
+unsaved edits; **Reset draft to default** creates a recovery draft, which still
+needs Save. The status distinguishes unsaved draft, saved next-session graph
+and immutable active-session graph, queried from Live. Saving during capture
 never changes Nodes, Workers, languages or routes in that session. Stop/finalize
-or Cancel, then start again to use the saved graph. Recreated recorder windows
-and Chrome restarts in the same profile load it. Transcripts/audio are never
-persisted. Closing/reloading releases capture/Workers and revokes audio URLs.
+or Cancel, then Start again to use the saved graph. Opening or closing the editor
+or Models does not start, stop or retarget capture. **Live window** focuses the
+existing recorder; without one, it explains how to invoke the toolbar.
+
+Saved edits refresh other open pages. If another editor saves while this page
+has a dirty draft, the draft stays intact and a conflict message requires
+**Load saved** before saving. Saves compare the stored graph while holding a
+Web Lock, preventing a racing editor from silently overwriting a newer graph.
+Finish one editor's changes at a time; copy any desired draft settings before
+Load saved. Recreated windows and Chrome restarts in the same profile retain the
+saved graph. Drafts remain page-local. Transcripts/audio are never persisted.
+Closing/reloading Live releases capture/Workers and revokes audio URLs.
 
 Fresh installs use current-tab audio → SpeechToText → original transcript,
 with an OPUS-MT Japanese → English paired translation branch. Existing boolean
 translation enablement/direction preferences migrate once, including a saved
-transcription-only choice. The recorder checkbox/direction controls edit this
-same saved graph; they do not store a second set of translation preferences.
-Removing OPUS-MT also removes its view and any dependent translated-audio branch.
-A missing/corrupt/unknown-version saved graph displays an error and prevents
-Start until a valid graph is saved. Storage failures remain visible.
+transcription-only choice. The editor's **Draft translation** controls edit this
+same graph and require Save; there is no second preferences store. Removing
+OPUS-MT also removes its view and dependent translated-audio branch.
+A corrupt/unknown-version saved graph displays an error and prevents Start
+until a valid graph is saved. Reset and Save in the editor to recover. Storage
+failures remain visible.
 
 ## Supported graph and ports
 
@@ -68,16 +83,17 @@ snippets of at most 300 UTF-16 units without splitting surrogate pairs; this
 respects production TTS's input limit. Choose the language/voice matching that
 text. This is not automatic language/voice detection.
 
-Add a TTS Node and select it in **TTS model preparation**. Its cache readiness
-is inspected without downloading. **Download TTS assets** explicitly prepares
-only its pinned checkpoint and selected voice: Supertonic 3 approximately
-399 MB; Kokoro approximately 93 MB. Cancel/retry preserves verified files.
-Preparation snapshots the selected Node's settings; subsequent draft changes
-do not change an in-flight download. Runtime, Japanese dictionary/voice frontend,
-WASM and matching eSpeak NG source/build bundle are packaged under the existing
-MV3 CSP. Weights are never bundled or silently downloaded during Start/inference.
+Use **Models** to inspect and prepare TTS assets. Select the same voice as the
+TTS Node's inspector settings, then **Download / retry** explicitly prepares
+only its pinned checkpoint and that voice: Supertonic 3 approximately 399 MB;
+Kokoro approximately 93 MB. Both models can be managed without adding a Node.
+Cancel/retry preserves verified files. Model-page voice selection does not edit
+the saved graph. Voice variants share weights; deleting a variant can make
+another voice unavailable. Runtime, Japanese dictionary/voice frontend, WASM
+and matching eSpeak NG source/build bundle are packaged under the existing MV3
+CSP. Weights are never bundled or silently downloaded during Start/inference.
 See [reviewed manifests](../extension/tts-cache.js),
-[TTS terms/frontends](tts-nodes.md), and the linked notices/source in the editor.
+[TTS terms/frontends](tts-nodes.md), and the linked notices/source in Models.
 
 Every session creates fresh production TTS Nodes and owned Workers. A small
 branch lifecycle adapter verifies assets before startup and reports missing

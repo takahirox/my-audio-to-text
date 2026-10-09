@@ -210,6 +210,9 @@ with tempfile.TemporaryDirectory() as tmp:
     assert (target / 'extension' / 'tab-audio-node.js').is_file()
     assert (target / 'web' / 'tts-assets' / 'phonemizer-source.tar.gz').is_file()
     assert (target / 'extension' / 'graph-editor.js').is_file()
+    assert (target / 'extension' / 'graph-editor.html').is_file()
+    assert (target / 'extension' / 'graph-page.js').is_file()
+    assert (target / 'extension' / 'navigation.js').is_file()
     assert (target / 'extension' / 'model-cache.html').is_file()
     assert (target / 'extension' / 'cache-demo' / 'weights.bin').stat().st_size == 16384
     for name in build.SHARED_FILES:

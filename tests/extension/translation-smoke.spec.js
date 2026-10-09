@@ -54,21 +54,16 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
     await recorder.locator('#stop').click(); await expect(recorder.locator('#start')).toBeEnabled();
     capabilities = await recorder.evaluate(() => ({ userAgent: navigator.userAgent, isolated: crossOriginIsolated,
       wasm: typeof WebAssembly === 'object', worker: typeof Worker === 'function', cache: !!globalThis.caches }));
-    await recorder.exposeFunction('logPreparation', value => console.log(`Real OPUS preparation: ${value}`));
-    await recorder.evaluate(() => {
-      let last = -1;
-      new MutationObserver(() => {
-        const progress = document.querySelector('#model-progress');
-        const bucket = Math.floor(progress.value / 25000000);
-        if (bucket !== last) { last = bucket; window.logPreparation(`${progress.value} / ${progress.max} bytes`); }
-      }).observe(document.querySelector('#model-bytes'), { childList: true });
-    });
-    await recorder.locator('#translation-direction').selectOption(direction);
-    await recorder.locator('#prepare-opus').click();
-    await expect(recorder.locator('#model-status')).toHaveText(/^(Ready|Error.*)$/, { timeout: 600000 });
-    cacheState = await recorder.locator('#model-status').textContent();
-    expect(cacheState, 'Real remote asset download/CORS/COEP/quota failure').toBe('Ready');
-    await recorder.locator('#translation-enabled').check();
+    const editor = await context.newPage(); await editor.goto(`chrome-extension://${id}/extension/graph-editor.html`);
+    const models = await context.newPage(); await models.goto(`chrome-extension://${id}/extension/model-cache.html`);
+    const card = models.locator(`#opus-${direction}`);
+    await editor.locator('#translation-direction').selectOption(direction);
+    await editor.locator('#translation-enabled').check(); await editor.locator('#graph-save').click();
+    await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+    await card.getByRole('button', { name: 'Download / retry', exact: true }).click();
+    await expect(card.locator('.model-status')).toHaveText(/^(Ready|Error.*)/, { timeout: 600000 });
+    cacheState = await card.locator('.model-status').textContent();
+    expect(cacheState, 'Real remote asset download/CORS/COEP/quota failure').toContain('Ready');
     for (let run = 0; run < 2; run++) {
       const before = requests.length;
       if (run) {
@@ -81,8 +76,8 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
         recorder.on('pageerror', error => errors.push(error.message));
         await expect(recorder.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
         await recorder.locator('#stop').click(); await expect(recorder.locator('#start')).toBeEnabled();
-        await expect(recorder.locator('#model-status')).toHaveText('Ready', { timeout: 30000 });
-        await recorder.locator('#translation-enabled').check();
+        await card.getByRole('button', { name: 'Check cache', exact: true }).click();
+        await expect(card.locator('.model-status')).toContainText('Ready', { timeout: 30000 });
       }
       await recorder.locator('#start').click();
       await expect(recorder.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
@@ -107,7 +102,7 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
       await expect.poll(() => meeting.locator('#audio').evaluate(audio => audio.ended), { timeout: 60000 }).toBe(true);
       await recorder.locator('#stop').click(); await expect(recorder.locator('#start')).toBeEnabled({ timeout: 120000 });
       const finals = await recorder.locator('#paired-finals li').evaluateAll(rows => rows.map(row => ({
-        original: row.children[0].textContent, translated: row.children[1].textContent,
+        original: row.querySelectorAll('pre')[0].textContent, translated: row.querySelectorAll('pre')[1].textContent,
       })));
       // Exercise representative ordinary English through the production Pipeline,
       // Node/Worker and extension-only verified cache, online and after recreation
