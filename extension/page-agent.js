@@ -1,4 +1,4 @@
-// Injected only after an explicit page-target action, in Chrome's ISOLATED world.
+// Injected only for the toolbar-invoked top-level document, in Chrome's ISOLATED world.
 // No page-world messages, evaluated strings, HTML insertion or frame traversal.
 (() => {
   if (globalThis.localTextPageAgent) return;
@@ -11,9 +11,9 @@
     const id = crypto.randomUUID(); targets.set(id, new WeakRef(element)); return id;
   };
   const describe = element => `${element.localName}${element.id ? ` #${element.id.slice(0, 80)}` : ''}${element.getAttribute('aria-label') ? ` · ${element.getAttribute('aria-label').slice(0, 80)}` : ''}`;
-  const sensitive = /password|passcode|payment|credit|cc-|card.?number|cvc|cvv|security|one.?time|otp|verification|social.?security|ssn|bank|routing|account.?number/i;
+  const sensitive = /password|passcode|\bauth(?:entication)?\b|\blogin\b|\busername\b|\bpin\b|\biban\b|\bbic\b|\bswift\b|financial|transaction|payment|credit|cc-|card.?number|cvc|cvv|security|one.?time|otp|verification|social.?security|ssn|bank|routing|account.?number/i;
   function editable(element) {
-    if (!(element instanceof HTMLElement) || !element.isConnected || element.ownerDocument !== document) return false;
+    if (!(element instanceof HTMLElement) || !element.isConnected || element.ownerDocument !== document || element.getRootNode() !== document) return false;
     if (element.closest('[hidden],[inert],[aria-hidden="true"],[aria-disabled="true"],[aria-readonly="true"]') || element.getClientRects().length === 0) return false;
     for (let ancestor = element; ancestor; ancestor = ancestor.parentElement) {
       const style = getComputedStyle(ancestor);
@@ -27,6 +27,7 @@
     // :disabled includes state inherited from a fieldset and respects legend exceptions.
     if (element instanceof HTMLInputElement) return ['text', 'search'].includes(element.type) && !element.matches(':disabled') && !element.readOnly;
     if (element instanceof HTMLTextAreaElement) return !element.matches(':disabled') && !element.readOnly;
+    if (element.querySelector('input,textarea,iframe,img,video,canvas,[contenteditable="false"],[data-lexical-editor],.ProseMirror,.ql-editor') || element.matches('[data-lexical-editor],.ProseMirror,.ql-editor')) return false;
     return element.isContentEditable && element.getAttribute('contenteditable') !== 'false' && !element.closest('[role="textbox"][aria-readonly="true"]');
   }
   function field(element) {
@@ -35,12 +36,42 @@
     }
     return element;
   }
+  // Keep only an actually focused element, never search for arbitrary fields.
+  // Chrome retains activeElement while Live steals window focus. Some editors
+  // blur on window deactivation; retain their last trusted focus in that case.
+  let previousFocus = editable(field(document.activeElement)) ? field(document.activeElement) : null;
+  document.addEventListener('focusin', event => {
+    if (!event.isTrusted) return;
+    const element = field(event.composedPath()[0]);
+    previousFocus = editable(element) ? element : null;
+  }, true);
+  document.addEventListener('focusout', event => {
+    if (!event.isTrusted) return;
+    if (event.relatedTarget) previousFocus = null;
+    else queueMicrotask(() => { if (document.hasFocus()) previousFocus = null; });
+  }, true);
+  document.addEventListener('pointerdown', event => {
+    if (!event.isTrusted) return;
+    // A deliberate click elsewhere supersedes old focus, even on a nonfocusable
+    // element. Dynamic comment activation will then provide a real focusin.
+    if (field(event.composedPath()[0]) !== previousFocus) previousFocus = null;
+  }, true);
+  window.addEventListener('pagehide', () => { previousFocus = null; });
+  function focusedField() {
+    const active = field(document.activeElement);
+    // Frames and unsupported controls supersede retained focus even if blurred.
+    if (active && ![document.body, document.documentElement].includes(active)) {
+      return active.shadowRoot ? null : active;
+    }
+    return !document.hasFocus() && editable(previousFocus) ? previousFocus : null;
+  }
   function append(element, text) {
-    if (!editable(element)) throw Error('Target is missing, sensitive, hidden or not editable. Stop and reselect a supported text field.');
+    if (!editable(element)) throw Error('Target is missing, sensitive, hidden or not editable. Focus a supported text field or use Live Copy.');
     const value = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : element.textContent;
     const inserted = (value && !/\s$/.test(value) ? ' ' : '') + text;
     if (!element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: inserted }))) throw Error('The editor rejected text insertion. Use another field or Live copy.');
-    if (!editable(element)) throw Error('Field changed during insertion. Stop and reselect.');
+    if (!editable(element) || focusedField() !== element) throw Error('Field changed during insertion. Focus the field again or use Live Copy.');
+    if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : element.textContent) !== value) throw Error('The editor changed its content during beforeinput. Use Live Copy.');
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
       // Native setter plus input/change supports ordinary controlled inputs.
       const prototype = element instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
@@ -71,10 +102,10 @@
   }
   chrome.runtime.onConnect.addListener(port => {
     if (port.name !== 'local-page-target' || port.sender?.id !== chrome.runtime.id) return;
-    let disposed = false, output, capture, cancelPicker;
+    let disposed = false, output, capture;
     const post = message => { if (!disposed) { try { port.postMessage(message); } catch { cleanup(); } } };
     function cleanup() {
-      disposed = true; cancelPicker?.(); cancelPicker = null;
+      disposed = true;
       capture?.stop(); capture = null; output = null;
     }
     port.onDisconnect.addListener(cleanup);
@@ -83,38 +114,18 @@
         case 'describe': return { label: document.title.slice(0, 80) || 'Authorized page', frame: 'top frame' };
         case 'discover': return [...document.querySelectorAll('audio,video')].map((element, index) => ({ id: identify(element), label: `${index + 1} · ${describe(element)}`, error: mediaError(element) }));
         case 'forget': targets.delete(message.target); return true;
-        case 'pick': {
-          cancelPicker?.();
-          return new Promise((resolve, reject) => {
-            const hint = document.createElement('div'); hint.textContent = 'Local transcription: click an editable field to select it. Escape cancels.';
-            Object.assign(hint.style, { position: 'fixed', top: '0', left: '0', zIndex: '2147483647', padding: '12px', background: '#142233', color: 'white', pointerEvents: 'none' });
-            document.documentElement.append(hint);
-            const done = () => { document.removeEventListener('click', click, true); document.removeEventListener('keydown', key, true); hint.remove(); clearTimeout(timer); cancelPicker = null; };
-            const click = event => {
-              event.preventDefault(); event.stopImmediatePropagation();
-              if (!event.isTrusted) return;
-              const element = field(event.target);
-              if (!editable(element)) { hint.textContent = 'Unsupported or sensitive field. Choose a visible text input, textarea or basic contenteditable; Escape cancels.'; return; }
-              done(); resolve({ id: identify(element), label: describe(element) });
-            };
-            const key = event => { if (event.key === 'Escape') { event.preventDefault(); done(); reject(Error('Field picker canceled.')); } };
-            const timer = setTimeout(() => { done(); reject(Error('Field picker expired. Pick again.')); }, 60000);
-            cancelPicker = () => { done(); reject(Error('Field picker canceled.')); };
-            document.addEventListener('click', click, true); document.addEventListener('keydown', key, true);
-          });
-        }
         case 'output': {
-          const element = message.target && targets.get(message.target)?.deref();
-          if (message.mode === 'selected' && !editable(element)) throw Error('Selected field disappeared or became unsupported. Stop and pick again.');
-          if (!['selected', 'focused'].includes(message.mode)) throw Error('Invalid output mode.');
-          output = { mode: message.mode, element, seen: new Set(), last: -1 }; return true;
+          output = { last: -1 }; return true;
         }
         case 'append': {
-          if (!output || !Number.isSafeInteger(message.sequence) || message.sequence < 0 || typeof message.key !== 'string' || typeof message.text !== 'string' || message.text.length > 100000) throw Error('Invalid or inactive output session.');
-          if (output.seen.has(message.key) || message.sequence <= output.last) return { duplicate: true };
+          if (!output || !Number.isSafeInteger(message.sequence) || message.sequence < 0 || typeof message.text !== 'string' || message.text.length > 100000) throw Error('Invalid or inactive output session.');
+          if (message.sequence <= output.last) return { duplicate: true };
           // Mark before editing: never retry an ambiguous DOM side effect.
-          output.seen.add(message.key); output.last = message.sequence;
-          append(output.mode === 'selected' ? output.element : field(document.activeElement), message.text); return { inserted: true };
+          output.last = message.sequence;
+          const element = focusedField();
+          if (!editable(element)) return { skipped: 'Focus a visible text/search input, textarea or basic contenteditable in the toolbar tab. Sensitive, hidden, disabled and frame fields are unsupported; use Live Copy.' };
+          try { append(element, message.text); return { inserted: true }; }
+          catch (error) { return { skipped: error.message }; }
         }
         case 'capture': {
           if (capture) throw Error('Media capture already active.');
@@ -155,7 +166,7 @@
             capture = { stop }; return true;
           } catch (error) { stop(); throw Error(`Element audio unavailable: ${error.message}. Use Chrome tab audio where permitted.`); }
         }
-        case 'stop': capture?.stop(); capture = null; output = null; cancelPicker?.(); return true;
+        case 'stop': capture?.stop(); capture = null; output = null; return true;
         default: throw Error('Unknown page operation.');
       }
     }

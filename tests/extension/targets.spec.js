@@ -15,9 +15,11 @@ function wav(frequency) {
 const fixture = `<title>Controlled input/output fixture</title>
 <button id="play">Play both</button><audio id="first" src="/440.wav" loop controls></audio><audio id="second" src="/880.wav" loop controls></audio>
 <form id="ordinary"><label>Notes <input id="focused" value="manual"></label><textarea id="chosen">existing</textarea><button type="submit">Submit</button></form>
-<div id="editable" contenteditable="true">draft</div><input id="password" type="password"><input id="card" autocomplete="cc-number"><input id="hidden" hidden><input id="readonly" readonly>
-<form><label>Security code<input id="security"></label><input type="password"></form><iframe src="/frame"></iframe>
+<div id="editable" contenteditable="true">draft</div><input id="search" type="search" value="query"><button id="activate-comment">Add a comment</button><div id="comment-shell"></div><input id="password" type="password"><input id="card" autocomplete="cc-number"><input id="iban" name="iban"><input id="hidden" hidden><input id="readonly" readonly>
+<div id="shadow-host"></div><form><label>Security code<input id="security"></label><input type="password"></form><iframe src="/frame"></iframe>
 <script>document.querySelector('#play').onclick=()=>Promise.all([...document.querySelectorAll('audio')].map(a=>a.play()));
+document.querySelector('#activate-comment').onclick=()=>{document.querySelector('#comment-shell').innerHTML='<div id="comment" contenteditable="true" role="textbox" aria-label="Comment"><span></span><br></div>'; document.querySelector('#comment').focus()};
+document.querySelector('#shadow-host').attachShadow({mode:'open'}).innerHTML='<input id="shadow-field">';
 window.submits=0;document.querySelector('form').onsubmit=e=>{e.preventDefault();window.submits++}; window.edits=[];
 document.addEventListener('input',e=>edits.push(e.target.id));</script>`;
 const test = base.extend({
@@ -39,7 +41,7 @@ const test = base.extend({
           if(data.type==='decode'){postMessage({type:data.final?'final':'partial',text:data.final?'confirmed fixture':'pending fixture',session:data.session,id:data.id});postMessage({type:'decoded',session:data.session});}
         };`);
       for (const name of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(root, 'web', name), `self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready',id:data.id});if(data.type==='translate')postMessage({type:'result',id:data.id,texts:['translated '+data.text]});if(data.type==='drain')postMessage({type:'drained',id:data.id});};`);
-      context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
+      context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: false,
         ignoreDefaultArgs: ['--disable-extensions', '--mute-audio'], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream'] });
       const cdp = await context.browser().newBrowserCDPSession(), { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
       const page = await context.newPage(); await page.goto(`chrome-extension://${id}/extension/recorder.html`);
@@ -54,11 +56,16 @@ const test = base.extend({
         };
       });
       const website = await context.newPage(); await website.goto(`http://127.0.0.1:${server.address().port}/`);
+      // Live lives in its own actual browser popup, as in toolbar-created UX.
+      await page.evaluate(async () => { const tab = await chrome.tabs.getCurrent(); await chrome.windows.create({ tabId: tab.id, type: 'popup', width: 620, height: 800 }); });
+      // Playwright enables focus emulation by default (every page appears focused).
+      // Disable it to exercise actual browser focus and trusted blur/focus events.
+      for (const target of [page, website]) await (await context.newCDPSession(target)).send('Emulation.setFocusEmulationEnabled', { enabled: false });
       const invoke = async (target = website) => {
         await target.bringToFront(); // Match an actual toolbar click on this tab.
         const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
         await cdp.send('Extensions.triggerAction', { id, targetId: targetInfos.find(info => info.url === target.url()).targetId });
-        await page.waitForTimeout(100);
+        if (!page.isClosed()) await page.waitForTimeout(100);
       };
       const graph = async ({ source = 'ChromeTabAudio', outputs = [], translation = false, live = true } = {}) => {
         await page.evaluate(async ({ source, outputs, translation, live }) => {
@@ -68,7 +75,11 @@ const test = base.extend({
             const views = graph.nodes.filter(node => ['TranscriptView', 'TranslationView'].includes(node.type)).map(node => node.id);
             graph.nodes = graph.nodes.filter(node => !views.includes(node.id)); graph.edges = graph.edges.filter(edge => !views.includes(edge.to[0]));
           }
-          for (const [id, type, translated] of outputs) { graph.nodes.push(graphNode(type, id)); graph.edges.push(edge(translated ? 'translation' : 'speech', 'final', id, translated ? 'translatedFinal' : 'final')); }
+          for (const [id, type, translated] of outputs) {
+            const textId = id + '-text';
+            graph.nodes.push(graphNode(type, id), graphNode(translated ? 'TranslatedFinalText' : 'FinalText', textId));
+            graph.edges.push(edge(translated ? 'translation' : 'speech', 'final', textId, 'final'), edge(textId, 'text', id, 'text'));
+          }
           saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
         }, { source, outputs, translation, live });
       };
@@ -81,174 +92,163 @@ const row = (page, id) => page.locator(`[data-target-node="${id}"]`);
 async function stop(t) {
   if (await t.page.locator('#stop').isEnabled()) { await t.page.locator('#stop').click(); await expect(t.page.locator('#start')).toBeEnabled(); }
 }
-async function authorize(t, id) {
-  // Toolbar invocation starts valid graphs even before optional targets exist.
-  await stop(t);
-  await row(t.page, id).getByRole('button', { name: 'Authorize capture tab for output' }).click(); await expect(row(t.page, id)).toContainText('Controlled input/output fixture');
-}
-async function pick(t, id, selector) {
-  await row(t.page, id).getByRole('button', { name: 'Pick field', exact: true }).click();
-  await expect(t.website.getByText('Local transcription: click an editable field')).toBeVisible();
-  await t.website.locator(selector).click(); await expect(row(t.page, id)).toContainText(selector);
-}
 async function emit(t, id, text, type = 'final') { await t.page.evaluate(({ id, text, type }) => window.activeSpeech.receiveEvent({ type, id, text }), { id, text, type }); }
 
-test('missing targets skip both sink types without page operations; no fallback destination, capture drain, Cancel and next-session retry', async ({ targets: t }) => {
-  await t.graph({ live: false, outputs: [['focusedSink', 'FocusedInputTextOutputNode'], ['pickedSink', 'SelectedFormFieldTextOutputNode']] });
-  await t.page.evaluate(() => {
-    window.pageOperations = [];
-    for (const [api, method] of [[chrome.tabs, 'connect'], [chrome.scripting, 'executeScript'], [chrome.permissions, 'request']]) {
-      const original = api[method].bind(api);
-      api[method] = (...args) => { window.pageOperations.push(method); return original(...args); };
-    }
-  });
-  await t.website.locator('#play').click(); await t.invoke();
-  await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect(t.page.locator('#errors')).toBeEmpty();
-  await expect(t.page.locator('#target-status')).toContainText('focusedSink: Focused input output skipped: no authorized target');
-  await expect(t.page.locator('#target-status')).toContainText('pickedSink: Selected field output skipped: no authorized target');
-  await expect(t.page.locator('#target-status')).toContainText('Input and output targets to enable it next session');
-  await expect(t.page.locator('#target-status')).toContainText('No text destination is active');
-  await expect(row(t.page, 'focusedSink').getByRole('button', { name: 'Authorize capture tab for output' })).toBeDisabled();
-  await emit(t, 100, 'discarded with status'); await stop(t);
-  expect(await t.page.evaluate(() => window.pageOperations)).toEqual([]);
-  expect(await t.website.evaluate(() => window.edits)).toEqual([]); await expect(t.page.locator('#final')).toBeEmpty();
-  await t.website.locator('#first').evaluate(element => element.pause()); await t.website.locator('#second').evaluate(element => element.pause());
-  await authorize(t, 'focusedSink'); await authorize(t, 'pickedSink');
-  await t.website.locator('#focused').focus(); await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
+test('toolbar automatically readies one TEXT sink; Live popup focus, input/search/textarea, order, once, Stop and Cancel', async ({ targets: t }) => {
+  await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] });
+  await t.website.locator('#focused').click(); await t.invoke();
+  await expect(t.page.locator('#status')).toHaveText('Transcription active');
   await expect(t.page.locator('#target-status')).toContainText('connected and authorized');
-  await expect(t.page.locator('#target-status')).toContainText('Selected field output skipped: no selected field');
-  await expect(t.page.locator('#target-status')).not.toContainText('No text destination is active');
-  await emit(t, 1, 'next session'); await emit(t, 1, 'duplicate');
-  await expect(t.website.locator('#focused')).toHaveValue('manual next session'); await expect(t.website.locator('#chosen')).toHaveValue('existing');
-  await t.page.locator('#cancel-session').click(); await emit(t, 2, 'canceled'); await expect(t.website.locator('#focused')).toHaveValue('manual next session');
-  await pick(t, 'pickedSink', '#chosen'); await t.website.locator('#focused').focus();
-  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#target-status')).not.toContainText('skipped');
-  await emit(t, 1, 'fresh final'); await stop(t);
-  await expect(t.website.locator('#focused')).toHaveValue('manual next session fresh final'); await expect(t.website.locator('#chosen')).toHaveValue('existing fresh final');
+  await expect(t.page.getByRole('button', { name: /Authorize capture|Pick field|Use next toolbar/ })).toHaveCount(0);
+  await t.page.bringToFront();
+  await expect.poll(() => t.website.evaluate(() => document.hasFocus())).toBe(false);
+  await emit(t, 1, 'one'); await emit(t, 1, 'duplicate'); await emit(t, 0, 'stale'); await emit(t, 2, 'two');
+  await expect(t.website.locator('#focused')).toHaveValue('manual one two');
+  await expect(t.page.locator('#final')).toContainText('two');
+  await t.website.bringToFront(); await t.website.locator('#search').click();
+  await t.website.locator('#search').evaluate(e => e.setSelectionRange(0, 5));
+  await t.page.bringToFront(); await emit(t, 3, 'search'); await expect(t.website.locator('#search')).toHaveValue('query search');
+  await t.website.bringToFront(); await t.website.locator('#chosen').click(); await t.page.bringToFront();
+  await emit(t, 4, 'notes'); await expect(t.website.locator('#chosen')).toHaveValue('existing notes');
+  await stop(t); await expect(t.website.locator('#chosen')).toHaveValue('existing notes');
   expect(await t.website.evaluate(() => window.submits)).toBe(0);
+  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
+  await emit(t, 1, 'fresh'); await expect(t.website.locator('#chosen')).toHaveValue('existing notes fresh');
+  await t.page.locator('#cancel-session').click(); await emit(t, 2, 'late');
+  await expect(t.website.locator('#chosen')).toHaveValue('existing notes fresh');
   expect(await t.page.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);
 });
 
-test('stale selected field startup skips independently; navigation/close detach authorized output and Live survives', async ({ targets: t }) => {
-  await t.graph({ outputs: [['focusedSink', 'FocusedInputTextOutputNode'], ['pickedSink', 'SelectedFormFieldTextOutputNode']] });
-  await t.invoke(); await authorize(t, 'focusedSink'); await authorize(t, 'pickedSink'); await pick(t, 'pickedSink', '#chosen');
-  await t.website.locator('#chosen').evaluate(element => element.remove()); await t.website.locator('#focused').focus();
-  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#target-status')).toContainText('Selected field output skipped: target unavailable'); await expect(t.page.locator('#errors')).toBeEmpty();
-  await emit(t, 1, 'healthy branch'); await expect(t.website.locator('#focused')).toHaveValue('manual healthy branch'); await expect(t.page.locator('#final')).toContainText('healthy branch');
-  await stop(t);
-  const other = await t.context.newPage(); await other.goto(`${t.webOrigin}/output`);
-  await row(t.page, 'focusedSink').getByRole('button', { name: 'Use next toolbar tab for output' }).click(); await t.invoke(other);
-  await other.locator('#focused').focus(); await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await other.goto(`${t.webOrigin}/new-document`); await expect(t.page.locator('#target-status')).toContainText(/detached|disconnected/);
-  await emit(t, 1, 'after navigation'); await expect(t.page.locator('#final')).toContainText('after navigation'); await expect(other.locator('#focused')).toHaveValue('manual');
-  await stop(t); await expect(row(t.page, 'focusedSink')).toContainText('No target selected');
-  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#target-status')).toContainText('Focused input output skipped: no authorized target'); await stop(t);
-  await row(t.page, 'focusedSink').getByRole('button', { name: 'Use next toolbar tab for output' }).click(); await t.invoke(other);
-  await other.locator('#focused').focus(); await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await other.close(); await expect(t.page.locator('#target-status')).toContainText(/detached|disconnected/);
-  await emit(t, 1, 'after close'); await expect(t.page.locator('#final')).toContainText('after close'); await stop(t);
+test('first toolbar-created Live popup prepares a pre-focused editor before window blur', async ({ targets: t }) => {
+  await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] });
+  await t.page.close(); await t.website.bringToFront();
+  await t.website.locator('#play').click(); await t.website.locator('#chosen').click();
+  await t.website.evaluate(() => window.addEventListener('blur', () => document.activeElement.blur()));
+  const opening = t.context.waitForEvent('page'); await t.invoke(); const live = await opening;
+  await live.waitForURL(/extension\/recorder.html/);
+  await (await t.context.newCDPSession(live)).send('Emulation.setFocusEmulationEnabled', { enabled: false });
+  await expect(live.locator('#status')).toHaveText('Transcription active');
+  await expect(live.locator('#target-status')).toContainText('connected and authorized');
+  await expect.poll(() => t.website.evaluate(() => document.hasFocus())).toBe(false);
+  await expect(live.locator('#partial')).toHaveText('pending fixture');
+  await live.locator('#stop').click(); await expect(live.locator('#status')).toContainText('Stopped');
+  await expect(t.website.locator('#chosen')).toHaveValue('existing confirmed fixture');
+  await expect(live.locator('#final')).toHaveText('confirmed fixture\n');
 });
 
-test('controlled output permission loss at startup skips its branch and reauthorization retries only a new session', async ({ targets: t }) => {
-  await t.graph({ outputs: [['focusedSink', 'FocusedInputTextOutputNode']] }); await t.invoke(); await stop(t);
-  const other = await t.context.newPage(); await other.goto(`${t.webOrigin}/output`);
-  await row(t.page, 'focusedSink').getByRole('button', { name: 'Use next toolbar tab for output' }).click(); await t.invoke(other);
-  await t.website.bringToFront();
-  // Deterministic permission/transport failure at the Chrome adapter boundary.
-  // Native activeTab denial and navigation are covered by separate cases.
-  await t.page.evaluate(() => {
-    window.originalConnect = chrome.tabs.connect.bind(chrome.tabs);
-    chrome.tabs.connect = () => { throw Error('Controlled output permission loss'); };
-  });
-  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#target-status')).toContainText('output skipped: target unavailable (Controlled output permission loss)');
-  await t.page.evaluate(() => { chrome.tabs.connect = window.originalConnect; });
-  await emit(t, 1, 'Live only'); await expect(t.page.locator('#final')).toContainText('Live only'); await expect(other.locator('#focused')).toHaveValue('manual');
-  await stop(t); await row(t.page, 'focusedSink').getByRole('button', { name: 'Use next toolbar tab for output' }).click(); await t.invoke(other);
-  await other.locator('#focused').focus(); await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#target-status')).toContainText('connected and authorized');
-  await emit(t, 1, 'retry'); await expect(t.page.locator('#target-status')).toContainText('inserted 1 confirmed utterance');
-  await stop(t); await expect(other.locator('#focused')).toHaveValue('manual retry');
+test('no focus skips without guessing; dynamic YouTube-style comment activation and focus changes route later values', async ({ targets: t }) => {
+  await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.invoke();
+  await expect(t.page.locator('#status')).toHaveText('Transcription active');
+  await emit(t, 1, 'no target'); await expect(t.page.locator('#target-status')).toContainText('Insertion skipped: Focus');
+  await expect(t.website.locator('#focused')).toHaveValue('manual'); await expect(t.page.locator('#final')).toContainText('no target');
+  await t.website.bringToFront(); await t.website.locator('#activate-comment').click();
+  await t.page.bringToFront(); await emit(t, 2, '<b>plain</b>');
+  await expect(t.website.locator('#comment')).toHaveText('<b>plain</b>'); expect(await t.website.locator('#comment b').count()).toBe(0);
+  await t.website.bringToFront(); await t.website.locator('#editable').click(); await t.page.bringToFront();
+  await emit(t, 3, 'next'); await expect(t.website.locator('#editable')).toHaveText('draft next');
+  // Explicit blur in the page invalidates the previous focus; Live cannot revive it.
+  await t.website.bringToFront(); await t.website.locator('#editable').evaluate(e => e.blur()); await t.page.bringToFront();
+  await emit(t, 4, 'never'); await expect(t.page.locator('#target-status')).toContainText('Insertion skipped');
+  await expect(t.website.locator('#editable')).toHaveText('draft next'); await stop(t);
 });
 
-test('native tab audio → production SpeechToText → Live and picked/focused fields; final-only, ordered, once, drain and teardown', async ({ targets: t }) => {
-  await t.graph({ outputs: [['focusedSink', 'FocusedInputTextOutputNode'], ['pickedSink', 'SelectedFormFieldTextOutputNode']] });
-  await t.invoke(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#errors')).toBeEmpty(); await expect(t.page.locator('#target-status')).toContainText('output skipped: no authorized target');
-  expect(await t.website.evaluate(() => window.edits)).toEqual([]);
-  await authorize(t, 'focusedSink'); await authorize(t, 'pickedSink'); await pick(t, 'pickedSink', '#chosen');
-  await t.website.locator('#play').click(); await t.website.locator('#focused').focus();
-  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#partial')).toHaveText('pending fixture');
-  await expect(t.website.locator('#focused')).toHaveValue('manual'); await expect(t.website.locator('#chosen')).toHaveValue('existing');
-  await expect(row(t.page, 'pickedSink').getByRole('button', { name: 'Clear target' })).toBeDisabled();
-  await t.page.locator('#stop').click(); await expect(t.page.locator('#status')).toContainText('Stopped');
-  await expect(t.website.locator('#focused')).toHaveValue('manual confirmed fixture'); await expect(t.website.locator('#chosen')).toHaveValue('existing confirmed fixture');
-  await expect(t.page.locator('#final')).toHaveText('confirmed fixture\n');
-  expect(await t.website.evaluate(() => window.submits)).toBe(0);
-  // A new run's IDs are scoped to fresh sink/port instances.
-  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await emit(t, 100, 'one'); await emit(t, 100, 'duplicate'); await emit(t, 99, 'stale'); await emit(t, 101, 'two');
-  await expect(t.website.locator('#chosen')).toHaveValue('existing confirmed fixture one two');
-  await t.website.locator('#editable').focus(); await emit(t, 102, '<b>plain</b>');
-  await expect(t.website.locator('#editable')).toHaveText('draft <b>plain</b>'); expect(await t.website.locator('#editable b').count()).toBe(0);
-  await t.page.locator('#cancel-session').click(); await emit(t, 103, 'after cancel');
-  await expect(t.website.locator('#chosen')).toHaveValue('existing confirmed fixture one two <b>plain</b>');
-  expect(await t.page.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);
+test('window-blur editor retains valid prior focus; clicks elsewhere and disconnected/replaced fields supersede it', async ({ targets: t }) => {
+  await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.invoke();
+  await expect(t.page.locator('#status')).toHaveText('Transcription active');
+  await t.website.bringToFront(); await t.website.locator('#chosen').click();
+  await t.website.evaluate(() => window.addEventListener('blur', () => document.activeElement.blur()));
+  await t.page.bringToFront(); await emit(t, 1, 'retained'); await expect(t.website.locator('#chosen')).toHaveValue('existing retained');
+  await t.website.bringToFront(); await t.website.locator('#play').click();
+  await t.website.evaluate(() => [...document.querySelectorAll('audio')].forEach(a => a.pause()));
+  await t.page.bringToFront(); await emit(t, 2, 'not focused'); await expect(t.page.locator('#target-status')).toContainText('Insertion skipped');
+  await t.website.bringToFront(); await t.website.locator('#chosen').click(); await t.page.bringToFront();
+  await t.website.locator('#chosen').evaluate(e => { const replacement = e.cloneNode(true); replacement.value = 'replacement'; e.replaceWith(replacement); });
+  await emit(t, 3, 'stale'); await expect(t.website.locator('#chosen')).toHaveValue('replacement');
+  await expect(t.page.locator('#final')).toContainText('stale'); await stop(t);
 });
 
-test('picked field survives focus changes; replacement/navigation detach; hostile/sensitive fields and frames fail closed', async ({ targets: t }) => {
-  await t.graph({ outputs: [['picked', 'SelectedFormFieldTextOutputNode']] }); await t.invoke(); await authorize(t, 'picked');
-  await pick(t, 'picked', '#chosen'); await t.website.locator('#focused').focus();
-  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await emit(t, 1, 'first'); await expect(t.website.locator('#chosen')).toHaveValue('existing first');
-  await t.website.evaluate(() => { const old = document.querySelector('#chosen'); const next = old.cloneNode(true); next.value = 'replacement'; old.replaceWith(next); });
-  await emit(t, 2, 'never'); await expect(t.page.locator('#target-status')).toContainText('detached'); await expect(t.website.locator('#chosen')).toHaveValue('replacement');
-  await emit(t, 3, 'live survives'); await expect(t.page.locator('#final')).toContainText('live survives');
-  await t.page.locator('#stop').click(); await expect(t.page.locator('#status')).toContainText('Stopped');
-  await row(t.page, 'picked').getByRole('button', { name: 'Pick field', exact: true }).click(); await expect(t.website.getByText('Local transcription: click')).toBeVisible();
-  for (const selector of ['#password', '#card', '#readonly', '#security']) {
-    await t.website.locator(selector).click(); await expect(t.website.getByText('Unsupported or sensitive field.')).toBeVisible();
-  }
-  await t.website.locator('iframe').contentFrame().locator('#frame-field').click();
-  await expect(t.website.getByText('Unsupported or sensitive field.')).toBeVisible();
-  await t.page.getByRole('button', { name: 'Cancel field picker' }).click(); await expect(t.website.getByText('Unsupported or sensitive field.')).toHaveCount(0);
-  await pick(t, 'picked', '#editable');
-  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await t.website.goto(`${t.webOrigin}/next`); await expect(t.page.locator('#status')).toContainText('Stopped');
-  await expect(row(t.page, 'picked')).toContainText('No target selected');
-});
-
-for (const selector of ['#focused', '#chosen']) {
-  test(`selected ${selector} becoming disabled through its fieldset preserves content and detaches output`, async ({ targets: t }) => {
-    await t.website.locator(selector).evaluate(element => {
-      const fieldset = document.createElement('fieldset'); element.before(fieldset); fieldset.append(element);
-    });
-    const original = await t.website.locator(selector).inputValue();
-    await t.graph({ outputs: [['picked', 'SelectedFormFieldTextOutputNode']] }); await t.invoke(); await authorize(t, 'picked');
-    await pick(t, 'picked', selector);
-    await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-    const disabled = await t.website.locator(selector).evaluate(element => {
-      element.closest('fieldset').disabled = true;
-      return { own: element.disabled, effective: element.matches(':disabled') };
-    });
-    expect(disabled).toEqual({ own: false, effective: true });
-    await emit(t, 1, 'blocked');
-    await expect(t.page.locator('#target-status')).toContainText('Insertion detached');
-    await expect(t.page.locator('#target-status')).toContainText('not editable');
-    await expect(t.website.locator(selector)).toHaveValue(original);
-    expect(await t.website.evaluate(() => window.edits)).toEqual([]);
-    // Re-enabling the field cannot reactivate an output that has detached.
-    await t.website.locator(selector).evaluate(element => { element.closest('fieldset').disabled = false; });
-    await emit(t, 2, 'Live continues'); await expect(t.page.locator('#final')).toContainText('Live continues');
-    await t.page.locator('#stop').click(); await expect(t.page.locator('#status')).toContainText('Stopped');
-    await expect(t.website.locator(selector)).toHaveValue(original);
-    expect(await t.website.evaluate(() => window.edits)).toEqual([]);
+for (const selector of ['#password', '#card', '#iban', '#readonly', '#security', 'iframe', '#shadow-field']) {
+  test(`unsupported ${selector} supersedes old focus and skips safely`, async ({ targets: t }) => {
+    await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.website.locator('#focused').click(); await t.invoke();
+    await expect(t.page.locator('#status')).toHaveText('Transcription active');
+    await t.website.bringToFront();
+    if (selector === 'iframe') await t.website.locator('iframe').contentFrame().locator('#frame-field').click();
+    else await t.website.locator(selector).click();
+    if (selector === '#shadow-field') await t.website.evaluate(() => window.addEventListener('blur', () => document.activeElement.blur()));
+    await t.page.bringToFront(); await emit(t, 1, 'blocked');
+    await expect(t.page.locator('#target-status')).toContainText('Insertion skipped'); await expect(t.website.locator('#focused')).toHaveValue('manual');
+    expect(await t.website.evaluate(() => window.edits)).toEqual([]); await expect(t.page.locator('#final')).toContainText('blocked'); await stop(t);
   });
 }
+
+for (const selector of ['#focused', '#chosen']) test(`disabled fieldset, hidden and canceled beforeinput skip; controlled ${selector} still appends`, async ({ targets: t }) => {
+  await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.invoke(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
+  await t.website.bringToFront(); await t.website.locator(selector).click(); await t.page.bringToFront();
+  const original = await t.website.locator(selector).inputValue();
+  await t.website.locator(selector).evaluate(e => { const f = document.createElement('fieldset'); e.before(f); f.append(e); f.disabled = true; });
+  await emit(t, 1, 'disabled'); await expect(t.page.locator('#target-status')).toContainText('Insertion skipped'); await expect(t.website.locator(selector)).toHaveValue(original);
+  await t.website.locator(selector).evaluate(e => { e.closest('fieldset').disabled = false; e.hidden = true; });
+  await emit(t, 2, 'hidden'); await expect(t.website.locator(selector)).toHaveValue(original);
+  await t.website.locator(selector).evaluate(e => {
+    e.hidden = false;
+    const native = Object.getOwnPropertyDescriptor(e instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype, 'value');
+    let tracked = e.value; window.controlled = tracked;
+    Object.defineProperty(e, 'value', { get() { return native.get.call(this); }, set(v) { tracked = v; native.set.call(this, v); } });
+    e.addEventListener('input', () => { if (native.get.call(e) !== tracked) { window.controlled = native.get.call(e); tracked = window.controlled; } });
+  });
+  await t.website.bringToFront(); await t.website.locator(selector).click(); await t.page.bringToFront();
+  await emit(t, 3, 'controlled'); await expect(t.website.locator(selector)).toHaveValue(original + ' controlled');
+  expect(await t.website.evaluate(() => window.controlled)).toBe(original + ' controlled');
+  await t.website.locator(selector).evaluate(e => e.addEventListener('beforeinput', event => event.preventDefault(), { once: true }));
+  await emit(t, 4, 'rejected'); await expect(t.page.locator('#target-status')).toContainText('editor rejected');
+  await expect(t.website.locator(selector)).toHaveValue(original + ' controlled');
+  await emit(t, 5, 'recovered'); await expect(t.website.locator(selector)).toHaveValue(original + ' controlled recovered'); await stop(t);
+});
+
+test('no cross-tab grants or output; toolbar retargets only after Stop; navigation expires the authorized document', async ({ targets: t }) => {
+  await t.graph({ source: 'MicrophoneAudio', outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.invoke();
+  await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting: 'granted', origin: t.origin });
+  const other = await t.context.newPage(); await other.goto(`${t.webOrigin.replace('127.0.0.1', 'localhost')}/other`); await other.bringToFront();
+  expect(await t.page.evaluate(async () => {
+    const tab = (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0]; const { authorizePage } = await import('./page-target.js');
+    try { await authorizePage(tab.id); return false; } catch { return true; }
+  })).toBe(true);
+  await t.website.bringToFront(); await t.website.locator('#focused').click(); await t.page.locator('#start').click();
+  await expect(t.page.locator('#status')).toHaveText('Transcription active');
+  await t.invoke(other); await other.locator('#focused').click(); await emit(t, 1, 'same tab');
+  await expect(t.website.locator('#focused')).toHaveValue('manual same tab'); await expect(other.locator('#focused')).toHaveValue('manual');
+  await t.website.goto(`${t.webOrigin}/replacement`); await expect(t.page.locator('#target-status')).toContainText(/detached|disconnected|unavailable/);
+  await emit(t, 2, 'Live survives'); await expect(t.page.locator('#final')).toContainText('Live survives'); await expect(t.website.locator('#focused')).toHaveValue('manual');
+  await stop(t); await t.invoke(other); await other.locator('#focused').click(); await t.page.locator('#start').click();
+  await expect(t.page.locator('#status')).toHaveText('Transcription active'); await emit(t, 1, 'new toolbar tab');
+  await expect(other.locator('#focused')).toHaveValue('manual new toolbar tab'); await expect(t.website.locator('#focused')).toHaveValue('manual'); await stop(t);
+});
+
+test('lost connection during start and running detaches focused output; Live continues and toolbar retry recovers', async ({ targets: t }) => {
+  await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.invoke(); await expect(t.page.locator('#status')).toHaveText('Transcription active'); await stop(t);
+  await t.page.evaluate(() => { window.originalConnect = chrome.tabs.connect.bind(chrome.tabs); chrome.tabs.connect = () => { throw Error('Controlled output permission loss'); }; });
+  await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
+  await expect(t.page.locator('#target-status')).toContainText('output skipped: target unavailable');
+  await emit(t, 1, 'Live only'); await expect(t.page.locator('#final')).toContainText('Live only');
+  await t.page.evaluate(() => { chrome.tabs.connect = window.originalConnect; }); await stop(t); await t.invoke();
+  await expect(t.page.locator('#status')).toHaveText('Transcription active'); await t.website.locator('#focused').click();
+  await emit(t, 1, 'retry'); await expect(t.website.locator('#focused')).toHaveValue('manual retry');
+  // Close the native tab: connection loss must not send a later edit elsewhere.
+  await t.website.close(); await expect(t.page.locator('#target-status')).toContainText(/detached|disconnected/); await stop(t);
+});
+
+test('completed translations flow through adapter to TEXT fan-out and paired Live; provisional/pending and duplicate finals never insert', async ({ targets: t }) => {
+  await t.page.evaluate(async () => {
+    const { TranslationSchedulerNode } = await import('./translation-scheduler.js'), start = TranslationSchedulerNode.prototype.start;
+    TranslationSchedulerNode.prototype.start = function(context) { this.prepare = async () => {}; return start.call(this, context); };
+  });
+  await t.graph({ translation: true, outputs: [['out', 'FocusedInputTextOutputNode', true]] }); await t.website.locator('#focused').click(); await t.invoke();
+  await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect(t.page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
+  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('#partial-english')).toContainText('translated pending text'); await expect(t.website.locator('#focused')).toHaveValue('manual');
+  await emit(t, 1, 'first'); await emit(t, 1, 'duplicate'); await emit(t, 2, 'second'); await stop(t);
+  await expect(t.website.locator('#focused')).toHaveValue('manual translated first translated second'); await expect(t.page.locator('#paired-finals')).toContainText('translated second');
+  await expect(t.page.locator('#errors')).toBeEmpty();
+});
 
 test('selected media discovers two real elements and captures only the selected tone with normalized PCM', async ({ targets: t }) => {
   await t.graph({ source: 'SelectedPageMediaAudio' }); await t.website.locator('#play').click(); await t.invoke();
@@ -282,48 +282,6 @@ test('microphone has an explicit Start gesture, native permission denial, fake-d
   await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active'); await t.page.locator('#stop').click(); await expect(t.page.locator('#status')).toContainText('Stopped');
 });
 
-test('different output tab requires its own toolbar grant and never changes capture; unauthorized tabs reject injection', async ({ targets: t }) => {
-  await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.invoke();
-  await stop(t);
-  const captureTab = await t.page.locator('#tab-status').textContent();
-  const other = await t.context.newPage(); await other.goto(`${t.webOrigin}/output`);
-  await other.bringToFront();
-  const unauthorized = await t.page.evaluate(async () => {
-    const tab = (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0];
-    const { authorizePage } = await import('./page-target.js');
-    try { await authorizePage(tab.id); return false; } catch { return true; }
-  });
-  expect(unauthorized).toBe(true);
-  await row(t.page, 'out').getByRole('button', { name: 'Use next toolbar tab for output' }).click(); await t.invoke(other);
-  await expect(row(t.page, 'out')).toContainText('Controlled input/output fixture');
-  expect(await t.page.locator('#tab-status').textContent()).toBe(captureTab);
-  await other.locator('#focused').focus(); await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await emit(t, 1, 'separate output'); await expect(other.locator('#focused')).toHaveValue('manual separate output'); await expect(t.website.locator('#focused')).toHaveValue('manual');
-  await other.goto(`${t.webOrigin}/replacement`); await expect(t.page.locator('#target-status')).toContainText(/detached|disconnected|navigated/);
-  await emit(t, 2, 'Live still active'); await expect(t.page.locator('#final')).toContainText('Live still active'); await expect(other.locator('#focused')).toHaveValue('manual');
-  await t.page.locator('#stop').click(); await expect(t.page.locator('#status')).toContainText('Stopped');
-  await expect(row(t.page, 'out')).toContainText('No target selected');
-});
-
-test('production translation scheduler fans out completed finals independently to paired Live and another chosen field', async ({ targets: t }) => {
-  await t.page.evaluate(async () => {
-    const { TranslationSchedulerNode } = await import('./translation-scheduler.js'), start = TranslationSchedulerNode.prototype.start;
-    TranslationSchedulerNode.prototype.start = function(context) { this.prepare = async () => {}; return start.call(this, context); };
-  });
-  await t.graph({ translation: true, outputs: [['original', 'FocusedInputTextOutputNode'], ['translatedField', 'SelectedFormFieldTextOutputNode', true], ['skippedTranslation', 'SelectedFormFieldTextOutputNode', true]] });
-  await t.invoke(); await authorize(t, 'original'); await authorize(t, 'translatedField'); await pick(t, 'translatedField', '#chosen');
-  await t.website.locator('#focused').focus(); await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
-  await expect(t.page.locator('#target-status')).toContainText('skippedTranslation: Selected field output skipped: no authorized target');
-  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('#partial-english')).toContainText('translated pending text');
-  await expect(t.website.locator('#focused')).toHaveValue('manual'); await expect(t.website.locator('#chosen')).toHaveValue('existing');
-  await emit(t, 1, 'first'); await emit(t, 1, 'duplicate'); await emit(t, 2, 'second');
-  await t.page.locator('#stop').click(); await expect(t.page.locator('#status')).toContainText('Stopped');
-  await expect(t.website.locator('#focused')).toHaveValue('manual first second'); await expect(t.website.locator('#chosen')).toHaveValue('existing translated first translated second');
-  await expect(t.page.locator('#paired-finals')).toContainText('translated second');
-  await expect(t.page.locator('#errors')).toBeEmpty();
-});
-
 test('unsupported/protection markers and audio-less media expose fallback without pretending to capture tab audio', async ({ targets: t }) => {
   await t.graph({ source: 'SelectedPageMediaAudio' }); await t.website.locator('#play').click(); await t.invoke();
   // Deterministic protection marker in the isolated world; no actual DRM service
@@ -342,22 +300,4 @@ test('unsupported/protection markers and audio-less media expose fallback withou
   await select.selectOption(options.find(option => option.text.includes('#silent-video')).value);
   await t.page.locator('#start').click(); await expect(t.page.locator('#errors')).toContainText('No capturable audio track'); await expect(t.page.locator('#errors')).toContainText('Chrome tab audio');
   expect(await t.page.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).length)).toBe(0);
-});
-
-test('clearing one selected destination leaves another chosen handle independent; controlled input events and rejected edits preserve content', async ({ targets: t }) => {
-  await t.graph({ outputs: [['first', 'SelectedFormFieldTextOutputNode'], ['second', 'SelectedFormFieldTextOutputNode']] }); await t.invoke();
-  for (const id of ['first', 'second']) { await authorize(t, id); await pick(t, id, '#chosen'); }
-  await row(t.page, 'first').getByRole('button', { name: 'Clear target' }).click(); await expect(row(t.page, 'first')).toContainText('No target selected');
-  await t.website.evaluate(() => {
-    const input = document.querySelector('#chosen'), native = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
-    let tracked = input.value; window.controlled = tracked;
-    Object.defineProperty(input, 'value', { get() { return native.get.call(this); }, set(value) { tracked = value; native.set.call(this, value); } });
-    input.addEventListener('input', () => { if (native.get.call(input) !== tracked) { window.controlled = native.get.call(input); tracked = window.controlled; } });
-  });
-  await t.website.locator('#focused').focus(); await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#target-status')).toContainText('first: Selected field output skipped');
-  await emit(t, 1, 'controlled'); await expect(t.website.locator('#chosen')).toHaveValue('existing controlled'); expect(await t.website.evaluate(() => window.controlled)).toBe('existing controlled');
-  await t.website.locator('#chosen').evaluate(element => element.addEventListener('beforeinput', event => event.preventDefault()));
-  await emit(t, 2, 'rejected'); await expect(t.page.locator('#target-status')).toContainText('rejected'); await expect(t.website.locator('#chosen')).toHaveValue('existing controlled');
-  await t.page.locator('#stop').click(); await expect(t.page.locator('#status')).toContainText('Stopped');
 });

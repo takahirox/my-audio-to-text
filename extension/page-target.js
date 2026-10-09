@@ -1,7 +1,7 @@
 // Browser communication belongs to concrete adapters, outside Pipeline.
 export class PageConnection {
   constructor(target, onEvent = () => {}) {
-    if (!Number.isInteger(target?.tabId) || typeof target.documentId !== 'string') throw Error('Authorize a page target in Live first.');
+    if (!Number.isInteger(target?.tabId) || typeof target.documentId !== 'string') throw Error('Invoke the toolbar on a normal page first.');
     this.target = { ...target }; this.pending = new Map(); this.nextRequest = 0;
     this.port = chrome.tabs.connect(target.tabId, { name: 'local-page-target', documentId: target.documentId });
     this.port.onMessage.addListener(message => {
@@ -13,14 +13,14 @@ export class PageConnection {
     });
     this.port.onDisconnect.addListener(() => {
       const message = chrome.runtime.lastError?.message;
-      this.close(); onEvent({ event: 'ended', error: message || 'Page disconnected. Invoke its toolbar action and reselect the target.' });
+      this.close(); onEvent({ event: 'ended', error: message || 'Page disconnected. Stop and invoke its toolbar action again.' });
     });
   }
   request(action, values = {}) {
-    if (this.closed) return Promise.reject(Error('Page target detached. Stop and authorize again.'));
+    if (this.closed) return Promise.reject(Error('Page target detached. Stop and invoke its toolbar action again.'));
     const request = ++this.nextRequest;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(request); reject(Error('Page operation expired. Stop and reselect the target.')); }, action === 'pick' ? 65000 : 10000);
+      const timer = setTimeout(() => { this.pending.delete(request); reject(Error('Page operation expired. Stop and invoke its toolbar action again.')); }, 10000);
       this.pending.set(request, { resolve, reject, timer });
       try { this.port.postMessage({ ...values, action, request }); }
       catch (error) { clearTimeout(timer); this.pending.delete(request); reject(error); }

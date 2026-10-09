@@ -37,6 +37,7 @@ test('fresh install saves default translation without downloading; visual edits,
   const heading = page.editor.locator('[data-node="speech"] .graph-heading');
   await heading.focus(); await heading.press('ArrowRight'); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
   await expect.poll(async () => (await saved(page)).nodes.find(n => n.id === 'speech').position.x).toBe(280);
+  await heading.scrollIntoViewIfNeeded();
   const box = await heading.boundingBox(); await page.editor.mouse.move(box.x + 20, box.y + 10); await page.editor.mouse.down(); await page.editor.mouse.move(box.x + 50, box.y + 30); await page.editor.mouse.up();
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
   await expect.poll(async () => (await saved(page)).nodes.find(n => n.id === 'speech').position).toEqual({ x: 310, y: 50 });
@@ -58,7 +59,7 @@ test('legacy preference migration, direction switch and corrupt saved graph reco
   await page.evaluate(() => localStorage.setItem('processing-graph-v1', '{broken')); await page.reload(); await page.editor.reload();
   await expect(page.locator('#errors')).toContainText('Saved graph unavailable'); await expect(page.locator('#start')).toBeDisabled();
   await page.editor.locator('#graph-reset').click(); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await expect(page.locator('#errors')).toBeEmpty();
-  expect((await saved(page)).version).toBe(2);
+  expect((await saved(page)).version).toBe(3);
 });
 
 for (const type of ['Supertonic3', 'Kokoro']) {
@@ -154,6 +155,7 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await output.dragTo(input); await expect(editor.locator('#graph-errors')).toBeEmpty();
   await editor.locator('#graph-zoom').selectOption('0.75');
   const heading = editor.getByRole('button', { name: 'Select speech', exact: true });
+  await heading.scrollIntoViewIfNeeded();
   const box = await heading.boundingBox();
   await editor.mouse.move(box.x + 10, box.y + 10); await editor.mouse.down(); await editor.mouse.move(box.x + 40, box.y + 25); await editor.mouse.up();
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
@@ -227,3 +229,31 @@ for (const [id, voice, other] of [['supertonic3', 'F1', 'M1'], ['kokoro', 'jf_al
     expect((await saved(live)).nodes.some(node => ['Supertonic3', 'Kokoro'].includes(node.type))).toBe(false);
   });
 }
+
+test('version 1/2 field sinks migrate in MV3 through typed adapters; ambiguous routes recover visibly', async ({ graphExtension: f }) => {
+  const page = await openGraph(f);
+  for (const version of [1, 2]) for (const type of ['FocusedInputTextOutputNode', 'SelectedFormFieldTextOutputNode']) {
+    await page.evaluate(async ({ version, type }) => {
+      const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js');
+      const graph = defaultGraph({ enabled: false }); graph.version = version;
+      graph.nodes.push({ ...graphNode('FocusedInputTextOutputNode', 'field'), type });
+      graph.edges.push(edge('speech', 'final', 'field', 'final'));
+      localStorage.setItem(GRAPH_KEY, JSON.stringify(graph));
+    }, { version, type });
+    await page.reload(); await page.editor.reload();
+    const graph = await saved(page);
+    expect(graph.version).toBe(3); expect(graph.nodes.some(n => n.type === 'SelectedFormFieldTextOutputNode')).toBe(false);
+    const adapter = graph.nodes.find(n => n.type === 'FinalText');
+    expect(graph.edges).toContainEqual({ from: [adapter.id, 'text'], to: ['field', 'text'] });
+    await expect(page.editor.locator('#graph-errors')).toBeEmpty();
+    await expect(page.editor.locator('#graph-node-type option[value="SelectedFormFieldTextOutputNode"]')).toHaveCount(0);
+  }
+  await page.evaluate(() => {
+    const graph = JSON.parse(localStorage.getItem('processing-graph-v1')); graph.version = 2;
+    graph.edges = graph.edges.filter(e => e.to[0] !== 'field'); localStorage.setItem('processing-graph-v1', JSON.stringify(graph));
+  });
+  await page.reload(); await page.editor.reload();
+  await expect(page.locator('#errors')).toContainText('Cannot migrate field output'); await expect(page.locator('#start')).toBeDisabled();
+  await page.editor.locator('#graph-reset').click(); await page.editor.locator('#graph-save').click();
+  await expect(page.locator('#errors')).toBeEmpty(); expect((await saved(page)).version).toBe(3);
+});

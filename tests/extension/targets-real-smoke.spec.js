@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
-test('real pinned ASR: native toolbar/tab audio fans out to Live and an authorized selected field with a skipped focused sink', async ({}, testInfo) => {
+test('real pinned ASR: native toolbar/tab audio fans out to Live and the same-tab focused TEXT sink', async ({}, testInfo) => {
   test.skip(process.env.EXTENSION_TARGET_SMOKE !== '1', 'Opt-in real ASR speech smoke: EXTENSION_TARGET_SMOKE=1. No model downloads during Run.');
   test.setTimeout(240000);
   const speech = await readFile('tests/fixtures/ordinary-english.wav');
@@ -26,9 +26,8 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and an authoriz
     await live.evaluate(async () => {
       const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
       const graph = defaultGraph({ enabled: false });
-      for (const [type, id] of [['SelectedFormFieldTextOutputNode', 'field'], ['FocusedInputTextOutputNode', 'skipped']]) {
-        graph.nodes.push(graphNode(type, id)); graph.edges.push(edge('speech', 'final', id, 'final'));
-      }
+      graph.nodes.push(graphNode('FinalText', 'text'), graphNode('FocusedInputTextOutputNode', 'field'));
+      graph.edges.push(edge('speech', 'final', 'text', 'final'), edge('text', 'text', 'field', 'text'));
       saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
     });
     const website = await context.newPage(); await website.goto(`http://127.0.0.1:${server.address().port}/`);
@@ -36,15 +35,10 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and an authoriz
     await cdp.send('Extensions.triggerAction', { id, targetId: targetInfos.find(target => target.url === website.url()).targetId });
     await expect(live.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
     await expect(live.locator('#errors')).toBeEmpty();
-    await expect(live.locator('#target-status')).toContainText('Selected field output skipped: no authorized target');
-    await live.locator('#stop').click(); await expect(live.locator('#status')).toContainText('Stopped', { timeout: 120000 });
-    await live.locator('#targets').evaluate(element => { element.open = true; });
-    await live.locator('[data-target-node="field"]').getByRole('button', { name: 'Authorize capture tab for output' }).click(); await expect(live.locator('[data-target-node="field"]')).toContainText('Real ASR field smoke');
-    await live.getByRole('button', { name: 'Pick field', exact: true }).click(); await expect(website.getByText('Local transcription: click')).toBeVisible();
-    await website.locator('#field').click(); await expect(live.locator('[data-target-node="field"]')).toContainText('#field');
-    await website.locator('#other').focus(); await live.locator('#start').click(); await expect(live.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
-    await expect(live.locator('#target-status')).toContainText('skipped: Focused input output skipped: no authorized target');
-    await website.locator('#play').click(); await expect(live.locator('#signal')).toHaveText('Tab audio signal detected.');
+    await expect(live.locator('#target-status')).toContainText('connected and authorized');
+    await expect(live.getByRole('button', { name: /Authorize capture|Pick field|Use next toolbar/ })).toHaveCount(0);
+    await website.locator('#play').click(); await website.locator('#field').click();
+    await expect(live.locator('#signal')).toHaveText('Tab audio signal detected.');
     await expect.poll(() => website.locator('audio').evaluate(audio => audio.ended), { timeout: 30000 }).toBe(true);
     await live.locator('#stop').click(); await expect(live.locator('#status')).toContainText('Stopped', { timeout: 120000 });
     const finals = (await live.locator('#final').textContent()).split('\n').map(text => text.trim()).filter(Boolean);
@@ -53,7 +47,7 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and an authoriz
     await expect(live.locator('#errors')).toBeEmpty(); expect(pageErrors).toEqual([]);
     expect(requests.every(request => request.method === 'GET' && !request.hasBody && (request.protocol === 'chrome-extension:' || request.hostname === '127.0.0.1'))).toBe(true);
     expect(await live.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);
-    const evidence = { browser: context.browser().version(), realAsr: true, realTabCapture: true, realFieldInsertion: true, missingTargetStartup: true, skippedFocusedOutput: true, fixtureSha256: createHash('sha256').update(speech).digest('hex'), finalUtterances: finals.length, insertedOnceInOrder: true, milliseconds: Date.now() - started, remoteRequests: 0, pageErrors };
+    const evidence = { browser: context.browser().version(), realAsr: true, realTabCapture: true, realFieldInsertion: true, toolbarDocumentPrepared: true, plainTextSink: true, concurrentLiveOutput: true, fixtureSha256: createHash('sha256').update(speech).digest('hex'), finalUtterances: finals.length, insertedOnceInOrder: true, milliseconds: Date.now() - started, remoteRequests: 0, pageErrors };
     await writeFile(testInfo.outputPath('real-field-smoke.json'), JSON.stringify(evidence, null, 2) + '\n');
   } finally { await context?.close(); await rm(profile, { recursive: true, force: true }); await new Promise(resolve => server.close(resolve)); }
 });

@@ -60,7 +60,7 @@ const session = new TabSession(view => {
       entry.append(label, original, translatedLabel, translated); return entry;
     }));
   }
-  element('start').disabled = !!graphError || running || !!targetControls?.busy || !!targetControls?.pendingOutput || (!Number.isInteger(view.tabId) && !view.savedGraph.nodes.some(node => node.type === 'MicrophoneAudio'));
+  element('start').disabled = !!graphError || running || !!targetControls?.busy || (!Number.isInteger(view.tabId) && !view.savedGraph.nodes.some(node => node.type === 'MicrophoneAudio'));
   element('stop').disabled = !['loading', 'starting', 'running'].includes(view.state);
   const nextState = JSON.stringify(graphState(view));
   if (!closed && nextState !== publishedState) { publishedState = nextState; stateChannel.postMessage(graphState(view)); }
@@ -88,22 +88,33 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return;
   if (message.type === 'get-live-graph-state') { respond(graphState(session.view)); return; }
   if (message.type === 'invoke' && Number.isInteger(message.tabId) && !session.session) {
-    clearAudio(); element('copy-status').textContent = '';
-    if (targetControls.busy) { session.update({ targetStatus: 'Finish or cancel target selection before starting a session.' }); return; }
-    if (targetControls.pendingOutput) { void targetControls.invokeOutput(message.tabId); return; }
-    session.update({ tabId: message.tabId });
-    if (refreshSaved()) void session.start(message.tabId);
+    void invokeTab(message.tabId).then(() => respond?.({ prepared: true }));
+    return true;
   }
 });
 chrome.tabs.onRemoved.addListener(tabId => { targetControls.tabEnded(tabId); session.tabEnded(tabId); });
 chrome.tabs.onUpdated.addListener((tabId, change) => { if (change.status === 'loading') { targetControls.tabEnded(tabId); session.tabEnded(tabId); } });
-window.addEventListener('pagehide', () => { targetControls.close(); session.cancel(); clearAudio(); closed = true; stateChannel.close(); });
+window.addEventListener('pagehide', () => { session.cancel(); clearAudio(); closed = true; stateChannel.close(); });
 window.addEventListener('error', event => session.fail(event.message));
 window.addEventListener('unhandledrejection', event => session.fail(event.reason?.message || String(event.reason)));
 window.addEventListener('storage', event => {
   if (event.key !== GRAPH_KEY && event.key !== null) return;
   refreshSaved();
 });
+async function invokeTab(tabId) {
+  if (targetControls.busy) return;
+  clearAudio(); element('copy-status').textContent = '';
+  session.update({ tabId });
+  if (!refreshSaved()) return;
+  await targetControls.prepareFocusedOutput(tabId);
+  if (!closed && !session.session) void session.start(tabId);
+}
 const params = new URLSearchParams(location.search), tabId = params.has('tab') ? Number(params.get('tab')) : NaN;
 if (params.has('error')) session.update({ error: params.get('error'), tabId });
-else if (Number.isInteger(tabId)) { if (graphError) session.update({ tabId }); else { session.update({ tabId }); void session.start(tabId); } }
+else if (Number.isInteger(tabId)) {
+  // New Live windows open unfocused so tracking is prepared before a page
+  // editor can blur on window deactivation. Reused windows do this in background.
+  void invokeTab(tabId).then(async () => {
+    if (!closed) { const live = await chrome.windows.getCurrent(); await chrome.windows.update(live.id, { focused: true }); }
+  });
+}
