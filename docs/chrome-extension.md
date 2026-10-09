@@ -49,12 +49,14 @@ and [#77 validation/screenshots](evidence/ui-77.md).
 Requirements: Chrome 116 or later, Python 3 and Node.js/npm.
 
 ```sh
-npm ci
-npm run prepare:assets
-npm run prepare:translation-assets
-npm run prepare:tts-assets
-npm run build:extension
+npm run setup:extension
 ```
+
+This one command installs the pinned npm dependencies, prepares ASR assets,
+then translation and TTS runtimes in the required order, and packages the
+extension. It stops on the first failed step. It also works from a fresh clone
+(with Node.js/npm and Python 3 installed). To repackage already-prepared assets
+without repeating setup, run `npm run build:extension` instead.
 
 Asset preparation downloads and verifies the existing pinned approximately
 91 MB runtime/model distribution. Building copies the maintained Web pipeline,
