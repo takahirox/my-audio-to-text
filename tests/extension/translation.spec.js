@@ -223,7 +223,7 @@ test(`${direction}: Cancel during final drain releases workers, preserves origin
 test('exclusive preference lifecycle, independent caches, immutable active direction and transcription-only repeat', async ({ translationExtension: f }) => {
   await instrument(f); let page = await openRecorder(f);
   await expect(page.locator('#translation-direction')).toHaveValue('ja-en');
-  await expect(page.locator('#translation-enabled')).not.toBeChecked();
+  await expect(page.locator('#translation-enabled')).toBeChecked();
   await page.locator('#translation-direction').selectOption('en-ja');
   await expect(page.locator('#model-status')).toHaveText('Not downloaded');
   await prepare(page); expect(f.requests).toHaveLength(7);

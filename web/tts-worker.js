@@ -10,6 +10,7 @@ export function requireWasm() {
 
 // Per-worker serial queue. Termination cancels downloads, initialization and
 // synchronous WASM work immediately; no stale result can reach a disposed graph.
+let cacheOnly = false;
 export function serveTts({ load, generate }) {
   let queue = Promise.resolve(), ready = false;
   self.onmessage = ({ data }) => {
@@ -17,6 +18,7 @@ export function serveTts({ load, generate }) {
       try {
         if (data.type === 'load') {
           if (ready) throw new Error('TTS Worker already loaded.');
+          cacheOnly = data.cacheOnly === true;
           requireWasm(); await load(data); ready = true;
           self.postMessage({ type: 'ready', id: data.id });
         } else if (data.type === 'generate') {
@@ -40,6 +42,12 @@ export function progress(message) { self.postMessage({ type: 'progress', message
 // and unavailable/quota-limited Cache Storage fall back to network transparently.
 export async function ttsAsset(url) {
   let cache;
+  if (cacheOnly) {
+    cache = await caches.open('transformers-cache');
+    const response = await cache.match(url);
+    if (!response) throw new Error('TTS asset missing or evicted. Use Download TTS assets in the graph editor.');
+    return response;
+  }
   try { cache = await caches.open('tts-assets-v1'); } catch { /* optional */ }
   const hit = await cache?.match(url).catch(() => undefined);
   if (hit) return hit;

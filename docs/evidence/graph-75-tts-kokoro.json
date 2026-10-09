@@ -1,0 +1,145 @@
+{
+  "type": "Kokoro",
+  "time": "2026-10-09T05:08:46.034Z",
+  "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+  "device": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "isolated": true,
+    "secure": true,
+    "cores": 16
+  },
+  "host": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "cpu": "Apple M4 Max"
+  },
+  "inference": "Real packaged TTS; ASR and tab source fixtures",
+  "runs": [
+    {
+      "language": "ja",
+      "loadMs": 1320,
+      "generationMs": 4795,
+      "waveform": {
+        "sampleRate": 24000,
+        "channels": 1,
+        "samples": 135600,
+        "finite": true,
+        "duration": 2.825,
+        "rms": 0.09475815472461929
+      }
+    },
+    {
+      "language": "en",
+      "loadMs": 821,
+      "generationMs": 4320,
+      "waveform": {
+        "sampleRate": 24000,
+        "channels": 1,
+        "samples": 133200,
+        "finite": true,
+        "duration": 2.775,
+        "rms": 0.0683127973227758
+      }
+    },
+    {
+      "language": "en",
+      "loadMs": 835,
+      "generationMs": 4291,
+      "waveform": {
+        "sampleRate": 24000,
+        "channels": 1,
+        "samples": 133200,
+        "finite": true,
+        "duration": 2.775,
+        "rms": 0.0683127973227758
+      }
+    }
+  ],
+  "errors": [],
+  "requests": [
+    {
+      "origin": "https://huggingface.co",
+      "path": "/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/api/resolve-cache/models/onnx-community/Kokoro-82M-v1.0-ONNX/1939ad2a8e416c0acfeecc08a694d14ef25f2231/config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/onnx/model_quantized.onnx",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://us.aws.cdn.hf.co",
+      "path": "/xet-bridge-us/67a5e958d363dcc0e458b910/72db5d760d8920a2fbd09b5a5b109b29c71c5e525956e6166025d1146c851e15",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/tokenizer.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/api/resolve-cache/models/onnx-community/Kokoro-82M-v1.0-ONNX/1939ad2a8e416c0acfeecc08a694d14ef25f2231/tokenizer.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/tokenizer_config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/api/resolve-cache/models/onnx-community/Kokoro-82M-v1.0-ONNX/1939ad2a8e416c0acfeecc08a694d14ef25f2231/tokenizer_config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/voices/jf_alpha.bin",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://us.aws.cdn.hf.co",
+      "path": "/xet-bridge-us/67a5e958d363dcc0e458b910/55f159cc77c5508bdf81bd95cd644cece886041d43ef69019ad6136965b53b43",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/voices/af_heart.bin",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://us.aws.cdn.hf.co",
+      "path": "/xet-bridge-us/67a5e958d363dcc0e458b910/478bbd0d587a03135a4899153eac4a80a046d65a32d924b25ea059319b055df8",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    }
+  ]
+}

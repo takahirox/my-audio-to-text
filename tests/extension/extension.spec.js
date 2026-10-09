@@ -33,6 +33,10 @@ const test = base.extend({
     try {
       const cdp = await context.browser().newBrowserCDPSession();
       const { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
+      // These legacy capture/lifecycle cases intentionally use a migrated
+      // transcription-only preference. Fresh-install graph behavior is covered
+      // by graph.spec.js.
+      await context.addInitScript(() => localStorage.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled: false, direction: 'ja-en' })));
       await use({ context, cdp, id, url: `chrome-extension://${id}/extension/recorder.html` });
     } finally { await context.close(); await rm(temporary, { recursive: true, force: true }); }
   },

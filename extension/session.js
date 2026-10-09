@@ -1,11 +1,8 @@
-import { Pipeline } from '../web/pipeline.js';
-import { SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
-import { ExtensionTabAudioNode } from './tab-audio-node.js';
-import { TranslationSchedulerNode, TRANSLATION } from './translation-scheduler.js';
 import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
-import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
 import { translationDirection } from './translation-preferences.js';
+import { assertGraph, defaultGraph, graphPreferences, withTranslation } from './graph.js';
+import { buildGraph } from './graph-runtime.js';
 
 // Owns tab targeting and the window's UI. Nodes own capture and recognition.
 export class TabSession {
@@ -13,74 +10,68 @@ export class TabSession {
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
     sourceFactory,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
+    graph = defaultGraph({ enabled: false }),
+    ttsWorkerFactory, prepareTts, onSynthesizedAudio = () => {},
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
   } = {}) {
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation;
-    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', partial: '', final: '', signal: '', translationEnabled: false, translationDirection: 'ja-en', displayDirection: 'ja-en', displayTranslationEnabled: false, translationStatus: 'Translation off', interimTranslation: null, utterances: [] };
+    this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
+    const preferences = graphPreferences(this.graph);
+    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', partial: '', final: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, ttsStatus: '', displayDirection: 'ja-en', displayTranslationEnabled: false, translationStatus: 'Translation off', interimTranslation: null, utterances: [] };
     this.update();
   }
   update(values = {}) { Object.assign(this.view, values); this.render({ ...this.view }); }
   async start(tabId) {
     if (this.session) return; // A second invocation never retargets live capture.
-    const session = { tabId, direction: this.view.translationDirection, translationEnabled: this.view.translationEnabled }; this.session = session;
-    this.update({ state: 'loading', tabId, displayDirection: session.direction, displayTranslationEnabled: session.translationEnabled,
+    let graph;
+    try { graph = assertGraph(this.graph); } catch (error) { this.update({ error: error.message }); return; }
+    const preferences = graphPreferences(graph);
+    const session = { tabId, direction: preferences.direction, translationEnabled: preferences.enabled }; this.session = session;
+    this.update({ state: 'loading', tabId, activeGraph: graph, ttsStatus: '', displayDirection: session.direction, displayTranslationEnabled: session.translationEnabled,
       translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: 'Loading ReazonSpeech ja-en + Silero…', error: '', partial: '', final: '', signal: '', interimTranslation: null, utterances: [] });
     try {
-      session.speech = new SpeechToTextNode({ workerFactory: this.workerFactory, onEvent: event => {
-        if (this.session !== session) return;
-        if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: event.message });
-        // Preloading has no active pipeline context to report errors yet.
-        else if (event.type === 'error' && session.pipeline.state === 'idle') this.fail(event.message);
-      } });
-      const transcript = new TranscriptOutputNode((port, { text }, signal) => {
-        if (this.session !== session || signal.aborted) return;
-        if (port === 'provisional' && this.view.state !== 'stopping') this.update({ partial: text });
-        else if (port === 'final') this.update({ partial: '', interimTranslation: null,
-          final: this.view.final + (text.trim() ? `${text}\n` : ''),
-          utterances: text.trim() ? [...this.view.utterances, { source: text, direction: session.direction, status: session.translation ? 'pending' : 'off', text: '' }] : this.view.utterances });
-      });
-      session.audio = new ExtensionTabAudioNode(tabId, {
-        sourceFactory: this.sourceFactory,
-        onAudio: pcm => {
+      Object.assign(session, buildGraph(graph, {
+        tabId, workerFactory: this.workerFactory, sourceFactory: this.sourceFactory,
+        translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
+        ttsWorkerFactory: this.ttsWorkerFactory, prepareTts: this.prepareTts,
+        onTtsState: ttsStatus => { if (this.session === session) this.update({ ttsStatus }); },
+        onSynthesizedAudio: (audio, signal) => {
+          if (this.session === session && !signal.aborted) return this.onSynthesizedAudio(audio, signal);
+        },
+        onSpeechEvent: event => {
+          if (this.session !== session) return;
+          if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: event.message });
+          else if (event.type === 'error' && session.pipeline?.state === 'idle') this.fail(event.message);
+        },
+        onTranscript: (port, { text }, signal) => {
+          if (this.session !== session || signal.aborted) return;
+          if (port === 'provisional' && this.view.state !== 'stopping') this.update({ partial: text });
+          else if (port === 'final') this.update({ partial: '', interimTranslation: null,
+            final: this.view.final + (text.trim() ? `${text}\n` : ''),
+            utterances: text.trim() ? [...this.view.utterances, { source: text, direction: session.direction, status: session.translation ? 'pending' : 'off', text: '' }] : this.view.utterances });
+        },
+        onCapturedAudio: pcm => {
           if (this.session !== session) return;
           if (!session.signal && pcm.some(sample => Math.abs(sample) > 0.00001)) {
             session.signal = true; this.update({ signal: 'Tab audio signal detected.' });
           }
         },
         onEnded: () => { if (this.session === session) void this.stop(); },
-      });
-      const nodes = { audio: session.audio, speech: session.speech, transcript };
-      const connections = [
-        { from: ['audio', 'audio'], to: ['speech', 'audio'] },
-        { from: ['speech', 'provisional'], to: ['transcript', 'provisional'] },
-        { from: ['speech', 'final'], to: ['transcript', 'final'] },
-      ];
-      if (session.translationEnabled) {
-        session.translation = new TranslationSchedulerNode({ prepare: signal => this.prepareTranslation(signal, session.direction),
-          TranslationNode: session.direction === 'en-ja' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
-          workerFactory: this.translationWorkerFactory, onState: status => {
-            if (this.session === session) this.update({ translationStatus: status });
-          } });
-        nodes.translation = session.translation;
-        nodes.translated = { inputs: { provisional: TRANSLATION, final: TRANSLATION }, outputs: {},
-          receive: (port, value, context) => {
-            if (this.session !== session || context.signal.aborted) return;
-            if (port === 'provisional') {
-              if (this.view.state !== 'stopping' && value.source.text === this.view.partial) this.update({ interimTranslation: value.status === 'pending' && this.view.interimTranslation
-                ? { ...value, previous: this.view.interimTranslation.status === 'complete' ? this.view.interimTranslation : this.view.interimTranslation.previous } : value });
-            } else {
-              const utterances = this.view.utterances.map((row, index) => index === value.index ? { ...row, ...value, source: row.source } : row);
-              this.update({ utterances });
-            }
-          } };
-        for (const port of ['provisional', 'final']) {
-          connections.push({ from: ['speech', port], to: ['translation', port] },
-            { from: ['translation', port], to: ['translated', port] });
-        }
-      }
-      session.pipeline = new Pipeline({ nodes, connections, onError: error => { if (this.session === session) this.fail(error.cause?.message || error.message); } });
+        onTranslationState: translationStatus => { if (this.session === session) this.update({ translationStatus }); },
+        onTranslation: (port, value, context) => {
+          if (this.session !== session || context.signal.aborted) return;
+          if (port === 'provisional') {
+            if (this.view.state !== 'stopping' && value.source.text === this.view.partial) this.update({ interimTranslation: value.status === 'pending' && this.view.interimTranslation
+              ? { ...value, previous: this.view.interimTranslation.status === 'complete' ? this.view.interimTranslation : this.view.interimTranslation.previous } : value });
+          } else {
+            const utterances = this.view.utterances.map((row, index) => index === value.index ? { ...row, ...value, source: row.source } : row);
+            this.update({ utterances });
+          }
+        },
+        onError: error => { if (this.session === session) this.fail(error.cause?.message || error.message); },
+      }));
       await session.speech.load();
       if (this.session !== session) return;
       this.update({ state: 'starting', status: 'Starting current-tab capture…' });
@@ -126,12 +117,18 @@ export class TabSession {
     this.cancel();
     this.update({ status: 'Transcription failed. Invoke the toolbar action or retry.', error: message });
   }
+  setGraph(graph) {
+    this.graph = assertGraph(graph);
+    const preferences = graphPreferences(this.graph);
+    this.update({ savedGraph: this.graph, translationEnabled: preferences.enabled, translationDirection: preferences.direction,
+      ...(this.session ? {} : { translationStatus: preferences.enabled ? 'Translation enabled for the next session' : 'Translation off' }) });
+  }
   setTranslation(enabled) {
-    if (this.session) return; // Apply to the next session; live graphs are immutable.
-    this.update({ translationEnabled: !!enabled, translationStatus: enabled ? 'Translation enabled for the next session' : 'Translation off' });
+    if (this.session) return;
+    this.setGraph(withTranslation(this.graph, { ...graphPreferences(this.graph), enabled: !!enabled }));
   }
   setTranslationDirection(direction) {
-    this.update({ translationDirection: translationDirection(direction) });
+    this.setGraph(withTranslation(this.graph, { ...graphPreferences(this.graph), direction: translationDirection(direction) }));
   }
   tabEnded(tabId) { if (this.session?.tabId === tabId) void this.stop(); }
 }

@@ -196,10 +196,20 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in ('transformers.js', 'ort-wasm-simd-threaded.asyncify.mjs',
                  'ort-wasm-simd-threaded.asyncify.wasm', 'transformers-LICENSE'):
         (translation / name).write_bytes(b'pinned runtime fixture')
+    tts = root / 'web' / 'tts-assets'
+    tts.mkdir()
+    for name in ('ort.mjs', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm',
+                 'transformers.js', 'ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm',
+                 'phonemizer.js', 'phonemizer-engine.mjs', 'phonemizer-source.tar.gz',
+                 'openjtalk-wasm-wrapper-D6E3BSJO.js', 'openjtalk-wasm.wasm',
+                 'open_jtalk_dic_utf_8-1.11.tar.gz', 'openjtalk-voice.htsvoice'):
+        (tts / name).write_bytes(b'pinned TTS runtime fixture')
     build.main()
     target = root / 'dist' / 'chrome-extension'
     assert {'pipeline.js', 'transcription-nodes.js'} <= set(build.SHARED_FILES)
     assert (target / 'extension' / 'tab-audio-node.js').is_file()
+    assert (target / 'web' / 'tts-assets' / 'phonemizer-source.tar.gz').is_file()
+    assert (target / 'extension' / 'graph-editor.js').is_file()
     assert (target / 'extension' / 'model-cache.html').is_file()
     assert (target / 'extension' / 'cache-demo' / 'weights.bin').stat().st_size == 16384
     for name in build.SHARED_FILES:

@@ -236,3 +236,12 @@ terminates pending inference/downloads and ignores stale replies. Repeat uses
 fresh graphs and cached assets. See [TTS Nodes](tts-nodes.md) for pins, languages,
 licenses, capability/errors and opt-in real-model tests. The generic runtime
 requires no TTS policy or modification.
+
+## Extension visual graph composition
+
+The [extension graph editor](extension-graph.md) saves a version 1 description
+with concrete production Node types and explicit named-port edges. The extension
+builder constructs this shared Pipeline at each session boundary. ASR, OPUS-MT
+directions, Supertonic 3 and Kokoro remain independent production processors;
+final-text adapters and audio playback are separate Nodes. No editor, model
+selection, storage or inference policy is added to the generic Pipeline runtime.

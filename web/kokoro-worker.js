@@ -8,13 +8,18 @@ export const KOKORO = Object.freeze({
 // does not forward revision, and its generate() validates English voices only.
 let model, tokenizer, Tensor, voiceData, phonemize;
 serveTts({
-  async load({ voice }) {
+  async load(settings) {
+    const { voice } = settings;
     if (!['af_heart', 'jf_alpha'].includes(voice)) throw new Error('Unsupported Kokoro voice/language.');
     if (voice === 'jf_alpha' && typeof DecompressionStream !== 'function') throw new Error('Japanese Kokoro requires DecompressionStream (gzip). Use a current browser.');
     const hf = await import('./tts-assets/transformers.js');
     hf.env.allowLocalModels = false; hf.env.useBrowserCache = true;
     hf.env.backends.onnx.wasm.numThreads = 1; hf.env.backends.onnx.wasm.proxy = false;
     hf.env.backends.onnx.wasm.wasmPaths = new URL('./tts-assets/', import.meta.url).href;
+    if (settings.cacheOnly) {
+      const { cacheOnlyKokoroRuntime } = await import('../extension/tts-cache.js');
+      await cacheOnlyKokoroRuntime(hf.env, settings);
+    }
     Tensor = hf.Tensor;
     const options = { revision: KOKORO.revision, progress_callback: value => progress(`Loading ${value.file || 'Kokoro'}${Number.isFinite(value.progress) ? ` ${value.progress.toFixed(0)}%` : ''}…`) };
     model = await hf.StyleTextToSpeech2Model.from_pretrained(KOKORO.id, { ...options, device: 'wasm', dtype: 'q8' });

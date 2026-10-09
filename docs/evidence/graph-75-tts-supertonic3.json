@@ -1,0 +1,159 @@
+{
+  "type": "Supertonic3",
+  "time": "2026-10-09T05:08:01.859Z",
+  "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+  "device": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "isolated": true,
+    "secure": true,
+    "cores": 16
+  },
+  "host": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "cpu": "Apple M4 Max"
+  },
+  "inference": "Real packaged TTS; ASR and tab source fixtures",
+  "runs": [
+    {
+      "language": "ja",
+      "loadMs": 868,
+      "generationMs": 1788,
+      "waveform": {
+        "sampleRate": 44100,
+        "channels": 1,
+        "samples": 137090,
+        "finite": true,
+        "duration": 2.8560416666666666,
+        "rms": 0.04760086277085531
+      }
+    },
+    {
+      "language": "en",
+      "loadMs": 1376,
+      "generationMs": 1785,
+      "waveform": {
+        "sampleRate": 44100,
+        "channels": 1,
+        "samples": 143777,
+        "finite": true,
+        "duration": 2.9953541666666665,
+        "rms": 0.04087151001716279
+      }
+    },
+    {
+      "language": "en",
+      "loadMs": 1643,
+      "generationMs": 1785,
+      "waveform": {
+        "sampleRate": 44100,
+        "channels": 1,
+        "samples": 143777,
+        "finite": true,
+        "duration": 2.9953541666666665,
+        "rms": 0.04856047353715859
+      }
+    }
+  ],
+  "errors": [],
+  "requests": [
+    {
+      "origin": "https://huggingface.co",
+      "path": "/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/duration_predictor.onnx",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://us.aws.cdn.hf.co",
+      "path": "/xet-bridge-us/6a9f6e77c73c1f80bd427e97/3f5f4dec9c9b3d9074a8d13141f3acc852dd6e97a07e156e9dc669fe98506b0a",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/text_encoder.onnx",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://us.aws.cdn.hf.co",
+      "path": "/xet-bridge-us/6a9f6e77c73c1f80bd427e97/9303c918c4da455b341b200d061a82c6ac3b8ed1d678cda6d412e72acfdb936b",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/tts.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/api/resolve-cache/models/supertone-oss-archive/supertonic-3/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx%2Ftts.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/unicode_indexer.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/api/resolve-cache/models/supertone-oss-archive/supertonic-3/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx%2Funicode_indexer.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/vector_estimator.onnx",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://us.aws.cdn.hf.co",
+      "path": "/xet-bridge-us/6a9f6e77c73c1f80bd427e97/c39cede05082f67b544b19a3b0c0fc273a71d0d8d38a9e06f2512789e3bad7fe",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/vocoder.onnx",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://us.aws.cdn.hf.co",
+      "path": "/xet-bridge-us/6a9f6e77c73c1f80bd427e97/752c10c00131361ee3ff7de734566150cb26ae821a1245d177a7f682ed0cad4d",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/voice_styles/F1.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    },
+    {
+      "origin": "https://huggingface.co",
+      "path": "/api/resolve-cache/models/supertone-oss-archive/supertonic-3/aafc6e32416a594460b32413efc49d7fe4ce6d46/voice_styles%2FF1.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsText": false
+    }
+  ]
+}

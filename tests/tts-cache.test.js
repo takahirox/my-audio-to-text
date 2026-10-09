@@ -37,3 +37,28 @@ test('TTS asset caching survives eviction, storage failure and offline misses wi
     }
   }
 });
+
+test('extension cache-only TTS never refetches evicted assets or falls back when storage is unavailable', async () => {
+  const { serveTts } = await import('../web/tts-worker.js');
+  const original = { caches: globalThis.caches, fetch: globalThis.fetch, self: globalThis.self };
+  const url = 'https://huggingface.co/model/resolve/' + 'a'.repeat(40) + '/weights.onnx';
+  const replies = []; let hit = new Response('prepared weights'), fetches = 0;
+  globalThis.self = { postMessage: message => replies.push(message) };
+  globalThis.fetch = async () => { fetches++; throw Error('Unexpected remote request'); };
+  globalThis.caches = { async open(name) { assert.equal(name, 'transformers-cache'); return { match: async key => { assert.equal(key, url); return hit?.clone(); } }; } };
+  try {
+    serveTts({ load: async () => { await ttsAsset(url); }, generate() {} });
+    globalThis.self.onmessage({ data: { type: 'load', id: 1, cacheOnly: true } });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(replies[0].type, 'ready'); assert.equal(await (await ttsAsset(url)).text(), 'prepared weights');
+    hit = null; await assert.rejects(ttsAsset(url), /missing or evicted/);
+    globalThis.caches.open = async () => { throw Error('Storage unavailable'); };
+    await assert.rejects(ttsAsset(url), /Storage unavailable/); assert.equal(fetches, 0);
+  } finally {
+    // Reset module state for other tests through its public Worker load protocol.
+    serveTts({ load() {}, generate() {} });
+    globalThis.self.onmessage({ data: { type: 'load', id: 2, cacheOnly: false } });
+    await new Promise(resolve => setImmediate(resolve));
+    for (const [key, value] of Object.entries(original)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; }
+  }
+});
