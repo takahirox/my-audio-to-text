@@ -60,3 +60,17 @@ TranslateGemma 4B (text only)
 
 Translation setup, assets, supported directions, terms and browser limits:
   https://github.com/takahirox/my-audio-to-text/blob/main/docs/translation-nodes.md
+
+Qwen3 0.6B transcript correction (optional; not included in extension graphs)
+  Qwen / Alibaba Cloud. Apache License 2.0.
+  Source: https://huggingface.co/Qwen/Qwen3-0.6B/tree/c1899de289a04d12100db370d81485cdf75e47ca
+  License: ./licenses/qwen3.txt
+  ONNX Community q4f16 conversion (no additional license declared on its card):
+  https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/tree/1e0a4a196ecabdf9a879664110574563d3f372d3
+  Upstream Apache terms apply to the derived model/tokenizer. Retain license,
+  attribution and applicable notices when redistributing; identify modifications.
+  Weights are downloaded on explicit Generate; not mirrored or bundled here.
+  Separate correction-assets/ runtime: Transformers.js 4.0.0-next.3 (Apache 2.0)
+  and ONNX Runtime Web 1.25.0-dev.20260212-1a71a5f46e (MIT), same checksum-pinned
+  versions/licenses as the translation runtime above. No remote inference.
+  Setup and evaluation: docs/correction-node.md in the repository.

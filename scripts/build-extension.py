@@ -5,7 +5,7 @@ import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_FILES = (
-    "pipeline.js", "transcription-nodes.js",
+    "pipeline.js", "port-contracts.js", "transcription-nodes.js",
     "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "supertonic3-worker.js", "supertonic3-runtime.js",
     "kokoro-worker.js", "kokoro-english.js", "kokoro-japanese.js", "kokoro-hepburn.js",
     "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js", "opus-mt-en-ja-worker.js",
