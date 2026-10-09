@@ -31,7 +31,7 @@ test('fresh graph defaults to translation; legacy preferences migrate once; pers
 });
 
 for (const [name, edit, pattern] of [
-  ['version', g => g.version = 2, /version/],
+  ['version', g => g.version = 99, /version/],
   ['unknown type', g => g.nodes[0].type = 'toString', /Unknown Node/],
   ['duplicate ID', g => g.nodes[1].id = 'audio', /Duplicate Node/],
   ['bad port', g => g.edges[0].from[1] = 'toString', /Unknown port/],
@@ -39,7 +39,7 @@ for (const [name, edit, pattern] of [
   ['cycle', g => g.edges.push(edge('speech', 'final', 'speech', 'audio')), /acyclic/],
   ['duplicate edge', g => g.edges.push(g.edges[0]), /Duplicate edge/],
   ['missing input', g => g.edges.pop(), /Required connection/],
-  ['missing source', g => g.nodes.shift(), /Exactly one Chrome/],
+  ['missing source', g => g.nodes.shift(), /Exactly one audio input/],
   ['position', g => g.nodes[0].position.x = Infinity, /Invalid position/],
   ['settings', g => g.nodes[2].settings.model = 'remote', /Unknown setting/],
   ['direction mismatch', g => g.nodes[3].type = 'OpusMtEnJa', /direction must match/],

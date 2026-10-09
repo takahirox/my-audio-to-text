@@ -99,6 +99,7 @@ export class GraphEditor {
       select.value = node.settings[key]; select.onchange = () => { node.settings[key] = select.value; this.draw(); };
       label.append(select); this.inspector.append(label);
     }
+    if (definition.help) this.inspector.append(el('p', definition.help));
     if (!definition.settings) this.inspector.append(el('p', 'This Node has no configurable settings.'));
     for (const [side, ports] of [['Input', definition.inputs], ['Output', definition.outputs]]) {
       for (const [name, contract] of Object.entries(ports)) this.inspector.append(el('p', `${side} ${name}: ${contract.name}`, 'muted'));

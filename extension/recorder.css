@@ -54,3 +54,8 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 @media (max-width: 1000px) { .graph-workspace { grid-template-columns: 150px minmax(0, 1fr); } .graph-inspector { grid-column: 1 / -1; } }
 @media (max-width: 600px) { body { padding: 1rem; } .model-grid { grid-template-columns: 1fr; } .graph-workspace { grid-template-columns: minmax(0, 1fr); } .graph-palette { display: flex; flex-wrap: wrap; gap: .4rem; } .graph-palette h2 { width: 100%; } .graph-palette button { width: auto; } .graph-scroll { min-height: 400px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+.target-row { border-top: 1px solid var(--border); padding: .5rem 0; overflow-wrap: anywhere; }
+.target-row button { margin: .2rem; font-size: .8rem; }
+.target-row select { max-width: 100%; }
+#target-status { white-space: pre-line; overflow-wrap: anywhere; font-size: .85rem; }

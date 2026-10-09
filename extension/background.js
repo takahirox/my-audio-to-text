@@ -1,4 +1,5 @@
-// The toolbar invocation grants access to this specific tab. No page injection.
+// Toolbar invocation grants access to this tab. Default capture needs no page
+// injection; optional page targets are explicitly authorized in Live.
 chrome.action.onClicked.addListener(async tab => {
   if (!Number.isInteger(tab.id)) return;
   const url = chrome.runtime.getURL('extension/recorder.html');

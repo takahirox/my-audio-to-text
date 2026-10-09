@@ -3,7 +3,9 @@
 This desktop Chromium Manifest V3 PoC starts local transcription for the tab
 on which you invoke its toolbar action. It uses the same ReazonSpeech ja-en,
 Silero VAD and hayamimi utterance policy as the [Node Playground speech test page](node-playground.md). There is no
-recognition server, page injection, microphone capture or tab-selection picker.
+recognition server. The default whole-tab graph needs no page injection or
+media picker. Optional microphone, selected media and page-field outputs are
+configured in Graph Editor and explicitly targeted in Live.
 
 The extension uses the shared Node/Port runtime:
 
@@ -102,16 +104,48 @@ playback is never an additional ASR input. See Chrome's
 [tabCapture API](https://developer.chrome.com/docs/extensions/reference/api/tabCapture)
 and [capture in a new extension window](https://developer.chrome.com/docs/extensions/how-to/web-platform/screen-capture#record_audio_and_video_in_a_new_tab).
 
+## Optional page and microphone workflows
+
+Save a graph with exactly one whole-tab, selected-media or microphone Input and
+one or more outputs. Live shows **Input and output targets** and separate target
+status/errors. For field outputs authorize the capture tab explicitly, or arm
+**Use next toolbar tab for output** and invoke the action on another output tab.
+That invocation leaves the capture target unchanged. Selected fields require a
+one-time **Pick field** click; focused fields follow the active editable field
+within the authorized output page. Clear/reselect while idle. Page targets are
+not persisted and expire on navigation; saved graph edits apply next session.
+
+Only confirmed original/completed translated text is appended, once per utterance
+ID in order, without overwriting content or submitting forms. Text/search inputs,
+textareas and basic contenteditable are supported. Sensitive/hidden/non-editable
+fields and authentication/payment forms are rejected. The top frame is the only
+supported frame; complex editors and shadow roots may require Live Copy. Page
+insertion failures detach that output while Live continues. Stop drains finals;
+Cancel/closing Live discards queued work and disconnects page hooks.
+
+For selected media, play audio/video, discover in Live, then choose a labeled
+entry. Its `captureStream()` supplies that element's audio separately, never a
+mixed tabCapture stream. Currently playing same-origin/stream-backed top-frame
+media is supported. Cross-origin/protected/DRM, restricted frames, missing audio
+tracks and unavailable capture APIs show a whole-tab fallback explanation.
+The extension does not bypass browser content protections. Save **Chrome tab
+audio** for fallback where permitted. For microphone save **Microphone audio**
+and press Start to request browser permission; denied/canceled permission is
+visible and late-granted tracks are released after cancellation.
+See [target policies, named ports and browser limitations](extension-graph.md).
+
 ## Permissions and local execution
 
 | Manifest entry | Purpose |
 | --- | --- |
 | `activeTab` | Temporary access to the specific tab where the user invokes the action; needed for `getMediaStreamId({targetTabId})`. |
+| `scripting` | Inject the packaged isolated adapter only into a user-authorized top-frame document after an explicit Live target action. No persistent host permissions. |
 | `tabCapture` | Obtain that tab's audio stream, without the Web sharing picker. |
 | `script-src 'self' 'wasm-unsafe-eval'` | Execute packaged scripts and the existing local WASM runtime. |
 | COOP/COEP | Isolate the extension page/workers for the pinned runtime's shared WASM memory. |
 
-No host, `tabs`, storage, microphone or offscreen permission is requested. Basic
+No host, `tabs`, storage or offscreen permission is requested. Microphone uses
+the browser getUserMedia permission flow only after explicit Start. Basic
 tab IDs and lifecycle events are available without the `tabs` permission. All
 scripts, translation runtimes and ASR weights are packaged locally; no remote code
 is loaded. The
