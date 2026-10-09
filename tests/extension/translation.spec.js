@@ -119,6 +119,33 @@ async function instrument(f) {
 for (const direction of ['ja-en', 'en-ja']) {
 const target = direction === 'en-ja' ? 'Japanese' : 'English';
 const open = async f => { const page = await openRecorder(f); await setDirection(page, direction); return page; };
+test(`${direction}: TranslationView without TranscriptView renders provisional and ordered final pairs under MV3 CSP`, async ({ translationExtension: f }) => {
+  await instrument(f); const page = await open(f);
+  await page.editor.getByRole('button', { name: 'Remove transcript', exact: true }).click();
+  await expect(page.editor.locator('#graph-errors')).toBeEmpty();
+  await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
+  await page.editor.reload(); await expect(page.editor.getByRole('button', { name: 'Select transcript', exact: true })).toHaveCount(0);
+  await prepare(page); await start(page);
+  await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
+  await emit(page, 'partial', 'preview');
+  await expect(page.locator('#partial')).toHaveText('preview');
+  await expect(page.locator('#partial-english')).toHaveText(`${target}: preview`);
+  await emit(page, 'final', 'slow', 0); await emit(page, 'final', 'second', 1); await emit(page, 'final', 'fail', 2);
+  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
+  await expect(page.locator('#paired-finals li')).toHaveCount(3);
+  await expect(page.locator('#paired-finals li').nth(0).locator('pre')).toHaveText(['slow', `${target}: slow`]);
+  await expect(page.locator('#paired-finals li').nth(1).locator('pre')).toHaveText(['second', `${target}: second`]);
+  await expect(page.locator('#paired-finals li').nth(2)).toContainText('Translation failed: Controlled inference failure');
+  await expect(page.locator('#partial')).toBeEmpty(); await expect(page.locator('#final')).toBeEmpty();
+  expect(await page.evaluate(() => window.ownedWorkers.every(worker => worker.released))).toBe(true);
+  await start(page); await emit(page, 'final', 'slow', 0);
+  await expect(page.locator('#paired-finals li')).toHaveCount(1);
+  await page.locator('#cancel-session').click();
+  await expect(page.locator('#paired-finals')).toContainText('Translation canceled');
+  await expect(page.locator('#paired-finals')).not.toContainText(`${target}: slow`);
+  expect(await page.evaluate(() => window.ownedWorkers.every(worker => worker.released))).toBe(true);
+});
+
 test(`${direction}: MV3 opt-in UI, Worker cache reads, pairing/stale states, ordered drain and offline profile reuse`, async ({ translationExtension: f }) => {
   test.setTimeout(60000); await instrument(f); let page = await open(f);
   await expect(model(page, '.model-status')).toHaveText('Not downloaded'); expect(f.requests).toEqual([]);

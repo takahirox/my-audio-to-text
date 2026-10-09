@@ -5,6 +5,8 @@ import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-
 import { AudioOutputNode } from '../web/synthesized-audio.js';
 import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode, TRANSLATION } from './translation-scheduler.js';
+import { FocusedInputTextOutputNode, SelectedFormFieldTextOutputNode } from './page-output-node.js';
+import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
 import { assertGraph, graphPreferences } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 
@@ -62,6 +64,12 @@ export function buildGraph(graph, options) {
     switch (spec.type) {
       case 'ChromeTabAudio':
         node = resources.audio = new ExtensionTabAudioNode(options.tabId, { sourceFactory: options.sourceFactory, onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
+      case 'SelectedPageMediaAudio':
+        node = resources.audio = new SelectedPageMediaAudioNode(options.targets?.[spec.id], { onAudio: options.onCapturedAudio, onEnded: options.onEnded, onState: state => options.onTargetState?.(spec.id, state) }); break;
+      case 'MicrophoneAudio':
+        node = resources.audio = new ExtensionMicrophoneAudioNode(options.microphoneStream, { onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
+      case 'FocusedInputTextOutputNode': case 'SelectedFormFieldTextOutputNode':
+        node = new (spec.type === 'FocusedInputTextOutputNode' ? FocusedInputTextOutputNode : SelectedFormFieldTextOutputNode)({ target: options.targets?.[spec.id], connectionFactory: options.pageConnectionFactory, onState: state => options.onTargetState?.(spec.id, state) }); break;
       case 'SpeechToText':
         node = resources.speech = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: options.onSpeechEvent }); break;
       case 'TranscriptView': node = new TranscriptOutputNode(options.onTranscript); break;

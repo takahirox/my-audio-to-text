@@ -222,7 +222,7 @@ with tempfile.TemporaryDirectory() as tmp:
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest['manifest_version'] == 3
     assert manifest['options_ui'] == {'page': 'extension/model-cache.html', 'open_in_tab': True}
-    assert set(manifest['permissions']) == {'activeTab', 'tabCapture'}
+    assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting'}
     assert 'host_permissions' not in manifest and 'content_scripts' not in manifest
     assert (target / manifest['background']['service_worker']).is_file()
     assert 'wasm-unsafe-eval' in manifest['content_security_policy']['extension_pages']

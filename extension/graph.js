@@ -3,11 +3,19 @@ import { TEXT } from '../web/translation-nodes.js';
 import { TRANSLATION } from './translation-scheduler.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 
+export const GRAPH_VERSION = 2;
+export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
+export const FIELD_TYPES = ['FocusedInputTextOutputNode', 'SelectedFormFieldTextOutputNode'];
+const fieldPorts = { final: TRANSCRIPT, translatedFinal: TRANSLATION };
 export const GRAPH_KEY = 'processing-graph-v1';
 const paired = contract => ({ provisional: contract, final: contract });
 // Fixed concrete production types and their public ports, not a model registry.
 export const NODE_TYPES = Object.freeze({
   ChromeTabAudio: { label: 'Chrome tab audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM } },
+  SelectedPageMediaAudio: { label: 'Selected page media audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Choose a media element in Live. Top frame only; unsupported media requires whole-tab capture.' },
+  MicrophoneAudio: { label: 'Microphone audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Press Start in Live to request microphone permission.' },
+  FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: fieldPorts, outputs: {}, optionalInputs: true, help: 'Authorize an output tab in Live. Connect exactly one final or translatedFinal port. Confirmed text only; appends to the focused editable field.' },
+  SelectedFormFieldTextOutputNode: { label: 'Selected form field text output', inputs: fieldPorts, outputs: {}, optionalInputs: true, help: 'Authorize an output tab and click Pick field in Live. Connect exactly one final or translatedFinal port. Targets are temporary and never stored in the graph.' },
   SpeechToText: { label: 'Speech to text', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TRANSCRIPT) },
   TranscriptView: { label: 'Original transcript', inputs: paired(TRANSCRIPT), outputs: {}, settings: { direction: ['ja-en', 'en-ja'] } },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: paired(TRANSCRIPT), outputs: paired(TRANSLATION) },
@@ -34,13 +42,13 @@ export function defaultGraph({ enabled = true, direction = 'ja-en' } = {}) {
     nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 230), graphNode('TranslationView', 'translated', 530, 230));
     for (const port of ['provisional', 'final']) edges.push(edge('speech', port, 'translation', port), edge('translation', port, 'translated', port));
   }
-  return { version: 1, nodes, edges };
+  return { version: GRAPH_VERSION, nodes, edges };
 }
 export const edge = (source, output, target, input) => ({ from: [source, output], to: [target, input] });
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
 export function validateGraph(graph) {
   const errors = [];
-  if (!record(graph) || graph.version !== 1 || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return ['Expected version 1 graph with nodes and edges arrays.'];
+  if (!record(graph) || ![1, GRAPH_VERSION].includes(graph.version) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return ['Expected version 1 or 2 graph with nodes and edges arrays.'];
   if (graph.nodes.length > 24 || graph.edges.length > 64) return ['Graph exceeds the supported size (24 nodes / 64 edges).'];
   const nodes = new Map(), incoming = new Map(), outgoing = new Map(), seen = new Set();
   for (const node of graph.nodes) {
@@ -79,23 +87,38 @@ export function validateGraph(graph) {
   }
   for (const id of nodes.keys()) visit(id);
   const ofType = type => graph.nodes.filter(n => n?.type === type);
-  for (const type of ['ChromeTabAudio', 'SpeechToText', 'TranscriptView']) if (ofType(type).length !== 1) errors.push(`Exactly one ${type} is required.`);
+  if (graph.nodes.filter(n => INPUT_TYPES.includes(n?.type)).length !== 1) errors.push('Exactly one audio input is required; simultaneous sources are ambiguous.');
+  if (ofType('SpeechToText').length !== 1) errors.push('Exactly one SpeechToText is required.');
+  if (ofType('TranscriptView').length > 1) errors.push('Only one shared Live transcript destination is supported.');
   if (graph.nodes.filter(n => translators.includes(n?.type)).length > 1 || ofType('TranslationView').length > 1) errors.push('Only one paired translation branch is supported.');
   for (const node of nodes.values()) {
     const definition = definitionOf(node.type);
     if (!definition) continue;
-    for (const port of Object.keys(definition.inputs)) if (!incoming.has(JSON.stringify([node.id, port]))) errors.push(`Required connection missing: ${node.id}.${port}`);
+    if (definition.optionalInputs && Object.keys(definition.inputs).filter(port => incoming.has(JSON.stringify([node.id, port]))).length !== 1) errors.push(`Connect exactly one finalized text input: ${node.id}`);
+    for (const port of Object.keys(definition.inputs)) if (!definition.optionalInputs && !incoming.has(JSON.stringify([node.id, port]))) errors.push(`Required connection missing: ${node.id}.${port}`);
     if (Object.keys(definition.outputs).length && !outgoing.has(node.id)) errors.push(`Unconnected output Node: ${node.id}`);
   }
-  const speech = ofType('SpeechToText')[0], transcript = ofType('TranscriptView')[0];
+  const speech = ofType('SpeechToText')[0];
   const translation = graph.nodes.find(n => translators.includes(n?.type)), translated = ofType('TranslationView')[0];
   const requires = (node, port, source, output = port) => {
     if (node && source && JSON.stringify(incoming.get(JSON.stringify([node.id, port]))) !== JSON.stringify([source.id, output])) errors.push(`Connect ${source.id}.${output} to ${node.id}.${port}.`);
   };
-  requires(speech, 'audio', ofType('ChromeTabAudio')[0]);
-  for (const port of ['provisional', 'final']) { requires(transcript, port, speech); requires(translation, port, speech); requires(translated, port, translation); }
-  if (!!translation !== !!translated) errors.push('OPUS-MT requires a paired TranslationView.');
-  if (translation && transcript?.settings?.direction !== (translation.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en')) errors.push('Transcript direction must match the concrete OPUS-MT Node.');
+  requires(speech, 'audio', graph.nodes.find(n => INPUT_TYPES.includes(n?.type)));
+  for (const port of ['provisional', 'final']) requires(translation, port, speech);
+  if (translated && !translation) errors.push('TranslationView requires OPUS-MT.');
+  if (!graph.nodes.some(n => definitionOf(n?.type) && !Object.keys(definitionOf(n.type).outputs).length)) errors.push('At least one output destination is required.');
+  for (const node of [...ofType('TranscriptView'), ...ofType('TranslationView')]) {
+    for (const port of ['provisional', 'final']) requires(node, port, node.type === 'TranscriptView' ? speech : translation);
+  }
+  for (const node of graph.nodes.filter(n => FIELD_TYPES.includes(n?.type))) {
+    for (const [port, source, output] of [['final', speech, 'final'], ['translatedFinal', translation, 'final']]) {
+      if (incoming.has(JSON.stringify([node.id, port]))) {
+        if (!source) errors.push(`No finalized producer for ${node.id}.${port}`);
+        requires(node, port, source, output);
+      }
+    }
+  }
+  if (translation && ofType('TranscriptView').some(view => view.settings?.direction !== (translation.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'))) errors.push('Transcript direction must match the concrete OPUS-MT Node.');
   // Avoid treating provisional transcripts or pending/error translations as text.
   for (const node of [...ofType('FinalText'), ...ofType('TranslatedFinalText')]) requires(node, 'final', node.type === 'FinalText' ? speech : translation);
   return [...new Set(errors)];
@@ -103,15 +126,15 @@ export function validateGraph(graph) {
 export function assertGraph(graph) {
   const errors = validateGraph(graph);
   if (errors.length) throw new Error(errors.join('\n'));
-  return structuredClone(graph);
+  return { ...structuredClone(graph), version: GRAPH_VERSION };
 }
 export function graphPreferences(graph) {
-  return { enabled: graph.nodes.some(n => translators.includes(n.type)), direction: graph.nodes.find(n => n.type === 'TranscriptView')?.settings.direction || 'ja-en' };
+  return { enabled: graph.nodes.some(n => translators.includes(n.type)), direction: graph.nodes.some(n => n.type === 'OpusMtEnJa') ? 'en-ja' : graph.nodes.find(n => n.type === 'TranscriptView')?.settings.direction || 'ja-en' };
 }
 export function withTranslation(graph, { enabled, direction }) {
   const next = assertGraph(graph);
   const current = next.nodes.find(n => translators.includes(n.type));
-  next.nodes.find(n => n.type === 'TranscriptView').settings.direction = direction;
+  for (const view of next.nodes.filter(n => n.type === 'TranscriptView')) view.settings.direction = direction;
   if (enabled && current) current.type = direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn';
   else if (enabled) {
     const branch = defaultGraph({ direction });
@@ -135,7 +158,11 @@ export function withTranslation(graph, { enabled, direction }) {
 }
 export function readGraph(storage) {
   const saved = storage.getItem(GRAPH_KEY);
-  if (saved !== null) return assertGraph(JSON.parse(saved));
+  if (saved !== null) {
+    const parsed = JSON.parse(saved), graph = assertGraph(parsed);
+    if (parsed.version === 1) saveGraph(storage, graph);
+    return graph;
+  }
   let legacy;
   try { legacy = JSON.parse(storage.getItem('opus-mt-translation-preferences')); } catch { /* migrate corrupt preferences to defaults */ }
   const graph = defaultGraph({ enabled: typeof legacy?.enabled === 'boolean' ? legacy.enabled : true, direction: legacy?.direction });

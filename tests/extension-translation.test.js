@@ -7,6 +7,7 @@ import { TEXT, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation
 import { OPUS_MT, OPUS_MT_EN_JA } from '../web/translation-models.js';
 import { TranslationSchedulerNode, TRANSLATION } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
+import { defaultGraph } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
 import { translationLabel, provisionalLabel } from '../extension/translation-view.js';
 
@@ -186,6 +187,51 @@ test('optional session path preserves Japanese, paired ordered English, stop/dra
   speech.receiveEvent({ type: 'final', text: 'late', id: 5 }); f.translation.complete(2, 'late'); await tick();
   assert.equal(f.session.view.final, ''); f.session.cancel(); await tick();
   assert.ok(f.translation.workers.every(worker => worker.terminated));
+});
+
+for (const direction of ['ja-en', 'en-ja']) for (const transcript of [false, true]) {
+  test(`${direction}: TranslationView owns ordered rows ${transcript ? 'with' : 'without'} TranscriptView`, async () => {
+    const f = sessionFixture(), graph = defaultGraph({ direction });
+    if (!transcript) {
+      graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
+      graph.edges = graph.edges.filter(edge => edge.to[0] !== 'transcript');
+    }
+    graph.edges.reverse(); f.session.setGraph(graph); await f.session.start(42);
+    const speech = f.session.session.speech;
+    speech.receiveEvent({ type: 'partial', text: 'old', id: 0 }); await tick();
+    assert.equal(f.session.view.partial, 'old'); assert.equal(f.session.view.interimTranslation.status, 'pending');
+    speech.receiveEvent({ type: 'partial', text: 'latest', id: 0 }); await tick();
+    f.translation.complete(0, 'stale'); await tick();
+    assert.equal(f.session.view.partial, 'latest'); assert.notEqual(f.session.view.interimTranslation.text, 'stale');
+    f.translation.complete(1, 'translated latest'); await tick();
+    assert.equal(f.session.view.interimTranslation.text, 'translated latest');
+    // Identical source strings are separate utterances, paired by scheduler index.
+    speech.receiveEvent({ type: 'final', text: 'same', id: 0 });
+    speech.receiveEvent({ type: 'final', text: 'same', id: 1 }); await tick();
+    assert.deepEqual(f.session.view.utterances.map(row => row.status), ['pending', 'pending']);
+    assert.equal(f.session.view.partial, ''); assert.equal(f.session.view.interimTranslation, null);
+    const stopping = f.session.stop(); await tick();
+    f.translation.complete(2, 'first'); await tick(); f.translation.complete(3, 'second'); await stopping;
+    assert.deepEqual(f.session.view.utterances.map(row => [row.source, row.text, row.status, row.direction]),
+      [['same', 'first', 'complete', direction], ['same', 'second', 'complete', direction]]);
+    assert.equal(f.session.view.final, transcript ? 'same\nsame\n' : '');
+    assert.ok(f.translation.workers.every(worker => worker.terminated));
+  });
+}
+
+test('TranslationView without TranscriptView retains errors and cancels pending rows without accepting late replies', async () => {
+  const f = sessionFixture(), graph = defaultGraph();
+  graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
+  graph.edges = graph.edges.filter(edge => edge.to[0] !== 'transcript');
+  f.session.setGraph(graph); await f.session.start(42);
+  f.session.session.speech.receiveEvent({ type: 'final', text: 'pending', id: 0 }); await tick();
+  f.session.cancel(); f.translation.complete(0, 'late'); await tick();
+  assert.deepEqual(f.session.view.utterances.map(row => [row.source, row.status, row.text]), [['pending', 'canceled', '']]);
+  f.session.prepareTranslation = async () => { throw Error('cache unavailable'); };
+  await f.session.start(42); await tick();
+  f.session.session.speech.receiveEvent({ type: 'final', text: 'failed', id: 0 }); await tick();
+  await f.session.stop();
+  assert.deepEqual(f.session.view.utterances.map(row => [row.source, row.status, row.error]), [['failed', 'error', 'cache unavailable']]);
 });
 
 test('unavailable model never stops speech capture and final pairing reports accurate failure', async () => {
