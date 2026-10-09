@@ -108,6 +108,21 @@ focus changes. Escape in the top frame, **Cancel field picker** in Live, closing
 Live, or the 60-second timeout removes picker hooks. **Clear target** detaches
 an idle destination; stop before clearing/reselecting or changing capture targets.
 
+Field outputs are optional at runtime (#85). A missing authorized page, an
+unpicked selected field, or a target that is unavailable during startup skips
+only that sink for the entire session. Live's target status names the skipped
+sink and explains how to select/authorize it for the next session; connected,
+authorized sinks have a separate ready status. Unset targets are skipped without
+connecting to a page, injecting a script, requesting permission, picking a field
+or authorizing a tab.
+Other routes continue, including Live, local translation, TTS and authorized
+field outputs. If no Live text view or field output is active, Live explicitly
+reports **No text destination is active**. The graph still runs with its saved
+routes; no fallback destination is added. Stop or Cancel, configure the target,
+then Start again to enable a skipped sink. Missed text is never replayed.
+Selected media remains a required input target, and graph schema validation
+still rejects malformed routes, incompatible ports and cycles.
+
 Targets are pinned to a tab and Chrome document ID, and selected fields/media
 also to the actual element identity, not a selector that can silently match a
 replacement. Navigation, removal, permission loss or unsupported editing detaches
@@ -245,6 +260,13 @@ fan-out, translated text to another field, stable-ID duplicate/stale suppression
 focus changes, basic contenteditable/plain text, field replacement, sensitive
 fields, frame boundaries, navigation, scoped output-tab authorization, permission
 denial, cancellation, Stop/drain and resource release.
+The deterministic #85 cases also cover missing pages for both field sink types,
+an authorized page without a picked field, all text destinations skipped, no
+page operations for unset targets, mixed active/skipped fan-out, stale fields at
+startup, next-session retry, and controlled permission/transport loss at the
+Chrome adapter boundary. Navigation/close and activeTab denial use native Chrome
+behavior; ASR/translation inference and the controlled permission error remain
+fixtures.
 
 Run the real speech/field smoke after building:
 
@@ -254,9 +276,11 @@ EXTENSION_TARGET_SMOKE=1 npm run test:extension -- tests/extension/targets-real-
 
 This uses the committed checksum-pinned English speech WAV, native tabCapture,
 the real bundled ReazonSpeech/Silero workers and selected-field insertion with
-simultaneous Live output, with no inference mocks or remote traffic. It compares
+simultaneous Live output and an unconfigured, skipped focused sink, with no
+inference mocks or remote traffic. It first starts with both field targets
+missing, then retries with the selected field authorized. It compares
 all confirmed Live utterances to appended field text after Stop. The saved
-[real smoke evidence](evidence/graph-81-real-asr-field.json) contains counts and
+[real smoke evidence](evidence/graph-85-real-asr-field.json) contains counts and
 runtime metadata, without transcripts. Native microphone hardware, third-party
 rich editors, meeting applications, DRM and restricted external frames remain
 optional manual compatibility checks; these results make no universal support

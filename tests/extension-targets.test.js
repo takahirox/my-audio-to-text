@@ -64,11 +64,60 @@ test('field errors detach the branch without retries, logging text or failing Li
   assert.ok(f.node.failed); assert.equal(f.closed(), 1); assert.match(f.states.at(-1), /Permission lost/); assert.ok(!f.states.join('').includes('private transcript'));
   const other = output(); await other.node.start(context); await other.node.receive('final', { text: 'no id' }, context); assert.ok(other.node.failed);
 });
-test('unauthorized field output refuses startup, and cancellation suppresses queued finals', async () => {
-  const node = new PageTextOutputNode({}); const controller = new AbortController(), context = { signal: controller.signal };
-  await assert.rejects(node.start(context), /Authorize/);
+test('cancellation suppresses queued finals', async () => {
+  const controller = new AbortController(), context = { signal: controller.signal };
   const f = output(); await f.node.start(context); controller.abort(); await f.node.receive('final', { id: 1, text: 'no' }, context);
   assert.equal(f.sent.length, 1); f.node.dispose();
+});
+
+for (const selected of [false, true]) {
+  for (const target of [undefined, {}, { tabId: 42 }, ...(selected ? [{ tabId: 42, documentId: 'authorized' }] : [])]) {
+    test(`${selected ? 'selected' : 'focused'} output skips incomplete target ${JSON.stringify(target)} without opening a page connection`, async () => {
+      const states = [], context = { signal: new AbortController().signal };
+      const node = new PageTextOutputNode({ target, selected, onState: (...state) => states.push(state), connectionFactory() { assert.fail('Skipped output must not touch a page'); } });
+      await node.start(context);
+      assert.equal(node.skipped, true);
+      assert.equal(states[0][1], false);
+      assert.match(states[0][0], /output skipped: no (authorized target|selected field)/);
+      assert.match(states[0][0], /Input and output targets.*next session/);
+      // A later target cannot activate this session or insert missed finals.
+      node.target = { tabId: 42, documentId: 'later', fieldId: 'later' };
+      for (const port of ['final', 'translatedFinal']) await node.receive(port, { id: 1, source: { id: 1 }, status: 'complete', text: 'never' }, context);
+      node.stop(); node.dispose();
+      assert.equal(states.length, 1);
+      assert.equal(node.sequence, 0);
+    });
+  }
+  for (const stage of ['connect', 'output']) {
+    test(`${selected ? 'selected' : 'focused'} output startup ${stage} failure stays branch-local and closes its connection`, async () => {
+      let closed = 0;
+      const states = [], context = { signal: new AbortController().signal };
+      const node = new PageTextOutputNode({ selected, target: { tabId: 42, documentId: 'stale', fieldId: 'removed' }, onState: (...state) => states.push(state),
+        connectionFactory() {
+          if (stage === 'connect') throw Error('Permission lost');
+          return { request: async () => { throw Error('Selected field removed'); }, close() { closed++; } };
+        } });
+      await node.start(context);
+      await node.receive('final', { id: 1, text: 'never' }, context);
+      assert.equal(node.skipped, true); assert.equal(closed, stage === 'connect' ? 0 : 1);
+      assert.equal(states[0][1], false); assert.match(states[0][0], /output skipped: target unavailable/);
+    });
+  }
+}
+
+test('disconnect during output handshake reports one skipped state and never revives on a late reply', async () => {
+  let disconnect, reply, closed = 0;
+  const states = [], context = { signal: new AbortController().signal };
+  const node = new PageTextOutputNode({ target: { tabId: 42, documentId: 'gone', label: 'Page' }, onState: (...state) => states.push(state),
+    connectionFactory: (_target, onEvent) => {
+      disconnect = () => onEvent({ event: 'ended', error: 'Page navigated' });
+      return { request: () => new Promise(resolve => { reply = resolve; }), close() { closed++; disconnect(); } };
+    } });
+  const starting = node.start(context); disconnect(); reply(); await starting;
+  await node.receive('final', { id: 1, text: 'never' }, context);
+  assert.equal(states.length, 1); assert.equal(states[0][1], false);
+  assert.match(states[0][0], /output skipped: target unavailable \(Page navigated\)/);
+  assert.equal(closed, 1); assert.equal(node.sequence, 0);
 });
 
 test('microphone toolbar selection never requests permission; cancellation releases a late grant before model/capture startup', async () => {

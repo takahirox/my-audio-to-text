@@ -11,18 +11,36 @@ export class PageTextOutputNode {
   }
   async start(context) {
     this.context = context;
-    if (!this.target || (this.selected && !this.target.fieldId)) throw Error('Authorize the output tab and pick the selected field in Live before Start.');
-    this.connection = this.connectionFactory(this.target, event => { if (event.event === 'ended' && !this.disposed) this.failure(event.error); });
-    await this.connection.request('output', { mode: this.selected ? 'selected' : 'focused', target: this.target.fieldId });
     context.signal.throwIfAborted();
-    this.onState(`${this.target.label}${this.selected ? ` · ${this.target.fieldLabel}` : ' · focused editable field'} · confirmed text only`);
+    // A field destination is optional. Never connect, inject or ask permission
+    // for an unset target; this decision lasts for this node's entire session.
+    if (!Number.isInteger(this.target?.tabId) || typeof this.target.documentId !== 'string' || !this.target.documentId) { this.skip('no authorized target'); return; }
+    if (this.selected && !this.target.fieldId) { this.skip('no selected field'); return; }
+    try {
+      this.connection = this.connectionFactory(this.target, event => { if (event.event === 'ended') this.failure(event.error); });
+      await this.connection.request('output', { mode: this.selected ? 'selected' : 'focused', target: this.target.fieldId });
+      context.signal.throwIfAborted();
+      if (!this.skipped && !this.failed && !this.disposed) {
+        this.connected = true;
+        this.onState(`${this.target.label}${this.selected ? ` · ${this.target.fieldLabel}` : ' · focused editable field'} · connected and authorized · confirmed text only`, true);
+      }
+    } catch (error) {
+      // A stale document/field or lost permission disables only this sink.
+      if (!context.signal.aborted && !this.skipped && !this.failed && !this.disposed) this.skip(`target unavailable (${error.message})`);
+    }
+  }
+  skip(reason) {
+    this.skipped = true; this.connection?.close();
+    this.onState(`${this.selected ? 'Selected field' : 'Focused input'} output skipped: ${reason}. Select/authorize a page${this.selected ? ' and pick a field' : ''} in Input and output targets to enable it next session.`, false);
   }
   failure(message) {
+    if (this.failed || this.skipped || this.disposed) return;
+    if (!this.connected) { this.skip(`target unavailable (${message})`); return; }
     this.failed = true; this.connection?.close();
-    this.onState(`Insertion detached: ${message} Stop, reauthorize/reselect and Start again. Live continues.`);
+    this.onState(`Insertion detached: ${message} Stop, reauthorize/reselect and Start again. Other branches continue.`, false);
   }
   async receive(port, value, context) {
-    if (this.failed || this.disposed || context.signal.aborted || !['final', 'translatedFinal'].includes(port)) return;
+    if (this.skipped || this.failed || this.disposed || context.signal.aborted || !['final', 'translatedFinal'].includes(port)) return;
     if (port === 'translatedFinal' && value.status !== 'complete') return;
     const id = port === 'translatedFinal' ? value.source?.id : value.id;
     // Production ASR gives monotonically increasing utterance IDs. Require them
@@ -34,7 +52,7 @@ export class PageTextOutputNode {
     const text = value.text?.trim(); if (!text) return;
     try {
       await this.connection.request('append', { key, sequence: this.sequence++, text });
-      if (!context.signal.aborted) this.onState(`${this.target.label} · inserted ${this.sequence} confirmed utterance(s)`);
+      if (!context.signal.aborted && !this.failed && !this.disposed) this.onState(`${this.target.label} · inserted ${this.sequence} confirmed utterance(s)`, true);
     } catch (error) { if (!context.signal.aborted) this.failure(error.message); }
   }
   stop() { this.dispose(); }

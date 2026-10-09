@@ -69,7 +69,7 @@ export function buildGraph(graph, options) {
       case 'MicrophoneAudio':
         node = resources.audio = new ExtensionMicrophoneAudioNode(options.microphoneStream, { onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
       case 'FocusedInputTextOutputNode': case 'SelectedFormFieldTextOutputNode':
-        node = new (spec.type === 'FocusedInputTextOutputNode' ? FocusedInputTextOutputNode : SelectedFormFieldTextOutputNode)({ target: options.targets?.[spec.id], connectionFactory: options.pageConnectionFactory, onState: state => options.onTargetState?.(spec.id, state) }); break;
+        node = new (spec.type === 'FocusedInputTextOutputNode' ? FocusedInputTextOutputNode : SelectedFormFieldTextOutputNode)({ target: options.targets?.[spec.id], connectionFactory: options.pageConnectionFactory, onState: (state, active) => options.onTargetState?.(spec.id, state, active) }); break;
       case 'SpeechToText':
         node = resources.speech = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: options.onSpeechEvent }); break;
       case 'TranscriptView': node = new TranscriptOutputNode(options.onTranscript); break;
