@@ -33,6 +33,9 @@ const test = base.extend({
     try {
       const cdp = await context.browser().newBrowserCDPSession();
       const { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
+      // loadUnpacked may return before the service worker registers onClicked.
+      const worker = context.serviceWorkers().find(worker => worker.url().includes(id)) || await context.waitForEvent('serviceworker');
+      await expect.poll(() => worker.evaluate(() => chrome.action.onClicked.hasListeners())).toBe(true);
       // These legacy capture/lifecycle cases intentionally use a migrated
       // transcription-only preference. Fresh-install graph behavior is covered
       // by graph.spec.js.

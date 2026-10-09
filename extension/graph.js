@@ -3,10 +3,9 @@ import { TEXT } from '../web/translation-nodes.js';
 import { TRANSLATION } from './translation-scheduler.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 
-export const GRAPH_VERSION = 2;
+export const GRAPH_VERSION = 3;
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
-export const FIELD_TYPES = ['FocusedInputTextOutputNode', 'SelectedFormFieldTextOutputNode'];
-const fieldPorts = { final: TRANSCRIPT, translatedFinal: TRANSLATION };
+export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
 const paired = contract => ({ provisional: contract, final: contract });
 // Fixed concrete production types and their public ports, not a model registry.
@@ -14,8 +13,7 @@ export const NODE_TYPES = Object.freeze({
   ChromeTabAudio: { label: 'Chrome tab audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM } },
   SelectedPageMediaAudio: { label: 'Selected page media audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Choose a media element in Live. Top frame only; unsupported media requires whole-tab capture.' },
   MicrophoneAudio: { label: 'Microphone audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Press Start in Live to request microphone permission.' },
-  FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: fieldPorts, outputs: {}, optionalInputs: true, help: 'Authorize an output tab in Live. Connect exactly one final or translatedFinal port. Confirmed text only; appends to the focused editable field.' },
-  SelectedFormFieldTextOutputNode: { label: 'Selected form field text output', inputs: fieldPorts, outputs: {}, optionalInputs: true, help: 'Authorize an output tab and click Pick field in Live. Connect exactly one final or translatedFinal port. Targets are temporary and never stored in the graph.' },
+  FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect FinalText.text or TranslatedFinalText.text; no separate authorization or field picker.' },
   SpeechToText: { label: 'Speech to text', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TRANSCRIPT) },
   TranscriptView: { label: 'Original transcript', inputs: paired(TRANSCRIPT), outputs: {}, settings: { direction: ['ja-en', 'en-ja'] } },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: paired(TRANSCRIPT), outputs: paired(TRANSLATION) },
@@ -48,7 +46,7 @@ export const edge = (source, output, target, input) => ({ from: [source, output]
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
 export function validateGraph(graph) {
   const errors = [];
-  if (!record(graph) || ![1, GRAPH_VERSION].includes(graph.version) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return ['Expected version 1 or 2 graph with nodes and edges arrays.'];
+  if (!record(graph) || graph.version !== GRAPH_VERSION || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return ['Expected version 3 graph with nodes and edges arrays.'];
   if (graph.nodes.length > 24 || graph.edges.length > 64) return ['Graph exceeds the supported size (24 nodes / 64 edges).'];
   const nodes = new Map(), incoming = new Map(), outgoing = new Map(), seen = new Set();
   for (const node of graph.nodes) {
@@ -110,23 +108,44 @@ export function validateGraph(graph) {
   for (const node of [...ofType('TranscriptView'), ...ofType('TranslationView')]) {
     for (const port of ['provisional', 'final']) requires(node, port, node.type === 'TranscriptView' ? speech : translation);
   }
-  for (const node of graph.nodes.filter(n => FIELD_TYPES.includes(n?.type))) {
-    for (const [port, source, output] of [['final', speech, 'final'], ['translatedFinal', translation, 'final']]) {
-      if (incoming.has(JSON.stringify([node.id, port]))) {
-        if (!source) errors.push(`No finalized producer for ${node.id}.${port}`);
-        requires(node, port, source, output);
-      }
-    }
-  }
   if (translation && ofType('TranscriptView').some(view => view.settings?.direction !== (translation.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'))) errors.push('Transcript direction must match the concrete OPUS-MT Node.');
   // Avoid treating provisional transcripts or pending/error translations as text.
   for (const node of [...ofType('FinalText'), ...ofType('TranslatedFinalText')]) requires(node, 'final', node.type === 'FinalText' ? speech : translation);
   return [...new Set(errors)];
 }
+// Legacy field sinks had producer-specific ports. Preserve each output through
+// an explicit typed adapter; ambiguous routes require recovery, never deletion.
+export function migrateGraph(graph) {
+  if (!record(graph) || ![1, 2].includes(graph.version)) return graph;
+  if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return graph;
+  const next = structuredClone(graph), ids = new Set(next.nodes.map(node => node?.id));
+  const recovery = id => { throw Error(`Cannot migrate field output ${id}: connect exactly one final producer. Reset and Save in Graph Editor, then connect FinalText.text or TranslatedFinalText.text to FocusedInputTextOutputNode.text.`); };
+  for (const node of [...next.nodes]) {
+    if (!['FocusedInputTextOutputNode', 'SelectedFormFieldTextOutputNode'].includes(node?.type)) continue;
+    const routes = next.edges.filter(route => route?.to?.[0] === node.id);
+    if (routes.length !== 1) recovery(node.id);
+    const route = routes[0], source = next.nodes.find(source => source?.id === route.from?.[0]);
+    const translated = route.to[1] === 'translatedFinal';
+    if (!['final', 'translatedFinal'].includes(route.to[1]) || route.from?.[1] !== 'final' ||
+        (translated ? !translators.includes(source?.type) : source?.type !== 'SpeechToText')) recovery(node.id);
+    const type = translated ? 'TranslatedFinalText' : 'FinalText';
+    let adapter = next.nodes.find(candidate => candidate.type === type && next.edges.some(e =>
+      e.from?.[0] === source.id && e.from[1] === 'final' && e.to?.[0] === candidate.id && e.to[1] === 'final'));
+    if (!adapter) {
+      let id = 'field-text'; while (ids.has(id)) id += '-new'; ids.add(id);
+      adapter = graphNode(type, id, Math.max(0, (node.position?.x ?? 20) - 250), Math.min(4000, (node.position?.y ?? 20) + 160));
+      next.nodes.push(adapter); next.edges.push(edge(source.id, 'final', id, 'final'));
+    }
+    node.type = 'FocusedInputTextOutputNode';
+    route.from = [adapter.id, 'text']; route.to = [node.id, 'text'];
+  }
+  next.version = GRAPH_VERSION;
+  return next;
+}
 export function assertGraph(graph) {
-  const errors = validateGraph(graph);
+  const migrated = migrateGraph(graph), errors = validateGraph(migrated);
   if (errors.length) throw new Error(errors.join('\n'));
-  return { ...structuredClone(graph), version: GRAPH_VERSION };
+  return structuredClone(migrated);
 }
 export function graphPreferences(graph) {
   return { enabled: graph.nodes.some(n => translators.includes(n.type)), direction: graph.nodes.some(n => n.type === 'OpusMtEnJa') ? 'en-ja' : graph.nodes.find(n => n.type === 'TranscriptView')?.settings.direction || 'ja-en' };
@@ -160,7 +179,7 @@ export function readGraph(storage) {
   const saved = storage.getItem(GRAPH_KEY);
   if (saved !== null) {
     const parsed = JSON.parse(saved), graph = assertGraph(parsed);
-    if (parsed.version === 1) saveGraph(storage, graph);
+    if (parsed.version !== GRAPH_VERSION) saveGraph(storage, graph);
     return graph;
   }
   let legacy;

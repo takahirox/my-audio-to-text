@@ -1,7 +1,7 @@
 import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
 import { translationDirection } from './translation-preferences.js';
-import { assertGraph, defaultGraph, graphPreferences, withTranslation, INPUT_TYPES } from './graph.js';
+import { assertGraph, defaultGraph, graphPreferences, withTranslation, INPUT_TYPES, FIELD_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
 
 // Owns tab targeting and the window's UI. Nodes own capture and recognition.
@@ -16,7 +16,7 @@ export class TabSession {
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
   } = {}) {
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
-    this.pageConnectionFactory = pageConnectionFactory; this.targets = {};
+    this.pageConnectionFactory = pageConnectionFactory; this.targets = {}; this.outputTarget = null;
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation;
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
     const preferences = graphPreferences(this.graph);
@@ -39,7 +39,7 @@ export class TabSession {
         this.update({ tabId, error: `Select and authorize the target for ${node.id} in Live before Start.` }); return;
       }
     }
-    const session = { tabId, targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), sourceType, direction: preferences.direction, translationEnabled: preferences.enabled }; this.session = session;
+    const session = { tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), sourceType, direction: preferences.direction, translationEnabled: preferences.enabled }; this.session = session;
     this.update({ state: 'loading', tabId, activeGraph: graph, ttsStatus: '', targetStatus: '', displayDirection: session.direction, displayTranslationEnabled: session.translationEnabled,
       translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: 'Loading ReazonSpeech ja-en + Silero…', error: '', partial: '', final: '', signal: '', interimTranslation: null, utterances: [] });
     try {
@@ -50,14 +50,14 @@ export class TabSession {
         session.microphoneStream = stream;
       }
       Object.assign(session, buildGraph(graph, {
-        tabId, targets: session.targets, microphoneStream: session.microphoneStream, pageConnectionFactory: this.pageConnectionFactory,
+        tabId, outputTarget: session.outputTarget, targets: session.targets, microphoneStream: session.microphoneStream, pageConnectionFactory: this.pageConnectionFactory,
         onTargetState: (id, state, active) => {
           if (this.session === session && state) {
             session.targetStates[id] = state;
             if (active === true) session.activeFieldOutputs.add(id);
             else if (active === false) session.activeFieldOutputs.delete(id);
             const statuses = Object.entries(session.targetStates).map(([id, status]) => `${id}: ${status}`);
-            if (!hasTranscriptView && !hasTranslationView && !session.activeFieldOutputs.size) statuses.push('No text destination is active. Select/authorize an output target in Input and output targets for the next session, or add a Live view in Graph Editor.');
+            if (!hasTranscriptView && !hasTranslationView && !session.activeFieldOutputs.size) statuses.push('No text destination is active. Focus a supported field in the toolbar tab or invoke its toolbar action for the next session, or add a Live view in Graph Editor.');
             this.update({ targetStatus: statuses.join('\n') });
           }
         },
@@ -170,6 +170,12 @@ export class TabSession {
     this.update();
   }
   tabEnded(tabId) {
+    if (this.outputTarget?.tabId === tabId) this.outputTarget = null;
+    if (this.session?.outputTarget?.tabId === tabId) {
+      for (const spec of this.session.description?.nodes || []) if (FIELD_TYPES.includes(spec.type)) {
+        this.session.pipeline.entries.get(spec.id).node.failure('Toolbar document navigated or closed.');
+      }
+    }
     for (const [id, target] of Object.entries(this.targets)) if (target.tabId === tabId) delete this.targets[id];
     if (this.session?.tabId === tabId && this.session.sourceType !== 'MicrophoneAudio') void this.stop();
     // Each output port reports its own detachment; preserve peer/skip statuses.

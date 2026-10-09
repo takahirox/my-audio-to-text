@@ -6,29 +6,22 @@ export class TargetControls {
   render() {
     const running = !!this.session.session, graph = running ? this.session.view.activeGraph : this.session.graph;
     const targets = running ? this.session.session.targets : this.session.targets;
-    const signature = JSON.stringify([graph, running, this.session.view.tabId, targets, this.pendingOutput, this.busy, !!this.picker]);
+    const signature = JSON.stringify([graph, running, this.session.view.tabId, targets, this.session.outputTarget, this.busy]);
     if (signature === this.signature) return;
     this.signature = signature; this.root.replaceChildren();
     const help = document.createElement('p'); help.className = 'muted';
-    help.textContent = 'Capture uses the toolbar-invoked tab. Page targets are top frame only. Authorize each output here, or choose “Use next toolbar tab” and invoke the extension on a different output page. Stop before changing targets.';
+    help.textContent = 'Focused output follows a supported user-focused field in the toolbar-invoked tab, top frame only. No field picker or extra authorization is needed. Stop before changing capture targets.';
     this.root.append(help);
     for (const node of graph.nodes.filter(n => INPUT_TYPES.includes(n.type) || FIELD_TYPES.includes(n.type))) {
       const row = document.createElement('div'); row.className = 'target-row'; row.dataset.targetNode = node.id;
-      const label = document.createElement('p'), target = targets[node.id];
-      label.textContent = `${node.id}: ${node.type === 'MicrophoneAudio' ? 'Microphone · explicit Start permission' : node.type === 'ChromeTabAudio' ? `Whole capture tab ${this.session.view.tabId ?? 'not selected'}` : target ? `${target.label}${target.fieldLabel ? ` · ${target.fieldLabel}` : ''}${target.mediaLabel ? ` · ${target.mediaLabel}` : ''}` : 'No target selected'}`;
+      const label = document.createElement('p'), target = FIELD_TYPES.includes(node.type) ? this.session.outputTarget : targets[node.id];
+      label.textContent = `${node.id}: ${node.type === 'MicrophoneAudio' ? 'Microphone · explicit Start permission' : node.type === 'ChromeTabAudio' ? `Whole capture tab ${this.session.view.tabId ?? 'not selected'}` : target ? `${target.label}${target.mediaLabel ? ` · ${target.mediaLabel}` : ''}` : 'No target selected'}`;
       row.append(label);
       const button = (text, action) => {
         const control = document.createElement('button'); control.type = 'button'; control.textContent = text; control.disabled = running || !!this.busy;
         control.onclick = () => { void this.perform(action); }; row.append(control); return control;
       };
-      if (FIELD_TYPES.includes(node.type)) {
-        button('Authorize capture tab for output', () => this.selectOutput(node, this.session.view.tabId));
-        button('Use next toolbar tab for output', async () => {
-          this.pendingOutput = node.id;
-          this.session.update({ targetStatus: `Invoke the toolbar action on the desired output tab for ${node.id}. Capture target will stay unchanged.` });
-        });
-        if (node.type === 'SelectedFormFieldTextOutputNode') button('Pick field', () => this.pick(node));
-      } else if (node.type === 'SelectedPageMediaAudio') {
+      if (node.type === 'SelectedPageMediaAudio') {
         button('Discover media in capture tab', async () => {
           const authorized = await authorizePage(this.session.view.tabId), connection = new PageConnection(authorized);
           try {
@@ -44,18 +37,12 @@ export class TargetControls {
           } finally { connection.close(); }
         });
       }
-      if (target) button('Clear target', async () => {
+      if (target && node.type === 'SelectedPageMediaAudio') button('Clear target', async () => {
         const connection = new PageConnection(target);
-        try { if (target.fieldId || target.mediaId) await connection.request('forget', { target: target.fieldId || target.mediaId }); } finally { connection.close(); if (this.mediaList?.id === node.id) this.mediaList.select.value = ''; this.session.setTarget(node.id, null); }
+        try { if (target.mediaId) await connection.request('forget', { target: target.mediaId }); } finally { connection.close(); if (this.mediaList?.id === node.id) this.mediaList.select.value = ''; this.session.setTarget(node.id, null); }
       });
       if (this.mediaList?.id === node.id && !running) row.append(this.mediaList.select);
       this.root.append(row);
-    }
-    if (this.picker) {
-      const cancel = document.createElement('button'); cancel.textContent = 'Cancel field picker'; cancel.onclick = () => this.picker?.close(); this.root.append(cancel);
-    }
-    if (this.pendingOutput) {
-      const cancel = document.createElement('button'); cancel.textContent = 'Cancel output-tab selection'; cancel.onclick = () => { this.pendingOutput = null; this.render(); this.session.update(); }; cancel.disabled = running; this.root.append(cancel);
     }
   }
   async perform(action) {
@@ -65,36 +52,18 @@ export class TargetControls {
     catch (error) { this.session.update({ targetStatus: `Target unavailable: ${error.message} Invoke the toolbar on a normal web page and try again.` }); }
     finally { this.busy = false; this.render(); this.session.update(); }
   }
-  async selectOutput(node, tabId) {
-    const target = await authorizePage(tabId);
-    if (this.session.session) return;
-    this.session.setTarget(node.id, target);
-    this.session.update({ targetStatus: `${node.id}: authorized ${target.label}. ${node.type === 'SelectedFormFieldTextOutputNode' ? 'Pick a field before Start.' : 'Focus a supported field in this page before finalized speech arrives.'}` });
-  }
-  async pick(node) {
-    const target = this.session.targets[node.id];
-    if (!target) throw Error('Authorize the output tab before picking.');
-    const connection = this.picker = new PageConnection(target);
+  async prepareFocusedOutput(tabId) {
+    this.session.outputTarget = null;
+    if (!this.session.graph.nodes.some(node => FIELD_TYPES.includes(node.type))) return;
+    this.busy = true; this.render(); this.session.update();
     try {
-      await chrome.tabs.update(target.tabId, { active: true });
-      const tab = await chrome.tabs.get(target.tabId); await chrome.windows.update(tab.windowId, { focused: true });
-      this.session.update({ targetStatus: 'Click a visible editable field in the output page. Escape cancels.' });
-      const field = await connection.request('pick');
-      if (this.session.session) return;
-      this.session.setTarget(node.id, { ...target, fieldId: field.id, fieldLabel: field.label });
-      this.session.update({ targetStatus: `${node.id}: selected ${field.label}. Start to append confirmed text.` });
-    } finally { connection.close(); this.picker = null; }
-  }
-  async invokeOutput(tabId) {
-    const id = this.pendingOutput; if (!id || this.session.session) return false;
-    this.pendingOutput = null;
-    const node = this.session.graph.nodes.find(node => node.id === id && FIELD_TYPES.includes(node.type));
-    if (node) await this.perform(() => this.selectOutput(node, tabId));
-    return true;
+      const target = await authorizePage(tabId);
+      if (!this.session.session) this.session.outputTarget = target;
+    } catch (error) {
+      this.session.update({ targetStatus: `Focused output unavailable: ${error.message} Other branches continue.` });
+    } finally { this.busy = false; this.render(); this.session.update(); }
   }
   tabEnded(tabId) {
     if (this.mediaList?.authorized.tabId === tabId) { this.mediaList = null; this.signature = null; }
-    if (this.picker?.target.tabId === tabId) this.picker.close();
   }
-  close() { this.picker?.close(); }
 }

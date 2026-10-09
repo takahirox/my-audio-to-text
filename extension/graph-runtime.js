@@ -5,7 +5,7 @@ import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-
 import { AudioOutputNode } from '../web/synthesized-audio.js';
 import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode, TRANSLATION } from './translation-scheduler.js';
-import { FocusedInputTextOutputNode, SelectedFormFieldTextOutputNode } from './page-output-node.js';
+import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
 import { assertGraph, graphPreferences } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
@@ -14,17 +14,20 @@ import { verifiedTtsCache } from './tts-cache.js';
 // transcript object, provisional text or translation status notification.
 export class FinalTextNode {
   outputs = { text: TEXT };
-  constructor(translated = false) { this.translated = translated; this.inputs = { final: translated ? TRANSLATION : TRANSCRIPT }; }
+  constructor(translated = false) { this.lastId = -1; this.translated = translated; this.inputs = { final: translated ? TRANSLATION : TRANSCRIPT }; }
   receive(port, value, context) {
     if (port !== 'final' || (this.translated && value.status !== 'complete')) return;
-    const text = value.text.trim();
-    // Keep every final utterance; each chunk respects production TTS's bound.
-    let remaining = text;
-    while (remaining) {
-      let end = Math.min(300, remaining.length);
-      if (end < remaining.length && /[\uD800-\uDBFF]/.test(remaining[end - 1])) end--;
-      context.emit('text', remaining.slice(0, end)); remaining = remaining.slice(end);
+    if (context.signal?.aborted) return;
+    // Session-local final delivery policy lives at conversion, outside TEXT.
+    // IDs, when supplied by ASR, are monotonic. Equal strings with distinct IDs
+    // are legitimate utterances; sources without IDs deliver each value once.
+    const id = this.translated ? value.source?.id : value.id;
+    if (Number.isSafeInteger(id) && id >= 0) {
+      if (id <= this.lastId) return;
+      this.lastId = id;
     }
+    const text = value.text.trim();
+    if (text) context.emit('text', text);
   }
 }
 
@@ -47,7 +50,17 @@ class PreparedTtsNode {
   }
   async receive(port, text, context) {
     if (this.failed) return;
-    try { await this.node.receive(port, text, context); }
+    try {
+      // TTS's size bound belongs to its branch, so TEXT fan-out preserves a
+      // whole final utterance for page editing and other string consumers.
+      let remaining = text;
+      while (remaining && !this.failed && !context.signal.aborted) {
+        let end = Math.min(300, remaining.length);
+        if (end < remaining.length && /[\uD800-\uDBFF]/.test(remaining[end - 1])) end--;
+        await this.node.receive(port, remaining.slice(0, end), context);
+        remaining = remaining.slice(end);
+      }
+    }
     catch (error) { if (!context.signal.aborted) await this.failure(error); }
   }
   async stop() {
@@ -68,8 +81,8 @@ export function buildGraph(graph, options) {
         node = resources.audio = new SelectedPageMediaAudioNode(options.targets?.[spec.id], { onAudio: options.onCapturedAudio, onEnded: options.onEnded, onState: state => options.onTargetState?.(spec.id, state) }); break;
       case 'MicrophoneAudio':
         node = resources.audio = new ExtensionMicrophoneAudioNode(options.microphoneStream, { onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
-      case 'FocusedInputTextOutputNode': case 'SelectedFormFieldTextOutputNode':
-        node = new (spec.type === 'FocusedInputTextOutputNode' ? FocusedInputTextOutputNode : SelectedFormFieldTextOutputNode)({ target: options.targets?.[spec.id], connectionFactory: options.pageConnectionFactory, onState: (state, active) => options.onTargetState?.(spec.id, state, active) }); break;
+      case 'FocusedInputTextOutputNode':
+        node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active) => options.onTargetState?.(spec.id, state, active) }); break;
       case 'SpeechToText':
         node = resources.speech = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: options.onSpeechEvent }); break;
       case 'TranscriptView': node = new TranscriptOutputNode(options.onTranscript); break;

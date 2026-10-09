@@ -1,0 +1,15 @@
+{
+  "browser": "153.0.8010.12",
+  "realAsr": true,
+  "realTabCapture": true,
+  "realFieldInsertion": true,
+  "toolbarDocumentPrepared": true,
+  "plainTextSink": true,
+  "concurrentLiveOutput": true,
+  "fixtureSha256": "21212faed6ae5f5958603d4d7cf60a423f1090fb6542d00e3a826ebe6235a768",
+  "finalUtterances": 3,
+  "insertedOnceInOrder": true,
+  "milliseconds": 37201,
+  "remoteRequests": 0,
+  "pageErrors": []
+}

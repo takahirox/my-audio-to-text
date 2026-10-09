@@ -74,14 +74,13 @@ test('concrete supported descriptions instantiate actual Nodes with identical co
   }
 });
 
-test('final adapters skip pending/errors, preserve ordered text and bound TTS snippets without breaking surrogate pairs', () => {
+test('final adapters skip pending/errors and preserve a whole utterance for TEXT fan-out', () => {
   const values = [], context = { emit: (port, text) => values.push([port, text]) }, adapter = new FinalTextNode(true);
   adapter.receive('provisional', { text: 'bad', status: 'complete' }, context);
   for (const status of ['pending', 'error', 'canceled']) adapter.receive('final', { text: 'bad', status }, context);
   const text = 'a'.repeat(299) + '😀' + 'b'.repeat(302);
   adapter.receive('final', { text, status: 'complete' }, context);
-  assert.equal(values.map(v => v[1]).join(''), text); assert.ok(values.every(v => v[1].length <= 300));
-  assert.ok(values.every(v => !/[\uD800-\uDBFF]$/.test(v[1])));
+  assert.deepEqual(values, [['text', text]]);
 });
 
 test('direction and translation controls retain saved audio nodes; disabling translation removes dependent audio only', () => {
@@ -120,7 +119,11 @@ test('saved translation → final-text → actual Kokoro Node graph drains only 
   await new Promise(resolve => setImmediate(resolve)); assert.deepEqual(texts, []);
   built.speech.receiveEvent({ type: 'final', text: 'one', id: 0 });
   built.speech.receiveEvent({ type: 'final', text: 'two', id: 1 });
+  const long = 'a'.repeat(299) + '😀' + 'b'.repeat(302);
+  built.speech.receiveEvent({ type: 'final', text: long, id: 2 });
   await built.pipeline.stop(); await built.pipeline.dispose();
-  assert.deepEqual(rows, ['one', 'two']); assert.deepEqual(texts, ['Translated one', 'Translated two']); assert.equal(audio.length, 2);
+  assert.deepEqual(rows, ['one', 'two', long]); assert.deepEqual(texts.slice(0, 2), ['Translated one', 'Translated two']);
+  assert.equal(texts.slice(2).join(''), 'Translated ' + long); assert.ok(texts.every(text => text.length <= 300 && !/[\uD800-\uDBFF]$/.test(text)));
+  assert.equal(audio.length, texts.length);
   assert.ok(workers.every(worker => worker.released));
 });

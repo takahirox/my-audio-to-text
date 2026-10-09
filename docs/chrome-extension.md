@@ -123,20 +123,36 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 
 Save a graph with exactly one whole-tab, selected-media or microphone Input and
 one or more outputs. Live shows **Input and output targets** and separate target
-status/errors. For field outputs authorize the capture tab explicitly, or arm
-**Use next toolbar tab for output** and invoke the action on another output tab.
-That invocation leaves the capture target unchanged. Selected fields require a
-one-time **Pick field** click; focused fields follow the active editable field
-within the authorized output page. Clear/reselect while idle. Page targets are
-not persisted and expire on navigation; saved graph edits apply next session.
+status/errors. For focused output, connect `SpeechToText.final → FinalText.final`,
+then `FinalText.text → FocusedInputTextOutputNode.text`. For translations connect
+`OPUS-MT.final → TranslatedFinalText.final`, then
+`TranslatedFinalText.text → FocusedInputTextOutputNode.text`.
+The sink accepts one plain TEXT string input;
+TRANSCRIPT/TRANSLATION cannot connect directly. Final adapter text can fan out
+to TTS and other TEXT consumers, while Live retains its independent display.
 
-Only confirmed original/completed translated text is appended, once per utterance
-ID in order, without overwriting content or submitting forms. Text/search inputs,
-textareas and basic contenteditable are supported. Sensitive/hidden/non-editable
-fields and authentication/payment forms are rejected. The top frame is the only
-supported frame; complex editors and shadow roots may require Live Copy. Page
-insertion failures detach that output while Live continues. Stop drains finals;
-Cancel/closing Live discards queued work and disconnects page hooks.
+Invoke the toolbar on the desired normal page. Configured focused output is
+prepared automatically on that same top-level document using `activeTab`, before
+Live takes window focus. Focus a supported text/search input, textarea or basic
+contenteditable to receive subsequent text. No additional output authorization,
+field picker or cross-tab destination is supported. If Live temporarily steals
+window focus, a valid prior user-focused field is retained until superseded;
+no field is guessed when there was no valid focus. Dynamic YouTube-style comment
+activation is covered by a controlled fixture; live YouTube compatibility has
+not been manually verified. Complex editors, shadow roots and restricted frames
+may require Live Copy.
+
+Manual/selected text is preserved and strings append in order without submitting
+forms. Upstream final adapters suppress repeated/stale IDs within the session
+and emit only confirmed original/completed translations. The string input itself
+needs no IDs. Sensitive/hidden/disabled fields and authentication/payment forms
+are skipped, as are canceled `beforeinput` edits; a visible status explains the
+skip while other branches continue. Page navigation, closure or permission loss
+detaches the sink. Stop and invoke the page toolbar again to recover; a running
+session never retargets when another tab's action is invoked. Page targets are
+not persisted. Version 1/2 saved field graphs migrate through typed adapters or
+show a Reset-and-Save recovery error. Selected media selection remains supported.
+Stop drains new finals without replay; Cancel/closing Live discards queued work.
 
 For selected media, play audio/video, discover in Live, then choose a labeled
 entry. Its `captureStream()` supplies that element's audio separately, never a
@@ -154,7 +170,7 @@ See [target policies, named ports and browser limitations](extension-graph.md).
 | Manifest entry | Purpose |
 | --- | --- |
 | `activeTab` | Temporary access to the specific tab where the user invokes the action; needed for `getMediaStreamId({targetTabId})`. |
-| `scripting` | Inject the packaged isolated adapter only into a user-authorized top-frame document after an explicit Live target action. No persistent host permissions. |
+| `scripting` | Inject the packaged isolated adapter only into a user-authorized top-frame document after toolbar invocation for configured focused output, or explicit media discovery in Live. No persistent host permissions. |
 | `tabCapture` | Obtain that tab's audio stream, without the Web sharing picker. |
 | `script-src 'self' 'wasm-unsafe-eval'` | Execute packaged scripts and the existing local WASM runtime. |
 | COOP/COEP | Isolate the extension page/workers for the pinned runtime's shared WASM memory. |

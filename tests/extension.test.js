@@ -58,70 +58,35 @@ function fieldOutputs({ live = true } = {}) {
     graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
     graph.edges = graph.edges.filter(edge => edge.to[0] !== 'transcript');
   }
-  for (const [id, type] of [['focused', 'FocusedInputTextOutputNode'], ['selected', 'SelectedFormFieldTextOutputNode']]) {
-    graph.nodes.push(graphNode(type, id)); graph.edges.push(edge('speech', 'final', id, 'final'));
-  }
+  graph.nodes.push(graphNode('FinalText', 'text'), graphNode('FocusedInputTextOutputNode', 'focused'));
+  graph.edges.push(edge('speech', 'final', 'text', 'final'), edge('text', 'text', 'focused', 'text'));
   return graph;
 }
 
-test('missing field targets start with actionable skip statuses; Stop drains Live, Cancel releases capture, and retry uses fresh targets', async () => {
-  const sent = [];
-  const f = fixture({ graph: fieldOutputs(), pageConnectionFactory: target => ({ request: async (action, value) => sent.push([target, action, value]), close() {} }) });
+test('missing toolbar document skips only focused output; Live drains, retry snapshots the same-tab document', async () => {
+  const sent = [], f = fixture({ graph: fieldOutputs(), pageConnectionFactory: target => ({ request: async (action, value) => { sent.push([target, action, value]); return { inserted: true }; }, close() {} }) });
   await f.session.start(42);
-  assert.equal(f.session.view.state, 'running'); assert.equal(f.session.view.error, '');
-  for (const label of ['Focused input', 'Selected field']) assert.match(f.session.view.targetStatus, new RegExp(`${label} output skipped: no authorized target`));
-  assert.match(f.session.view.targetStatus, /Input and output targets.*next session/);
-  assert.doesNotMatch(f.session.view.targetStatus, /No text destination/);
-  assert.throws(() => f.session.setTarget('focused', {}), /Stop before/);
-  f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
-  await f.session.stop();
-  assert.equal(f.session.view.final, 'final text\n'); assert.deepEqual(sent, []);
-  f.session.setTarget('focused', { tabId: 99, documentId: 'authorized', label: 'Page' });
-  f.session.setTarget('selected', { tabId: 99, documentId: 'authorized', label: 'Page' });
-  await f.session.start(42);
-  assert.match(f.session.view.targetStatus, /connected and authorized/);
-  assert.match(f.session.view.targetStatus, /Selected field output skipped: no selected field/);
-  f.sources[1].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop();
-  assert.deepEqual(sent.filter(([, action]) => action === 'append').map(([, , value]) => value.text), ['final text']);
-  f.session.setTarget('selected', { tabId: 99, documentId: 'authorized', fieldId: 'picked', label: 'Page', fieldLabel: 'Notes' });
-  await f.session.start(42); assert.doesNotMatch(f.session.view.targetStatus, /skipped/);
-  const before = sent.length; f.session.cancel(); f.sources[2].onAudio(new Float32Array(16000)); await drain();
-  assert.equal(sent.length, before); assert.ok(f.workers.every(worker => worker.terminated));
-  assert.equal(f.sources[2].stops.at(-1), false);
-});
-
-test('field-only graph starts without fallback views and reports when every text destination is inactive', async () => {
-  const f = fixture({ graph: fieldOutputs({ live: false }), pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
-  await f.session.start(42);
-  assert.equal(f.session.view.state, 'running'); assert.equal(f.session.view.error, '');
-  assert.match(f.session.view.targetStatus, /No text destination is active/);
-  assert.equal(f.session.session.pipeline.entries.has('transcript'), false);
+  assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /output skipped: no authorized toolbar document/);
   f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop();
-  assert.equal(f.session.view.final, ''); assert.equal(f.session.view.state, 'idle');
+  assert.equal(f.session.view.final, 'final text\n'); assert.deepEqual(sent, []);
+  f.session.outputTarget = { tabId: 42, documentId: 'authorized', label: 'Page' };
+  await f.session.start(42); assert.match(f.session.view.targetStatus, /connected and authorized/);
+  f.session.outputTarget.documentId = 'changed';
+  f.sources[1].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop();
+  assert.deepEqual(sent.filter(([, action]) => action === 'append').map(([target, , value]) => [target.documentId, value.text]), [['authorized', 'final text']]);
+  f.session.tabEnded(42); assert.equal(f.session.outputTarget, null);
 });
-
-test('target snapshot precedes model loading and stale field startup leaves an authorized peer running', async () => {
-  const sent = [], f = fixture({ graph: fieldOutputs({ live: false }), holdLoad: true,
-    pageConnectionFactory: target => ({ request: async (action, value) => {
-      if (target.documentId === 'stale') throw Error('Permission lost');
-      sent.push([target.documentId, action, value]);
-    }, close() {} }) });
-  f.session.setTarget('selected', { tabId: 99, documentId: 'stale', fieldId: 'picked', label: 'Page' });
-  const starting = f.session.start(42);
-  f.session.targets.focused = { tabId: 99, documentId: 'later', label: 'Page' };
-  f.session.targets.selected.documentId = 'later';
-  f.workers.forEach(worker => worker.reply({ type: 'ready' })); await starting;
-  assert.equal(f.session.view.state, 'running'); assert.deepEqual(sent, []);
-  assert.match(f.session.view.targetStatus, /Permission lost/); assert.match(f.session.view.targetStatus, /No text destination is active/);
-  await f.session.stop();
-  const retry = f.session.start(42); f.workers.slice(2).forEach(worker => worker.reply({ type: 'ready' })); await retry;
-  assert.doesNotMatch(f.session.view.targetStatus, /skipped|No text destination/);
-  const selected = f.session.session.pipeline.entries.get('selected').node;
-  selected.failure('Page removed');
-  assert.equal(f.session.view.state, 'running'); assert.doesNotMatch(f.session.view.targetStatus, /No text destination/);
-  f.session.session.pipeline.entries.get('focused').node.failure('Permission lost');
-  assert.match(f.session.view.targetStatus, /No text destination is active/);
-  f.session.cancel();
+test('field-only graph reports every unavailable destination without adding a fallback view', async () => {
+  const f = fixture({ graph: fieldOutputs({ live: false }), pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
+  await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /No text destination is active/);
+  f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop(); assert.equal(f.session.view.final, '');
+});
+test('stale document disables focused output while Live continues; cancellation releases capture and workers', async () => {
+  const f = fixture({ graph: fieldOutputs(), pageConnectionFactory: () => ({ request: async () => { throw Error('Permission lost'); }, close() {} }) });
+  f.session.outputTarget = { tabId: 42, documentId: 'stale', label: 'Page' };
+  await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /Permission lost/);
+  f.session.session.speech.receiveEvent({ type: 'final', id: 1, text: 'Live continues' }); await drain(); assert.match(f.session.view.final, /Live continues/);
+  f.session.cancel(); await drain(); assert.ok(f.workers.every(worker => worker.terminated)); assert.equal(f.sources[0].stops.at(-1), false);
 });
 
 test('selected media input still requires its target before model or capture startup', async () => {
@@ -244,6 +209,7 @@ test('toolbar action passes the invoked tab to a persistent window and reuses it
   await invoke({ id: 42 });
   assert.equal(created[0].url, 'chrome-extension://id/extension/recorder.html?tab=42');
   assert.equal(created[0].type, 'popup');
+  assert.equal(created[0].focused, false, 'new Live prepares page focus before taking window focus');
   contexts = [{ documentUrl: created[0].url, windowId: 7 }];
   await invoke({ id: 99 });
   assert.equal(created.length, 1); assert.equal(sent[0].tabId, 99);

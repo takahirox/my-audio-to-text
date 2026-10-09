@@ -1,4 +1,4 @@
-# Executable extension processing graphs (#75, #81)
+# Executable extension processing graphs (#75, #81, #87)
 
 Open **Graph Editor** from Live or Models. It opens a separate full-size
 extension tab. The left **Nodes** palette lists every supported concrete Node;
@@ -36,16 +36,20 @@ translation enablement/direction preferences migrate once, including a saved
 transcription-only choice. The editor's **Draft translation** controls edit this
 same graph and require Save; there is no second preferences store. Removing
 OPUS-MT also removes its view and dependent translated-audio branch.
-Version 1 descriptions migrate to version 2 without changing Nodes or routes,
-using the same storage key for compatibility. Page/media target handles are
-never saved with a graph and must be authorized in each new Live window.
+Version 1/2 descriptions migrate to version 3 using the same storage key.
+Legacy focused/selected field sinks with one unambiguous final route become a
+focused TEXT sink plus FinalText or TranslatedFinalText; an existing matching
+adapter is reused. Selected-field picking is removed. Ambiguous/malformed routes
+fail visibly; Reset and Save in Graph Editor, then reconnect the explicit text
+path to recover. Outputs are never silently dropped. Page/media handles are
+never saved with a graph. Media selection is still available in Live.
 A corrupt/unknown-version saved graph displays an error and prevents Start
 until a valid graph is saved. Reset and Save in the editor to recover. Storage
 failures remain visible.
 
 ## Supported graph and ports
 
-The version 2 description is JSON with `version`, `nodes` and `edges`. Each Node
+The version 3 description is JSON with `version`, `nodes` and `edges`. Each Node
 has `id`, concrete `type`, `settings`, and `position: { x, y }`. Each edge has
 `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`. No implicit routes, payload
 wrappers, model registry or remote execution are added. [The schema and default](../extension/graph.js)
@@ -57,8 +61,7 @@ constructs a real `Pipeline` with exactly those named-port edges.
 | ChromeTabAudio | — | audio: captured mono 16 kHz PCM; ExtensionTabAudioNode |
 | SelectedPageMediaAudio | — | audio: selected element only, normalized mono 16 kHz PCM |
 | MicrophoneAudio | — | audio: explicitly permitted microphone, normalized mono 16 kHz PCM |
-| FocusedInputTextOutputNode | final: TRANSCRIPT **or** translatedFinal: TRANSLATION | append confirmed text to focused field in authorized page |
-| SelectedFormFieldTextOutputNode | final: TRANSCRIPT **or** translatedFinal: TRANSLATION | append confirmed text to explicitly picked field in authorized page |
+| FocusedInputTextOutputNode | text: TEXT (one plain string input) | append to user-focused field in the toolbar-invoked document |
 | SpeechToText | audio: captured PCM | provisional/final: TRANSCRIPT; SpeechToTextNode |
 | TranscriptView | provisional/final: TRANSCRIPT | original/provisional/final UI; TranscriptOutputNode |
 | OpusMtJaEn | provisional/final: TRANSCRIPT | provisional/final: paired TRANSLATION; TranslationSchedulerNode with OpusMtTranslationNode |
@@ -90,61 +93,61 @@ Node and route; Live chooses the temporary browser target. Toolbar invocation
 selects the capture tab. The default remains whole-tab audio → ASR → Live with
 optional paired translation; it injects nothing into the page.
 
-For page outputs, connect `SpeechToText.final` to each field sink's `final`, or
-`OPUS-MT.final` to its `translatedFinal`. Exactly one of these inputs must be
-connected per sink. A provisional edge is rejected even though it shares a
-contract with the final edge. Fan-out preserves the Live route and independently
-routes the same final to any number of field sinks, bounded by graph size.
-No processing Node needs to know about its destinations.
+For page output, connect `SpeechToText.final → FinalText.final`, then
+`FinalText.text → FocusedInputTextOutputNode.text`. For translations use
+`OPUS-MT.final → TranslatedFinalText.final`, then
+`TranslatedFinalText.text → FocusedInputTextOutputNode.text`. TRANSCRIPT and
+TRANSLATION cannot connect directly to TEXT. Adapter outputs can fan out to
+other TEXT consumers, including TTS; ASR/translation still fan out to Live.
+The sink knows only strings, not model identity, translation status or IDs.
 
-For each field sink, click **Authorize capture tab for output**. To use a different
-page, click **Use next toolbar tab for output**, then invoke the extension action
-on that page. That invocation authorizes only this output and leaves the capture
-tab unchanged. Every output must be explicitly authorized; default graphs never
-insert text. A focused sink uses the editable active field in that authorized
-page when a final arrives. A selected sink additionally needs **Pick field**:
-click the desired field in the page once. The selected element survives ordinary
-focus changes. Escape in the top frame, **Cancel field picker** in Live, closing
-Live, or the 60-second timeout removes picker hooks. **Clear target** detaches
-an idle destination; stop before clearing/reselecting or changing capture targets.
+Invoke the toolbar on the desired normal web page. A configured focused sink
+automatically prepares that tab's top-level Chrome document using `activeTab`
+and the packaged isolated page agent, before Live takes window focus. There is
+no extra authorization, field picker, cross-tab selection or persistent host
+grant. New Live windows open unfocused during preparation. A running graph
+ignores another toolbar invocation; Stop first to change the capture/output tab.
+A graph saved after invocation applies next session; if it newly adds a focused
+sink, invoke the page toolbar again to prepare its document.
 
-Field outputs are optional at runtime (#85). A missing authorized page, an
-unpicked selected field, or a target that is unavailable during startup skips
-only that sink for the entire session. Live's target status names the skipped
-sink and explains how to select/authorize it for the next session; connected,
-authorized sinks have a separate ready status. Unset targets are skipped without
-connecting to a page, injecting a script, requesting permission, picking a field
-or authorizing a tab.
-Other routes continue, including Live, local translation, TTS and authorized
-field outputs. If no Live text view or field output is active, Live explicitly
-reports **No text destination is active**. The graph still runs with its saved
-routes; no fallback destination is added. Stop or Cancel, configure the target,
-then Start again to enable a skipped sink. Missed text is never replayed.
-Selected media remains a required input target, and graph schema validation
-still rejects malformed routes, incompatible ports and cycles.
+Focus a supported field on the toolbar tab. Each arriving string follows current
+eligible focus; the agent never searches for an arbitrary input. If Live steals
+window focus and the editor blurs, a previously user-focused field is retained
+only while it remains valid in that same document and no other focus/click has
+superseded it. No previous focus, unsupported focus, disabled/hidden/sensitive
+fields, cancellation by `beforeinput`, or unsupported rich editing skips that
+value with a visible explanation. Focus another supported field for subsequent
+values; skipped values are never replayed. YouTube-style dynamic comments are
+supported when activation creates/focuses an accessible basic contenteditable.
+Closed shadow roots and restricted/cross-origin frames require Live Copy.
 
-Targets are pinned to a tab and Chrome document ID, and selected fields/media
-also to the actual element identity, not a selector that can silently match a
-replacement. Navigation, removal, permission loss or unsupported editing detaches
-the affected insertion branch with visible recovery guidance; Live continues.
-Stop drains final ASR/translation deliveries before detaching ports. Cancel
-aborts queued work, closes ports and releases capture. Graph settings/targets
-are copied at session start and cannot retarget an active session.
+A missing/stale document or lost permission/transport skips or detaches only
+that output. ASR, translation, TTS, Live and other branches continue. If all text
+destinations are unavailable, Live explicitly reports **No text destination is
+active**. Stop and invoke the page toolbar again to recover. Navigation/closure
+invalidates the pinned document; it never follows another tab or injects into a
+new document automatically. Tab/media capture retains its existing stop-on-tab-
+navigation behavior; microphone/Live can continue with output detached.
 
-Field insertion appends confirmed utterances in order. Each sink and page port
-reject duplicate/stale utterance IDs and never automatically retry an uncertain
-DOM side effect. Blank, provisional, pending, error and canceled values do not
-insert. Utterance IDs reset only in a new session. Existing content is preserved:
-text appends at the end, with a space if needed; a focused field's caret moves to
-the new end. It does not replace selected/manual text or submit forms. Ordinary
-`text`/`search` inputs, textareas and basic contenteditable are supported, with
-cancelable `beforeinput` and `input`/`change` events, native value setters, and
-plain text nodes. Passwords, credit-card/security fields, authentication/payment
-forms, disabled/read-only/hidden/inert fields are rejected conservatively. Rich
-editors, closed shadow roots and cross-origin/restricted frames are unsupported;
-use Live Copy for them. A page can reject `beforeinput`; this detaches insertion.
-DOM and browser editing support varies; synthetic events do not promise support
-for every framework. Page strings are never executed and text is never HTML.
+Final adapters apply a session-local monotonic ID policy when their transcript
+producer supplies IDs, dropping repeated/stale confirmed results before emitting
+plain strings. Completed translations alone emit text; provisional/pending/error
+values do not. Distinct utterances with identical text remain distinct. A source
+without IDs delivers each plain value once; the sink does not deduplicate by text.
+Pipeline serializes each sink. Its page port uses a local sequence outside TEXT
+and never retries an uncertain edit. Stop drains new final deliveries, with no
+replay; Cancel aborts queued work and closes ports. Each new session has fresh
+adapters and delivery state, with immutable graph/document snapshots.
+
+Insertion preserves manual/selected content and appends at the end with a space
+if needed, without submitting forms. Text/search inputs, textareas and basic
+contenteditable use cancelable `beforeinput`, native value setters, plain text
+nodes, and `input`/`change` events. Changed targets/content during `beforeinput`
+are skipped. Password/payment/authentication, read-only/disabled/hidden/inert
+fields and embedded-widget rich editors are rejected conservatively. Framework
+compatibility varies; use Live Copy if a page rejects synthetic input events.
+No HTML is inserted or page strings executed. The extension does not submit
+text to a remote service.
 
 **Selected page media audio**: play media in the toolbar-invoked capture tab,
 then click **Discover media in capture tab** and choose a labeled audio/video
@@ -173,8 +176,8 @@ Microphone requires no capture tab and is not mixed with tab/media capture.
 
 Connect SpeechToText.final → FinalText.final → Supertonic3.text (or Kokoro.text)
 → AudioOutput.audio. To speak translations, use OPUS-MT.final →
-TranslatedFinalText.final instead. Final adapters split long text into ordered
-snippets of at most 300 UTF-16 units without splitting surrogate pairs; this
+TranslatedFinalText.final instead. Final adapters emit whole utterances. The TTS
+branch splits long text into ordered snippets of at most 300 UTF-16 units without splitting surrogate pairs; this
 respects production TTS's input limit. Choose the language/voice matching that
 text. This is not automatic language/voice detection.
 
@@ -246,42 +249,43 @@ extension's bounded 1 MiB chunk hashes; build/install never runs it.
 No post-merge deployment verification is required for this unpacked extension.
 No website/Chrome Web Store publication is part of this change.
 
-### #81 source and destination checks
+### #87 source and destination checks
 
-`tests/extension/targets.spec.js` runs the packaged MV3 graph with real native
-tab capture, DOM editing/picking, media capture and Chrome's microphone permission
-state (the device is Chromium's fake microphone). ASR/translation inference is
-deterministic fixture code in that suite. The two-tone fixture proves selected
-media isolation by measuring a strong 440 Hz component and less than 1/20 of
-that amplitude at the other element's 880 Hz. It checks cross-origin fallback,
-audio-less streams and a deterministic protected-media marker; this does not
-claim verification of real external DRM playback. It also checks finalized-only
-fan-out, translated text to another field, stable-ID duplicate/stale suppression,
-focus changes, basic contenteditable/plain text, field replacement, sensitive
-fields, frame boundaries, navigation, scoped output-tab authorization, permission
-denial, cancellation, Stop/drain and resource release.
-The deterministic #85 cases also cover missing pages for both field sink types,
-an authorized page without a picked field, all text destinations skipped, no
-page operations for unset targets, mixed active/skipped fan-out, stale fields at
-startup, next-session retry, and controlled permission/transport loss at the
-Chrome adapter boundary. Navigation/close and activeTab denial use native Chrome
-behavior; ASR/translation inference and the controlled permission error remain
-fixtures.
+[Local validation results and limitations](evidence/graph-87.md) separate fixture
+coverage from real ASR inference and report shared WebKit cleanup timeouts.
 
-Run the real speech/field smoke after building:
+`tests/extension/targets.spec.js` runs the packaged MV3 graph with native toolbar
+invocation, tab/media capture, DOM editing, and Chrome microphone permission
+(the device is Chromium's fake microphone). ASR/translation inference is fixture
+code. Focus tests use **headed Chromium** with Playwright focus emulation disabled
+and Live in a separate popup, asserting real browser-window deactivation. On
+Linux run under a display or `xvfb-run -a npm run test:extension`.
+
+These checks cover automatic same-tab preparation, no target, changing focus,
+text/search/textarea/basic contenteditable, dynamic comment activation, editors
+that blur on window deactivation, replacement/disconnection, sensitive/hidden/
+disabled fields, frames, `beforeinput` cancellation, native controlled-input
+setters, ordered once-only finals, translated output with concurrent Live,
+navigation/closure, native activeTab denial, controlled connection/permission
+loss, Stop, Cancel and retry. Unit checks cover version 1/2 migration/recovery
+and TEXT fan-out. The two-tone media test still proves selected-element audio
+isolation; cross-origin, audio-less and deterministic protected-media cases
+remain fixtures, not external DRM verification.
+
+Run the separate real speech/field smoke after building:
 
 ```sh
 EXTENSION_TARGET_SMOKE=1 npm run test:extension -- tests/extension/targets-real-smoke.spec.js
 ```
 
 This uses the committed checksum-pinned English speech WAV, native tabCapture,
-the real bundled ReazonSpeech/Silero workers and selected-field insertion with
-simultaneous Live output and an unconfigured, skipped focused sink, with no
-inference mocks or remote traffic. It first starts with both field targets
-missing, then retries with the selected field authorized. It compares
-all confirmed Live utterances to appended field text after Stop. The saved
-[real smoke evidence](evidence/graph-85-real-asr-field.json) contains counts and
-runtime metadata, without transcripts. Native microphone hardware, third-party
-rich editors, meeting applications, DRM and restricted external frames remain
-optional manual compatibility checks; these results make no universal support
-promise.
+the real bundled ReazonSpeech/Silero workers, automatic same-tab preparation,
+and FinalText → focused TEXT insertion concurrently with Live, without inference
+mocks or remote traffic. It compares every confirmed Live utterance to appended
+field text after Stop. [Recorded real-ASR evidence](evidence/graph-87-real-asr-field.json)
+contains counts/runtime metadata without transcripts.
+
+Direct live YouTube search/comments have **not** been verified by the controlled
+fixtures or real-ASR smoke. Site-specific rich editors, native microphone hardware,
+meeting apps, DRM and restricted external frames remain optional manual checks.
+No post-merge verification is required for the locally unpacked extension.
