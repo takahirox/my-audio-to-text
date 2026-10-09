@@ -190,12 +190,10 @@ package; the plain TEXT contract is shared without loading a model.
 
 ## Required post-merge verification
 
-**Pending for #78 until performed.** Keep the Issue open. After merge record
-successful Pages run URL, merged SHA and verification time. In a fresh deployed
-origin browser, follow the canonical index link and verify nested HTML/app,
-root Node/policy/contract/cache modules, the dedicated Worker, runtime JS/MJS/WASM,
-notices and pinned asset resolution under `/my-audio-to-text/`. Verify errors,
-Cancel, bypass and original/candidate display. If published-origin model access
-differs from local tests, run real inference there and retain its results and
-network evidence. Local prefix tests do not establish deployed revision or
-published-origin model access.
+**Performed for #78 on 2026-10-09T09:35:57Z.** The
+[post-merge record](evidence/correction-78-postmerge.md) identifies the successful
+Pages run, merged SHA, fresh deployed-origin index/page/Worker/runtime/asset
+checks, errors, Cancel, bypass and original/candidate display. Real Japanese
+and English inference also ran on Pages with sanitized traffic recorded.
+The missed corrections, Japanese semantic regression and weight-cache failure
+reproduced; deployment verification does not establish a quality improvement.

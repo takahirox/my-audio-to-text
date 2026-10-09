@@ -122,17 +122,12 @@ No larger model, recognizer coupling or extension default was added.
 
 ## Required post-merge verification
 
-**Pending.** No push, PR, merge, Issue comment/closure or deployment action was
-performed. This checkpoint is local evidence only. After merge, record the
-Pages deployment run URL, merged SHA and check time, then verify in a fresh
-published-origin browser:
-
-1. Canonical index link and direct `/my-audio-to-text/nodes/qwen3-correction/` page.
-2. App, shared contracts/Node/policy/cache modules, dedicated Worker, runtime
-   JS/MJS/WASM, notices and immutable model asset resolution under the prefix.
-3. Original/candidate display, status/errors, Generate, Cancel and no-download bypass.
-4. Real model inference and sanitized traffic if published-origin asset access
-   differs from local tests; record actual quality failures too.
-
-Keep #78 open until those results are recorded. Passing localhost/prefix tests
-does not establish that Pages deployed the merged revision.
+**Performed 2026-10-09T09:35:57Z.** PR #80 merged as
+`58000ca292f33b27251a9dc4b954e429ad0e18ae`; its Pages deployment succeeded.
+Fresh deployed-origin browser checks, 15 deterministic browser regressions and
+real Japanese/English production Worker inference completed. The intended
+corrections were still missed, the Japanese UI regression reproduced, and
+weight caching failed visibly. See the [post-merge record](correction-78-postmerge.md)
+for the deployment run URL, SHA, check time, published-file hashes, prefix/asset
+checks, actual outputs and sanitized traffic. These checks establish deployment
+and runtime behavior, not correction quality improvement.

@@ -1,0 +1,653 @@
+{
+  "time": "2026-10-09T09:35:57.247Z",
+  "browser": "154.0.8037.99",
+  "capabilities": {
+    "gpu": true,
+    "adapter": true,
+    "f16": true,
+    "info": {
+      "vendor": "apple",
+      "architecture": "metal-3",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "secure": true,
+    "isolated": false
+  },
+  "model": {
+    "id": "onnx-community/Qwen3-0.6B-ONNX",
+    "revision": "1e0a4a196ecabdf9a879664110574563d3f372d3",
+    "dtype": "q4f16",
+    "device": "webgpu"
+  },
+  "fixtures": [
+    {
+      "id": "ja-correct",
+      "language": "ja",
+      "kind": "exact-copy",
+      "text": "今日は良い天気です。",
+      "expected": "今日は良い天気です。"
+    },
+    {
+      "id": "en-correct",
+      "language": "en",
+      "kind": "exact-copy",
+      "text": "There is a cat on the table.",
+      "expected": "There is a cat on the table."
+    },
+    {
+      "id": "ja-error",
+      "language": "ja",
+      "kind": "correction",
+      "text": "今日は良い転機です。",
+      "expected": "今日は良い天気です。"
+    },
+    {
+      "id": "en-error",
+      "language": "en",
+      "kind": "correction",
+      "text": "Their is a cat on the table.",
+      "expected": "There is a cat on the table."
+    },
+    {
+      "id": "ja-lexical-error",
+      "language": "ja",
+      "kind": "correction",
+      "text": "明日の天気予法を確認します。",
+      "expected": "明日の天気予報を確認します。"
+    },
+    {
+      "id": "en-lexical-error",
+      "language": "en",
+      "kind": "correction",
+      "text": "I parked my car in the barking lot.",
+      "expected": "I parked my car in the parking lot."
+    },
+    {
+      "id": "ja-date-time",
+      "language": "ja",
+      "kind": "exact-copy",
+      "text": "会議は2026年10月9日の14:30です。",
+      "expected": "会議は2026年10月9日の14:30です。"
+    },
+    {
+      "id": "en-date-time",
+      "language": "en",
+      "kind": "exact-copy",
+      "text": "The meeting is on October 9, 2026 at 14:30.",
+      "expected": "The meeting is on October 9, 2026 at 14:30."
+    },
+    {
+      "id": "ja-figures",
+      "language": "ja",
+      "kind": "exact-copy",
+      "text": "料金は3,500円で、人数は12人です。",
+      "expected": "料金は3,500円で、人数は12人です。"
+    },
+    {
+      "id": "en-figures",
+      "language": "en",
+      "kind": "exact-copy",
+      "text": "The price is $3,500.50 for 12 people.",
+      "expected": "The price is $3,500.50 for 12 people."
+    },
+    {
+      "id": "ja-names",
+      "language": "ja",
+      "kind": "exact-copy",
+      "text": "渡辺さんと田中さんは新宿で会います。",
+      "expected": "渡辺さんと田中さんは新宿で会います。"
+    },
+    {
+      "id": "en-names",
+      "language": "en",
+      "kind": "exact-copy",
+      "text": "Takahiro Watanabe works with ReazonSpeech in Shinjuku.",
+      "expected": "Takahiro Watanabe works with ReazonSpeech in Shinjuku."
+    },
+    {
+      "id": "ja-negation",
+      "language": "ja",
+      "kind": "exact-copy",
+      "text": "私は明日の会議に出席しません。",
+      "expected": "私は明日の会議に出席しません。"
+    },
+    {
+      "id": "en-negation",
+      "language": "en",
+      "kind": "exact-copy",
+      "text": "I will not attend the meeting tomorrow.",
+      "expected": "I will not attend the meeting tomorrow."
+    }
+  ],
+  "result": {
+    "loadedMs": 68065.5,
+    "totalMs": 70633.10000038147,
+    "runs": [
+      {
+        "text": "今日は良い天気です。",
+        "id": "ja-correct",
+        "input": "今日は良い天気です。",
+        "expected": "今日は良い天気です。",
+        "kind": "exact-copy",
+        "inferenceMs": 679.2000002861023,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "There is a cat on the table.",
+        "id": "en-correct",
+        "input": "There is a cat on the table.",
+        "expected": "There is a cat on the table.",
+        "kind": "exact-copy",
+        "inferenceMs": 119.09999990463257,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "今日は良い転機です。",
+        "id": "ja-error",
+        "input": "今日は良い転機です。",
+        "expected": "今日は良い天気です。",
+        "kind": "correction",
+        "inferenceMs": 112.09999990463257,
+        "rejections": [],
+        "exactMatch": false,
+        "changed": false,
+        "outcome": "missed-correction"
+      },
+      {
+        "text": "Their is a cat on the table.",
+        "id": "en-error",
+        "input": "Their is a cat on the table.",
+        "expected": "There is a cat on the table.",
+        "kind": "correction",
+        "inferenceMs": 101.80000019073486,
+        "rejections": [],
+        "exactMatch": false,
+        "changed": false,
+        "outcome": "missed-correction"
+      },
+      {
+        "text": "明日の天気予法を確認します。",
+        "id": "ja-lexical-error",
+        "input": "明日の天気予法を確認します。",
+        "expected": "明日の天気予報を確認します。",
+        "kind": "correction",
+        "inferenceMs": 116.09999990463257,
+        "rejections": [],
+        "exactMatch": false,
+        "changed": false,
+        "outcome": "missed-correction"
+      },
+      {
+        "text": "I parked my car in the barking lot.",
+        "id": "en-lexical-error",
+        "input": "I parked my car in the barking lot.",
+        "expected": "I parked my car in the parking lot.",
+        "kind": "correction",
+        "inferenceMs": 116.90000009536743,
+        "rejections": [],
+        "exactMatch": false,
+        "changed": false,
+        "outcome": "missed-correction"
+      },
+      {
+        "text": "会議は2026年10月9日の14:30です。",
+        "id": "ja-date-time",
+        "input": "会議は2026年10月9日の14:30です。",
+        "expected": "会議は2026年10月9日の14:30です。",
+        "kind": "exact-copy",
+        "inferenceMs": 187.19999980926514,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "The meeting is on October 9, 2026 at 14:30.",
+        "id": "en-date-time",
+        "input": "The meeting is on October 9, 2026 at 14:30.",
+        "expected": "The meeting is on October 9, 2026 at 14:30.",
+        "kind": "exact-copy",
+        "inferenceMs": 180.7000002861023,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "料金は3,500円で、人数は12人です。",
+        "id": "ja-figures",
+        "input": "料金は3,500円で、人数は12人です。",
+        "expected": "料金は3,500円で、人数は12人です。",
+        "kind": "exact-copy",
+        "inferenceMs": 165.09999990463257,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "The price is $3,500.50 for 12 people.",
+        "id": "en-figures",
+        "input": "The price is $3,500.50 for 12 people.",
+        "expected": "The price is $3,500.50 for 12 people.",
+        "kind": "exact-copy",
+        "inferenceMs": 179.19999980926514,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "渡辺さんと田中さんは新宿で会います。",
+        "id": "ja-names",
+        "input": "渡辺さんと田中さんは新宿で会います。",
+        "expected": "渡辺さんと田中さんは新宿で会います。",
+        "kind": "exact-copy",
+        "inferenceMs": 140.7000002861023,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "Takahiro Watanabe works with ReazonSpeech in Shinjuku.",
+        "id": "en-names",
+        "input": "Takahiro Watanabe works with ReazonSpeech in Shinjuku.",
+        "expected": "Takahiro Watanabe works with ReazonSpeech in Shinjuku.",
+        "kind": "exact-copy",
+        "inferenceMs": 150.40000009536743,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "私は明日の会議に出席しません。",
+        "id": "ja-negation",
+        "input": "私は明日の会議に出席しません。",
+        "expected": "私は明日の会議に出席しません。",
+        "kind": "exact-copy",
+        "inferenceMs": 123.5,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "I will not attend the meeting tomorrow.",
+        "id": "en-negation",
+        "input": "I will not attend the meeting tomorrow.",
+        "expected": "I will not attend the meeting tomorrow.",
+        "kind": "exact-copy",
+        "inferenceMs": 105.89999961853027,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      },
+      {
+        "text": "今日は良い天気です。",
+        "id": "ja-correct",
+        "input": "今日は良い天気です。",
+        "expected": "今日は良い天気です。",
+        "kind": "exact-copy",
+        "inferenceMs": 88.10000038146973,
+        "rejections": [],
+        "exactMatch": true,
+        "changed": false,
+        "outcome": "unchanged-correct"
+      }
+    ],
+    "originals": [
+      "今日は良い天気です。",
+      "There is a cat on the table.",
+      "今日は良い転機です。",
+      "Their is a cat on the table.",
+      "明日の天気予法を確認します。",
+      "I parked my car in the barking lot.",
+      "会議は2026年10月9日の14:30です。",
+      "The meeting is on October 9, 2026 at 14:30.",
+      "料金は3,500円で、人数は12人です。",
+      "The price is $3,500.50 for 12 people.",
+      "渡辺さんと田中さんは新宿で会います。",
+      "Takahiro Watanabe works with ReazonSpeech in Shinjuku.",
+      "私は明日の会議に出席しません。",
+      "I will not attend the meeting tomorrow.",
+      "今日は良い天気です。"
+    ],
+    "events": [
+      {
+        "status": "initiate",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "tokenizer.json",
+        "type": "progress"
+      },
+      {
+        "status": "initiate",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "tokenizer_config.json",
+        "type": "progress"
+      },
+      {
+        "status": "initiate",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "config.json",
+        "type": "progress"
+      },
+      {
+        "status": "download",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "config.json",
+        "type": "progress"
+      },
+      {
+        "status": "download",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "tokenizer_config.json",
+        "type": "progress"
+      },
+      {
+        "status": "done",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "config.json",
+        "type": "progress"
+      },
+      {
+        "status": "initiate",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "onnx/model_q4f16.onnx",
+        "type": "progress"
+      },
+      {
+        "status": "initiate",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "generation_config.json",
+        "type": "progress"
+      },
+      {
+        "status": "done",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "tokenizer_config.json",
+        "type": "progress"
+      },
+      {
+        "status": "download",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "generation_config.json",
+        "type": "progress"
+      },
+      {
+        "status": "download",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "tokenizer.json",
+        "type": "progress"
+      },
+      {
+        "status": "done",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "generation_config.json",
+        "type": "progress"
+      },
+      {
+        "status": "download",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "onnx/model_q4f16.onnx",
+        "type": "progress"
+      },
+      {
+        "status": "done",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "tokenizer.json",
+        "type": "progress"
+      },
+      {
+        "status": "cache-warning",
+        "message": "Model cache unavailable: Failed to execute 'put' on 'Cache': Unexpected internal error.. This run can continue, but a later run may download again.",
+        "type": "progress"
+      },
+      {
+        "status": "done",
+        "name": "onnx-community/Qwen3-0.6B-ONNX",
+        "file": "onnx/model_q4f16.onnx",
+        "type": "progress"
+      },
+      {
+        "status": "ready",
+        "task": "text-generation",
+        "model": "onnx-community/Qwen3-0.6B-ONNX",
+        "type": "progress"
+      },
+      {
+        "type": "ready"
+      }
+    ],
+    "failures": [],
+    "cacheKeys": [
+      "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/config.json",
+      "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/tokenizer_config.json",
+      "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/generation_config.json",
+      "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/tokenizer.json"
+    ]
+  },
+  "pageRun": {
+    "status": "Complete",
+    "errors": "",
+    "original": "今日は良い天気です。",
+    "output": "良い天気です。",
+    "load-time": "63746 ms",
+    "latency": "213 ms",
+    "cache-status": "Model cache unavailable: Failed to execute 'put' on 'Cache': Unexpected internal error.. This run can continue, but a later run may download again.",
+    "language": "ja",
+    "expected": "今日は良い天気です。",
+    "exactMatch": false,
+    "outcome": "regression"
+  },
+  "requests": [
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-correction/",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-correction/app.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-nodes.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-policy.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/qwen3-correction-worker.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-policy.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-cache.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-assets/transformers.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/tokenizer.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/tokenizer_config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/Qwen3-0.6B-ONNX/1e0a4a196ecabdf9a879664110574563d3f372d3/config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://us.aws.cdn.hf.co/xet-bridge-us/680fffcdbe536d99d3cb19b9/14577b14575c295814540235bfaa7696c416f7147220e1bf7280bac0add17c01",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/Qwen3-0.6B-ONNX/1e0a4a196ecabdf9a879664110574563d3f372d3/tokenizer_config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/onnx/model_q4f16.onnx",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/generation_config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://us.aws.cdn.hf.co/xet-bridge-us/680fffcdbe536d99d3cb19b9/8e2ec55509cb678edd94b22625d4c04c12eee5bdd7d2194748287ad80f1fe6e3",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/Qwen3-0.6B-ONNX/1e0a4a196ecabdf9a879664110574563d3f372d3/generation_config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-assets/ort-wasm-simd-threaded.asyncify.mjs",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-assets/ort-wasm-simd-threaded.asyncify.wasm",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-cache.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/qwen3-correction-worker.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-policy.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-cache.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-assets/transformers.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/1e0a4a196ecabdf9a879664110574563d3f372d3/onnx/model_q4f16.onnx",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://us.aws.cdn.hf.co/xet-bridge-us/680fffcdbe536d99d3cb19b9/8e2ec55509cb678edd94b22625d4c04c12eee5bdd7d2194748287ad80f1fe6e3",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-assets/ort-wasm-simd-threaded.asyncify.mjs",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-assets/ort-wasm-simd-threaded.asyncify.wasm",
+      "method": "GET",
+      "hasBody": false,
+      "containsInput": false
+    }
+  ],
+  "errors": []
+}

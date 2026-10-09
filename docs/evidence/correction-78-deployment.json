@@ -1,0 +1,210 @@
+{
+  "time": "2026-10-09T09:35:57.197Z",
+  "deployment": {
+    "conclusion": "success",
+    "head_sha": "58000ca292f33b27251a9dc4b954e429ad0e18ae",
+    "html_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/37911894375",
+    "id": 37911894375,
+    "status": "completed",
+    "updated_at": "2026-10-09T09:33:26Z"
+  },
+  "baseURL": "https://takahirox.github.io/my-audio-to-text/",
+  "browser": "154.0.8037.99",
+  "freshContext": true,
+  "indexHref": "./nodes/qwen3-correction/",
+  "pageURL": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-correction/",
+  "assets": [
+    {
+      "path": "index.html",
+      "status": 200,
+      "bytes": 2216,
+      "gitBlob": "20bdb65bae7c18ef492b2e72b832483727442aea",
+      "matchesMerge": true
+    },
+    {
+      "path": "nodes/qwen3-correction/index.html",
+      "status": 200,
+      "bytes": 2674,
+      "gitBlob": "2d0c31d665d1457eaf1cd878908c7cbd95cf0f69",
+      "matchesMerge": true
+    },
+    {
+      "path": "nodes/qwen3-correction/app.js",
+      "status": 200,
+      "bytes": 4442,
+      "gitBlob": "0c7b15e5a780a4bfc89dd36001d60d5657f59692",
+      "matchesMerge": true
+    },
+    {
+      "path": "pipeline.js",
+      "status": 200,
+      "bytes": 7754,
+      "gitBlob": "7bf8254f38374f880049d8d83770f1b9d88b6f70",
+      "matchesMerge": true
+    },
+    {
+      "path": "translation-nodes.js",
+      "status": 200,
+      "bytes": 4943,
+      "gitBlob": "fc1a8aac719296eede887645fadf89bef8d987ed",
+      "matchesMerge": true
+    },
+    {
+      "path": "correction-nodes.js",
+      "status": 200,
+      "bytes": 5336,
+      "gitBlob": "31550effeb3530a5222bc514ef46b999d9bf0775",
+      "matchesMerge": true
+    },
+    {
+      "path": "port-contracts.js",
+      "status": 200,
+      "bytes": 234,
+      "gitBlob": "1c66f57d68a1da72e6c388a83ef7d0168bdfbdeb",
+      "matchesMerge": true
+    },
+    {
+      "path": "correction-policy.js",
+      "status": 200,
+      "bytes": 2766,
+      "gitBlob": "cba268e75a69673ec20aacb6c366a6b7d1b6dd98",
+      "matchesMerge": true
+    },
+    {
+      "path": "correction-cache.js",
+      "status": 200,
+      "bytes": 1219,
+      "gitBlob": "b9db5bcbb4bff2016197f0d7368d183dbb2d6578",
+      "matchesMerge": true
+    },
+    {
+      "path": "qwen3-correction-worker.js",
+      "status": 200,
+      "bytes": 3877,
+      "gitBlob": "61266f0ff5c8c31084a36a8f48e5d6003f018adc",
+      "matchesMerge": true
+    },
+    {
+      "path": "third-party-notices.txt",
+      "status": 200,
+      "bytes": 4533,
+      "gitBlob": "2af54d038a980e93459402a02344db7ffd3266d6",
+      "matchesMerge": true
+    },
+    {
+      "path": "licenses/qwen3.txt",
+      "status": 200,
+      "bytes": 11343,
+      "gitBlob": "6634c8cc3133b3848ec74b9f275acaaa1ea618ab",
+      "matchesMerge": true
+    },
+    {
+      "path": "correction-assets/transformers.js",
+      "status": 200,
+      "bytes": 506762,
+      "sha256": "cbc046a11e0fd29542e6f2d301c083080e3f9767c233dbd0b2a107db5baa0a81"
+    },
+    {
+      "path": "correction-assets/ort-wasm-simd-threaded.asyncify.mjs",
+      "status": 200,
+      "bytes": 48533,
+      "sha256": "32c0e5c315c7716ffd3dfd138269e0e71b3ba330f719cfbf1bdcb7ec71156358"
+    },
+    {
+      "path": "correction-assets/ort-wasm-simd-threaded.asyncify.wasm",
+      "status": 200,
+      "bytes": 27204649,
+      "sha256": "54bce16407fb2cccf8e44a093bf82364850c01c3a9d4d8a8731f0d570c46f47c"
+    },
+    {
+      "path": "correction-assets/transformers-LICENSE",
+      "status": 200,
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  ],
+  "checks": {
+    "mergedTrackedFiles": true,
+    "runtimeAssetsHTTP200": true,
+    "indexNavigation": true,
+    "onDemandOnly": true,
+    "bypassNoModelDownloads": true,
+    "originalAndCandidate": true,
+    "emptyInputError": true,
+    "longInputError": true,
+    "cancelAndRetryEnabled": true
+  },
+  "requests": [
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-correction/",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-correction/app.js",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-nodes.js",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-policy.js",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/qwen3-correction-worker.js",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-policy.js",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-cache.js",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/correction-assets/transformers.js",
+      "method": "GET",
+      "hasBody": false
+    }
+  ],
+  "errors": []
+}
