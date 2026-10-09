@@ -24,8 +24,9 @@
     if (sensitive.test([...element.labels || []].map(label => label.textContent).join(' '))) return false;
     // Conservative: never insert in authentication/payment forms.
     if (element.closest('form')?.querySelector('input[type="password"],input[autocomplete^="cc-"],input[autocomplete="one-time-code"]')) return false;
-    if (element instanceof HTMLInputElement) return ['text', 'search'].includes(element.type) && !element.disabled && !element.readOnly;
-    if (element instanceof HTMLTextAreaElement) return !element.disabled && !element.readOnly;
+    // :disabled includes state inherited from a fieldset and respects legend exceptions.
+    if (element instanceof HTMLInputElement) return ['text', 'search'].includes(element.type) && !element.matches(':disabled') && !element.readOnly;
+    if (element instanceof HTMLTextAreaElement) return !element.matches(':disabled') && !element.readOnly;
     return element.isContentEditable && element.getAttribute('contenteditable') !== 'false' && !element.closest('[role="textbox"][aria-readonly="true"]');
   }
   function field(element) {

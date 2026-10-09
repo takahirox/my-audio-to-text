@@ -128,6 +128,34 @@ test('picked field survives focus changes; replacement/navigation detach; hostil
   await expect(row(t.page, 'picked')).toContainText('No target selected');
 });
 
+for (const selector of ['#focused', '#chosen']) {
+  test(`selected ${selector} becoming disabled through its fieldset preserves content and detaches output`, async ({ targets: t }) => {
+    await t.website.locator(selector).evaluate(element => {
+      const fieldset = document.createElement('fieldset'); element.before(fieldset); fieldset.append(element);
+    });
+    const original = await t.website.locator(selector).inputValue();
+    await t.graph({ outputs: [['picked', 'SelectedFormFieldTextOutputNode']] }); await t.invoke(); await authorize(t, 'picked');
+    await pick(t, 'picked', selector);
+    await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
+    const disabled = await t.website.locator(selector).evaluate(element => {
+      element.closest('fieldset').disabled = true;
+      return { own: element.disabled, effective: element.matches(':disabled') };
+    });
+    expect(disabled).toEqual({ own: false, effective: true });
+    await emit(t, 1, 'blocked');
+    await expect(t.page.locator('#target-status')).toContainText('Insertion detached');
+    await expect(t.page.locator('#target-status')).toContainText('not editable');
+    await expect(t.website.locator(selector)).toHaveValue(original);
+    expect(await t.website.evaluate(() => window.edits)).toEqual([]);
+    // Re-enabling the field cannot reactivate an output that has detached.
+    await t.website.locator(selector).evaluate(element => { element.closest('fieldset').disabled = false; });
+    await emit(t, 2, 'Live continues'); await expect(t.page.locator('#final')).toContainText('Live continues');
+    await t.page.locator('#stop').click(); await expect(t.page.locator('#status')).toContainText('Stopped');
+    await expect(t.website.locator(selector)).toHaveValue(original);
+    expect(await t.website.evaluate(() => window.edits)).toEqual([]);
+  });
+}
+
 test('selected media discovers two real elements and captures only the selected tone with normalized PCM', async ({ targets: t }) => {
   await t.graph({ source: 'SelectedPageMediaAudio' }); await t.website.locator('#play').click(); await t.invoke();
   await row(t.page, 'audio').getByRole('button', { name: 'Discover media in capture tab' }).click();
