@@ -26,9 +26,9 @@ Pin the Qwen3 checkpoint/tokenizer revision, q4f16 assets and existing verified 
 
 ## Related issues
 
-Closes #78
+Related to #78
 
-The Issue is **not fully verified or resolved**: post-merge Pages verification is pending, and no correction-quality improvement is claimed. Keep the PR in draft during review of these limitations. The closing keyword is included as explicitly required by the publishing instruction, despite the repository template's convention to use it only for fully resolved Issues. Merging this PR into `main` will automatically close #78; that automatic closure does not establish completion of the required post-merge verification, which must still be performed and recorded before the Issue is considered resolved.
+The Issue is **not fully verified or resolved**: post-merge Pages verification is pending, and no correction-quality improvement is claimed. Keep the PR in draft during review of these limitations. Keep #78 open until the required post-merge verification has been performed and recorded.
 
 ## Scope check
 
