@@ -15,6 +15,8 @@ Verified from upstream code, model cards and repository file metadata on
 separately; [runtime archive hashes and file allowlists](../scripts/prepare-tts-assets.py)
 pin every staged binary. MB below means decimal MB and excludes HTTP compression.
 Real browser results are recorded in [acceptance evidence](evidence/tts-73.md).
+The [source-build follow-up](evidence/tts-73-espeak-source.md) records final
+Kokoro checks after replacing the English frontend with the pinned-source build.
 
 | Node | Model/checkpoint | Frontend and voices | Backend / output | On-demand model assets |
 | --- | --- | --- | --- | --- |
@@ -62,11 +64,13 @@ Staging downloads these exact npm archives (no install scripts):
 | --- | --- |
 | `@huggingface/transformers` 3.8.1 | Standalone browser module 888,173 bytes; ORT JSEP MJS/WASM 44,484 / 21,596,019 bytes; Apache-2.0 license |
 | `onnxruntime-web` 1.22.0-dev.20250409-89f8206ba4 (Transformers 3.8.1's exact dependency) | WASM ES module 48,008 bytes; MJS/WASM 20,856 / 11,133,407 bytes; auxiliary ORT bundle 398,170 bytes; MIT license |
-| `phonemizer` 1.2.1 | 1,322,380-byte single module with embedded engine/data; Apache-2.0 wrapper, GPLv3 eSpeak NG |
+| Source-built eSpeak NG `0dfd1d77dd7f96ef1ea6856c9fa5cfac01599582` | WASM/English data embedded in `phonemizer-engine.mjs` (1,742,316 bytes), English-only `phonemizer.js` adapter; GPL-3.0-or-later. Complete corresponding source/data/build bundle staged alongside the modules |
 | `kokoro-js-jp` 0.2.0 | Open JTalk wrapper 93,921 bytes; WASM 395,024 bytes; dictionary 1.11 gzip archive 23,643,819 bytes (about 100 MB unpacked in WASM memory); Mei voice 862,503 bytes; third-party notices |
 
-All four archives have SHA-256 pins in the staging script. The Pages artifact
-includes `web/tts-assets/` (60,493,827 bytes total), but no TTS weights. This
+The three npm archives, complete eSpeak source archive and rebuilt engine have
+SHA-256 pins in the staging script. The Pages artifact includes `web/tts-assets/`
+with the matching downloadable eSpeak source bundle (16,315,334 bytes;
+77,218,463 bytes total staged assets), but no TTS weights. This
 separate directory keeps the existing extension's `vendor/` packaging and
 ASR preparation independent. Each page requests only its needed runtime and
 frontend. URLs derive from owning module URLs, preserving `/my-audio-to-text/`.
@@ -79,10 +83,14 @@ model/code/voices and Transformers Apache-2.0; ORT MIT; Open JTalk/openjtalkjs
 and dictionary Modified BSD; misaki Apache-2.0, cutlet MIT; required Mei HTS
 voice CC BY 3.0 attributed to Nagoya Institute of Technology/MMDAgent.
 Mei loads for frontend configuration; the output voice remains Kokoro.
-Phonemizer's embedded eSpeak NG retains GPLv3; the wrapper's Apache notice
-does not relicense it. Upstream package does not specify the native engine's
-exact source revision; wrapper/binary bytes are immutable and source/build
-links plus the GPL text are preserved. No package-wide Apache claim is made.
+The English frontend is rebuilt from the pinned eSpeak NG source above using
+Emscripten 3.1.30 and the [included build/installation scripts](../scripts/tts-phonemizer/README.md).
+Its engine, data and adapter retain GPL-3.0-or-later. The Kokoro page directly
+links `tts-assets/phonemizer-source.tar.gz` on the same served origin: it contains
+the full matching source/data archive (including upstream build scripts and
+notices), our adapter/build scripts, pinned compiler Dockerfile and installation
+instructions. Staging verifies source and engine checksums before publishing
+them together. The untraceable phonemizer 1.2.1 npm binary is no longer used.
 
 ## Ports and lifecycle
 

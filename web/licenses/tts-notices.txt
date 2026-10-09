@@ -28,13 +28,16 @@ Japanese frontend (Kokoro only)
   checksum-pinned kokoro-js-jp npm package. No native addon or Python is shipped.
 
 English frontend (Kokoro only)
-  Phonemizer.js 1.2.1, Xenova, Apache-2.0 wrapper: ./phonemizer.txt.
-  https://github.com/xenova/phonemizer.js/tree/6835144b7ee9043129222549c1ed2f6a27216278
-  Embedded eSpeak NG engine/data retain GPLv3 terms: ./espeak-ng.txt.
-  Engine source/build instructions: https://github.com/espeak-ng/espeak-ng/tree/master/emscripten
-  The npm wrapper does not identify an exact native eSpeak source revision;
-  the distributed JS/embedded engine bytes are pinned by archive SHA-256.
-  Do not interpret the wrapper's Apache license as relicensing eSpeak NG.
+  Source-built eSpeak NG engine, English data and adapter: GPL-3.0-or-later.
+  Copyright eSpeak NG contributors; full license: ./espeak-ng.txt.
+  Source revision: 0dfd1d77dd7f96ef1ea6856c9fa5cfac01599582.
+  https://github.com/espeak-ng/espeak-ng/tree/0dfd1d77dd7f96ef1ea6856c9fa5cfac01599582
+  DOWNLOAD CORRESPONDING SOURCE (same origin, also linked on the Kokoro page):
+  ../tts-assets/phonemizer-source.tar.gz
+  Includes the complete engine/data source archive, upstream notices/licenses,
+  adapter, Dockerfile, build/installation instructions and output checksum.
+  Built with Emscripten 3.1.30; generated module embeds WASM and English data.
+  The untraceable phonemizer 1.2.1 npm binary is no longer distributed.
 
 Browser inference runtimes
   Transformers.js 3.8.1, Hugging Face, Apache-2.0:

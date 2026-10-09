@@ -5,6 +5,7 @@
 <p>Generate locally with Kokoro 82M v1.0 (q8 WASM). First Run downloads about 93 MB of model/voice assets plus the runtime; Japanese additionally loads about 25 MB of Open JTalk frontend/dictionary assets. Output is mono 24 kHz.</p>
 <p>Downloads start only on Generate. Text stays in this browser. Requires a current browser with WebAssembly SIMD. Cached downloads may be evicted; retry online after a cache miss.</p>
 <p><a href="../../licenses/kokoro.txt">Apache-2.0 model/code license</a>, <a href="../../licenses/kokoro-japanese.txt">Japanese frontend notices (including Mei CC BY 3.0)</a> and <a href="../../licenses/tts-notices.txt">runtime / English frontend notices</a>. <a href="https://github.com/takahirox/my-audio-to-text/blob/main/docs/tts-nodes.md">Setup, pins and testing</a></p>
+<p>English frontend: <a href="../../licenses/espeak-ng.txt">eSpeak NG GPLv3 license</a> and <a href="../../tts-assets/phonemizer-source.tar.gz" download>Download corresponding source, data and build scripts</a>.</p>
 <label for="input">Short text (at most 300 characters)</label>
 <textarea id="input" rows="4" maxlength="300">こんにちは。今日は良い天気です。</textarea>
 <div class="controls"><label>Language / voice <select id="voice"><option value="jf_alpha">Japanese · jf_alpha</option><option value="af_heart">English · af_heart</option></select></label></div>

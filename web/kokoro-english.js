@@ -1,6 +1,7 @@
 // Adapted from hexgrad/kokoro dfb907a02bba8152ca444717ca5d78747ccb4bec.
 // Copyright hexgrad, Apache-2.0; see licenses/kokoro.txt.
-// Changed: import the checksum-pinned local phonemizer.
+// Changed: import the local eSpeak NG adapter rebuilt from pinned source.
+// Corresponding source/data/build scripts: tts-assets/phonemizer-source.tar.gz.
 import { phonemize as espeakng } from "./tts-assets/phonemizer.js";
 
 /**

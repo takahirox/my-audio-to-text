@@ -1,5 +1,33 @@
 import { test, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { ttsFixture, observeTts } from './tts-fixture.js';
+
+test('Kokoro corresponding-source download resolves beside the engine under the Pages prefix', async ({ page }) => {
+  const prefix = !process.env.ASR_BASE_URL && !process.env.ASR_BENCHMARK ? './my-audio-to-text/' : './';
+  await page.goto(prefix + 'nodes/kokoro/');
+  const link = page.getByRole('link', { name: 'Download corresponding source, data and build scripts' });
+  const href = await link.evaluate(element => element.href);
+  expect(href).toBe(new URL('../../tts-assets/phonemizer-source.tar.gz', page.url()).href);
+  const download = await page.request.get(href);
+  expect(download.status()).toBe(200);
+  const bytes = await download.body();
+  // gzip archive, rather than a fallback HTML page or a mutable upstream link.
+  expect([...bytes.subarray(0, 2)]).toEqual([0x1f, 0x8b]);
+  expect(bytes.length).toBeGreaterThan(1000000);
+  const tar = gunzipSync(bytes), members = new Map();
+  for (let offset = 0; offset < tar.length && tar[offset] !== 0;) {
+    const name = tar.subarray(offset, offset + 100).toString().replace(/\0.*$/, '');
+    const size = parseInt(tar.subarray(offset + 124, offset + 136).toString(), 8);
+    members.set(name, tar.subarray(offset + 512, offset + 512 + size));
+    offset += 512 + Math.ceil(size / 512) * 512;
+  }
+  expect([...members.keys()].sort()).toEqual(['Dockerfile', 'ENGINE-SHA256.txt', 'README.md', 'build.sh', 'espeak-ng.tar.gz', 'phonemizer.js']);
+  expect(createHash('sha256').update(members.get('espeak-ng.tar.gz')).digest('hex')).toBe('e6b84b52a87b3ad72885331bd942b2adecd70c384fa4ecfbe10aae7d9afd5e21');
+  const engine = await page.request.get(new URL('phonemizer-engine.mjs', href).href);
+  expect(engine.status()).toBe(200);
+  expect(members.get('ENGINE-SHA256.txt').toString().split(' ')[0]).toBe(createHash('sha256').update(await engine.body()).digest('hex'));
+});
 
 for (const slug of ['supertonic3', 'kokoro']) {
   test(`${slug}: index/prefix, production Node-to-player graph, both languages, WAV and repeat`, async ({ page }) => {

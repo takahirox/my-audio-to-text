@@ -1,5 +1,10 @@
 # Issue #73 validation
 
+The results below describe the initial implementation. The English engine was
+subsequently rebuilt from pinned source to resolve the distribution finding;
+[final source-build and Kokoro validation](tts-73-espeak-source.md) records that
+replacement and its matching downloadable source bundle.
+
 Worktree baseline: `78d5862b3c130d495069799aa03b0d0b260f25cb`.
 Validation date: 2026-10-09 JST (2026-10-08 UTC).
 
