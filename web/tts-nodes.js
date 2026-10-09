@@ -5,8 +5,8 @@ import { SYNTHESIZED_AUDIO, validateSynthesizedAudio } from './synthesized-audio
 class WorkerTextToSpeechNode {
   inputs = { text: TEXT };
   outputs = { audio: SYNTHESIZED_AUDIO };
-  constructor(url, settings, { workerFactory = url => new Worker(url, { type: 'module' }), onEvent = () => {} } = {}) {
-    this.url = url; this.settings = settings; this.workerFactory = workerFactory;
+  constructor(url, settings, { workerFactory = url => new Worker(url, { type: 'module' }), onEvent = () => {}, loadOptions = {} } = {}) {
+    this.url = url; this.settings = { ...settings, ...loadOptions }; this.workerFactory = workerFactory;
     this.onEvent = onEvent; this.pending = new Map(); this.sequence = 0;
   }
   event(value) { try { this.onEvent(value); } catch { /* observer only */ } }

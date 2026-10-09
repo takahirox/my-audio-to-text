@@ -5,8 +5,10 @@ The [Supertonic 3 page](../web/nodes/supertonic3/index.html) and
 Node, dedicated inference Worker and Pipeline graph. Models/frontends execute
 locally in WASM with one thread. WebGPU and cross-origin isolation are not
 required. Downloads begin only after Generate; there is no remote inference
-service and no network request includes text. No ASR/translation implementation,
-extension inference/packaging, native integration or graphical editor is changed.
+service and no network request includes text. The original #73 implementation did not change ASR/translation or extension
+packaging. Issue #75 adds [verified extension graph integration](extension-graph.md)
+with explicit model preparation and cache-only TTS startup, using these same
+production Nodes and reviewed browser runtimes/frontends.
 
 ## Verified artifacts and language support
 

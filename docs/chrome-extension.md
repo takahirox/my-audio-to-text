@@ -33,6 +33,7 @@ Requirements: Chrome 116 or later, Python 3 and Node.js/npm.
 npm ci
 npm run prepare:assets
 npm run prepare:translation-assets
+npm run prepare:tts-assets
 npm run build:extension
 ```
 
@@ -40,7 +41,8 @@ Asset preparation downloads and verifies the existing pinned approximately
 91 MB runtime/model distribution. Building copies the maintained Web pipeline,
 nodes, core, workers, configuration, capture helpers, models and license notices
 into `dist/chrome-extension/`. Translation preparation adds about 28 MB of
-checksum-pinned runtime JS/MJS/WASM; OPUS-MT weights are not bundled. These
+checksum-pinned runtime JS/MJS/WASM. TTS preparation stages about 77 MB of reviewed
+runtimes/frontends plus corresponding source; OPUS-MT/TTS weights are not bundled. These
 generated files are ignored by Git. Rebuild
 after source changes; reload the extension in Chrome after rebuilding.
 
@@ -110,6 +112,7 @@ npm test
 npm run test:browser
 npm run prepare:assets
 npm run prepare:translation-assets
+npm run prepare:tts-assets
 npm run build:extension
 npm run test:extension
 ```
@@ -139,9 +142,12 @@ cross-browser extension support. No post-merge verification is required by #61.
 
 ## Optional OPUS-MT Japanese ↔ English (#69 / #71)
 
-Translation defaults off with Japanese → English selected. Both preferences
-persist in extension-origin localStorage across window recreation/profile restart;
-transcripts are not saved. A new toolbar invocation uses the saved preferences.
+Fresh installs default to the saved transcription + Japanese → English translation
+graph. Earlier enablement/direction preferences migrate into it. The saved graph
+persists in extension-origin localStorage across window recreation/profile restart;
+transcripts are not saved. A new toolbar invocation uses the saved graph. See
+[the executable visual graph editor](extension-graph.md) for editing, recovery,
+validation and optional production Supertonic 3 / Kokoro audio paths.
 In the recorder window, select Japanese → English or English → Japanese, then
 click **Download / retry OPUS-MT** to explicitly download the pinned model data
 (Japanese → English: 238,978,729 bytes, about 239 MB; English → Japanese:

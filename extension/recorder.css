@@ -1,5 +1,5 @@
 :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-body { max-width: 48rem; margin: 1.5rem auto; padding: 0 1.2rem; }
+body { max-width: 66rem; margin: 1.5rem auto; padding: 0 1.2rem; }
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; }
 button { padding: .6rem; margin-right: .5rem; }
@@ -9,3 +9,20 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 2rem; }
 fieldset { margin-top: 1rem; }
 #paired-finals li { border-bottom: 1px solid #888; }
 #partial-english { border-left: 3px solid #888; padding-left: .7rem; }
+
+.graph-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; }
+.graph-scroll { overflow: auto; max-height: 650px; border: 1px solid #aaa; background: #f6f8fa; color: #172331; }
+.graph-canvas { position: relative; min-width: 800px; min-height: 520px; }
+.graph-wires { position: absolute; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.graph-wires path { stroke: #366bab; stroke-width: 2; fill: none; }
+.graph-node { position: absolute; box-sizing: border-box; width: 235px; padding: 8px; border: 1px solid #8b9bab; border-radius: 5px; background: white; }
+.graph-heading { font-weight: bold; cursor: move; touch-action: none; margin-bottom: .5rem; }
+.graph-node label { display: block; }
+.graph-ports { display: flex; justify-content: space-between; margin-top: .5rem; gap: .25rem; }
+.graph-ports button { display: block; margin: .25rem 0; font-size: .85rem; }
+.selected-port { outline: 3px solid #366bab; }
+#graph-errors { color: #a32020; white-space: pre-wrap; }
+#graph-connections { font-size: .85rem; }
+#graph-connections button { margin: .15rem; }
+#audio-outputs { max-height: 320px; overflow: auto; }
+#audio-outputs li { padding: .5rem; }

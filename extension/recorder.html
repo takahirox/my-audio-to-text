@@ -15,9 +15,24 @@
   <button id="start" disabled>Start again</button>
   <button id="stop" disabled>Stop / finalize</button>
   <button id="cancel-session" disabled>Cancel session</button>
+  <details id="graph-panel">
+    <summary>Processing graph editor</summary>
+    <div id="graph-editor"></div>
+    <fieldset>
+      <legend>TTS model preparation</legend>
+      <p>Supertonic 3: about 399 MB; Kokoro: about 93 MB. Runtime/frontends are packaged. Weights download only when you press Download. Missing assets leave transcription usable. Audio appears in a separate player; press Play to listen.</p>
+      <label for="tts-node">TTS Node in the draft</label><select id="tts-node"></select>
+      <button id="prepare-tts" disabled>Download TTS assets</button><button id="cancel-tts-download" disabled>Cancel TTS download</button>
+      <p id="tts-model-status" role="status">Add a TTS Node to inspect its assets.</p>
+      <p><a href="../web/licenses/tts-notices.txt">TTS terms and notices</a> · <a href="../web/tts-assets/phonemizer-source.tar.gz">Matching eSpeak NG source / build bundle (GPL-3.0-or-later)</a>. Supertonic weights/voices: OpenRAIL-M; Kokoro: Apache-2.0. Choose language/voice to match the connected text.</p>
+      <p>TranslateGemma is a next step: extension packaging, WebGPU and asset terms are not verified, so it is not selectable.</p>
+    </fieldset>
+  </details>
+  <p id="tts-status" role="status"></p>
+  <ol id="audio-outputs"></ol>
   <fieldset>
     <legend>Optional local translation (OPUS-MT)</legend>
-    <label><input id="translation-enabled" type="checkbox"> Enable translation for the next session (Stop first)</label>
+    <label><input id="translation-enabled" type="checkbox"> Include OPUS-MT in the saved graph for the next session (Stop first)</label>
     <label for="translation-direction">Translation direction</label>
     <select id="translation-direction">
       <option value="ja-en" selected>Japanese → English</option>

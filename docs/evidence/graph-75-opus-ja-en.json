@@ -1,0 +1,168 @@
+{
+  "direction": "ja-en",
+  "model": {
+    "id": "onnx-community/opus-mt-ja-en",
+    "revision": "05470cd69b62aa32e3ee64ccfd41279789ee4b1e",
+    "dtype": "q8",
+    "device": "wasm"
+  },
+  "time": "2026-10-09T05:08:49.181Z",
+  "browserVersion": "153.0.8010.12",
+  "capabilities": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "isolated": true,
+    "wasm": true,
+    "worker": true,
+    "cache": true
+  },
+  "fixture": {
+    "name": "Japanese",
+    "path": "test_wavs/test_ja_1.wav",
+    "sha256": "09abd330ce706a6e6969fe6bbc8275314af631fcee4e536afd0626570d263fbf"
+  },
+  "cacheState": "Ready",
+  "runs": [
+    {
+      "run": 0,
+      "offline": false,
+      "recreatedWindow": false,
+      "provisional": {
+        "original": "日本語",
+        "translated": "Japanese"
+      },
+      "finals": [
+        {
+          "original": "日本語ちゃんと聞き取れますか",
+          "translated": "Do you hear Japanese well?"
+        },
+        {
+          "original": "あん時聞こえてんの",
+          "translated": "I heard you."
+        },
+        {
+          "original": "ちゃんと聞こえてんの",
+          "translated": "I can hear you."
+        },
+        {
+          "original": "マイクを持ってもらって",
+          "translated": "Take the microphone."
+        }
+      ],
+      "ordinaryTranslations": []
+    },
+    {
+      "run": 1,
+      "offline": true,
+      "recreatedWindow": true,
+      "provisional": {
+        "original": "日本語ちゃんと",
+        "translated": "I'm gonna take it from here."
+      },
+      "finals": [
+        {
+          "original": "日本語ちゃんと聞き込んでますか",
+          "translated": "Are you listening to your Japanese?"
+        },
+        {
+          "original": "ちゃんと聞こえてんの",
+          "translated": "I can hear you."
+        },
+        {
+          "original": "ちゃんと聞こえてんの",
+          "translated": "I can hear you."
+        },
+        {
+          "original": "マイクを持ってもらって",
+          "translated": "Take the microphone."
+        }
+      ],
+      "ordinaryTranslations": []
+    }
+  ],
+  "errors": [],
+  "requests": [
+    {
+      "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/config.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/opus-mt-ja-en/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/config.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/generation_config.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/opus-mt-ja-en/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/generation_config.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/tokenizer_config.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/opus-mt-ja-en/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/tokenizer_config.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/tokenizer.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/opus-mt-ja-en/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/tokenizer.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/special_tokens_map.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/opus-mt-ja-en/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/special_tokens_map.json",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/onnx/encoder_model_quantized.onnx",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://us.aws.cdn.hf.co/xet-bridge-us/66ce4930da5d6bbe4dee43d3/fcab6d83b34094a4d17a3900ec60ca6469c0c0dbf4045ac1e5843c531aa88426",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/onnx/decoder_model_merged_quantized.onnx",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "url": "https://us.aws.cdn.hf.co/xet-bridge-us/66ce4930da5d6bbe4dee43d3/3d6965f869634aa71e04f113930f6b184ac4f7f098836d645a0ca6237399cc00",
+      "method": "GET",
+      "hasBody": false
+    }
+  ],
+  "requestSummary": {
+    "total": 190,
+    "byScheme": {
+      "http": 2,
+      "chrome-extension": 174,
+      "https": 14
+    },
+    "byMethod": {
+      "GET": 190
+    },
+    "requestsWithBody": 0,
+    "detailScope": "External asset requests only; repeated packaged-resource and local speech-fixture GETs summarized above."
+  }
+}
