@@ -29,6 +29,8 @@ export class TabSession {
     let graph;
     try { graph = assertGraph(this.graph); } catch (error) { this.update({ error: error.message }); return; }
     const preferences = graphPreferences(graph);
+    const hasTranscriptView = graph.nodes.some(node => node.type === 'TranscriptView');
+    const hasTranslationView = graph.nodes.some(node => node.type === 'TranslationView');
     const sourceType = graph.nodes.find(n => INPUT_TYPES.includes(n.type)).type;
     if (sourceType === 'MicrophoneAudio' && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.' }); return; }
     for (const node of graph.nodes.filter(n => FIELD_TYPES.includes(n.type) || n.type === 'SelectedPageMediaAudio')) {
@@ -69,7 +71,8 @@ export class TabSession {
           if (port === 'provisional' && this.view.state !== 'stopping') this.update({ partial: text });
           else if (port === 'final') this.update({ partial: '', interimTranslation: null,
             final: this.view.final + (text.trim() ? `${text}\n` : ''),
-            utterances: text.trim() ? [...this.view.utterances, { source: text, direction: session.direction, status: session.translation ? 'pending' : 'off', text: '' }] : this.view.utterances });
+            // Paired rows belong to TranslationView's source-bearing messages.
+            utterances: !hasTranslationView && text.trim() ? [...this.view.utterances, { source: text, direction: session.direction, status: session.translation ? 'pending' : 'off', text: '' }] : this.view.utterances });
         },
         onCapturedAudio: pcm => {
           if (this.session !== session) return;
@@ -82,11 +85,14 @@ export class TabSession {
         onTranslation: (port, value, context) => {
           if (this.session !== session || context.signal.aborted) return;
           if (port === 'provisional') {
-            if (this.view.state !== 'stopping' && value.source.text === this.view.partial) this.update({ interimTranslation: value.status === 'pending' && this.view.interimTranslation
+            if (this.view.state !== 'stopping' && (!hasTranscriptView || value.source.text === this.view.partial)) this.update({
+              ...(!hasTranscriptView ? { partial: value.source.text } : {}),
+              interimTranslation: value.status === 'pending' && this.view.interimTranslation
               ? { ...value, previous: this.view.interimTranslation.status === 'complete' ? this.view.interimTranslation : this.view.interimTranslation.previous } : value });
           } else {
-            const utterances = this.view.utterances.map((row, index) => index === value.index ? { ...row, ...value, source: row.source } : row);
-            this.update({ utterances });
+            const utterances = [...this.view.utterances], first = !utterances[value.index];
+            utterances[value.index] = { ...value, source: value.source.text, direction: session.direction };
+            this.update({ utterances, ...(!hasTranscriptView && first ? { partial: '', interimTranslation: null } : {}) });
           }
         },
         onError: error => { if (this.session === session) this.fail(error.cause?.message || error.message); },

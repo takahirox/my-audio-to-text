@@ -89,6 +89,7 @@ export function validateGraph(graph) {
   const ofType = type => graph.nodes.filter(n => n?.type === type);
   if (graph.nodes.filter(n => INPUT_TYPES.includes(n?.type)).length !== 1) errors.push('Exactly one audio input is required; simultaneous sources are ambiguous.');
   if (ofType('SpeechToText').length !== 1) errors.push('Exactly one SpeechToText is required.');
+  if (ofType('TranscriptView').length > 1) errors.push('Only one shared Live transcript destination is supported.');
   if (graph.nodes.filter(n => translators.includes(n?.type)).length > 1 || ofType('TranslationView').length > 1) errors.push('Only one paired translation branch is supported.');
   for (const node of nodes.values()) {
     const definition = definitionOf(node.type);

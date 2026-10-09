@@ -122,6 +122,10 @@ test('saved cycles, type mismatches, unknown ports/types and missing inputs refu
     ['Unknown port', graph => graph.edges[0].from[1] = 'missing'],
     ['Unknown Node type', graph => graph.nodes[0].type = 'UnverifiedModel'],
     ['Required connection', graph => graph.edges.pop()],
+    ['Only one shared Live transcript', graph => {
+      graph.nodes.push({ ...structuredClone(graph.nodes.find(node => node.type === 'TranscriptView')), id: 'other' });
+      for (const port of ['provisional', 'final']) graph.edges.push({ from: ['speech', port], to: ['other', port] });
+    }],
   ]) {
     const graph = structuredClone(valid); edit(graph);
     await page.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), graph); await page.reload(); await page.editor.reload();

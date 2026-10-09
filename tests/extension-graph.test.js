@@ -44,6 +44,10 @@ for (const [name, edit, pattern] of [
   ['settings', g => g.nodes[2].settings.model = 'remote', /Unknown setting/],
   ['direction mismatch', g => g.nodes[3].type = 'OpusMtEnJa', /direction must match/],
   ['duplicate translation', g => g.nodes.push(graphNode('OpusMtEnJa', 'other')), /Only one paired/],
+  ['duplicate transcript destination', g => {
+    g.nodes.push(graphNode('TranscriptView', 'other'));
+    for (const port of ['provisional', 'final']) g.edges.push(edge('speech', port, 'other', port));
+  }, /Only one shared Live transcript/],
   ['malformed edge', g => g.edges.push({ from: null }), /Malformed/],
 ]) test(`schema rejects ${name} before saving or constructing Workers`, () => {
   const graph = defaultGraph(); edit(graph);
