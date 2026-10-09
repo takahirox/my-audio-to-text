@@ -197,16 +197,16 @@ asset terms is a documented next step, as permitted by #75.
 ## Validation
 
 ```sh
-npm ci
-npm run prepare:assets
-npm run prepare:translation-assets # after ASR preparation, which replaces vendor/
-npm run prepare:tts-assets
-npm run build:extension
+npm run setup:extension
 npm test
 npm run test:browser -- --workers=2
 npm run test:extension
 EXTENSION_TTS_SMOKE=all npm run test:extension -- tests/extension/graph-tts-smoke.spec.js
 ```
+
+Setup prepares the assets in the required order and builds `dist/chrome-extension/`.
+For source changes with assets already prepared, use `npm run build:extension`.
+See [build, load and reload instructions](chrome-extension.md#build-and-load-unpacked).
 
 Use `EXTENSION_TTS_SMOKE=Supertonic3` or `Kokoro` for one model. Tests download
 weights only through the explicit preparation button. The TTS smoke runs the
