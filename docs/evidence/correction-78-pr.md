@@ -10,7 +10,7 @@ Pin the Qwen3 checkpoint/tokenizer revision, q4f16 assets and existing verified 
 - The Playground offers text input, language selection, Generate, Cancel and bypass, with original/candidate views, a changed span, timing, errors and cache warnings. Text is processed locally; recorded traffic contains asset GETs and no network inference.
 - The prompt requests minimal apparent ASR fixes and preserves meaning, language, names, figures, dates/times, negation and wording when uncertain. This is text-only candidate generation, with no acoustic verification or guarantee of semantic fidelity.
 - **Draft: quality improvement is not demonstrated.** The final batch copied all 10 distinct correct fixtures and a repeated correct fixture, but missed all four intended corrections. A separate Japanese Playground run dropped “today” from a correct sentence. The original and deletion remained visible. Earlier prompt regressions are also recorded in the evidence.
-- **Required post-merge Pages verification remains pending.** Keep #78 open until the deployment run URL, merged SHA, check time and fresh deployed-origin prefix/Worker/runtime/asset checks are recorded, including deployed real inference if asset access differs. This PR must not be treated as completion of those checks.
+- **Required post-merge Pages verification remains pending.** Record the deployment run URL, merged SHA, check time and fresh deployed-origin prefix/Worker/runtime/asset checks, including deployed real inference if asset access differs. This PR must not be treated as completion of those checks.
 
 ## Validation
 
@@ -26,9 +26,9 @@ Pin the Qwen3 checkpoint/tokenizer revision, q4f16 assets and existing verified 
 
 ## Related issues
 
-Refs #78
+Closes #78
 
-The Issue is **not fully verified or resolved**: post-merge Pages verification is pending, and no correction-quality improvement is claimed. Keep the PR in draft during review of these limitations and keep #78 open until its verification evidence is recorded.
+The Issue is **not fully verified or resolved**: post-merge Pages verification is pending, and no correction-quality improvement is claimed. Keep the PR in draft during review of these limitations. The closing reference is included as required by the publication request; GitHub will automatically close #78 on merge, but required post-merge verification still needs to be performed and recorded.
 
 ## Scope check
 
