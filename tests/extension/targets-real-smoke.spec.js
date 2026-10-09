@@ -43,7 +43,7 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and the same-ta
     await live.locator('#stop').click(); await expect(live.locator('#status')).toContainText('Stopped', { timeout: 120000 });
     const finals = (await live.locator('#final').textContent()).split('\n').map(text => text.trim()).filter(Boolean);
     expect(finals.length).toBeGreaterThan(0);
-    await expect(website.locator('#field')).toHaveValue('manual ' + finals.join(' ')); await expect(website.locator('#other')).toHaveValue('');
+    await expect(website.locator('#field')).toHaveValue('manual' + finals.join('')); await expect(website.locator('#other')).toHaveValue('');
     await expect(live.locator('#errors')).toBeEmpty(); expect(pageErrors).toEqual([]);
     expect(requests.every(request => request.method === 'GET' && !request.hasBody && (request.protocol === 'chrome-extension:' || request.hostname === '127.0.0.1'))).toBe(true);
     expect(await live.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);

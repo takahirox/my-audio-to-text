@@ -142,9 +142,12 @@ activation is covered by a controlled fixture; live YouTube compatibility has
 not been manually verified. Complex editors, shadow roots and restricted frames
 may require Live Copy.
 
-Manual/selected text is preserved and strings append in order without submitting
-forms. Upstream final adapters suppress repeated/stale IDs within the session
-and emit only confirmed original/completed translations. The string input itself
+Manual/selected text and existing whitespace are preserved. Incoming TEXT strings
+append verbatim in order, including leading/trailing whitespace. No spaces,
+newlines or other delimiters are added and no forms are submitted. Empty strings
+are ignored; formatting and spacing belong upstream. Upstream final adapters
+suppress repeated/stale IDs within the session and emit only confirmed
+original/completed translations. The string input itself
 needs no IDs. Sensitive/hidden/disabled fields and authentication/payment forms
 are skipped, as are canceled `beforeinput` edits; a visible status explains the
 skip while other branches continue. Page navigation, closure or permission loss
