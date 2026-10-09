@@ -1,0 +1,52 @@
+Supertonic 3
+  Copyright (c) 2026 Supertone Inc.
+  Official archived browser helper (MIT):
+  https://github.com/supertone-oss-archive/supertonic/tree/1e9799e964ea4c0dad7cde993b65c3c813a7b373/web
+  ./supertonic-code.txt; model and preset voices: ./supertonic-model.txt (OpenRAIL-M).
+  https://huggingface.co/supertone-oss-archive/supertonic-3/tree/aafc6e32416a594460b32413efc49d7fe4ce6d46
+  The archive has no ongoing upstream development/support. No hosted service is used.
+
+Kokoro 82M v1.0
+  Copyright hexgrad. Apache-2.0 model and implementation: ./kokoro.txt.
+  https://huggingface.co/hexgrad/Kokoro-82M/tree/f3ff3571791e39611d31c381e3a41a3af07b4987
+  ONNX Community conversion and voice embeddings:
+  https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/tree/1939ad2a8e416c0acfeecc08a694d14ef25f2231
+  Implementation / English normalization:
+  https://github.com/hexgrad/kokoro/tree/dfb907a02bba8152ca444717ca5d78747ccb4bec/kokoro.js
+
+Japanese frontend (Kokoro only)
+  Adapted from nerosui/kokoro-js-jp 0.2.0, Apache-2.0.
+  https://github.com/nerosui/kokoro-js-jp/tree/8eadd00e25759e5f6d067009dd02943c17048508
+  Complete notices and license texts: ./kokoro-japanese.txt.
+  Includes misaki (Apache-2.0), cutlet (MIT), Open JTalk/openjtalkjs (BSD),
+  Open JTalk dictionary 1.11 (NAIST/UniDic/Open JTalk Modified BSD), and
+  Mei HTS voice (Copyright 2009-2013 Nagoya Institute of Technology,
+  MMDAgent Project, CC BY 3.0: https://creativecommons.org/licenses/by/3.0/).
+  Mei is loaded only because the Open JTalk frontend requires configuration;
+  generated speech comes from Kokoro, not the Mei synthesizer.
+  Four WASM/wrapper/dictionary/voice assets are copied unchanged from the
+  checksum-pinned kokoro-js-jp npm package. No native addon or Python is shipped.
+
+English frontend (Kokoro only)
+  Source-built eSpeak NG engine, English data and adapter: GPL-3.0-or-later.
+  Copyright eSpeak NG contributors; full license: ./espeak-ng.txt.
+  Source revision: 0dfd1d77dd7f96ef1ea6856c9fa5cfac01599582.
+  https://github.com/espeak-ng/espeak-ng/tree/0dfd1d77dd7f96ef1ea6856c9fa5cfac01599582
+  DOWNLOAD CORRESPONDING SOURCE (same origin, also linked on the Kokoro page):
+  ../tts-assets/phonemizer-source.tar.gz
+  Includes the complete engine/data source archive, upstream notices/licenses,
+  adapter, Dockerfile, build/installation instructions and output checksum.
+  Built with Emscripten 3.1.30; generated module embeds WASM and English data.
+  The untraceable phonemizer 1.2.1 npm binary is no longer distributed.
+
+Browser inference runtimes
+  Transformers.js 3.8.1, Hugging Face, Apache-2.0:
+  ./transformers-tts-LICENSE.txt (also tts-assets/transformers-LICENSE).
+  https://github.com/huggingface/transformers.js/tree/3.8.1
+  ONNX Runtime Web 1.22.0-dev.20250409-89f8206ba4, Microsoft, MIT:
+  ./onnxruntime-tts.txt.
+  https://github.com/microsoft/onnxruntime/tree/89f8206ba4
+  Checksum-pinned npm assets: scripts/prepare-tts-assets.py.
+
+Only fixed model/runtime/voice URLs are fetched by GET on explicit Generate.
+Input text is processed locally and is never placed in network requests.

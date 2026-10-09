@@ -1,0 +1,82 @@
+{
+  "supertonic-3": {
+    "revision": "aafc6e32416a594460b32413efc49d7fe4ce6d46",
+    "files": [
+      {
+        "path": "onnx/duration_predictor.onnx",
+        "bytes": 3700147,
+        "sha256": "c3eb91414d5ff8a7a239b7fe9e34e7e2bf8a8140d8375ffb14718b1c639325db"
+      },
+      {
+        "path": "onnx/text_encoder.onnx",
+        "bytes": 36416150,
+        "sha256": "c7befd5ea8c3119769e8a6c1486c4edc6a3bc8365c67621c881bbb774b9902ff"
+      },
+      {
+        "path": "onnx/tts.json",
+        "bytes": 8253,
+        "sha256": null
+      },
+      {
+        "path": "onnx/unicode_indexer.json",
+        "bytes": 277676,
+        "sha256": null
+      },
+      {
+        "path": "onnx/vector_estimator.onnx",
+        "bytes": 256534781,
+        "sha256": "883ac868ea0275ef0e991524dc64f16b3c0376efd7c320af6b53f5b780d7c61c"
+      },
+      {
+        "path": "onnx/vocoder.onnx",
+        "bytes": 101424195,
+        "sha256": "085de76dd8e8d5836d6ca66826601f615939218f90e519f70ee8a36ed2a4c4ba"
+      },
+      {
+        "path": "voice_styles/F1.json",
+        "bytes": 292046,
+        "sha256": null
+      },
+      {
+        "path": "voice_styles/M1.json",
+        "bytes": 291748,
+        "sha256": null
+      }
+    ]
+  },
+  "Kokoro-82M-v1.0-ONNX": {
+    "revision": "1939ad2a8e416c0acfeecc08a694d14ef25f2231",
+    "files": [
+      {
+        "path": "config.json",
+        "bytes": 44,
+        "sha256": null
+      },
+      {
+        "path": "onnx/model_quantized.onnx",
+        "bytes": 92361116,
+        "sha256": "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478"
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 3497,
+        "sha256": null
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 113,
+        "sha256": null
+      },
+      {
+        "path": "voices/af_heart.bin",
+        "bytes": 522240,
+        "sha256": "d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b"
+      },
+      {
+        "path": "voices/jf_alpha.bin",
+        "bytes": 522240,
+        "sha256": "56b479360aad9f367aeb8cef908f9201cf48b4555e488c5f4590c9dfcd978bb6"
+      }
+    ]
+  }
+}

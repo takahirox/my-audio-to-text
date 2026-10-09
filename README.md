@@ -26,6 +26,15 @@ Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox
 
 The published entry point lists available processor nodes. Select [Speech-to-Text (ReazonSpeech ja-en)](https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/) to open its individual test page. It runs the actual `SpeechToTextNode` through the Node/Port pipeline, with microphone or browser-tab sources and a transcript sink. The model and processing policy are fixed; there is no model comparison selector. The index also lists separate OPUS-MT Japanese → English / English → Japanese and TranslateGemma 4B Japanese → English pages, each running its production node in an owned Worker. See [pinned models, setup, terms and real-model tests](docs/translation-nodes.md) and the [page convention and how to add another node](docs/node-playground.md).
 
+Independent [Supertonic 3](web/nodes/supertonic3/index.html) and
+[Kokoro 82M](web/nodes/kokoro/index.html) text-to-speech Nodes also run through
+the Pipeline, with Japanese/English input and playable mono audio at each
+model's native rate. Each has its own WASM Worker and page with Generate,
+Cancel and WAV download. Run `npm run prepare:tts-assets` for local setup;
+model downloads start on Generate. See [TTS pins, terms and testing](docs/tts-nodes.md)
+and [real inference evidence](docs/evidence/tts-73.md). ASR → translation → TTS
+composition remains future work.
+
 The retained hayamimi-inspired path uses 0.8-second pre-roll, provisional recognition about every 0.5 seconds of active speech, a 0.35-second trailing-silence endpoint, and a 12-second maximum utterance duration. Stop finalizes active speech. Silero VAD and ASR run in separate workers; inference is serialized, superseded previews are coalesced, and pending audio is bounded at 30 seconds. ReazonSpeech uses the evidence-based one-thread default from [Issue #38](docs/evidence/reazon-38.md).
 
 Microphone or browser-tab audio feeds normalized PCM into the documented [local ASR core boundary](docs/local-asr-core.md); capture/resampling stays outside recognition orchestration. For tab audio, use a desktop Chromium browser and choose a tab with “Share tab audio” enabled in the browser sharing picker.

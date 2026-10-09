@@ -3,7 +3,7 @@
 The [published Web entry point](https://takahirox.github.io/my-audio-to-text/)
 lists available processor nodes. Each link opens a small, independent test page
 that supplies valid inputs to the actual node and displays its outputs and
-practical status/errors. The list includes three independent entries:
+practical status/errors. The list includes independent entries:
 
 - [Speech-to-Text (ReazonSpeech ja-en)](https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/):
   microphone or browser-tab audio → `SpeechToTextNode` → provisional/final
@@ -15,6 +15,14 @@ practical status/errors. The list includes three independent entries:
   plain text → `EnglishToJapaneseOpusMtTranslationNode` (local WASM) → Japanese string sink.
 - [TranslateGemma 4B Translation (Japanese → English)](https://takahirox.github.io/my-audio-to-text/nodes/translategemma/):
   plain text → `TranslateGemmaTranslationNode` (local WebGPU) → translated string sink.
+- [Supertonic 3 Text-to-Speech](https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/):
+  text → `Supertonic3TextToSpeechNode` (local WASM) → mono 44.1 kHz audio/player.
+- [Kokoro 82M Text-to-Speech](https://takahirox.github.io/my-audio-to-text/nodes/kokoro/):
+  text → `KokoroTextToSpeechNode` (local WASM with Japanese/English frontend) → mono 24 kHz audio/player.
+
+Both TTS pages provide Generate/Cancel, loading/generation times, playback and
+WAV download using the production Pipeline. Downloads start only on Generate.
+See [pinned TTS assets, terms, setup and validation](tts-nodes.md).
 
 The translation pages have text input, Run/Cancel, output, progress/errors and
 separate loading and inference/drain latencies. They run the production nodes
@@ -59,6 +67,8 @@ needed. Each page can differ according to its node's input/output needs.
 the speech page. The [Pages workflow](../.github/workflows/pages.yml) prepares
 the pinned runtime/models and uploads the entire `web/` directory recursively.
 It also stages the pinned translation JS/MJS/WASM after speech preparation.
+TTS preparation stages separate `web/tts-assets/` runtimes/frontends and notices;
+TTS weights download on demand. The existing extension package is unchanged.
 Translation weights download on demand from immutable Hugging Face revisions;
 the Pages artifact does not include those weights. There is no bundler or separate page build. Keep `web/vendor/`, shared modules,
 workers, licenses and notices at the Web root. Extension packaging continues
@@ -73,7 +83,8 @@ recognition runtime or isolation setup. Existing root worker registrations still
 use the same script/scope after upgrading from the dedicated demo.
 
 Run `npm test`, `npm run test:browser -- --workers=2`, `npm run prepare:assets`,
-`npm run prepare:translation-assets`, `npm run build:extension` and `npm run test:extension`. The browser suite tests
+`npm run prepare:translation-assets`, `npm run build:extension` and `npm run test:extension`.
+For TTS pages also run `npm run prepare:tts-assets`. The browser suite tests
 the plain static server and a repository-prefix alias without server isolation
 headers. Opt-in real-model checks use the migrated speech page too.
 
