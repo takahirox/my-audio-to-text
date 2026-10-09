@@ -35,7 +35,7 @@ export class FocusedInputTextOutputNode {
     this.onState(`Insertion detached: ${message} Stop and invoke that page's toolbar action again. Other branches continue.`, false);
   }
   async receive(port, text, context) {
-    if (this.skipped || this.failed || this.disposed || context.signal.aborted || port !== 'text' || typeof text !== 'string' || !text.trim()) return;
+    if (this.skipped || this.failed || this.disposed || context.signal.aborted || port !== 'text' || typeof text !== 'string' || !text.length) return;
     try {
       // Pipeline serializes this sink. Sequence is only page-session delivery
       // identity, never part of the plain TEXT contract. Never retry an edit.

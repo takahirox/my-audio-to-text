@@ -60,13 +60,20 @@ function output({ target = { tabId: 42, documentId: 'document', label: 'Test pag
 test('plain strings need no IDs; equal text is valid, no replay on Stop, cancellation ignores late delivery', async () => {
   const f = output(), ctx = context(); await f.node.start(ctx);
   assert.deepEqual(f.node.inputs, { text: TEXT });
-  for (const text of ['one', 'one', 'two', ' ']) await f.node.receive('text', text, ctx);
+  for (const text of ['one', 'one', 'two', '']) await f.node.receive('text', text, ctx);
   await f.node.receive('final', { id: 1, text: 'invalid' }, ctx);
   f.node.stop(); await f.node.receive('text', 'late', ctx);
   assert.deepEqual(f.sent.filter(([action]) => action === 'append').map(([, value]) => [value.text, value.sequence]), [['one', 0], ['one', 1], ['two', 2]]);
   assert.equal(f.closed(), 1);
   const controller = new AbortController(), other = output(); await other.node.start({ signal: controller.signal }); controller.abort();
   await other.node.receive('text', 'late', { signal: controller.signal }); assert.equal(other.sent.length, 1);
+});
+test('focused TEXT output forwards Japanese and explicit whitespace verbatim, skipping only empty strings', async () => {
+  const f = output(), ctx = context(); await f.node.start(ctx);
+  const texts = ['今日は', 'いい天気ですね', ' world', ' ', '\n', '\t', '  next\n\t '];
+  for (const text of ['', ...texts, '', null, { text: 'invalid' }]) await f.node.receive('text', text, ctx);
+  assert.deepEqual(f.sent.filter(([action]) => action === 'append').map(([, value]) => [value.text, value.sequence]), texts.map((text, sequence) => [text, sequence]));
+  assert.equal(f.node.inserted, texts.length);
 });
 test('no focus/canceled edit skips a value; permission/transport errors detach only this branch without retry', async () => {
   const f = output({ response: { skipped: 'Focus a field' } }), ctx = context(); await f.node.start(ctx);

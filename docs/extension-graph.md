@@ -139,8 +139,13 @@ and never retries an uncertain edit. Stop drains new final deliveries, with no
 replay; Cancel aborts queued work and closes ports. Each new session has fresh
 adapters and delivery state, with immutable graph/document snapshots.
 
-Insertion preserves manual/selected content and appends at the end with a space
-if needed, without submitting forms. Text/search inputs, textareas and basic
+Insertion preserves manual/selected content, including existing whitespace, and
+appends each incoming TEXT string verbatim at the end without submitting forms.
+No spaces, newlines or other delimiters are added; incoming leading/trailing
+whitespace is preserved and empty strings are ignored. For example, `今日は`
+followed by `いい天気ですね` produces `今日はいい天気ですね`; appending ` world`
+to `Hello` produces `Hello world` because the incoming string supplies the space.
+Formatting and spacing belong upstream. Text/search inputs, textareas and basic
 contenteditable use cancelable `beforeinput`, native value setters, plain text
 nodes, and `input`/`change` events. Changed targets/content during `beforeinput`
 are skipped. Password/payment/authentication, read-only/disabled/hidden/inert

@@ -68,25 +68,24 @@
   function append(element, text) {
     if (!editable(element)) throw Error('Target is missing, sensitive, hidden or not editable. Focus a supported text field or use Live Copy.');
     const value = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : element.textContent;
-    const inserted = (value && !/\s$/.test(value) ? ' ' : '') + text;
-    if (!element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: inserted }))) throw Error('The editor rejected text insertion. Use another field or Live copy.');
+    if (!element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: text }))) throw Error('The editor rejected text insertion. Use another field or Live copy.');
     if (!editable(element) || focusedField() !== element) throw Error('Field changed during insertion. Focus the field again or use Live Copy.');
     if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : element.textContent) !== value) throw Error('The editor changed its content during beforeinput. Use Live Copy.');
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
       // Native setter plus input/change supports ordinary controlled inputs.
       const prototype = element instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
       const current = element.value;
-      if (element.maxLength >= 0 && current.length + inserted.length > element.maxLength) throw Error('Field length limit reached; text was not inserted.');
-      Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, current + inserted);
+      if (element.maxLength >= 0 && current.length + text.length > element.maxLength) throw Error('Field length limit reached; text was not inserted.');
+      Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, current + text);
       if (document.activeElement === element) element.setSelectionRange(element.value.length, element.value.length);
     } else {
       const range = document.createRange(); range.selectNodeContents(element); range.collapse(false);
-      const node = document.createTextNode(inserted); range.insertNode(node);
+      const node = document.createTextNode(text); range.insertNode(node);
       if (document.activeElement === element) {
         range.setStartAfter(node); range.collapse(true); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
       }
     }
-    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: inserted }));
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   }
   function mediaError(element) {

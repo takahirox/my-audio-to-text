@@ -94,6 +94,65 @@ async function stop(t) {
 }
 async function emit(t, id, text, type = 'final') { await t.page.evaluate(({ id, text, type }) => window.activeSpeech.receiveEvent({ type, id, text }), { id, text, type }); }
 
+for (const selector of ['#focused', '#search', '#chosen', '#editable']) test(`plain TEXT appends verbatim to ${selector}, preserving whitespace, selections and event data`, async ({ targets: t }) => {
+  await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.invoke();
+  await expect(t.page.locator('#status')).toHaveText('Transcription active'); await stop(t);
+  // Supply TEXT directly so the upstream final adapter's formatting cannot
+  // hide output changes to whitespace. Use the actual Pipeline and page port.
+  expect(await t.page.evaluate(async webOrigin => {
+    const { Pipeline } = await import('../web/pipeline.js');
+    const { TEXT } = await import('../web/translation-nodes.js');
+    const { FocusedInputTextOutputNode } = await import('./page-output-node.js');
+    const { authorizePage } = await import('./page-target.js');
+    const tab = (await chrome.tabs.query({})).find(tab => tab.url?.startsWith(webOrigin));
+    window.plainOutput = new FocusedInputTextOutputNode({ target: await authorizePage(tab.id) });
+    window.plainSource = { inputs: {}, outputs: { text: TEXT }, start(context) { this.emit = text => context.emit('text', text); } };
+    window.plainPipeline = new Pipeline({ nodes: { source: window.plainSource, output: window.plainOutput }, connections: [{ from: ['source', 'text'], to: ['output', 'text'] }] });
+    await window.plainPipeline.start(); return window.plainOutput.connected;
+  }, t.webOrigin)).toBe(true);
+  const field = t.website.locator(selector), multiline = ['#chosen', '#editable'].includes(selector);
+  await field.evaluate(element => {
+    for (const type of ['beforeinput', 'input', 'change']) element.addEventListener(type, event => window.insertionEvents.push({ type: event.type, data: event.data ?? null, inputType: event.inputType ?? null, bubbles: event.bubbles, cancelable: event.cancelable }));
+  });
+  const cases = [
+    { initial: '', texts: ['', '今日は', 'いい天気ですね', 'いい天気ですね', ''] },
+    { initial: 'Hello', texts: ['', ' world', '  ', '\t', ...(multiline ? ['\nnext\n'] : []), ''] },
+    { initial: multiline ? '\n existing \t \n' : ' existing \t ', texts: ['\t end  ', ' <b>plain</b> ', ...(multiline ? ['\n', ' \n\t '] : [])] },
+  ];
+  try {
+    for (const { initial, texts } of cases) {
+      await field.evaluate((element, value) => {
+        if (element.isContentEditable) element.textContent = value; else element.value = value;
+        window.insertionEvents = [];
+      }, initial);
+      await t.website.bringToFront(); await field.click();
+      await field.evaluate(element => {
+        if (element.isContentEditable) { const range = document.createRange(); range.selectNodeContents(element); getSelection().removeAllRanges(); getSelection().addRange(range); }
+        else element.setSelectionRange(0, element.value.length);
+      });
+      await t.page.bringToFront();
+      expect(await t.page.evaluate(async texts => {
+        for (const text of texts) window.plainSource.emit(text);
+        await window.plainPipeline.entries.get('output').queue;
+        // Replayed port deliveries must not append again or dispatch events.
+        const connection = window.plainOutput.connection, sequence = window.plainOutput.sequence - 1;
+        return [await connection.request('append', { sequence, text: 'duplicate' }), await connection.request('append', { sequence: 0, text: 'stale' })];
+      }, texts)).toEqual([{ duplicate: true }, { duplicate: true }]);
+      const expected = initial + texts.join('');
+      expect(await field.evaluate(element => element.isContentEditable ? element.textContent : element.value)).toBe(expected);
+      expect(await t.website.evaluate(() => window.insertionEvents)).toEqual(texts.filter(text => text.length).flatMap(data => [
+        { type: 'beforeinput', data, inputType: 'insertText', bubbles: true, cancelable: true },
+        { type: 'input', data, inputType: 'insertText', bubbles: true, cancelable: false },
+        { type: 'change', data: null, inputType: null, bubbles: true, cancelable: false },
+      ]));
+      expect(await field.locator('b').count()).toBe(0);
+    }
+    expect(await t.website.evaluate(() => window.submits)).toBe(0);
+  } finally {
+    await t.page.evaluate(async () => { await window.plainPipeline.stop(); await window.plainPipeline.dispose(); });
+  }
+});
+
 test('toolbar automatically readies one TEXT sink; Live popup focus, input/search/textarea, order, once, Stop and Cancel', async ({ targets: t }) => {
   await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] });
   await t.website.locator('#focused').click(); await t.invoke();
@@ -102,20 +161,21 @@ test('toolbar automatically readies one TEXT sink; Live popup focus, input/searc
   await expect(t.page.getByRole('button', { name: /Authorize capture|Pick field|Use next toolbar/ })).toHaveCount(0);
   await t.page.bringToFront();
   await expect.poll(() => t.website.evaluate(() => document.hasFocus())).toBe(false);
-  await emit(t, 1, 'one'); await emit(t, 1, 'duplicate'); await emit(t, 0, 'stale'); await emit(t, 2, 'two');
-  await expect(t.website.locator('#focused')).toHaveValue('manual one two');
-  await expect(t.page.locator('#final')).toContainText('two');
+  await emit(t, 1, '今日は'); await emit(t, 1, 'duplicate'); await emit(t, 0, 'stale'); await emit(t, 2, 'いい天気ですね'); await emit(t, 3, 'いい天気ですね');
+  await expect(t.website.locator('#focused')).toHaveValue('manual今日はいい天気ですねいい天気ですね');
+  // Live receives transcripts independently of the final adapter's ID policy.
+  await expect(t.page.locator('#final')).toHaveText('今日は\nduplicate\nstale\nいい天気ですね\nいい天気ですね\n');
   await t.website.bringToFront(); await t.website.locator('#search').click();
   await t.website.locator('#search').evaluate(e => e.setSelectionRange(0, 5));
-  await t.page.bringToFront(); await emit(t, 3, 'search'); await expect(t.website.locator('#search')).toHaveValue('query search');
+  await t.page.bringToFront(); await emit(t, 4, 'search'); await expect(t.website.locator('#search')).toHaveValue('querysearch');
   await t.website.bringToFront(); await t.website.locator('#chosen').click(); await t.page.bringToFront();
-  await emit(t, 4, 'notes'); await expect(t.website.locator('#chosen')).toHaveValue('existing notes');
-  await stop(t); await expect(t.website.locator('#chosen')).toHaveValue('existing notes');
+  await emit(t, 5, 'notes'); await expect(t.website.locator('#chosen')).toHaveValue('existingnotes');
+  await stop(t); await expect(t.website.locator('#chosen')).toHaveValue('existingnotes');
   expect(await t.website.evaluate(() => window.submits)).toBe(0);
   await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await emit(t, 1, 'fresh'); await expect(t.website.locator('#chosen')).toHaveValue('existing notes fresh');
+  await emit(t, 1, 'fresh'); await expect(t.website.locator('#chosen')).toHaveValue('existingnotesfresh');
   await t.page.locator('#cancel-session').click(); await emit(t, 2, 'late');
-  await expect(t.website.locator('#chosen')).toHaveValue('existing notes fresh');
+  await expect(t.website.locator('#chosen')).toHaveValue('existingnotesfresh');
   expect(await t.page.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);
 });
 
@@ -132,7 +192,7 @@ test('first toolbar-created Live popup prepares a pre-focused editor before wind
   await expect.poll(() => t.website.evaluate(() => document.hasFocus())).toBe(false);
   await expect(live.locator('#partial')).toHaveText('pending fixture');
   await live.locator('#stop').click(); await expect(live.locator('#status')).toContainText('Stopped');
-  await expect(t.website.locator('#chosen')).toHaveValue('existing confirmed fixture');
+  await expect(t.website.locator('#chosen')).toHaveValue('existingconfirmed fixture');
   await expect(live.locator('#final')).toHaveText('confirmed fixture\n');
 });
 
@@ -145,11 +205,11 @@ test('no focus skips without guessing; dynamic YouTube-style comment activation 
   await t.page.bringToFront(); await emit(t, 2, '<b>plain</b>');
   await expect(t.website.locator('#comment')).toHaveText('<b>plain</b>'); expect(await t.website.locator('#comment b').count()).toBe(0);
   await t.website.bringToFront(); await t.website.locator('#editable').click(); await t.page.bringToFront();
-  await emit(t, 3, 'next'); await expect(t.website.locator('#editable')).toHaveText('draft next');
+  await emit(t, 3, 'next'); await expect(t.website.locator('#editable')).toHaveText('draftnext');
   // Explicit blur in the page invalidates the previous focus; Live cannot revive it.
   await t.website.bringToFront(); await t.website.locator('#editable').evaluate(e => e.blur()); await t.page.bringToFront();
   await emit(t, 4, 'never'); await expect(t.page.locator('#target-status')).toContainText('Insertion skipped');
-  await expect(t.website.locator('#editable')).toHaveText('draft next'); await stop(t);
+  await expect(t.website.locator('#editable')).toHaveText('draftnext'); await stop(t);
 });
 
 test('window-blur editor retains valid prior focus; clicks elsewhere and disconnected/replaced fields supersede it', async ({ targets: t }) => {
@@ -157,7 +217,7 @@ test('window-blur editor retains valid prior focus; clicks elsewhere and disconn
   await expect(t.page.locator('#status')).toHaveText('Transcription active');
   await t.website.bringToFront(); await t.website.locator('#chosen').click();
   await t.website.evaluate(() => window.addEventListener('blur', () => document.activeElement.blur()));
-  await t.page.bringToFront(); await emit(t, 1, 'retained'); await expect(t.website.locator('#chosen')).toHaveValue('existing retained');
+  await t.page.bringToFront(); await emit(t, 1, 'retained'); await expect(t.website.locator('#chosen')).toHaveValue('existingretained');
   await t.website.bringToFront(); await t.website.locator('#play').click();
   await t.website.evaluate(() => [...document.querySelectorAll('audio')].forEach(a => a.pause()));
   await t.page.bringToFront(); await emit(t, 2, 'not focused'); await expect(t.page.locator('#target-status')).toContainText('Insertion skipped');
@@ -197,12 +257,12 @@ for (const selector of ['#focused', '#chosen']) test(`disabled fieldset, hidden 
     e.addEventListener('input', () => { if (native.get.call(e) !== tracked) { window.controlled = native.get.call(e); tracked = window.controlled; } });
   });
   await t.website.bringToFront(); await t.website.locator(selector).click(); await t.page.bringToFront();
-  await emit(t, 3, 'controlled'); await expect(t.website.locator(selector)).toHaveValue(original + ' controlled');
-  expect(await t.website.evaluate(() => window.controlled)).toBe(original + ' controlled');
+  await emit(t, 3, 'controlled'); await expect(t.website.locator(selector)).toHaveValue(original + 'controlled');
+  expect(await t.website.evaluate(() => window.controlled)).toBe(original + 'controlled');
   await t.website.locator(selector).evaluate(e => e.addEventListener('beforeinput', event => event.preventDefault(), { once: true }));
   await emit(t, 4, 'rejected'); await expect(t.page.locator('#target-status')).toContainText('editor rejected');
-  await expect(t.website.locator(selector)).toHaveValue(original + ' controlled');
-  await emit(t, 5, 'recovered'); await expect(t.website.locator(selector)).toHaveValue(original + ' controlled recovered'); await stop(t);
+  await expect(t.website.locator(selector)).toHaveValue(original + 'controlled');
+  await emit(t, 5, 'recovered'); await expect(t.website.locator(selector)).toHaveValue(original + 'controlledrecovered'); await stop(t);
 });
 
 test('no cross-tab grants or output; toolbar retargets only after Stop; navigation expires the authorized document', async ({ targets: t }) => {
@@ -216,12 +276,12 @@ test('no cross-tab grants or output; toolbar retargets only after Stop; navigati
   await t.website.bringToFront(); await t.website.locator('#focused').click(); await t.page.locator('#start').click();
   await expect(t.page.locator('#status')).toHaveText('Transcription active');
   await t.invoke(other); await other.locator('#focused').click(); await emit(t, 1, 'same tab');
-  await expect(t.website.locator('#focused')).toHaveValue('manual same tab'); await expect(other.locator('#focused')).toHaveValue('manual');
+  await expect(t.website.locator('#focused')).toHaveValue('manualsame tab'); await expect(other.locator('#focused')).toHaveValue('manual');
   await t.website.goto(`${t.webOrigin}/replacement`); await expect(t.page.locator('#target-status')).toContainText(/detached|disconnected|unavailable/);
   await emit(t, 2, 'Live survives'); await expect(t.page.locator('#final')).toContainText('Live survives'); await expect(t.website.locator('#focused')).toHaveValue('manual');
   await stop(t); await t.invoke(other); await other.locator('#focused').click(); await t.page.locator('#start').click();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await emit(t, 1, 'new toolbar tab');
-  await expect(other.locator('#focused')).toHaveValue('manual new toolbar tab'); await expect(t.website.locator('#focused')).toHaveValue('manual'); await stop(t);
+  await expect(other.locator('#focused')).toHaveValue('manualnew toolbar tab'); await expect(t.website.locator('#focused')).toHaveValue('manual'); await stop(t);
 });
 
 test('lost connection during start and running detaches focused output; Live continues and toolbar retry recovers', async ({ targets: t }) => {
@@ -232,7 +292,7 @@ test('lost connection during start and running detaches focused output; Live con
   await emit(t, 1, 'Live only'); await expect(t.page.locator('#final')).toContainText('Live only');
   await t.page.evaluate(() => { chrome.tabs.connect = window.originalConnect; }); await stop(t); await t.invoke();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await t.website.locator('#focused').click();
-  await emit(t, 1, 'retry'); await expect(t.website.locator('#focused')).toHaveValue('manual retry');
+  await emit(t, 1, 'retry'); await expect(t.website.locator('#focused')).toHaveValue('manualretry');
   // Close the native tab: connection loss must not send a later edit elsewhere.
   await t.website.close(); await expect(t.page.locator('#target-status')).toContainText(/detached|disconnected/); await stop(t);
 });
@@ -246,7 +306,7 @@ test('completed translations flow through adapter to TEXT fan-out and paired Liv
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect(t.page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
   await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('#partial-english')).toContainText('translated pending text'); await expect(t.website.locator('#focused')).toHaveValue('manual');
   await emit(t, 1, 'first'); await emit(t, 1, 'duplicate'); await emit(t, 2, 'second'); await stop(t);
-  await expect(t.website.locator('#focused')).toHaveValue('manual translated first translated second'); await expect(t.page.locator('#paired-finals')).toContainText('translated second');
+  await expect(t.website.locator('#focused')).toHaveValue('manualtranslated firsttranslated second'); await expect(t.page.locator('#paired-finals')).toContainText('translated second');
   await expect(t.page.locator('#errors')).toBeEmpty();
 });
 
