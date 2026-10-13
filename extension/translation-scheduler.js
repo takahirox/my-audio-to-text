@@ -1,15 +1,19 @@
 import { Pipeline } from '../web/pipeline.js';
-import { TEXT_RESULT } from '../web/port-contracts.js';
+import { NUMBER } from '../web/port-contracts.js';
 import { OpusMtTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
 
-export { TEXT_RESULT } from '../web/port-contracts.js';
+export const TRANSLATION_OUTPUTS = Object.freeze({
+  provisional: TEXT, text: TEXT,
+  provisionalSource: TEXT, provisionalStatus: TEXT, provisionalError: TEXT,
+  finalSource: TEXT, finalStatus: TEXT, finalIndex: NUMBER, finalError: TEXT,
+});
 
 // Session-owned adapter, not a generic queue: one in flight, one replaceable
 // provisional, and a FIFO of finals. receive() never waits for inference, so
 // Pipeline's input serialization cannot accumulate obsolete provisional work.
 export class TranslationSchedulerNode {
   inputs = { provisional: TEXT, text: TEXT };
-  outputs = { provisional: TEXT, text: TEXT, provisionalResult: TEXT_RESULT, finalResult: TEXT_RESULT };
+  outputs = TRANSLATION_OUTPUTS;
   constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, onState = () => {} } = {}) {
     this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
     this.finals = []; this.version = 0; this.finalIndex = 0;
@@ -36,10 +40,13 @@ export class TranslationSchedulerNode {
   emit(job, status, text = '', error = '') {
     if (this.disposed || this.context.signal.aborted) return;
     if (job.port === 'provisional' && job.version !== this.version) return;
-    this.context.emit(job.port === 'provisional' ? 'provisionalResult' : 'finalResult',
-      { source: job.source, index: job.index, status, text, error });
-    // Pending/error notifications never enter a reusable text-processing path.
-    if (status === 'complete') this.context.emit(job.port, text);
+    const prefix = job.port === 'provisional' ? 'provisional' : 'final';
+    this.context.emitOutputs({
+      [`${prefix}Source`]: job.source, [`${prefix}Status`]: status, [`${prefix}Error`]: error,
+      ...(prefix === 'final' ? { finalIndex: job.index } : {}),
+      // Pending/errors never enter reusable successful text-processing paths.
+      ...(status === 'complete' ? { [job.port]: text } : {}),
+    });
   }
   clearProvisional() {
     this.provisional = null;

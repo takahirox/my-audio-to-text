@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, withTranslation, GRAPH_KEY, NODE_TYPES } from '../extension/graph.js';
+import { legacyGraph } from './fixtures/legacy-graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { Pipeline } from '../web/pipeline.js';
 import { SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
@@ -56,22 +57,31 @@ for (const [name, edit, pattern] of [
   assert.throws(() => buildGraph(graph, {}), pattern);
 });
 
-test('version 4 paired edges are preserved; TranslationView accepts either plain stream and rejects mixed/empty modes', () => {
-  const saved = defaultGraph(), store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(saved));
-  assert.deepEqual(readGraph(store), saved);
-  assert.equal(store.getItem(GRAPH_KEY), JSON.stringify(saved), 'version 4 needs no rewrite');
-  for (const ports of [['text'], ['provisionalText'], ['provisionalText', 'text']]) {
-    const graph = defaultGraph(); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated');
-    for (const port of ports) graph.edges.push(edge('translation', port === 'text' ? 'text' : 'provisional', 'translated', port));
-    assert.deepEqual(validateGraph(graph), []);
-    assert.ok(buildGraph(graph, {}).pipeline);
-    graph.edges.push(edge('translation', 'finalResult', 'translated', 'final'));
-    assert.match(validateGraph(graph).join('\n'), /Choose either TEXT or paired/);
+test('version 4 paired graphs migrate explicitly; plain streams remain unchanged; incomplete groups fail', () => {
+  for (const direction of ['ja-en', 'en-ja']) {
+    const saved = legacyGraph({ direction }, 4), store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(saved));
+    const migrated = readGraph(store), expected = defaultGraph({ direction });
+    assert.deepEqual(migrated.nodes, expected.nodes);
+    assert.deepEqual(migrated.edges.map(JSON.stringify).sort(), expected.edges.map(JSON.stringify).sort());
+    assert.equal(JSON.parse(store.getItem(GRAPH_KEY)).version, 5);
+    for (const ports of [['text'], ['provisionalText'], ['provisionalText', 'text']]) {
+      const graph = legacyGraph({ direction }, 4); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated');
+      for (const port of ports) graph.edges.push(edge('translation', port === 'text' ? 'text' : 'provisional', 'translated', port));
+      assert.deepEqual(assertGraph(graph).edges, graph.edges);
+      graph.version = 5;
+      assert.deepEqual(validateGraph(graph), []);
+      graph.edges.push(edge('translation', 'finalSource', 'translated', 'finalSource'));
+      assert.match(validateGraph(graph).join('\n'), /Required connection missing/);
+    }
   }
   const empty = defaultGraph(); empty.edges = empty.edges.filter(e => e.to[0] !== 'translated');
   assert.match(validateGraph(empty).join('\n'), /Required connection missing/);
-  empty.edges.push(edge('translation', 'provisionalResult', 'translated', 'provisional'));
-  assert.match(validateGraph(empty).join('\n'), /Required connection missing/);
+  const split = defaultGraph(); split.edges.find(e => e.to[0] === 'translated' && e.to[1] === 'text').from = ['speech', 'final'];
+  assert.match(validateGraph(split).join('\n'), /matching direct outputs/);
+  const invalid = legacyGraph({}, 4); invalid.edges.push(edge('translation', 'finalResult', 'transcript', 'final'));
+  const store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(invalid));
+  assert.throws(() => readGraph(store), /Cannot migrate/);
+  assert.equal(store.getItem(GRAPH_KEY), JSON.stringify(invalid));
 });
 
 test('concrete supported descriptions instantiate actual Nodes with identical contract identities and the exact saved edges', () => {

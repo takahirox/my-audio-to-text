@@ -70,7 +70,18 @@ export function buildGraph(graph, options) {
           TranslationNode: spec.type === 'OpusMtEnJa' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
           workerFactory: options.translationWorkerFactory, onState: options.onTranslationState }); break;
       case 'TranslationView':
-        node = { inputs: NODE_TYPES.TranslationView.inputs, outputs: {}, receive: options.onTranslation || (() => {}) }; break;
+        node = { inputs: NODE_TYPES.TranslationView.inputs, outputs: {},
+          receive: options.onTranslation || (() => {}),
+          receiveInputs: async (values, context) => {
+            if (Object.hasOwn(values, 'finalStatus') || Object.hasOwn(values, 'provisionalStatus')) {
+              return options.onTranslationInputs?.(values, context);
+            }
+            for (const [port, value] of Object.entries(values)) {
+              if (context.signal.aborted) return;
+              await options.onTranslation?.(port, value, context);
+            }
+          },
+        }; break;
       case 'Supertonic3': case 'Kokoro': {
         const Node = spec.type === 'Supertonic3' ? Supertonic3TextToSpeechNode : KokoroTextToSpeechNode;
         const production = new Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,

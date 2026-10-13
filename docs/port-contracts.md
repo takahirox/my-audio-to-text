@@ -1,86 +1,73 @@
 # Primitive-first Node/Port contracts
 
-Issue #91 audits shared Nodes, the Node Playground and the extension. Ordinary
-text uses the one shared `TEXT` identity from `web/port-contracts.js`. Port names
-express processing semantics: ASR `provisional` replaces a preview; ASR `final`
-commits an utterance. Both values are strings. Connections select the intended
-semantics explicitly. Type compatibility alone does not promise finality.
+Issues #91 and #95 audit shared Nodes, the Node Playground, and the extension.
+Ordinary text uses shared `TEXT` and scheduler final indices use shared `NUMBER`
+from `web/port-contracts.js`. No BOOLEAN value is consumed, so none is introduced.
+Contracts are identities; receiving Nodes validate their payloads.
 
-| Boundary / value | Public data | Internal or observer bookkeeping |
+| Boundary | Public ports and values | Internal or observer bookkeeping |
 | --- | --- | --- |
-| SpeechToText / TranscriptOutput / speech Playground | `provisional: TEXT`, `final: TEXT`; callback `(port, text, signal)` | Core session and utterance IDs, load/drain state, VAD events, audio diagnostics; duplicate final IDs are suppressed inside SpeechToText before fan-out |
-| OPUS-MT (both directions), TranslateGemma | `text: TEXT → text: TEXT` | Worker request IDs, model/load state; single input serialization preserves result order |
-| SpeechTranscriptCorrection | `text: TEXT → text: TEXT` | Candidate validation, Worker IDs, bypass/error diagnostics; final ASR connects directly, former FinalTranscriptText adapter removed |
-| Extension TranslationScheduler | `provisional: TEXT` (optional), `text: TEXT` inputs; `provisional: TEXT`, `text: TEXT` successful outputs | One active job, replaceable provisional version, FIFO finals, model failures, Stop/Cancel policy; identity stays in the scheduler |
-| Paired TranslationView | Optional `provisionalResult`, plus `finalResult`, from scheduler into view's `provisional`/`final` inputs: `TEXT_RESULT` | View rendering and session generation; it never joins separate text streams or matches ASR IDs |
-| Focused field, TTS and independent text sinks | Plain `TEXT`; connect ASR `final` or scheduler `text`, with independent fan-out | Field insertion sequence/document authorization, synthesis RPCs, language/voice settings, UI state; no upstream metadata required |
-| Captured audio | `MONO_16KHZ_PCM`: normalized mono 16 kHz Float32Array | Capture target, permission, resampler state |
-| Synthesized audio | `SYNTHESIZED_AUDIO`: samples, sampleRate, channels together | Playback URLs and synthesis timing; incompatible with bare captured PCM |
+| Capture sources: microphone, browser tab, extension tab/selected media | `audio: MONO_16KHZ_PCM`, normalized mono 16 kHz Float32Array | Target, permission, resampler and diagnostics |
+| SpeechToText / TranscriptOutput / speech Playground | `provisional: TEXT`, `final: TEXT`, plain strings | Core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
+| OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
+| SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
+| Extension TranslationScheduler (both directions) | Inputs: optional `provisional: TEXT`, required `text: TEXT`; successful `provisional: TEXT` / `text: TEXT` outputs; grouped source/status/error TEXT outputs for each stream and `finalIndex: NUMBER` | Active inference, provisional versions, FIFO finals, model failure and Stop policy |
+| TranslationView | `text`, `provisionalText`, `finalSource`, `finalStatus`, `finalError`, `provisionalSource`, `provisionalStatus`, `provisionalError`: TEXT; `finalIndex`: NUMBER | View rows and session generation; uses `receiveInputs`, never joins branches or matches by strings |
+| TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
+| Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
+| AudioOutput / playback and WAV adapter | `audio: SYNTHESIZED_AUDIO`, `{ samples: Float32Array, sampleRate: positive integer, channels: 1 }` | Playback URLs and cleanup |
 
-No public NUMBER/BOOLEAN port is currently needed. Adding unused utterance IDs,
-status enums or model-specific contract tokens would add mandatory coordination
-without a real consumer. Independent supplementary values can use separately
-named primitive ports when a consumer actually needs them.
+The only structured public value retained is **synthesized audio**. Samples,
+rate and channel layout are intrinsically coupled: interpreting samples without
+their format changes duration/pitch or produces invalid playback/WAV. Models
+produce different native rates. Captured audio instead has a fixed, agreed mono
+16 kHz format and uses a bare typed array. These distinct contracts prevent
+misinterpreting synthesis output as capture input; no blanket unification is needed.
+Observer events, worker RPCs, configuration, graph JSON and UI row objects are
+internal interfaces, not Node-to-Node port contracts.
 
-## The paired result boundary
+## Correlated translation primitives
 
-`TEXT_RESULT` is a small reusable structured result:
+The scheduler uses `context.emitOutputs()` for each pending, complete or error
+update. It publishes `finalSource`, `finalStatus`, `finalIndex`, `finalError`
+together, adding `text` only on successful completion. Final indices are assigned
+on receipt and distinguish repeated identical utterances. A provisional update
+publishes `provisionalSource`, `provisionalStatus`, `provisionalError`, adding
+`provisional` only on completion. There is no unused provisional index port.
+Errors always carry a string; successful/pending updates clear it with `''`.
+Status strings are `pending`, `complete`, or `error`. Cancel marks unresolved UI
+rows `canceled` locally after invalidating the session and disposing the graph.
 
-```js
-{ source: 'input string', text: 'result string', status: 'pending', index: 0, error: '' }
-```
+The paired view connects these outputs directly, renaming `provisional` to
+`provisionalText`, and consumes each group through `receiveInputs`. Pending/error
+updates intentionally omit successful text. UI row objects are assembled locally
+for rendering; no structured text object travels over an edge. `TEXT_RESULT` is
+removed. Ordinary text processors connect only `text` (or preview `provisional`)
+and receive strings without statuses or metadata. Each source/status/error/index
+port is independently reusable with a compatible primitive consumer.
 
-`status` is `pending`, `complete` or `error` in scheduler outputs; the session
-marks unresolved rows `canceled` on Cancel. A provisional result has no final
-index. `index` identifies a scheduler-local final job, including identical source
-strings submitted twice. Source/result/status/index must remain indivisible at
-this asynchronous paired-view boundary: emitting independent source and result
-strings would lose alignment when interim work is superseded or inference fails.
-This optional diagnostic contract describes a text-processing result, without
-ASR IDs, processor identity or model dependencies. It is never required by text
-processors. Pending/errors are not emitted on successful TEXT outputs.
+The scheduler coalesces provisional jobs, invalidates stale completions by
+version, prioritizes FIFO finals, and emits each successful final string once.
+Final receipt clears its own preview with an empty completed provisional group
+before inference; an older final completion leaves a newer preview intact. Stop
+clears provisional work and drains all final strings; Cancel ignores late replies.
+ASR distinguishes equal strings by internal utterance IDs and suppresses duplicate
+final IDs. TTS splits long text only inside its own branch, preserving whole text
+for independent field consumers.
 
-Separate output ports are independent deliveries, not an atomic pair. Text-only
-consumers connect only `text`. The paired view connects only result ports and
-uses their source data, including an explicit provisional translation source in
-Live; its stream and language direction are independent of TranscriptView. The generic Pipeline adds no
-coercion, synchronization, event bus, registry or envelope. The core's observer
-callbacks remain diagnostic/lifecycle interfaces, not alternative text routes.
+## Graphs and supported topology
 
-## Ordering, lifecycle and saved graphs
+Version 5 graphs explicitly migrate versions 1–4. Extraction adapters are bypassed
+while preserving all downstream routes and fan-out. Version 4 paired result edges
+expand to direct primitive connections; TEXT-only view routes remain unchanged.
+Malformed or ambiguous routes fail visibly with Reset and Save recovery, and the
+stored graph remains untouched on failure. Nothing is silently dropped.
 
-ASR suppresses duplicate/stale monotonic final IDs before emitting strings;
-different IDs with equal strings are valid utterances. The scheduler assigns its
-own job indices on TEXT receipt, coalesces provisional work, prioritizes FIFO
-finals and suppresses stale interim completions. Final receipt clears its own
-pending or displayed preview with an empty provisional TEXT and result update,
-before inference; delayed finals therefore preserve newer independent previews.
-It emits each successful final string once. Stop clears and discards interim
-work and drains finals through consumers;
-Cancel aborts the graph and ignores late replies. TTS splits long utterances only
-inside its own branch; field fan-out receives the complete, verbatim string.
-
-Version 4 extension graphs explicitly migrate versions 1–3. FinalText and
-TranslatedFinalText disappear by bypassing each adapter and preserving every
-outgoing route. Scheduler final inputs/outputs become `text`; TranslationView
-edges become `provisionalResult`/`finalResult`. Invalid legacy routes fail with a
-visible Reset and Save recovery path; stored graphs remain untouched on failure.
-Required inputs, input cardinality, same contract identity, settings, format and
-acyclicity remain validated. Optional interim/diagnostic ports do not have to be
-connected. The concrete Live coordinator retains one source/ASR, one transcript
-view and at most one scheduler/paired view, because those own its session state.
-
-A direct flow needs no extraction nodes:
-
-```text
-SpeechToText.final ──→ Translation.text ──→ FocusedInputTextOutputNode.text
-                  │                    └─→ TTS.text
-                  └─→ Correction.text ──→ another TEXT consumer
-Translation.finalResult ──→ TranslationView.final  (optional paired diagnostics)
-```
-
-See [runtime](pipeline-runtime.md), [graph](extension-graph.md) and
-[Issue #91 validation](evidence/ports-91.md). Issue #91 requires no post-merge
-verification: all acceptance criteria are verifiable before merge. Any desired
-deployment verification belongs in a separate follow-up Issue and must not gate
-this PR's merge or Issue #91's closure.
+The editor validates types, one incoming edge per input, required/optional inputs,
+settings and acyclicity. Paired display requires the complete final bundle from
+one translator, plus either no preview bundle or its complete direct bundle.
+Metadata split across independent branches is rejected because it cannot preserve
+correlation. Plain display accepts `text` and/or `provisionalText` from any TEXT
+producer and invents no alignment. Default graphs use paired primitive delivery.
+See [runtime semantics](pipeline-runtime.md#correlated-primitive-outputs) and
+[graph wiring](extension-graph.md).

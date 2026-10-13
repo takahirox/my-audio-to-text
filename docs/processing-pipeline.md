@@ -107,8 +107,9 @@ consumers from the same speech-to-text unit.
 
 Ordinary text is primitive-first across the shared Pipeline, Playground and
 extension. [The contract audit](port-contracts.md) explains internal bookkeeping,
-optional paired result outputs and the distinct audio formats. Separate ports
-are independent streams, never an implicit synchronized pair.
+correlated primitive output groups and the distinct audio formats. Separate
+`emit()` calls remain independent; `emitOutputs()` groups values delivered directly
+to one consumer through its serial queue. Independent processor branches are not joined.
 
 ## Local execution and platform direction
 

@@ -4,9 +4,9 @@ import { readFileSync } from 'node:fs';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT, TextOutputNode, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
 import { OPUS_MT, OPUS_MT_EN_JA } from '../web/translation-models.js';
-import { TranslationSchedulerNode, TEXT_RESULT } from '../extension/translation-scheduler.js';
+import { TranslationSchedulerNode } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
-import { defaultGraph } from '../extension/graph.js';
+import { defaultGraph, NODE_TYPES, translationViewEdges } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
 import { translationLabel, provisionalLabel } from '../extension/translation-view.js';
 
@@ -34,20 +34,26 @@ function workerFixture({ holdLoad = false, failLoad = false, failTranslate = fal
   return { workers, requests, workerFactory, complete };
 }
 async function schedulerGraph(options = {}) {
-  const f = workerFixture(options), outputs = [], states = [];
+  const f = workerFixture(options), outputs = [], states = [], plain = [];
   let emit;
   const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory, prepare: options.prepare,
     TranslationNode: options.direction === 'en-ja' ? EnglishToJapaneseOpusMtTranslationNode : undefined,
     onState: state => states.push(state) });
   const pipeline = new Pipeline({ nodes: {
     source: { inputs: {}, outputs: { provisional: TEXT, final: TEXT }, start(context) { emit = context.emit; } },
-    scheduler, sink: { inputs: { provisional: TEXT_RESULT, final: TEXT_RESULT }, outputs: {}, receive(port, value) { outputs.push({ port, ...value }); } },
+    scheduler, sink: { inputs: NODE_TYPES.TranslationView.inputs, outputs: {}, async receiveInputs(values) {
+      await options.receiveInputs?.(values);
+      const provisional = Object.hasOwn(values, 'provisionalStatus'), prefix = provisional ? 'provisional' : 'final';
+      outputs.push({ port: provisional ? 'provisional' : 'final', source: values[`${prefix}Source`],
+        status: values[`${prefix}Status`], error: values[`${prefix}Error`], text: values[provisional ? 'provisionalText' : 'text'] || '',
+        index: values.finalIndex });
+    } }, plain: new TextOutputNode(text => plain.push(text)),
   }, connections: ['provisional', 'final'].flatMap(port => [
-    { from: ['source', port], to: ['scheduler', port === 'final' ? 'text' : port] }, { from: ['scheduler', port === 'final' ? 'finalResult' : 'provisionalResult'], to: ['sink', port] },
-  ]) });
+    { from: ['source', port], to: ['scheduler', port === 'final' ? 'text' : port] },
+  ]).concat(translationViewEdges('scheduler', 'sink'), [{ from: ['scheduler', 'text'], to: ['plain', 'text'] }]) });
   await pipeline.start();
   const send = (port, text) => emit(port, text);
-  return { ...f, pipeline, scheduler, outputs, states, send };
+  return { ...f, pipeline, scheduler, outputs, states, plain, send };
 }
 
 test('production pinned manifest includes all seven runtime files and reviewed bounded hashes', () => {
@@ -86,6 +92,27 @@ test(`${direction}: explicit Pipeline adapter coalesces rapid provisional update
   assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => [value.port, value.source, value.index]),
     [['provisional', '', undefined], ['final', 'final one', 0], ['final', 'final two', 1], ['provisional', 'new utterance', undefined]]);
   await f.pipeline.stop(); await f.pipeline.dispose(); assert.ok(f.workers.every(worker => worker.terminated));
+});
+
+test(`${direction}: slow correlated consumer drains identical finals without delaying a plain TEXT branch`, async () => {
+  let release, entered = false;
+  const held = new Promise(resolve => { release = resolve; });
+  const f = await graph({ receiveInputs: async () => { if (!entered) { entered = true; await held; } } });
+  f.send('final', 'same'); f.send('final', 'same'); await tick();
+  assert.equal(entered, true); assert.deepEqual(f.outputs, []);
+  f.complete(0, 'first'); await tick();
+  // A late duplicate completion cannot resolve the next request.
+  f.complete(0, 'duplicate'); await tick();
+  f.complete(1, 'second'); await tick();
+  assert.deepEqual(f.plain, ['first', 'second']);
+  let stopped = false; const stopping = f.pipeline.stop().then(() => { stopped = true; });
+  await tick(); assert.equal(stopped, false);
+  release(); await stopping;
+  assert.deepEqual(f.outputs.map(row => [row.source, row.status, row.index, row.text]), [
+    ['same', 'pending', 0, ''], ['same', 'pending', 1, ''],
+    ['same', 'complete', 0, 'first'], ['same', 'complete', 1, 'second'],
+  ]);
+  await f.pipeline.dispose();
 });
 
 test(`${direction}: latest matching provisional completes; Stop drops queued interim and drains every final`, async () => {

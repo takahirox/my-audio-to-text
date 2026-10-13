@@ -79,34 +79,53 @@ async function fixtureTranslation(f, live) {
 }
 
 for (const direction of ['ja-en', 'en-ja']) {
-  test(`${direction}: direct primitive translation ports render interim/completed text without paired metadata`, async ({ graphExtension: f }) => {
+  test(`${direction}: persisted version 4 primitive translation routes render interim/completed text after migration`, async ({ graphExtension: f }) => {
     const live = await openGraph(f), editor = live.editor;
-    await fixtureTranslation(f, live);
     await editor.locator('#translation-direction').selectOption(direction);
-    for (const name of ['provisional', 'final']) await editor.getByRole('button', { name: `Disconnect translation.${name === 'final' ? 'finalResult' : 'provisionalResult'} to translated.${name}`, exact: true }).click();
+    for (const name of ['finalSource', 'finalStatus', 'finalIndex', 'finalError', 'provisionalSource', 'provisionalStatus', 'provisionalError']) await editor.getByRole('button', { name: `Disconnect translation.${name} to translated.${name}`, exact: true }).click();
     for (const [output, input] of [['provisional', 'provisionalText'], ['text', 'text']]) {
       await port(editor, 'translation', 'output', output).click(); await port(editor, 'translated', 'input', input).click();
     }
     await expect(editor.locator('#graph-errors')).toBeEmpty(); await save(editor);
-    await startGraph(live);
-    await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));
-    await expect(live.locator('#partial-english')).toHaveText('Translated preview');
-    await expect(live.locator('#paired-provisional-source')).toBeHidden();
-    await expect(live.locator('#partial-english')).not.toHaveAttribute('data-status');
-    await expect(live.locator('#translated-text')).toBeEmpty();
-    await emitFinal(live, 'completed');
-    await expect(live.locator('#translated-text')).toHaveText('Translated completed\n');
-    await expect(live.locator('#partial-english')).toBeEmpty();
-    await expect(live.locator('#translated-text')).not.toHaveAttribute('data-status');
-    await expect(live.locator('#paired-finals li')).toHaveCount(0);
-    await expect(live.locator('#final')).toHaveText('completed\n');
-    await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
+    const routes = (await saved(live)).edges;
+    await live.evaluate(() => {
+      const key = 'processing-graph-v1', graph = JSON.parse(localStorage.getItem(key));
+      graph.version = 4; localStorage.setItem(key, JSON.stringify(graph));
+    });
+    await live.close(); const reopened = await openGraph(f);
+    expect((await saved(reopened)).version).toBe(5);
+    expect((await saved(reopened)).edges).toEqual(routes);
+    await fixtureTranslation(f, reopened);
+    await startGraph(reopened);
+    await reopened.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));
+    await expect(reopened.locator('#partial-english')).toHaveText('Translated preview');
+    await expect(reopened.locator('#paired-provisional-source')).toBeHidden();
+    await expect(reopened.locator('#partial-english')).not.toHaveAttribute('data-status');
+    await expect(reopened.locator('#translated-text')).toBeEmpty();
+    await emitFinal(reopened, 'completed');
+    await expect(reopened.locator('#translated-text')).toHaveText('Translated completed\n');
+    await expect(reopened.locator('#partial-english')).toBeEmpty();
+    await expect(reopened.locator('#translated-text')).not.toHaveAttribute('data-status');
+    await expect(reopened.locator('#paired-finals li')).toHaveCount(0);
+    await expect(reopened.locator('#final')).toHaveText('completed\n');
+    await reopened.locator('#stop').click(); await expect(reopened.locator('#start')).toBeEnabled();
   });
 }
 
-test('saved version 4 paired view remains operational with pending, completed, error and canceled states', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), graph = await saved(live);
-  expect(graph.version).toBe(4);
+for (const direction of ['ja-en', 'en-ja']) test(`${direction}: saved version 4 paired view remains operational with pending, completed, error and canceled states`, async ({ graphExtension: f }) => {
+  let live = await openGraph(f);
+  await live.editor.locator('#translation-direction').selectOption(direction);
+  await save(live.editor);
+  await live.evaluate(async () => {
+    const { GRAPH_KEY } = await import('./graph.js');
+    const graph = JSON.parse(localStorage.getItem(GRAPH_KEY)); graph.version = 4;
+    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
+    graph.edges.push({ from: ['translation', 'finalResult'], to: ['translated', 'final'] },
+      { from: ['translation', 'provisionalResult'], to: ['translated', 'provisional'] });
+    localStorage.setItem(GRAPH_KEY, JSON.stringify(graph));
+  });
+  await live.close(); live = await openGraph(f); const graph = await saved(live);
+  expect(graph.version).toBe(5);
   await live.editor.reload(); expect(await saved(live)).toEqual(graph);
   await fixtureTranslation(f, live); await startGraph(live);
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));
