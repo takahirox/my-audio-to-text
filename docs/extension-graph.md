@@ -6,8 +6,15 @@ use its buttons or the Add Node selector. Drag a heading (or focus it and use
 arrow keys) to move a Node. Click an output then a compatible named input, or
 drag between ports, to connect. Ports show their contract types; incompatible
 inputs are disabled during connection. Escape cancels a selected port. Use the
-canvas scrollbars and **Canvas zoom** to navigate a large graph. Disconnect a
-link below the canvas; Remove deletes a Node and its edges. Select a heading to
+canvas scrollbars and **Canvas zoom** to navigate a large graph. Connecting to
+an occupied input replaces only its incoming wire; other inputs and source
+fan-out stay intact. Repeating the same connection changes nothing. Invalid
+connections keep the previous wire. Click a wire directly on the canvas (or
+focus it and press Enter/Space): the selected wire turns yellow. Press
+Delete/Backspace while it is focused to disconnect only that wire. Hit targets
+keep the same screen width at every supported zoom. Escape clears selection.
+The keyboard-accessible **Connections** Disconnect buttons remain available
+below the canvas. Remove deletes a Node and its edges. Select a heading to
 edit language/voice in the right **Settings** inspector. OPUS-MT directions are
 separate executable Node types.
 
@@ -44,6 +51,9 @@ move to optional paired result ports. Ambiguous/malformed routes fail visibly;
 Reset and Save in Graph Editor, then reconnect the desired text paths to recover.
 Outputs are never silently dropped. Page/media handles are never saved with a
 graph. Media selection is still available in Live.
+Existing version 4 TranslationView `provisional`/`final` paired-result edges
+remain unchanged and operational; the new TEXT display inputs are additive,
+so no version 4 migration is needed. Default graphs retain paired-result mode.
 A corrupt/unknown-version saved graph displays an error and prevents Start
 until a valid graph is saved. Reset and Save in the editor to recover. Storage
 failures remain visible.
@@ -67,7 +77,7 @@ constructs a real `Pipeline` with exactly those named-port edges.
 | TranscriptView | provisional (optional)/final: TEXT | original/provisional/final UI; TranscriptOutputNode |
 | OpusMtJaEn | provisional (optional)/text: TEXT | provisional/text: TEXT, provisionalResult/finalResult: TEXT_RESULT; TranslationSchedulerNode with OpusMtTranslationNode |
 | OpusMtEnJa | provisional (optional)/text: TEXT | provisional/text: TEXT, provisionalResult/finalResult: TEXT_RESULT; TranslationSchedulerNode with EnglishToJapaneseOpusMtTranslationNode |
-| TranslationView | provisional (optional)/final: TEXT_RESULT | paired, ordered original/translated rows |
+| TranslationView | provisional/final: TEXT_RESULT **or** provisionalText/text: TEXT (see modes below) | paired, ordered original/translated rows or plain interim/completed translated text |
 | Supertonic3 | text: TEXT | audio: SYNTHESIZED_AUDIO; Supertonic3TextToSpeechNode (ja/en, F1/M1) |
 | Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; KokoroTextToSpeechNode (Japanese jf_alpha / English af_heart) |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | separate native audio player / WAV; AudioOutputNode |
@@ -77,13 +87,38 @@ is required; original and translation views are independent optional sinks.
 Multiple source Nodes are rejected before capture to avoid mixing ASR state. At most one paired
 translation branch is supported by the Live session coordinator. Edges are
 validated by shared contract identity, independent of producer identity. Interim
-inputs are optional; final/text inputs remain required. View streams are
+inputs are optional; processor final/text inputs remain required. View streams are
 independent: a transcript view can consume a translated TEXT stream, while the
 paired view retains its own source/result/status from one atomic result.
 Unknown types/settings/ports, duplicate edges, multiple connections to one
 input, missing required inputs and cycles fail before Save or Worker startup.
 Graphs are bounded to 24 Nodes/64 edges. ASR audio and generated TTS audio have
 different contract identities and cannot connect interchangeably.
+
+### Translation display modes
+
+The existing **Paired translation / Translated** Node supports two exclusive
+representations, selected by its connected inputs:
+
+- **Plain TEXT:** connect either direction's `OpusMt.provisional → TranslationView.provisionalText`
+  for replacing interim text, and/or `OpusMt.text → TranslationView.text` for
+  appending completed text. At least one TEXT input must be connected. Completed
+  text appears in its own completed display, never as an interim stream. These
+  inputs consume only strings: they create no source text, IDs, statuses, indexes,
+  correlation or paired rows. The independent original transcript remains
+  available when its own view is connected. Finalization clears the scheduler's
+  primitive preview; Stop/Cancel clear the display preview.
+- **Paired TEXT_RESULT:** connect `OpusMt.finalResult → TranslationView.final`
+  (required in paired mode), with optional
+  `OpusMt.provisionalResult → TranslationView.provisional`. Each result contains
+  its atomic source/result/status/index; the existing view preserves ordered
+  original/translated rows and pending/error/cancellation rendering.
+
+Disconnect the previous representation before switching. Connecting both TEXT
+and TEXT_RESULT to this view is rejected to prevent duplicate output or false
+pairs made from independent primitive streams. No unused metadata input is
+required in TEXT mode. Port compatibility follows the declared type; choose
+interim outputs for interim inputs and completed outputs for completed inputs.
 
 ## Concrete input and output targets
 

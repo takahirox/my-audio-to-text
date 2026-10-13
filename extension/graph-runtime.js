@@ -1,13 +1,13 @@
 import { Pipeline } from '../web/pipeline.js';
 import { SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
-import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TEXT } from '../web/translation-nodes.js';
+import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
 import { AudioOutputNode } from '../web/synthesized-audio.js';
 import { ExtensionTabAudioNode } from './tab-audio-node.js';
-import { TranslationSchedulerNode, TEXT_RESULT } from './translation-scheduler.js';
+import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
-import { assertGraph, graphPreferences } from './graph.js';
+import { assertGraph, graphPreferences, NODE_TYPES } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
@@ -70,7 +70,7 @@ export function buildGraph(graph, options) {
           TranslationNode: spec.type === 'OpusMtEnJa' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
           workerFactory: options.translationWorkerFactory, onState: options.onTranslationState }); break;
       case 'TranslationView':
-        node = { inputs: { provisional: TEXT_RESULT, final: TEXT_RESULT }, outputs: {}, receive: options.onTranslation || (() => {}) }; break;
+        node = { inputs: NODE_TYPES.TranslationView.inputs, outputs: {}, receive: options.onTranslation || (() => {}) }; break;
       case 'Supertonic3': case 'Kokoro': {
         const Node = spec.type === 'Supertonic3' ? Supertonic3TextToSpeechNode : KokoroTextToSpeechNode;
         const production = new Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,

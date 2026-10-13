@@ -167,6 +167,49 @@ function sessionFixture(translation = workerFixture()) {
   return { session, asr, views, translation };
 }
 
+for (const direction of ['ja-en', 'en-ja']) for (const ports of [['text'], ['provisionalText'], ['provisionalText', 'text']]) {
+  test(`${direction}: direct TranslationView ${ports.join('/')} keeps primitive interim and completed text separate`, async () => {
+    const f = sessionFixture(), graph = defaultGraph({ direction });
+    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
+    for (const port of ports) graph.edges.push({ from: ['translation', port === 'text' ? 'text' : 'provisional'], to: ['translated', port] });
+    f.session.setGraph(graph); await f.session.start(42);
+    const speech = f.session.session.speech;
+    speech.receiveEvent({ type: 'partial', text: 'source preview' }); await tick();
+    assert.equal(f.session.view.provisionalTranslationText, '', 'pending is not fabricated as a string');
+    f.translation.complete(0, 'translated preview'); await tick();
+    assert.equal(f.session.view.provisionalTranslationText, ports.includes('provisionalText') ? 'translated preview' : '');
+    assert.equal(f.session.view.translatedText, '');
+    assert.equal(f.session.view.interimTranslation, null);
+    speech.receiveEvent({ type: 'final', text: 'source final' }); await tick();
+    assert.equal(f.session.view.provisionalTranslationText, '', 'finalization clears the primitive preview');
+    f.translation.complete(1, 'translated final'); await tick();
+    assert.equal(f.session.view.translatedText, ports.includes('text') ? 'translated final\n' : '');
+    assert.deepEqual(f.session.view.utterances, [], 'no invented atomic pair or status/index metadata');
+    assert.equal(f.session.view.final, 'source final\n', 'independent original transcript remains intact');
+    const stopping = f.session.stop(); await stopping;
+    await f.session.start(42);
+    assert.equal(f.session.view.translatedText, ''); assert.equal(f.session.view.provisionalTranslationText, '');
+    f.session.cancel();
+    assert.ok(f.translation.workers.every(worker => worker.terminated));
+  });
+}
+
+test('plain display does not infer correlation between independent completed and provisional TEXT streams', async () => {
+  const f = sessionFixture(), graph = defaultGraph({ enabled: false });
+  graph.nodes.push({ id: 'translated', type: 'TranslationView', settings: {}, position: { x: 600, y: 300 } });
+  graph.edges.push({ from: ['speech', 'provisional'], to: ['translated', 'provisionalText'] },
+    { from: ['speech', 'final'], to: ['translated', 'text'] });
+  f.session.setGraph(graph); await f.session.start(42);
+  const context = { signal: f.session.session.pipeline.entries.get('translated').controller.signal };
+  const display = f.session.session.pipeline.entries.get('translated').node;
+  display.receive('provisionalText', 'current independent preview', context);
+  display.receive('text', 'older completed stream', context);
+  assert.equal(f.session.view.provisionalTranslationText, 'current independent preview');
+  assert.equal(f.session.view.translatedText, 'older completed stream\n');
+  assert.deepEqual(f.session.view.utterances, []);
+  f.session.cancel();
+});
+
 test('optional session path preserves Japanese, paired ordered English, stop/drain and repeat ownership', async () => {
   const f = sessionFixture(); await f.session.start(42);
   assert.equal(f.translation.workers.length, 0); await f.session.stop();

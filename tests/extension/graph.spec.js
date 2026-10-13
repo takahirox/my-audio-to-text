@@ -20,10 +20,12 @@ test('fresh install saves default translation without downloading; visual edits,
   await expect(page.locator('#translation-status')).toHaveText('Translation off');
   await emitFinal(page, 'transcription only'); await expect(page.locator('#paired-finals')).toContainText('Translation off');
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  // Duplicate edges cannot be saved. Load saved restores the draft.
+  // Repeating an existing connection is a no-op; validation still rejects
+  // externally supplied duplicates in the schema/runtime tests.
   await page.editor.getByRole('button', { name: 'speech output final', exact: true }).click();
   await page.editor.getByRole('button', { name: 'transcript input final', exact: true }).click();
-  await expect(page.editor.locator('#graph-errors')).toContainText('Duplicate edge');
+  await expect(page.editor.locator('#graph-errors')).toBeEmpty();
+  await expect(page.editor.locator('#graph-state')).not.toContainText('Unsaved draft');
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); expect((await saved(page)).edges).toHaveLength(3);
   await page.editor.locator('#graph-load').click(); await expect(page.editor.locator('#graph-errors')).toBeEmpty();
   // Remove and reconnect a required named port.
@@ -160,7 +162,7 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await editor.mouse.move(box.x + 10, box.y + 10); await editor.mouse.down(); await editor.mouse.move(box.x + 40, box.y + 25); await editor.mouse.up();
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   await expect.poll(async () => (await saved(live)).nodes.find(n => n.id === 'speech').position).toEqual({ x: 310, y: 50 });
-  expect(await editor.locator('.graph-wires path').count()).toBe(7);
+  expect(await editor.locator('.graph-wires .wire-line').count()).toBe(7);
   const second = await f.context.newPage(); await second.goto(editor.url());
   // Both drafts diverge from the same saved graph; saving one keeps the other's draft.
   await editor.getByRole('button', { name: 'Select speech', exact: true }).press('ArrowRight');

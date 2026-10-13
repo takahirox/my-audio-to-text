@@ -46,19 +46,24 @@ export class GraphEditor {
     zoomLabel.append(this.zoomControl); toolbar.append(zoomLabel);
     this.summary = el('p'); this.summary.id = 'graph-state'; this.summary.setAttribute('role', 'status');
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
-    this.hint = el('p', 'Connect: click an output then a matching input, or drag between ports. Escape cancels a connection. Select a Node heading for settings; drag or use arrow keys to move it.');
+    this.hint = el('p', 'Connect: click an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Select a wire on the canvas and press Delete/Backspace to disconnect; Connections buttons also work. Escape clears selection. Translation display: use provisionalText/text for plain TEXT, or provisional/final for paired TEXT_RESULT; disconnect the other mode first. Select a Node heading for settings; drag or use arrow keys to move it.');
     const workspace = el('div', undefined, 'graph-workspace');
     const palette = el('aside', undefined, 'graph-palette'); palette.setAttribute('aria-label', 'Node palette'); palette.append(el('h2', 'Nodes'));
     for (const [type, definition] of Object.entries(NODE_TYPES)) palette.append(button(`+ ${definition.label}`, null, () => this.addNode(type)));
     this.scroll = el('div', undefined, 'graph-scroll'); this.scroll.tabIndex = 0; this.scroll.setAttribute('aria-label', 'Scrollable graph canvas');
     this.extent = el('div', undefined, 'graph-extent'); this.canvas = el('div', undefined, 'graph-canvas'); this.canvas.id = 'graph-canvas';
-    this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); this.svg.classList.add('graph-wires'); this.svg.setAttribute('aria-hidden', 'true');
+    this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); this.svg.classList.add('graph-wires'); this.svg.setAttribute('aria-label', 'Graph connections');
     this.extent.append(this.canvas); this.scroll.append(this.extent);
     this.inspector = el('aside', undefined, 'graph-inspector'); this.inspector.setAttribute('aria-label', 'Node settings inspector');
     workspace.append(palette, this.scroll, this.inspector);
     this.connections = el('ul'); this.connections.id = 'graph-connections';
     root.replaceChildren(toolbar, this.summary, this.hint, this.errors, workspace, el('h2', 'Connections'), this.connections);
-    root.addEventListener('keydown', event => { if (event.key === 'Escape') { this.selected = null; this.draw(); } });
+    root.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { this.selected = null; this.selectedEdge = null; this.draw(); }
+      if (['Delete', 'Backspace'].includes(event.key) && this.selectedEdge && event.target.closest('.graph-wire')) {
+        event.preventDefault(); event.stopPropagation(); this.disconnect(this.selectedEdge); this.scroll.focus();
+      }
+    });
     this.draw();
   }
   addNode(type) {
@@ -83,10 +88,26 @@ export class GraphEditor {
   }
   connect(id, port, contract) {
     if (this.selected && this.selected.contract === contract && this.selected.id !== id) {
-      this.draft.edges.push(edge(this.selected.id, this.selected.port, id, port)); this.selected = null;
+      const proposed = edge(this.selected.id, this.selected.port, id, port);
+      const identical = this.draft.edges.some(e => JSON.stringify(e) === JSON.stringify(proposed));
+      if (!identical) {
+        const candidate = { ...this.draft, edges: this.draft.edges.filter(e => e.to[0] !== id || e.to[1] !== port).concat(proposed) };
+        // Drafts can be incomplete. Reject newly introduced constraints, while
+        // allowing the ordinary missing-input/unconnected-output draft errors.
+        const previous = new Set(validateGraph(this.draft));
+        const errors = validateGraph(candidate).filter(message => !previous.has(message) && !/^(Required connection missing:|Unconnected output Node:)/.test(message));
+        if (errors.length) this.error = errors.join('\n');
+        else this.draft.edges = candidate.edges;
+      }
+      this.selected = null;
     }
     this.draw();
     this.canvas.querySelector(`[data-node="${id}"] [data-side="input"][data-port="${port}"]`)?.focus();
+  }
+  disconnect(connection) {
+    this.draft.edges = this.draft.edges.filter(e => e !== connection);
+    if (this.selectedEdge === connection) this.selectedEdge = null;
+    this.draw();
   }
   drawInspector() {
     this.inspector.replaceChildren(el('h2', 'Settings'));
@@ -112,6 +133,7 @@ export class GraphEditor {
     this.selected = null; this.selectedNode = null; this.draw();
   }
   draw() {
+    if (!this.draft.edges.includes(this.selectedEdge)) this.selectedEdge = null;
     this.canvas.replaceChildren(this.svg); this.svg.replaceChildren(); this.connections.replaceChildren();
     this.errors.textContent = this.error || validateGraph(this.draft).join('\n'); this.error = '';
     this.updateSummary(); this.drawInspector();
@@ -125,7 +147,7 @@ export class GraphEditor {
       const heading = el('button', `${definition.label} (${node.id})`, 'graph-heading'); heading.type = 'button';
       heading.setAttribute('aria-label', `Select ${node.id}`); heading.setAttribute('aria-pressed', String(this.selectedNode === node.id));
       heading.title = 'Select to inspect settings. Drag to move; arrow keys move by 10 pixels.';
-      heading.onclick = () => { this.selectedNode = node.id; this.drawInspector(); for (const c of this.canvas.querySelectorAll('.graph-node')) { const selected = c.dataset.node === node.id; c.classList.toggle('selected-node', selected); c.querySelector('.graph-heading').setAttribute('aria-pressed', String(selected)); } };
+      heading.onclick = () => { this.selectedEdge = null; this.drawWires(); this.selectedNode = node.id; this.drawInspector(); for (const c of this.canvas.querySelectorAll('.graph-node')) { const selected = c.dataset.node === node.id; c.classList.toggle('selected-node', selected); c.querySelector('.graph-heading').setAttribute('aria-pressed', String(selected)); } };
       heading.onkeydown = event => {
         const delta = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[event.key];
         if (!delta) return; event.preventDefault(); this.selectedNode = node.id;
@@ -133,7 +155,7 @@ export class GraphEditor {
         this.canvas.querySelector(`[data-node="${node.id}"] .graph-heading`).focus();
       };
       heading.onpointerdown = event => {
-        if (event.button !== 0) return; heading.setPointerCapture(event.pointerId); this.selectedNode = node.id; this.drawInspector();
+        if (event.button !== 0) return; heading.setPointerCapture(event.pointerId); this.selectedEdge = null; this.selectedNode = node.id; this.drawInspector();
         const x = event.clientX, y = event.clientY, origin = { ...node.position }; let moved = false;
         heading.onpointermove = move => {
           if (Math.abs(move.clientX - x) + Math.abs(move.clientY - y) < 3) return;
@@ -151,6 +173,7 @@ export class GraphEditor {
         const column = el('div');
         for (const [port, contract] of Object.entries(declarations)) {
           const control = button(`${side === 'input' ? '←' : '→'} ${port}`, null, () => {
+            this.selectedEdge = null;
             if (side === 'output') this.selected = this.selected?.id === node.id && this.selected.port === port ? null : { id: node.id, port, contract };
             else return this.connect(node.id, port, contract);
             this.draw();
@@ -184,20 +207,38 @@ export class GraphEditor {
     }
     for (const [index, connection] of this.draft.edges.entries()) {
       const row = el('li', `${connection.from.join('.')} → ${connection.to.join('.')} `);
-      const disconnect = button('Disconnect', null, () => { this.draft.edges.splice(index, 1); this.draw(); });
+      const disconnect = button('Disconnect', null, () => { this.disconnect(connection); this.connections.querySelectorAll('button')[Math.min(index, this.draft.edges.length - 1)]?.focus(); });
       disconnect.setAttribute('aria-label', `Disconnect ${connection.from.join('.')} to ${connection.to.join('.')}`); row.append(disconnect); this.connections.append(row);
     }
     this.drawWires(); this.onDraft(structuredClone(this.draft));
   }
   drawWires() {
     this.svg.replaceChildren(); const origin = this.canvas.getBoundingClientRect();
-    for (const { from, to } of this.draft.edges) {
+    for (const [index, connection] of this.draft.edges.entries()) {
+      const { from, to } = connection;
       const port = (pair, side) => this.canvas.querySelector(`[data-node="${pair[0]}"] [data-side="${side}"][data-port="${pair[1]}"]`);
       const a = port(from, 'output')?.getBoundingClientRect(), b = port(to, 'input')?.getBoundingClientRect();
       if (!a || !b) continue;
       const x1 = (a.right - origin.left) / this.zoom, y1 = (a.top + a.height / 2 - origin.top) / this.zoom, x2 = (b.left - origin.left) / this.zoom, y2 = (b.top + b.height / 2 - origin.top) / this.zoom;
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', `M${x1},${y1} C${x1 + 60},${y1} ${x2 - 60},${y2} ${x2},${y2}`); this.svg.append(path);
+      path.setAttribute('d', `M${x1},${y1} C${x1 + 60},${y1} ${x2 - 60},${y2} ${x2},${y2}`);
+      path.classList.add('wire-line');
+      const hit = path.cloneNode(); hit.classList.remove('wire-line'); hit.classList.add('wire-hit');
+      hit.style.strokeWidth = `${16 / this.zoom}px`;
+      const wire = document.createElementNS('http://www.w3.org/2000/svg', 'g'); wire.classList.add('graph-wire'); wire.dataset.edge = index;
+      wire.setAttribute('tabindex', '0'); wire.setAttribute('role', 'button');
+      wire.setAttribute('aria-label', `Select connection ${from.join('.')} to ${to.join('.')}`);
+      wire.setAttribute('aria-pressed', String(this.selectedEdge === connection));
+      wire.classList.toggle('selected-wire', this.selectedEdge === connection);
+      const select = event => {
+        event.preventDefault(); event.stopPropagation(); this.selectedEdge = connection; this.selected = null; this.selectedNode = null;
+        this.draw(); this.svg.querySelector(`[data-edge="${index}"]`).focus();
+      };
+      wire.onclick = select;
+      wire.onpointerdown = event => event.stopPropagation();
+      wire.onkeydown = event => { if (['Enter', ' '].includes(event.key)) select(event); };
+      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${from.join('.')} → ${to.join('.')}. Select, then Delete/Backspace to disconnect.`;
+      wire.append(title, path, hit); this.svg.append(wire);
     }
   }
 }

@@ -38,6 +38,7 @@ for (const [name, edit, pattern] of [
   ['incompatible type', g => g.edges[0].from = ['speech', 'final'], /Incompatible/],
   ['cycle', g => g.edges.push(edge('speech', 'final', 'speech', 'audio')), /acyclic/],
   ['duplicate edge', g => g.edges.push(g.edges[0]), /Duplicate edge/],
+  ['multiple incoming edges', g => g.edges.push(edge('speech', 'provisional', 'translation', 'text')), /Only one connection/],
   ['missing input', g => g.edges.pop(), /Required connection/],
   ['missing source', g => g.nodes.shift(), /Exactly one audio input/],
   ['position', g => g.nodes[0].position.x = Infinity, /Invalid position/],
@@ -53,6 +54,24 @@ for (const [name, edit, pattern] of [
   assert.match(validateGraph(graph).join('\n'), pattern);
   assert.throws(() => assertGraph(graph), pattern);
   assert.throws(() => buildGraph(graph, {}), pattern);
+});
+
+test('version 4 paired edges are preserved; TranslationView accepts either plain stream and rejects mixed/empty modes', () => {
+  const saved = defaultGraph(), store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(saved));
+  assert.deepEqual(readGraph(store), saved);
+  assert.equal(store.getItem(GRAPH_KEY), JSON.stringify(saved), 'version 4 needs no rewrite');
+  for (const ports of [['text'], ['provisionalText'], ['provisionalText', 'text']]) {
+    const graph = defaultGraph(); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated');
+    for (const port of ports) graph.edges.push(edge('translation', port === 'text' ? 'text' : 'provisional', 'translated', port));
+    assert.deepEqual(validateGraph(graph), []);
+    assert.ok(buildGraph(graph, {}).pipeline);
+    graph.edges.push(edge('translation', 'finalResult', 'translated', 'final'));
+    assert.match(validateGraph(graph).join('\n'), /Choose either TEXT or paired/);
+  }
+  const empty = defaultGraph(); empty.edges = empty.edges.filter(e => e.to[0] !== 'translated');
+  assert.match(validateGraph(empty).join('\n'), /Required connection missing/);
+  empty.edges.push(edge('translation', 'provisionalResult', 'translated', 'provisional'));
+  assert.match(validateGraph(empty).join('\n'), /Required connection missing/);
 });
 
 test('concrete supported descriptions instantiate actual Nodes with identical contract identities and the exact saved edges', () => {
