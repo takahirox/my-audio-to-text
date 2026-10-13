@@ -119,6 +119,39 @@ async function instrument(f) {
 for (const direction of ['ja-en', 'en-ja']) {
 const target = direction === 'en-ja' ? 'Japanese' : 'English';
 const open = async f => { const page = await openRecorder(f); await setDirection(page, direction); return page; };
+for (const paired of [false, true]) test(`${direction}: translated TEXT preview clears on finalization ${paired ? 'with' : 'without'} paired metadata`, async ({ translationExtension: f }) => {
+  await instrument(f); const page = await open(f);
+  await page.evaluate(async ({ direction, paired }) => {
+    const { readGraph, saveGraph, edge, GRAPH_KEY } = await import('./graph.js');
+    const graph = readGraph(localStorage);
+    if (!paired) {
+      graph.nodes = graph.nodes.filter(node => node.type !== 'TranslationView');
+      graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
+    }
+    graph.nodes.find(node => node.type === 'TranscriptView').settings.direction = direction === 'ja-en' ? 'en-ja' : 'ja-en';
+    graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript');
+    graph.edges.push(edge('translation', 'provisional', 'transcript', 'provisional'),
+      edge('translation', 'text', 'transcript', 'final'));
+    saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+  }, { direction, paired });
+  await prepare(page); await start(page);
+  await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
+  await emit(page, 'partial', 'hello', 0);
+  await expect(page.locator('#partial')).toHaveText(`${target}: hello`);
+  await emit(page, 'final', 'hello', 0);
+  await expect(page.locator('#partial')).toBeEmpty();
+  await expect(page.locator('#final')).toHaveText(`${target}: hello\n`);
+  await expect(page.locator('#partial')).toBeEmpty();
+  // Completion must not depend on Stop or optional result connections.
+  await expect(page.locator('#status')).toHaveText('Transcription active');
+  await emit(page, 'partial', 'hello', 1);
+  await expect(page.locator('#partial')).toHaveText(`${target}: hello`);
+  await emit(page, 'final', 'hello', 1);
+  await expect(page.locator('#final')).toHaveText(`${target}: hello\n${target}: hello\n`);
+  await expect(page.locator('#partial')).toBeEmpty();
+  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
+});
+
 test(`${direction}: an older translated final preserves a newer ASR preview on independently connected TEXT ports`, async ({ translationExtension: f }) => {
   await instrument(f); const page = await open(f);
   await page.evaluate(async direction => {

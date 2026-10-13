@@ -82,6 +82,41 @@ were checked against the current modules; `git diff --check` passed. Browser,
 extension/build and optional real-model checks were not rerun for this revision.
 No push or merge was performed.
 
+## Scheduler preview invalidation and Issue reference
+
+Final TEXT receipt now clears the scheduler's pending or displayed provisional
+translation with an empty provisional TEXT and result update. This happens at
+invalidation, before final inference, so delayed finals cannot clear newer
+previews. Stop uses the same scheduler-owned cleanup; Cancel still discards late
+work. TranscriptView's independent input streams retain their existing behavior.
+
+Four deterministic unit regressions reproduced the stale translated preview
+before the fix. They now cover both translation directions, with and without
+optional paired metadata, same-string utterances and preservation of newer
+provisional state. Four packaged MV3 regressions check direct translated TEXT
+previews and finals while the session remains running.
+
+The live PR and saved description again use `Refs #91`. A GitHub read-back
+confirmed the pending deployment record and unchanged head
+`ab6153833b66f54823cb20f4ae4792b6468f1f1f`. Downstream publication must preserve
+this non-closing reference until required deployment verification is recorded.
+
+Validation for this scheduler revision:
+
+| Command | Result |
+| --- | --- |
+| `npm test` | 253 passed, 0 failed/skipped |
+| `npm run test:browser -- tests/browser/text-contracts.spec.js` | 2 passed, 0 failed/skipped (Chromium and WebKit) |
+| `npm run build:extension` | Passed after pinned asset preparation |
+| `npm run test:extension` | 87 passed, 5 optional real-model checks skipped, 0 failed (3.5 min) |
+| `git diff --check` | Passed |
+
+All four new packaged regressions and the existing independent-preview checks
+passed. The full browser suite and optional real-model inference smoke were not
+rerun. The five packaged skips are the existing opt-in real TTS (two),
+ASR-to-field (one) and ASR-to-OPUS-MT (two) checks. No retries were enabled and
+no failures were accepted as flaky. No push or merge was performed.
+
 ## Required post-merge verification — pending
 
 If merging triggers Playground publication, verify deployment completion, the

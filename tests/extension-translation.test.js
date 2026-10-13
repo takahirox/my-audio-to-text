@@ -76,14 +76,15 @@ test(`${direction}: explicit Pipeline adapter coalesces rapid provisional update
   f.send('final', 'final one'); f.send('final', 'final two'); f.send('provisional', 'new utterance'); await tick();
   f.complete(0); await tick();
   assert.equal(f.requests[1].text, 'final one');
-  assert.equal(f.outputs.filter(value => value.status === 'complete').length, 0, 'old interim suppressed');
+  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => [value.port, value.source]),
+    [['provisional', '']], 'old interim suppressed and its preview explicitly cleared');
   // A duplicate delayed reply cannot resolve the active final request.
   f.complete(0, 'stale duplicate'); await tick(); assert.equal(f.requests.length, 2);
   f.complete(1); await tick(); assert.equal(f.requests[2].text, 'final two');
   f.complete(2); await tick(); assert.equal(f.requests[3].text, 'new utterance');
   f.complete(3); await tick();
   assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => [value.port, value.source, value.index]),
-    [['final', 'final one', 0], ['final', 'final two', 1], ['provisional', 'new utterance', undefined]]);
+    [['provisional', '', undefined], ['final', 'final one', 0], ['final', 'final two', 1], ['provisional', 'new utterance', undefined]]);
   await f.pipeline.stop(); await f.pipeline.dispose(); assert.ok(f.workers.every(worker => worker.terminated));
 });
 
@@ -247,6 +248,38 @@ for (const direction of ['ja-en', 'en-ja']) for (const paired of [false, true]) 
   await f.session.start(42);
   f.session.session.speech.receiveEvent({ type: 'partial', text: 'canceled preview', id: 0 }); await tick();
   f.session.cancel(); await tick(); assert.equal(f.session.view.partial, '');
+});
+
+for (const direction of ['ja-en', 'en-ja']) for (const paired of [false, true]) test(`${direction}: scheduler clears its translated preview on finalization ${paired ? 'with' : 'without'} paired metadata`, async () => {
+  const f = sessionFixture(), graph = defaultGraph({ direction });
+  if (!paired) {
+    graph.nodes = graph.nodes.filter(node => node.type !== 'TranslationView');
+    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
+  }
+  graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript');
+  graph.edges.push({ from: ['translation', 'provisional'], to: ['transcript', 'provisional'] },
+    { from: ['translation', 'text'], to: ['transcript', 'final'] });
+  f.session.setGraph(graph); await f.session.start(42);
+  const speech = f.session.session.speech;
+  speech.receiveEvent({ type: 'partial', text: 'hello', id: 0 }); await tick();
+  f.translation.complete(0, 'Translated hello'); await tick();
+  assert.equal(f.session.view.partial, 'Translated hello');
+  speech.receiveEvent({ type: 'final', text: 'hello', id: 0 }); await tick();
+  assert.equal(f.session.view.partial, '', 'final receipt invalidates the scheduler-owned preview before inference');
+  f.translation.complete(1, 'Translated hello'); await tick();
+  assert.equal(f.session.view.final, 'Translated hello\n');
+  assert.equal(f.session.view.partial, '', 'the completed final leaves no stale translated preview');
+
+  // A same-string next utterance is independent of the preceding final.
+  speech.receiveEvent({ type: 'final', text: 'hello', id: 1 });
+  speech.receiveEvent({ type: 'partial', text: 'hello', id: 2 }); await tick();
+  if (paired) assert.equal(f.session.view.interimTranslation.status, 'pending');
+  f.translation.complete(2, 'Second hello'); await tick();
+  if (paired) assert.equal(f.session.view.interimTranslation.status, 'pending', 'an older final preserves newer provisional state');
+  f.translation.complete(3, 'New preview'); await tick();
+  assert.equal(f.session.view.partial, 'New preview');
+  assert.equal(f.session.view.final, 'Translated hello\nSecond hello\n');
+  await f.session.stop(); assert.equal(f.session.view.partial, '');
 });
 
 test('TranslationView without TranscriptView retains errors and cancels pending rows without accepting late replies', async () => {

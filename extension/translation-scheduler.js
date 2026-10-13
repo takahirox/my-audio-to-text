@@ -41,19 +41,28 @@ export class TranslationSchedulerNode {
     // Pending/error notifications never enter a reusable text-processing path.
     if (status === 'complete') this.context.emit(job.port, text);
   }
+  clearProvisional() {
+    this.provisional = null;
+    if (!this.previewActive) return;
+    this.previewActive = false;
+    // Clear at invalidation, before final inference. An older final completion
+    // must not clear a newer preview, and only this scheduler owns this stream.
+    this.emit({ port: 'provisional', source: '', version: this.version }, 'complete');
+  }
   receive(port, source) {
     if (!['provisional', 'text'].includes(port) || typeof source !== 'string') throw new TypeError('Expected TEXT on provisional or text.');
     if (this.disposed || (port === 'provisional' && this.stopping)) return;
     if (!source.trim()) {
-      this.version++; this.provisional = null;
-      if (port === 'provisional') this.emit({ port, source: '', version: this.version }, 'complete');
+      this.version++;
+      if (port === 'provisional') this.previewActive = true; // explicit empty updates also clear consumers
+      this.clearProvisional();
       return;
     }
     const job = { port, source, version: ++this.version };
     if (port === 'text') {
       job.index = this.finalIndex++;
-      this.provisional = null; // invalidate queued and in-flight provisional
-    }
+      this.clearProvisional(); // invalidate queued, in-flight and displayed provisional
+    } else this.previewActive = true;
     if (this.error) { this.emit(job, 'error', '', this.error); return; }
     this.emit(job, 'pending');
     if (port === 'text') this.finals.push(job);
@@ -94,7 +103,7 @@ export class TranslationSchedulerNode {
     this.provisional = null;
     void this.translation?.dispose().catch(() => {});
   }
-  discardProvisional() { this.stopping = true; this.version++; this.provisional = null; }
+  discardProvisional() { this.stopping = true; this.version++; this.clearProvisional(); }
   async stop() {
     this.discardProvisional();
     await this.ready;

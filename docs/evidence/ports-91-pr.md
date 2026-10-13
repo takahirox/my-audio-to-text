@@ -12,6 +12,7 @@ Document the repository-wide contract audit in [docs/port-contracts.md](docs/por
 - Preserve same-string distinct utterances, ordered once-only finals, superseded provisional work, source/result alignment, pending/error/canceled reporting, Stop drain and Cancel stale-work suppression.
 - Explicitly migrate persisted graph versions 1–3 to version 4, bypassing extraction adapters while preserving every outgoing route. Invalid legacy graphs show a recovery path without overwriting stored routes.
 - Preserve newer ASR previews when independently connected delayed translation finals arrive; session-local completion bookkeeping clears only the completed preview.
+- Clear scheduler-owned translated previews when final input invalidates provisional work, before inference, while preserving newer independent previews.
 - Preserve the focused-field sink's verbatim insertion behavior required by #89, including explicit upstream whitespace.
 - Update architecture, graph and Node documentation and deterministic shared, Playground and packaged MV3 regression coverage.
 
@@ -29,6 +30,8 @@ Checks reported by the extension-session correction node:
 
 The subsequent documentation/metadata correction reran `npm test`: 249 passed, 0 failed/skipped, and passed documentation checks and `git diff --check`. Browser, extension/build and optional real-model checks were not rerun for that revision.
 
+The latest scheduler preview correction ran `npm test`: 253 passed, 0 failed/skipped; the targeted browser text-contract tests: 2 passed (Chromium and WebKit); the extension build: passed; and the full packaged MV3 suite: 87 passed, 5 optional real-model checks skipped, 0 failed. All four new translated-preview regressions passed, with both translation directions and optional paired metadata connected or disconnected. `git diff --check` passed. The full browser suite and optional real-model inference smoke were not rerun for this correction.
+
 The implementation node previously ran the full browser suite: 218 passed, 18 optional checks skipped, 0 failed. The full browser suite was not rerun after the extension-session correction. Optional real-model inference smoke was not run; deterministic inference fixtures do not establish model quality. The packaged suite initialized real pinned ASR/Silero workers under MV3 CSP. No test failures were accepted as flaky and retries were disabled.
 
 Coverage includes direct TEXT connections across producers, fan-out, optional metadata, valid/invalid edges, translation ordering/errors, same-string distinct utterances, final-only field output, Stop/Cancel, migration/recovery, delayed-final preview handling and verbatim field insertion.
@@ -39,7 +42,7 @@ Publication checked the clean worktree, fast-forward ancestry from the existing 
 
 ## Related issues
 
-Closes #91
+Refs #91
 
 Pre-merge implementation and validation are complete. The required post-merge Playground deployment verification remains pending as described above. Record deployment evidence after merge.
 

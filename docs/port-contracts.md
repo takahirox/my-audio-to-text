@@ -52,8 +52,11 @@ callbacks remain diagnostic/lifecycle interfaces, not alternative text routes.
 ASR suppresses duplicate/stale monotonic final IDs before emitting strings;
 different IDs with equal strings are valid utterances. The scheduler assigns its
 own job indices on TEXT receipt, coalesces provisional work, prioritizes FIFO
-finals and suppresses stale interim completions. It emits each successful final
-string once. Stop discards interim work and drains finals through consumers;
+finals and suppresses stale interim completions. Final receipt clears its own
+pending or displayed preview with an empty provisional TEXT and result update,
+before inference; delayed finals therefore preserve newer independent previews.
+It emits each successful final string once. Stop clears and discards interim
+work and drains finals through consumers;
 Cancel aborts the graph and ignores late replies. TTS splits long utterances only
 inside its own branch; field fan-out receives the complete, verbatim string.
 
