@@ -10,11 +10,16 @@ canvas scrollbars and **Canvas zoom** to navigate a large graph. Connecting to
 an occupied input replaces only its incoming wire; other inputs and source
 fan-out stay intact. Repeating the same connection changes nothing. Invalid
 connections keep the previous wire. Click a wire directly on the canvas (or
-focus it and press Enter/Space): the selected wire turns yellow. Press
-Delete/Backspace while it is focused to disconnect only that wire. Hit targets
-keep the same screen width at every supported zoom. Escape clears selection.
-The keyboard-accessible **Connections** Disconnect buttons remain available
-below the canvas. Remove deletes a Node and its edges. Select a heading to
+focus it and press Enter/Space): the selected wire turns yellow and reveals a
+nearby **Disconnect** button on the canvas. Selecting alone keeps the wire.
+Click or tap Disconnect to remove only that edge; it needs no hover or keyboard.
+The button and wire hit targets keep the same screen size at every supported
+zoom, and the button stays within the visible canvas near the selected segment,
+preferring space clear of Nodes, ports and other wires. With a selected wire
+focused, Tab moves to Disconnect; Enter/Space activates it. Delete/Backspace on
+a focused wire also removes it. Escape or clicking blank canvas clears selection
+and hides Disconnect. After removal, focus returns to the scrollable canvas.
+Remove deletes a Node and its edges. Select a heading to
 edit language/voice in the right **Settings** inspector. OPUS-MT directions are
 separate executable Node types.
 
@@ -292,6 +297,8 @@ extension's bounded 1 MiB chunk hashes; build/install never runs it.
 
 No post-merge deployment verification is required for this unpacked extension.
 No website/Chrome Web Store publication is part of this change.
+See [on-canvas edge removal checks (#97)](evidence/graph-97.md) for pointer/touch,
+keyboard, zoom, persistence and session-isolation coverage and local results.
 
 ### #87 source and destination checks
 

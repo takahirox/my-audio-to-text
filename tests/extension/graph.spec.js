@@ -1,4 +1,4 @@
-import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './graph-fixture.js';
+import { test, expect, openGraph, startGraph, emitFinal, addAudioPath, disconnectWire } from './graph-fixture.js';
 
 const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
 
@@ -29,7 +29,7 @@ test('fresh install saves default translation without downloading; visual edits,
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); expect((await saved(page)).edges).toHaveLength(3);
   await page.editor.locator('#graph-load').click(); await expect(page.editor.locator('#graph-errors')).toBeEmpty();
   // Remove and reconnect a required named port.
-  await page.editor.getByRole('button', { name: 'Disconnect audio.audio to speech.audio', exact: true }).click();
+  await disconnectWire(page.editor, 'audio.audio to speech.audio');
   await expect(page.editor.locator('#graph-errors')).toContainText('Required connection');
   await page.editor.getByRole('button', { name: 'speech output final', exact: true }).click();
   await expect(page.editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
@@ -148,12 +148,12 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await expect(editor.getByRole('complementary', { name: 'Node settings inspector' })).toContainText('Original transcript');
   await expect(editor.getByLabel('transcript direction', { exact: true })).toBeVisible();
   await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toContainText('text');
-  await editor.getByRole('button', { name: 'Disconnect audio.audio to speech.audio', exact: true }).click();
+  await disconnectWire(editor, 'audio.audio to speech.audio');
   const output = editor.getByRole('button', { name: 'audio output audio', exact: true });
   const input = editor.getByRole('button', { name: 'speech input audio', exact: true });
   await output.focus(); await output.press('Space'); await input.focus(); await input.press('Enter');
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  await editor.getByRole('button', { name: 'Disconnect audio.audio to speech.audio', exact: true }).click();
+  await disconnectWire(editor, 'audio.audio to speech.audio');
   await output.dragTo(input); await expect(editor.locator('#graph-errors')).toBeEmpty();
   await editor.locator('#graph-zoom').selectOption('0.75');
   const heading = editor.getByRole('button', { name: 'Select speech', exact: true });
@@ -270,7 +270,7 @@ test('MV3 editor accepts direct translated TEXT into TranscriptView and field ou
   const page = await openGraph(f), editor = page.editor;
   await editor.getByRole('button', { name: 'Remove translated', exact: true }).click();
   for (const [source, output, target, input] of [['speech', 'provisional', 'transcript', 'provisional'], ['speech', 'provisional', 'translation', 'provisional'], ['speech', 'final', 'transcript', 'final']]) {
-    await editor.getByRole('button', { name: `Disconnect ${source}.${output} to ${target}.${input}`, exact: true }).click();
+    await disconnectWire(editor, `${source}.${output} to ${target}.${input}`);
   }
   await editor.getByRole('button', { name: 'translation output text', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'transcript input final', exact: true })).toBeEnabled();
