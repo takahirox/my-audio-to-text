@@ -61,7 +61,7 @@ test('legacy preference migration, direction switch and corrupt saved graph reco
   await page.evaluate(() => localStorage.setItem('processing-graph-v1', '{broken')); await page.reload(); await page.editor.reload();
   await expect(page.locator('#errors')).toContainText('Saved graph unavailable'); await expect(page.locator('#start')).toBeDisabled();
   await page.editor.locator('#graph-reset').click(); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await expect(page.locator('#errors')).toBeEmpty();
-  expect((await saved(page)).version).toBe(4);
+  expect((await saved(page)).version).toBe(5);
 });
 
 for (const type of ['Supertonic3', 'Kokoro']) {
@@ -162,7 +162,9 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await editor.mouse.move(box.x + 10, box.y + 10); await editor.mouse.down(); await editor.mouse.move(box.x + 40, box.y + 25); await editor.mouse.up();
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   await expect.poll(async () => (await saved(live)).nodes.find(n => n.id === 'speech').position).toEqual({ x: 310, y: 50 });
-  expect(await editor.locator('.graph-wires .wire-line').count()).toBe(7);
+  expect(await editor.locator('.graph-wires .wire-line').count()).toBe((await saved(live)).edges.length);
+  expect(await editor.locator('#graph-canvas').evaluate(canvas => [...canvas.querySelectorAll('.graph-node')].every(card => card.offsetTop + card.offsetHeight <= canvas.offsetHeight))).toBe(true);
+  await expect(editor.getByRole('button', { name: 'translation output finalIndex', exact: true })).toContainText('number');
   const second = await f.context.newPage(); await second.goto(editor.url());
   // Both drafts diverge from the same saved graph; saving one keeps the other's draft.
   await editor.getByRole('button', { name: 'Select speech', exact: true }).press('ArrowRight');
@@ -248,7 +250,7 @@ test('version 1/2/3 field sinks migrate in MV3 to direct TEXT; ambiguous routes 
     }, { version, type });
     await page.reload(); await page.editor.reload();
     const graph = await saved(page);
-    expect(graph.version).toBe(4); expect(graph.nodes.some(n => n.type === 'SelectedFormFieldTextOutputNode')).toBe(false);
+    expect(graph.version).toBe(5); expect(graph.nodes.some(n => n.type === 'SelectedFormFieldTextOutputNode')).toBe(false);
     expect(graph.nodes.some(n => n.type === 'FinalText')).toBe(false);
     expect(graph.edges).toContainEqual({ from: ['speech', 'final'], to: ['field', 'text'] });
     await expect(page.editor.locator('#graph-errors')).toBeEmpty();
@@ -261,7 +263,7 @@ test('version 1/2/3 field sinks migrate in MV3 to direct TEXT; ambiguous routes 
   await page.reload(); await page.editor.reload();
   await expect(page.locator('#errors')).toContainText('Cannot migrate field output'); await expect(page.locator('#start')).toBeDisabled();
   await page.editor.locator('#graph-reset').click(); await page.editor.locator('#graph-save').click();
-  await expect(page.locator('#errors')).toBeEmpty(); expect((await saved(page)).version).toBe(4);
+  await expect(page.locator('#errors')).toBeEmpty(); expect((await saved(page)).version).toBe(5);
 });
 
 test('MV3 editor accepts direct translated TEXT into TranscriptView and field output with optional interim/diagnostics disconnected', async ({ graphExtension: f }) => {
@@ -291,6 +293,8 @@ test('MV3 version 3 migration preserves translated field fan-out and paired diag
   await page.evaluate(async () => {
     const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js');
     const graph = defaultGraph(); graph.version = 3;
+    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
+    graph.edges.push(edge('translation', 'finalResult', 'translated', 'final'), edge('translation', 'provisionalResult', 'translated', 'provisional'));
     for (const route of graph.edges) {
       if (route.to[0] === 'translation' && route.to[1] === 'text') route.to[1] = 'final';
       if (route.from[0] === 'translation') route.from[1] = route.from[1] === 'finalResult' ? 'final' : 'provisional';
@@ -301,8 +305,8 @@ test('MV3 version 3 migration preserves translated field fan-out and paired diag
   });
   await page.reload(); await page.editor.reload();
   const graph = await saved(page);
-  expect(graph.version).toBe(4); expect(graph.nodes.some(node => node.id === 'text')).toBe(false);
+  expect(graph.version).toBe(5); expect(graph.nodes.some(node => node.id === 'text')).toBe(false);
   for (const target of ['a', 'b']) expect(graph.edges).toContainEqual({ from: ['translation', 'text'], to: [target, 'text'] });
-  expect(graph.edges).toContainEqual({ from: ['translation', 'finalResult'], to: ['translated', 'final'] });
+  expect(graph.edges).toContainEqual({ from: ['translation', 'finalSource'], to: ['translated', 'finalSource'] });
   await expect(page.editor.locator('#graph-errors')).toBeEmpty();
 });

@@ -1,4 +1,4 @@
-# Executable extension processing graphs (#75, #81, #87)
+# Executable extension processing graphs (#75, #81, #87, #95)
 
 Open **Graph Editor** from Live or Models. It opens a separate full-size
 extension tab. The left **Nodes** palette lists every supported concrete Node;
@@ -43,24 +43,26 @@ translation enablement/direction preferences migrate once, including a saved
 transcription-only choice. The editor's **Draft translation** controls edit this
 same graph and require Save; there is no second preferences store. Removing
 OPUS-MT also removes its view and dependent translated-audio branch.
-Version 1/2/3 descriptions migrate explicitly to version 4 using the same
+Version 1/2/3/4 descriptions migrate explicitly to version 5 using the same
 storage key. Legacy field sinks become focused TEXT sinks. `FinalText` and
 `TranslatedFinalText` are removed by reconnecting every downstream route to the
 producer's final string output; fan-out is preserved. TranslationView routes
-move to optional paired result ports. Ambiguous/malformed routes fail visibly;
+expand to correlated primitive ports. Ambiguous/malformed routes fail visibly;
 Reset and Save in Graph Editor, then reconnect the desired text paths to recover.
 Outputs are never silently dropped. Page/media handles are never saved with a
 graph. Media selection is still available in Live.
-Existing version 4 TranslationView `provisional`/`final` paired-result edges
-remain unchanged and operational; the new TEXT display inputs are additive,
-so no version 4 migration is needed. Default graphs retain paired-result mode.
+Version 4 `finalResult → final` expands to
+`text/finalSource/finalStatus/finalIndex/finalError`;
+`provisionalResult → provisional` expands to
+`provisionalText/provisionalSource/provisionalStatus/provisionalError`.
+TEXT-only routes remain unchanged. Default graphs use correlated primitive ports.
 A corrupt/unknown-version saved graph displays an error and prevents Start
 until a valid graph is saved. Reset and Save in the editor to recover. Storage
 failures remain visible.
 
 ## Supported graph and ports
 
-The version 4 description is JSON with `version`, `nodes` and `edges`. Each Node
+The version 5 description is JSON with `version`, `nodes` and `edges`. Each Node
 has `id`, concrete `type`, `settings`, and `position: { x, y }`. Each edge has
 `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`. No implicit routes, payload
 wrappers, model registry or remote execution are added. [The schema and default](../extension/graph.js)
@@ -75,9 +77,9 @@ constructs a real `Pipeline` with exactly those named-port edges.
 | FocusedInputTextOutputNode | text: TEXT (one plain string input) | append to user-focused field in the toolbar-invoked document |
 | SpeechToText | audio: captured PCM | provisional/final: TEXT; SpeechToTextNode |
 | TranscriptView | provisional (optional)/final: TEXT | original/provisional/final UI; TranscriptOutputNode |
-| OpusMtJaEn | provisional (optional)/text: TEXT | provisional/text: TEXT, provisionalResult/finalResult: TEXT_RESULT; TranslationSchedulerNode with OpusMtTranslationNode |
-| OpusMtEnJa | provisional (optional)/text: TEXT | provisional/text: TEXT, provisionalResult/finalResult: TEXT_RESULT; TranslationSchedulerNode with EnglishToJapaneseOpusMtTranslationNode |
-| TranslationView | provisional/final: TEXT_RESULT **or** provisionalText/text: TEXT (see modes below) | paired, ordered original/translated rows or plain interim/completed translated text |
+| OpusMtJaEn | provisional (optional)/text: TEXT | provisional/text, provisionalSource/Status/Error, finalSource/Status/Error: TEXT; finalIndex: NUMBER; TranslationSchedulerNode with OpusMtTranslationNode |
+| OpusMtEnJa | provisional (optional)/text: TEXT | provisional/text, provisionalSource/Status/Error, finalSource/Status/Error: TEXT; finalIndex: NUMBER; TranslationSchedulerNode with EnglishToJapaneseOpusMtTranslationNode |
+| TranslationView | text/provisionalText and source/status/error TEXT inputs, finalIndex NUMBER (see modes below) | paired, ordered original/translated rows or plain interim/completed translated text |
 | Supertonic3 | text: TEXT | audio: SYNTHESIZED_AUDIO; Supertonic3TextToSpeechNode (ja/en, F1/M1) |
 | Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; KokoroTextToSpeechNode (Japanese jf_alpha / English af_heart) |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | separate native audio player / WAV; AudioOutputNode |
@@ -89,7 +91,7 @@ translation branch is supported by the Live session coordinator. Edges are
 validated by shared contract identity, independent of producer identity. Interim
 inputs are optional; processor final/text inputs remain required. View streams are
 independent: a transcript view can consume a translated TEXT stream, while the
-paired view retains its own source/result/status from one atomic result.
+paired view retains its own source/result/status from one grouped emission.
 Unknown types/settings/ports, duplicate edges, multiple connections to one
 input, missing required inputs and cycles fail before Save or Worker startup.
 Graphs are bounded to 24 Nodes/64 edges. ASR audio and generated TTS audio have
@@ -108,17 +110,21 @@ representations, selected by its connected inputs:
   correlation or paired rows. The independent original transcript remains
   available when its own view is connected. Finalization clears the scheduler's
   primitive preview; Stop/Cancel clear the display preview.
-- **Paired TEXT_RESULT:** connect `OpusMt.finalResult → TranslationView.final`
-  (required in paired mode), with optional
-  `OpusMt.provisionalResult → TranslationView.provisional`. Each result contains
-  its atomic source/result/status/index; the existing view preserves ordered
-  original/translated rows and pending/error/cancellation rendering.
+- **Paired primitives:** connect the same translator's `text`, `finalSource`,
+  `finalStatus`, `finalIndex`, and `finalError` to the identically named view
+  inputs. Optionally connect its `provisional` to `provisionalText` along with
+  `provisionalSource`, `provisionalStatus`, and `provisionalError`. Each update
+  is one `emitOutputs` group, delivered through `receiveInputs`. Pending/error
+  groups omit text; complete groups include it. Index identifies the final row,
+  including repeated identical source strings. The view preserves ordered pairs
+  and pending/complete/error/canceled rendering.
 
-Disconnect the previous representation before switching. Connecting both TEXT
-and TEXT_RESULT to this view is rejected to prevent duplicate output or false
-pairs made from independent primitive streams. No unused metadata input is
-required in TEXT mode. Port compatibility follows the declared type; choose
-interim outputs for interim inputs and completed outputs for completed inputs.
+To switch to plain display, disconnect the source/status/index/error inputs;
+keep the text routes. To switch to paired display, add the complete bundle.
+Partial bundles or wires from independent processor branches are rejected:
+matching TEXT contracts cannot establish correlation across separate emissions.
+No metadata inputs are required in plain mode. See the
+[shared runtime semantics](pipeline-runtime.md#correlated-primitive-outputs).
 
 ## Concrete input and output targets
 

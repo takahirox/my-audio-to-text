@@ -27,6 +27,7 @@ test('unknown nodes/ports, incompatible identities, duplicates and cycles fail c
   } }, connections: [connection('a', 'text', 'b', 'text')] }), /Incompatible/);
   const edge = connection('a', 'text', 'b', 'text');
   assert.throws(() => new Pipeline({ nodes, connections: [edge, edge] }), /Duplicate/);
+  assert.throws(() => new Pipeline({ nodes: { ...nodes, other: source() }, connections: [edge, connection('other', 'text', 'b', 'text')] }), /Only one connection/);
   const both = () => ({ inputs: { text }, outputs: { text }, receive() {} });
   assert.throws(() => new Pipeline({ nodes: { a: both(), b: both() }, connections: [
     connection('a', 'text', 'b', 'text'), connection('b', 'text', 'a', 'text'),
@@ -173,3 +174,100 @@ for (const hook of ['start', 'stop']) {
     assert.equal(pipeline.state, 'disposed');
   });
 }
+
+test('group snapshots correlate identical consecutive values for async receivers and independent fan-out', async () => {
+  const held = gate(), grouped = [], other = [], plain = [], legacy = [];
+  const producer = { outputs: { original: text, translated: text }, start(context) { this.context = context; },
+    stop(context) { context.emitOutputs({ original: 'tail', translated: 'final tail' }); } };
+  const paired = { inputs: { source: text, result: text }, async receiveInputs(values) {
+    grouped.push(values); if (grouped.length === 1) await held.promise;
+  } };
+  const mirror = { inputs: paired.inputs, receiveInputs(values) { other.push(values); } };
+  const ordinary = { inputs: paired.inputs, async receive(port, value) { legacy.push([port, value]); await tick(); } };
+  const pipeline = new Pipeline({ nodes: { producer, paired, mirror, ordinary, plain: sink((port, value) => plain.push(value)) }, connections: [
+    ...['paired', 'mirror', 'ordinary'].flatMap(target => [connection('producer', 'original', target, 'source'), connection('producer', 'translated', target, 'result')]),
+    connection('producer', 'translated', 'plain', 'text'),
+  ] });
+  await pipeline.start();
+  const values = { original: 'same', translated: 'first' };
+  producer.context.emitOutputs(values); values.translated = 'mutated';
+  producer.context.emitOutputs({ original: 'same', translated: 'second' });
+  await tick();
+  assert.deepEqual(grouped, [{ source: 'same', result: 'first' }]);
+  assert.deepEqual(other, [{ source: 'same', result: 'first' }, { source: 'same', result: 'second' }]);
+  assert.deepEqual(plain, ['first', 'second']);
+  let stopped = false; const stopping = pipeline.stop().then(() => { stopped = true; });
+  await tick(); assert.equal(stopped, false);
+  held.resolve(); await stopping;
+  assert.deepEqual(grouped, [...other]);
+  assert.deepEqual(grouped, [{ source: 'same', result: 'first' }, { source: 'same', result: 'second' }, { source: 'tail', result: 'final tail' }]);
+  assert.ok(grouped.every(Object.isFrozen));
+  assert.deepEqual(plain, ['first', 'second', 'final tail']);
+  assert.deepEqual(legacy, grouped.flatMap(values => Object.entries(values)));
+  await pipeline.dispose();
+});
+
+test('separate emit calls stay separate and async completions publish in completion order', async () => {
+  const first = gate(), second = gate(), values = [], producer = {
+    outputs: { original: text, translated: text }, start(context) { this.context = context; },
+  };
+  const pipeline = new Pipeline({ nodes: { producer, receiver: {
+    inputs: { source: text, result: text }, receiveInputs(group) { values.push(group); },
+  } }, connections: [connection('producer', 'original', 'receiver', 'source'), connection('producer', 'translated', 'receiver', 'result')] });
+  await pipeline.start();
+  producer.context.emit('original', 'same'); producer.context.emit('translated', 'unpaired');
+  const tasks = [first, second].map((held, index) => held.promise.then(() => producer.context.emitOutputs({ original: 'same', translated: String(index) })));
+  second.resolve(); await tasks[1]; first.resolve(); await tasks[0];
+  await pipeline.stop();
+  assert.deepEqual(values, [{ source: 'same' }, { result: 'unpaired' }, { source: 'same', result: '1' }, { source: 'same', result: '0' }]);
+  await pipeline.dispose();
+});
+
+for (const mode of ['throw', 'fail', 'dispose']) test(`group ${mode} skips queued groups and preserves healthy branches when possible`, async () => {
+  const held = gate(), calls = [], independent = [], producer = {
+    outputs: { a: text, b: text }, start(context) { this.context = context; },
+  };
+  const receiver = { inputs: { a: text, b: text }, async receiveInputs(values, context) {
+    calls.push(values); await held.promise;
+    if (mode === 'throw') throw Error('receiver failure');
+    if (mode === 'fail') context.fail(Error('receiver failure'));
+  } };
+  const pipeline = new Pipeline({ nodes: { producer, receiver, independent: sink((port, value) => independent.push(value)) }, connections: [
+    connection('producer', 'a', 'receiver', 'a'), connection('producer', 'b', 'receiver', 'b'), connection('producer', 'b', 'independent', 'text'),
+  ] });
+  await pipeline.start(); producer.context.emitOutputs({ a: 'same', b: 'one' }); producer.context.emitOutputs({ a: 'same', b: 'two' });
+  await tick();
+  if (mode === 'dispose') await pipeline.dispose();
+  held.resolve(); await tick();
+  producer.context.emitOutputs({ a: 'late', b: 'three' });
+  if (mode === 'dispose') { await tick(); assert.deepEqual(independent, ['one', 'two']); }
+  else { await assert.rejects(pipeline.stop(), AggregateError); assert.deepEqual(independent, ['one', 'two', 'three']); }
+  assert.deepEqual(calls, [{ a: 'same', b: 'one' }]);
+  await pipeline.dispose();
+});
+
+test('invalid group fails before any output is delivered', async () => {
+  const producer = source(), values = [];
+  const pipeline = new Pipeline({ nodes: { producer, sink: sink((port, value) => values.push(value)) }, connections: [connection('producer', 'text', 'sink', 'text')] });
+  await pipeline.start(); producer.context.emitOutputs({ text: 'must not leak', unknown: 'invalid' });
+  await assert.rejects(pipeline.stop(), AggregateError);
+  assert.deepEqual(values, []); assert.equal(pipeline.errors.length, 1);
+  await pipeline.dispose();
+});
+
+for (const mode of ['fail', 'dispose']) test(`ordinary receive stops remaining group inputs on ${mode}`, async () => {
+  const producer = { outputs: { a: text, b: text }, start(context) { this.context = context; } }, calls = [];
+  let pipeline;
+  pipeline = new Pipeline({ nodes: { producer, sink: {
+    inputs: { a: text, b: text }, async receive(port, value, context) {
+      calls.push([port, value]);
+      if (mode === 'fail') context.fail(Error('first input failed'));
+      else await pipeline.dispose();
+    },
+  } }, connections: [connection('producer', 'a', 'sink', 'a'), connection('producer', 'b', 'sink', 'b')] });
+  await pipeline.start(); producer.context.emitOutputs({ a: 'one', b: 'two' });
+  await tick();
+  assert.deepEqual(calls, [['a', 'one']]);
+  if (mode === 'fail') await assert.rejects(pipeline.stop(), AggregateError);
+  await pipeline.dispose();
+});

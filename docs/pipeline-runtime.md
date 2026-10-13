@@ -22,9 +22,10 @@ const node = {
 };
 ```
 
-Hooks are optional, except that a connected input needs `receive`. Each hook may
-return a promise. `context` has `emit(outputPort, value)`, `fail(error)` and an
-`AbortSignal` named `signal`. An input handler may emit zero, one or many values,
+Hooks are optional, except that a connected input needs `receive` or
+`receiveInputs`. Each hook may return a promise. `context` has
+`emit(outputPort, value)`, `emitOutputs(values)`, `fail(error)` and an `AbortSignal`
+named `signal`. An input handler may emit zero, one or many values,
 including later from a Worker callback. Background work must finish within the
 node's `stop()` promise. Implementations should observe `signal` and release
 background resources in `dispose()`; for example, pass it to `fetch()`.
@@ -33,8 +34,8 @@ background resources in `dispose()`; for example, pass it to `fetch()`.
 the **same token**, including agreement on payload format (for example PCM sample rate). Names are descriptive, not structural
 schema matching. Tokens impose no fields on payloads and do not validate values
 at delivery time. Nodes own validation of their data contracts. Unknown nodes,
-unknown ports, incompatible tokens, duplicate connections, duplicate node
-instances and cycles fail during construction. Unknown output emissions report
+unknown ports, incompatible tokens, duplicate connections, multiple incoming
+edges per input, duplicate node instances and cycles fail during construction. Unknown output emissions report
 a node error. Graphs are fixed acyclic graphs for this minimal implementation.
 
 ```js
@@ -58,10 +59,60 @@ using one serial promise queue per node. A slow receiver does not delay another
 branch receiving the same output. Queue limits/coalescing remain processing
 policy; this runtime does not provide generic backpressure or durable storage.
 
-Independent ports are not atomic pairs. Use primitive ports for independent
-values; keep asynchronous correlation inside the responsible node or use a small
-reusable structured result when a paired consumer actually needs it. See the
-[repository contract audit](port-contracts.md) for the text and audio boundaries.
+## Correlated primitive outputs
+
+A producer can publish named values in one logical emission:
+
+```js
+context.emitOutputs({ original: 'Hello', translated: 'こんにちは' });
+// Opt-in consumer, connected directly to both outputs:
+const view = {
+  inputs: { source: TEXT, text: TEXT },
+  async receiveInputs(values, context) {
+    // { source: 'Hello', text: 'こんにちは' } for this emission only
+    await render(values.source, values.text, context.signal);
+  },
+};
+```
+
+The output map is an internal API argument, never a port payload or contract.
+Each connected port still carries its declared value. The runtime snapshots the
+map, validates **all** output names before any delivery, maps connected output
+names to input names, and enqueues **one item per target**. An unknown output
+fails the producer without partially publishing the group. Empty maps do nothing.
+Each target sees only its connected subset; absent outputs stay absent. The
+mapped input map is frozen, while payload references remain read-only by convention.
+
+`receiveInputs(values, context)` opts into complete groups and takes precedence
+over `receive`. It runs once per emission, including singleton `emit()` calls.
+Ordinary Nodes still use `receive(port, value, context)` unchanged: for a group,
+the runtime awaits each connected input in output-map enumeration order within
+that single queue item. Nodes with multiple independent inputs need not opt in.
+Two successive `emit()` calls remain **two singleton groups**.
+
+Per-target queue order is publication order, including equal primitive values
+in consecutive groups. Async input hooks finish before the next item starts.
+Independent fan-out targets have their own queues: a slow or failed branch does
+not delay another. Background inference completing out of order publishes in
+completion order; the producer owns any required input-order buffering. The
+translation scheduler uses a FIFO of finals and versions to invalidate provisional
+jobs before publishing, rather than asking consumers to compare source text.
+
+Correlation is supported between ports emitted together by **one producer and
+connected directly to one receiver**. Separate processor branches are not joined:
+the runtime does not carry hidden IDs across hops, merge groups, wait for missing
+ports, or synchronize independent consumers. A processor may explicitly publish
+a new group, but has to own its association. A receiving group can be a partial
+update by design; consumers must not infer a pair from separate groups or assume
+required graph inputs are included in every emission.
+
+Errors abort the failing target and skip its remaining queued groups; ordinary
+per-port fallback also stops the current group on failure/abort. Previously
+performed side effects are not rolled back. Healthy branches still drain. Dispose
+invalidates queued groups and late outputs immediately, and running hooks must
+observe their signal for external side effects. Graceful Stop drains whole queue
+items and includes groups emitted by upstream Stop hooks before closing consumers.
+These are local delivery guarantees, not transactions or distributed synchronization.
 
 ## Lifecycle and errors
 
@@ -245,15 +296,15 @@ requires no TTS policy or modification.
 
 ## Extension visual graph composition
 
-The [extension graph editor](extension-graph.md) saves a version 4 description
+The [extension graph editor](extension-graph.md) saves a version 5 description
 with concrete production Node types and explicit named-port edges. The extension
 builder constructs this shared Pipeline at each session boundary. ASR, OPUS-MT
 directions, Supertonic 3 and Kokoro remain independent production processors;
 ordinary text flows connect directly through shared `TEXT` ports, and audio
-playback remains a separate Node. Version 1–3 descriptions migrate explicitly
-to version 4, removing extraction adapters while preserving their downstream
-routes and fan-out. No editor, model selection, storage or inference policy is
-added to the generic Pipeline runtime.
+playback remains a separate Node. Version 1–4 descriptions migrate explicitly
+to version 5, removing extraction adapters while preserving their downstream
+routes and fan-out; old paired result edges expand into correlated primitive
+routes. No editor, model selection, storage or inference policy is added to the generic Pipeline runtime.
 
 ## Optional transcript correction
 

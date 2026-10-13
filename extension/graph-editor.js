@@ -46,7 +46,7 @@ export class GraphEditor {
     zoomLabel.append(this.zoomControl); toolbar.append(zoomLabel);
     this.summary = el('p'); this.summary.id = 'graph-state'; this.summary.setAttribute('role', 'status');
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
-    this.hint = el('p', 'Connect: click an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Select a wire on the canvas and press Delete/Backspace to disconnect; Connections buttons also work. Escape clears selection. Translation display: use provisionalText/text for plain TEXT, or provisional/final for paired TEXT_RESULT; disconnect the other mode first. Select a Node heading for settings; drag or use arrow keys to move it.');
+    this.hint = el('p', 'Connect: click an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Select a wire on the canvas and press Delete/Backspace to disconnect; Connections buttons also work. Escape clears selection. Translation display: use provisionalText/text for plain TEXT. For paired rows, connect text, finalSource, finalStatus, finalIndex, finalError directly from one translator; add provisionalText, provisionalSource, provisionalStatus, provisionalError for previews. Separate branches cannot be joined. Select a Node heading for settings; drag or use arrow keys to move it.');
     const workspace = el('div', undefined, 'graph-workspace');
     const palette = el('aside', undefined, 'graph-palette'); palette.setAttribute('aria-label', 'Node palette'); palette.append(el('h2', 'Nodes'));
     for (const [type, definition] of Object.entries(NODE_TYPES)) palette.append(button(`+ ${definition.label}`, null, () => this.addNode(type)));
@@ -205,6 +205,10 @@ export class GraphEditor {
       }
       card.append(ports); this.canvas.append(card);
     }
+    // Multi-output Nodes can be taller than the old fixed card estimate.
+    const renderedHeight = Math.max(height, ...Array.from(this.canvas.querySelectorAll('.graph-node'), card => card.offsetTop + card.offsetHeight + 20));
+    this.canvas.style.height = `${renderedHeight}px`;
+    this.extent.style.height = `${renderedHeight * this.zoom}px`;
     for (const [index, connection] of this.draft.edges.entries()) {
       const row = el('li', `${connection.from.join('.')} → ${connection.to.join('.')} `);
       const disconnect = button('Disconnect', null, () => { this.disconnect(connection); this.connections.querySelectorAll('button')[Math.min(index, this.draft.edges.length - 1)]?.focus(); });

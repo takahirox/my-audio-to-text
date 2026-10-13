@@ -22,7 +22,7 @@ test('direct TEXT input accepts different producers and all audio sources; struc
     assert.deepEqual(validateGraph(graph), []); assert.ok(buildGraph(graph, { onTranscript() {}, onTranslation() {} }).pipeline);
     graph.edges.at(-1).from = ['speech', 'provisional'];
     assert.deepEqual(validateGraph(graph), [], 'TEXT compatibility is independent of producer/port semantics');
-    if (translated) { graph.edges.at(-1).from = ['translation', 'finalResult']; assert.match(validateGraph(graph).join('\n'), /Incompatible port/); }
+    if (translated) { graph.edges.at(-1).from = ['translation', 'finalIndex']; assert.match(validateGraph(graph).join('\n'), /Incompatible port/); }
   }
 });
 test('version 1/2 field graphs migrate persistently, preserve media, and reject ambiguous outputs visibly', () => {
@@ -51,7 +51,7 @@ test('version 3 removes adapters preserving every fan-out route and translation 
     assert.deepEqual(graph, before, 'migration never mutates stored input');
     assert.equal(migrated.nodes.some(node => node.id === 'text'), false);
     for (const id of ['a', 'b']) assert.ok(migrated.edges.some(route => JSON.stringify(route) === JSON.stringify(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', id, 'text'))));
-    if (translated) assert.ok(migrated.edges.some(route => route.from[1] === 'finalResult' && route.to[0] === 'translated'));
+    if (translated) assert.ok(migrated.edges.some(route => route.from[1] === 'finalSource' && route.to[0] === 'translated'));
     graph.edges.find(route => route.to[0] === 'text').from[1] = 'provisional';
     assert.throws(() => assertGraph(graph), /Cannot migrate text adapter.*Reset and Save/);
   }

@@ -4,7 +4,8 @@ export const portContract = name => Object.freeze({ name });
 /**
  * Nodes declare inputs/outputs as { portName: contract }. Optional async hooks:
  * start(context), receive(port, value, context), stop(context), dispose().
- * context provides emit(port, value), fail(error), and an AbortSignal.
+ * context provides emit(port, value), emitOutputs(values), fail(error), and an AbortSignal.
+ * Optional receiveInputs(values, context) receives one emission mapped to input names.
  */
 export class Pipeline {
   constructor({ nodes, connections = [], onError = () => {} }) {
@@ -22,7 +23,7 @@ export class Pipeline {
     }
     const indegree = new Map([...this.entries.keys()].map(id => [id, 0]));
     const edges = new Map([...this.entries.keys()].map(id => [id, []]));
-    const seen = new Set();
+    const seen = new Set(), incoming = new Set();
     for (const { from: [source, output], to: [target, input] } of connections) {
       const a = this.entries.get(source), b = this.entries.get(target);
       if (!a || !b) throw new Error(`Unknown connection node: ${!a ? source : target}`);
@@ -31,10 +32,13 @@ export class Pipeline {
       if (!a.outputs[output] || a.outputs[output] !== b.inputs[input]) {
         throw new Error(`Incompatible port contracts: ${source}.${output} → ${target}.${input}`);
       }
-      if (typeof b.node.receive !== 'function') throw new Error(`Input node ${target} needs receive().`);
+      if (typeof b.node.receive !== 'function' && typeof b.node.receiveInputs !== 'function') throw new Error(`Input node ${target} needs receive() or receiveInputs().`);
       const key = JSON.stringify([source, output, target, input]);
       if (seen.has(key)) throw new Error('Duplicate connection.');
       seen.add(key);
+      const destination = JSON.stringify([target, input]);
+      if (incoming.has(destination)) throw new Error(`Only one connection allowed to ${target}.${input}`);
+      incoming.add(destination);
       if (!a.routes.has(output)) a.routes.set(output, []);
       a.routes.get(output).push({ entry: b, port: input });
       edges.get(source).push(target);
@@ -54,6 +58,7 @@ export class Pipeline {
       entry.context = Object.freeze({
         signal: entry.controller.signal,
         emit: (port, value) => this.emit(entry, port, value),
+        emitOutputs: values => this.emitOutputs(entry, values),
         fail: error => this.fail(entry, error),
       });
     }
@@ -66,16 +71,36 @@ export class Pipeline {
     // Observer failures cannot break delivery to another branch.
     try { this.onError(error, entry.id); } catch { /* errors remain available */ }
   }
-  emit(entry, port, value) {
+  emit(entry, port, value) { this.emitOutputs(entry, { [port]: value }); }
+  emitOutputs(entry, values) {
     if (!entry.active || entry.closed || entry.failed || this.state === 'disposed') return;
-    if (!Object.hasOwn(entry.outputs, port)) {
+    if (!values || typeof values !== 'object' || Array.isArray(values)) {
+      this.fail(entry, new TypeError('emitOutputs needs a named output map.')); return;
+    }
+    // Snapshot and validate the entire group before enqueueing any branch.
+    const outputs = Object.entries(values);
+    for (const [port] of outputs) if (!Object.hasOwn(entry.outputs, port)) {
       this.fail(entry, new Error(`Unknown output port: ${entry.id}.${port}`)); return;
     }
-    // Enqueue every branch immediately. Each node serializes its own inputs.
-    for (const { entry: target, port: input } of entry.routes.get(port) || []) {
+    const deliveries = new Map();
+    for (const [port, value] of outputs) {
+      for (const { entry: target, port: input } of entry.routes.get(port) || []) {
+        if (!deliveries.has(target)) deliveries.set(target, {});
+        Object.defineProperty(deliveries.get(target), input, { value, enumerable: true });
+      }
+    }
+    for (const [target, inputs] of deliveries) {
+      Object.freeze(inputs);
+      // One queue item per target: no interleaving while an async hook runs.
       target.queue = target.queue.then(async () => {
-        if (!target.active || target.closed || target.failed || this.state === 'disposed') return;
-        await target.node.receive(input, value, target.context);
+        const live = () => target.active && !target.closed && !target.failed && this.state !== 'disposed';
+        if (!live()) return;
+        if (typeof target.node.receiveInputs === 'function') {
+          await target.node.receiveInputs(inputs, target.context);
+        } else for (const [input, value] of Object.entries(inputs)) {
+          if (!live()) return;
+          await target.node.receive(input, value, target.context);
+        }
       }).catch(error => this.fail(target, error));
     }
   }

@@ -33,7 +33,7 @@ export class TabSession {
     const hasTranscriptView = graph.nodes.some(node => node.type === 'TranscriptView');
     const translationView = graph.nodes.find(node => node.type === 'TranslationView');
     const hasTranslationView = !!translationView;
-    const plainTranslation = graph.edges.some(route => route.to[0] === translationView?.id && ['provisionalText', 'text'].includes(route.to[1]));
+    const plainTranslation = !!translationView && !graph.edges.some(route => route.to[0] === translationView.id && route.to[1] === 'finalSource');
     const transcript = graph.nodes.find(node => node.type === 'TranscriptView');
     const speech = graph.nodes.find(node => node.type === 'SpeechToText');
     const hasSpeechPreview = graph.edges.some(route => route.from[0] === speech.id && route.from[1] === 'provisional'
@@ -117,7 +117,15 @@ export class TabSession {
             this.update({ translatedText: this.view.translatedText + (value.trim() ? `${value}\n` : '') });
             return;
           }
-          if (port === 'provisional') {
+        },
+        onTranslationInputs: (values, context) => {
+          if (this.session !== session || context.signal.aborted) return;
+          const provisional = Object.hasOwn(values, 'provisionalStatus');
+          const prefix = provisional ? 'provisional' : 'final';
+          const value = { source: values[`${prefix}Source`], status: values[`${prefix}Status`],
+            error: values[`${prefix}Error`], text: values[provisional ? 'provisionalText' : 'text'] || '',
+            ...(provisional ? {} : { index: values.finalIndex }) };
+          if (provisional) {
             if (this.view.state !== 'stopping') this.update({
               ...(!hasTranscriptView ? { partial: value.source } : {}),
               interimTranslation: value.status === 'pending' && this.view.interimTranslation

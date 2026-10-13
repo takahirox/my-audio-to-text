@@ -257,7 +257,9 @@ window immediately cancels pending work; transcripts are not persisted.
 
 The outer graph explicitly connects `SpeechToTextNode.provisional/final` to
 `TranslationSchedulerNode.provisional/text`, and separate
-`provisionalResult/finalResult` outputs to the paired view. Successful `text`
+grouped primitive source/status/error/index/text outputs directly to the paired view.
+The view opts into `receiveInputs`; version 4 paired-result routes migrate explicitly
+to version 5 primitive routes, while TEXT-only routes stay intact. Successful `text`
 outputs connect directly to TTS or focused-field sinks. This session-owned
 adapter takes plain provisional/final TEXT strings into an owned
 inner graph: `source.text → OpusMtTranslationNode.text → TextOutputNode.text`
