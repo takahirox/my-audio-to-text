@@ -51,14 +51,14 @@ test('real ASR adapter exposes provisional/final through one core and drains the
   const pcm = new Float32Array(8000).fill(0.05);
   f.capture.audio(pcm); await tick(); f.classify(); f.finish(0, 'provisional'); await tick();
   assert.equal(pcm.length, 8000, 'fan-out payload ownership remains with caller');
-  assert.deepEqual(f.values, [['provisional', { text: 'provisional', id: 1 }]]);
+  assert.deepEqual(f.values, [['provisional', 'provisional']]);
   let drained = false; const stopping = f.pipeline.stop().then(() => { drained = true; });
   await tick(); assert.equal(drained, false); f.classify();
   const stop = f.workers[1].messages.find(m => m.type === 'vad-stop');
   f.workers[1].reply({ type: 'vad-stopped', session: stop.session });
   assert.equal(f.decodes()[1].audio.length, 8037);
   f.finish(1, ' '); await stopping;
-  assert.deepEqual(f.values.at(-1), ['final', { text: 'provisional', id: 1 }]);
+  assert.deepEqual(f.values.at(-1), ['final', 'provisional']);
   assert.equal(f.pipeline.state, 'stopped'); assert.equal(f.workers.length, 2);
   await f.pipeline.dispose(); assert.ok(f.workers.every(w => w.terminated));
 });
@@ -128,8 +128,8 @@ test('a drained speech node hands warm workers to a fresh graph with isolated po
   f.speech.receiveEvent({ type: 'final', id: 1, text: 'stale' });
   f.workers[0].reply({ type: 'final', session: 1, id: 1, text: 'stale' });
   source.source.audio(new Float32Array(8000).fill(0.05)); await tick(); f.classify(); f.finish(2, 'second'); await tick();
-  assert.deepEqual(values, [['provisional', { text: 'second', id: 1 }]]);
-  assert.deepEqual(f.values.at(-1), ['final', { text: 'first final', id: 1 }]);
+  assert.deepEqual(values, [['provisional', 'second']]);
+  assert.deepEqual(f.values.at(-1), ['final', 'first final']);
   await pipeline.dispose(); assert.ok(f.workers.every(w => w.terminated));
   assert.throws(() => speech.nextSession(), /successfully drained/);
 });

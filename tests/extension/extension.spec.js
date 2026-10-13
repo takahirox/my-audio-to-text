@@ -151,7 +151,7 @@ test('Stop waits for the final transcript port before completion and disposal', 
   await expect(page.locator('#partial')).toHaveText('extension transcript');
   await page.evaluate(() => { window.holdTranscript = true; });
   await page.locator('#stop').click();
-  await expect.poll(() => page.evaluate(() => window.heldTranscript?.text)).toBe('extension transcript');
+  await expect.poll(() => page.evaluate(() => window.heldTranscript)).toBe('extension transcript');
   await expect(page.locator('#status')).toHaveText('Finalizing transcript…');
   await expect(page.locator('#final')).toBeEmpty();
   await expect(page.locator('#start')).toBeDisabled();

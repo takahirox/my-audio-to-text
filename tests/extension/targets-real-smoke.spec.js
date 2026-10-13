@@ -26,8 +26,8 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and the same-ta
     await live.evaluate(async () => {
       const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
       const graph = defaultGraph({ enabled: false });
-      graph.nodes.push(graphNode('FinalText', 'text'), graphNode('FocusedInputTextOutputNode', 'field'));
-      graph.edges.push(edge('speech', 'final', 'text', 'final'), edge('text', 'text', 'field', 'text'));
+      graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'field'));
+      graph.edges.push(edge('speech', 'final', 'field', 'text'));
       saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
     });
     const website = await context.newPage(); await website.goto(`http://127.0.0.1:${server.address().port}/`);

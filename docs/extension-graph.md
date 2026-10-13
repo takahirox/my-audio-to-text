@@ -36,20 +36,21 @@ translation enablement/direction preferences migrate once, including a saved
 transcription-only choice. The editor's **Draft translation** controls edit this
 same graph and require Save; there is no second preferences store. Removing
 OPUS-MT also removes its view and dependent translated-audio branch.
-Version 1/2 descriptions migrate to version 3 using the same storage key.
-Legacy focused/selected field sinks with one unambiguous final route become a
-focused TEXT sink plus FinalText or TranslatedFinalText; an existing matching
-adapter is reused. Selected-field picking is removed. Ambiguous/malformed routes
-fail visibly; Reset and Save in Graph Editor, then reconnect the explicit text
-path to recover. Outputs are never silently dropped. Page/media handles are
-never saved with a graph. Media selection is still available in Live.
+Version 1/2/3 descriptions migrate explicitly to version 4 using the same
+storage key. Legacy field sinks become focused TEXT sinks. `FinalText` and
+`TranslatedFinalText` are removed by reconnecting every downstream route to the
+producer's final string output; fan-out is preserved. TranslationView routes
+move to optional paired result ports. Ambiguous/malformed routes fail visibly;
+Reset and Save in Graph Editor, then reconnect the desired text paths to recover.
+Outputs are never silently dropped. Page/media handles are never saved with a
+graph. Media selection is still available in Live.
 A corrupt/unknown-version saved graph displays an error and prevents Start
 until a valid graph is saved. Reset and Save in the editor to recover. Storage
 failures remain visible.
 
 ## Supported graph and ports
 
-The version 3 description is JSON with `version`, `nodes` and `edges`. Each Node
+The version 4 description is JSON with `version`, `nodes` and `edges`. Each Node
 has `id`, concrete `type`, `settings`, and `position: { x, y }`. Each edge has
 `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`. No implicit routes, payload
 wrappers, model registry or remote execution are added. [The schema and default](../extension/graph.js)
@@ -62,13 +63,11 @@ constructs a real `Pipeline` with exactly those named-port edges.
 | SelectedPageMediaAudio | — | audio: selected element only, normalized mono 16 kHz PCM |
 | MicrophoneAudio | — | audio: explicitly permitted microphone, normalized mono 16 kHz PCM |
 | FocusedInputTextOutputNode | text: TEXT (one plain string input) | append to user-focused field in the toolbar-invoked document |
-| SpeechToText | audio: captured PCM | provisional/final: TRANSCRIPT; SpeechToTextNode |
-| TranscriptView | provisional/final: TRANSCRIPT | original/provisional/final UI; TranscriptOutputNode |
-| OpusMtJaEn | provisional/final: TRANSCRIPT | provisional/final: paired TRANSLATION; TranslationSchedulerNode with OpusMtTranslationNode |
-| OpusMtEnJa | provisional/final: TRANSCRIPT | provisional/final: paired TRANSLATION; TranslationSchedulerNode with EnglishToJapaneseOpusMtTranslationNode |
-| TranslationView | provisional/final: TRANSLATION | paired, ordered original/translated rows |
-| FinalText | final: TRANSCRIPT | text: plain TEXT string |
-| TranslatedFinalText | final: TRANSLATION | text: completed final translation only; skips pending/errors |
+| SpeechToText | audio: captured PCM | provisional/final: TEXT; SpeechToTextNode |
+| TranscriptView | provisional (optional)/final: TEXT | original/provisional/final UI; TranscriptOutputNode |
+| OpusMtJaEn | provisional (optional)/text: TEXT | provisional/text: TEXT, provisionalResult/finalResult: TEXT_RESULT; TranslationSchedulerNode with OpusMtTranslationNode |
+| OpusMtEnJa | provisional (optional)/text: TEXT | provisional/text: TEXT, provisionalResult/finalResult: TEXT_RESULT; TranslationSchedulerNode with EnglishToJapaneseOpusMtTranslationNode |
+| TranslationView | provisional (optional)/final: TEXT_RESULT | paired, ordered original/translated rows |
 | Supertonic3 | text: TEXT | audio: SYNTHESIZED_AUDIO; Supertonic3TextToSpeechNode (ja/en, F1/M1) |
 | Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; KokoroTextToSpeechNode (Japanese jf_alpha / English af_heart) |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | separate native audio player / WAV; AudioOutputNode |
@@ -76,13 +75,13 @@ constructs a real `Pipeline` with exactly those named-port edges.
 Exactly one audio source and one ASR are required. At least one output destination
 is required; original and translation views are independent optional sinks.
 Multiple source Nodes are rejected before capture to avoid mixing ASR state. At most one paired
-translation branch is supported, connected to the same ASR provisional/final
-ports as the original view. Both view ports must be connected, preserving row
-indices/order. Final-text adapters must connect to the matching final source.
-Every input needs exactly one producer; every processor/source needs a connected
-output. Extra dangling Nodes, unknown types/settings/ports, incompatible contract
-identities, duplicate IDs/edges, cycles, missing connections and inconsistent
-view/OPUS direction fail validation before Save or any Worker/capture startup.
+translation branch is supported by the Live session coordinator. Edges are
+validated by shared contract identity, independent of producer identity. Interim
+inputs are optional; final/text inputs remain required. View streams are
+independent: a transcript view can consume a translated TEXT stream, while the
+paired view retains its own source/result/status from one atomic result.
+Unknown types/settings/ports, duplicate edges, multiple connections to one
+input, missing required inputs and cycles fail before Save or Worker startup.
 Graphs are bounded to 24 Nodes/64 edges. ASR audio and generated TTS audio have
 different contract identities and cannot connect interchangeably.
 
@@ -93,13 +92,12 @@ Node and route; Live chooses the temporary browser target. Toolbar invocation
 selects the capture tab. The default remains whole-tab audio → ASR → Live with
 optional paired translation; it injects nothing into the page.
 
-For page output, connect `SpeechToText.final → FinalText.final`, then
-`FinalText.text → FocusedInputTextOutputNode.text`. For translations use
-`OPUS-MT.final → TranslatedFinalText.final`, then
-`TranslatedFinalText.text → FocusedInputTextOutputNode.text`. TRANSCRIPT and
-TRANSLATION cannot connect directly to TEXT. Adapter outputs can fan out to
-other TEXT consumers, including TTS; ASR/translation still fan out to Live.
+For page output, connect `SpeechToText.final → FocusedInputTextOutputNode.text`
+or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. Text can fan out to
+TTS and other TEXT consumers while ASR/translation independently feed Live.
 The sink knows only strings, not model identity, translation status or IDs.
+Select final/completed ports for insertion; provisional ports have replacement
+semantics and should feed preview consumers. See the [contract audit](port-contracts.md).
 
 Invoke the toolbar on the desired normal web page. A configured focused sink
 automatically prepares that tab's top-level Chrome document using `activeTab`
@@ -179,9 +177,9 @@ Microphone requires no capture tab and is not mixed with tab/media capture.
 
 ## Optional TTS paths
 
-Connect SpeechToText.final → FinalText.final → Supertonic3.text (or Kokoro.text)
-→ AudioOutput.audio. To speak translations, use OPUS-MT.final →
-TranslatedFinalText.final instead. Final adapters emit whole utterances. The TTS
+Connect SpeechToText.final → Supertonic3.text (or Kokoro.text) → AudioOutput.audio.
+To speak translations, connect OPUS-MT.text directly to TTS.text. These outputs
+emit whole utterances; pending/error diagnostics use separate ports. The TTS
 branch splits long text into ordered snippets of at most 300 UTF-16 units without splitting surrogate pairs; this
 respects production TTS's input limit. Choose the language/voice matching that
 text. This is not automatic language/voice detection.
@@ -285,7 +283,7 @@ EXTENSION_TARGET_SMOKE=1 npm run test:extension -- tests/extension/targets-real-
 
 This uses the committed checksum-pinned English speech WAV, native tabCapture,
 the real bundled ReazonSpeech/Silero workers, automatic same-tab preparation,
-and FinalText → focused TEXT insertion concurrently with Live, without inference
+and ASR final TEXT → focused insertion concurrently with Live, without inference
 mocks or remote traffic. It compares every confirmed Live utterance to appended
 field text after Stop. [Recorded real-ASR evidence](evidence/graph-87-real-asr-field.json)
 contains counts/runtime metadata without transcripts.

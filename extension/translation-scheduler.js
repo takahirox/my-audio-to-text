@@ -1,15 +1,15 @@
-import { Pipeline, portContract } from '../web/pipeline.js';
-import { TRANSCRIPT } from '../web/transcription-nodes.js';
+import { Pipeline } from '../web/pipeline.js';
+import { TEXT_RESULT } from '../web/port-contracts.js';
 import { OpusMtTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
 
-export const TRANSLATION = portContract('paired translation { source, text, status, index }');
+export { TEXT_RESULT } from '../web/port-contracts.js';
 
 // Session-owned adapter, not a generic queue: one in flight, one replaceable
 // provisional, and a FIFO of finals. receive() never waits for inference, so
 // Pipeline's input serialization cannot accumulate obsolete provisional work.
 export class TranslationSchedulerNode {
-  inputs = { provisional: TRANSCRIPT, final: TRANSCRIPT };
-  outputs = { provisional: TRANSLATION, final: TRANSLATION };
+  inputs = { provisional: TEXT, text: TEXT };
+  outputs = { provisional: TEXT, text: TEXT, provisionalResult: TEXT_RESULT, finalResult: TEXT_RESULT };
   constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, onState = () => {} } = {}) {
     this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
     this.finals = []; this.version = 0; this.finalIndex = 0;
@@ -36,22 +36,36 @@ export class TranslationSchedulerNode {
   emit(job, status, text = '', error = '') {
     if (this.disposed || this.context.signal.aborted) return;
     if (job.port === 'provisional' && job.version !== this.version) return;
-    this.context.emit(job.port, { source: job.source, index: job.index, status, text, error });
+    this.context.emit(job.port === 'provisional' ? 'provisionalResult' : 'finalResult',
+      { source: job.source, index: job.index, status, text, error });
+    // Pending/error notifications never enter a reusable text-processing path.
+    if (status === 'complete') this.context.emit(job.port, text);
+  }
+  clearProvisional() {
+    this.provisional = null;
+    if (!this.previewActive) return;
+    this.previewActive = false;
+    // Clear at invalidation, before final inference. An older final completion
+    // must not clear a newer preview, and only this scheduler owns this stream.
+    this.emit({ port: 'provisional', source: '', version: this.version }, 'complete');
   }
   receive(port, source) {
+    if (!['provisional', 'text'].includes(port) || typeof source !== 'string') throw new TypeError('Expected TEXT on provisional or text.');
     if (this.disposed || (port === 'provisional' && this.stopping)) return;
-    if (!source.text.trim()) {
-      this.version++; this.provisional = null;
+    if (!source.trim()) {
+      this.version++;
+      if (port === 'provisional') this.previewActive = true; // explicit empty updates also clear consumers
+      this.clearProvisional();
       return;
     }
-    const job = { port, source: { ...source }, version: ++this.version };
-    if (port === 'final') {
+    const job = { port, source, version: ++this.version };
+    if (port === 'text') {
       job.index = this.finalIndex++;
-      this.provisional = null; // invalidate queued and in-flight provisional
-    }
+      this.clearProvisional(); // invalidate queued, in-flight and displayed provisional
+    } else this.previewActive = true;
     if (this.error) { this.emit(job, 'error', '', this.error); return; }
     this.emit(job, 'pending');
-    if (port === 'final') this.finals.push(job);
+    if (port === 'text') this.finals.push(job);
     else this.provisional = job;
     this.pump();
   }
@@ -66,13 +80,13 @@ export class TranslationSchedulerNode {
     while (!this.disposed && !this.error && (this.finals.length || this.provisional)) {
       const job = this.finals.shift() || this.provisional;
       if (job === this.provisional) this.provisional = null;
-      if (job.source.text.length > 1000) {
+      if (job.source.length > 1000) {
         this.emit(job, 'error', '', 'OPUS-MT accepts at most 1,000 characters per utterance.'); continue;
       }
       try {
         const text = await new Promise((resolve, reject) => {
           this.active = { job, resolve, reject };
-          this.send(job.source.text);
+          this.send(job.source);
         });
         this.emit(job, 'complete', text);
       } catch (error) { if (!this.disposed) this.emit(job, 'error', '', error.message); }
@@ -89,7 +103,7 @@ export class TranslationSchedulerNode {
     this.provisional = null;
     void this.translation?.dispose().catch(() => {});
   }
-  discardProvisional() { this.stopping = true; this.version++; this.provisional = null; }
+  discardProvisional() { this.stopping = true; this.version++; this.clearProvisional(); }
   async stop() {
     this.discardProvisional();
     await this.ready;

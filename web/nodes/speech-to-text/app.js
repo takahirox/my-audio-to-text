@@ -32,8 +32,8 @@ function createFlow(speech = new SpeechToTextNode()) {
     onAudio: chunk => { if (isCurrent()) audio(chunk); },
     onEnded: () => { if (isCurrent()) void stop(); },
   });
-  const transcript = new TranscriptOutputNode((port, value) => {
-    if (isCurrent()) receiveTranscript(port, value);
+  const transcript = new TranscriptOutputNode((port, text) => {
+    if (isCurrent()) receiveTranscript(port, text);
   });
   const pipeline = new Pipeline({ nodes: { source, speech, transcript }, connections: [
     { from: ['source', 'audio'], to: ['speech', 'audio'] },
@@ -84,19 +84,19 @@ function receive(data) {
     diagnostics();
   }
 }
-function receiveTranscript(port, data) {
+function receiveTranscript(port, text) {
   const type = port === 'provisional' ? 'partial' : 'final';
   if (type === 'partial' && state === 'stopping') return;
-  if (data.text.trim()) {
+  if (text.trim()) {
     if (type === 'partial') partialCount++; else finalCount++;
     diagnostics();
   }
-  if (data.text.trim() && !firstText) { firstText = true; $('first-text').textContent = time(performance.now() - startedAt); }
+  if (text.trim() && !firstText) { firstText = true; $('first-text').textContent = time(performance.now() - startedAt); }
   if (type === 'partial') {
-    if (data.text.trim() && !firstPartial) { firstPartial = true; $('first-partial').textContent = time(performance.now() - startedAt); }
-    $('partial').textContent = data.text;
+    if (text.trim() && !firstPartial) { firstPartial = true; $('first-partial').textContent = time(performance.now() - startedAt); }
+    $('partial').textContent = text;
   } else {
-    if (data.text.trim()) $('final').textContent += `${data.text}\n`;
+    if (text.trim()) $('final').textContent += `${text}\n`;
     $('partial').textContent = '';
   }
 }

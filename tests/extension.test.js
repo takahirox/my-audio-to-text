@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { spawnSync } from 'node:child_process';
 import { Pipeline } from '../web/pipeline.js';
-import { MONO_16KHZ_PCM, TRANSCRIPT } from '../web/transcription-nodes.js';
+import { MONO_16KHZ_PCM, TEXT } from '../web/transcription-nodes.js';
 import { TabSession } from '../extension/session.js';
 import { defaultGraph, graphNode, edge } from '../extension/graph.js';
 
@@ -58,8 +58,8 @@ function fieldOutputs({ live = true } = {}) {
     graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
     graph.edges = graph.edges.filter(edge => edge.to[0] !== 'transcript');
   }
-  graph.nodes.push(graphNode('FinalText', 'text'), graphNode('FocusedInputTextOutputNode', 'focused'));
-  graph.edges.push(edge('speech', 'final', 'text', 'final'), edge('text', 'text', 'focused', 'text'));
+  graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'focused'));
+  graph.edges.push(edge('speech', 'final', 'focused', 'text'));
   return graph;
 }
 
@@ -106,8 +106,8 @@ test('extension session emits provisional/final output, flushes once and clears 
     ['ExtensionTabAudioNode', 'SpeechToTextNode', 'TranscriptOutputNode']);
   assert.equal(graph.entries.get('audio').outputs.audio, MONO_16KHZ_PCM);
   assert.equal(graph.entries.get('speech').inputs.audio, MONO_16KHZ_PCM);
-  assert.equal(graph.entries.get('transcript').inputs.provisional, TRANSCRIPT);
-  assert.equal(graph.entries.get('transcript').inputs.final, TRANSCRIPT);
+  assert.equal(graph.entries.get('transcript').inputs.provisional, TEXT);
+  assert.equal(graph.entries.get('transcript').inputs.final, TEXT);
   sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
   assert.equal(session.view.partial, 'provisional text');
   await session.start(99); assert.equal(sources.length, 1, 'live capture cannot be retargeted');

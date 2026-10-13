@@ -77,7 +77,7 @@ leave already cached complete files; partial responses are not usable entries.
 
 ```js
 import { Pipeline } from './pipeline.js';
-import { SpeechTranscriptCorrectionNode, FinalTranscriptTextNode } from './correction-nodes.js';
+import { SpeechTranscriptCorrectionNode } from './correction-nodes.js';
 
 // speech, originalTranscriptView, correctedTextView and translation are
 // consumers/processors supplied by the application. No default graph changes.
@@ -88,12 +88,10 @@ const correction = new SpeechTranscriptCorrectionNode({
   onEvent: event => console.log(event),
 });
 const graph = new Pipeline({
-  nodes: { speech, originalTranscriptView, finalText: new FinalTranscriptTextNode(),
-    correction, correctedTextView, translation },
+  nodes: { speech, originalTranscriptView, correction, correctedTextView, translation },
   connections: [
     { from: ['speech', 'final'], to: ['originalTranscriptView', 'final'] },
-    { from: ['speech', 'final'], to: ['finalText', 'final'] },
-    { from: ['finalText', 'text'], to: ['correction', 'text'] },
+    { from: ['speech', 'final'], to: ['correction', 'text'] },
     { from: ['correction', 'text'], to: ['correctedTextView', 'text'] },
     { from: ['correction', 'text'], to: ['translation', 'text'] },
   ],
@@ -102,14 +100,13 @@ await graph.start();
 // Later: await graph.stop(); await graph.dispose();
 ```
 
-The adapter only extracts `transcript.text`; it never mutates `{text, id}`.
-Connect **final**, not provisional. Both ASR ports have the same transcript
-contract, so choosing the final port is an explicit consumer graph policy.
-Utterance IDs/alignment stay with original consumers. The Pipeline serializes
-inputs and drains candidate delivery in order; the processor carries no generic
-metadata. Downstream applications decide how candidates are presented/accepted.
+Connect `SpeechToTextNode.final` directly to `correction.text`. Both ASR ports
+carry `TEXT` strings; choosing **final** is an explicit graph policy for consumers
+that commit text. ASR IDs remain inside the core/node. The Pipeline serializes
+inputs and drains candidate delivery in order. Downstream applications decide
+how candidates are presented/accepted. No extraction adapter is needed.
 
-To omit correction, connect the final-text adapter directly to text consumers.
+To omit correction, connect `speech.final` directly to text consumers.
 `enabled: false` offers a direct bypass. With `onFailure: 'bypass'`, loading
 and communication failures release the Worker, emit a `bypass` diagnostic,
 pass the original text, and bypass remaining inputs in that session. Inference

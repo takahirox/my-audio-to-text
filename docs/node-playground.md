@@ -127,3 +127,9 @@ pending status until completed; see [translation verification](translation-nodes
 For #71 the new canonical `/my-audio-to-text/nodes/opus-mt-en-ja/` page has a
 **pending** post-merge deployed-SHA/URL/worker/model verification gate; see
 [Issue #71 evidence](evidence/translation-direction-71.md).
+
+Shared speech outputs `provisional` and `final` are `TEXT` strings, compatible
+with translation, correction and TTS inputs directly. Select `final` for sinks
+that commit text; no extraction adapter or metadata connection is required.
+See the [contract audit](port-contracts.md) and deterministic
+`tests/browser/text-contracts.spec.js` composition test.

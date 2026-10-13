@@ -1,8 +1,8 @@
 import { BrowserTab, Microphone } from './audio.js';
 import { LocalAsrCore } from './local-asr-core.js';
 import { Pipeline, portContract } from './pipeline.js';
-import { TRANSCRIPT } from './port-contracts.js';
-export { TRANSCRIPT } from './port-contracts.js';
+import { TEXT } from './port-contracts.js';
+export { TEXT } from './port-contracts.js';
 
 export const MONO_16KHZ_PCM = portContract('mono 16 kHz Float32Array PCM');
 
@@ -79,7 +79,7 @@ export class MicrophoneAudioNode extends BrowserAudioNode {
 
 export class SpeechToTextNode {
   inputs = { audio: MONO_16KHZ_PCM };
-  outputs = { provisional: TRANSCRIPT, final: TRANSCRIPT };
+  outputs = { provisional: TEXT, final: TEXT };
   constructor({ onEvent = () => {}, workerFactory } = {}) {
     this.onEvent = onEvent;
     // This node alone owns the existing isolated ASR and VAD workers.
@@ -94,9 +94,13 @@ export class SpeechToTextNode {
       this.loading?.reject(error); this.draining?.reject(error);
       this.context?.fail(error);
     } else if (event.type === 'partial' || event.type === 'final') {
-      this.context?.emit(event.type === 'partial' ? 'provisional' : 'final', {
-        text: event.text, id: event.id,
-      });
+      // Deduplicate worker finals here, before fan-out. Identical strings with
+      // different utterance IDs remain distinct values; IDs stay core-local.
+      if (event.type === 'final' && Number.isSafeInteger(event.id) && event.id >= 0) {
+        if (event.id <= (this.lastFinalId ?? -1)) return;
+        this.lastFinalId = event.id;
+      }
+      this.context?.emit(event.type === 'partial' ? 'provisional' : 'final', event.text);
     }
     this.onEvent(event);
   }
@@ -150,7 +154,7 @@ function deferred() {
 }
 
 export class TranscriptOutputNode {
-  inputs = { provisional: TRANSCRIPT, final: TRANSCRIPT };
+  inputs = { provisional: TEXT, final: TEXT };
   outputs = {};
   constructor(onTranscript = () => {}) { this.onTranscript = onTranscript; }
   receive(port, value, context) { return this.onTranscript(port, value, context.signal); }

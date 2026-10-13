@@ -2,10 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Pipeline } from '../web/pipeline.js';
-import { TRANSCRIPT } from '../web/transcription-nodes.js';
-import { TEXT, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
+import { TEXT, TextOutputNode, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
 import { OPUS_MT, OPUS_MT_EN_JA } from '../web/translation-models.js';
-import { TranslationSchedulerNode, TRANSLATION } from '../extension/translation-scheduler.js';
+import { TranslationSchedulerNode, TEXT_RESULT } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
 import { defaultGraph } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
@@ -41,13 +40,13 @@ async function schedulerGraph(options = {}) {
     TranslationNode: options.direction === 'en-ja' ? EnglishToJapaneseOpusMtTranslationNode : undefined,
     onState: state => states.push(state) });
   const pipeline = new Pipeline({ nodes: {
-    source: { inputs: {}, outputs: { provisional: TRANSCRIPT, final: TRANSCRIPT }, start(context) { emit = context.emit; } },
-    scheduler, sink: { inputs: { provisional: TRANSLATION, final: TRANSLATION }, outputs: {}, receive(port, value) { outputs.push({ port, ...value }); } },
+    source: { inputs: {}, outputs: { provisional: TEXT, final: TEXT }, start(context) { emit = context.emit; } },
+    scheduler, sink: { inputs: { provisional: TEXT_RESULT, final: TEXT_RESULT }, outputs: {}, receive(port, value) { outputs.push({ port, ...value }); } },
   }, connections: ['provisional', 'final'].flatMap(port => [
-    { from: ['source', port], to: ['scheduler', port] }, { from: ['scheduler', port], to: ['sink', port] },
+    { from: ['source', port], to: ['scheduler', port === 'final' ? 'text' : port] }, { from: ['scheduler', port === 'final' ? 'finalResult' : 'provisionalResult'], to: ['sink', port] },
   ]) });
   await pipeline.start();
-  const send = (port, text, id = text) => emit(port, { text, id });
+  const send = (port, text) => emit(port, text);
   return { ...f, pipeline, scheduler, outputs, states, send };
 }
 
@@ -73,18 +72,19 @@ test(`${direction}: explicit Pipeline adapter coalesces rapid provisional update
   assert.ok(f.workers[0].url.pathname.endsWith(direction === 'en-ja' ? '/opus-mt-en-ja-worker.js' : '/opus-mt-worker.js'));
   for (let i = 0; i < 100; i++) f.send('provisional', `update ${i}`);
   await tick();
-  assert.equal(f.requests.length, 1); assert.equal(f.scheduler.provisional.source.text, 'update 99');
+  assert.equal(f.requests.length, 1); assert.equal(f.scheduler.provisional.source, 'update 99');
   f.send('final', 'final one'); f.send('final', 'final two'); f.send('provisional', 'new utterance'); await tick();
   f.complete(0); await tick();
   assert.equal(f.requests[1].text, 'final one');
-  assert.equal(f.outputs.filter(value => value.status === 'complete').length, 0, 'old interim suppressed');
+  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => [value.port, value.source]),
+    [['provisional', '']], 'old interim suppressed and its preview explicitly cleared');
   // A duplicate delayed reply cannot resolve the active final request.
   f.complete(0, 'stale duplicate'); await tick(); assert.equal(f.requests.length, 2);
   f.complete(1); await tick(); assert.equal(f.requests[2].text, 'final two');
   f.complete(2); await tick(); assert.equal(f.requests[3].text, 'new utterance');
   f.complete(3); await tick();
-  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => [value.port, value.source.text, value.index]),
-    [['final', 'final one', 0], ['final', 'final two', 1], ['provisional', 'new utterance', undefined]]);
+  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => [value.port, value.source, value.index]),
+    [['provisional', '', undefined], ['final', 'final one', 0], ['final', 'final two', 1], ['provisional', 'new utterance', undefined]]);
   await f.pipeline.stop(); await f.pipeline.dispose(); assert.ok(f.workers.every(worker => worker.terminated));
 });
 
@@ -92,7 +92,7 @@ test(`${direction}: latest matching provisional completes; Stop drops queued int
   const f = await graph();
   f.send('provisional', 'old'); await tick();
   f.send('provisional', 'latest'); await tick(); f.complete(0); await tick(); f.complete(1); await tick();
-  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => value.source.text), ['latest']);
+  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => value.source), ['latest']);
   f.send('final', 'one'); f.send('final', 'two'); f.send('provisional', 'obsolete'); await tick();
   let stopped = false; const stopping = f.pipeline.stop().then(() => { stopped = true; });
   await tick(); assert.equal(stopped, false);
@@ -142,10 +142,10 @@ test(`${direction}: overlong final reports error without losing subsequent valid
 }
 
 test('UI distinguishes matching, pending, older interim, failed and canceled translation', () => {
-  const complete = { status: 'complete', source: { text: 'old' }, text: 'English old' };
+  const complete = { status: 'complete', source: 'old', text: 'English old' };
   assert.equal(provisionalLabel('old', complete, true), 'English old');
   assert.match(provisionalLabel('new', complete, true), /Translating… Older interim: English old/);
-  assert.match(provisionalLabel('new', { status: 'pending', source: { text: 'new' }, previous: complete }, true), /Original for older translation: old/);
+  assert.match(provisionalLabel('new', { status: 'pending', source: 'new', previous: complete }, true), /Original for older translation: old/);
   assert.equal(provisionalLabel('new', null, false), 'Translation off');
   assert.equal(translationLabel({ status: 'error', error: 'cache missing' }), 'Translation failed: cache missing');
   assert.equal(translationLabel({ status: 'canceled' }), 'Translation canceled');
@@ -219,6 +219,69 @@ for (const direction of ['ja-en', 'en-ja']) for (const transcript of [false, tru
   });
 }
 
+for (const direction of ['ja-en', 'en-ja']) for (const paired of [false, true]) test(`${direction}: delayed translated finals preserve the current ASR preview ${paired ? 'with' : 'without'} paired metadata`, async () => {
+  const f = sessionFixture(), graph = defaultGraph({ direction });
+  if (!paired) {
+    graph.nodes = graph.nodes.filter(node => node.type !== 'TranslationView');
+    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
+  }
+  graph.edges = graph.edges.filter(route => !(route.to[0] === 'transcript' && route.to[1] === 'final')
+    && !(route.to[0] === 'translation' && route.to[1] === 'provisional'));
+  graph.edges.push({ from: ['translation', 'text'], to: ['transcript', 'final'] });
+  f.session.setGraph(graph); await f.session.start(42);
+  const speech = f.session.session.speech;
+  // Finalization also clears provisional deliveries still queued at the sink.
+  speech.receiveEvent({ type: 'partial', text: 'same', id: 0 });
+  speech.receiveEvent({ type: 'final', text: 'same', id: 0 }); await tick();
+  assert.equal(f.session.view.partial, ''); assert.equal(f.translation.requests.length, 1);
+  speech.receiveEvent({ type: 'partial', text: 'same', id: 1 }); await tick();
+  assert.equal(f.session.view.partial, 'same');
+  f.translation.complete(0, 'first translation'); await tick();
+  assert.equal(f.session.view.final, 'first translation\n');
+  assert.equal(f.session.view.partial, 'same', 'an older translated final cannot clear a newer equal-string preview');
+  speech.receiveEvent({ type: 'final', text: 'same', id: 1 });
+  speech.receiveEvent({ type: 'partial', text: 'next preview', id: 2 }); await tick();
+  f.translation.complete(1, 'second translation'); await tick();
+  assert.equal(f.session.view.final, 'first translation\nsecond translation\n');
+  assert.equal(f.session.view.partial, 'next preview');
+  await f.session.stop(); assert.equal(f.session.view.partial, '');
+  await f.session.start(42);
+  f.session.session.speech.receiveEvent({ type: 'partial', text: 'canceled preview', id: 0 }); await tick();
+  f.session.cancel(); await tick(); assert.equal(f.session.view.partial, '');
+});
+
+for (const direction of ['ja-en', 'en-ja']) for (const paired of [false, true]) test(`${direction}: scheduler clears its translated preview on finalization ${paired ? 'with' : 'without'} paired metadata`, async () => {
+  const f = sessionFixture(), graph = defaultGraph({ direction });
+  if (!paired) {
+    graph.nodes = graph.nodes.filter(node => node.type !== 'TranslationView');
+    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
+  }
+  graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript');
+  graph.edges.push({ from: ['translation', 'provisional'], to: ['transcript', 'provisional'] },
+    { from: ['translation', 'text'], to: ['transcript', 'final'] });
+  f.session.setGraph(graph); await f.session.start(42);
+  const speech = f.session.session.speech;
+  speech.receiveEvent({ type: 'partial', text: 'hello', id: 0 }); await tick();
+  f.translation.complete(0, 'Translated hello'); await tick();
+  assert.equal(f.session.view.partial, 'Translated hello');
+  speech.receiveEvent({ type: 'final', text: 'hello', id: 0 }); await tick();
+  assert.equal(f.session.view.partial, '', 'final receipt invalidates the scheduler-owned preview before inference');
+  f.translation.complete(1, 'Translated hello'); await tick();
+  assert.equal(f.session.view.final, 'Translated hello\n');
+  assert.equal(f.session.view.partial, '', 'the completed final leaves no stale translated preview');
+
+  // A same-string next utterance is independent of the preceding final.
+  speech.receiveEvent({ type: 'final', text: 'hello', id: 1 });
+  speech.receiveEvent({ type: 'partial', text: 'hello', id: 2 }); await tick();
+  if (paired) assert.equal(f.session.view.interimTranslation.status, 'pending');
+  f.translation.complete(2, 'Second hello'); await tick();
+  if (paired) assert.equal(f.session.view.interimTranslation.status, 'pending', 'an older final preserves newer provisional state');
+  f.translation.complete(3, 'New preview'); await tick();
+  assert.equal(f.session.view.partial, 'New preview');
+  assert.equal(f.session.view.final, 'Translated hello\nSecond hello\n');
+  await f.session.stop(); assert.equal(f.session.view.partial, '');
+});
+
 test('TranslationView without TranscriptView retains errors and cancels pending rows without accepting late replies', async () => {
   const f = sessionFixture(), graph = defaultGraph();
   graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
@@ -279,4 +342,49 @@ test('direction is captured before loading, applies next session, and never rela
   assert.ok(f.translation.workers[1].url.pathname.endsWith('/opus-mt-worker.js'));
   assert.equal(f.session.view.displayDirection, 'ja-en'); assert.deepEqual(f.session.view.utterances, []);
   f.session.cancel(); await tick(); assert.ok(f.translation.workers.every(worker => worker.terminated));
+});
+
+test('scheduler accepts only TEXT and emits successful strings once to independent fan-out without diagnostic connections', async () => {
+  const f = workerFixture(), a = [], b = [];
+  let emit;
+  const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory });
+  const pipeline = new Pipeline({ nodes: {
+    source: { outputs: { text: TEXT }, start(c) { emit = text => c.emit('text', text); } }, scheduler,
+    a: new TextOutputNode(text => a.push(text)),
+    b: new TextOutputNode(text => b.push(text)),
+  }, connections: [
+    { from: ['source', 'text'], to: ['scheduler', 'text'] },
+    ...['a', 'b'].map(id => ({ from: ['scheduler', 'text'], to: [id, 'text'] })),
+  ] });
+  await pipeline.start();
+  emit('same'); emit('same'); emit('x'.repeat(1001)); emit('next'); await tick();
+  assert.deepEqual(a, [], 'pending is never a TEXT value');
+  f.complete(0, 'first'); await tick(); f.complete(1, 'second'); await tick();
+  const stopping = pipeline.stop(); await tick(); f.complete(2, 'third'); await stopping;
+  assert.deepEqual(a, ['first', 'second', 'third']); assert.deepEqual(b, a);
+  await pipeline.dispose();
+});
+
+test('independent transcript and paired translation streams do not overwrite each other’s interim state', async () => {
+  const f = sessionFixture(); f.session.setTranslation(true);
+  const graph = structuredClone(f.session.graph); graph.nodes.find(node => node.type === 'TranscriptView').settings.direction = 'en-ja';
+  f.session.setGraph(graph); await f.session.start(42);
+  assert.equal(f.session.view.displayTranscriptDirection, 'en-ja');
+  assert.equal(f.session.view.displayDirection, 'ja-en');
+  const pipeline = f.session.session.pipeline;
+  const transcript = pipeline.entries.get('transcript'), translation = pipeline.entries.get('translation');
+  await transcript.node.receive('provisional', 'independent transcript', transcript.context);
+  translation.node.receive('provisional', 'translation source'); await tick();
+  assert.equal(f.session.view.partial, 'independent transcript');
+  assert.equal(f.session.view.interimTranslation.source, 'translation source');
+  await transcript.node.receive('final', 'independent final', transcript.context);
+  assert.equal(f.session.view.partial, 'independent transcript', 'independent ports are not an atomic pair');
+  await transcript.node.receive('provisional', '', transcript.context);
+  assert.equal(f.session.view.partial, '', 'the provisional stream can explicitly clear its own preview');
+  f.translation.complete(0, 'translated'); await tick();
+  assert.equal(f.session.view.interimTranslation.text, 'translated');
+  assert.equal(f.session.view.final, 'independent final\n');
+  translation.node.receive('provisional', ''); await tick();
+  assert.equal(f.session.view.interimTranslation.source, '');
+  await f.session.stop();
 });

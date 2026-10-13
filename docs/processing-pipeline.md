@@ -44,7 +44,7 @@ Node
 ```
 
 - **Input/output ports** describe compatible data contracts, such as normalized
-  audio streams, transcript events, text, summaries or structured topic data.
+  audio streams, plain text, summaries or structured topic data.
   A node may have multiple typed inputs and outputs; no one-input/one-output
   restriction is imposed.
 - **Configuration** describes the choices needed by that processing unit, such
@@ -57,8 +57,9 @@ Node
 
 Composition connects a node's output port to another node's compatible input
 port. Contracts must describe the payload and meaning needed by the consumer:
-for example, PCM format for audio or replacement versus committed semantics for
-transcript events. Adjacent nodes should not need to know each other's model,
+for example, PCM format for audio or strings for ordinary text. Provisional
+and committed semantics use port names, while both share `TEXT`. Adjacent nodes
+should not need to know each other's model,
 worker arrangement or UI. The runtime uses shared contract tokens and explicit
 connections; new data contracts should follow real processor requirements.
 
@@ -96,13 +97,18 @@ Speech-to-Text.final → Transcript/history → Rolling summary
 Transcript/history → Topic extraction/analysis → Visualization
 ```
 
-Only the first example represents an existing end-to-end capability, via both
-the capture/core/UI integration and the new Node/Port example. All other
-composed processors, history storage, article/text inputs and connections above are future
-examples. In particular,
+Capture and transcription are executable today, and final text can connect
+directly to the independent translation, correction, TTS and text-output nodes.
+History storage, article/text inputs and summary/analysis connections above are
+future examples. In particular,
 `.provisional` is the SpeechToTextNode port for the existing core's `partial`
 events. Provisional replacements and committed events may feed different
 consumers from the same speech-to-text unit.
+
+Ordinary text is primitive-first across the shared Pipeline, Playground and
+extension. [The contract audit](port-contracts.md) explains internal bookkeeping,
+optional paired result outputs and the distinct audio formats. Separate ports
+are independent streams, never an implicit synchronized pair.
 
 ## Local execution and platform direction
 

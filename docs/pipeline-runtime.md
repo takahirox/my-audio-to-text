@@ -11,7 +11,7 @@ A node is an independently executable/configurable/replaceable object. It declar
 `inputs` and `outputs` as maps from named ports to shared contract tokens:
 
 ```js
-const TEXT = portContract('text');
+import { TEXT } from './port-contracts.js';
 const node = {
   inputs: { original: TEXT, translation: TEXT },
   outputs: { display: TEXT },
@@ -30,8 +30,7 @@ node's `stop()` promise. Implementations should observe `signal` and release
 background resources in `dispose()`; for example, pass it to `fetch()`.
 
 `portContract(name)` creates a small shared identity. Both endpoints must declare
-the **same token**, including agreement on payload semantics (PCM format,
-replacement versus commitment, etc.). Names are descriptive, not structural
+the **same token**, including agreement on payload format (for example PCM sample rate). Names are descriptive, not structural
 schema matching. Tokens impose no fields on payloads and do not validate values
 at delivery time. Nodes own validation of their data contracts. Unknown nodes,
 unknown ports, incompatible tokens, duplicate connections, duplicate node
@@ -58,6 +57,11 @@ outputs. Delivery is asynchronous and ordered across all inputs of each node,
 using one serial promise queue per node. A slow receiver does not delay another
 branch receiving the same output. Queue limits/coalescing remain processing
 policy; this runtime does not provide generic backpressure or durable storage.
+
+Independent ports are not atomic pairs. Use primitive ports for independent
+values; keep asynchronous correlation inside the responsible node or use a small
+reusable structured result when a paired consumer actually needs it. See the
+[repository contract audit](port-contracts.md) for the text and audio boundaries.
 
 ## Lifecycle and errors
 
@@ -149,11 +153,13 @@ dedicated ASR worker and dedicated VAD worker. The existing two-worker internal
 boundary is retained; there is no worker pool or implicit resource sharing.
 Lightweight source/sink wrappers create no processing workers. `partial` events
 map to the `provisional` port; `final` events map to the `final` port. Both carry
-the core's `{ text, id }` utterance data without adding graph metadata. The core's
+plain `TEXT` strings. Utterance IDs remain inside the ASR core/node; duplicate
+final IDs are suppressed before fan-out, while equal strings from distinct
+utterances are delivered separately. The core's
 ReazonSpeech ja-en/Silero/hayamimi policy and provisional fallback are unchanged.
 `onEvent` optionally observes original core diagnostics/lifecycle events;
 transcript processing belongs on the ports. `TranscriptOutputNode` accepts an
-async callback `(port, value, signal)` and can serve as a UI, storage or test sink.
+async callback `(port, text, signal)` and can serve as a UI, storage or test sink.
 
 After [preparing assets and serving the playground](asr-manual-testing.md#local-setup),
 open the Speech-to-Text test page from the Node Playground list and allow its
@@ -239,17 +245,22 @@ requires no TTS policy or modification.
 
 ## Extension visual graph composition
 
-The [extension graph editor](extension-graph.md) saves a version 1 description
+The [extension graph editor](extension-graph.md) saves a version 4 description
 with concrete production Node types and explicit named-port edges. The extension
 builder constructs this shared Pipeline at each session boundary. ASR, OPUS-MT
 directions, Supertonic 3 and Kokoro remain independent production processors;
-final-text adapters and audio playback are separate Nodes. No editor, model
-selection, storage or inference policy is added to the generic Pipeline runtime.
+ordinary text flows connect directly through shared `TEXT` ports, and audio
+playback remains a separate Node. Version 1–3 descriptions migrate explicitly
+to version 4, removing extraction adapters while preserving their downstream
+routes and fan-out. No editor, model selection, storage or inference policy is
+added to the generic Pipeline runtime.
 
 ## Optional transcript correction
 
 `SpeechTranscriptCorrectionNode` owns a Qwen3 0.6B Worker and exposes plain
-`TEXT` input/output. Connect `SpeechToTextNode.final` through the explicit
-`FinalTranscriptTextNode` adapter; preserve a separate original transcript
-branch. It can be omitted or explicitly bypassed, with no default graph or
-extension change. See [model, lifecycle, conservative policy and evaluation](correction-node.md).
+`TEXT` input/output. Connect `SpeechToTextNode.final` directly to
+`SpeechTranscriptCorrectionNode.text`; fan out the final string to preserve a
+separate original transcript branch. Connect the correction's `text` output
+directly to translation or other `TEXT` consumers. It can be omitted or
+explicitly bypassed, with no default graph or extension change. See
+[model, lifecycle, conservative policy and evaluation](correction-node.md).
