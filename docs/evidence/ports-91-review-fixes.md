@@ -1,5 +1,16 @@
 # Issue #91: review corrections
 
+## Current acceptance and publication scope
+
+Issue #91 explicitly specifies **Required post-merge verification: None**.
+All required acceptance criteria are achievable and verifiable before merge.
+This supersedes every earlier publication directive in this record that required
+deployment evidence, a non-closing reference, or keeping #91 open pending
+publication checks. Those references below describe historical revisions only.
+The saved and live PR descriptions retain `Closes #91`; publication verification
+must not gate PR merge or Issue closure. Any desired deployment verification
+belongs in a separate follow-up Issue. No deployment verification is claimed.
+
 ## Changes
 
 TranscriptView no longer clears its provisional input whenever an independently
@@ -16,10 +27,11 @@ distinct utterances, delayed translations, Stop and Cancel. Packaged MV3
 regressions explicitly hold and release a translation so the ordering check
 does not depend on inference timing.
 
-PR [#92](https://github.com/takahirox/my-audio-to-text/pull/92) now references
-`Refs #91` instead of an automatic closing directive. Its required post-merge
-verification record remains pending. The GitHub head was not changed by this
-revision node; publication of the local checkpoint remains downstream work.
+PR [#92](https://github.com/takahirox/my-audio-to-text/pull/92) then referenced
+`Refs #91` instead of an automatic closing directive. At that revision, its
+post-merge verification record was marked pending; that requirement is now
+superseded by the Issue's explicit scope above. The GitHub head was not changed
+by that revision node; publication of its local checkpoint was downstream work.
 
 ## Separator finding: contradicted by the selected base
 
@@ -69,12 +81,12 @@ migration and direct shared TEXT connections from ASR finals to correction and
 other text consumers, including fan-out to preserve the original transcript.
 It no longer instructs readers to use the removed final-text adapter.
 
-PR #92's closing directive was replaced with `Refs #91` again, preserving its
-pending deployment record. A read-back verified the corrected description and
+PR #92's closing directive was replaced with `Refs #91` again, preserving the
+then-pending deployment record. A read-back verified the corrected description and
 unchanged head `e62527024d7bc4054466d7bc7cb6a8fb8abcbff7`.
-The [saved PR description](ports-91-pr.md) records this correction for downstream
-publication; retain the non-closing reference until required verification is
-performed and recorded.
+The [saved PR description](ports-91-pr.md) recorded this correction for downstream
+publication. Its former requirement to retain a non-closing reference is
+superseded by the Issue's explicit scope above.
 
 For this documentation/metadata revision, `npm test` passed all 249 tests with
 no failures or skips. Documentation links, graph version and named TEXT ports
@@ -96,10 +108,10 @@ optional paired metadata, same-string utterances and preservation of newer
 provisional state. Four packaged MV3 regressions check direct translated TEXT
 previews and finals while the session remains running.
 
-The live PR and saved description again use `Refs #91`. A GitHub read-back
-confirmed the pending deployment record and unchanged head
-`ab6153833b66f54823cb20f4ae4792b6468f1f1f`. Downstream publication must preserve
-this non-closing reference until required deployment verification is recorded.
+The live PR and saved description again used `Refs #91`. A GitHub read-back
+confirmed the then-pending deployment record and unchanged head
+`ab6153833b66f54823cb20f4ae4792b6468f1f1f`. The instruction to preserve a
+non-closing reference pending deployment verification is now superseded.
 
 Validation for this scheduler revision:
 
@@ -117,36 +129,30 @@ rerun. The five packaged skips are the existing opt-in real TTS (two),
 ASR-to-field (one) and ASR-to-OPUS-MT (two) checks. No retries were enabled and
 no failures were accepted as flaky. No push or merge was performed.
 
-## Required post-merge verification — pending
+## Historical publication corrections — superseded
 
-If merging triggers Playground publication, verify deployment completion, the
-published revision, updated pages and core text flows on the published origin,
-then record evidence before closing Issue #91. No push or merge was performed.
+Earlier revisions required `Refs #91` and deployment evidence before closing
+the Issue. Issue #91's explicit requirement of no post-merge verification
+supersedes those directives; they impose no merge or closure gate.
 
-## Publication directive
-
-PR #92's body and the saved description must use `Refs #91` until required
-post-merge Playground deployment verification is performed and recorded.
-Preserve this non-closing reference during downstream publication, following
-[the development flow](../development-flow.md#implement-and-propose-a-pull-request)
-and [review merge criteria](../review-guidelines.md#merge-criteria). Verification
-remains pending and is not a pre-merge acceptance condition. If merge triggers
-publication, verify deployment completion, the published revision, updated pages
-and core text flows, then record evidence before closing Issue #91.
-
-For this reference correction, a live PR read-back verified that the body changed
-only to `Refs #91`, verification remains pending, and head
-`456529038e8b66e4a74aa5cb5964a27c2fd9975c` is unchanged. Both evidence files
+For the earlier reference correction, a live PR read-back verified that the body
+changed only to `Refs #91`, verification was marked pending, and head
+`456529038e8b66e4a74aa5cb5964a27c2fd9975c` was unchanged. Both evidence files
 passed reference, pending-status and local-link checks; `git diff --check`
 passed. Runtime suites, builds and real-model checks were not rerun for this
 documentation/metadata change. No push, merge or deployment was performed.
 
-## Current publication instruction
+The subsequent publication task required `Closes #91` in the PR body. That
+reference remains consistent with the Issue's current scope. Its accompanying
+pending deployment requirement is superseded, as stated above. No merge or
+deployment was part of that publication task.
 
-The current publication task explicitly requires `Closes #91` in the PR body.
-This user instruction takes precedence over the earlier non-closing publication
-guidance above and the repository's closing-reference convention. The saved
-description therefore uses `Closes #91` for this publication. Required post-merge
-Playground deployment verification remains **pending**; the closing directive
-does not establish that deployment or published-site verification has passed.
-No merge or deployment is part of this publication task.
+## Closure requirement correction validation
+
+The contract guide, implementation evidence, review record and saved PR
+description now match Issue #91's explicit scope. Documentation scope, local
+links, the closing reference and `git diff --check` passed. A live PR read-back
+confirmed an exact match with the saved description, open PR state and unchanged
+GitHub head `8a03e61c373c3d865eecac96ca7b2e7b1a8eb5d4`.
+Runtime suites, builds and optional real-model checks were not rerun for this
+documentation/metadata correction. No push, merge or deployment was performed.

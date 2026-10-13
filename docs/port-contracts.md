@@ -80,6 +80,7 @@ Translation.finalResult ──→ TranslationView.final  (optional paired diagno
 ```
 
 See [runtime](pipeline-runtime.md), [graph](extension-graph.md) and
-[Issue #91 validation](evidence/ports-91.md). Publishing verification after merge
-remains pending until the updated Playground revision is deployed and its core
-text flows are checked on the published pages.
+[Issue #91 validation](evidence/ports-91.md). Issue #91 requires no post-merge
+verification: all acceptance criteria are verifiable before merge. Any desired
+deployment verification belongs in a separate follow-up Issue and must not gate
+this PR's merge or Issue #91's closure.

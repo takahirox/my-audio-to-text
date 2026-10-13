@@ -38,18 +38,18 @@ Coverage includes direct TEXT connections across producers, fan-out, optional me
 
 Publication checked the clean worktree, fast-forward ancestry from the existing PR head and current remote main, and the complete diff with `git diff --check`. Test suites were not rerun during publication.
 
-**Required post-merge verification remains pending:** if merge triggers Playground publishing, verify deployment completion, the published revision, updated pages and working core text flows on the published origin, then record the evidence. This is not a pre-merge acceptance condition. The unpacked extension needs no additional post-merge check.
+**Required post-merge verification: None.** Issue #91 requires all acceptance criteria to be achievable and verifiable before merge. This supersedes the earlier pending deployment requirement and closure gate. Any desired deployment verification belongs in a separate follow-up Issue and must not gate this PR's merge or #91's closure. No deployment verification is claimed.
 
 ## Related issues
 
 Closes #91
 
-Pre-merge implementation and validation are complete. The required post-merge Playground deployment verification remains pending as described above. Record deployment evidence after merge.
+Implementation and pre-merge validation are complete. Issue #91 requires no post-merge verification.
 
 ## Scope check
 
-- [x] Pre-merge scope is complete; required post-merge deployment verification remains pending and must be performed and recorded after merge.
+- [x] This PR fully addresses Issue #91's implementation and pre-merge acceptance scope; no post-merge verification is required.
 - [x] This PR does not include unrelated work.
 - [x] This PR does not add speculative abstractions, extensibility, frameworks, or subsystems that are not needed by the Issue.
-- [x] The implementation is complete; outstanding post-merge verification is explicitly stated above and is not claimed as completed.
+- [x] The implementation is complete; no required work is deferred until after merge.
 - [x] Validation maps to the Issue's expected outcome / acceptance criteria.

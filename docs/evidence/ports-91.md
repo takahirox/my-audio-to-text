@@ -67,11 +67,13 @@ ASR-to-field (one), and ASR-to-OPUS-MT (two). Deterministic inference fixtures a
 not claimed as real-model quality/recognition verification. Real ASR/Silero
 initialization in the mandatory packaged suite is reported separately above.
 
-## Required post-merge verification — pending
+## Required post-merge verification — none
 
-If merge triggers Playground publishing, wait for deployment completion, verify
-the published revision, load the updated list/speech/translation pages, and check
-core text flows on the published origin. Local tests do not establish deployment.
-Keep Issue #91 open until this evidence is recorded. No deployment, push, PR,
-merge or GitHub comment was performed by this node. The unpacked extension is
-validated before merge and needs no additional post-merge check.
+Issue #91 explicitly requires no post-merge verification. All required acceptance
+criteria are achievable and verifiable before merge. This supersedes this
+record's earlier directive to keep #91 open pending Playground deployment
+evidence. Publication checks must not gate PR merge or Issue closure; any desired
+deployment verification belongs in a separate follow-up Issue.
+
+No deployment, push, PR, merge or GitHub comment was performed by the
+implementation node. Local validation does not claim deployment verification.
