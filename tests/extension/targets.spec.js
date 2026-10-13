@@ -115,6 +115,7 @@ for (const selector of ['#focused', '#search', '#chosen', '#editable']) test(`pl
   });
   const cases = [
     { initial: '', texts: ['', '今日は', 'いい天気ですね', 'いい天気ですね', ''] },
+    { initial: 'manual', texts: ['Hello', 'world'] },
     { initial: 'Hello', texts: ['', ' world', '  ', '\t', ...(multiline ? ['\nnext\n'] : []), ''] },
     { initial: multiline ? '\n existing \t \n' : ' existing \t ', texts: ['\t end  ', ' <b>plain</b> ', ...(multiline ? ['\n', ' \n\t '] : [])] },
   ];

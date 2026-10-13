@@ -218,6 +218,37 @@ for (const direction of ['ja-en', 'en-ja']) for (const transcript of [false, tru
   });
 }
 
+for (const direction of ['ja-en', 'en-ja']) for (const paired of [false, true]) test(`${direction}: delayed translated finals preserve the current ASR preview ${paired ? 'with' : 'without'} paired metadata`, async () => {
+  const f = sessionFixture(), graph = defaultGraph({ direction });
+  if (!paired) {
+    graph.nodes = graph.nodes.filter(node => node.type !== 'TranslationView');
+    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
+  }
+  graph.edges = graph.edges.filter(route => !(route.to[0] === 'transcript' && route.to[1] === 'final')
+    && !(route.to[0] === 'translation' && route.to[1] === 'provisional'));
+  graph.edges.push({ from: ['translation', 'text'], to: ['transcript', 'final'] });
+  f.session.setGraph(graph); await f.session.start(42);
+  const speech = f.session.session.speech;
+  // Finalization also clears provisional deliveries still queued at the sink.
+  speech.receiveEvent({ type: 'partial', text: 'same', id: 0 });
+  speech.receiveEvent({ type: 'final', text: 'same', id: 0 }); await tick();
+  assert.equal(f.session.view.partial, ''); assert.equal(f.translation.requests.length, 1);
+  speech.receiveEvent({ type: 'partial', text: 'same', id: 1 }); await tick();
+  assert.equal(f.session.view.partial, 'same');
+  f.translation.complete(0, 'first translation'); await tick();
+  assert.equal(f.session.view.final, 'first translation\n');
+  assert.equal(f.session.view.partial, 'same', 'an older translated final cannot clear a newer equal-string preview');
+  speech.receiveEvent({ type: 'final', text: 'same', id: 1 });
+  speech.receiveEvent({ type: 'partial', text: 'next preview', id: 2 }); await tick();
+  f.translation.complete(1, 'second translation'); await tick();
+  assert.equal(f.session.view.final, 'first translation\nsecond translation\n');
+  assert.equal(f.session.view.partial, 'next preview');
+  await f.session.stop(); assert.equal(f.session.view.partial, '');
+  await f.session.start(42);
+  f.session.session.speech.receiveEvent({ type: 'partial', text: 'canceled preview', id: 0 }); await tick();
+  f.session.cancel(); await tick(); assert.equal(f.session.view.partial, '');
+});
+
 test('TranslationView without TranscriptView retains errors and cancels pending rows without accepting late replies', async () => {
   const f = sessionFixture(), graph = defaultGraph();
   graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
@@ -314,6 +345,9 @@ test('independent transcript and paired translation streams do not overwrite eac
   assert.equal(f.session.view.partial, 'independent transcript');
   assert.equal(f.session.view.interimTranslation.source, 'translation source');
   await transcript.node.receive('final', 'independent final', transcript.context);
+  assert.equal(f.session.view.partial, 'independent transcript', 'independent ports are not an atomic pair');
+  await transcript.node.receive('provisional', '', transcript.context);
+  assert.equal(f.session.view.partial, '', 'the provisional stream can explicitly clear its own preview');
   f.translation.complete(0, 'translated'); await tick();
   assert.equal(f.session.view.interimTranslation.text, 'translated');
   assert.equal(f.session.view.final, 'independent final\n');

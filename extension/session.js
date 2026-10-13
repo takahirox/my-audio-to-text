@@ -32,6 +32,10 @@ export class TabSession {
     const transcriptDirection = graph.nodes.find(node => node.type === 'TranscriptView')?.settings.direction || preferences.direction;
     const hasTranscriptView = graph.nodes.some(node => node.type === 'TranscriptView');
     const hasTranslationView = graph.nodes.some(node => node.type === 'TranslationView');
+    const transcript = graph.nodes.find(node => node.type === 'TranscriptView');
+    const speech = graph.nodes.find(node => node.type === 'SpeechToText');
+    const hasSpeechPreview = graph.edges.some(route => route.from[0] === speech.id && route.from[1] === 'provisional'
+      && route.to[0] === transcript?.id && route.to[1] === 'provisional');
     const sourceType = graph.nodes.find(n => INPUT_TYPES.includes(n.type)).type;
     if (sourceType === 'MicrophoneAudio' && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.' }); return; }
     for (const node of graph.nodes.filter(n => n.type === 'SelectedPageMediaAudio')) {
@@ -71,13 +75,24 @@ export class TabSession {
         },
         onSpeechEvent: event => {
           if (this.session !== session) return;
+          if (hasSpeechPreview && (event.type === 'partial' || event.type === 'final')) {
+            const revision = session.speechPreviewRevision = (session.speechPreviewRevision || 0) + 1;
+            if (event.type === 'final') {
+              // ASR completion owns its preview cleanup, independently of the
+              // producer connected to TranscriptView.final. Wait for already
+              // queued previews, and preserve any newer utterance's preview.
+              void session.pipeline.entries.get(transcript.id).queue.then(() => {
+                if (this.session === session && session.speechPreviewRevision === revision) this.update({ partial: '' });
+              });
+            }
+          }
           if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: event.message });
           else if (event.type === 'error' && session.pipeline?.state === 'idle') this.fail(event.message);
         },
         onTranscript: (port, text, signal) => {
           if (this.session !== session || signal.aborted) return;
           if (port === 'provisional' && this.view.state !== 'stopping') this.update({ partial: text });
-          else if (port === 'final') this.update({ partial: '', ...(!hasTranslationView ? { interimTranslation: null } : {}),
+          else if (port === 'final') this.update({ ...(!hasTranslationView ? { interimTranslation: null } : {}),
             final: this.view.final + (text.trim() ? `${text}\n` : ''),
             // Paired rows belong to TranslationView's source-bearing messages.
             utterances: !hasTranslationView && text.trim() ? [...this.view.utterances, { source: text, direction: transcriptDirection, status: 'off', text: '' }] : this.view.utterances });

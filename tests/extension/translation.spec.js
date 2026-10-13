@@ -119,6 +119,45 @@ async function instrument(f) {
 for (const direction of ['ja-en', 'en-ja']) {
 const target = direction === 'en-ja' ? 'Japanese' : 'English';
 const open = async f => { const page = await openRecorder(f); await setDirection(page, direction); return page; };
+test(`${direction}: an older translated final preserves a newer ASR preview on independently connected TEXT ports`, async ({ translationExtension: f }) => {
+  await instrument(f); const page = await open(f);
+  await page.evaluate(async direction => {
+    const { readGraph, saveGraph, edge, GRAPH_KEY } = await import('./graph.js');
+    const graph = readGraph(localStorage);
+    graph.edges = graph.edges.filter(route => !(route.to[0] === 'transcript' && route.to[1] === 'final')
+      && !(route.to[0] === 'translation' && route.to[1] === 'provisional'));
+    graph.edges.push(edge('translation', 'text', 'transcript', 'final'));
+    saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+    const { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode } = await import('../web/translation-nodes.js');
+    const Node = direction === 'en-ja' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode;
+    const receive = Node.prototype.receive;
+    // Hold exactly one production translation receive until the test releases
+    // it, rather than depending on inference timing or browser speed.
+    Node.prototype.receive = async function(...args) {
+      if (!window.finishTranslation) await new Promise(resolve => { window.finishTranslation = resolve; });
+      return receive.apply(this, args);
+    };
+  }, direction);
+  await prepare(page); await start(page);
+  await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
+  await emit(page, 'partial', 'same', 0);
+  await expect(page.locator('#partial')).toHaveText('same');
+  await emit(page, 'final', 'same', 0);
+  await expect(page.locator('#partial')).toBeEmpty();
+  await expect.poll(() => page.evaluate(() => !!window.finishTranslation)).toBe(true);
+  await emit(page, 'partial', 'same', 1);
+  await expect(page.locator('#partial')).toHaveText('same');
+  await page.evaluate(() => window.finishTranslation());
+  await expect(page.locator('#final')).toHaveText(`${target}: same\n`);
+  await expect(page.locator('#partial')).toHaveText('same');
+  await emit(page, 'final', 'same', 1);
+  await expect(page.locator('#partial')).toBeEmpty();
+  await expect(page.locator('#final')).toHaveText(`${target}: same\n${target}: same\n`);
+  await emit(page, 'partial', 'next preview', 2);
+  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
+  await expect(page.locator('#partial')).toBeEmpty();
+});
+
 test(`${direction}: independent translated TranscriptView uses its own language and retains paired source/result identity`, async ({ translationExtension: f }) => {
   await instrument(f); const page = await open(f);
   await page.evaluate(async direction => {
