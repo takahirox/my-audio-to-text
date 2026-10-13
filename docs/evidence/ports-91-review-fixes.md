@@ -125,10 +125,18 @@ then record evidence before closing Issue #91. No push or merge was performed.
 
 ## Publication directive
 
-The current publication request explicitly requires `Closes #91` in PR #92's
-body. The saved description uses that directive, superseding the earlier
-non-closing-reference publication instructions above. Required post-merge
-Playground deployment verification remains pending and must still be performed
-and recorded if merge triggers publication. This publication step does not merge
-the PR or claim deployment verification. It checks clean-worktree ancestry and
-the complete PR diff; it does not rerun the previously reported test suites.
+PR #92's body and the saved description must use `Refs #91` until required
+post-merge Playground deployment verification is performed and recorded.
+Preserve this non-closing reference during downstream publication, following
+[the development flow](../development-flow.md#implement-and-propose-a-pull-request)
+and [review merge criteria](../review-guidelines.md#merge-criteria). Verification
+remains pending and is not a pre-merge acceptance condition. If merge triggers
+publication, verify deployment completion, the published revision, updated pages
+and core text flows, then record evidence before closing Issue #91.
+
+For this reference correction, a live PR read-back verified that the body changed
+only to `Refs #91`, verification remains pending, and head
+`456529038e8b66e4a74aa5cb5964a27c2fd9975c` is unchanged. Both evidence files
+passed reference, pending-status and local-link checks; `git diff --check`
+passed. Runtime suites, builds and real-model checks were not rerun for this
+documentation/metadata change. No push, merge or deployment was performed.
