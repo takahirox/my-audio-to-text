@@ -39,7 +39,7 @@ Publication checked the clean worktree, fast-forward ancestry from the existing 
 
 ## Related issues
 
-Closes #91
+Refs #91
 
 Pre-merge implementation and validation are complete. The required post-merge Playground deployment verification remains pending as described above. Record deployment evidence after merge.
 
