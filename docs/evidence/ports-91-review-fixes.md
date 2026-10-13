@@ -140,3 +140,13 @@ only to `Refs #91`, verification remains pending, and head
 passed reference, pending-status and local-link checks; `git diff --check`
 passed. Runtime suites, builds and real-model checks were not rerun for this
 documentation/metadata change. No push, merge or deployment was performed.
+
+## Current publication instruction
+
+The current publication task explicitly requires `Closes #91` in the PR body.
+This user instruction takes precedence over the earlier non-closing publication
+guidance above and the repository's closing-reference convention. The saved
+description therefore uses `Closes #91` for this publication. Required post-merge
+Playground deployment verification remains **pending**; the closing directive
+does not establish that deployment or published-site verification has passed.
+No merge or deployment is part of this publication task.
