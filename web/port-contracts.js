@@ -1,4 +1,6 @@
 import { portContract } from './pipeline.js';
-// Shared identities, without payload envelopes or model/runtime dependencies.
+// Shared identities, without model/runtime dependencies.
 export const TEXT = portContract('text');
-export const TRANSCRIPT = portContract('transcript { text, id }');
+// An indivisible result for paired views across asynchronous work. Ordinary
+// text consumers use TEXT; they never need this optional diagnostic output.
+export const TEXT_RESULT = portContract('text result { source, text, status, index, error }');

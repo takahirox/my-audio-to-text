@@ -1,16 +1,6 @@
-import { TEXT, TRANSCRIPT } from './port-contracts.js';
+import { TEXT } from './port-contracts.js';
 import { validateInput, validateCandidate } from './correction-policy.js';
 export { TEXT } from './port-contracts.js';
-
-// Connect SpeechToTextNode.final explicitly. IDs/alignment remain in consumers.
-export class FinalTranscriptTextNode {
-  inputs = { final: TRANSCRIPT };
-  outputs = { text: TEXT };
-  receive(port, transcript, context) {
-    if (port !== 'final' || typeof transcript?.text !== 'string') throw new TypeError('Expected a final transcript with text.');
-    context.emit('text', transcript.text);
-  }
-}
 
 export class SpeechTranscriptCorrectionNode {
   inputs = { text: TEXT };

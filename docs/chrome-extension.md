@@ -123,13 +123,11 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 
 Save a graph with exactly one whole-tab, selected-media or microphone Input and
 one or more outputs. Live shows **Input and output targets** and separate target
-status/errors. For focused output, connect `SpeechToText.final → FinalText.final`,
-then `FinalText.text → FocusedInputTextOutputNode.text`. For translations connect
-`OPUS-MT.final → TranslatedFinalText.final`, then
-`TranslatedFinalText.text → FocusedInputTextOutputNode.text`.
-The sink accepts one plain TEXT string input;
-TRANSCRIPT/TRANSLATION cannot connect directly. Final adapter text can fan out
-to TTS and other TEXT consumers, while Live retains its independent display.
+status/errors. Connect `SpeechToText.final → FocusedInputTextOutputNode.text`
+or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
+strings can fan out to TTS and other consumers. For final-only output, select
+ASR `final` or translation `text`, rather than `provisional`. The paired Live
+view uses separate optional result ports; pending/errors never reach text sinks.
 
 Invoke the toolbar on the desired normal page. Configured focused output is
 prepared automatically on that same top-level document using `activeTab`, before
@@ -258,8 +256,10 @@ or closing the
 window immediately cancels pending work; transcripts are not persisted.
 
 The outer graph explicitly connects `SpeechToTextNode.provisional/final` to
-`TranslationSchedulerNode.provisional/final`, and paired outputs to the translated
-sink. This session-owned adapter bridges the transcript contract to an owned
+`TranslationSchedulerNode.provisional/text`, and separate
+`provisionalResult/finalResult` outputs to the paired view. Successful `text`
+outputs connect directly to TTS or focused-field sinks. This session-owned
+adapter takes plain provisional/final TEXT strings into an owned
 inner graph: `source.text → OpusMtTranslationNode.text → TextOutputNode.text`
 for Japanese → English, or the independent `EnglishToJapaneseOpusMtTranslationNode`
 for English → Japanese. Each Node owns its direction-specific Worker; no switchable

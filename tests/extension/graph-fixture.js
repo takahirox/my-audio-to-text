@@ -111,10 +111,10 @@ export async function emitFinal(page, text) {
 export async function addAudioPath(page, type) {
   const editor = page.editor;
   await editor.locator('#translation-enabled').uncheck();
-  for (const node of ['FinalText', type, 'AudioOutput']) {
+  for (const node of [type, 'AudioOutput']) {
     await editor.locator('#graph-node-type').selectOption(node); await editor.locator('#graph-add').click();
   }
-  for (const [source, output, target, input] of [['speech', 'final', 'finaltext', 'final'], ['finaltext', 'text', type.toLowerCase(), 'text'], [type.toLowerCase(), 'audio', 'audiooutput', 'audio']]) {
+  for (const [source, output, target, input] of [['speech', 'final', type.toLowerCase(), 'text'], [type.toLowerCase(), 'audio', 'audiooutput', 'audio']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
     await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).click();
   }

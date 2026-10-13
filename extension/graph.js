@@ -1,9 +1,9 @@
-import { MONO_16KHZ_PCM, TRANSCRIPT } from '../web/transcription-nodes.js';
+import { MONO_16KHZ_PCM } from '../web/transcription-nodes.js';
 import { TEXT } from '../web/translation-nodes.js';
-import { TRANSLATION } from './translation-scheduler.js';
+import { TEXT_RESULT } from '../web/port-contracts.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 
-export const GRAPH_VERSION = 3;
+export const GRAPH_VERSION = 4;
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
@@ -13,14 +13,12 @@ export const NODE_TYPES = Object.freeze({
   ChromeTabAudio: { label: 'Chrome tab audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM } },
   SelectedPageMediaAudio: { label: 'Selected page media audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Choose a media element in Live. Top frame only; unsupported media requires whole-tab capture.' },
   MicrophoneAudio: { label: 'Microphone audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Press Start in Live to request microphone permission.' },
-  FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect FinalText.text or TranslatedFinalText.text; no separate authorization or field picker.' },
-  SpeechToText: { label: 'Speech to text', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TRANSCRIPT) },
-  TranscriptView: { label: 'Original transcript', inputs: paired(TRANSCRIPT), outputs: {}, settings: { direction: ['ja-en', 'en-ja'] } },
-  OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: paired(TRANSCRIPT), outputs: paired(TRANSLATION) },
-  OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: paired(TRANSCRIPT), outputs: paired(TRANSLATION) },
-  TranslationView: { label: 'Paired translation', inputs: paired(TRANSLATION), outputs: {} },
-  FinalText: { label: 'Final original → text', inputs: { final: TRANSCRIPT }, outputs: { text: TEXT } },
-  TranslatedFinalText: { label: 'Completed final translation → text', inputs: { final: TRANSLATION }, outputs: { text: TEXT } },
+  FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect SpeechToText.final or a processor’s completed text output; no separate authorization or field picker.' },
+  SpeechToText: { label: 'Speech to text', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT) },
+  TranscriptView: { label: 'Original transcript', inputs: paired(TEXT), optionalInputs: ['provisional'], outputs: {}, settings: { direction: ['ja-en', 'en-ja'] } },
+  OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: { provisional: TEXT, text: TEXT, provisionalResult: TEXT_RESULT, finalResult: TEXT_RESULT } },
+  OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: { provisional: TEXT, text: TEXT, provisionalResult: TEXT_RESULT, finalResult: TEXT_RESULT } },
+  TranslationView: { label: 'Paired translation', inputs: paired(TEXT_RESULT), optionalInputs: ['provisional'], outputs: {} },
   Supertonic3: { label: 'Supertonic 3 TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { language: ['ja', 'en'], voice: ['F1', 'M1'] } },
   Kokoro: { label: 'Kokoro TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { voice: ['jf_alpha', 'af_heart'] } },
   AudioOutput: { label: 'Audio player / WAV', inputs: { audio: SYNTHESIZED_AUDIO }, outputs: {} },
@@ -38,7 +36,7 @@ export function defaultGraph({ enabled = true, direction = 'ja-en' } = {}) {
   const edges = [edge('audio', 'audio', 'speech', 'audio'), ...['provisional', 'final'].map(port => edge('speech', port, 'transcript', port))];
   if (enabled) {
     nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 230), graphNode('TranslationView', 'translated', 530, 230));
-    for (const port of ['provisional', 'final']) edges.push(edge('speech', port, 'translation', port), edge('translation', port, 'translated', port));
+    for (const port of ['provisional', 'final']) edges.push(edge('speech', port, 'translation', port === 'final' ? 'text' : port), edge('translation', port === 'final' ? 'finalResult' : 'provisionalResult', 'translated', port));
   }
   return { version: GRAPH_VERSION, nodes, edges };
 }
@@ -46,7 +44,7 @@ export const edge = (source, output, target, input) => ({ from: [source, output]
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
 export function validateGraph(graph) {
   const errors = [];
-  if (!record(graph) || graph.version !== GRAPH_VERSION || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return ['Expected version 3 graph with nodes and edges arrays.'];
+  if (!record(graph) || graph.version !== GRAPH_VERSION || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return ['Expected version 4 graph with nodes and edges arrays.'];
   if (graph.nodes.length > 24 || graph.edges.length > 64) return ['Graph exceeds the supported size (24 nodes / 64 edges).'];
   const nodes = new Map(), incoming = new Map(), outgoing = new Map(), seen = new Set();
   for (const node of graph.nodes) {
@@ -92,52 +90,53 @@ export function validateGraph(graph) {
   for (const node of nodes.values()) {
     const definition = definitionOf(node.type);
     if (!definition) continue;
-    if (definition.optionalInputs && Object.keys(definition.inputs).filter(port => incoming.has(JSON.stringify([node.id, port]))).length !== 1) errors.push(`Connect exactly one finalized text input: ${node.id}`);
-    for (const port of Object.keys(definition.inputs)) if (!definition.optionalInputs && !incoming.has(JSON.stringify([node.id, port]))) errors.push(`Required connection missing: ${node.id}.${port}`);
+    for (const port of Object.keys(definition.inputs)) if (!definition.optionalInputs?.includes(port) && !incoming.has(JSON.stringify([node.id, port]))) errors.push(`Required connection missing: ${node.id}.${port}`);
     if (Object.keys(definition.outputs).length && !outgoing.has(node.id)) errors.push(`Unconnected output Node: ${node.id}`);
   }
-  const speech = ofType('SpeechToText')[0];
-  const translation = graph.nodes.find(n => translators.includes(n?.type)), translated = ofType('TranslationView')[0];
-  const requires = (node, port, source, output = port) => {
-    if (node && source && JSON.stringify(incoming.get(JSON.stringify([node.id, port]))) !== JSON.stringify([source.id, output])) errors.push(`Connect ${source.id}.${output} to ${node.id}.${port}.`);
-  };
-  requires(speech, 'audio', graph.nodes.find(n => INPUT_TYPES.includes(n?.type)));
-  for (const port of ['provisional', 'final']) requires(translation, port, speech);
-  if (translated && !translation) errors.push('TranslationView requires OPUS-MT.');
   if (!graph.nodes.some(n => definitionOf(n?.type) && !Object.keys(definitionOf(n.type).outputs).length)) errors.push('At least one output destination is required.');
-  for (const node of [...ofType('TranscriptView'), ...ofType('TranslationView')]) {
-    for (const port of ['provisional', 'final']) requires(node, port, node.type === 'TranscriptView' ? speech : translation);
-  }
-  if (translation && ofType('TranscriptView').some(view => view.settings?.direction !== (translation.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'))) errors.push('Transcript direction must match the concrete OPUS-MT Node.');
-  // Avoid treating provisional transcripts or pending/error translations as text.
-  for (const node of [...ofType('FinalText'), ...ofType('TranslatedFinalText')]) requires(node, 'final', node.type === 'FinalText' ? speech : translation);
   return [...new Set(errors)];
 }
-// Legacy field sinks had producer-specific ports. Preserve each output through
-// an explicit typed adapter; ambiguous routes require recovery, never deletion.
+// Version 4 removes extraction nodes and gives the scheduler primitive text
+// ports plus optional, indivisible result ports for paired views. Rewrite every
+// route explicitly; malformed/ambiguous legacy routes require visible recovery.
 export function migrateGraph(graph) {
-  if (!record(graph) || ![1, 2].includes(graph.version)) return graph;
+  if (!record(graph) || ![1, 2, 3].includes(graph.version)) return graph;
   if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return graph;
-  const next = structuredClone(graph), ids = new Set(next.nodes.map(node => node?.id));
-  const recovery = id => { throw Error(`Cannot migrate field output ${id}: connect exactly one final producer. Reset and Save in Graph Editor, then connect FinalText.text or TranslatedFinalText.text to FocusedInputTextOutputNode.text.`); };
-  for (const node of [...next.nodes]) {
+  const next = structuredClone(graph);
+  const recovery = (kind, id) => { throw Error(`Cannot migrate ${kind} ${id}: ambiguous or invalid route. Reset and Save in Graph Editor, then reconnect the desired TEXT routes.`); };
+  if (graph.version < 3) for (const node of next.nodes) {
     if (!['FocusedInputTextOutputNode', 'SelectedFormFieldTextOutputNode'].includes(node?.type)) continue;
     const routes = next.edges.filter(route => route?.to?.[0] === node.id);
-    if (routes.length !== 1) recovery(node.id);
+    if (routes.length !== 1) recovery('field output', node.id);
     const route = routes[0], source = next.nodes.find(source => source?.id === route.from?.[0]);
     const translated = route.to[1] === 'translatedFinal';
     if (!['final', 'translatedFinal'].includes(route.to[1]) || route.from?.[1] !== 'final' ||
-        (translated ? !translators.includes(source?.type) : source?.type !== 'SpeechToText')) recovery(node.id);
-    const type = translated ? 'TranslatedFinalText' : 'FinalText';
-    let adapter = next.nodes.find(candidate => candidate.type === type && next.edges.some(e =>
-      e.from?.[0] === source.id && e.from[1] === 'final' && e.to?.[0] === candidate.id && e.to[1] === 'final'));
-    if (!adapter) {
-      let id = 'field-text'; while (ids.has(id)) id += '-new'; ids.add(id);
-      adapter = graphNode(type, id, Math.max(0, (node.position?.x ?? 20) - 250), Math.min(4000, (node.position?.y ?? 20) + 160));
-      next.nodes.push(adapter); next.edges.push(edge(source.id, 'final', id, 'final'));
+        (translated ? !translators.includes(source?.type) : source?.type !== 'SpeechToText')) recovery('field output', node.id);
+    node.type = 'FocusedInputTextOutputNode'; route.to[1] = 'text';
+  }
+  const adapters = next.nodes.filter(node => ['FinalText', 'TranslatedFinalText'].includes(node?.type));
+  for (const adapter of adapters) {
+    const inputs = next.edges.filter(route => route?.to?.[0] === adapter.id);
+    const route = inputs[0], source = next.nodes.find(node => node?.id === route?.from?.[0]);
+    if (inputs.length !== 1 || route.to[1] !== 'final' || route.from[1] !== 'final' ||
+        (adapter.type === 'FinalText' ? source?.type !== 'SpeechToText' : !translators.includes(source?.type)) ||
+        Object.keys(adapter.settings || {}).length) recovery('text adapter', adapter.id);
+    for (const output of next.edges.filter(edge => edge?.from?.[0] === adapter.id)) {
+      if (output.from[1] !== 'text') recovery('text adapter', adapter.id);
+      output.from = [...route.from];
     }
-    node.type = 'FocusedInputTextOutputNode';
-    route.from = [adapter.id, 'text']; route.to = [node.id, 'text'];
+    next.edges = next.edges.filter(edge => edge?.to?.[0] !== adapter.id);
+    next.nodes = next.nodes.filter(node => node !== adapter);
+  }
+  for (const route of next.edges) {
+    const source = next.nodes.find(node => node?.id === route?.from?.[0]);
+    const target = next.nodes.find(node => node?.id === route?.to?.[0]);
+    if (translators.includes(source?.type)) {
+      if (!['provisional', 'final'].includes(route.from?.[1])) recovery('translation output', source.id);
+      const final = route.from[1] === 'final';
+      route.from[1] = target?.type === 'TranslationView' ? (final ? 'finalResult' : 'provisionalResult') : (final ? 'text' : 'provisional');
+    }
+    if (translators.includes(target?.type) && route.to?.[1] === 'final') route.to[1] = 'text';
   }
   next.version = GRAPH_VERSION;
   return next;
@@ -148,7 +147,10 @@ export function assertGraph(graph) {
   return structuredClone(migrated);
 }
 export function graphPreferences(graph) {
-  return { enabled: graph.nodes.some(n => translators.includes(n.type)), direction: graph.nodes.some(n => n.type === 'OpusMtEnJa') ? 'en-ja' : graph.nodes.find(n => n.type === 'TranscriptView')?.settings.direction || 'ja-en' };
+  const translation = graph.nodes.find(node => translators.includes(node.type));
+  return { enabled: !!translation, direction: translation
+    ? (translation.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en')
+    : graph.nodes.find(node => node.type === 'TranscriptView')?.settings.direction || 'ja-en' };
 }
 export function withTranslation(graph, { enabled, direction }) {
   const next = assertGraph(graph);
@@ -162,9 +164,9 @@ export function withTranslation(graph, { enabled, direction }) {
     const unused = base => { let id = base; while (ids.has(id)) id += '-new'; ids.add(id); return id; };
     const id = unused('translation'), sink = unused('translated'), speech = next.nodes.find(n => n.type === 'SpeechToText').id;
     next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink });
-    for (const port of ['provisional', 'final']) next.edges.push(edge(speech, port, id, port), edge(id, port, sink, port));
+    for (const port of ['provisional', 'final']) next.edges.push(edge(speech, port, id, port === 'final' ? 'text' : port), edge(id, port === 'final' ? 'finalResult' : 'provisionalResult', sink, port));
   } else {
-    const removed = new Set(next.nodes.filter(n => translators.includes(n.type) || ['TranslationView', 'TranslatedFinalText'].includes(n.type)).map(n => n.id));
+    const removed = new Set(next.nodes.filter(n => translators.includes(n.type) || n.type === 'TranslationView').map(n => n.id));
     // Remove downstream audio branch too when its only source is translation.
     let changed = true;
     while (changed) {

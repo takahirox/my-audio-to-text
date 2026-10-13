@@ -59,7 +59,7 @@ test('legacy preference migration, direction switch and corrupt saved graph reco
   await page.evaluate(() => localStorage.setItem('processing-graph-v1', '{broken')); await page.reload(); await page.editor.reload();
   await expect(page.locator('#errors')).toContainText('Saved graph unavailable'); await expect(page.locator('#start')).toBeDisabled();
   await page.editor.locator('#graph-reset').click(); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await expect(page.locator('#errors')).toBeEmpty();
-  expect((await saved(page)).version).toBe(3);
+  expect((await saved(page)).version).toBe(4);
 });
 
 for (const type of ['Supertonic3', 'Kokoro']) {
@@ -145,7 +145,7 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
   await expect(editor.getByRole('complementary', { name: 'Node settings inspector' })).toContainText('Original transcript');
   await expect(editor.getByLabel('transcript direction', { exact: true })).toBeVisible();
-  await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toContainText('transcript');
+  await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toContainText('text');
   await editor.getByRole('button', { name: 'Disconnect audio.audio to speech.audio', exact: true }).click();
   const output = editor.getByRole('button', { name: 'audio output audio', exact: true });
   const input = editor.getByRole('button', { name: 'speech input audio', exact: true });
@@ -230,21 +230,25 @@ for (const [id, voice, other] of [['supertonic3', 'F1', 'M1'], ['kokoro', 'jf_al
   });
 }
 
-test('version 1/2 field sinks migrate in MV3 through typed adapters; ambiguous routes recover visibly', async ({ graphExtension: f }) => {
+test('version 1/2/3 field sinks migrate in MV3 to direct TEXT; ambiguous routes recover visibly', async ({ graphExtension: f }) => {
   const page = await openGraph(f);
-  for (const version of [1, 2]) for (const type of ['FocusedInputTextOutputNode', 'SelectedFormFieldTextOutputNode']) {
+  for (const version of [1, 2, 3]) for (const type of (version === 3 ? ['FocusedInputTextOutputNode'] : ['FocusedInputTextOutputNode', 'SelectedFormFieldTextOutputNode'])) {
     await page.evaluate(async ({ version, type }) => {
       const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js');
       const graph = defaultGraph({ enabled: false }); graph.version = version;
       graph.nodes.push({ ...graphNode('FocusedInputTextOutputNode', 'field'), type });
-      graph.edges.push(edge('speech', 'final', 'field', 'final'));
+      if (version < 3) graph.edges.push(edge('speech', 'final', 'field', 'final'));
+      else {
+        graph.nodes.push({ id: 'text', type: 'FinalText', settings: {}, position: { x: 20, y: 20 } });
+        graph.edges.push(edge('speech', 'final', 'text', 'final'), edge('text', 'text', 'field', 'text'));
+      }
       localStorage.setItem(GRAPH_KEY, JSON.stringify(graph));
     }, { version, type });
     await page.reload(); await page.editor.reload();
     const graph = await saved(page);
-    expect(graph.version).toBe(3); expect(graph.nodes.some(n => n.type === 'SelectedFormFieldTextOutputNode')).toBe(false);
-    const adapter = graph.nodes.find(n => n.type === 'FinalText');
-    expect(graph.edges).toContainEqual({ from: [adapter.id, 'text'], to: ['field', 'text'] });
+    expect(graph.version).toBe(4); expect(graph.nodes.some(n => n.type === 'SelectedFormFieldTextOutputNode')).toBe(false);
+    expect(graph.nodes.some(n => n.type === 'FinalText')).toBe(false);
+    expect(graph.edges).toContainEqual({ from: ['speech', 'final'], to: ['field', 'text'] });
     await expect(page.editor.locator('#graph-errors')).toBeEmpty();
     await expect(page.editor.locator('#graph-node-type option[value="SelectedFormFieldTextOutputNode"]')).toHaveCount(0);
   }
@@ -255,5 +259,48 @@ test('version 1/2 field sinks migrate in MV3 through typed adapters; ambiguous r
   await page.reload(); await page.editor.reload();
   await expect(page.locator('#errors')).toContainText('Cannot migrate field output'); await expect(page.locator('#start')).toBeDisabled();
   await page.editor.locator('#graph-reset').click(); await page.editor.locator('#graph-save').click();
-  await expect(page.locator('#errors')).toBeEmpty(); expect((await saved(page)).version).toBe(3);
+  await expect(page.locator('#errors')).toBeEmpty(); expect((await saved(page)).version).toBe(4);
+});
+
+test('MV3 editor accepts direct translated TEXT into TranscriptView and field output with optional interim/diagnostics disconnected', async ({ graphExtension: f }) => {
+  const page = await openGraph(f), editor = page.editor;
+  await editor.getByRole('button', { name: 'Remove translated', exact: true }).click();
+  for (const [source, output, target, input] of [['speech', 'provisional', 'transcript', 'provisional'], ['speech', 'provisional', 'translation', 'provisional'], ['speech', 'final', 'transcript', 'final']]) {
+    await editor.getByRole('button', { name: `Disconnect ${source}.${output} to ${target}.${input}`, exact: true }).click();
+  }
+  await editor.getByRole('button', { name: 'translation output text', exact: true }).click();
+  await expect(editor.getByRole('button', { name: 'transcript input final', exact: true })).toBeEnabled();
+  await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
+  await editor.getByRole('button', { name: 'transcript input final', exact: true }).click();
+  await editor.locator('#graph-node-type').selectOption('FocusedInputTextOutputNode'); await editor.locator('#graph-add').click();
+  await editor.getByRole('button', { name: 'translation output text', exact: true }).click();
+  await editor.getByRole('button', { name: 'focusedinputtextoutputnode input text', exact: true }).click();
+  await expect(editor.locator('#graph-errors')).toBeEmpty(); await editor.locator('#graph-save').click();
+  await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+  const graph = await saved(page);
+  expect(graph.edges).toContainEqual({ from: ['translation', 'text'], to: ['transcript', 'final'] });
+  expect(graph.edges).toContainEqual({ from: ['translation', 'text'], to: ['focusedinputtextoutputnode', 'text'] });
+  expect(graph.nodes.some(n => ['FinalText', 'TranslatedFinalText'].includes(n.type))).toBe(false);
+  expect(await page.evaluate(() => window.graphWorkers.length)).toBe(0);
+});
+
+test('MV3 version 3 migration preserves translated field fan-out and paired diagnostic routes', async ({ graphExtension: f }) => {
+  const page = await openGraph(f);
+  await page.evaluate(async () => {
+    const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js');
+    const graph = defaultGraph(); graph.version = 3;
+    for (const route of graph.edges) {
+      if (route.to[0] === 'translation' && route.to[1] === 'text') route.to[1] = 'final';
+      if (route.from[0] === 'translation') route.from[1] = route.from[1] === 'finalResult' ? 'final' : 'provisional';
+    }
+    graph.nodes.push({ id: 'text', type: 'TranslatedFinalText', settings: {}, position: { x: 20, y: 20 } }, graphNode('FocusedInputTextOutputNode', 'a'), graphNode('FocusedInputTextOutputNode', 'b'));
+    graph.edges.push(edge('translation', 'final', 'text', 'final'), edge('text', 'text', 'a', 'text'), edge('text', 'text', 'b', 'text'));
+    localStorage.setItem(GRAPH_KEY, JSON.stringify(graph));
+  });
+  await page.reload(); await page.editor.reload();
+  const graph = await saved(page);
+  expect(graph.version).toBe(4); expect(graph.nodes.some(node => node.id === 'text')).toBe(false);
+  for (const target of ['a', 'b']) expect(graph.edges).toContainEqual({ from: ['translation', 'text'], to: [target, 'text'] });
+  expect(graph.edges).toContainEqual({ from: ['translation', 'finalResult'], to: ['translated', 'final'] });
+  await expect(page.editor.locator('#graph-errors')).toBeEmpty();
 });

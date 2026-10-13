@@ -119,6 +119,31 @@ async function instrument(f) {
 for (const direction of ['ja-en', 'en-ja']) {
 const target = direction === 'en-ja' ? 'Japanese' : 'English';
 const open = async f => { const page = await openRecorder(f); await setDirection(page, direction); return page; };
+test(`${direction}: independent translated TranscriptView uses its own language and retains paired source/result identity`, async ({ translationExtension: f }) => {
+  await instrument(f); const page = await open(f);
+  await page.evaluate(async direction => {
+    const { readGraph, saveGraph, edge, GRAPH_KEY } = await import('./graph.js');
+    const graph = readGraph(localStorage);
+    graph.nodes.find(node => node.type === 'TranscriptView').settings.direction = direction === 'ja-en' ? 'en-ja' : 'ja-en';
+    graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript');
+    graph.edges.push(edge('translation', 'text', 'transcript', 'final'));
+    saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+  }, direction);
+  await prepare(page); await start(page);
+  await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
+  await emit(page, 'partial', 'preview');
+  await expect(page.locator('#partial')).toBeEmpty();
+  await expect(page.locator('#partial-translation-source')).toHaveText('preview');
+  await expect(page.locator('#partial-english')).toHaveText(`${target}: preview`);
+  await emit(page, 'final', 'same', 0); await emit(page, 'final', 'same', 1);
+  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
+  await expect(page.locator('#final')).toHaveText(`${target}: same\n${target}: same\n`);
+  await expect(page.locator('#final')).toHaveAttribute('lang', direction === 'ja-en' ? 'en' : 'ja');
+  await expect(page.locator('#paired-finals li')).toHaveCount(2);
+  for (const index of [0, 1]) await expect(page.locator('#paired-finals li').nth(index).locator('pre')).toHaveText(['same', `${target}: same`]);
+  await expect(page.locator('#partial-translation-source')).toBeEmpty();
+});
+
 test(`${direction}: TranslationView without TranscriptView renders provisional and ordered final pairs under MV3 CSP`, async ({ translationExtension: f }) => {
   await instrument(f); const page = await open(f);
   await page.editor.getByRole('button', { name: 'Remove transcript', exact: true }).click();
@@ -204,7 +229,7 @@ test(`${direction}: production preparation reports network/quota/cancel errors, 
   await page.editor.locator('#translation-enabled').check(); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await start(page);
   await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
   await emit(page, 'final', 'fail'); await expect(page.locator('#translation-status')).toContainText('Controlled inference failure');
-  await emit(page, 'final', '原文'); await expect(page.locator('#final')).toHaveText('fail\n原文\n');
+  await emit(page, 'final', '原文', 1); await expect(page.locator('#final')).toHaveText('fail\n原文\n');
   await expect(page.locator('#errors')).toBeEmpty();
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
 });
@@ -228,7 +253,7 @@ test(`${direction}: missing WebAssembly in translation Worker reports failure wh
   await f.disableWasm(direction); await instrument(f); const page = await open(f); await prepare(page);
   await page.editor.locator('#translation-enabled').check(); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await start(page);
   await expect(page.locator('#translation-status')).toContainText('requires WebAssembly');
-  await emit(page, 'final', '原文'); await expect(page.locator('#final')).toHaveText('原文\n');
+  await emit(page, 'final', '原文', 1); await expect(page.locator('#final')).toHaveText('原文\n');
   await expect(page.locator('#paired-finals')).toContainText('requires WebAssembly');
   await expect(page.locator('#errors')).toBeEmpty();
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();

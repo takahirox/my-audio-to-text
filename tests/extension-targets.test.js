@@ -2,32 +2,32 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, GRAPH_KEY, NODE_TYPES, GRAPH_VERSION } from '../extension/graph.js';
 import { FocusedInputTextOutputNode } from '../extension/page-output-node.js';
-import { buildGraph, FinalTextNode } from '../extension/graph-runtime.js';
+import { buildGraph } from '../extension/graph-runtime.js';
 import { TEXT } from '../web/translation-nodes.js';
-import { TRANSCRIPT } from '../web/transcription-nodes.js';
+import { SpeechToTextNode } from '../web/transcription-nodes.js';
+import { legacyGraph, legacyAdapter } from './fixtures/legacy-graph.js';
 import { Pipeline } from '../web/pipeline.js';
 
 function fieldGraph(translated = false) {
   const graph = defaultGraph({ enabled: translated });
-  graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'field'), graphNode(translated ? 'TranslatedFinalText' : 'FinalText', 'text'));
-  graph.edges.push(edge(translated ? 'translation' : 'speech', 'final', 'text', 'final'), edge('text', 'text', 'field', 'text'));
+  graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'field'));
+  graph.edges.push(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', 'field', 'text'));
   return graph;
 }
-test('one TEXT input; all audio sources and Live remain valid; transcript/translation cannot connect directly', () => {
+test('direct TEXT input accepts different producers and all audio sources; structured diagnostics cannot connect', () => {
   assert.deepEqual(NODE_TYPES.FocusedInputTextOutputNode.inputs, { text: TEXT });
   assert.equal(NODE_TYPES.SelectedFormFieldTextOutputNode, undefined);
   for (const translated of [false, true]) for (const type of ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio']) {
     const graph = fieldGraph(translated); graph.nodes[0].type = type;
     assert.deepEqual(validateGraph(graph), []); assert.ok(buildGraph(graph, { onTranscript() {}, onTranslation() {} }).pipeline);
-    graph.edges.at(-1).from = [translated ? 'translation' : 'speech', 'final'];
-    assert.match(validateGraph(graph).join('\n'), /Incompatible port/);
+    graph.edges.at(-1).from = ['speech', 'provisional'];
+    assert.deepEqual(validateGraph(graph), [], 'TEXT compatibility is independent of producer/port semantics');
+    if (translated) { graph.edges.at(-1).from = ['translation', 'finalResult']; assert.match(validateGraph(graph).join('\n'), /Incompatible port/); }
   }
-  const graph = fieldGraph(); graph.edges.at(-2).from[1] = 'provisional';
-  assert.match(validateGraph(graph).join('\n'), /Connect speech.final/);
 });
-test('version 1/2 field graphs migrate persistently, reuse adapters, preserve media, and reject ambiguous outputs visibly', () => {
+test('version 1/2 field graphs migrate persistently, preserve media, and reject ambiguous outputs visibly', () => {
   for (const version of [1, 2]) for (const oldType of ['FocusedInputTextOutputNode', 'SelectedFormFieldTextOutputNode']) for (const translated of [false, true]) {
-    const graph = defaultGraph({ enabled: translated }); graph.version = version; graph.nodes[0].type = 'SelectedPageMediaAudio';
+    const graph = legacyGraph({ enabled: translated }, version); graph.nodes[0].type = 'SelectedPageMediaAudio';
     graph.nodes.push({ ...graphNode('FocusedInputTextOutputNode', 'field'), type: oldType });
     graph.edges.push(edge(translated ? 'translation' : 'speech', 'final', 'field', translated ? 'translatedFinal' : 'final'));
     let saved = JSON.stringify(graph);
@@ -37,19 +37,24 @@ test('version 1/2 field graphs migrate persistently, reuse adapters, preserve me
     assert.deepEqual(readGraph(storage), migrated); assert.deepEqual(validateGraph(migrated), []);
     assert.equal(migrated.nodes[0].type, 'SelectedPageMediaAudio');
     assert.equal(migrated.nodes.find(n => n.id === 'field').type, 'FocusedInputTextOutputNode');
-    const adapter = migrated.nodes.find(n => n.type === (translated ? 'TranslatedFinalText' : 'FinalText'));
-    assert.ok(migrated.edges.some(e => e.from[0] === adapter.id && e.to[0] === 'field' && e.to[1] === 'text'));
-    // Existing final adapter can fan out to legacy destinations after migration.
-    const oldWithAdapter = structuredClone(graph); oldWithAdapter.nodes.push(adapter);
-    oldWithAdapter.edges.push(edge(translated ? 'translation' : 'speech', 'final', adapter.id, 'final'));
-    assert.equal(assertGraph(oldWithAdapter).nodes.length, migrated.nodes.length);
+    assert.deepEqual(migrated.edges.at(-1), edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', 'field', 'text'));
     graph.edges.push(edge('speech', 'final', 'field', 'final'));
     assert.throws(() => assertGraph(graph), /Cannot migrate.*Reset and Save/);
   }
-  const graph = defaultGraph(); graph.version = 1;
-  assert.deepEqual(assertGraph(graph).edges, graph.edges);
-  const malformed = fieldGraph(); malformed.version = 2; malformed.edges.at(-1).to[1] = 'final';
-  assert.throws(() => assertGraph(malformed), /Cannot migrate/);
+});
+test('version 3 removes adapters preserving every fan-out route and translation view diagnostics', () => {
+  for (const translated of [false, true]) {
+    const graph = legacyGraph({ enabled: translated });
+    graph.nodes.push(legacyAdapter(translated), graphNode('FocusedInputTextOutputNode', 'a'), graphNode('FocusedInputTextOutputNode', 'b'));
+    graph.edges.push(edge(translated ? 'translation' : 'speech', 'final', 'text', 'final'), edge('text', 'text', 'a', 'text'), edge('text', 'text', 'b', 'text'));
+    const before = structuredClone(graph), migrated = assertGraph(graph);
+    assert.deepEqual(graph, before, 'migration never mutates stored input');
+    assert.equal(migrated.nodes.some(node => node.id === 'text'), false);
+    for (const id of ['a', 'b']) assert.ok(migrated.edges.some(route => JSON.stringify(route) === JSON.stringify(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', id, 'text'))));
+    if (translated) assert.ok(migrated.edges.some(route => route.from[1] === 'finalResult' && route.to[0] === 'translated'));
+    graph.edges.find(route => route.to[0] === 'text').from[1] = 'provisional';
+    assert.throws(() => assertGraph(graph), /Cannot migrate text adapter.*Reset and Save/);
+  }
 });
 const context = () => ({ signal: new AbortController().signal });
 function output({ target = { tabId: 42, documentId: 'document', label: 'Test page' }, response = { inserted: true } } = {}) {
@@ -104,22 +109,16 @@ test('disconnect during output handshake never revives on a late reply', async (
   const starting = node.start(ctx); disconnect(); reply(); await starting; await node.receive('text', 'never', ctx);
   assert.equal(states.length, 1); assert.equal(states[0][1], false); assert.equal(closed, 1); assert.equal(node.sequence, 0);
 });
-test('final delivery policy deduplicates IDs upstream; plain TEXT fans out independently in order while Live receives transcripts', async () => {
-  for (const translated of [false, true]) {
-    const a = output(), b = output(), live = [];
-    const adapter = new FinalTextNode(translated);
-    const source = { inputs: {}, outputs: { final: adapter.inputs.final }, start(ctx) { this.emit = value => ctx.emit('final', value); } };
-    const pipeline = new Pipeline({ nodes: { source, adapter, a: a.node, b: b.node, live: { inputs: { final: source.outputs.final }, outputs: {}, receive: (_port, value) => live.push(value) } }, connections: [edge('source', 'final', 'adapter', 'final'), edge('source', 'final', 'live', 'final'), edge('adapter', 'text', 'a', 'text'), edge('adapter', 'text', 'b', 'text')] });
-    await pipeline.start();
-    for (const [id, text, status] of [[0, 'pending', 'pending'], [1, 'one', 'complete'], [1, 'retry', 'complete'], [0, 'stale', 'complete'], [2, 'one', 'complete'], [3, 'x'.repeat(299) + '😀' + 'end', 'complete']]) {
-      if (!translated && status !== 'complete') continue;
-      source.emit({ id, source: { id }, text, status });
-    }
-    await pipeline.stop(); await pipeline.stop(); await pipeline.dispose();
-    for (const f of [a, b]) assert.deepEqual(f.sent.filter(([action]) => action === 'append').map(([, v]) => v.text), ['one', 'one', 'x'.repeat(299) + '😀' + 'end']);
-    assert.equal(live.length, translated ? 6 : 5);
-  }
-  assert.notEqual(TEXT, TRANSCRIPT);
+test('SpeechToText deduplicates worker IDs before direct TEXT fan-out; equal strings with distinct IDs deliver once', async () => {
+  const a = output(), b = output(), live = [], speech = new SpeechToTextNode();
+  speech.start = ctx => { speech.context = ctx; }; speech.stop = () => {};
+  const pipeline = new Pipeline({ nodes: { speech, a: a.node, b: b.node, live: { inputs: { final: TEXT }, outputs: {}, receive: (_port, value) => live.push(value) } }, connections: [edge('speech', 'final', 'live', 'final'), edge('speech', 'final', 'a', 'text'), edge('speech', 'final', 'b', 'text')] });
+  await pipeline.start();
+  speech.receiveEvent({ type: 'partial', id: 0, text: 'provisional' });
+  for (const [id, text] of [[1, 'one'], [1, 'retry'], [0, 'stale'], [2, 'one'], [3, 'x'.repeat(299) + '😀' + 'end']]) speech.receiveEvent({ type: 'final', id, text });
+  await pipeline.stop(); await pipeline.stop(); await pipeline.dispose();
+  for (const f of [a, b]) assert.deepEqual(f.sent.filter(([action]) => action === 'append').map(([, v]) => v.text), ['one', 'one', 'x'.repeat(299) + '😀' + 'end']);
+  assert.deepEqual(live, ['one', 'one', 'x'.repeat(299) + '😀' + 'end']);
 });
 
 test('microphone toolbar selection never requests permission; cancellation releases a late grant before model/capture startup', async () => {

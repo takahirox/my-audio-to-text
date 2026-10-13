@@ -76,9 +76,8 @@ const test = base.extend({
             graph.nodes = graph.nodes.filter(node => !views.includes(node.id)); graph.edges = graph.edges.filter(edge => !views.includes(edge.to[0]));
           }
           for (const [id, type, translated] of outputs) {
-            const textId = id + '-text';
-            graph.nodes.push(graphNode(type, id), graphNode(translated ? 'TranslatedFinalText' : 'FinalText', textId));
-            graph.edges.push(edge(translated ? 'translation' : 'speech', 'final', textId, 'final'), edge(textId, 'text', id, 'text'));
+            graph.nodes.push(graphNode(type, id));
+            graph.edges.push(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', id, 'text'));
           }
           saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
         }, { source, outputs, translation, live });
@@ -97,7 +96,7 @@ async function emit(t, id, text, type = 'final') { await t.page.evaluate(({ id, 
 for (const selector of ['#focused', '#search', '#chosen', '#editable']) test(`plain TEXT appends verbatim to ${selector}, preserving whitespace, selections and event data`, async ({ targets: t }) => {
   await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.invoke();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await stop(t);
-  // Supply TEXT directly so the upstream final adapter's formatting cannot
+  // Supply TEXT directly so the upstream producer's formatting cannot
   // hide output changes to whitespace. Use the actual Pipeline and page port.
   expect(await t.page.evaluate(async webOrigin => {
     const { Pipeline } = await import('../web/pipeline.js');
@@ -163,8 +162,8 @@ test('toolbar automatically readies one TEXT sink; Live popup focus, input/searc
   await expect.poll(() => t.website.evaluate(() => document.hasFocus())).toBe(false);
   await emit(t, 1, '今日は'); await emit(t, 1, 'duplicate'); await emit(t, 0, 'stale'); await emit(t, 2, 'いい天気ですね'); await emit(t, 3, 'いい天気ですね');
   await expect(t.website.locator('#focused')).toHaveValue('manual今日はいい天気ですねいい天気ですね');
-  // Live receives transcripts independently of the final adapter's ID policy.
-  await expect(t.page.locator('#final')).toHaveText('今日は\nduplicate\nstale\nいい天気ですね\nいい天気ですね\n');
+  // The ASR producer deduplicates before fan-out to field output and Live.
+  await expect(t.page.locator('#final')).toHaveText('今日は\nいい天気ですね\nいい天気ですね\n');
   await t.website.bringToFront(); await t.website.locator('#search').click();
   await t.website.locator('#search').evaluate(e => e.setSelectionRange(0, 5));
   await t.page.bringToFront(); await emit(t, 4, 'search'); await expect(t.website.locator('#search')).toHaveValue('querysearch');
@@ -297,7 +296,7 @@ test('lost connection during start and running detaches focused output; Live con
   await t.website.close(); await expect(t.page.locator('#target-status')).toContainText(/detached|disconnected/); await stop(t);
 });
 
-test('completed translations flow through adapter to TEXT fan-out and paired Live; provisional/pending and duplicate finals never insert', async ({ targets: t }) => {
+test('completed translations flow directly to TEXT fan-out and paired Live; provisional/pending and duplicate finals never insert', async ({ targets: t }) => {
   await t.page.evaluate(async () => {
     const { TranslationSchedulerNode } = await import('./translation-scheduler.js'), start = TranslationSchedulerNode.prototype.start;
     TranslationSchedulerNode.prototype.start = function(context) { this.prepare = async () => {}; return start.call(this, context); };

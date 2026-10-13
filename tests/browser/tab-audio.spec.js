@@ -12,7 +12,7 @@ for (const fallback of [false, true]) {
       window.pipelineValues = []; window.pipelineErrors = [];
       window.flow = createTabTranscriptionPipeline({
         onTranscript: async (port, value) => {
-          await Promise.resolve(); window.pipelineValues.push({ port, ...value });
+          await Promise.resolve(); window.pipelineValues.push({ port, text: value });
         },
         onError: error => window.pipelineErrors.push(error.message),
       });
@@ -22,7 +22,7 @@ for (const fallback of [false, true]) {
     await expect.poll(() => page.evaluate(() => window.pipelineValues.filter(v => v.port === 'provisional').length)).toBeGreaterThan(0);
     await page.evaluate(async () => { await window.flow.pipeline.stop(); });
     expect(await page.evaluate(() => window.pipelineValues.filter(v => v.port === 'final'))).toEqual([
-      { port: 'final', text: 'tab transcript', id: 1 },
+      { port: 'final', text: 'tab transcript' },
     ]);
     expect(await page.evaluate(() => window.flow.pipeline.state)).toBe('stopped');
     await released(page);

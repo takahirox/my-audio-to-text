@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT, TextOutputNode } from '../web/translation-nodes.js';
-import { TRANSCRIPT } from '../web/transcription-nodes.js';
-import { SpeechTranscriptCorrectionNode, FinalTranscriptTextNode } from '../web/correction-nodes.js';
+import { SpeechTranscriptCorrectionNode } from '../web/correction-nodes.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(options = {}, respond = message => ({ type: message.type === 'load' ? 'ready' : message.type === 'drain' ? 'drained' : 'result', text: message.text + ' corrected' })) {
   const workers = [], output = [], original = [], errors = [], events = [];
@@ -39,22 +38,19 @@ test('plain TEXT identity, serial final texts, exactly one output including empt
   assert.equal(f.workers[0].url.pathname.endsWith('/qwen3-correction-worker.js'), true);
   await f.pipeline.dispose(); await f.pipeline.dispose(); assert.equal(f.workers[0].terminated, 1);
 });
-test('explicit final transcript adapter extracts text without mutating IDs or wiring provisional', async () => {
-  const adapter = new FinalTranscriptTextNode(), outputs = [], original = [];
-  const transcript = Object.freeze({ text: 'final', id: 42 });
+test('final TEXT connects directly to correction and fans out without provisional delivery', async () => {
+  const outputs = [], original = [];
   const graph = new Pipeline({ nodes: {
-    source: { outputs: { provisional: TRANSCRIPT, final: TRANSCRIPT }, start(c) { c.emit('provisional', {text:'partial',id:42}); c.emit('final', transcript); } },
-    adapter, sink: new TextOutputNode(text => outputs.push(text)),
-    original: { inputs: { final: TRANSCRIPT }, receive(port, value) { original.push(value); } },
+    source: { outputs: { provisional: TEXT, final: TEXT }, start(c) { c.emit('provisional', 'partial'); c.emit('final', 'final'); } },
+    correction: new SpeechTranscriptCorrectionNode({ enabled: false }), sink: new TextOutputNode(text => outputs.push(text)),
+    original: new TextOutputNode(text => original.push(text)),
   }, connections: [
-    { from: ['source', 'final'], to: ['adapter', 'final'] },
-    { from: ['source', 'final'], to: ['original', 'final'] },
-    { from: ['adapter', 'text'], to: ['sink', 'text'] },
+    { from: ['source', 'final'], to: ['correction', 'text'] },
+    { from: ['source', 'final'], to: ['original', 'text'] },
+    { from: ['correction', 'text'], to: ['sink', 'text'] },
   ] });
   await graph.start(); await graph.stop(); await graph.dispose();
-  assert.deepEqual(outputs, ['final']); assert.equal(original[0], transcript);
-  assert.throws(() => new Pipeline({ nodes: { source: {outputs:{final:TRANSCRIPT}}, correction:new SpeechTranscriptCorrectionNode() }, connections:[{from:['source','final'],to:['correction','text']}] }), /Incompatible/);
-  assert.throws(() => adapter.receive('provisional', transcript, {}), /final transcript/);
+  assert.deepEqual(outputs, ['final']); assert.deepEqual(original, ['final']);
 });
 test('disabled correction copies exactly without creating a Worker; node can also be omitted', async () => {
   const f = fixture({ enabled: false }); await f.pipeline.start(); f.emit('  I will not go.  ');

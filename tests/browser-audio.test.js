@@ -128,7 +128,7 @@ for (const kind of ['tab', 'microphone', 'extension']) for (const rate of [16000
     const expected = joinAudio([resampler.push(new Float32Array(rate + 37).fill(0.05)), resampler.flush()]);
     assert.equal(actual.length, expected.length);
     assert.ok(actual.every((sample, i) => Math.abs(sample - expected[i]) < 1e-6));
-    assert.deepEqual(values.filter(([port]) => port === 'final'), [['final', { text: 'committed', id: 1 }]]);
+    assert.deepEqual(values.filter(([port]) => port === 'final'), [['final', 'committed']]);
     assert.ok(b.tracks.every(track => track.stops === 1));
     assert.equal(b.contexts[0].state, 'closed');
     await flow.pipeline.dispose(); assert.ok(workers.every(worker => worker.terminated));

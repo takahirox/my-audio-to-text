@@ -20,7 +20,7 @@ export class TabSession {
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation;
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
     const preferences = graphPreferences(this.graph);
-    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', partial: '', final: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, ttsStatus: '', targetStatus: '', displayDirection: 'ja-en', displayTranslationEnabled: false, translationStatus: 'Translation off', interimTranslation: null, utterances: [] };
+    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', partial: '', final: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, ttsStatus: '', targetStatus: '', displayDirection: 'ja-en', displayTranscriptDirection: preferences.direction, displayTranslationEnabled: false, translationStatus: 'Translation off', interimTranslation: null, utterances: [] };
     this.update();
   }
   update(values = {}) { Object.assign(this.view, values); this.render({ ...this.view }); }
@@ -29,6 +29,7 @@ export class TabSession {
     let graph;
     try { graph = assertGraph(this.graph); } catch (error) { this.update({ error: error.message }); return; }
     const preferences = graphPreferences(graph);
+    const transcriptDirection = graph.nodes.find(node => node.type === 'TranscriptView')?.settings.direction || preferences.direction;
     const hasTranscriptView = graph.nodes.some(node => node.type === 'TranscriptView');
     const hasTranslationView = graph.nodes.some(node => node.type === 'TranslationView');
     const sourceType = graph.nodes.find(n => INPUT_TYPES.includes(n.type)).type;
@@ -39,8 +40,8 @@ export class TabSession {
         this.update({ tabId, error: `Select and authorize the target for ${node.id} in Live before Start.` }); return;
       }
     }
-    const session = { tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), sourceType, direction: preferences.direction, translationEnabled: preferences.enabled }; this.session = session;
-    this.update({ state: 'loading', tabId, activeGraph: graph, ttsStatus: '', targetStatus: '', displayDirection: session.direction, displayTranslationEnabled: session.translationEnabled,
+    const session = { tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), sourceType, direction: preferences.direction, transcriptDirection, translationEnabled: preferences.enabled }; this.session = session;
+    this.update({ state: 'loading', tabId, activeGraph: graph, ttsStatus: '', targetStatus: '', displayDirection: session.direction, displayTranscriptDirection: transcriptDirection, displayTranslationEnabled: session.translationEnabled,
       translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: 'Loading ReazonSpeech ja-en + Silero…', error: '', partial: '', final: '', signal: '', interimTranslation: null, utterances: [] });
     try {
       if (sourceType === 'MicrophoneAudio') {
@@ -73,13 +74,13 @@ export class TabSession {
           if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: event.message });
           else if (event.type === 'error' && session.pipeline?.state === 'idle') this.fail(event.message);
         },
-        onTranscript: (port, { text }, signal) => {
+        onTranscript: (port, text, signal) => {
           if (this.session !== session || signal.aborted) return;
           if (port === 'provisional' && this.view.state !== 'stopping') this.update({ partial: text });
-          else if (port === 'final') this.update({ partial: '', interimTranslation: null,
+          else if (port === 'final') this.update({ partial: '', ...(!hasTranslationView ? { interimTranslation: null } : {}),
             final: this.view.final + (text.trim() ? `${text}\n` : ''),
             // Paired rows belong to TranslationView's source-bearing messages.
-            utterances: !hasTranslationView && text.trim() ? [...this.view.utterances, { source: text, direction: session.direction, status: session.translation ? 'pending' : 'off', text: '' }] : this.view.utterances });
+            utterances: !hasTranslationView && text.trim() ? [...this.view.utterances, { source: text, direction: transcriptDirection, status: 'off', text: '' }] : this.view.utterances });
         },
         onCapturedAudio: pcm => {
           if (this.session !== session) return;
@@ -92,14 +93,14 @@ export class TabSession {
         onTranslation: (port, value, context) => {
           if (this.session !== session || context.signal.aborted) return;
           if (port === 'provisional') {
-            if (this.view.state !== 'stopping' && (!hasTranscriptView || value.source.text === this.view.partial)) this.update({
-              ...(!hasTranscriptView ? { partial: value.source.text } : {}),
+            if (this.view.state !== 'stopping') this.update({
+              ...(!hasTranscriptView ? { partial: value.source } : {}),
               interimTranslation: value.status === 'pending' && this.view.interimTranslation
               ? { ...value, previous: this.view.interimTranslation.status === 'complete' ? this.view.interimTranslation : this.view.interimTranslation.previous } : value });
           } else {
             const utterances = [...this.view.utterances], first = !utterances[value.index];
-            utterances[value.index] = { ...value, source: value.source.text, direction: session.direction };
-            this.update({ utterances, ...(!hasTranscriptView && first ? { partial: '', interimTranslation: null } : {}) });
+            utterances[value.index] = { ...value, direction: session.direction };
+            this.update({ utterances, ...(first ? { interimTranslation: null, ...(!hasTranscriptView ? { partial: '' } : {}) } : {}) });
           }
         },
         onError: error => { if (this.session === session) this.fail(error.cause?.message || error.message); },

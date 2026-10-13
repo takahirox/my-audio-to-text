@@ -2,10 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Pipeline } from '../web/pipeline.js';
-import { TRANSCRIPT } from '../web/transcription-nodes.js';
-import { TEXT, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
+import { TEXT, TextOutputNode, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
 import { OPUS_MT, OPUS_MT_EN_JA } from '../web/translation-models.js';
-import { TranslationSchedulerNode, TRANSLATION } from '../extension/translation-scheduler.js';
+import { TranslationSchedulerNode, TEXT_RESULT } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
 import { defaultGraph } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
@@ -41,13 +40,13 @@ async function schedulerGraph(options = {}) {
     TranslationNode: options.direction === 'en-ja' ? EnglishToJapaneseOpusMtTranslationNode : undefined,
     onState: state => states.push(state) });
   const pipeline = new Pipeline({ nodes: {
-    source: { inputs: {}, outputs: { provisional: TRANSCRIPT, final: TRANSCRIPT }, start(context) { emit = context.emit; } },
-    scheduler, sink: { inputs: { provisional: TRANSLATION, final: TRANSLATION }, outputs: {}, receive(port, value) { outputs.push({ port, ...value }); } },
+    source: { inputs: {}, outputs: { provisional: TEXT, final: TEXT }, start(context) { emit = context.emit; } },
+    scheduler, sink: { inputs: { provisional: TEXT_RESULT, final: TEXT_RESULT }, outputs: {}, receive(port, value) { outputs.push({ port, ...value }); } },
   }, connections: ['provisional', 'final'].flatMap(port => [
-    { from: ['source', port], to: ['scheduler', port] }, { from: ['scheduler', port], to: ['sink', port] },
+    { from: ['source', port], to: ['scheduler', port === 'final' ? 'text' : port] }, { from: ['scheduler', port === 'final' ? 'finalResult' : 'provisionalResult'], to: ['sink', port] },
   ]) });
   await pipeline.start();
-  const send = (port, text, id = text) => emit(port, { text, id });
+  const send = (port, text) => emit(port, text);
   return { ...f, pipeline, scheduler, outputs, states, send };
 }
 
@@ -73,7 +72,7 @@ test(`${direction}: explicit Pipeline adapter coalesces rapid provisional update
   assert.ok(f.workers[0].url.pathname.endsWith(direction === 'en-ja' ? '/opus-mt-en-ja-worker.js' : '/opus-mt-worker.js'));
   for (let i = 0; i < 100; i++) f.send('provisional', `update ${i}`);
   await tick();
-  assert.equal(f.requests.length, 1); assert.equal(f.scheduler.provisional.source.text, 'update 99');
+  assert.equal(f.requests.length, 1); assert.equal(f.scheduler.provisional.source, 'update 99');
   f.send('final', 'final one'); f.send('final', 'final two'); f.send('provisional', 'new utterance'); await tick();
   f.complete(0); await tick();
   assert.equal(f.requests[1].text, 'final one');
@@ -83,7 +82,7 @@ test(`${direction}: explicit Pipeline adapter coalesces rapid provisional update
   f.complete(1); await tick(); assert.equal(f.requests[2].text, 'final two');
   f.complete(2); await tick(); assert.equal(f.requests[3].text, 'new utterance');
   f.complete(3); await tick();
-  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => [value.port, value.source.text, value.index]),
+  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => [value.port, value.source, value.index]),
     [['final', 'final one', 0], ['final', 'final two', 1], ['provisional', 'new utterance', undefined]]);
   await f.pipeline.stop(); await f.pipeline.dispose(); assert.ok(f.workers.every(worker => worker.terminated));
 });
@@ -92,7 +91,7 @@ test(`${direction}: latest matching provisional completes; Stop drops queued int
   const f = await graph();
   f.send('provisional', 'old'); await tick();
   f.send('provisional', 'latest'); await tick(); f.complete(0); await tick(); f.complete(1); await tick();
-  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => value.source.text), ['latest']);
+  assert.deepEqual(f.outputs.filter(value => value.status === 'complete').map(value => value.source), ['latest']);
   f.send('final', 'one'); f.send('final', 'two'); f.send('provisional', 'obsolete'); await tick();
   let stopped = false; const stopping = f.pipeline.stop().then(() => { stopped = true; });
   await tick(); assert.equal(stopped, false);
@@ -142,10 +141,10 @@ test(`${direction}: overlong final reports error without losing subsequent valid
 }
 
 test('UI distinguishes matching, pending, older interim, failed and canceled translation', () => {
-  const complete = { status: 'complete', source: { text: 'old' }, text: 'English old' };
+  const complete = { status: 'complete', source: 'old', text: 'English old' };
   assert.equal(provisionalLabel('old', complete, true), 'English old');
   assert.match(provisionalLabel('new', complete, true), /Translating… Older interim: English old/);
-  assert.match(provisionalLabel('new', { status: 'pending', source: { text: 'new' }, previous: complete }, true), /Original for older translation: old/);
+  assert.match(provisionalLabel('new', { status: 'pending', source: 'new', previous: complete }, true), /Original for older translation: old/);
   assert.equal(provisionalLabel('new', null, false), 'Translation off');
   assert.equal(translationLabel({ status: 'error', error: 'cache missing' }), 'Translation failed: cache missing');
   assert.equal(translationLabel({ status: 'canceled' }), 'Translation canceled');
@@ -279,4 +278,46 @@ test('direction is captured before loading, applies next session, and never rela
   assert.ok(f.translation.workers[1].url.pathname.endsWith('/opus-mt-worker.js'));
   assert.equal(f.session.view.displayDirection, 'ja-en'); assert.deepEqual(f.session.view.utterances, []);
   f.session.cancel(); await tick(); assert.ok(f.translation.workers.every(worker => worker.terminated));
+});
+
+test('scheduler accepts only TEXT and emits successful strings once to independent fan-out without diagnostic connections', async () => {
+  const f = workerFixture(), a = [], b = [];
+  let emit;
+  const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory });
+  const pipeline = new Pipeline({ nodes: {
+    source: { outputs: { text: TEXT }, start(c) { emit = text => c.emit('text', text); } }, scheduler,
+    a: new TextOutputNode(text => a.push(text)),
+    b: new TextOutputNode(text => b.push(text)),
+  }, connections: [
+    { from: ['source', 'text'], to: ['scheduler', 'text'] },
+    ...['a', 'b'].map(id => ({ from: ['scheduler', 'text'], to: [id, 'text'] })),
+  ] });
+  await pipeline.start();
+  emit('same'); emit('same'); emit('x'.repeat(1001)); emit('next'); await tick();
+  assert.deepEqual(a, [], 'pending is never a TEXT value');
+  f.complete(0, 'first'); await tick(); f.complete(1, 'second'); await tick();
+  const stopping = pipeline.stop(); await tick(); f.complete(2, 'third'); await stopping;
+  assert.deepEqual(a, ['first', 'second', 'third']); assert.deepEqual(b, a);
+  await pipeline.dispose();
+});
+
+test('independent transcript and paired translation streams do not overwrite each other’s interim state', async () => {
+  const f = sessionFixture(); f.session.setTranslation(true);
+  const graph = structuredClone(f.session.graph); graph.nodes.find(node => node.type === 'TranscriptView').settings.direction = 'en-ja';
+  f.session.setGraph(graph); await f.session.start(42);
+  assert.equal(f.session.view.displayTranscriptDirection, 'en-ja');
+  assert.equal(f.session.view.displayDirection, 'ja-en');
+  const pipeline = f.session.session.pipeline;
+  const transcript = pipeline.entries.get('transcript'), translation = pipeline.entries.get('translation');
+  await transcript.node.receive('provisional', 'independent transcript', transcript.context);
+  translation.node.receive('provisional', 'translation source'); await tick();
+  assert.equal(f.session.view.partial, 'independent transcript');
+  assert.equal(f.session.view.interimTranslation.source, 'translation source');
+  await transcript.node.receive('final', 'independent final', transcript.context);
+  f.translation.complete(0, 'translated'); await tick();
+  assert.equal(f.session.view.interimTranslation.text, 'translated');
+  assert.equal(f.session.view.final, 'independent final\n');
+  translation.node.receive('provisional', ''); await tick();
+  assert.equal(f.session.view.interimTranslation.source, '');
+  await f.session.stop();
 });
