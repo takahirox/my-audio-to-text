@@ -122,3 +122,13 @@ no failures were accepted as flaky. No push or merge was performed.
 If merging triggers Playground publication, verify deployment completion, the
 published revision, updated pages and core text flows on the published origin,
 then record evidence before closing Issue #91. No push or merge was performed.
+
+## Publication directive
+
+The current publication request explicitly requires `Closes #91` in PR #92's
+body. The saved description uses that directive, superseding the earlier
+non-closing-reference publication instructions above. Required post-merge
+Playground deployment verification remains pending and must still be performed
+and recorded if merge triggers publication. This publication step does not merge
+the PR or claim deployment verification. It checks clean-worktree ancestry and
+the complete PR diff; it does not rerun the previously reported test suites.
