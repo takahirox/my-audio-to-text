@@ -19,13 +19,15 @@ Document the repository-wide contract audit in [docs/port-contracts.md](docs/por
 
 Committed evidence: [implementation validation](docs/evidence/ports-91.md) and [review corrections](docs/evidence/ports-91-review-fixes.md).
 
-Latest revision checks reported by the correction node:
+Checks reported by the extension-session correction node:
 
 - `npm test`: 249 passed, 0 failed/skipped.
 - `npm run test:browser -- tests/browser/text-contracts.spec.js`: 2 passed across Chromium and WebKit, 0 failed/skipped.
 - `npm run build:extension`: passed after pinned asset preparation.
 - `npm run test:extension`: 83 passed, 5 optional real-model checks skipped, 0 failed.
 - `git diff --check`: passed.
+
+The subsequent documentation/metadata correction reran `npm test`: 249 passed, 0 failed/skipped, and passed documentation checks and `git diff --check`. Browser, extension/build and optional real-model checks were not rerun for that revision.
 
 The implementation node previously ran the full browser suite: 218 passed, 18 optional checks skipped, 0 failed. The full browser suite was not rerun after the extension-session correction. Optional real-model inference smoke was not run; deterministic inference fixtures do not establish model quality. The packaged suite initialized real pinned ASR/Silero workers under MV3 CSP. No test failures were accepted as flaky and retries were disabled.
 
@@ -37,14 +39,14 @@ Publication checked the clean worktree, fast-forward ancestry from the existing 
 
 ## Related issues
 
-Refs #91
+Closes #91
 
-Pre-merge implementation and validation are complete. The required post-merge Playground deployment verification remains pending as described above. Keep Issue #91 open until that verification is performed and recorded.
+Pre-merge implementation and validation are complete. The required post-merge Playground deployment verification remains pending as described above. Record deployment evidence after merge.
 
 ## Scope check
 
-- [x] Pre-merge scope is complete; Issue #91 remains open until required post-merge deployment verification is performed and recorded.
+- [x] Pre-merge scope is complete; required post-merge deployment verification remains pending and must be performed and recorded after merge.
 - [x] This PR does not include unrelated work.
 - [x] This PR does not add speculative abstractions, extensibility, frameworks, or subsystems that are not needed by the Issue.
-- [x] Any intentionally partial implementation is clearly stated, and the parent Issue is not presented as fully resolved unless the remaining scope has been explicitly split out. (No partial implementation; outstanding post-merge verification is stated above.)
+- [x] The implementation is complete; outstanding post-merge verification is explicitly stated above and is not claimed as completed.
 - [x] Validation maps to the Issue's expected outcome / acceptance criteria.
