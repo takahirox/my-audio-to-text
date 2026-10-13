@@ -120,4 +120,9 @@ export async function addAudioPath(page, type) {
   }
   await expect(editor.locator('#graph-errors')).toBeEmpty(); await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
 }
+export async function disconnectWire(editor, route) {
+  const wire = editor.getByRole('button', { name: `Select connection ${route}`, exact: true });
+  await wire.press('Enter');
+  await editor.getByRole('button', { name: `Disconnect ${route}`, exact: true }).click();
+}
 export { expect };

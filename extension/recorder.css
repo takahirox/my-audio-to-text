@@ -41,6 +41,7 @@ fieldset { border: 1px solid var(--border); border-radius: .5rem; padding: .75re
 .graph-wires .wire-hit { stroke: transparent; pointer-events: stroke; cursor: pointer; }
 .graph-wires .selected-wire .wire-line { stroke: #fff1a8; stroke-width: 5; }
 .graph-wire:focus-visible .wire-line { stroke: #fff1a8; }
+#graph-disconnect { position: absolute; z-index: 1; transform-origin: top left; min-width: 112px; min-height: 44px; font-size: .85rem; border-color: #fff1a8; touch-action: manipulation; }
 .graph-node { position: absolute; width: 235px; padding: 8px; border: 1px solid #647693; border-radius: .6rem; background: #202d40; }
 .graph-heading { display: block; width: 100%; padding: .2rem; text-align: left; background: transparent; border: 0; font-weight: 650; font-size: .85rem; cursor: move; touch-action: none; margin-bottom: .4rem; }
 .graph-node > button:not(.graph-heading) { font-size: .7rem; padding: .2rem .4rem; }
@@ -49,7 +50,7 @@ fieldset { border: 1px solid var(--border); border-radius: .5rem; padding: .75re
 .graph-ports button { display: block; width: 100%; text-align: left; margin: .3rem 0; padding: .3rem; font-size: .75rem; overflow-wrap: anywhere; }
 .graph-ports small { display: block; font-size: .6rem; color: var(--muted); }
 .selected-node { border: 2px solid #c4d8ff; } .selected-port { outline: 3px solid var(--accent); }
-#graph-errors { font-size: .85rem; } #graph-connections { font-size: .85rem; padding-left: 1.2rem; } #graph-connections button { margin: .2rem; font-size: .8rem; }
+#graph-errors { font-size: .85rem; }
 .model-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .model-status { font-weight: 650; } .model-card label { display: block; }
 progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap: anywhere; font-size: .8rem; }
