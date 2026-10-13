@@ -245,17 +245,22 @@ requires no TTS policy or modification.
 
 ## Extension visual graph composition
 
-The [extension graph editor](extension-graph.md) saves a version 1 description
+The [extension graph editor](extension-graph.md) saves a version 4 description
 with concrete production Node types and explicit named-port edges. The extension
 builder constructs this shared Pipeline at each session boundary. ASR, OPUS-MT
 directions, Supertonic 3 and Kokoro remain independent production processors;
-final-text adapters and audio playback are separate Nodes. No editor, model
-selection, storage or inference policy is added to the generic Pipeline runtime.
+ordinary text flows connect directly through shared `TEXT` ports, and audio
+playback remains a separate Node. Version 1–3 descriptions migrate explicitly
+to version 4, removing extraction adapters while preserving their downstream
+routes and fan-out. No editor, model selection, storage or inference policy is
+added to the generic Pipeline runtime.
 
 ## Optional transcript correction
 
 `SpeechTranscriptCorrectionNode` owns a Qwen3 0.6B Worker and exposes plain
-`TEXT` input/output. Connect `SpeechToTextNode.final` through the explicit
-`FinalTranscriptTextNode` adapter; preserve a separate original transcript
-branch. It can be omitted or explicitly bypassed, with no default graph or
-extension change. See [model, lifecycle, conservative policy and evaluation](correction-node.md).
+`TEXT` input/output. Connect `SpeechToTextNode.final` directly to
+`SpeechTranscriptCorrectionNode.text`; fan out the final string to preserve a
+separate original transcript branch. Connect the correction's `text` output
+directly to translation or other `TEXT` consumers. It can be omitted or
+explicitly bypassed, with no default graph or extension change. See
+[model, lifecycle, conservative policy and evaluation](correction-node.md).

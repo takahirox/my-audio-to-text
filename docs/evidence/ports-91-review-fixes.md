@@ -62,6 +62,26 @@ ASR-to-field (one) and ASR-to-OPUS-MT (two) inference checks. The mandatory
 packaged suite initialized the real pinned ASR/Silero workers under MV3 CSP.
 No test failures were accepted as flaky, and retries were disabled.
 
+## Runtime guide and PR reference corrections
+
+The runtime guide now describes version 4 extension graphs, explicit legacy
+migration and direct shared TEXT connections from ASR finals to correction and
+other text consumers, including fan-out to preserve the original transcript.
+It no longer instructs readers to use the removed final-text adapter.
+
+PR #92's closing directive was replaced with `Refs #91` again, preserving its
+pending deployment record. A read-back verified the corrected description and
+unchanged head `e62527024d7bc4054466d7bc7cb6a8fb8abcbff7`.
+The [saved PR description](ports-91-pr.md) records this correction for downstream
+publication; retain the non-closing reference until required verification is
+performed and recorded.
+
+For this documentation/metadata revision, `npm test` passed all 249 tests with
+no failures or skips. Documentation links, graph version and named TEXT ports
+were checked against the current modules; `git diff --check` passed. Browser,
+extension/build and optional real-model checks were not rerun for this revision.
+No push or merge was performed.
+
 ## Required post-merge verification — pending
 
 If merging triggers Playground publication, verify deployment completion, the
