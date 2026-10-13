@@ -20,7 +20,7 @@ export class TabSession {
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation;
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
     const preferences = graphPreferences(this.graph);
-    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', partial: '', final: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, ttsStatus: '', targetStatus: '', displayDirection: 'ja-en', displayTranscriptDirection: preferences.direction, displayTranslationEnabled: false, translationStatus: 'Translation off', interimTranslation: null, utterances: [] };
+    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', partial: '', final: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, ttsStatus: '', targetStatus: '', displayDirection: 'ja-en', displayTranscriptDirection: preferences.direction, displayTranslationEnabled: false, plainTranslation: false, provisionalTranslationText: '', translatedText: '', translationStatus: 'Translation off', interimTranslation: null, utterances: [] };
     this.update();
   }
   update(values = {}) { Object.assign(this.view, values); this.render({ ...this.view }); }
@@ -31,7 +31,9 @@ export class TabSession {
     const preferences = graphPreferences(graph);
     const transcriptDirection = graph.nodes.find(node => node.type === 'TranscriptView')?.settings.direction || preferences.direction;
     const hasTranscriptView = graph.nodes.some(node => node.type === 'TranscriptView');
-    const hasTranslationView = graph.nodes.some(node => node.type === 'TranslationView');
+    const translationView = graph.nodes.find(node => node.type === 'TranslationView');
+    const hasTranslationView = !!translationView;
+    const plainTranslation = graph.edges.some(route => route.to[0] === translationView?.id && ['provisionalText', 'text'].includes(route.to[1]));
     const transcript = graph.nodes.find(node => node.type === 'TranscriptView');
     const speech = graph.nodes.find(node => node.type === 'SpeechToText');
     const hasSpeechPreview = graph.edges.some(route => route.from[0] === speech.id && route.from[1] === 'provisional'
@@ -45,7 +47,7 @@ export class TabSession {
       }
     }
     const session = { tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), sourceType, direction: preferences.direction, transcriptDirection, translationEnabled: preferences.enabled }; this.session = session;
-    this.update({ state: 'loading', tabId, activeGraph: graph, ttsStatus: '', targetStatus: '', displayDirection: session.direction, displayTranscriptDirection: transcriptDirection, displayTranslationEnabled: session.translationEnabled,
+    this.update({ state: 'loading', tabId, activeGraph: graph, ttsStatus: '', targetStatus: '', displayDirection: session.direction, displayTranscriptDirection: transcriptDirection, displayTranslationEnabled: hasTranslationView, plainTranslation, provisionalTranslationText: '', translatedText: '',
       translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: 'Loading ReazonSpeech ja-en + Silero…', error: '', partial: '', final: '', signal: '', interimTranslation: null, utterances: [] });
     try {
       if (sourceType === 'MicrophoneAudio') {
@@ -107,6 +109,14 @@ export class TabSession {
         onTranslationState: translationStatus => { if (this.session === session) this.update({ translationStatus }); },
         onTranslation: (port, value, context) => {
           if (this.session !== session || context.signal.aborted) return;
+          if (port === 'provisionalText') {
+            if (this.view.state !== 'stopping') this.update({ provisionalTranslationText: value });
+            return;
+          }
+          if (port === 'text') {
+            this.update({ translatedText: this.view.translatedText + (value.trim() ? `${value}\n` : '') });
+            return;
+          }
           if (port === 'provisional') {
             if (this.view.state !== 'stopping') this.update({
               ...(!hasTranscriptView ? { partial: value.source } : {}),
@@ -140,7 +150,7 @@ export class TabSession {
     }
     const starting = this.view.state === 'starting';
     session.translation?.discardProvisional();
-    this.update({ state: 'stopping', status: session.translation ? 'Finalizing transcript and translations…' : 'Finalizing transcript…', partial: '', interimTranslation: null });
+    this.update({ state: 'stopping', status: session.translation ? 'Finalizing transcript and translations…' : 'Finalizing transcript…', partial: '', interimTranslation: null, provisionalTranslationText: '' });
     // Schedule before ending the source: onEnded can reenter stop().
     return session.stopping = Promise.resolve().then(async () => {
       try {
@@ -159,7 +169,7 @@ export class TabSession {
     const session = this.session; this.session = null;
     session?.microphoneStream?.getTracks().forEach(track => track.stop());
     void session?.pipeline?.dispose().catch(() => {});
-    this.update({ state: 'idle', partial: '', signal: '', interimTranslation: null,
+    this.update({ state: 'idle', partial: '', signal: '', interimTranslation: null, provisionalTranslationText: '',
       translationStatus: session?.translation ? 'Translation canceled' : this.view.translationStatus,
       utterances: this.view.utterances.map(row => row.status === 'pending' ? { ...row, status: 'canceled' } : row) });
   }

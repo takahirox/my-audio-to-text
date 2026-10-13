@@ -18,7 +18,7 @@ export const NODE_TYPES = Object.freeze({
   TranscriptView: { label: 'Original transcript', inputs: paired(TEXT), optionalInputs: ['provisional'], outputs: {}, settings: { direction: ['ja-en', 'en-ja'] } },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: { provisional: TEXT, text: TEXT, provisionalResult: TEXT_RESULT, finalResult: TEXT_RESULT } },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: { provisional: TEXT, text: TEXT, provisionalResult: TEXT_RESULT, finalResult: TEXT_RESULT } },
-  TranslationView: { label: 'Paired translation', inputs: paired(TEXT_RESULT), optionalInputs: ['provisional'], outputs: {} },
+  TranslationView: { label: 'Paired translation / Translated', inputs: { ...paired(TEXT_RESULT), provisionalText: TEXT, text: TEXT }, optionalInputs: ['provisional', 'final', 'provisionalText', 'text'], outputs: {}, help: 'Plain display: provisionalText for interim TEXT, text for completed TEXT (either or both). Paired display: final plus optional provisional TEXT_RESULT. Disconnect the other representation before switching modes.' },
   Supertonic3: { label: 'Supertonic 3 TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { language: ['ja', 'en'], voice: ['F1', 'M1'] } },
   Kokoro: { label: 'Kokoro TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { voice: ['jf_alpha', 'af_heart'] } },
   AudioOutput: { label: 'Audio player / WAV', inputs: { audio: SYNTHESIZED_AUDIO }, outputs: {} },
@@ -90,6 +90,13 @@ export function validateGraph(graph) {
   for (const node of nodes.values()) {
     const definition = definitionOf(node.type);
     if (!definition) continue;
+    if (node.type === 'TranslationView') {
+      const connected = port => incoming.has(JSON.stringify([node.id, port]));
+      const plain = connected('provisionalText') || connected('text');
+      const paired = connected('provisional') || connected('final');
+      if (plain && paired) errors.push(`Choose either TEXT or paired TEXT_RESULT inputs for ${node.id}, not both.`);
+      if (!plain && !connected('final')) errors.push(`Required connection missing: ${node.id}.text or provisionalText (TEXT), or final (TEXT_RESULT)`);
+    }
     for (const port of Object.keys(definition.inputs)) if (!definition.optionalInputs?.includes(port) && !incoming.has(JSON.stringify([node.id, port]))) errors.push(`Required connection missing: ${node.id}.${port}`);
     if (Object.keys(definition.outputs).length && !outgoing.has(node.id)) errors.push(`Unconnected output Node: ${node.id}`);
   }

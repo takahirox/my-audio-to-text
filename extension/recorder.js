@@ -35,20 +35,24 @@ const session = new TabSession(view => {
   element('partial-source-label').textContent = `Provisional ${transcriptLanguages.source} original`;
   element('partial-target-label').textContent = `Provisional ${languages.target} translation`;
   element('final-source-label').textContent = `Full ${transcriptLanguages.source} original transcript`;
-  element('final-pair-label').textContent = `Completed utterances · ${languages.source} original / ${languages.target} translation`;
+  element('final-pair-label').textContent = view.plainTranslation ? 'Original transcript' : `Completed utterances · ${languages.source} original / ${languages.target} translation`;
   element('partial').lang = element('final').lang = transcriptLanguages.sourceCode;
   element('partial-english').lang = languages.targetCode;
   element('translation-status').textContent = view.translationStatus;
   element('partial-translation-source').textContent = view.interimTranslation?.source || '';
   element('partial-translation-source').lang = languages.sourceCode;
-  element('partial-english').textContent = provisionalLabel(view.interimTranslation?.source || '', view.interimTranslation, view.displayTranslationEnabled);
-  element('partial-english').dataset.status = provisionalState(view.interimTranslation?.source || '', view.interimTranslation, view.displayTranslationEnabled);
+  element('partial-english').textContent = view.plainTranslation ? view.provisionalTranslationText : provisionalLabel(view.interimTranslation?.source || '', view.interimTranslation, view.displayTranslationEnabled);
+  if (view.plainTranslation) delete element('partial-english').dataset.status;
+  else element('partial-english').dataset.status = provisionalState(view.interimTranslation?.source || '', view.interimTranslation, view.displayTranslationEnabled);
+  element('paired-provisional-source').hidden = !!view.plainTranslation;
+  element('plain-translation').hidden = !view.plainTranslation;
+  element('translated-text').textContent = view.translatedText || '';
   element('provisional-translation').hidden = !view.displayTranslationEnabled;
   element('tts-output').hidden = !view.ttsStatus && !audioURLs.size;
   element('model-recovery').hidden = !/missing|evict|retry|unavailable/i.test(`${view.translationStatus} ${view.ttsStatus}`);
   element('cancel-session').disabled = !running;
   element('copy-final').disabled = !view.final.trim();
-  element('empty-history').hidden = !!view.utterances.length;
+  element('empty-history').hidden = !!view.plainTranslation || !!view.utterances.length;
   if (view.utterances !== renderedUtterances) {
     renderedUtterances = view.utterances;
     element('paired-finals').replaceChildren(...view.utterances.map((row, index) => {
