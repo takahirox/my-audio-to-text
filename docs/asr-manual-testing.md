@@ -13,7 +13,7 @@ The model itself is an offline recognizer. The [local ASR core](local-asr-core.m
 | Pre-roll | Up to 0.8 seconds of idle audio before speech |
 | Provisional scheduling | About every 0.5 seconds of active utterance audio, excluding pre-roll |
 | Endpoint | About 0.35 seconds of trailing silence |
-| Maximum duration | 12 seconds excluding pre-roll; continuous speech continues in a new utterance |
+| Maximum duration | 6-second default audio segment including pre-roll; optional startup NUMBER accepts 1–12 seconds; continuous speech continues in a new segment |
 | Stop | Flush capture and VAD tails, then drain finals once |
 | Inference | One decode at a time; finals before coalesced latest previews |
 | Backlog | Visible error and release if pending audio exceeds 30 seconds |

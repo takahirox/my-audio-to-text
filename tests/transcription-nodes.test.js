@@ -103,13 +103,15 @@ for (const phase of ['load', 'running', 'draining']) {
 }
 
 test('a drained speech node hands warm workers to a fresh graph with isolated ports and sessions', async () => {
-  const f = fixture(); await f.load();
+  const f = fixture(); f.speech.receive('maxDuration', 1.25); await f.load();
+  assert.equal(f.speech.core.simulation.maxSamples, 20000);
+  assert.throws(() => f.speech.receive('maxDuration', 2.5), /before session startup/);
   assert.throws(() => f.speech.nextSession(), /successfully drained/);
   f.capture.audio(new Float32Array(8000).fill(0.05)); await tick(); f.classify(); f.finish(0, 'first'); await tick();
   const stopping = f.pipeline.stop(); await tick(); f.classify();
   f.workers[1].reply({ type: 'vad-stopped', session: 1 }); f.finish(1, 'first final'); await stopping;
   const values = [], core = f.speech.core;
-  const speech = f.speech.nextSession();
+  const speech = f.speech.nextSession({ maxDuration: 2.5 });
   assert.notEqual(speech, f.speech); assert.equal(speech.core, core); assert.equal(f.speech.core, null);
   assert.throws(() => f.speech.nextSession(), /successfully drained/);
   await assert.rejects(f.speech.load(), /transferred/);
@@ -122,6 +124,7 @@ test('a drained speech node hands warm workers to a fresh graph with isolated po
     { from: ['speech', 'final'], to: ['transcript', 'final'] },
   ] });
   await speech.load(); await pipeline.start();
+  assert.equal(speech.core.simulation.maxSamples, 40000);
   assert.equal(f.workers.length, 2);
   assert.ok(f.workers.every(w => w.messages.filter(m => m.type === 'load').length === 1));
   f.capture.audio(new Float32Array(8000)); // Old source/context cannot emit into the new graph.

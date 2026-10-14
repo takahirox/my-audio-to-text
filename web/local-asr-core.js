@@ -1,4 +1,5 @@
 import { ReazonSimulation, BUFFER_LIMIT } from './reazon-simulation.js';
+import { ASR_CONFIG, maxDurationSamples } from './local-asr-config.js';
 
 const backlogError = () => new Error('Backend is over 30 seconds behind. Capture stopped; retry with shorter utterances.');
 
@@ -38,8 +39,9 @@ export class LocalAsrCore {
     };
     return worker;
   }
-  start() {
+  start({ maxDuration = ASR_CONFIG.defaultMaxDurationSeconds } = {}) {
     if (this.state !== 'ready') throw new Error('ASR core must be ready before starting.');
+    maxDurationSamples(maxDuration);
     const session = ++this.session;
     this.state = 'running'; this.vadQueued = 0;
     this.latestPartials.clear();
@@ -47,6 +49,7 @@ export class LocalAsrCore {
       message => this.worker.postMessage({ ...message, session }, [message.audio.buffer]),
       () => { this.latestPartials.clear(); this.state = 'ready'; this.diagnostics(); this.emit('stopped'); },
       (event, id) => this.emit('speech', { event, id }),
+      { maxDuration },
     );
     try { this.vadWorker.postMessage({ type: 'vad-start', session }); }
     catch (error) { this.fail(error); }
@@ -98,6 +101,7 @@ export class LocalAsrCore {
     } else if (!vad && ['partial', 'final'].includes(data.type)) {
       const request = this.simulation.inFlight;
       if (!request || request.id !== data.id || request.final !== (data.type === 'final')) return;
+      if (request.delivered) return;
       if (data.type === 'partial' && (this.state === 'stopping' || !this.simulation.acceptsPartial(data.id))) return;
       let text = data.text;
       if (data.type === 'partial') {
@@ -106,6 +110,7 @@ export class LocalAsrCore {
         // Keep the fresh final authoritative unless it contains no usable text.
         if (!text.trim()) text = this.latestPartials.get(data.id) ?? text;
         this.latestPartials.delete(data.id);
+        request.delivered = true;
       }
       this.emit(data.type, { text, id: data.id });
     }

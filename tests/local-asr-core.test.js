@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { LocalAsrCore } from '../web/local-asr-core.js';
 import { ASR_CONFIG, SILERO_CONFIG } from '../web/local-asr-config.js';
 import { PRE_ROLL, PREVIEW_INTERVAL, TRAILING_SILENCE, MAX_SPEECH, BUFFER_LIMIT } from '../web/reazon-simulation.js';
+import { joinAudio } from '../web/audio.js';
 
 // Worker fixtures use the real transferable-message semantics. Replies are
 // controlled independently to model slow inference and concurrent VAD work.
@@ -56,6 +57,17 @@ test('core loads both isolated workers and exposes only retained configuration/s
   f.core.release(); assert.ok(f.workers.every(w => w.terminated));
 });
 
+test('invalid duration fails before changing the ready core or starting VAD', () => {
+  const f = fixture(); f.ready(); const session = f.core.session;
+  for (const maxDuration of [0, -1, 0.99, 12.01, NaN, Infinity, -Infinity, null, '2']) {
+    assert.throws(() => f.core.start({ maxDuration }), /1 to 12 seconds/);
+    assert.equal(f.core.state, 'ready'); assert.equal(f.core.session, session);
+    assert.equal(f.vad.messages.filter(m => m.type === 'vad-start').length, 0);
+  }
+  f.core.start(); assert.equal(f.core.simulation.maxSamples, 96000);
+  f.core.release();
+});
+
 test('deterministic PCM preserves caller ownership, pre-roll, provisional and final lifecycle', () => {
   const f = fixture(); f.ready(); f.core.start();
   f.feed(3 * 16000, 0); assert.equal(f.decodes().length, 0);
@@ -89,13 +101,78 @@ test('busy inference coalesces previews, rejects an ended utterance preview, and
   assert.equal(f.decodes()[3].audio.length, 8000);
 });
 
-test('maximum-duration finals preserve continuous speech without repeating pre-roll', () => {
+test('default maximum-duration finals preserve continuous speech including pre-roll', () => {
   const f = fixture(); f.ready(); f.core.start(); f.feed(PRE_ROLL, 0);
-  f.feed(MAX_SPEECH); assert.equal(f.decodes()[0].audio.length, MAX_SPEECH + PRE_ROLL);
-  f.finish(); f.feed(MAX_SPEECH); assert.equal(f.decodes()[1].audio.length, MAX_SPEECH);
+  assert.equal(f.core.simulation.maxSamples, 96000);
+  f.feed(96000 - PRE_ROLL); assert.equal(f.decodes()[0].audio.length, 96000);
+  f.finish(); f.feed(96000); assert.equal(f.decodes()[1].audio.length, 96000);
   f.finish(); f.feed(37); f.core.stop(); f.stopped();
   assert.equal(f.decodes()[2].audio.length, 37); f.finish();
   assert.equal(f.replies('final').length, 3); assert.equal(f.replies('stopped').length, 1);
+});
+
+test('a fractional cap keeps FIFO finals, resets previews, rejects duplicates and drains a pending VAD tail', () => {
+  const f = fixture(); f.ready(); f.core.start({ maxDuration: 1.234567 });
+  const cap = 19753;
+  const input = Float32Array.from({ length: cap * 3 + 37 }, (_, i) => i / 1000000);
+  function push(start, end) {
+    f.core.push(input.subarray(start, end));
+    const m = f.vad.messages.at(-1);
+    f.vad.reply({ type: 'vad', session: m.session, frames: [{ audio: m.audio, speaking: true }] });
+  }
+  push(0, 8000); f.finish(undefined, 'segment one preview');
+  push(8000, 16000); // Keep this preview pending across two cap boundaries.
+  push(16000, cap * 2 + 8000);
+  f.finish(undefined, 'stale preview');
+  assert.equal(f.decodes().at(-1).id, 1);
+  assert.equal(f.decodes().at(-1).final, true);
+  const message = f.decodes().at(-1);
+  f.asr.reply({ type: 'final', id: message.id, session: message.session, text: '' });
+  f.asr.reply({ type: 'final', id: message.id, session: message.session, text: 'duplicate' });
+  f.asr.reply({ type: 'decoded', session: message.session });
+  f.finish(undefined, ''); // Second segment must not inherit first's fallback.
+  f.finish(undefined, 'segment three preview');
+  f.core.push(input.subarray(cap * 2 + 8000)); // Classification is pending at Stop.
+  f.core.stop(); const tail = f.vad.messages.filter(m => m.type === 'vad-audio').at(-1);
+  f.vad.reply({ type: 'vad', session: tail.session, frames: [{ audio: tail.audio, speaking: true }] });
+  f.stopped();
+  while (f.core.simulation.inFlight) f.finish(undefined, '');
+  assert.deepEqual(f.replies('partial').map(e => e.text), ['segment one preview', 'segment three preview']);
+  assert.deepEqual(f.replies('final').map(e => [e.id, e.text]), [[1, 'segment one preview'], [2, ''], [3, 'segment three preview'], [4, '']]);
+  const finals = f.decodes().filter(m => m.final);
+  assert.deepEqual(finals.map(m => m.audio.length), [cap, cap, cap, 37]);
+  assert.deepEqual(joinAudio(finals.map(m => m.audio)), input);
+  assert.equal(f.replies('stopped').length, 1);
+});
+
+for (const pending of ['vad boundary', 'final inference', 'Stop drain']) test(`Cancel with pending ${pending} discards cap work and releases both workers`, () => {
+  const f = fixture(); f.ready(); f.core.start({ maxDuration: 1 });
+  f.feed(8000); f.finish(undefined, 'discarded preview');
+  f.core.push(new Float32Array(8000).fill(0.05));
+  if (pending !== 'vad boundary') f.classify();
+  if (pending === 'Stop drain') { f.core.stop(); f.stopped(); }
+  const callbacks = f.workers.map(w => w.onmessage), session = f.core.session;
+  f.core.release();
+  for (const type of ['final', 'decoded', 'vad', 'vad-stopped']) for (const callback of callbacks) {
+    callback({ data: { type, id: 1, text: 'late final', session, frames: [{ audio: new Float32Array(8000), speaking: true }] } });
+  }
+  assert.equal(f.replies('final').length, 0); assert.equal(f.replies('stopped').length, 0);
+  assert.equal(f.core.latestPartials.size, 0); assert.equal(f.core.simulation, null);
+  assert.ok(f.workers.every(w => w.terminated));
+});
+
+test('consecutive long VAD utterances reset fallback after every capped segment', () => {
+  const f = fixture(); f.ready(); f.core.start({ maxDuration: 1.25 });
+  for (let utterance = 0; utterance < 2; utterance++) {
+    f.feed(8000); f.finish(undefined, `preview ${utterance}`);
+    f.feed(40000); // Two capped segments and a remainder, without silence.
+    f.feed(TRAILING_SILENCE, 0); // The remainder ends at VAD before the next cap.
+    while (f.core.simulation.inFlight) f.finish(undefined, '');
+  }
+  f.core.stop(); f.stopped();
+  assert.deepEqual(f.decodes().filter(m => m.final).map(m => m.audio.length), [20000, 20000, 13600, 20000, 20000, 13600]);
+  assert.deepEqual(f.replies('final').map(e => [e.id, e.text]), [[1, 'preview 0'], [2, ''], [3, ''], [4, 'preview 1'], [5, ''], [6, '']]);
+  assert.equal(f.replies('stopped').length, 1);
 });
 
 test('Stop waits for VAD tail and finals, suppresses previews, drains once and supports repeat', () => {

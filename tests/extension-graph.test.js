@@ -11,6 +11,37 @@ import { TranslationSchedulerNode } from '../extension/translation-scheduler.js'
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
 
 const storage = () => { const values = new Map(); return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }; };
+
+test('optional Number configuration reloads and binds a snapshot before ASR or capture startup', async () => {
+  const store = storage(), graph = defaultGraph();
+  const options = { workerFactory: () => ({ postMessage() {}, terminate() {} }), sourceFactory: () => ({ start() {}, stop() {} }) };
+  const unconnected = buildGraph(graph, options);
+  assert.equal(unconnected.speech.maxDuration, 6); await unconnected.pipeline.dispose();
+  graph.nodes.push(graphNode('Number', 'duration'));
+  graph.nodes.at(-1).settings.value = 1.234567;
+  graph.edges.push(edge('duration', 'value', 'speech', 'maxDuration'));
+  saveGraph(store, graph); assert.deepEqual(readGraph(store), graph);
+  const built = buildGraph(readGraph(store), options);
+  assert.equal(built.speech.maxDuration, 1.234567);
+  assert.equal(built.speech.core.state, 'released'); // No workers or audio processing yet.
+  graph.nodes.at(-1).settings.value = 9.5; saveGraph(store, graph);
+  assert.equal(built.speech.maxDuration, 1.234567);
+  const next = buildGraph(readGraph(store), options);
+  assert.equal(next.speech.maxDuration, 9.5);
+  assert.deepEqual(built.description.edges, graph.edges);
+  await built.pipeline.dispose(); await next.pipeline.dispose();
+});
+
+test('connected invalid Number fails before Workers; runtime NUMBER outputs cannot configure startup', () => {
+  for (const value of [0, -1, 0.9, 12.01, NaN, Infinity, -Infinity, null, undefined, '2']) {
+    const graph = defaultGraph(); graph.nodes.push(graphNode('Number', 'duration'));
+    graph.nodes.at(-1).settings.value = value; graph.edges.push(edge('duration', 'value', 'speech', 'maxDuration'));
+    assert.throws(() => buildGraph(graph, { workerFactory() { assert.fail('Must not create Worker'); } }), /finite number|1 to 12 seconds/);
+    assert.throws(() => saveGraph(storage(), graph), /finite number|1 to 12 seconds/);
+  }
+  const graph = defaultGraph({ enabled: true }); graph.edges.push(edge('translation', 'finalIndex', 'speech', 'maxDuration'));
+  assert.match(validateGraph(graph).join('\n'), /requires Number.value available before session startup/);
+});
 const audioGraph = (type, translated = false) => {
   const graph = defaultGraph({ enabled: translated });
   graph.nodes.push(graphNode(type, 'tts'), graphNode('AudioOutput', 'player'));

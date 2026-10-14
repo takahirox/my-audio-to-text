@@ -3,13 +3,28 @@ import assert from 'node:assert/strict';
 import { ReazonSimulation, PRE_ROLL, PREVIEW_INTERVAL, TRAILING_SILENCE, MAX_SPEECH, BUFFER_LIMIT } from '../web/reazon-simulation.js';
 import { joinAudio } from '../web/audio.js';
 
-function fixture() {
+function fixture(maxDuration) {
   const requests = [], events = []; let drained = 0;
-  const simulation = new ReazonSimulation(message => requests.push(message), () => drained++, event => events.push(event));
+  const simulation = new ReazonSimulation(message => requests.push(message), () => drained++, event => events.push(event), { maxDuration });
   const finish = () => { while (simulation.inFlight) simulation.decoded(); };
   return { simulation, requests, events, finish, drained: () => drained };
 }
 const samples = (n, offset = 0) => Float32Array.from({ length: n }, (_, i) => (i + offset + 1) / 1000000);
+
+for (const seconds of [1, 1.234567, 6, 12]) test(`cap ${seconds} splits inside VAD frames with exact sample ownership`, () => {
+  const f = fixture(seconds), cap = Math.floor(seconds * 16000);
+  const input = samples(PRE_ROLL + cap * 3 + 37);
+  f.simulation.push(input.slice(0, PRE_ROLL), false);
+  for (let offset = PRE_ROLL; offset < input.length; offset += 512) {
+    f.simulation.push(input.slice(offset, offset + 512), true); f.finish();
+  }
+  f.simulation.stop(); f.finish();
+  const finals = f.requests.filter(r => r.final);
+  assert.deepEqual(finals.map(r => r.audio.length), [cap, cap, cap, PRE_ROLL + 37]);
+  assert.deepEqual(finals.map(r => r.id), [1, 2, 3, 4]);
+  assert.deepEqual(joinAudio(finals.map(r => r.audio)), input);
+  assert.equal(f.drained(), 1);
+});
 
 test('silence is bounded pre-roll and never produces a decode, including Stop', () => {
   const f = fixture();
@@ -59,7 +74,7 @@ test('0.35-second trailing silence finalizes complete audio; a short pause reset
   assert.equal(TRAILING_SILENCE, 5600);
 });
 
-test('12 seconds of speech excludes pre-roll; forced boundaries lose or repeat no samples', () => {
+test('default 6-second audio segments include pre-roll; boundaries lose or repeat no samples', () => {
   const f = fixture(), before = samples(PRE_ROLL), input = samples(25 * 16000 + 37);
   f.simulation.push(before, false);
   for (let offset = 0; offset < input.length; offset += 2048) {
@@ -67,7 +82,7 @@ test('12 seconds of speech excludes pre-roll; forced boundaries lose or repeat n
   }
   f.simulation.stop(); f.finish();
   const finals = f.requests.filter(item => item.final);
-  assert.deepEqual(finals.map(item => item.audio.length), [PRE_ROLL + MAX_SPEECH, MAX_SPEECH, 16037]);
+  assert.deepEqual(finals.map(item => item.audio.length), [96000, 96000, 96000, 96000, 28837]);
   assert.deepEqual(joinAudio(finals.map(item => item.audio)), joinAudio([before, input]));
   assert.equal(f.simulation.waiting, 0); assert.equal(f.drained(), 1);
 });

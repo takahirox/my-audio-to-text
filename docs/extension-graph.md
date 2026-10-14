@@ -96,7 +96,8 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | SelectedPageMediaAudio | — | audio: selected-element mono 16 kHz PCM |
 | MicrophoneAudio | — | audio: explicitly permitted microphone PCM |
 | FocusedInputTextOutputNode | text: TEXT | append verbatim to focused editable field |
-| SpeechToText | audio: PCM | provisional/final: TEXT |
+| Number | — | value: NUMBER; editable finite constant |
+| SpeechToText | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | replace / append: TEXT, individually optional | one labeled Live region; at least one input must connect |
 | TextFormatter | input1–input4: TEXT, individually optional | text: TEXT; at least one input must connect |
 | OpusMtJaEn / OpusMtEnJa | provisional (optional) / text: TEXT | successful provisional/text plus grouped source/status/error TEXT, finalIndex NUMBER |
@@ -110,6 +111,43 @@ or audio-only output. Multiple translators and displays are supported. Type
 identity determines compatibility; generic sinks accept arbitrary TEXT producers.
 Unknown settings/ports/types, duplicate IDs/edges, multiple routes into one input,
 missing required connections and cycles fail before Save or Worker startup.
+
+### Maximum speech segment duration
+
+Unconnected `SpeechToText.maxDuration` uses **6 seconds**. Add **Number**, select
+its heading, edit `value` in Settings, and connect `Number.value →
+SpeechToText.maxDuration`. The default audio and provisional→replace / final→append
+wires stay in place. Save to use the configuration at the next Start.
+
+Number is a generic numeric source with the shared `NUMBER` contract: its value
+must be finite, and it has no ASR units. SpeechToText requires **1–12 seconds**,
+inclusive, and accepts decimals. Zero, negatives, nonfinite, empty/nonnumeric and
+out-of-range duration settings fail visibly; an explicitly invalid connection
+never falls back to 6 or clamps. The lower bound keeps the existing 0.8-second
+pre-roll within a segment; the upper bound preserves the existing model policy
+and 30-second pending-audio budget. Seconds round down to whole 16 kHz samples
+(at most one sample below the entered duration).
+
+The builder resolves this configuration edge from the validated saved graph,
+delivering the bare number to the ASR input **before any Node starts or captures
+audio**. It removes that edge from streaming routes: it never sends a number as
+PCM, and needs no startup scheduler. Other Number edges use normal NUMBER
+emission at source startup. Only `Number.value` is supported for this startup
+port; translator indices or other values arriving during processing cannot
+configure a session. Saving or editing while loading/running does not alter the
+session's snapshot. Existing version 6 graphs remain valid without migration;
+older graph migrations still apply.
+
+VAD's usual trailing-silence endpoint or the sample cap, whichever comes first,
+finalizes a segment. The cap counts the **whole audio segment**, including
+pre-roll and any short pauses/trailing silence. Continuous speech resumes at the
+next sample in a new segment, without repeated pre-roll. Stop drains all segments
+and the capture/VAD tail; Cancel discards pending work and releases both workers.
+ReazonSpeech ja-en is simulated streaming: finals queue behind any inference in
+progress, and slow devices can still hit backlog protection. This cap is **not a
+final-result latency SLA**. Mid-sentence cuts lose linguistic/acoustic context
+and can reduce accuracy, particularly with shorter caps; no new model or text
+stitching is introduced.
 
 ### Generic text displays
 

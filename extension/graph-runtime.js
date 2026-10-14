@@ -11,6 +11,7 @@ import { LiveTextDisplayNode, TextFormatterNode } from '../web/text-nodes.js';
 import { PairedTextFormatterNode } from './paired-text-formatter.js';
 import { assertGraph } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
+import { NumberNode } from '../web/number-node.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
 // assets, initialization or synthesis failure must leave transcription usable.
@@ -56,6 +57,7 @@ export function buildGraph(graph, options) {
   for (const spec of description.nodes) {
     let node;
     switch (spec.type) {
+      case 'Number': node = new NumberNode(spec.settings); break;
       case 'ChromeTabAudio':
         node = resources.audio = new ExtensionTabAudioNode(options.tabId, { sourceFactory: options.sourceFactory, onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
       case 'SelectedPageMediaAudio':
@@ -84,5 +86,17 @@ export function buildGraph(graph, options) {
     }
     nodes[spec.id] = node;
   }
-  return { ...resources, description, pipeline: new Pipeline({ nodes, connections: description.edges, onError: options.onError }) };
+  // Resolve constant configuration edges synchronously from this validated
+  // snapshot. Pipeline starts consumers before producers; a normal start-time
+  // emission would arrive too late. Only this optional port uses startup binding,
+  // never the audio queue. All other Number outputs use ordinary NUMBER delivery.
+  const connections = description.edges.filter(edge => {
+    const target = nodes[edge.to[0]];
+    if (target instanceof SpeechToTextNode && edge.to[1] === 'maxDuration') {
+      target.receive('maxDuration', nodes[edge.from[0]].value);
+      return false;
+    }
+    return true;
+  });
+  return { ...resources, description, pipeline: new Pipeline({ nodes, connections, onError: options.onError }) };
 }
