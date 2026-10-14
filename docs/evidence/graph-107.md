@@ -37,21 +37,18 @@ accent/noise, mixed-language or sustained real-time throughput claim is made.
 
 ## Validation still required before merge
 
-The full extension regression suite has **not completed successfully** on this
-host. After fixing stale graph-version assertions, repeated launches encountered
-timeouts during extension service-worker registration, fixture setup or browser
-teardown, including native cases that passed earlier. A minimal packaged load
-did register the toolbar listener and open Live without application errors.
-Increasing the test timeout to 90 seconds and probing the installed Chrome
-build did not produce a reliable full run. These runs were stopped once the
-environment failures repeated; no browser workaround or skipped mandatory case
-was added to production or test code. Re-run the complete extension suite in a
-working desktop Chromium environment before merge:
+The later fix node reports a successful full extension regression run:
+**122 passed, 6 optional real-model smoke skips**, with no failures. Commit
+`e33194d1a74317eab08736d000041f133b41e598` fixes the Text persistence test's
+Save/reload race by waiting for Save completion and checking the exact stored
+literal before reloading. That node also reports successful pinned asset
+preparation, extension build, syntax and whitespace checks. The optional smoke
+checks were not rerun; the earlier passing Whisper real-model smoke above is
+separate evidence. Publication did not rerun these suites.
 
-```sh
-npm run build:extension
-npm run test:extension
-```
+This successful run supersedes the initial extension registration/setup/teardown
+timeouts described in the original PR. The initial-run counts above remain as
+historical evidence; the extension regression check is now complete.
 
 Two initial WebKit failures (Pages-prefix worklet instrumentation and microphone
 permission instrumentation) passed on an isolated rerun. The WebKit tab-picker
