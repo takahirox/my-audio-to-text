@@ -11,6 +11,8 @@ import { LiveTextDisplayNode, TextFormatterNode } from '../web/text-nodes.js';
 import { PairedTextFormatterNode } from './paired-text-formatter.js';
 import { assertGraph } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
+import { TextNode } from '../web/text-constant-node.js';
+import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
 import { NumberNode } from '../web/number-node.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
@@ -57,6 +59,7 @@ export function buildGraph(graph, options) {
   for (const spec of description.nodes) {
     let node;
     switch (spec.type) {
+      case 'Text': node = new TextNode(spec.settings); break;
       case 'Number': node = new NumberNode(spec.settings); break;
       case 'ChromeTabAudio':
         node = resources.audio = new ExtensionTabAudioNode(options.tabId, { sourceFactory: options.sourceFactory, onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
@@ -66,7 +69,9 @@ export function buildGraph(graph, options) {
         node = resources.audio = new ExtensionMicrophoneAudioNode(options.microphoneStream, { onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
       case 'FocusedInputTextOutputNode':
         node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active) => options.onTargetState?.(spec.id, state, active) }); break;
-      case 'SpeechToText':
+      case 'SpeechToTextWhisper':
+        node = resources.speech = new SpeechToTextWhisperNode({ workerFactory: options.whisperWorkerFactory, onEvent: options.onSpeechEvent }); break;
+      case 'SpeechToTextReazonSpeech':
         node = resources.speech = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: options.onSpeechEvent }); break;
       case 'LiveTextDisplay': node = new LiveTextDisplayNode(state => options.onDisplay?.(spec.id, state), { appendConnected: description.edges.some(edge => edge.to[0] === spec.id && edge.to[1] === 'append') }); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
@@ -88,12 +93,12 @@ export function buildGraph(graph, options) {
   }
   // Resolve constant configuration edges synchronously from this validated
   // snapshot. Pipeline starts consumers before producers; a normal start-time
-  // emission would arrive too late. Only this optional port uses startup binding,
-  // never the audio queue. All other Number outputs use ordinary NUMBER delivery.
+  // emission would arrive too late. Only model configuration ports use startup binding,
+  // never the audio queue. Other constant edges use ordinary typed delivery.
   const connections = description.edges.filter(edge => {
     const target = nodes[edge.to[0]];
-    if (target instanceof SpeechToTextNode && edge.to[1] === 'maxDuration') {
-      target.receive('maxDuration', nodes[edge.from[0]].value);
+    if ((target instanceof SpeechToTextNode && edge.to[1] === 'maxDuration') || (target instanceof SpeechToTextWhisperNode && edge.to[1] === 'language')) {
+      target.receive(edge.to[1], nodes[edge.from[0]].value);
       return false;
     }
     return true;

@@ -43,10 +43,10 @@ saved graph. Drafts remain page-local. Transcripts/audio are never persisted.
 Closing/reloading Live releases capture/Workers and revokes audio URLs.
 
 Fresh installs and **Reset draft to default** use exactly three Nodes:
-`ChromeTabAudio`, `SpeechToText`, and one generic `LiveTextDisplay` labeled Text
+`ChromeTabAudio`, `SpeechToTextReazonSpeech`, and one generic `LiveTextDisplay` labeled Text
 (language unspecified). The three named-port edges are `ChromeTabAudio.audio →
-SpeechToText.audio`, `SpeechToText.provisional → LiveTextDisplay.replace`, and
-`SpeechToText.final → LiveTextDisplay.append`. No translation or formatter is
+SpeechToTextReazonSpeech.audio`, `SpeechToTextReazonSpeech.provisional → LiveTextDisplay.replace`, and
+`SpeechToTextReazonSpeech.final → LiveTextDisplay.append`. No translation or formatter is
 included. Reset changes only the draft until Save; upgrades never replace a
 saved graph with the new default. Existing explicit boolean translation
 preferences migrate once when no graph is saved: only `enabled: true` adds the
@@ -59,7 +59,9 @@ direction control changes all configured OPUS-MT Nodes; choose concrete Node
 types in the graph for independently directed branches. Removing
 OPUS-MT also removes exclusively dependent formatting/display/audio branches.
 Shared sinks with other connected producers remain.
-Version 1–5 descriptions migrate explicitly to version 6 using the same storage
+Version 6 `SpeechToText` Nodes become `SpeechToTextReazonSpeech`, with no added
+ASR, changed IDs, settings, positions, edges or destinations.
+Version 1–6 descriptions migrate explicitly to version 7 using the same storage
 key. Legacy field sinks become focused TEXT sinks; extraction adapters reconnect
 every downstream route, preserving fan-out. Version 4 paired result edges first
 expand to primitive bundles. Version 5 `TranscriptView` becomes `LiveTextDisplay`
@@ -83,7 +85,7 @@ Page/media handles are never saved with a graph.
 
 ## Supported graph and ports
 
-Version 6 is JSON with `version`, `nodes`, `edges`, and an optional
+Version 7 is JSON with `version`, `nodes`, `edges`, and an optional
 `translationDirection` next-session preference (used when no translator exists).
 Each Node has `id`, concrete `type`, `settings`, and `position: { x, y }`.
 Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
@@ -96,8 +98,10 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | SelectedPageMediaAudio | — | audio: selected-element mono 16 kHz PCM |
 | MicrophoneAudio | — | audio: explicitly permitted microphone PCM |
 | FocusedInputTextOutputNode | text: TEXT | append verbatim to focused editable field |
+| Text | — | value: TEXT; editable literal string, including empty |
+| SpeechToTextWhisper | audio: PCM; language: TEXT (optional startup en/ja, defaults to en) | final: TEXT; provisional declared for replacement compatibility but never emits |
 | Number | — | value: NUMBER; editable finite constant |
-| SpeechToText | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
+| SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | replace / append: TEXT, individually optional | one labeled Live region; at least one input must connect |
 | TextFormatter | input1–input4: TEXT, individually optional | text: TEXT; at least one input must connect |
 | OpusMtJaEn / OpusMtEnJa | provisional (optional) / text: TEXT | successful provisional/text plus grouped source/status/error TEXT, finalIndex NUMBER |
@@ -112,15 +116,49 @@ identity determines compatibility; generic sinks accept arbitrary TEXT producers
 Unknown settings/ports/types, duplicate IDs/edges, multiple routes into one input,
 missing required connections and cycles fail before Save or Worker startup.
 
+### Whisper and reusable Text constants
+
+To transcribe English, remove the ReazonSpeech Node and add **Whisper tiny
+(multilingual) ASR**. Reconnect the audio source to `audio` and the same
+`provisional → replace` / `final → append` wires to LiveTextDisplay. Keep exactly
+one ASR. Any existing final TEXT consumer (TextFormatter, OPUS-MT, focused field,
+or TTS) can receive Whisper finals with its existing port. The default/reset
+graph continues to use ReazonSpeech ja-en. Remove any old maxDuration edge and
+unused Number Node on replacement; Whisper has a fixed 6-second cap.
+
+Whisper uses an actual packaged multilingual tiny q8 checkpoint, CPU WASM and
+Silero. Its unconnected language is **English (`en`)**. To choose Japanese, add
+**Text**, select its heading, enter exactly `ja` in value and connect
+`Text.value → SpeechToTextWhisper.language`. This release supports `en` and `ja`;
+other codes, whitespace, uppercase and empty language values fail before model
+loading. ReazonSpeech has no language port. Whisper is multilingual, not `.en`.
+
+Text is a general constant with a free-form literal string, including empty
+text, markup characters, newlines and emoji. Ordinary TEXT consumers receive it
+once at their session start. It can supply formatter inputs or a display without
+ASR-specific behavior. Only a direct Text constant may configure Whisper's
+language: the builder delivers it from the validated session snapshot before
+loading Workers and removes that edge from the continuous delivery path. The
+same Text may also feed ordinary TEXT consumers. Saved edits apply next session.
+
+Whisper produces **completed segments only**, without provisional recognition.
+Its compatible provisional port stays silent. Segments end on Silero's trailing
+silence or a fixed 6-second audio cap; continuous speech splits at the next
+sample without repeating pre-roll. Stop drains queued finals and active speech;
+Cancel discards pending results and terminates Workers. Pending audio is bounded
+at 30 seconds; overflow fails visibly and stops capture. Mid-sentence cuts and
+small-model limitations can reduce quality; the audio cap is not output latency.
+See [model pins, setup and smoke tests](whisper-node.md).
+
 ### Maximum speech segment duration
 
-Unconnected `SpeechToText.maxDuration` uses **6 seconds**. Add **Number**, select
+Unconnected `SpeechToTextReazonSpeech.maxDuration` uses **6 seconds**. Add **Number**, select
 its heading, edit `value` in Settings, and connect `Number.value →
-SpeechToText.maxDuration`. The default audio and provisional→replace / final→append
+SpeechToTextReazonSpeech.maxDuration`. The default audio and provisional→replace / final→append
 wires stay in place. Save to use the configuration at the next Start.
 
 Number is a generic numeric source with the shared `NUMBER` contract: its value
-must be finite, and it has no ASR units. SpeechToText requires **1–12 seconds**,
+must be finite, and it has no ASR units. SpeechToTextReazonSpeech requires **1–12 seconds**,
 inclusive, and accepts decimals. Zero, negatives, nonfinite, empty/nonnumeric and
 out-of-range duration settings fail visibly; an explicitly invalid connection
 never falls back to 6 or clamps. The lower bound keeps the existing 0.8-second
@@ -135,8 +173,8 @@ PCM, and needs no startup scheduler. Other Number edges use normal NUMBER
 emission at source startup. Only `Number.value` is supported for this startup
 port; translator indices or other values arriving during processing cannot
 configure a session. Saving or editing while loading/running does not alter the
-session's snapshot. Existing version 6 graphs remain valid without migration;
-older graph migrations still apply.
+session's snapshot. Version 6 graphs migrate only the saved ASR type name and
+graph version; older graph migrations still apply.
 
 VAD's usual trailing-silence endpoint or the sample cap, whichever comes first,
 finalizes a segment. The cap counts the **whole audio segment**, including
@@ -211,7 +249,7 @@ Node and route; Live chooses the temporary browser target. Toolbar invocation
 selects the capture tab. The default is whole-tab audio → ASR → one Live text
 display; it injects nothing into the page.
 
-For page output, connect `SpeechToText.final → FocusedInputTextOutputNode.text`
+For page output, connect `SpeechToTextReazonSpeech.final → FocusedInputTextOutputNode.text`
 or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. Text can fan out to
 TTS and other TEXT consumers while ASR/translation independently feed Live.
 The sink knows only strings, not model identity, translation status or IDs.
@@ -296,7 +334,7 @@ Microphone requires no capture tab and is not mixed with tab/media capture.
 
 ## Optional TTS paths
 
-Connect SpeechToText.final → Supertonic3.text (or Kokoro.text) → AudioOutput.audio.
+Connect SpeechToTextReazonSpeech.final → Supertonic3.text (or Kokoro.text) → AudioOutput.audio.
 To speak translations, connect OPUS-MT.text directly to TTS.text. These outputs
 emit whole utterances; pending/error diagnostics use separate ports. The TTS
 branch splits long text into ordered snippets of at most 300 UTF-16 units without splitting surrogate pairs; this

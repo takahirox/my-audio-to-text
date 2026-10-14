@@ -1,20 +1,21 @@
 import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
 import { translationDirection } from './translation-preferences.js';
-import { assertGraph, defaultGraph, graphPreferences, withTranslation, INPUT_TYPES, FIELD_TYPES } from './graph.js';
+import { assertGraph, defaultGraph, graphPreferences, withTranslation, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
 
 // Owns tab targeting and the window's UI. Nodes own capture and recognition.
 export class TabSession {
   constructor(render, {
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
-    sourceFactory, pageConnectionFactory,
+    sourceFactory, pageConnectionFactory, whisperWorkerFactory,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph({ enabled: false }),
     ttsWorkerFactory, prepareTts, onSynthesizedAudio = () => {},
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
   } = {}) {
+    this.whisperWorkerFactory = whisperWorkerFactory;
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
     this.pageConnectionFactory = pageConnectionFactory; this.targets = {}; this.outputTarget = null;
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation;
@@ -40,7 +41,7 @@ export class TabSession {
       }
     }
     const session = { tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), sourceType, direction: preferences.direction, translationEnabled: preferences.enabled }; this.session = session;
-    this.update({ state: 'loading', tabId, activeGraph: graph, displays: {}, ttsStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: 'Loading ReazonSpeech ja-en + Silero…', error: '', signal: '' });
+    this.update({ state: 'loading', tabId, activeGraph: graph, displays: {}, ttsStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: `Loading ${NODE_TYPES[graph.nodes.find(n => ASR_TYPES.includes(n.type)).type].label} + Silero…`, error: '', signal: '' });
     try {
       if (sourceType === 'MicrophoneAudio') {
         // Request directly from the explicit Start action, before loading models.
@@ -60,7 +61,7 @@ export class TabSession {
             this.update({ targetStatus: statuses.join('\n') });
           }
         },
-        workerFactory: this.workerFactory, sourceFactory: this.sourceFactory,
+        workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, sourceFactory: this.sourceFactory,
         translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
         ttsWorkerFactory: this.ttsWorkerFactory, prepareTts: this.prepareTts,
         onTtsState: ttsStatus => { if (this.session === session) this.update({ ttsStatus }); },

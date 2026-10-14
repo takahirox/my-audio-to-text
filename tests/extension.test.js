@@ -272,6 +272,12 @@ with tempfile.TemporaryDirectory() as tmp:
                  'openjtalk-wasm-wrapper-D6E3BSJO.js', 'openjtalk-wasm.wasm',
                  'open_jtalk_dic_utf_8-1.11.tar.gz', 'openjtalk-voice.htsvoice'):
         (tts / name).write_bytes(b'pinned TTS runtime fixture')
+    whisper = root / 'web' / 'vendor' / 'whisper' / 'tiny'
+    whisper.mkdir(parents=True)
+    (whisper / 'fixture.onnx').write_bytes(b'pinned Whisper fixture')
+    (root / 'scripts').mkdir()
+    import hashlib
+    (root / 'scripts' / 'whisper-assets.json').write_text(json.dumps({'files': [{'path': 'fixture.onnx', 'bytes': 22, 'sha256': hashlib.sha256(b'pinned Whisper fixture').hexdigest()}]}))
     build.main()
     target = root / 'dist' / 'chrome-extension'
     assert {'pipeline.js', 'transcription-nodes.js'} <= set(build.SHARED_FILES)

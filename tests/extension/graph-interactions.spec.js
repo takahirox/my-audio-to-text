@@ -245,7 +245,7 @@ for (const version of [4, 5]) for (const direction of ['ja-en', 'en-ja']) for (c
     }
     await live.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), legacy);
     await live.close(); live = await openGraph(f); const graph = await saved(live);
-    expect(graph.version).toBe(6); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
+    expect(graph.version).toBe(7); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
     await fixtureTranslation(f, live); await startGraph(live);
     const text = live.locator('[data-display="translated"] .display-preview');
     await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));

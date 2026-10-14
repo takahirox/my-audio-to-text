@@ -8,8 +8,10 @@ Contracts are identities; receiving Nodes validate their payloads.
 | Boundary | Public ports and values | Internal or observer bookkeeping |
 | --- | --- | --- |
 | Capture sources: microphone, browser tab, extension tab/selected media | `audio: MONO_16KHZ_PCM`, normalized mono 16 kHz Float32Array | Target, permission, resampler and diagnostics |
+| Text | `value: TEXT`, any literal string, including empty | One emission at session start; direct language edges bind before loading |
+| SpeechToTextWhisper | `audio: PCM`, optional startup `language: TEXT` (en/ja; default en); `final: TEXT`, silent `provisional: TEXT` | Multilingual tiny q8, Silero, fixed 6 s segments; Stop drains / Cancel releases |
 | Number | `value: NUMBER`, finite numeric constant | Consumers define units and domain limits |
-| SpeechToText / TranscriptOutput / speech Playground | `audio: PCM`, optional startup `maxDuration: NUMBER` in seconds; `provisional: TEXT`, `final: TEXT`, plain strings | Frozen session cap (default 6 s, supported 1–12 s), core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
+| SpeechToTextReazonSpeech / TranscriptOutput / speech Playground | `audio: PCM`, optional startup `maxDuration: NUMBER` in seconds; `provisional: TEXT`, `final: TEXT`, plain strings | Frozen session cap (default 6 s, supported 1–12 s), core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
 | Extension TranslationScheduler (both directions) | Inputs: optional `provisional: TEXT`, required `text: TEXT`; successful `provisional: TEXT` / `text: TEXT` outputs; grouped source/status/error TEXT outputs for each stream and `finalIndex: NUMBER` | Active inference, provisional versions, FIFO finals, model failure and Stop policy |
@@ -62,7 +64,9 @@ for independent field consumers.
 
 ## Graphs and supported topology
 
-Version 6 graphs explicitly migrate versions 1–5. Extraction adapters are bypassed
+Version 7 graphs explicitly migrate versions 1–6. Version 6 changes only
+SpeechToText to SpeechToTextReazonSpeech, preserving every ID and route.
+Extraction adapters are bypassed
 while preserving all downstream routes and fan-out. Version 4 paired result edges
 expand to direct primitive connections; TEXT-only legacy views become generic
 replace/append displays. Paired legacy views

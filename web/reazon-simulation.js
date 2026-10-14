@@ -8,10 +8,11 @@ export const TRAILING_SILENCE = ASR_CONFIG.trailingSilenceSeconds * RATE;
 export const MAX_SPEECH = ASR_CONFIG.maxUtteranceSeconds * RATE;
 export const BUFFER_LIMIT = ASR_CONFIG.pendingAudioSeconds * RATE;
 
-// ReazonSpeech-only policy. Input blocks have already been classified by Silero.
+// Shared Silero segmentation policy. Input blocks have already been classified by Silero.
 // Finals take priority; there is no provisional queue, just the latest snapshot.
 export class ReazonSimulation {
-  constructor(send, drained, speech = () => {}, { maxDuration = ASR_CONFIG.defaultMaxDurationSeconds } = {}) {
+  constructor(send, drained, speech = () => {}, { maxDuration = ASR_CONFIG.defaultMaxDurationSeconds, finalOnly = false } = {}) {
+    this.finalOnly = finalOnly;
     this.maxSamples = maxDurationSamples(maxDuration);
     this.send = send; this.drained = drained; this.speech = speech;
     this.preRoll = new Float32Array(); this.active = null; this.nextId = 0;
@@ -68,7 +69,7 @@ export class ReazonSimulation {
     if (this.stopping) {
       this.finished = true; this.drained(); return;
     }
-    if (!item?.speaking || item.duration - item.previewDuration < PREVIEW_INTERVAL) return;
+    if (this.finalOnly || !item?.speaking || item.duration - item.previewDuration < PREVIEW_INTERVAL) return;
     item.previewDuration = item.duration;
     const audio = joinAudio(item.chunks);
     this.inFlight = { id: item.id, length: audio.length, final: false };
