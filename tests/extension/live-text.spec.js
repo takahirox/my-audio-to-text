@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.js';
+import { legacyGraph } from '../fixtures/legacy-graph.js';
 const region = (page, id) => page.locator(`[data-display="${id}"]`);
 
 async function fixtureTranslation(f, page) {
@@ -12,6 +13,40 @@ async function fixtureTranslation(f, page) {
   await page.evaluate(async () => {
     const { TabSession } = await import('./session.js'), start = TabSession.prototype.start;
     TabSession.prototype.start = function(...args) { window.activeSession = this; this.prepareTranslation = async () => {}; return start.apply(this, args); };
+  });
+}
+
+for (const id of ['constructor', 'toString', 'hasOwnProperty']) {
+  test(`MV3 v5 migration preserves display ID ${id} and renders before and during a session`, async ({ graphExtension: f }) => {
+    let live = await openGraph(f);
+    const legacy = legacyGraph({ enabled: false }, 5);
+    legacy.nodes.find(node => node.id === 'transcript').id = id;
+    for (const route of legacy.edges) if (route.to[0] === 'transcript') route.to[0] = id;
+    await live.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), legacy);
+    await live.close(); live = await openGraph({ ...f, url: `${f.url}?error=&tab=42` });
+    const migrated = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+    expect(migrated.version).toBe(6);
+    expect(migrated.nodes.find(node => node.id === id).type).toBe('LiveTextDisplay');
+    expect(migrated.edges.filter(route => route.to[0] === id)).toEqual([
+      { from: ['speech', 'provisional'], to: [id, 'replace'] },
+      { from: ['speech', 'final'], to: [id, 'append'] },
+    ]);
+    await expect(live.locator('.live-text-region')).toHaveCount(1);
+    await expect(region(live, id).locator('h2')).toHaveText('Original');
+    await expect(region(live, id).locator('.display-preview')).toBeEmpty();
+    await expect(region(live, id).locator('li')).toHaveCount(0);
+    await expect(live.locator('#errors')).toBeEmpty();
+    await expect(live.locator('#start')).toBeEnabled();
+    await live.locator('#start').click();
+    await expect(live.locator('#status')).toHaveText('Transcription active');
+    await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'pending' }));
+    await expect(region(live, id).locator('.display-preview')).toHaveText('pending');
+    await emitFinal(live, 'committed');
+    await expect(region(live, id).locator('li pre')).toHaveText(['committed']);
+    await expect(region(live, id).locator('.display-preview')).toBeEmpty();
+    await live.locator('#stop').click();
+    await expect(live.locator('#start')).toBeEnabled();
+    await expect(live.locator('#errors')).toBeEmpty();
   });
 }
 

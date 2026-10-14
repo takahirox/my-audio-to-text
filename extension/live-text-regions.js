@@ -19,7 +19,7 @@ export function renderTextRegions(root, graph, displays) {
     }
     region.querySelector('h2').textContent = spec.settings.label;
     region.setAttribute('aria-label', spec.settings.label); region.lang = spec.settings.language;
-    const state = displays[spec.id] || { preview: '', items: [] };
+    const state = (Object.hasOwn(displays, spec.id) && displays[spec.id]) || { preview: '', items: [] };
     if (region.displayState !== state) {
       const items = region.querySelector('ol');
       items.replaceChildren(...state.items.map(text => {
