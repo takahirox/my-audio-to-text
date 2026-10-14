@@ -19,7 +19,7 @@ export const NODE_TYPES = Object.freeze({
   SpeechToText: { label: 'Speech to text', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT) },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
-  LiveTextDisplay: { label: 'Live text display', inputs: { replace: TEXT, append: TEXT }, optionalInputs: ['replace', 'append'], outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Connect replace for a preview and/or append for committed items. Every append clears the preview; repeated and empty items are preserved. Multiple displays are independent and ordered by graph Node order.' },
+  LiveTextDisplay: { label: 'Live text display', inputs: { replace: TEXT, append: TEXT }, optionalInputs: ['replace', 'append'], outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Replace changes only the preview. Every append adds one committed item and clears the preview; repeated and empty items are preserved. Stop/Cancel keep committed items and discard preview when append is connected. Start again begins empty. Multiple displays are independent and ordered by graph Node order.' },
   TextFormatter: { label: 'Text formatter', inputs: FORMAT_INPUTS, optionalInputs: Object.keys(FORMAT_INPUTS), outputs: { text: TEXT }, textSettings: { template: { default: '{1}', maxLength: 2048, multiline: true } }, help: 'Use {1}–{4}, labels and literal newlines. Escape braces as {{ and }}. Missing inputs are empty. Each emission formats the latest input values; only directly grouped emissions update together. Independent branches are not correlated.' },
   PairedTextFormatter: { label: 'Paired text formatter (compatibility)', inputs: PAIRED_INPUTS, optionalInputs: ['provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError'], outputs: { text: TEXT }, settings: { direction: ['ja-en', 'en-ja'] }, help: 'Preserves saved paired translation source/index/status history. Connect the complete final bundle directly from one translator, optionally its complete preview bundle. Connect text to LiveTextDisplay.replace. Independent branches cannot be paired.' },
   Supertonic3: { label: 'Supertonic 3 TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { language: ['ja', 'en'], voice: ['F1', 'M1'] } },
@@ -39,12 +39,13 @@ export function graphNode(type, id, x = 20, y = 20) {
   if (!definition) throw new Error(`Unknown Node type: ${type}`);
   return { id, type, settings: { ...Object.fromEntries(Object.entries(definition.settings || {}).map(([key, values]) => [key, values[0]])), ...Object.fromEntries(Object.entries(definition.textSettings || {}).map(([key, spec]) => [key, spec.default])) }, position: { x, y } };
 }
-export function defaultGraph({ enabled = true, direction = 'ja-en' } = {}) {
+// Translation is an explicit configuration, never part of a new/reset default.
+export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
   direction = direction === 'en-ja' ? 'en-ja' : 'ja-en';
   const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToText', 'speech', 270, 30), graphNode('LiveTextDisplay', 'transcript', 800, 30)];
-  nodes[2].settings = { label: 'Original', language: direction === 'en-ja' ? 'en' : 'ja' };
   const edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'final', 'transcript', 'append')];
   if (enabled) {
+    nodes[2].settings = { label: 'Original', language: direction === 'en-ja' ? 'en' : 'ja' };
     nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 230), graphNode('LiveTextDisplay', 'translated', 800, 230), graphNode('PairedTextFormatter', 'translated-format', 530, 230));
     nodes[4].settings.label = 'Translation'; nodes[5].settings.direction = direction;
     for (const port of ['provisional', 'final']) edges.push(edge('speech', port, 'translation', port === 'final' ? 'text' : port));
@@ -235,7 +236,7 @@ export function withTranslation(graph, { enabled, direction }) {
   for (const formatter of next.nodes.filter(n => n.type === 'PairedTextFormatter')) formatter.settings.direction = direction;
   if (enabled && current) for (const node of next.nodes.filter(n => translators.includes(n.type))) node.type = direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn';
   else if (enabled) {
-    const branch = defaultGraph({ direction });
+    const branch = defaultGraph({ enabled: true, direction });
     // Choose unused IDs when the user's graph uses the default names elsewhere.
     const ids = new Set(next.nodes.map(n => n.id));
     const unused = base => unusedId(ids, base);
@@ -267,7 +268,7 @@ export function readGraph(storage) {
   }
   let legacy;
   try { legacy = JSON.parse(storage.getItem('opus-mt-translation-preferences')); } catch { /* migrate corrupt preferences to defaults */ }
-  const graph = defaultGraph({ enabled: typeof legacy?.enabled === 'boolean' ? legacy.enabled : true, direction: legacy?.direction });
+  const graph = defaultGraph({ enabled: legacy?.enabled === true, direction: legacy?.direction });
   saveGraph(storage, graph);
   return graph;
 }

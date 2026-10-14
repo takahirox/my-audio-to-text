@@ -42,11 +42,19 @@ Load saved. Recreated windows and Chrome restarts in the same profile retain the
 saved graph. Drafts remain page-local. Transcripts/audio are never persisted.
 Closing/reloading Live releases capture/Workers and revokes audio URLs.
 
-Fresh installs use current-tab audio → SpeechToText → original transcript,
-with an OPUS-MT Japanese → English paired translation branch. Existing boolean
-translation enablement/direction preferences migrate once, including a saved
-transcription-only choice. The editor's **Draft translation** controls edit this
-same graph and require Save; there is no second preferences store. The convenience
+Fresh installs and **Reset draft to default** use exactly three Nodes:
+`ChromeTabAudio`, `SpeechToText`, and one generic `LiveTextDisplay` labeled Text
+(language unspecified). The three named-port edges are `ChromeTabAudio.audio →
+SpeechToText.audio`, `SpeechToText.provisional → LiveTextDisplay.replace`, and
+`SpeechToText.final → LiveTextDisplay.append`. No translation or formatter is
+included. Reset changes only the draft until Save; upgrades never replace a
+saved graph with the new default. Existing explicit boolean translation
+preferences migrate once when no graph is saved: only `enabled: true` adds the
+translation branch. Missing/corrupt preferences use the minimal default; saved
+graphs always take precedence, preserving custom settings and routes.
+
+The editor's **Draft translation** controls edit this same graph and require
+Save; there is no second preferences store. The convenience
 direction control changes all configured OPUS-MT Nodes; choose concrete Node
 types in the graph for independently directed branches. Removing
 OPUS-MT also removes exclusively dependent formatting/display/audio branches.
@@ -119,8 +127,12 @@ retains completed history on Stop; Cancel marks pending rows canceled locally.
 
 Live renders one region per configured sink, ordered by Node array order, with
 its user-supplied label (1–120 characters) and optional language. Labels and all
-values use `textContent`, never HTML. Each region has Copy text. Runtime/model,
-capture, target and error status remain outside display content. The active graph
+values use `textContent`, never HTML. Committed DOM items with an unchanged
+prefix stay attached; only new items are appended. Preview updates are separate,
+so ordinary previews/appends retain committed text selection and do not force a
+scroll jump. Resets and replaced/shortened histories remove stale items. Each
+region has Copy text. Runtime/model, capture, target and error status remain
+outside display content. The active graph
 owns labels/routes throughout a session; saving a draft applies only on the next
 Start. Stopped history keeps the last graph's labels until then. Output-only graphs
 render no text regions and add no implicit fallback display.
@@ -148,7 +160,8 @@ are currently exposed in Graph Editor.
 translation behavior that a latest-value template cannot reproduce. It requires
 matching direct primitive outputs from one translator. It emits whole-history
 TEXT replacements, so pending/error/completed row updates never append duplicates.
-It is also used by the default bilingual graph; Live has no paired-row renderer.
+It is also used by the explicitly enabled bilingual configuration; Live has no
+paired-row renderer.
 New typed display sinks can later add their own contract, Node state and a small
 renderer keyed to the sink type. They need not bind Live to producer/model types.
 This iteration introduces no image/chart/video types, renderer SDK or event bus.
@@ -157,8 +170,8 @@ This iteration introduces no image/chart/video types, renderer SDK or event bus.
 
 In Live, open **Input and output targets**. Graph Editor chooses the concrete
 Node and route; Live chooses the temporary browser target. Toolbar invocation
-selects the capture tab. The default remains whole-tab audio → ASR → Live with
-optional paired translation; it injects nothing into the page.
+selects the capture tab. The default is whole-tab audio → ASR → one Live text
+display; it injects nothing into the page.
 
 For page output, connect `SpeechToText.final → FocusedInputTextOutputNode.text`
 or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. Text can fan out to
@@ -362,3 +375,10 @@ Direct live YouTube search/comments have **not** been verified by the controlled
 fixtures or real-ASR smoke. Site-specific rich editors, native microphone hardware,
 meeting apps, DRM and restricted external frames remain optional manual checks.
 No post-merge verification is required for the locally unpacked extension.
+
+### #101 default and append checks
+
+[Append investigation and local validation](evidence/graph-101.md) distinguish
+committed state from DOM replacement, source final-ID filtering and intentional
+new-session resets, and record default/migration, selection/scroll and palette
+translation checks with optional real-model limits.

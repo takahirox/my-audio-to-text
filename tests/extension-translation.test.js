@@ -198,7 +198,7 @@ const display = (f, id = 'transcript') => f.session.view.displays[id] || { items
 const rows = f => f.session.session.pipeline.entries.get('translated-format').node.rows;
 
 for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]) test(`${direction}: paired formatter preserves ordered repeated sources, stale preview suppression and Stop drain (${original})`, async () => {
-  const f = sessionFixture(), graph = defaultGraph({ direction });
+  const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
   if (!original) { graph.nodes = graph.nodes.filter(n => n.id !== 'transcript'); graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); }
   graph.edges.reverse(); f.session.setGraph(graph); await f.session.start(42);
   const speech = f.session.session.speech;
@@ -219,7 +219,7 @@ for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]
 });
 
 for (const direction of ['ja-en', 'en-ja']) for (const ports of [['replace'], ['append'], ['replace', 'append']]) test(`${direction}: arbitrary direct translation TEXT display ${ports.join('/')}`, async () => {
-  const f = sessionFixture(), graph = defaultGraph({ direction });
+  const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
   graph.nodes = graph.nodes.filter(n => n.id !== 'translated-format'); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated-format' && e.from[0] !== 'translated-format');
   for (const port of ports) graph.edges.push({ from: ['translation', port === 'append' ? 'text' : 'provisional'], to: ['translated', port] });
   f.session.setGraph(graph); await f.session.start(42); const speech = f.session.session.speech;
@@ -252,7 +252,7 @@ test('English → Japanese has a distinct pinned complete manifest and cache key
 
 test('active processing direction and display labels remain immutable when a different draft is saved', async () => {
   const f = sessionFixture(), preparations = []; f.session.prepareTranslation = async (signal, direction) => preparations.push(direction);
-  f.session.setGraph(defaultGraph({ direction: 'en-ja' })); await f.session.start(42);
+  f.session.setGraph(defaultGraph({ enabled: true, direction: 'en-ja' })); await f.session.start(42);
   const active = f.session.view.activeGraph; f.session.setTranslationDirection('ja-en');
   assert.equal(f.session.view.activeGraph, active); assert.deepEqual(preparations, ['en-ja']);
   f.session.session.speech.receiveEvent({ type: 'final', text: 'Hello', id: 0 }); await tick(); f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
@@ -293,7 +293,7 @@ test('independent sinks consume plain TEXT and append clears only its own replac
 });
 
 test('multiple translator runtime statuses retain each branch failure independently of Live labels', async () => {
-  const f = sessionFixture(), graph = defaultGraph();
+  const f = sessionFixture(), graph = defaultGraph({ enabled: true });
   graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('LiveTextDisplay', 'reverse-display'));
   graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'append'));
   f.session.prepareTranslation = async (signal, direction) => { if (direction === 'ja-en') throw Error('Forward cache unavailable'); };

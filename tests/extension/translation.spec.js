@@ -223,6 +223,7 @@ test('saved processing direction applies next session; generic labels and existi
 
 function model(page, selector) { return page.models.locator(`#opus-${page.direction} ${selector}`); }
 async function setDirection(page, direction) {
+  await page.editor.locator('#translation-enabled').check();
   await page.editor.locator('#translation-direction').selectOption(direction);
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); page.direction = direction;
 }

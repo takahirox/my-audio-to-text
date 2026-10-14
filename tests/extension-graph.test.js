@@ -18,8 +18,16 @@ const audioGraph = (type, translated = false) => {
   return graph;
 };
 
-test('fresh graph defaults to translation; legacy preferences migrate once; persisted graph is the single source of truth', () => {
-  const fresh = storage(); assert.equal(readGraph(fresh).nodes[3].type, 'OpusMtJaEn');
+test('fresh graph is minimal; only explicit legacy translation choices migrate; saved graphs take precedence', () => {
+  const fresh = storage(), minimal = defaultGraph();
+  assert.deepEqual(minimal.nodes.map(n => n.type), ['ChromeTabAudio', 'SpeechToText', 'LiveTextDisplay']);
+  assert.deepEqual(minimal.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'final', 'transcript', 'append')]);
+  assert.deepEqual(minimal.nodes[2].settings, { label: 'Text', language: 'und' });
+  assert.deepEqual(readGraph(fresh), minimal);
+  for (const legacy of ['{broken', '{}', '{"direction":"en-ja"}', '{"enabled":"true"}']) {
+    const store = storage(); store.setItem('opus-mt-translation-preferences', legacy);
+    assert.equal(readGraph(store).nodes.length, 3);
+  }
   for (const enabled of [false, true]) for (const direction of ['ja-en', 'en-ja']) {
     const store = storage(); store.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled, direction }));
     const graph = readGraph(store); assert.equal(graph.translationDirection, direction); assert.equal(graph.nodes.length, enabled ? 6 : 3);
@@ -29,7 +37,23 @@ test('fresh graph defaults to translation; legacy preferences migrate once; pers
   const store = storage(); store.setItem(GRAPH_KEY, '{broken'); assert.throws(() => readGraph(store));
   saveGraph(store, defaultGraph({ enabled: false })); assert.equal(readGraph(store).nodes.length, 3);
   store.setItem('opus-mt-translation-preferences', '{broken'); assert.equal(readGraph(store).nodes.length, 3);
-  assert.throws(() => saveGraph({ setItem() { throw Error('Quota'); } }, defaultGraph()), /Quota/);
+  assert.throws(() => saveGraph({ setItem() { throw Error('Quota'); } }, defaultGraph({ enabled: true })), /Quota/);
+});
+
+test('current custom and translation graphs reload byte-for-byte without preference migration or default rewiring', () => {
+  for (const enabled of [false, true]) {
+    const store = storage(), graph = defaultGraph({ enabled, direction: 'en-ja' });
+    graph.nodes[2].settings = { label: 'My custom display', language: 'ja' };
+    graph.nodes[0].position.x = 91;
+    graph.nodes.push(graphNode('TextFormatter', 'custom'));
+    graph.nodes.at(-1).settings.template = 'Final: {1}';
+    graph.edges = graph.edges.filter(e => !(e.to[0] === 'transcript' && e.to[1] === 'append'));
+    graph.edges.push(edge('speech', 'final', 'custom', 'input1'), edge('custom', 'text', 'transcript', 'append'));
+    const raw = JSON.stringify(graph, null, 2); store.setItem(GRAPH_KEY, raw);
+    store.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled: !enabled, direction: 'ja-en' }));
+    assert.deepEqual(readGraph(store), graph); assert.deepEqual(readGraph(store), graph);
+    assert.equal(store.getItem(GRAPH_KEY), raw);
+  }
 });
 
 for (const [name, edit, pattern] of [
@@ -47,7 +71,7 @@ for (const [name, edit, pattern] of [
   ['settings', g => g.nodes[2].settings.model = 'remote', /Unknown setting/],
   ['malformed edge', g => g.edges.push({ from: null }), /Malformed/],
 ]) test(`schema rejects ${name} before saving or constructing Workers`, () => {
-  const graph = defaultGraph(); edit(graph);
+  const graph = defaultGraph({ enabled: true }); edit(graph);
   assert.match(validateGraph(graph).join('\n'), pattern);
   assert.throws(() => assertGraph(graph), pattern);
   assert.throws(() => buildGraph(graph, {}), pattern);
@@ -58,8 +82,8 @@ test('versions 1–5 preserve paired bundles, direction, fan-out and explicitly 
     const saved = legacyGraph({ direction }, version), store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(saved));
     const migrated = readGraph(store);
     assert.equal(migrated.version, 6); assert.equal(migrated.translationDirection, direction);
-    assert.deepEqual(migrated.nodes.map(n => n.type), defaultGraph({ direction }).nodes.map(n => n.type));
-    assert.deepEqual(migrated.edges.map(JSON.stringify).sort(), defaultGraph({ direction }).edges.map(JSON.stringify).sort());
+    assert.deepEqual(migrated.nodes.map(n => n.type), defaultGraph({ enabled: true, direction }).nodes.map(n => n.type));
+    assert.deepEqual(migrated.edges.map(JSON.stringify).sort(), defaultGraph({ enabled: true, direction }).edges.map(JSON.stringify).sort());
     assert.equal(migrated.nodes.at(-1).settings.direction, direction);
     assert.deepEqual(readGraph(store), migrated);
   }
@@ -72,7 +96,7 @@ test('versions 1–5 preserve paired bundles, direction, fan-out and explicitly 
     graph.edges.push(edge('translation', 'finalSource', 'translated', 'finalSource'));
     assert.throws(() => assertGraph(graph), /Required connection missing/);
   }
-  const split = defaultGraph(); split.edges.find(e => e.to[0] === 'translated-format' && e.to[1] === 'text').from = ['speech', 'final'];
+  const split = defaultGraph({ enabled: true }); split.edges.find(e => e.to[0] === 'translated-format' && e.to[1] === 'text').from = ['speech', 'final'];
   assert.match(validateGraph(split).join('\n'), /matching direct outputs/);
   const invalid = legacyGraph({}, 4); invalid.edges.push(edge('translation', 'finalResult', 'transcript', 'final'));
   const store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(invalid));
@@ -80,7 +104,7 @@ test('versions 1–5 preserve paired bundles, direction, fan-out and explicitly 
 });
 
 test('concrete supported descriptions instantiate actual Nodes with identical contract identities and the exact saved edges', () => {
-  for (const graph of [defaultGraph(), defaultGraph({ enabled: false }), defaultGraph({ direction: 'en-ja' }), audioGraph('Supertonic3'), audioGraph('Kokoro', true)]) {
+  for (const graph of [defaultGraph({ enabled: true }), defaultGraph({ enabled: false }), defaultGraph({ enabled: true, direction: 'en-ja' }), audioGraph('Supertonic3'), audioGraph('Kokoro', true)]) {
     const result = buildGraph(graph, { tabId: 42, onTranscript() {}, onTranslation() {}, onTranslationState() {}, prepareTranslation() {}, onSynthesizedAudio() {} });
     assert.ok(result.pipeline instanceof Pipeline);
     assert.ok(result.audio instanceof ExtensionTabAudioNode); assert.ok(result.speech instanceof SpeechToTextNode);
@@ -143,7 +167,7 @@ test('saved translation TEXT → actual Kokoro Node graph drains only completed 
 });
 
 test('TEXT edges depend on contract identity; interim and diagnostic inputs are optional', () => {
-  const graph = defaultGraph();
+  const graph = defaultGraph({ enabled: true });
   graph.edges = graph.edges.filter(route => !(route.to[0] === 'transcript' && route.to[1] === 'replace') && route.to[1] !== 'provisional');
   // A translated stream can be the full transcript destination, independently
   // of the scheduler's paired diagnostic view. No producer identity is required.
@@ -175,7 +199,7 @@ test('v5 migration preserves independent language, maximum IDs and fan-out; capa
 });
 
 test('disabling translation retains a shared display and all unaffected routes', () => {
-  const graph = defaultGraph(); graph.edges.find(e => e.to[0] === 'transcript' && e.to[1] === 'append').from = ['translation', 'text'];
+  const graph = defaultGraph({ enabled: true }); graph.edges.find(e => e.to[0] === 'transcript' && e.to[1] === 'append').from = ['translation', 'text'];
   const disabled = withTranslation(graph, { enabled: false, direction: 'ja-en' });
   assert.ok(disabled.nodes.some(n => n.id === 'transcript'));
   assert.deepEqual(disabled.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace')]);

@@ -25,3 +25,30 @@ test('shared TEXT formatter/display Nodes compose grouped and independent stream
   });
   expect(result).toEqual({ current: '<b>A</b>\n{1}\n\n{escaped}', history: ['<b>A</b>\n{1}\n\n{escaped}', '<b>A</b>\n{1}\nC\n{escaped}', '<b>A</b>\n{1}\n\n{escaped}'], preview: '', errors: [] });
 });
+
+test('shared display state keeps every final through provisional replacements, Stop/Cancel and a fresh session', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { LiveTextDisplayNode } = await import('/text-nodes.js');
+    const c = { signal: new AbortController().signal }, states = [];
+    const display = new LiveTextDisplayNode(state => states.push(state), { appendConnected: true });
+    display.start();
+    const expected = [], invariants = [];
+    for (const final of ['  <img src=x>\n&  ', 'same', 'same', '', '']) {
+      for (const preview of ['first', 'replaced', '']) {
+        display.receive('replace', preview, c);
+        invariants.push(JSON.stringify(states.at(-1)) === JSON.stringify({ preview, items: expected }));
+      }
+      display.receive('append', final, c); expected.push(final);
+      invariants.push(JSON.stringify(states.at(-1)) === JSON.stringify({ preview: '', items: expected }));
+    }
+    display.receive('replace', 'Stop preview', c); display.stop(); const stopped = states.at(-1);
+    display.receive('replace', 'Cancel preview', c); display.dispose(); const canceled = states.at(-1);
+    const fresh = new LiveTextDisplayNode(state => states.push(state)); fresh.start();
+    return { invariants, stopped, canceled, fresh: states.at(-1), first: states[0] };
+  });
+  expect(result.invariants.every(Boolean)).toBe(true);
+  const history = { preview: '', items: ['  <img src=x>\n&  ', 'same', 'same', '', ''] };
+  expect(result.stopped).toEqual(history); expect(result.canceled).toEqual(history);
+  expect(result.fresh).toEqual({ preview: '', items: [] }); expect(result.first).toEqual(result.fresh);
+});
