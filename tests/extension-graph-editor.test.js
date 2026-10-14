@@ -29,7 +29,7 @@ test('type mismatch, self-connection, unknown ports, split correlated display an
   const e = editor(), before = structuredClone(e.draft.edges);
   connect(e, 'audio', 'audio', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'translation', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'translated', 'text'); assert.deepEqual(e.draft.edges, before);
+  connect(e, 'speech', 'final', 'translated-format', 'text'); assert.deepEqual(e.draft.edges, before);
   assert.match(e.error, /matching direct outputs/);
   e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToText.outputs.final };
   e.connect('translation', 'text', NODE_TYPES.OpusMtJaEn.inputs.text); assert.deepEqual(e.draft.edges, before);

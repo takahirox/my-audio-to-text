@@ -37,7 +37,7 @@ test('version 1/2 field graphs migrate persistently, preserve media, and reject 
     assert.deepEqual(readGraph(storage), migrated); assert.deepEqual(validateGraph(migrated), []);
     assert.equal(migrated.nodes[0].type, 'SelectedPageMediaAudio');
     assert.equal(migrated.nodes.find(n => n.id === 'field').type, 'FocusedInputTextOutputNode');
-    assert.deepEqual(migrated.edges.at(-1), edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', 'field', 'text'));
+    assert.ok(migrated.edges.some(route => JSON.stringify(route) === JSON.stringify(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', 'field', 'text'))));
     graph.edges.push(edge('speech', 'final', 'field', 'final'));
     assert.throws(() => assertGraph(graph), /Cannot migrate.*Reset and Save/);
   }
@@ -51,7 +51,7 @@ test('version 3 removes adapters preserving every fan-out route and translation 
     assert.deepEqual(graph, before, 'migration never mutates stored input');
     assert.equal(migrated.nodes.some(node => node.id === 'text'), false);
     for (const id of ['a', 'b']) assert.ok(migrated.edges.some(route => JSON.stringify(route) === JSON.stringify(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', id, 'text'))));
-    if (translated) assert.ok(migrated.edges.some(route => route.from[1] === 'finalSource' && route.to[0] === 'translated'));
+    if (translated) assert.ok(migrated.edges.some(route => route.from[1] === 'finalSource' && route.to[0] === 'translated-format'));
     graph.edges.find(route => route.to[0] === 'text').from[1] = 'provisional';
     assert.throws(() => assertGraph(graph), /Cannot migrate text adapter.*Reset and Save/);
   }

@@ -104,6 +104,17 @@ async function setup(extension, { mode = 'audio', fallback = false } = {}) {
   const page = await context.newPage();
   await page.goto(url);
   await observePipeline(page, new URL('../web/', url).href);
+  await page.evaluate(async () => {
+    const { LiveTextDisplayNode } = await import('../web/text-nodes.js');
+    const receiveInputs = LiveTextDisplayNode.prototype.receiveInputs;
+    LiveTextDisplayNode.prototype.receiveInputs = async function(values, context) {
+      if (Object.hasOwn(values, 'append') && window.holdTranscript) {
+        window.heldTranscript = values.append;
+        await new Promise(resolve => { window.releaseTranscript = resolve; });
+      }
+      if (!context.signal.aborted) return receiveInputs.call(this, values, context);
+    };
+  });
   await page.evaluate(() => window.invoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
   return page;
 }
@@ -118,8 +129,8 @@ for (const fallback of [false, true]) {
   test(`loadable MV3 extension uses real ${fallback ? 'fallback' : 'worklet'} audio, pipeline, provisional/final fallback, Stop and repeat`, async ({ extension }) => {
     const page = await setup(extension, { fallback });
     await expect(page.locator('#status')).toHaveText('Transcription active');
-    await expect(page.locator('#partial')).toHaveText('extension transcript');
-    expect(await graphTypes(page)).toEqual(['ExtensionTabAudioNode', 'SpeechToTextNode', 'TranscriptOutputNode']);
+    await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
+    expect(await graphTypes(page)).toEqual(['ExtensionTabAudioNode', 'SpeechToTextNode', 'LiveTextDisplayNode']);
     expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);
     expect(await page.evaluate(() => window.mediaOptions.audio.mandatory)).toEqual({ chromeMediaSource: 'tab', chromeMediaSourceId: 'fixture-id' });
     expect(await page.evaluate(() => window.mediaOptions.video)).toBe(false);
@@ -130,12 +141,12 @@ for (const fallback of [false, true]) {
     expect(inputs.some(m => Math.abs(m.last - 0.05) < 1e-5)).toBe(true);
     await page.locator('#stop').click();
     await expect(page.locator('#status')).toContainText('Stopped');
-    await expect(page.locator('#final')).toHaveText('extension transcript\n');
-    await expect(page.locator('#partial')).toBeEmpty(); await released(page);
+    await expect(page.locator('[data-display="transcript"] .display-items')).toHaveText('extension transcript\n');
+    await expect(page.locator('[data-display="transcript"] .display-preview')).toBeEmpty(); await released(page);
     expect(await page.evaluate(() => window.terminated)).toBe(2);
     await page.locator('#start').click();
-    await expect(page.locator('#final')).toBeEmpty();
-    await expect(page.locator('#partial')).toHaveText('extension transcript');
+    await expect(page.locator('[data-display="transcript"] .display-items')).toBeEmpty();
+    await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
     await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
     await released(page, 2); expect(await page.evaluate(() => window.terminated)).toBe(4);
     await expect(page.locator('#errors')).toBeEmpty();
@@ -148,24 +159,24 @@ for (const fallback of [false, true]) {
 
 test('Stop waits for the final transcript port before completion and disposal', async ({ extension }) => {
   const page = await setup(extension);
-  await expect(page.locator('#partial')).toHaveText('extension transcript');
+  await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
   await page.evaluate(() => { window.holdTranscript = true; });
   await page.locator('#stop').click();
   await expect.poll(() => page.evaluate(() => window.heldTranscript)).toBe('extension transcript');
-  await expect(page.locator('#status')).toHaveText('Finalizing transcript…');
-  await expect(page.locator('#final')).toBeEmpty();
+  await expect(page.locator('#status')).toHaveText('Finalizing graph outputs…');
+  await expect(page.locator('[data-display="transcript"] .display-items')).toBeEmpty();
   await expect(page.locator('#start')).toBeDisabled();
   expect(await page.evaluate(() => window.terminated)).toBe(0);
   await page.evaluate(() => window.releaseTranscript());
   await expect(page.locator('#status')).toContainText('Stopped');
-  await expect(page.locator('#final')).toHaveText('extension transcript\n');
+  await expect(page.locator('[data-display="transcript"] .display-items')).toHaveText('extension transcript\n');
   await released(page);
   expect(await page.evaluate(() => window.terminated)).toBe(2);
 });
 
 test('teardown while the transcript sink drains discards held output and workers', async ({ extension }) => {
   const page = await setup(extension);
-  await expect(page.locator('#partial')).toHaveText('extension transcript');
+  await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
   await page.evaluate(() => { window.holdTranscript = true; });
   await page.locator('#stop').click();
   await expect.poll(() => page.evaluate(() => !!window.releaseTranscript)).toBe(true);
@@ -173,7 +184,7 @@ test('teardown while the transcript sink drains discards held output and workers
   expect(await page.evaluate(() => window.terminated)).toBe(2);
   await page.evaluate(() => window.releaseTranscript());
   await released(page);
-  await expect(page.locator('#final')).toBeEmpty();
+  await expect(page.locator('[data-display="transcript"] .display-items')).toBeEmpty();
   await expect(page.locator('#errors')).toBeEmpty();
 });
 
@@ -190,9 +201,9 @@ test('model preload progress and cancellation leave capture unrequested and retr
   expect(await page.evaluate(() => window.pipelineCalls)).toEqual([{ hook: 'dispose', id: 0 }]);
   await page.evaluate(() => { window.holdLoad = false; });
   await page.locator('#start').click();
-  await expect(page.locator('#partial')).toHaveText('extension transcript');
+  await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
   await page.locator('#stop').click();
-  await expect(page.locator('#final')).toHaveText('extension transcript\n');
+  await expect(page.locator('[data-display="transcript"] .display-items')).toHaveText('extension transcript\n');
   await released(page);
   await expect(page.locator('#errors')).toBeEmpty();
 });
@@ -201,7 +212,7 @@ for (const phase of ['loading', 'running']) {
   test(`worker failure during ${phase} disposes the pipeline and permits retry`, async ({ extension }) => {
     const page = await setup(extension, { mode: phase === 'loading' ? 'loading' : 'audio' });
     await expect.poll(() => page.evaluate(() => window.workers.length)).toBe(2);
-    if (phase === 'running') await expect(page.locator('#partial')).toHaveText('extension transcript');
+    if (phase === 'running') await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
     await page.evaluate(() => window.workers[0].postMessage({ type: 'fixture-error' }));
     await expect(page.locator('#errors')).toContainText('Controlled worker failure');
     await expect(page.locator('#start')).toBeEnabled();
@@ -210,7 +221,7 @@ for (const phase of ['loading', 'running']) {
     else expect(await page.evaluate(() => window.requests)).toEqual([]);
     await page.evaluate(() => { window.holdLoad = false; });
     await page.locator('#start').click();
-    await expect(page.locator('#partial')).toHaveText('extension transcript');
+    await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
     await expect(page.locator('#errors')).toBeEmpty();
     await page.locator('#stop').click();
     await expect(page.locator('#status')).toContainText('Stopped');
@@ -233,14 +244,14 @@ for (const mode of ['api-error', 'media-error', 'no-audio']) {
 for (const reason of ['track', 'removed', 'updated']) {
   test(`${reason} ending the tab finalizes and releases the extension`, async ({ extension }) => {
     const page = await setup(extension);
-    await expect(page.locator('#partial')).toHaveText('extension transcript');
+    await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
     await page.evaluate(reason => {
       if (reason === 'track') window.streams[0].stream.getAudioTracks()[0].onended();
       else if (reason === 'removed') window.removed(42);
       else window.updated(42, { status: 'loading' });
     }, reason);
     await expect(page.locator('#status')).toContainText('Stopped');
-    await expect(page.locator('#final')).toHaveText('extension transcript\n'); await released(page);
+    await expect(page.locator('[data-display="transcript"] .display-items')).toHaveText('extension transcript\n'); await released(page);
     await expect(page.locator('#errors')).toBeEmpty();
   });
 }
@@ -271,11 +282,11 @@ test('a late capture grant cannot feed or end a replacement session', async ({ e
   await page.locator('#start').click();
   await expect.poll(() => page.evaluate(() => window.grant !== window.oldGrant)).toBe(true);
   await page.evaluate(() => window.grant());
-  await expect(page.locator('#partial')).toHaveText('extension transcript');
+  await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
   await page.evaluate(() => window.oldGrant());
   await expect.poll(() => page.evaluate(() => window.streams.map(s => s.stops))).toEqual([0, 1]);
   await expect(page.locator('#status')).toHaveText('Transcription active');
-  await expect(page.locator('#final')).toBeEmpty();
+  await expect(page.locator('[data-display="transcript"] .display-items')).toBeEmpty();
   await expect(page.locator('#errors')).toBeEmpty();
   await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
   await released(page, 2);
@@ -322,7 +333,7 @@ test('real toolbar invocation captures the current tab without a picker, repeats
   await expect(recorder.locator('#errors')).toHaveText('');
   await expect(recorder.locator('#status')).toHaveText('Transcription active');
   await expect(recorder.locator('#signal')).toHaveText('Tab audio signal detected.');
-  await expect(recorder.locator('#partial')).toHaveText('extension transcript');
+  await expect(recorder.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
   await expect(recorder.locator('#errors')).toBeEmpty();
   // Another toolbar invocation during capture focuses the existing window and
   // retains the original native tab grant and stream.
@@ -346,17 +357,17 @@ test('real toolbar invocation captures the current tab without a picker, repeats
   expect(context.pages().filter(page => page.url().includes('/extension/recorder.html'))).toHaveLength(1);
   await recorder.locator('#stop').click();
   await expect(recorder.locator('#status')).toContainText('Stopped');
-  await expect(recorder.locator('#final')).toHaveText('extension transcript\n');
+  await expect(recorder.locator('[data-display="transcript"] .display-items')).toHaveText('extension transcript\n');
   await recorder.locator('#start').click();
   await expect(recorder.locator('#status')).toHaveText('Transcription active');
-  await expect(recorder.locator('#partial')).toHaveText('extension transcript');
-  await expect(recorder.locator('#final')).toBeEmpty();
+  await expect(recorder.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
+  await expect(recorder.locator('[data-display="transcript"] .display-items')).toBeEmpty();
   // Returning focus to the meeting must leave the capture/window alive.
   await meeting.bringToFront();
   await expect(recorder.locator('#status')).toHaveText('Transcription active');
   await meeting.goto('https://meeting.test/next');
   await expect(recorder.locator('#status')).toContainText('Stopped');
-  await expect(recorder.locator('#final')).toHaveText('extension transcript\n');
+  await expect(recorder.locator('[data-display="transcript"] .display-items')).toHaveText('extension transcript\n');
   await expect(recorder.locator('#errors')).toBeEmpty();
   // Toolbar invocation on a new tab reuses the same window after Stop.
   await second.bringToFront();
@@ -365,15 +376,15 @@ test('real toolbar invocation captures the current tab without a picker, repeats
   const next = targets.targetInfos.find(target => target.url === second.url());
   await cdp.send('Extensions.triggerAction', { id, targetId: next.targetId });
   await expect(recorder.locator('#status')).toHaveText('Transcription active');
-  await expect(recorder.locator('#partial')).toHaveText('extension transcript');
-  await expect(recorder.locator('#final')).toBeEmpty();
+  await expect(recorder.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
+  await expect(recorder.locator('[data-display="transcript"] .display-items')).toBeEmpty();
   const retargetedTabs = await captured();
   expect(retargetedTabs).toEqual([await recorder.evaluate(() => window.invocations.at(-1))]);
   expect(retargetedTabs).not.toEqual(originalTabs);
   expect(context.pages().filter(page => page.url().includes('/extension/recorder.html'))).toHaveLength(1);
   await second.close();
   await expect(recorder.locator('#status')).toContainText('Stopped');
-  await expect(recorder.locator('#final')).toHaveText('extension transcript\n');
+  await expect(recorder.locator('[data-display="transcript"] .display-items')).toHaveText('extension transcript\n');
   await expect(recorder.locator('#errors')).toBeEmpty();
   // Closing the transcript window releases an active native capture too.
   await meeting.bringToFront();
@@ -381,7 +392,7 @@ test('real toolbar invocation captures the current tab without a picker, repeats
   const finalTargets = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
   await cdp.send('Extensions.triggerAction', { id,
     targetId: finalTargets.targetInfos.find(target => target.url === meeting.url()).targetId });
-  await expect(recorder.locator('#partial')).toHaveText('extension transcript');
+  await expect(recorder.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
   await recorder.close();
   await expect.poll(async () => worker.evaluate(async () =>
     (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);
@@ -424,7 +435,7 @@ base('packaged extension initializes the real pinned ReazonSpeech/Silero workers
 
 test('Live navigation opens separate extension pages without stopping or retargeting active native audio', async ({ extension }) => {
   const page = await setup(extension);
-  await expect(page.locator('#partial')).toHaveText('extension transcript');
+  await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
   await page.setViewportSize({ width: 440, height: 800 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   for (const [name, file] of [['Graph Editor', 'graph-editor.html'], ['Models', 'model-cache.html']]) {
@@ -439,9 +450,9 @@ test('Live navigation opens separate extension pages without stopping or retarge
     await opened.close();
   }
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await released(page);
-  await page.locator('#copy-final').click(); await expect(page.locator('#copy-status')).toContainText('copied');
+  await page.locator('[data-display="transcript"] button').click(); await expect(page.locator('[data-display="transcript"] [role="status"]')).toContainText('copied');
   // Test-only read grant; the product needs no clipboard permission to copy
   // during a user gesture and does not read the clipboard.
   await extension.context.grantPermissions(['clipboard-read']);
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('extension transcript\n');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('extension transcript');
 });

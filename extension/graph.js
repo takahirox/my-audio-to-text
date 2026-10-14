@@ -1,9 +1,11 @@
 import { MONO_16KHZ_PCM } from '../web/transcription-nodes.js';
 import { TEXT } from '../web/translation-nodes.js';
 import { TRANSLATION_OUTPUTS } from './translation-scheduler.js';
+import { FORMAT_INPUTS, parseTemplate } from '../web/text-nodes.js';
+import { PAIRED_INPUTS } from './paired-text-formatter.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 
-export const GRAPH_VERSION = 5;
+export const GRAPH_VERSION = 6;
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
@@ -15,33 +17,40 @@ export const NODE_TYPES = Object.freeze({
   MicrophoneAudio: { label: 'Microphone audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Press Start in Live to request microphone permission.' },
   FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect SpeechToText.final or a processor’s completed text output; no separate authorization or field picker.' },
   SpeechToText: { label: 'Speech to text', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT) },
-  TranscriptView: { label: 'Original transcript', inputs: paired(TEXT), optionalInputs: ['provisional'], outputs: {}, settings: { direction: ['ja-en', 'en-ja'] } },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
-  TranslationView: { label: 'Paired translation / Translated', inputs: {
-    ...Object.fromEntries(Object.entries(TRANSLATION_OUTPUTS).filter(([port]) => port !== 'provisional')), provisionalText: TEXT,
-  }, optionalInputs: [...Object.keys(TRANSLATION_OUTPUTS).filter(port => port !== 'provisional'), 'provisionalText'], outputs: {}, help: 'Plain display: provisionalText and/or text. Paired display: text plus finalSource, finalStatus, finalIndex, finalError from the same translator; optional provisionalText plus provisionalSource, provisionalStatus, provisionalError. Groups travel directly from one producer; separate processor branches cannot be joined.' },
+  LiveTextDisplay: { label: 'Live text display', inputs: { replace: TEXT, append: TEXT }, optionalInputs: ['replace', 'append'], outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Connect replace for a preview and/or append for committed items. Every append clears the preview; repeated and empty items are preserved. Multiple displays are independent and ordered by graph Node order.' },
+  TextFormatter: { label: 'Text formatter', inputs: FORMAT_INPUTS, optionalInputs: Object.keys(FORMAT_INPUTS), outputs: { text: TEXT }, textSettings: { template: { default: '{1}', maxLength: 2048, multiline: true } }, help: 'Use {1}–{4}, labels and literal newlines. Escape braces as {{ and }}. Missing inputs are empty. Each emission formats the latest input values; only directly grouped emissions update together. Independent branches are not correlated.' },
+  PairedTextFormatter: { label: 'Paired text formatter (compatibility)', inputs: PAIRED_INPUTS, optionalInputs: ['provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError'], outputs: { text: TEXT }, settings: { direction: ['ja-en', 'en-ja'] }, help: 'Preserves saved paired translation source/index/status history. Connect the complete final bundle directly from one translator, optionally its complete preview bundle. Connect text to LiveTextDisplay.replace. Independent branches cannot be paired.' },
   Supertonic3: { label: 'Supertonic 3 TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { language: ['ja', 'en'], voice: ['F1', 'M1'] } },
   Kokoro: { label: 'Kokoro TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { voice: ['jf_alpha', 'af_heart'] } },
   AudioOutput: { label: 'Audio player / WAV', inputs: { audio: SYNTHESIZED_AUDIO }, outputs: {} },
 });
+const LEGACY_VIEWS = {
+  TranscriptView: { label: 'Original transcript', inputs: paired(TEXT), optionalInputs: ['provisional'], outputs: {}, settings: { direction: ['ja-en', 'en-ja'] } },
+  TranslationView: { label: 'Paired translation / Translated', inputs: {
+    ...Object.fromEntries(Object.entries(TRANSLATION_OUTPUTS).filter(([port]) => port !== 'provisional')), provisionalText: TEXT,
+  }, optionalInputs: [...Object.keys(TRANSLATION_OUTPUTS).filter(port => port !== 'provisional'), 'provisionalText'], outputs: {}, help: 'Plain display: provisionalText and/or text. Paired display: text plus finalSource, finalStatus, finalIndex, finalError from the same translator; optional provisionalText plus provisionalSource, provisionalStatus, provisionalError. Groups travel directly from one producer; separate processor branches cannot be joined.' },
+};
 const definitionOf = type => Object.hasOwn(NODE_TYPES, type) ? NODE_TYPES[type] : undefined;
 const translators = ['OpusMtJaEn', 'OpusMtEnJa'];
 export function graphNode(type, id, x = 20, y = 20) {
   const definition = Object.hasOwn(NODE_TYPES, type) ? NODE_TYPES[type] : undefined;
   if (!definition) throw new Error(`Unknown Node type: ${type}`);
-  return { id, type, settings: Object.fromEntries(Object.entries(definition.settings || {}).map(([key, values]) => [key, values[0]])), position: { x, y } };
+  return { id, type, settings: { ...Object.fromEntries(Object.entries(definition.settings || {}).map(([key, values]) => [key, values[0]])), ...Object.fromEntries(Object.entries(definition.textSettings || {}).map(([key, spec]) => [key, spec.default])) }, position: { x, y } };
 }
 export function defaultGraph({ enabled = true, direction = 'ja-en' } = {}) {
-  const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToText', 'speech', 270, 30), graphNode('TranscriptView', 'transcript', 530, 30)];
-  nodes[2].settings.direction = direction === 'en-ja' ? 'en-ja' : 'ja-en';
-  const edges = [edge('audio', 'audio', 'speech', 'audio'), ...['provisional', 'final'].map(port => edge('speech', port, 'transcript', port))];
+  direction = direction === 'en-ja' ? 'en-ja' : 'ja-en';
+  const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToText', 'speech', 270, 30), graphNode('LiveTextDisplay', 'transcript', 800, 30)];
+  nodes[2].settings = { label: 'Original', language: direction === 'en-ja' ? 'en' : 'ja' };
+  const edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'final', 'transcript', 'append')];
   if (enabled) {
-    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 230), graphNode('TranslationView', 'translated', 530, 230));
+    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 230), graphNode('LiveTextDisplay', 'translated', 800, 230), graphNode('PairedTextFormatter', 'translated-format', 530, 230));
+    nodes[4].settings.label = 'Translation'; nodes[5].settings.direction = direction;
     for (const port of ['provisional', 'final']) edges.push(edge('speech', port, 'translation', port === 'final' ? 'text' : port));
-    edges.push(...translationViewEdges('translation', 'translated'));
+    edges.push(...translationViewEdges('translation', 'translated-format'), edge('translated-format', 'text', 'translated', 'replace'));
   }
-  return { version: GRAPH_VERSION, nodes, edges };
+  return { version: GRAPH_VERSION, translationDirection: direction, nodes, edges };
 }
 export const edge = (source, output, target, input) => ({ from: [source, output], to: [target, input] });
 export function translationViewEdges(source, target, provisional = true) {
@@ -49,22 +58,32 @@ export function translationViewEdges(source, target, provisional = true) {
     ...(provisional ? ['provisional', 'provisionalSource', 'provisionalStatus', 'provisionalError'] : [])];
   return ports.map(port => edge(source, port, target, port === 'provisional' ? 'provisionalText' : port));
 }
+function unusedId(ids, base) {
+  let id = base.slice(0, 64), index = 1;
+  while (ids.has(id)) { const suffix = `-${++index}`; id = base.slice(0, 64 - suffix.length) + suffix; }
+  ids.add(id); return id;
+}
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
-export function validateGraph(graph) {
+export function validateGraph(graph, legacy = false) {
+  const types = legacy ? { ...NODE_TYPES, ...LEGACY_VIEWS } : NODE_TYPES;
+  const definitionOf = type => Object.hasOwn(types, type) ? types[type] : undefined;
   const errors = [];
-  if (!record(graph) || graph.version !== GRAPH_VERSION || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return ['Expected version 5 graph with nodes and edges arrays.'];
+  if (!record(graph) || graph.version !== (legacy ? 5 : GRAPH_VERSION) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return [`Expected version ${legacy ? 5 : GRAPH_VERSION} graph with nodes and edges arrays.`];
   if (graph.nodes.length > 24 || graph.edges.length > 64) return ['Graph exceeds the supported size (24 nodes / 64 edges).'];
+  if (graph.translationDirection !== undefined && !['ja-en', 'en-ja'].includes(graph.translationDirection)) errors.push('Invalid translation direction preference.');
   const nodes = new Map(), incoming = new Map(), outgoing = new Map(), seen = new Set();
   for (const node of graph.nodes) {
     if (!record(node) || typeof node.id !== 'string' || !/^[a-zA-Z][\w-]{0,63}$/.test(node.id)) { errors.push('Invalid Node ID.'); continue; }
     if (nodes.has(node.id)) errors.push(`Duplicate Node ID: ${node.id}`);
     nodes.set(node.id, node);
-    const definition = Object.hasOwn(NODE_TYPES, node.type) && NODE_TYPES[node.type];
+    const definition = definitionOf(node.type);
     if (!definition) { errors.push(`Unknown Node type: ${node.type}`); continue; }
     if (!record(node.position) || ![node.position.x, node.position.y].every(n => Number.isFinite(n) && n >= 0 && n <= 4000)) errors.push(`Invalid position: ${node.id}`);
     if (!record(node.settings)) { errors.push(`Invalid settings: ${node.id}`); continue; }
-    for (const key of Object.keys(node.settings)) if (!Object.hasOwn(definition.settings || {}, key)) errors.push(`Unknown setting: ${node.id}.${key}`);
+    for (const key of Object.keys(node.settings)) if (!Object.hasOwn(definition.settings || {}, key) && !Object.hasOwn(definition.textSettings || {}, key)) errors.push(`Unknown setting: ${node.id}.${key}`);
     for (const [key, values] of Object.entries(definition.settings || {})) if (!values.includes(node.settings[key])) errors.push(`Invalid setting: ${node.id}.${key}`);
+    for (const [key, spec] of Object.entries(definition.textSettings || {})) if (typeof node.settings[key] !== 'string' || node.settings[key].length > spec.maxLength || (key === 'label' && !node.settings[key].trim())) errors.push(`Invalid setting: ${node.id}.${key}`);
+    if (node.type === 'TextFormatter') try { parseTemplate(node.settings.template); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
   }
   for (const connection of graph.edges) {
     if (!record(connection) || !Array.isArray(connection.from) || !Array.isArray(connection.to) || connection.from.length !== 2 || connection.to.length !== 2 || ![...connection.from, ...connection.to].every(s => typeof s === 'string')) { errors.push('Malformed named-port edge.'); continue; }
@@ -93,18 +112,19 @@ export function validateGraph(graph) {
   const ofType = type => graph.nodes.filter(n => n?.type === type);
   if (graph.nodes.filter(n => INPUT_TYPES.includes(n?.type)).length !== 1) errors.push('Exactly one audio input is required; simultaneous sources are ambiguous.');
   if (ofType('SpeechToText').length !== 1) errors.push('Exactly one SpeechToText is required.');
-  if (ofType('TranscriptView').length > 1) errors.push('Only one shared Live transcript destination is supported.');
-  if (graph.nodes.filter(n => translators.includes(n?.type)).length > 1 || ofType('TranslationView').length > 1) errors.push('Only one paired translation branch is supported.');
   for (const node of nodes.values()) {
     const definition = definitionOf(node.type);
     if (!definition) continue;
-    if (node.type === 'TranslationView') {
+    if (node.type === 'LiveTextDisplay' || node.type === 'TextFormatter') {
+      if (!Object.keys(definition.inputs).some(port => incoming.has(JSON.stringify([node.id, port])))) errors.push(`Required connection missing: ${node.id} needs at least one TEXT input`);
+    }
+    if (node.type === 'TranslationView' || node.type === 'PairedTextFormatter') {
       const connected = port => incoming.has(JSON.stringify([node.id, port]));
       if (!connected('text') && !connected('provisionalText')) errors.push(`Required connection missing: ${node.id}.text or provisionalText`);
       // A paired view can only use directly grouped outputs from one scheduler.
       // Type compatibility alone cannot guarantee association across branches.
       const metadata = ['finalSource', 'finalStatus', 'finalIndex', 'finalError', 'provisionalSource', 'provisionalStatus', 'provisionalError'];
-      if (metadata.some(connected)) {
+      if (node.type === 'PairedTextFormatter' || metadata.some(connected)) {
         const ports = ['text', 'finalSource', 'finalStatus', 'finalIndex', 'finalError'];
         if (['provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError'].some(connected)) ports.push('provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError');
         const source = incoming.get(JSON.stringify([node.id, 'finalSource']))?.[0];
@@ -123,7 +143,7 @@ export function validateGraph(graph) {
 }
 // Rewrite every legacy route explicitly; malformed or ambiguous routes require visible recovery.
 export function migrateGraph(graph) {
-  if (!record(graph) || ![1, 2, 3, 4].includes(graph.version)) return graph;
+  if (!record(graph) || ![1, 2, 3, 4, 5].includes(graph.version)) return graph;
   if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return graph;
   const next = structuredClone(graph);
   const recovery = (kind, id) => { throw Error(`Cannot migrate ${kind} ${id}: ambiguous or invalid route. Reset and Save in Graph Editor, then reconnect the desired TEXT routes.`); };
@@ -169,6 +189,31 @@ export function migrateGraph(graph) {
     if (!translators.includes(source?.type) || target?.type !== 'TranslationView' || route.to[1] !== (final ? 'final' : 'provisional')) recovery('paired translation', source?.id || '?');
     return translationViewEdges(source.id, target.id).filter(edge => final ? !edge.from[1].startsWith('provisional') : edge.from[1].startsWith('provisional'));
   });
+  next.version = 5;
+  const legacyErrors = validateGraph(next, true);
+  if (legacyErrors.length) throw Error(`Cannot migrate saved graph: ${legacyErrors.join(' ')} Fix the routes or Reset and Save in Graph Editor.`);
+  const preferences = graphPreferences(next);
+  next.translationDirection = preferences.direction;
+  const ids = new Set(next.nodes.map(node => node.id));
+  const unused = base => unusedId(ids, base);
+  for (const node of [...next.nodes]) {
+    const routes = next.edges.filter(route => route.to[0] === node.id);
+    if (node.type === 'TranscriptView') {
+      node.type = 'LiveTextDisplay'; node.settings = { label: 'Original', language: node.settings.direction === 'en-ja' ? 'en' : 'ja' };
+      for (const route of routes) route.to[1] = route.to[1] === 'final' ? 'append' : 'replace';
+    } else if (node.type === 'TranslationView') {
+      const paired = routes.some(route => route.to[1] === 'finalSource');
+      node.type = 'LiveTextDisplay'; node.settings = { label: 'Translation', language: 'und' };
+      if (paired) {
+        const id = unused(`${node.id}-format`), formatter = graphNode('PairedTextFormatter', id, Math.min(4000, node.position.x), Math.min(4000, node.position.y + 260));
+        const source = next.nodes.find(source => source.id === routes.find(route => route.to[1] === 'finalSource').from[0]);
+        formatter.settings.direction = source.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en';
+        next.nodes.push(formatter);
+        for (const route of routes) route.to[0] = id;
+        next.edges.push(edge(id, 'text', node.id, 'replace'));
+      } else for (const route of routes) route.to[1] = route.to[1] === 'text' ? 'append' : 'replace';
+    }
+  }
   next.version = GRAPH_VERSION;
   return next;
 }
@@ -181,29 +226,33 @@ export function graphPreferences(graph) {
   const translation = graph.nodes.find(node => translators.includes(node.type));
   return { enabled: !!translation, direction: translation
     ? (translation.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en')
-    : graph.nodes.find(node => node.type === 'TranscriptView')?.settings.direction || 'ja-en' };
+    : graph.translationDirection || graph.nodes.find(node => node.type === 'TranscriptView')?.settings.direction || 'ja-en' };
 }
 export function withTranslation(graph, { enabled, direction }) {
   const next = assertGraph(graph);
   const current = next.nodes.find(n => translators.includes(n.type));
-  for (const view of next.nodes.filter(n => n.type === 'TranscriptView')) view.settings.direction = direction;
-  if (enabled && current) current.type = direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn';
+  next.translationDirection = direction;
+  for (const formatter of next.nodes.filter(n => n.type === 'PairedTextFormatter')) formatter.settings.direction = direction;
+  if (enabled && current) for (const node of next.nodes.filter(n => translators.includes(n.type))) node.type = direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn';
   else if (enabled) {
     const branch = defaultGraph({ direction });
     // Choose unused IDs when the user's graph uses the default names elsewhere.
     const ids = new Set(next.nodes.map(n => n.id));
-    const unused = base => { let id = base; while (ids.has(id)) id += '-new'; ids.add(id); return id; };
-    const id = unused('translation'), sink = unused('translated'), speech = next.nodes.find(n => n.type === 'SpeechToText').id;
-    next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink });
+    const unused = base => unusedId(ids, base);
+    const id = unused('translation'), sink = unused('translated'), formatter = unused('translated-format'), speech = next.nodes.find(n => n.type === 'SpeechToText').id;
+    next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink }, { ...branch.nodes[5], id: formatter });
     for (const port of ['provisional', 'final']) next.edges.push(edge(speech, port, id, port === 'final' ? 'text' : port));
-    next.edges.push(...translationViewEdges(id, sink));
+    next.edges.push(...translationViewEdges(id, formatter), edge(formatter, 'text', sink, 'replace'));
   } else {
     const removed = new Set(next.nodes.filter(n => translators.includes(n.type) || n.type === 'TranslationView').map(n => n.id));
     // Remove downstream audio branch too when its only source is translation.
     let changed = true;
     while (changed) {
       changed = false;
-      for (const connection of next.edges) if (removed.has(connection.from[0]) && !removed.has(connection.to[0])) { removed.add(connection.to[0]); changed = true; }
+      for (const node of next.nodes) {
+        const inputs = next.edges.filter(e => e.to[0] === node.id);
+        if (!removed.has(node.id) && inputs.length && inputs.every(e => removed.has(e.from[0]))) { removed.add(node.id); changed = true; }
+      }
     }
     next.nodes = next.nodes.filter(n => !removed.has(n.id)); next.edges = next.edges.filter(e => !removed.has(e.from[0]) && !removed.has(e.to[0]));
   }
