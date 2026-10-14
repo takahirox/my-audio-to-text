@@ -62,7 +62,12 @@ test('MV3 Text literal and empty values round-trip and deliver once to an ordina
   await editor.getByRole('button', { name: 'transcript input replace', exact: true }).click();
   for (const value of ['<img src=x onerror=alert(1)> & "\n😀 {1}', '']) {
     await editor.getByLabel('text value', { exact: true }).fill(value); await editor.locator('#graph-save').click();
+    await expect(editor.locator('#graph-save')).toBeEnabled();
     await expect(editor.locator('#graph-errors')).toBeEmpty();
+    // Reload only after the asynchronous Web Lock save has persisted the literal.
+    await expect.poll(() => editor.evaluate(() =>
+      JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.find(node => node.id === 'text')?.settings.value
+    )).toBe(value);
     await editor.reload(); await editor.getByRole('button', { name: 'Select text', exact: true }).click();
     await expect(editor.getByLabel('text value', { exact: true })).toHaveValue(value);
     await startGraph(page); await expect(page.locator('.display-preview')).toHaveText(value);
