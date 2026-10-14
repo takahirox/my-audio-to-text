@@ -197,7 +197,9 @@ test('native touch selects and disconnects without hover; saved removal applies 
 });
 
 test('click and drag reconnect a populated input, preserving fan-out; identical and invalid attempts keep old edge', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor, original = await saved(live);
+  const live = await openGraph(f), editor = live.editor;
+  await editor.locator('#translation-enabled').check(); await save(editor);
+  const original = await saved(live);
   await editor.setViewportSize({ width: 1600, height: 1000 });
   const output = name => port(editor, 'speech', 'output', name), input = port(editor, 'translation', 'input', 'text');
   await output('provisional').click(); await input.click(); await save(editor);

@@ -67,3 +67,21 @@ test('mixed display owns Stop/Cancel preview cleanup; replace-only values and co
   mixed.receive('replace', 'canceled', c); mixed.dispose(); assert.equal(mixed.preview, '');
   value.receive('replace', 'current value', c); value.stop(); value.dispose(); assert.equal(value.preview, 'current value');
 });
+
+test('committed state has no loss across consecutive preview updates, repeated/empty finals and session teardown', () => {
+  let latest; const node = new LiveTextDisplayNode(state => latest = state, { appendConnected: true }), c = context();
+  const expected = [];
+  node.start();
+  for (const text of ['  <script>literal</script>\n&  ', 'same', 'same', '', '', 'last']) {
+    for (const preview of ['first preview', 'source replacement', '']) {
+      node.receive('replace', preview, c);
+      assert.deepEqual(latest, { preview, items: expected });
+    }
+    node.receive('append', text, c); expected.push(text);
+    assert.deepEqual(latest, { preview: '', items: expected });
+  }
+  node.receive('replace', 'uncommitted', c); node.stop(); node.dispose();
+  assert.deepEqual(latest, { preview: '', items: expected });
+  const fresh = new LiveTextDisplayNode(state => latest = state); fresh.start();
+  assert.deepEqual(latest, { preview: '', items: [] });
+});

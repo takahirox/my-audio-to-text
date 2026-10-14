@@ -155,6 +155,8 @@ Separate issues should define and implement:
 See the [development flow](docs/development-flow.md) for workflow and language policy, and the [review guidelines](docs/review-guidelines.md) for review and merge criteria.
 
 The extension Live window renders graph-configured `LiveTextDisplay` sinks with
-custom labels. Optional `TextFormatter` Nodes compose primitive TEXT; saved v5
+custom labels. Fresh setup and Reset default to Chrome tab audio → SpeechToText →
+one display: provisional text replaces only the preview, and each final appends
+a committed item. Translation remains an explicit graph addition. Optional `TextFormatter` Nodes compose primitive TEXT; saved v5
 paired views migrate through a compatibility formatter without losing alignment.
 See [Live display and migration semantics](docs/extension-graph.md).

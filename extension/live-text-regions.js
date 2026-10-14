@@ -3,7 +3,7 @@
 export function renderTextRegions(root, graph, displays) {
   const specs = graph?.nodes.filter(node => node.type === 'LiveTextDisplay') || [];
   const existing = new Map(Array.from(root.children, region => [region.dataset.display, region]));
-  for (const spec of specs) {
+  for (const [index, spec] of specs.entries()) {
     let region = existing.get(spec.id);
     if (!region) {
       region = document.createElement('section'); region.className = 'panel live-text-region'; region.dataset.display = spec.id;
@@ -17,20 +17,30 @@ export function renderTextRegions(root, graph, displays) {
       };
       region.append(heading, copy, notice, items, preview);
     }
-    region.querySelector('h2').textContent = spec.settings.label;
+    const heading = region.querySelector('h2');
+    if (heading.textContent !== spec.settings.label) heading.textContent = spec.settings.label;
     region.setAttribute('aria-label', spec.settings.label); region.lang = spec.settings.language;
     const state = (Object.hasOwn(displays, spec.id) && displays[spec.id]) || { preview: '', items: [] };
     if (region.displayState !== state) {
       const items = region.querySelector('ol');
-      items.replaceChildren(...state.items.map(text => {
-        const item = document.createElement('li'), value = document.createElement('pre'); value.textContent = text; item.append(value, '\n'); return item;
-      }));
-      region.querySelector('.display-preview').textContent = state.preview;
+      const previous = region.displayState?.items || [];
+      let prefix = 0;
+      while (prefix < previous.length && prefix < state.items.length && previous[prefix] === state.items[prefix]) prefix++;
+      // Keep the unchanged prefix attached, including repeated and empty items.
+      // Shorter/replaced histories (including new sessions) remove stale tails.
+      while (items.children.length > prefix) items.lastElementChild.remove();
+      for (const text of state.items.slice(prefix)) {
+        const item = document.createElement('li'), value = document.createElement('pre'); value.textContent = text; item.append(value, '\n'); items.append(item);
+      }
+      const preview = region.querySelector('.display-preview');
+      if (preview.textContent !== state.preview) preview.textContent = state.preview;
       region.displayText = [...state.items, ...(state.preview ? [state.preview] : [])].join('\n');
       region.querySelector('button').disabled = !region.displayText;
       region.displayState = state;
     }
-    root.append(region); existing.delete(spec.id);
+    // Reattaching even the same region clears browser text selection.
+    if (root.children[index] !== region) root.insertBefore(region, root.children[index] || null);
+    existing.delete(spec.id);
   }
   for (const region of existing.values()) region.remove();
 }

@@ -4,7 +4,7 @@ import { GraphEditor } from '../extension/graph-editor.js';
 import { defaultGraph, edge, graphNode, NODE_TYPES } from '../extension/graph.js';
 
 // Exercise the same transactional method used by both DOM connection gestures.
-function editor(graph = defaultGraph()) {
+function editor(graph = defaultGraph({ enabled: true })) {
   const editor = Object.create(GraphEditor.prototype);
   Object.assign(editor, { draft: graph, draw() {}, canvas: { querySelector() {} } });
   return editor;
