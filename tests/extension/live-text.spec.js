@@ -4,6 +4,38 @@ import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.
 import { legacyGraph } from '../fixtures/legacy-graph.js';
 const region = (page, id) => page.locator(`[data-display="${id}"]`);
 
+test('MV3 Live keeps displays, controls, accessible status and actionable errors without an instructional footer', async ({ graphExtension: f }) => {
+  const live = await openGraph({ ...f, url: `${f.url}?error=Capture%20denied.%20Invoke%20the%20toolbar%20action%20to%20retry.&tab=42` });
+  await expect(live.locator('footer')).toHaveCount(0);
+  for (const text of ['The default shows speech in one Live text display.', 'Replace updates only the preview;', 'Copy display text before closing.']) {
+    await expect(live.locator('body')).not.toContainText(text);
+  }
+  await expect(live.getByRole('region', { name: 'Recording', exact: true })).toBeVisible();
+  await expect(live.locator('#tab-status')).toHaveText('Capture target · whole tab 42');
+  await expect(live.getByRole('alert')).toHaveText('Capture denied. Invoke the toolbar action to retry.');
+  await expect(live.getByRole('button', { name: 'Start again', exact: true })).toBeEnabled();
+  await expect(live.getByRole('button', { name: 'Stop / finalize', exact: true })).toBeDisabled();
+  await expect(live.getByRole('button', { name: 'Cancel session', exact: true })).toBeDisabled();
+  await expect(live.locator('.live-text-region')).toHaveCount(1);
+  const display = live.getByRole('region', { name: 'Text', exact: true });
+  await expect(display.getByRole('heading', { name: 'Text', exact: true })).toBeVisible();
+  await expect(display.getByRole('button', { name: 'Copy text', exact: true })).toBeDisabled();
+  await expect(display.locator('.display-preview')).toHaveAttribute('aria-live', 'polite');
+  await expect(display.locator('.display-items')).toHaveAttribute('aria-live', 'polite');
+  await live.getByRole('button', { name: 'Start again', exact: true }).click();
+  await expect(live.locator('#status')).toHaveAttribute('role', 'status');
+  await expect(live.locator('#status')).toHaveText('Transcription active');
+  await expect(live.locator('#errors')).toBeEmpty();
+  await expect(live.getByRole('button', { name: 'Stop / finalize', exact: true })).toBeEnabled();
+  await expect(live.getByRole('button', { name: 'Cancel session', exact: true })).toBeEnabled();
+  await emitFinal(live, 'Visible result');
+  await expect(display.locator('li pre')).toHaveText(['Visible result']);
+  await expect(display.getByRole('button', { name: 'Copy text', exact: true })).toBeEnabled();
+  await live.getByRole('button', { name: 'Stop / finalize', exact: true }).click();
+  await expect(live.getByRole('button', { name: 'Start again', exact: true })).toBeEnabled();
+  await expect(display.locator('li pre')).toHaveText(['Visible result']);
+});
+
 async function fixtureTranslation(f, page) {
   for (const worker of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(f.root, 'web', worker), `self.onmessage=({data})=>{
     if(data.type==='load')postMessage({type:'ready',id:data.id});
