@@ -1,14 +1,15 @@
 # Primitive-first Node/Port contracts
 
 Issues #91, #95 and #99 audit shared Nodes, the Node Playground, and the extension.
-Ordinary text uses shared `TEXT` and scheduler final indices use shared `NUMBER`
+Ordinary text uses shared `TEXT`; Number constants, speech duration and scheduler final indices use shared `NUMBER`
 from `web/port-contracts.js`. No BOOLEAN value is consumed, so none is introduced.
 Contracts are identities; receiving Nodes validate their payloads.
 
 | Boundary | Public ports and values | Internal or observer bookkeeping |
 | --- | --- | --- |
 | Capture sources: microphone, browser tab, extension tab/selected media | `audio: MONO_16KHZ_PCM`, normalized mono 16 kHz Float32Array | Target, permission, resampler and diagnostics |
-| SpeechToText / TranscriptOutput / speech Playground | `provisional: TEXT`, `final: TEXT`, plain strings | Core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
+| Number | `value: NUMBER`, finite numeric constant | Consumers define units and domain limits |
+| SpeechToText / TranscriptOutput / speech Playground | `audio: PCM`, optional startup `maxDuration: NUMBER` in seconds; `provisional: TEXT`, `final: TEXT`, plain strings | Frozen session cap (default 6 s, supported 1–12 s), core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
 | Extension TranslationScheduler (both directions) | Inputs: optional `provisional: TEXT`, required `text: TEXT`; successful `provisional: TEXT` / `text: TEXT` outputs; grouped source/status/error TEXT outputs for each stream and `finalIndex: NUMBER` | Active inference, provisional versions, FIFO finals, model failure and Stop policy |

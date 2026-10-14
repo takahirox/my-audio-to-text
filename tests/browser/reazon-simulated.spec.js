@@ -258,22 +258,24 @@ test.describe('ReazonSpeech ja-en baseline', () => {
       expect((await decodes(page)).filter(m => m.final)).toHaveLength(1);
     });
 
-    test('continuous speech forces 12-second finals without losing or repeating boundary audio', async ({ page }) => {
+    test('continuous speech forces default 6-second finals without losing or repeating boundary audio', async ({ page }) => {
       await setup(page); await page.locator('#start').click();
       await feed(page, 12800, 0);
-      await feed(page, 12 * 16000, 0.05);
-      await expect(page.locator('#final')).toHaveText('日本語204800\n');
-      await feed(page, 12 * 16000, 0.06);
-      await expect(page.locator('#final')).toHaveText('日本語204800\n日本語192000\n');
+      await feed(page, 6 * 16000, 0.05);
+      await expect(page.locator('#final')).toHaveText('日本語96000\n');
+      await feed(page, 6 * 16000, 0.06);
+      await expect(page.locator('#final')).toHaveText('日本語96000\n日本語96000\n');
       await feed(page, 37, 0.07); await page.locator('#stop').click();
       await expect(page.locator('#status')).toContainText('Stopped');
       const finals = (await decodes(page)).filter(m => m.final);
-      expect(finals.map(m => m.audio.length)).toEqual([204800, 192000, 37]);
-      expect(finals[0].audio.samples.slice(0,12800).every(sample => sample === 0)).toBe(true);
-      for (const [index, value] of [[0, 0.05], [1, 0.06], [2, 0.07]]) {
-        const speech = finals[index].audio.samples.slice(index === 0 ? 12800 : 0);
-        expect(speech.every(sample => Math.abs(sample - value) < 1e-6)).toBe(true);
+      expect(finals.map(m => m.audio.length)).toEqual([96000, 96000, 12837]);
+      const audio = finals.flatMap(m => m.audio.samples);
+      let offset = 0;
+      for (const [length, value] of [[12800, 0], [96000, 0.05], [96000, 0.06], [37, 0.07]]) {
+        expect(audio.slice(offset, offset + length).every(sample => Math.abs(sample - value) < 1e-6)).toBe(true);
+        offset += length;
       }
+      expect(audio.length).toBe(offset);
     });
 
     test('VAD classifies during a blocked ASR decode, coalesces previews and retains endpoints for Stop', async ({ page }) => {

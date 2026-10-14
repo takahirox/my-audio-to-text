@@ -1,7 +1,8 @@
 import { BrowserTab, Microphone } from './audio.js';
 import { LocalAsrCore } from './local-asr-core.js';
 import { Pipeline, portContract } from './pipeline.js';
-import { TEXT } from './port-contracts.js';
+import { TEXT, NUMBER } from './port-contracts.js';
+import { ASR_CONFIG, maxDurationSamples } from './local-asr-config.js';
 export { TEXT } from './port-contracts.js';
 
 export const MONO_16KHZ_PCM = portContract('mono 16 kHz Float32Array PCM');
@@ -78,9 +79,10 @@ export class MicrophoneAudioNode extends BrowserAudioNode {
 }
 
 export class SpeechToTextNode {
-  inputs = { audio: MONO_16KHZ_PCM };
+  inputs = { audio: MONO_16KHZ_PCM, maxDuration: NUMBER };
   outputs = { provisional: TEXT, final: TEXT };
-  constructor({ onEvent = () => {}, workerFactory } = {}) {
+  constructor({ onEvent = () => {}, workerFactory, maxDuration = ASR_CONFIG.defaultMaxDurationSeconds } = {}) {
+    maxDurationSamples(maxDuration); this.maxDuration = maxDuration;
     this.onEvent = onEvent;
     // This node alone owns the existing isolated ASR and VAD workers.
     this.core = new LocalAsrCore(event => this.receiveEvent(event), { workerFactory });
@@ -115,11 +117,18 @@ export class SpeechToTextNode {
   }
   async start(context) {
     this.context = context;
+    this.sessionMaxDuration = this.maxDuration;
     await this.load();
     context.signal.throwIfAborted();
-    this.core.start();
+    this.core.start({ maxDuration: this.sessionMaxDuration });
   }
-  receive(port, audio) { this.core.push(audio); }
+  receive(port, value) {
+    if (port === 'maxDuration') {
+      if (this.context) throw new Error('SpeechToText.maxDuration must be configured before session startup.');
+      maxDurationSamples(value); this.maxDuration = value;
+    } else if (port === 'audio') this.core.push(value);
+    else throw new Error(`Unknown SpeechToText input: ${port}`);
+  }
   stop() {
     if (!this.draining) {
       this.draining = deferred();
@@ -129,11 +138,11 @@ export class SpeechToTextNode {
   }
   // A graph is single-use. After its graceful drain, move sole ownership of
   // the warm core to a fresh node without reloading models or sharing workers.
-  nextSession({ onEvent = this.onEvent } = {}) {
+  nextSession({ onEvent = this.onEvent, maxDuration = this.maxDuration } = {}) {
     if (!this.stopped || this.disposed || this.context?.signal.aborted || this.core?.state !== 'ready') {
       throw new Error('A new speech session requires a successfully drained node.');
     }
-    const next = new SpeechToTextNode({ onEvent });
+    const next = new SpeechToTextNode({ onEvent, maxDuration });
     next.core = this.core; next.loading = deferred(); next.loading.resolve();
     next.core.onEvent = event => next.receiveEvent(event);
     this.core = null; this.context = null;

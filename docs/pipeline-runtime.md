@@ -207,10 +207,23 @@ map to the `provisional` port; `final` events map to the `final` port. Both carr
 plain `TEXT` strings. Utterance IDs remain inside the ASR core/node; duplicate
 final IDs are suppressed before fan-out, while equal strings from distinct
 utterances are delivered separately. The core's
-ReazonSpeech ja-en/Silero/hayamimi policy and provisional fallback are unchanged.
+ReazonSpeech ja-en/Silero/hayamimi policy uses a 6-second default audio segment
+cap; provisional fallback remains local to each segment ID.
 `onEvent` optionally observes original core diagnostics/lifecycle events;
 transcript processing belongs on the ports. `TranscriptOutputNode` accepts an
 async callback `(port, text, signal)` and can serve as a UI, storage or test sink.
+
+`SpeechToTextNode.maxDuration` is an optional shared `NUMBER` input in seconds
+(finite 1–12, decimals supported). Configure with `speech.receive('maxDuration',
+2.5)` before `pipeline.start()`, or pass `{ maxDuration: 2.5 }` to the constructor.
+After startup this port rejects updates; its session value is frozen. The
+extension builder resolves `Number.value → SpeechToText.maxDuration` from the
+saved snapshot before starting any Nodes and omits that configuration edge from
+streaming delivery. A normal constant emitted inside source `start()` would be
+too late because consumers start first. The generic Pipeline has no new
+configuration scheduling phase. `NumberNode` itself is a reusable finite numeric
+source whose `value: NUMBER` output uses ordinary startup emission for other
+consumers. See [configuration limits and audio ownership](extension-graph.md#maximum-speech-segment-duration).
 
 After [preparing assets and serving the playground](asr-manual-testing.md#local-setup),
 open the Speech-to-Text test page from the Node Playground list and allow its

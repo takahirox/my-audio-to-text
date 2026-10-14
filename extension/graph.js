@@ -4,6 +4,9 @@ import { TRANSLATION_OUTPUTS } from './translation-scheduler.js';
 import { FORMAT_INPUTS, parseTemplate } from '../web/text-nodes.js';
 import { PAIRED_INPUTS } from './paired-text-formatter.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
+import { NUMBER } from '../web/port-contracts.js';
+import { finiteNumber } from '../web/number-node.js';
+import { maxDurationSamples } from '../web/local-asr-config.js';
 
 export const GRAPH_VERSION = 6;
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
@@ -16,7 +19,8 @@ export const NODE_TYPES = Object.freeze({
   SelectedPageMediaAudio: { label: 'Selected page media audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Choose a media element in Live. Top frame only; unsupported media requires whole-tab capture.' },
   MicrophoneAudio: { label: 'Microphone audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Press Start in Live to request microphone permission.' },
   FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect SpeechToText.final or a processor’s completed text output; no separate authorization or field picker.' },
-  SpeechToText: { label: 'Speech to text', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT) },
+  Number: { label: 'Number', inputs: {}, outputs: { value: NUMBER }, numberSettings: { value: { default: 6 } }, help: 'Reusable finite numeric constant. Select this Node to edit value. Units and limits belong to its consumer. SpeechToText.maxDuration accepts 1–12 seconds, including decimals; saves apply next session.' },
+  SpeechToText: { label: 'Speech to text', inputs: { audio: MONO_16KHZ_PCM, maxDuration: NUMBER }, optionalInputs: ['maxDuration'], outputs: paired(TEXT), help: 'Optional maxDuration: connect Number.value for a 1–12 second audio segment cap (default 6 seconds). Includes pre-roll; decimals round down to whole 16 kHz samples. Frozen before capture; saved edits apply next session. VAD can end sooner. Mid-sentence splits may reduce recognition quality. Inference and final display can take longer than the cap.' },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   LiveTextDisplay: { label: 'Live text display', inputs: { replace: TEXT, append: TEXT }, optionalInputs: ['replace', 'append'], outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Replace changes only the preview. Every append adds one committed item and clears the preview; repeated and empty items are preserved. Stop/Cancel keep committed items and discard preview when append is connected. Start again begins empty. Multiple displays are independent and ordered by graph Node order.' },
@@ -37,7 +41,7 @@ const translators = ['OpusMtJaEn', 'OpusMtEnJa'];
 export function graphNode(type, id, x = 20, y = 20) {
   const definition = Object.hasOwn(NODE_TYPES, type) ? NODE_TYPES[type] : undefined;
   if (!definition) throw new Error(`Unknown Node type: ${type}`);
-  return { id, type, settings: { ...Object.fromEntries(Object.entries(definition.settings || {}).map(([key, values]) => [key, values[0]])), ...Object.fromEntries(Object.entries(definition.textSettings || {}).map(([key, spec]) => [key, spec.default])) }, position: { x, y } };
+  return { id, type, settings: { ...Object.fromEntries(Object.entries(definition.settings || {}).map(([key, values]) => [key, values[0]])), ...Object.fromEntries(Object.entries({ ...definition.textSettings, ...definition.numberSettings }).map(([key, spec]) => [key, spec.default])) }, position: { x, y } };
 }
 // Translation is an explicit configuration, never part of a new/reset default.
 export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
@@ -81,7 +85,8 @@ export function validateGraph(graph, legacy = false) {
     if (!definition) { errors.push(`Unknown Node type: ${node.type}`); continue; }
     if (!record(node.position) || ![node.position.x, node.position.y].every(n => Number.isFinite(n) && n >= 0 && n <= 4000)) errors.push(`Invalid position: ${node.id}`);
     if (!record(node.settings)) { errors.push(`Invalid settings: ${node.id}`); continue; }
-    for (const key of Object.keys(node.settings)) if (!Object.hasOwn(definition.settings || {}, key) && !Object.hasOwn(definition.textSettings || {}, key)) errors.push(`Unknown setting: ${node.id}.${key}`);
+    for (const key of Object.keys(node.settings)) if (!Object.hasOwn(definition.settings || {}, key) && !Object.hasOwn(definition.textSettings || {}, key) && !Object.hasOwn(definition.numberSettings || {}, key)) errors.push(`Unknown setting: ${node.id}.${key}`);
+    for (const key of Object.keys(definition.numberSettings || {})) try { finiteNumber(node.settings[key]); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
     for (const [key, values] of Object.entries(definition.settings || {})) if (!values.includes(node.settings[key])) errors.push(`Invalid setting: ${node.id}.${key}`);
     for (const [key, spec] of Object.entries(definition.textSettings || {})) if (typeof node.settings[key] !== 'string' || node.settings[key].length > spec.maxLength || (key === 'label' && !node.settings[key].trim())) errors.push(`Invalid setting: ${node.id}.${key}`);
     if (node.type === 'TextFormatter') try { parseTemplate(node.settings.template); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
@@ -96,6 +101,10 @@ export function validateGraph(graph, legacy = false) {
     if (!a || !b) { errors.push(`Unknown edge Node: ${source} → ${target}`); continue; }
     if (!Object.hasOwn(a.outputs, output) || !Object.hasOwn(b.inputs, input)) { errors.push(`Unknown port: ${source}.${output} → ${target}.${input}`); continue; }
     if (a.outputs[output] !== b.inputs[input]) errors.push(`Incompatible port types: ${source}.${output} → ${target}.${input}`);
+    if (nodes.get(target)?.type === 'SpeechToText' && input === 'maxDuration') {
+      if (nodes.get(source)?.type !== 'Number' || output !== 'value') errors.push(`${target}.maxDuration requires Number.value available before session startup.`);
+      else try { maxDurationSamples(nodes.get(source).settings?.value); } catch (error) { errors.push(`${target}: ${error.message}`); }
+    }
     const destination = JSON.stringify([target, input]);
     if (incoming.has(destination)) errors.push(`Only one connection allowed to ${target}.${input}`);
     incoming.set(destination, connection.from);

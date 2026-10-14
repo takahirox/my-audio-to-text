@@ -25,6 +25,7 @@ const core = new LocalAsrCore(event => {
 core.load();               // Asynchronously load both workers.
 // After the ready event:
 core.start();              // Begin a fresh recognition session.
+// Or core.start({ maxDuration: 2.5 }); // Frozen segment cap in seconds.
 core.push(pcm);            // One mono 16 kHz Float32Array, of any block length.
 // Stop the audio source and push its final PCM tail before calling:
 core.stop();               // Flush VAD, finalize speech, then drain inference.
@@ -41,6 +42,18 @@ Empty blocks have no effect. Blocks outside a running session are ignored.
 calls throw. `stop()` and `release()` are idempotent. Release discards pending
 work and rejects callbacks from terminated workers. `load()` can reuse a released
 core. Worker/pipeline errors release both workers before emitting `error`.
+
+`start({ maxDuration })` accepts finite numeric seconds from 1 to 12 (default 6),
+rounded down to whole 16 kHz samples. Invalid settings throw before session
+mutation. The cap counts all segment audio, including 0.8-second pre-roll and
+pauses, and splits inside classified blocks with contiguous sample ownership.
+The ordinary VAD endpoint can finalize earlier. Continuous speech starts a new
+segment at the next sample without repeated pre-roll. The 1-second lower bound
+accommodates existing pre-roll; the 12-second upper bound stays within the model
+policy and 30-second pending buffer. This caps audio length, not inference or
+final-display wall time: ReazonSpeech ja-en runs serialized offline decodes with
+coalesced previews. Mid-sentence segmentation can reduce recognition accuracy
+through loss of context. See [Number configuration delivery](extension-graph.md#maximum-speech-segment-duration).
 
 Stop accepts no more PCM after the call, suppresses pending provisional results,
 waits for VAD's final short frame, and emits `stopped` only after all finals drain.
@@ -88,9 +101,9 @@ utterance preview, and messages from old workers never reach the event callback.
 
 [`web/local-asr-config.js`](../web/local-asr-config.js) owns the model identity,
 input rate, 0.8 s pre-roll, 0.5 s provisional interval, 0.35 s trailing silence,
-12 s maximum utterance duration (excluding pre-roll), 30 s pending-audio limit,
+6 s default segment cap (including pre-roll), 12 s supported upper bound, 30 s pending-audio limit,
 and Silero settings (threshold 0.5, 512-sample windows, one thread). These describe
-the retained baseline, not a new runtime-selectable tuning API.
+the retained baseline; only the segment cap has optional session-start configuration.
 [`web/reazon-config.js`](../web/reazon-config.js) retains the evidence-based
 one-thread default and capability-aware selection within the four-thread runtime
 cap. Explicit 1/2/4-thread requests remain limited to the existing benchmark.

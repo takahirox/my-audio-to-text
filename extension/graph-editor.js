@@ -146,8 +146,20 @@ export class GraphEditor {
       control.onchange = () => { node.settings[key] = control.value; this.draw(); };
       label.append(control); this.inspector.append(label);
     }
+    for (const key of Object.keys(definition.numberSettings || {})) {
+      const label = el('label', key + ' '), control = el('input');
+      control.type = 'number'; control.step = 'any'; control.value = node.settings[key];
+      control.setAttribute('aria-label', `${node.id} ${key}`);
+      control.oninput = () => {
+        // Empty / malformed input must remain invalid, never become zero or a
+        // default through coercion. JSON also preserves this as invalid null.
+        node.settings[key] = control.valueAsNumber;
+        this.errors.textContent = validateGraph(this.draft).join('\n'); this.updateSummary();
+      };
+      label.append(control); this.inspector.append(label);
+    }
     if (definition.help) this.inspector.append(el('p', definition.help));
-    if (!definition.settings && !definition.textSettings) this.inspector.append(el('p', 'This Node has no configurable settings.'));
+    if (!definition.settings && !definition.textSettings && !definition.numberSettings) this.inspector.append(el('p', 'This Node has no configurable settings.'));
     for (const [side, ports] of [['Input', definition.inputs], ['Output', definition.outputs]]) {
       for (const [name, contract] of Object.entries(ports)) this.inspector.append(el('p', `${side} ${name}: ${contract.name}`, 'muted'));
     }

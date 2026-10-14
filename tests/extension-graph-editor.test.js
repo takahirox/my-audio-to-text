@@ -40,3 +40,17 @@ test('type mismatch, self-connection, unknown ports, split correlated display an
   connect(e, 'second', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, withSecond);
   assert.match(e.error, /acyclic/);
 });
+
+test('Number connects only to NUMBER; invalid duration edits and TEXT/PCM edges preserve prior routing', () => {
+  const e = editor(defaultGraph()); e.draft.nodes.push(graphNode('Number', 'duration'));
+  const before = structuredClone(e.draft.edges);
+  connect(e, 'duration', 'value', 'speech', 'audio'); assert.deepEqual(e.draft.edges, before);
+  connect(e, 'speech', 'final', 'speech', 'maxDuration'); assert.deepEqual(e.draft.edges, before);
+  connect(e, 'audio', 'audio', 'speech', 'maxDuration'); assert.deepEqual(e.draft.edges, before);
+  e.draft.nodes.at(-1).settings.value = 0;
+  connect(e, 'duration', 'value', 'speech', 'maxDuration'); assert.deepEqual(e.draft.edges, before);
+  assert.match(e.error, /1 to 12 seconds/);
+  e.draft.nodes.at(-1).settings.value = 2.5;
+  connect(e, 'duration', 'value', 'speech', 'maxDuration');
+  assert.deepEqual(e.draft.edges.at(-1), edge('duration', 'value', 'speech', 'maxDuration'));
+});

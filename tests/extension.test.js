@@ -52,6 +52,27 @@ function fixture({ holdLoad = false, holdSource = false, sourceError, stopError,
 }
 const drain = () => new Promise(resolve => setImmediate(resolve));
 
+test('Number duration is set before capture; saves during load/capture affect only the next session', async () => {
+  const graph = defaultGraph(); graph.nodes.push(graphNode('Number', 'duration'));
+  graph.nodes.at(-1).settings.value = 2.5;
+  graph.edges.push(edge('duration', 'value', 'speech', 'maxDuration'));
+  const f = fixture({ graph, holdLoad: true });
+  const starting = f.session.start(42); await drain();
+  assert.equal(f.sources.length, 0);
+  assert.equal(f.session.session.speech.maxDuration, 2.5);
+  graph.nodes.at(-1).settings.value = 3.75; f.session.setGraph(graph);
+  f.workers.forEach(w => w.reply({ type: 'ready' })); await starting;
+  assert.equal(f.session.session.speech.core.simulation.maxSamples, 40000);
+  graph.nodes.at(-1).settings.value = 1.25; f.session.setGraph(graph);
+  f.sources[0].onAudio(new Float32Array(40000).fill(0.05)); await drain();
+  assert.equal(f.workers[0].messages.find(m => m.type === 'decode').audio.length, 40000);
+  await f.session.stop();
+  const next = f.session.start(42); await drain();
+  f.workers.slice(-2).forEach(w => w.reply({ type: 'ready' })); await next;
+  assert.equal(f.session.session.speech.core.simulation.maxSamples, 20000);
+  f.session.cancel(); await drain(); assert.ok(f.workers.every(w => w.terminated));
+});
+
 function fieldOutputs({ live = true } = {}) {
   const graph = defaultGraph({ enabled: false });
   if (!live) {
