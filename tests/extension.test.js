@@ -55,7 +55,7 @@ const drain = () => new Promise(resolve => setImmediate(resolve));
 function fieldOutputs({ live = true } = {}) {
   const graph = defaultGraph({ enabled: false });
   if (!live) {
-    graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
+    graph.nodes = graph.nodes.filter(node => node.id !== 'transcript');
     graph.edges = graph.edges.filter(edge => edge.to[0] !== 'transcript');
   }
   graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'focused'));
@@ -68,7 +68,7 @@ test('missing toolbar document skips only focused output; Live drains, retry sna
   await f.session.start(42);
   assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /output skipped: no authorized toolbar document/);
   f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop();
-  assert.equal(f.session.view.final, 'final text\n'); assert.deepEqual(sent, []);
+  assert.equal((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), 'final text\n'); assert.deepEqual(sent, []);
   f.session.outputTarget = { tabId: 42, documentId: 'authorized', label: 'Page' };
   await f.session.start(42); assert.match(f.session.view.targetStatus, /connected and authorized/);
   f.session.outputTarget.documentId = 'changed';
@@ -79,13 +79,13 @@ test('missing toolbar document skips only focused output; Live drains, retry sna
 test('field-only graph reports every unavailable destination without adding a fallback view', async () => {
   const f = fixture({ graph: fieldOutputs({ live: false }), pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
   await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /No text destination is active/);
-  f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop(); assert.equal(f.session.view.final, '');
+  f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop(); assert.equal((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), '');
 });
 test('stale document disables focused output while Live continues; cancellation releases capture and workers', async () => {
   const f = fixture({ graph: fieldOutputs(), pageConnectionFactory: () => ({ request: async () => { throw Error('Permission lost'); }, close() {} }) });
   f.session.outputTarget = { tabId: 42, documentId: 'stale', label: 'Page' };
   await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /Permission lost/);
-  f.session.session.speech.receiveEvent({ type: 'final', id: 1, text: 'Live continues' }); await drain(); assert.match(f.session.view.final, /Live continues/);
+  f.session.session.speech.receiveEvent({ type: 'final', id: 1, text: 'Live continues' }); await drain(); assert.match((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), /Live continues/);
   f.session.cancel(); await drain(); assert.ok(f.workers.every(worker => worker.terminated)); assert.equal(f.sources[0].stops.at(-1), false);
 });
 
@@ -103,22 +103,22 @@ test('extension session emits provisional/final output, flushes once and clears 
   const graph = session.session.pipeline;
   assert.ok(graph instanceof Pipeline);
   assert.deepEqual(graph.order.map(entry => entry.node.constructor.name),
-    ['ExtensionTabAudioNode', 'SpeechToTextNode', 'TranscriptOutputNode']);
+    ['ExtensionTabAudioNode', 'SpeechToTextNode', 'LiveTextDisplayNode']);
   assert.equal(graph.entries.get('audio').outputs.audio, MONO_16KHZ_PCM);
   assert.equal(graph.entries.get('speech').inputs.audio, MONO_16KHZ_PCM);
-  assert.equal(graph.entries.get('transcript').inputs.provisional, TEXT);
-  assert.equal(graph.entries.get('transcript').inputs.final, TEXT);
+  assert.equal(graph.entries.get('transcript').inputs.replace, TEXT);
+  assert.equal(graph.entries.get('transcript').inputs.append, TEXT);
   sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
-  assert.equal(session.view.partial, 'provisional text');
+  assert.equal((session.view.displays.transcript?.preview || ''), 'provisional text');
   await session.start(99); assert.equal(sources.length, 1, 'live capture cannot be retargeted');
   await Promise.all([session.stop(), session.stop()]); await drain();
-  assert.equal(session.view.final, 'final text\n');
-  assert.equal(session.view.partial, ''); assert.equal(session.view.state, 'idle');
+  assert.equal((session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), 'final text\n');
+  assert.equal((session.view.displays.transcript?.preview || ''), ''); assert.equal(session.view.state, 'idle');
   assert.deepEqual(sources[0].stops, [true]);
   assert.equal(workers[1].messages.filter(m => m.type === 'vad-stop').length, 1);
   assert.ok(workers.every(w => w.terminated));
   await session.start(99);
-  assert.equal(session.view.final, ''); assert.equal(session.view.partial, '');
+  assert.equal((session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), ''); assert.equal((session.view.displays.transcript?.preview || ''), '');
   const before = workers[3].messages.length;
   sources[0].onAudio(new Float32Array(16000)); sources[0].onEnded();
   workers[0].reply({ type: 'error', message: 'stale error' });
@@ -148,7 +148,7 @@ test('closing/navigating a target or ending capture finalizes; unrelated tabs do
   f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
   f.session.tabEnded(99); assert.equal(f.session.view.state, 'running');
   f.session.tabEnded(42); f.sources[0].onEnded(); await drain();
-  assert.equal(f.session.view.state, 'idle'); assert.equal(f.session.view.final, 'final text\n');
+  assert.equal(f.session.view.state, 'idle'); assert.equal((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), 'final text\n');
   assert.deepEqual(f.sources[0].stops, [true]);
 });
 

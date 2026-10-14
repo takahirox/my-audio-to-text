@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, withTranslation, GRAPH_KEY, NODE_TYPES } from '../extension/graph.js';
 import { legacyGraph } from './fixtures/legacy-graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
+import { LiveTextDisplayNode } from '../web/text-nodes.js';
 import { Pipeline } from '../web/pipeline.js';
-import { SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
+import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { ExtensionTabAudioNode } from '../extension/tab-audio-node.js';
 import { TranslationSchedulerNode } from '../extension/translation-scheduler.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
@@ -21,7 +22,7 @@ test('fresh graph defaults to translation; legacy preferences migrate once; pers
   const fresh = storage(); assert.equal(readGraph(fresh).nodes[3].type, 'OpusMtJaEn');
   for (const enabled of [false, true]) for (const direction of ['ja-en', 'en-ja']) {
     const store = storage(); store.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled, direction }));
-    const graph = readGraph(store); assert.equal(graph.nodes[2].settings.direction, direction); assert.equal(graph.nodes.length, enabled ? 5 : 3);
+    const graph = readGraph(store); assert.equal(graph.translationDirection, direction); assert.equal(graph.nodes.length, enabled ? 6 : 3);
     assert.equal(store.getItem('opus-mt-translation-preferences'), null);
     assert.deepEqual(readGraph(store), graph);
   }
@@ -40,15 +41,10 @@ for (const [name, edit, pattern] of [
   ['cycle', g => g.edges.push(edge('speech', 'final', 'speech', 'audio')), /acyclic/],
   ['duplicate edge', g => g.edges.push(g.edges[0]), /Duplicate edge/],
   ['multiple incoming edges', g => g.edges.push(edge('speech', 'provisional', 'translation', 'text')), /Only one connection/],
-  ['missing input', g => g.edges.pop(), /Required connection/],
+  ['missing input', g => g.edges = g.edges.filter(e => e.to[0] !== 'translated'), /Required connection/],
   ['missing source', g => g.nodes.shift(), /Exactly one audio input/],
   ['position', g => g.nodes[0].position.x = Infinity, /Invalid position/],
   ['settings', g => g.nodes[2].settings.model = 'remote', /Unknown setting/],
-  ['duplicate translation', g => g.nodes.push(graphNode('OpusMtEnJa', 'other')), /Only one paired/],
-  ['duplicate transcript destination', g => {
-    g.nodes.push(graphNode('TranscriptView', 'other'));
-    for (const port of ['provisional', 'final']) g.edges.push(edge('speech', port, 'other', port));
-  }, /Only one shared Live transcript/],
   ['malformed edge', g => g.edges.push({ from: null }), /Malformed/],
 ]) test(`schema rejects ${name} before saving or constructing Workers`, () => {
   const graph = defaultGraph(); edit(graph);
@@ -57,31 +53,30 @@ for (const [name, edit, pattern] of [
   assert.throws(() => buildGraph(graph, {}), pattern);
 });
 
-test('version 4 paired graphs migrate explicitly; plain streams remain unchanged; incomplete groups fail', () => {
-  for (const direction of ['ja-en', 'en-ja']) {
-    const saved = legacyGraph({ direction }, 4), store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(saved));
-    const migrated = readGraph(store), expected = defaultGraph({ direction });
-    assert.deepEqual(migrated.nodes, expected.nodes);
-    assert.deepEqual(migrated.edges.map(JSON.stringify).sort(), expected.edges.map(JSON.stringify).sort());
-    assert.equal(JSON.parse(store.getItem(GRAPH_KEY)).version, 5);
-    for (const ports of [['text'], ['provisionalText'], ['provisionalText', 'text']]) {
-      const graph = legacyGraph({ direction }, 4); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated');
-      for (const port of ports) graph.edges.push(edge('translation', port === 'text' ? 'text' : 'provisional', 'translated', port));
-      assert.deepEqual(assertGraph(graph).edges, graph.edges);
-      graph.version = 5;
-      assert.deepEqual(validateGraph(graph), []);
-      graph.edges.push(edge('translation', 'finalSource', 'translated', 'finalSource'));
-      assert.match(validateGraph(graph).join('\n'), /Required connection missing/);
-    }
+test('versions 1–5 preserve paired bundles, direction, fan-out and explicitly migrate generic displays', () => {
+  for (const version of [1, 2, 3, 4, 5]) for (const direction of ['ja-en', 'en-ja']) {
+    const saved = legacyGraph({ direction }, version), store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(saved));
+    const migrated = readGraph(store);
+    assert.equal(migrated.version, 6); assert.equal(migrated.translationDirection, direction);
+    assert.deepEqual(migrated.nodes.map(n => n.type), defaultGraph({ direction }).nodes.map(n => n.type));
+    assert.deepEqual(migrated.edges.map(JSON.stringify).sort(), defaultGraph({ direction }).edges.map(JSON.stringify).sort());
+    assert.equal(migrated.nodes.at(-1).settings.direction, direction);
+    assert.deepEqual(readGraph(store), migrated);
   }
-  const empty = defaultGraph(); empty.edges = empty.edges.filter(e => e.to[0] !== 'translated');
-  assert.match(validateGraph(empty).join('\n'), /Required connection missing/);
-  const split = defaultGraph(); split.edges.find(e => e.to[0] === 'translated' && e.to[1] === 'text').from = ['speech', 'final'];
+  for (const ports of [['text'], ['provisionalText'], ['provisionalText', 'text']]) {
+    const graph = legacyGraph({}, 5); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated');
+    for (const port of ports) graph.edges.push(edge('translation', port === 'text' ? 'text' : 'provisional', 'translated', port));
+    const migrated = assertGraph(graph);
+    assert.equal(migrated.nodes.length, 5);
+    assert.deepEqual(migrated.edges.filter(e => e.to[0] === 'translated').map(e => e.to[1]), ports.map(p => p === 'text' ? 'append' : 'replace'));
+    graph.edges.push(edge('translation', 'finalSource', 'translated', 'finalSource'));
+    assert.throws(() => assertGraph(graph), /Required connection missing/);
+  }
+  const split = defaultGraph(); split.edges.find(e => e.to[0] === 'translated-format' && e.to[1] === 'text').from = ['speech', 'final'];
   assert.match(validateGraph(split).join('\n'), /matching direct outputs/);
   const invalid = legacyGraph({}, 4); invalid.edges.push(edge('translation', 'finalResult', 'transcript', 'final'));
   const store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(invalid));
-  assert.throws(() => readGraph(store), /Cannot migrate/);
-  assert.equal(store.getItem(GRAPH_KEY), JSON.stringify(invalid));
+  assert.throws(() => readGraph(store), /Cannot migrate/); assert.equal(store.getItem(GRAPH_KEY), JSON.stringify(invalid));
 });
 
 test('concrete supported descriptions instantiate actual Nodes with identical contract identities and the exact saved edges', () => {
@@ -89,7 +84,7 @@ test('concrete supported descriptions instantiate actual Nodes with identical co
     const result = buildGraph(graph, { tabId: 42, onTranscript() {}, onTranslation() {}, onTranslationState() {}, prepareTranslation() {}, onSynthesizedAudio() {} });
     assert.ok(result.pipeline instanceof Pipeline);
     assert.ok(result.audio instanceof ExtensionTabAudioNode); assert.ok(result.speech instanceof SpeechToTextNode);
-    assert.ok(result.pipeline.entries.get('transcript').node instanceof TranscriptOutputNode);
+    assert.ok(result.pipeline.entries.get('transcript').node instanceof LiveTextDisplayNode);
     if (result.translation) assert.ok(result.translation instanceof TranslationSchedulerNode);
     for (const spec of graph.nodes) {
       const actual = result.pipeline.entries.get(spec.id);
@@ -131,7 +126,7 @@ test('saved translation TEXT → actual Kokoro Node graph drains only completed 
   };
   const built = buildGraph(graph, { tabId: 42, sourceFactory: () => ({ start() {}, stop() {} }),
     workerFactory: factory(), translationWorkerFactory: factory(), ttsWorkerFactory: factory(),
-    prepareTranslation: async () => {}, prepareTts: async () => {}, onTranscript: (port, value) => { if (port === 'final') rows.push(value); },
+    prepareTranslation: async () => {}, prepareTts: async () => {}, onDisplay: (id, state) => { if (id === 'transcript') rows.splice(0, rows.length, ...state.items); },
     onTranslation() {}, onTranslationState() {}, onSynthesizedAudio: value => audio.push(value) });
   await built.pipeline.start();
   built.speech.receiveEvent({ type: 'partial', text: 'provisional', id: 0 });
@@ -149,15 +144,52 @@ test('saved translation TEXT → actual Kokoro Node graph drains only completed 
 
 test('TEXT edges depend on contract identity; interim and diagnostic inputs are optional', () => {
   const graph = defaultGraph();
-  graph.edges = graph.edges.filter(route => route.to[1] !== 'provisional');
+  graph.edges = graph.edges.filter(route => !(route.to[0] === 'transcript' && route.to[1] === 'replace') && route.to[1] !== 'provisional');
   // A translated stream can be the full transcript destination, independently
   // of the scheduler's paired diagnostic view. No producer identity is required.
   graph.edges.find(route => route.to[0] === 'transcript').from = ['translation', 'text'];
-  graph.nodes.find(node => node.type === 'TranscriptView').settings.direction = 'en-ja';
+  graph.nodes.find(node => node.id === 'transcript').settings.label = 'Any text';
   assert.deepEqual(validateGraph(graph), []);
   assert.ok(buildGraph(graph, {}).pipeline);
   graph.edges.push(edge('speech', 'final', 'translation', 'provisional'));
   assert.deepEqual(validateGraph(graph), [], 'separate independent input streams are legal');
   graph.edges.find(route => route.to[0] === 'translation' && route.to[1] === 'text').from = ['translation', 'text'];
   assert.match(validateGraph(graph).join('\n'), /acyclic/);
+});
+
+test('v5 migration preserves independent language, maximum IDs and fan-out; capacity recovery never overwrites storage', () => {
+  const legacy = legacyGraph({ direction: 'en-ja' }, 5), longId = 'x'.repeat(64);
+  legacy.nodes.find(n => n.id === 'transcript').settings.direction = 'ja-en';
+  legacy.nodes.find(n => n.id === 'translated').id = longId;
+  for (const route of legacy.edges) if (route.to[0] === 'translated') route.to[0] = longId;
+  legacy.nodes.push(graphNode('FocusedInputTextOutputNode', 'field'), graphNode('FocusedInputTextOutputNode', longId.slice(0, 62) + '-2'));
+  legacy.edges.push(edge('translation', 'text', 'field', 'text'), edge('speech', 'final', longId.slice(0, 62) + '-2', 'text'));
+  const migrated = assertGraph(legacy);
+  assert.equal(migrated.nodes.find(n => n.id === 'transcript').settings.language, 'ja');
+  assert.equal(migrated.nodes.find(n => n.type === 'PairedTextFormatter').settings.direction, 'en-ja');
+  assert.ok(migrated.nodes.every(n => n.id.length <= 64)); assert.equal(new Set(migrated.nodes.map(n => n.id)).size, migrated.nodes.length);
+  assert.ok(migrated.edges.some(e => JSON.stringify(e) === JSON.stringify(edge('translation', 'text', 'field', 'text'))));
+  while (legacy.nodes.length < 24) { const id = 'field-' + legacy.nodes.length; legacy.nodes.push(graphNode('FocusedInputTextOutputNode', id)); legacy.edges.push(edge('speech', 'final', id, 'text')); }
+  const store = storage(), saved = JSON.stringify(legacy); store.setItem(GRAPH_KEY, saved);
+  assert.throws(() => readGraph(store), /Graph exceeds/); assert.equal(store.getItem(GRAPH_KEY), saved);
+});
+
+test('disabling translation retains a shared display and all unaffected routes', () => {
+  const graph = defaultGraph(); graph.edges.find(e => e.to[0] === 'transcript' && e.to[1] === 'append').from = ['translation', 'text'];
+  const disabled = withTranslation(graph, { enabled: false, direction: 'ja-en' });
+  assert.ok(disabled.nodes.some(n => n.id === 'transcript'));
+  assert.deepEqual(disabled.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace')]);
+});
+
+test('multiple processing directions prepare independently of sink labels and graph preference', async () => {
+  const graph = defaultGraph({ enabled: false }); graph.translationDirection = 'en-ja';
+  for (const [type, id] of [['OpusMtJaEn', 'forward'], ['OpusMtEnJa', 'reverse']]) {
+    graph.nodes.push(graphNode(type, id), graphNode('LiveTextDisplay', id + '-display'));
+    graph.nodes.at(-1).settings.label = 'Any arbitrary label'; graph.edges.push(edge('speech', 'final', id, 'text'), edge(id, 'text', id + '-display', 'append'));
+  }
+  const directions = [], built = buildGraph(graph, { workerFactory: () => ({ postMessage() {}, terminate() {} }), sourceFactory: () => ({ start() {}, stop() {} }), prepareTranslation: async (signal, direction) => { directions.push(direction); throw Error('Fixture unavailable'); } });
+  // Use the production scheduler start hook; ASR model setup is unrelated here.
+  for (const id of ['forward', 'reverse']) { const entry = built.pipeline.entries.get(id); entry.node.start(entry.context); }
+  await Promise.all(built.translations.map(n => n.ready)); assert.deepEqual(directions.sort(), ['en-ja', 'ja-en']);
+  await built.pipeline.dispose();
 });

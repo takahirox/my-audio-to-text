@@ -296,15 +296,20 @@ requires no TTS policy or modification.
 
 ## Extension visual graph composition
 
-The [extension graph editor](extension-graph.md) saves a version 5 description
+The [extension graph editor](extension-graph.md) saves a version 6 description
 with concrete production Node types and explicit named-port edges. The extension
 builder constructs this shared Pipeline at each session boundary. ASR, OPUS-MT
 directions, Supertonic 3 and Kokoro remain independent production processors;
 ordinary text flows connect directly through shared `TEXT` ports, and audio
-playback remains a separate Node. Version 1–4 descriptions migrate explicitly
-to version 5, removing extraction adapters while preserving their downstream
+playback remains a separate Node. Version 1–5 descriptions migrate explicitly
+to version 6, removing extraction adapters while preserving their downstream
 routes and fan-out; old paired result edges expand into correlated primitive
-routes. No editor, model selection, storage or inference policy is added to the generic Pipeline runtime.
+routes. Legacy views become generic TEXT displays; indexed paired behavior is
+preserved by a narrow compatibility formatter. Shared `LiveTextDisplayNode`
+and `TextFormatterNode` own text presentation state and bounded formatting.
+Independent formatter inputs update latest values immediately; only directly
+grouped inputs update together. No editor, model selection, storage or inference
+policy is added to the generic Pipeline runtime.
 
 ## Optional transcript correction
 

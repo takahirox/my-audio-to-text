@@ -83,17 +83,19 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
       await expect(recorder.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
       await expect(recorder.locator('#translation-status')).toHaveText(/^(Local OPUS-MT ready|Translation unavailable:.*)$/, { timeout: 120000 });
       expect(await recorder.locator('#translation-status').textContent()).toBe('Local OPUS-MT ready');
-      await recorder.evaluate(() => {
-        window.completedProvisional = [];
-        new MutationObserver(() => {
-          const translated = document.querySelector('#partial-english');
-          if (translated.dataset.status === 'complete') window.completedProvisional.push({
-            original: document.querySelector('#partial').textContent, translated: translated.textContent,
-          });
-        }).observe(document.querySelector('#partial-english'), { childList: true, attributes: true });
+      await recorder.evaluate(async () => {
+        window.completedProvisional = []; window.finalPairs = [];
+        const { PairedTextFormatterNode } = await import('./paired-text-formatter.js');
+        const receiveInputs = PairedTextFormatterNode.prototype.receiveInputs;
+        PairedTextFormatterNode.prototype.receiveInputs = function(values, context) {
+          const result = receiveInputs.call(this, values, context);
+          if (this.preview?.source && this.preview.status === 'complete') window.completedProvisional.push({ original: this.preview.source, translated: this.preview.text });
+          window.finalPairs = this.rows.map(row => ({ original: row.source, translated: row.text }));
+          return result;
+        };
       });
       await meeting.locator('#play').click();
-      await expect(recorder.locator('#partial')).toHaveText(reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/, { timeout: 60000 });
+      await expect(recorder.locator('[data-display="transcript"] .display-preview')).toHaveText(reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/, { timeout: 60000 });
       await expect.poll(() => recorder.evaluate(() => window.completedProvisional.length), { timeout: 60000 }).toBeGreaterThan(0);
       const provisional = await recorder.evaluate(() => window.completedProvisional.at(-1));
       expect(provisional.original).toMatch(reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/);
@@ -101,9 +103,7 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
       expect(provisional.translated).not.toMatch(/^(Translating|Translation|Older interim)/);
       await expect.poll(() => meeting.locator('#audio').evaluate(audio => audio.ended), { timeout: 60000 }).toBe(true);
       await recorder.locator('#stop').click(); await expect(recorder.locator('#start')).toBeEnabled({ timeout: 120000 });
-      const finals = await recorder.locator('#paired-finals li').evaluateAll(rows => rows.map(row => ({
-        original: row.querySelectorAll('pre')[0].textContent, translated: row.querySelectorAll('pre')[1].textContent,
-      })));
+      const finals = await recorder.evaluate(() => window.finalPairs);
       // Exercise representative ordinary English through the production Pipeline,
       // Node/Worker and extension-only verified cache, online and after recreation
       // offline. No ASR/model/runtime mocks or direct remote-model fallback.

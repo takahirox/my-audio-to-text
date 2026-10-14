@@ -6,7 +6,7 @@ import { TEXT, TextOutputNode, EnglishToJapaneseOpusMtTranslationNode } from '..
 import { OPUS_MT, OPUS_MT_EN_JA } from '../web/translation-models.js';
 import { TranslationSchedulerNode } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
-import { defaultGraph, NODE_TYPES, translationViewEdges } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, NODE_TYPES, translationViewEdges } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
 import { translationLabel, provisionalLabel } from '../extension/translation-view.js';
 
@@ -41,7 +41,7 @@ async function schedulerGraph(options = {}) {
     onState: state => states.push(state) });
   const pipeline = new Pipeline({ nodes: {
     source: { inputs: {}, outputs: { provisional: TEXT, final: TEXT }, start(context) { emit = context.emit; } },
-    scheduler, sink: { inputs: NODE_TYPES.TranslationView.inputs, outputs: {}, async receiveInputs(values) {
+    scheduler, sink: { inputs: NODE_TYPES.PairedTextFormatter.inputs, outputs: {}, async receiveInputs(values) {
       await options.receiveInputs?.(values);
       const provisional = Object.hasOwn(values, 'provisionalStatus'), prefix = provisional ? 'provisional' : 'final';
       outputs.push({ port: provisional ? 'provisional' : 'final', source: values[`${prefix}Source`],
@@ -194,187 +194,50 @@ function sessionFixture(translation = workerFixture()) {
   return { session, asr, views, translation };
 }
 
-for (const direction of ['ja-en', 'en-ja']) for (const ports of [['text'], ['provisionalText'], ['provisionalText', 'text']]) {
-  test(`${direction}: direct TranslationView ${ports.join('/')} keeps primitive interim and completed text separate`, async () => {
-    const f = sessionFixture(), graph = defaultGraph({ direction });
-    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
-    for (const port of ports) graph.edges.push({ from: ['translation', port === 'text' ? 'text' : 'provisional'], to: ['translated', port] });
-    f.session.setGraph(graph); await f.session.start(42);
-    const speech = f.session.session.speech;
-    speech.receiveEvent({ type: 'partial', text: 'source preview' }); await tick();
-    assert.equal(f.session.view.provisionalTranslationText, '', 'pending is not fabricated as a string');
-    f.translation.complete(0, 'translated preview'); await tick();
-    assert.equal(f.session.view.provisionalTranslationText, ports.includes('provisionalText') ? 'translated preview' : '');
-    assert.equal(f.session.view.translatedText, '');
-    assert.equal(f.session.view.interimTranslation, null);
-    speech.receiveEvent({ type: 'final', text: 'source final' }); await tick();
-    assert.equal(f.session.view.provisionalTranslationText, '', 'finalization clears the primitive preview');
-    f.translation.complete(1, 'translated final'); await tick();
-    assert.equal(f.session.view.translatedText, ports.includes('text') ? 'translated final\n' : '');
-    assert.deepEqual(f.session.view.utterances, [], 'no invented atomic pair or status/index metadata');
-    assert.equal(f.session.view.final, 'source final\n', 'independent original transcript remains intact');
-    const stopping = f.session.stop(); await stopping;
-    await f.session.start(42);
-    assert.equal(f.session.view.translatedText, ''); assert.equal(f.session.view.provisionalTranslationText, '');
-    f.session.cancel();
-    assert.ok(f.translation.workers.every(worker => worker.terminated));
-  });
-}
+const display = (f, id = 'transcript') => f.session.view.displays[id] || { items: [], preview: '' };
+const rows = f => f.session.session.pipeline.entries.get('translated-format').node.rows;
 
-test('plain display does not infer correlation between independent completed and provisional TEXT streams', async () => {
-  const f = sessionFixture(), graph = defaultGraph({ enabled: false });
-  graph.nodes.push({ id: 'translated', type: 'TranslationView', settings: {}, position: { x: 600, y: 300 } });
-  graph.edges.push({ from: ['speech', 'provisional'], to: ['translated', 'provisionalText'] },
-    { from: ['speech', 'final'], to: ['translated', 'text'] });
-  f.session.setGraph(graph); await f.session.start(42);
-  const context = { signal: f.session.session.pipeline.entries.get('translated').controller.signal };
-  const display = f.session.session.pipeline.entries.get('translated').node;
-  display.receive('provisionalText', 'current independent preview', context);
-  display.receive('text', 'older completed stream', context);
-  assert.equal(f.session.view.provisionalTranslationText, 'current independent preview');
-  assert.equal(f.session.view.translatedText, 'older completed stream\n');
-  assert.deepEqual(f.session.view.utterances, []);
-  f.session.cancel();
-});
-
-test('optional session path preserves Japanese, paired ordered English, stop/drain and repeat ownership', async () => {
-  const f = sessionFixture(); await f.session.start(42);
-  assert.equal(f.translation.workers.length, 0); await f.session.stop();
-  f.session.setTranslation(true); await f.session.start(42);
-  const speech = f.session.session.speech;
-  speech.receiveEvent({ type: 'partial', text: '日本語', id: 0 }); await tick();
-  assert.equal(f.session.view.partial, '日本語'); assert.equal(f.session.view.interimTranslation.status, 'pending');
-  f.translation.complete(0, 'Japanese'); await tick(); assert.equal(f.session.view.interimTranslation.text, 'Japanese');
-  speech.receiveEvent({ type: 'final', text: '日本語', id: 0 });
-  speech.receiveEvent({ type: 'final', text: '次', id: 1 }); await tick();
-  const stopping = f.session.stop(); await tick(); assert.equal(f.session.view.state, 'stopping');
-  f.translation.complete(1, 'Japanese'); await tick(); f.translation.complete(2, 'Next'); await stopping;
-  assert.deepEqual(f.session.view.utterances.map(row => [row.source, row.text, row.status]),
-    [['日本語', 'Japanese', 'complete'], ['次', 'Next', 'complete']]);
-  assert.equal(f.session.view.final, '日本語\n次\n'); assert.ok(f.asr.every(worker => worker.terminated));
-  assert.ok(f.translation.workers.every(worker => worker.terminated));
-  await f.session.start(99); assert.deepEqual(f.session.view.utterances, []);
-  speech.receiveEvent({ type: 'final', text: 'late', id: 5 }); f.translation.complete(2, 'late'); await tick();
-  assert.equal(f.session.view.final, ''); f.session.cancel(); await tick();
-  assert.ok(f.translation.workers.every(worker => worker.terminated));
-});
-
-for (const direction of ['ja-en', 'en-ja']) for (const transcript of [false, true]) {
-  test(`${direction}: TranslationView owns ordered rows ${transcript ? 'with' : 'without'} TranscriptView`, async () => {
-    const f = sessionFixture(), graph = defaultGraph({ direction });
-    if (!transcript) {
-      graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
-      graph.edges = graph.edges.filter(edge => edge.to[0] !== 'transcript');
-    }
-    graph.edges.reverse(); f.session.setGraph(graph); await f.session.start(42);
-    const speech = f.session.session.speech;
-    speech.receiveEvent({ type: 'partial', text: 'old', id: 0 }); await tick();
-    assert.equal(f.session.view.partial, 'old'); assert.equal(f.session.view.interimTranslation.status, 'pending');
-    speech.receiveEvent({ type: 'partial', text: 'latest', id: 0 }); await tick();
-    f.translation.complete(0, 'stale'); await tick();
-    assert.equal(f.session.view.partial, 'latest'); assert.notEqual(f.session.view.interimTranslation.text, 'stale');
-    f.translation.complete(1, 'translated latest'); await tick();
-    assert.equal(f.session.view.interimTranslation.text, 'translated latest');
-    // Identical source strings are separate utterances, paired by scheduler index.
-    speech.receiveEvent({ type: 'final', text: 'same', id: 0 });
-    speech.receiveEvent({ type: 'final', text: 'same', id: 1 }); await tick();
-    assert.deepEqual(f.session.view.utterances.map(row => row.status), ['pending', 'pending']);
-    assert.equal(f.session.view.partial, ''); assert.equal(f.session.view.interimTranslation, null);
-    const stopping = f.session.stop(); await tick();
-    f.translation.complete(2, 'first'); await tick(); f.translation.complete(3, 'second'); await stopping;
-    assert.deepEqual(f.session.view.utterances.map(row => [row.source, row.text, row.status, row.direction]),
-      [['same', 'first', 'complete', direction], ['same', 'second', 'complete', direction]]);
-    assert.equal(f.session.view.final, transcript ? 'same\nsame\n' : '');
-    assert.ok(f.translation.workers.every(worker => worker.terminated));
-  });
-}
-
-for (const direction of ['ja-en', 'en-ja']) for (const paired of [false, true]) test(`${direction}: delayed translated finals preserve the current ASR preview ${paired ? 'with' : 'without'} paired metadata`, async () => {
+for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]) test(`${direction}: paired formatter preserves ordered repeated sources, stale preview suppression and Stop drain (${original})`, async () => {
   const f = sessionFixture(), graph = defaultGraph({ direction });
-  if (!paired) {
-    graph.nodes = graph.nodes.filter(node => node.type !== 'TranslationView');
-    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
-  }
-  graph.edges = graph.edges.filter(route => !(route.to[0] === 'transcript' && route.to[1] === 'final')
-    && !(route.to[0] === 'translation' && route.to[1] === 'provisional'));
-  graph.edges.push({ from: ['translation', 'text'], to: ['transcript', 'final'] });
-  f.session.setGraph(graph); await f.session.start(42);
+  if (!original) { graph.nodes = graph.nodes.filter(n => n.id !== 'transcript'); graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); }
+  graph.edges.reverse(); f.session.setGraph(graph); await f.session.start(42);
   const speech = f.session.session.speech;
-  // Finalization also clears provisional deliveries still queued at the sink.
-  speech.receiveEvent({ type: 'partial', text: 'same', id: 0 });
-  speech.receiveEvent({ type: 'final', text: 'same', id: 0 }); await tick();
-  assert.equal(f.session.view.partial, ''); assert.equal(f.translation.requests.length, 1);
-  speech.receiveEvent({ type: 'partial', text: 'same', id: 1 }); await tick();
-  assert.equal(f.session.view.partial, 'same');
-  f.translation.complete(0, 'first translation'); await tick();
-  assert.equal(f.session.view.final, 'first translation\n');
-  assert.equal(f.session.view.partial, 'same', 'an older translated final cannot clear a newer equal-string preview');
-  speech.receiveEvent({ type: 'final', text: 'same', id: 1 });
-  speech.receiveEvent({ type: 'partial', text: 'next preview', id: 2 }); await tick();
-  f.translation.complete(1, 'second translation'); await tick();
-  assert.equal(f.session.view.final, 'first translation\nsecond translation\n');
-  assert.equal(f.session.view.partial, 'next preview');
-  await f.session.stop(); assert.equal(f.session.view.partial, '');
-  await f.session.start(42);
-  f.session.session.speech.receiveEvent({ type: 'partial', text: 'canceled preview', id: 0 }); await tick();
-  f.session.cancel(); await tick(); assert.equal(f.session.view.partial, '');
+  speech.receiveEvent({ type: 'partial', text: 'old', id: 0 }); await tick();
+  speech.receiveEvent({ type: 'partial', text: 'latest', id: 0 }); await tick();
+  f.translation.complete(0, 'stale'); await tick(); assert.doesNotMatch(display(f, 'translated').preview, /stale/);
+  f.translation.complete(1, 'translated latest'); await tick(); assert.match(display(f, 'translated').preview, /latest.*\n.*translated latest/);
+  speech.receiveEvent({ type: 'final', text: 'same', id: 0 }); speech.receiveEvent({ type: 'final', text: 'same', id: 1 }); await tick();
+  assert.deepEqual(rows(f).map(row => row.status), ['pending', 'pending']);
+  const stopping = f.session.stop(); await tick();
+  f.translation.complete(2, 'first'); await tick(); f.translation.complete(3, 'second'); await stopping;
+  assert.match(display(f, 'translated').preview, /same\n.*first\n\n.*same\n.*second/);
+  assert.deepEqual(display(f).items, original ? ['same', 'same'] : []);
+  assert.ok(f.translation.workers.every(w => w.terminated));
+  await f.session.start(42); assert.equal(display(f, 'translated').preview, '');
+  speech.receiveEvent({ type: 'final', text: 'late', id: 5 }); f.translation.complete(3, 'late'); await tick();
+  assert.deepEqual(display(f).items, []); f.session.cancel();
 });
 
-for (const direction of ['ja-en', 'en-ja']) for (const paired of [false, true]) test(`${direction}: scheduler clears its translated preview on finalization ${paired ? 'with' : 'without'} paired metadata`, async () => {
+for (const direction of ['ja-en', 'en-ja']) for (const ports of [['replace'], ['append'], ['replace', 'append']]) test(`${direction}: arbitrary direct translation TEXT display ${ports.join('/')}`, async () => {
   const f = sessionFixture(), graph = defaultGraph({ direction });
-  if (!paired) {
-    graph.nodes = graph.nodes.filter(node => node.type !== 'TranslationView');
-    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
-  }
-  graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript');
-  graph.edges.push({ from: ['translation', 'provisional'], to: ['transcript', 'provisional'] },
-    { from: ['translation', 'text'], to: ['transcript', 'final'] });
-  f.session.setGraph(graph); await f.session.start(42);
-  const speech = f.session.session.speech;
-  speech.receiveEvent({ type: 'partial', text: 'hello', id: 0 }); await tick();
-  f.translation.complete(0, 'Translated hello'); await tick();
-  assert.equal(f.session.view.partial, 'Translated hello');
-  speech.receiveEvent({ type: 'final', text: 'hello', id: 0 }); await tick();
-  assert.equal(f.session.view.partial, '', 'final receipt invalidates the scheduler-owned preview before inference');
-  f.translation.complete(1, 'Translated hello'); await tick();
-  assert.equal(f.session.view.final, 'Translated hello\n');
-  assert.equal(f.session.view.partial, '', 'the completed final leaves no stale translated preview');
-
-  // A same-string next utterance is independent of the preceding final.
-  speech.receiveEvent({ type: 'final', text: 'hello', id: 1 });
-  speech.receiveEvent({ type: 'partial', text: 'hello', id: 2 }); await tick();
-  if (paired) assert.equal(f.session.view.interimTranslation.status, 'pending');
-  f.translation.complete(2, 'Second hello'); await tick();
-  if (paired) assert.equal(f.session.view.interimTranslation.status, 'pending', 'an older final preserves newer provisional state');
-  f.translation.complete(3, 'New preview'); await tick();
-  assert.equal(f.session.view.partial, 'New preview');
-  assert.equal(f.session.view.final, 'Translated hello\nSecond hello\n');
-  await f.session.stop(); assert.equal(f.session.view.partial, '');
+  graph.nodes = graph.nodes.filter(n => n.id !== 'translated-format'); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated-format' && e.from[0] !== 'translated-format');
+  for (const port of ports) graph.edges.push({ from: ['translation', port === 'append' ? 'text' : 'provisional'], to: ['translated', port] });
+  f.session.setGraph(graph); await f.session.start(42); const speech = f.session.session.speech;
+  speech.receiveEvent({ type: 'partial', text: 'preview' }); await tick(); assert.equal(display(f, 'translated').preview, '');
+  f.translation.complete(0, 'translated preview'); await tick(); assert.equal(display(f, 'translated').preview, ports.includes('replace') ? 'translated preview' : '');
+  speech.receiveEvent({ type: 'final', text: 'final' }); await tick(); assert.equal(display(f, 'translated').preview, '');
+  f.translation.complete(1, 'translated final'); await tick(); assert.deepEqual(display(f, 'translated').items, ports.includes('append') ? ['translated final'] : []);
+  await f.session.stop(); await f.session.start(42); assert.deepEqual(display(f, 'translated'), { preview: '', items: [] }); f.session.cancel();
 });
 
-test('TranslationView without TranscriptView retains errors and cancels pending rows without accepting late replies', async () => {
-  const f = sessionFixture(), graph = defaultGraph();
-  graph.nodes = graph.nodes.filter(node => node.type !== 'TranscriptView');
-  graph.edges = graph.edges.filter(edge => edge.to[0] !== 'transcript');
-  f.session.setGraph(graph); await f.session.start(42);
+test('paired compatibility retains error history and visibly cancels pending rows, ignoring late replies', async () => {
+  const f = sessionFixture(); f.session.setTranslation(true); await f.session.start(42);
   f.session.session.speech.receiveEvent({ type: 'final', text: 'pending', id: 0 }); await tick();
   f.session.cancel(); f.translation.complete(0, 'late'); await tick();
-  assert.deepEqual(f.session.view.utterances.map(row => [row.source, row.status, row.text]), [['pending', 'canceled', '']]);
-  f.session.prepareTranslation = async () => { throw Error('cache unavailable'); };
-  await f.session.start(42); await tick();
-  f.session.session.speech.receiveEvent({ type: 'final', text: 'failed', id: 0 }); await tick();
-  await f.session.stop();
-  assert.deepEqual(f.session.view.utterances.map(row => [row.source, row.status, row.error]), [['failed', 'error', 'cache unavailable']]);
-});
-
-test('unavailable model never stops speech capture and final pairing reports accurate failure', async () => {
-  const f = sessionFixture(); f.session.prepareTranslation = async () => { throw new Error('WASM / cache unavailable'); };
-  f.session.setTranslation(true); await f.session.start(42); await tick();
-  assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.translationStatus, /unavailable/);
-  f.session.session.speech.receiveEvent({ type: 'final', text: '原文', id: 0 }); await tick();
-  assert.equal(f.session.view.final, '原文\n'); assert.equal(f.session.view.utterances[0].status, 'error');
-  assert.equal(f.translation.workers.length, 0); assert.equal(f.session.view.error, '');
-  await f.session.stop();
+  assert.match(display(f, 'translated').preview, /pending\n.*Translation canceled/); assert.doesNotMatch(display(f, 'translated').preview, /late/);
+  f.session.prepareTranslation = async () => { throw Error('cache unavailable'); }; await f.session.start(42);
+  f.session.session.speech.receiveEvent({ type: 'final', text: 'failed', id: 0 }); await tick(); await f.session.stop();
+  assert.match(display(f, 'translated').preview, /failed\n.*Translation failed: cache unavailable/); assert.deepEqual(display(f).items, ['failed']);
 });
 
 test('English → Japanese has a distinct pinned complete manifest and cache keys', () => {
@@ -387,31 +250,14 @@ test('English → Japanese has a distinct pinned complete manifest and cache key
   assert.ok(files.every(file => /^[a-f0-9]{64}$/.test(file.sha256) && file.sha256Chunks.length === Math.ceil(file.bytes / HASH_CHUNK_BYTES)));
 });
 
-test('direction is captured before loading, applies next session, and never relabels old rows', async () => {
-  const f = sessionFixture(); const preparations = [];
-  f.session.prepareTranslation = async (signal, direction) => preparations.push(direction);
-  assert.equal(f.session.view.translationDirection, 'ja-en');
-  f.session.setTranslationDirection('en-ja');
-  await f.session.start(42); assert.equal(f.translation.workers.length, 0); await f.session.stop();
-  f.session.setTranslation(true);
-  const starting = f.session.start(42);
-  f.session.setTranslationDirection('ja-en');
-  await starting; await tick();
-  assert.deepEqual(preparations, ['en-ja']);
-  assert.ok(f.translation.workers[0].url.pathname.endsWith('/opus-mt-en-ja-worker.js'));
-  assert.equal(f.session.view.displayDirection, 'en-ja');
-  f.session.session.speech.receiveEvent({ type: 'partial', text: 'Hello', id: 0 }); await tick();
-  f.translation.complete(0, 'こんにちは'); await tick();
-  assert.equal(f.session.view.interimTranslation.text, 'こんにちは');
-  f.session.session.speech.receiveEvent({ type: 'final', text: 'Hello', id: 0 }); await tick();
-  f.translation.complete(1, 'こんにちは'); await tick(); await f.session.stop();
-  assert.equal(f.session.view.utterances[0].direction, 'en-ja');
-  assert.equal(f.session.view.displayDirection, 'en-ja');
-  await f.session.start(42); await tick();
-  assert.deepEqual(preparations, ['en-ja', 'ja-en']);
-  assert.ok(f.translation.workers[1].url.pathname.endsWith('/opus-mt-worker.js'));
-  assert.equal(f.session.view.displayDirection, 'ja-en'); assert.deepEqual(f.session.view.utterances, []);
-  f.session.cancel(); await tick(); assert.ok(f.translation.workers.every(worker => worker.terminated));
+test('active processing direction and display labels remain immutable when a different draft is saved', async () => {
+  const f = sessionFixture(), preparations = []; f.session.prepareTranslation = async (signal, direction) => preparations.push(direction);
+  f.session.setGraph(defaultGraph({ direction: 'en-ja' })); await f.session.start(42);
+  const active = f.session.view.activeGraph; f.session.setTranslationDirection('ja-en');
+  assert.equal(f.session.view.activeGraph, active); assert.deepEqual(preparations, ['en-ja']);
+  f.session.session.speech.receiveEvent({ type: 'final', text: 'Hello', id: 0 }); await tick(); f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
+  assert.equal(display(f, 'translated').preview, 'English: Hello\nJapanese: こんにちは');
+  await f.session.start(42); assert.deepEqual(preparations, ['en-ja', 'ja-en']); assert.equal(display(f, 'translated').preview, ''); f.session.cancel();
 });
 
 test('scheduler accepts only TEXT and emits successful strings once to independent fan-out without diagnostic connections', async () => {
@@ -435,26 +281,27 @@ test('scheduler accepts only TEXT and emits successful strings once to independe
   await pipeline.dispose();
 });
 
-test('independent transcript and paired translation streams do not overwrite each other’s interim state', async () => {
-  const f = sessionFixture(); f.session.setTranslation(true);
-  const graph = structuredClone(f.session.graph); graph.nodes.find(node => node.type === 'TranscriptView').settings.direction = 'en-ja';
-  f.session.setGraph(graph); await f.session.start(42);
-  assert.equal(f.session.view.displayTranscriptDirection, 'en-ja');
-  assert.equal(f.session.view.displayDirection, 'ja-en');
-  const pipeline = f.session.session.pipeline;
-  const transcript = pipeline.entries.get('transcript'), translation = pipeline.entries.get('translation');
-  await transcript.node.receive('provisional', 'independent transcript', transcript.context);
-  translation.node.receive('provisional', 'translation source'); await tick();
-  assert.equal(f.session.view.partial, 'independent transcript');
-  assert.equal(f.session.view.interimTranslation.source, 'translation source');
-  await transcript.node.receive('final', 'independent final', transcript.context);
-  assert.equal(f.session.view.partial, 'independent transcript', 'independent ports are not an atomic pair');
-  await transcript.node.receive('provisional', '', transcript.context);
-  assert.equal(f.session.view.partial, '', 'the provisional stream can explicitly clear its own preview');
-  f.translation.complete(0, 'translated'); await tick();
-  assert.equal(f.session.view.interimTranslation.text, 'translated');
-  assert.equal(f.session.view.final, 'independent final\n');
-  translation.node.receive('provisional', ''); await tick();
-  assert.equal(f.session.view.interimTranslation.source, '');
-  await f.session.stop();
+test('independent sinks consume plain TEXT and append clears only its own replace preview', async () => {
+  const f = sessionFixture(); f.session.setTranslation(true); await f.session.start(42);
+  const original = f.session.session.pipeline.entries.get('transcript');
+  original.node.receive('replace', 'independent preview', original.context);
+  f.session.session.translation.receive('provisional', 'translation source'); await tick();
+  assert.equal(display(f).preview, 'independent preview'); assert.match(display(f, 'translated').preview, /translation source/);
+  original.node.receive('append', 'committed', original.context); assert.equal(display(f).preview, '');
+  f.translation.complete(0, 'translated'); await tick(); assert.match(display(f, 'translated').preview, /translated/);
+  assert.deepEqual(display(f).items, ['committed']); await f.session.stop();
+});
+
+test('multiple translator runtime statuses retain each branch failure independently of Live labels', async () => {
+  const f = sessionFixture(), graph = defaultGraph();
+  graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('LiveTextDisplay', 'reverse-display'));
+  graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'append'));
+  f.session.prepareTranslation = async (signal, direction) => { if (direction === 'ja-en') throw Error('Forward cache unavailable'); };
+  f.session.setGraph(graph); await f.session.start(42); await tick();
+  assert.match(f.session.view.translationStatus, /translation: Translation unavailable: Forward cache unavailable/);
+  assert.match(f.session.view.translationStatus, /reverse: Local OPUS-MT ready/);
+  f.session.session.speech.receiveEvent({ type: 'final', text: 'Hello' }); await tick();
+  f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
+  assert.match(display(f, 'translated').preview, /Forward cache unavailable/);
+  assert.deepEqual(display(f, 'reverse-display').items, ['こんにちは']);
 });

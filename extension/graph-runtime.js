@@ -1,5 +1,5 @@
 import { Pipeline } from '../web/pipeline.js';
-import { SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
+import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
 import { AudioOutputNode } from '../web/synthesized-audio.js';
@@ -7,7 +7,9 @@ import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
-import { assertGraph, graphPreferences, NODE_TYPES } from './graph.js';
+import { LiveTextDisplayNode, TextFormatterNode } from '../web/text-nodes.js';
+import { PairedTextFormatterNode } from './paired-text-formatter.js';
+import { assertGraph } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
@@ -49,8 +51,8 @@ class PreparedTtsNode {
 }
 
 export function buildGraph(graph, options) {
-  const description = assertGraph(graph), preferences = graphPreferences(description);
-  const nodes = {}, resources = {};
+  const description = assertGraph(graph);
+  const nodes = {}, resources = { translations: [] };
   for (const spec of description.nodes) {
     let node;
     switch (spec.type) {
@@ -64,24 +66,13 @@ export function buildGraph(graph, options) {
         node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active) => options.onTargetState?.(spec.id, state, active) }); break;
       case 'SpeechToText':
         node = resources.speech = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: options.onSpeechEvent }); break;
-      case 'TranscriptView': node = new TranscriptOutputNode(options.onTranscript); break;
+      case 'LiveTextDisplay': node = new LiveTextDisplayNode(state => options.onDisplay?.(spec.id, state), { appendConnected: description.edges.some(edge => edge.to[0] === spec.id && edge.to[1] === 'append') }); break;
+      case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
+      case 'PairedTextFormatter': node = new PairedTextFormatterNode(spec.settings); break;
       case 'OpusMtJaEn': case 'OpusMtEnJa':
-        node = resources.translation = new TranslationSchedulerNode({ prepare: signal => options.prepareTranslation(signal, preferences.direction),
+        node = resources.translation = new TranslationSchedulerNode({ prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
           TranslationNode: spec.type === 'OpusMtEnJa' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
-          workerFactory: options.translationWorkerFactory, onState: options.onTranslationState }); break;
-      case 'TranslationView':
-        node = { inputs: NODE_TYPES.TranslationView.inputs, outputs: {},
-          receive: options.onTranslation || (() => {}),
-          receiveInputs: async (values, context) => {
-            if (Object.hasOwn(values, 'finalStatus') || Object.hasOwn(values, 'provisionalStatus')) {
-              return options.onTranslationInputs?.(values, context);
-            }
-            for (const [port, value] of Object.entries(values)) {
-              if (context.signal.aborted) return;
-              await options.onTranslation?.(port, value, context);
-            }
-          },
-        }; break;
+          workerFactory: options.translationWorkerFactory, onState: state => options.onTranslationState?.(state, spec.id) }); resources.translations.push(node); break;
       case 'Supertonic3': case 'Kokoro': {
         const Node = spec.type === 'Supertonic3' ? Supertonic3TextToSpeechNode : KokoroTextToSpeechNode;
         const production = new Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,

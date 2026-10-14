@@ -1,6 +1,6 @@
 # Primitive-first Node/Port contracts
 
-Issues #91 and #95 audit shared Nodes, the Node Playground, and the extension.
+Issues #91, #95 and #99 audit shared Nodes, the Node Playground, and the extension.
 Ordinary text uses shared `TEXT` and scheduler final indices use shared `NUMBER`
 from `web/port-contracts.js`. No BOOLEAN value is consumed, so none is introduced.
 Contracts are identities; receiving Nodes validate their payloads.
@@ -12,7 +12,9 @@ Contracts are identities; receiving Nodes validate their payloads.
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
 | Extension TranslationScheduler (both directions) | Inputs: optional `provisional: TEXT`, required `text: TEXT`; successful `provisional: TEXT` / `text: TEXT` outputs; grouped source/status/error TEXT outputs for each stream and `finalIndex: NUMBER` | Active inference, provisional versions, FIFO finals, model failure and Stop policy |
-| TranslationView | `text`, `provisionalText`, `finalSource`, `finalStatus`, `finalError`, `provisionalSource`, `provisionalStatus`, `provisionalError`: TEXT; `finalIndex`: NUMBER | View rows and session generation; uses `receiveInputs`, never joins branches or matches by strings |
+| PairedTextFormatter (compatibility) | `text`, `provisionalText`, `finalSource`, `finalStatus`, `finalError`, `provisionalSource`, `provisionalStatus`, `provisionalError`: TEXT; `finalIndex`: NUMBER | Indexed local history emitted as TEXT; uses `receiveInputs`, never joins branches or matches by strings |
+| LiveTextDisplay | replace/append: TEXT | Independent replace value and committed list; no processor identity |
+| TextFormatter | input1–input4: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
 | TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
 | Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
 | AudioOutput / playback and WAV adapter | `audio: SYNTHESIZED_AUDIO`, `{ samples: Float32Array, sampleRate: positive integer, channels: 1 }` | Playback URLs and cleanup |
@@ -35,13 +37,15 @@ on receipt and distinguish repeated identical utterances. A provisional update
 publishes `provisionalSource`, `provisionalStatus`, `provisionalError`, adding
 `provisional` only on completion. There is no unused provisional index port.
 Errors always carry a string; successful/pending updates clear it with `''`.
-Status strings are `pending`, `complete`, or `error`. Cancel marks unresolved UI
-rows `canceled` locally after invalidating the session and disposing the graph.
+Status strings are `pending`, `complete`, or `error`. Cancel marks unresolved
+compatibility rows `canceled` locally before invalidating
+the session and disposing the graph; Live receives only the formatted string.
 
-The paired view connects these outputs directly, renaming `provisional` to
+The paired compatibility formatter connects these outputs directly, renaming
+`provisional` to
 `provisionalText`, and consumes each group through `receiveInputs`. Pending/error
-updates intentionally omit successful text. UI row objects are assembled locally
-for rendering; no structured text object travels over an edge. `TEXT_RESULT` is
+updates intentionally omit successful text. Row objects are formatter-local state;
+no structured text object travels over an edge. `TEXT_RESULT` is
 removed. Ordinary text processors connect only `text` (or preview `provisional`)
 and receive strings without statuses or metadata. Each source/status/error/index
 port is independently reusable with a compatible primitive consumer.
@@ -57,9 +61,12 @@ for independent field consumers.
 
 ## Graphs and supported topology
 
-Version 5 graphs explicitly migrate versions 1–4. Extraction adapters are bypassed
+Version 6 graphs explicitly migrate versions 1–5. Extraction adapters are bypassed
 while preserving all downstream routes and fan-out. Version 4 paired result edges
-expand to direct primitive connections; TEXT-only view routes remain unchanged.
+expand to direct primitive connections; TEXT-only legacy views become generic
+replace/append displays. Paired legacy views
+retain every primitive route through a compatibility formatter into a generic
+replace display.
 Malformed or ambiguous routes fail visibly with Reset and Save recovery, and the
 stored graph remains untouched on failure. Nothing is silently dropped.
 
@@ -67,7 +74,7 @@ The editor validates types, one incoming edge per input, required/optional input
 settings and acyclicity. Paired display requires the complete final bundle from
 one translator, plus either no preview bundle or its complete direct bundle.
 Metadata split across independent branches is rejected because it cannot preserve
-correlation. Plain display accepts `text` and/or `provisionalText` from any TEXT
+correlation. Generic display accepts `replace` and/or `append` from any TEXT
 producer and invents no alignment. Default graphs use paired primitive delivery.
 See [runtime semantics](pipeline-runtime.md#correlated-primitive-outputs) and
 [graph wiring](extension-graph.md).

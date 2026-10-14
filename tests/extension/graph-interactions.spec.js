@@ -1,3 +1,4 @@
+import { legacyGraph } from '../fixtures/legacy-graph.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph, emitFinal, disconnectWire } from './graph-fixture.js';
@@ -51,17 +52,17 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
     await expect(control).toHaveAccessibleName('Disconnect audio.audio to speech.audio');
     await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length);
     await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
-    await pointerSelect(editor, 'speech.final to transcript.final');
+    await pointerSelect(editor, 'speech.final to transcript.append');
     await expect(wireFor(editor, 'audio.audio to speech.audio')).toHaveAttribute('aria-pressed', 'false');
-    await expect(control).toHaveAccessibleName('Disconnect speech.final to transcript.final');
+    await expect(control).toHaveAccessibleName('Disconnect speech.final to transcript.append');
     await expect(editor.locator('.selected-wire')).toHaveCount(1);
     await editor.keyboard.press('Escape');
     await expect(control).toBeHidden(); await expect(editor.locator('.selected-wire')).toHaveCount(0);
     await expect(editor.locator('.graph-scroll')).toBeFocused();
-    await pointerSelect(editor, 'speech.provisional to transcript.provisional');
+    await pointerSelect(editor, 'speech.provisional to transcript.replace');
     await editor.locator('#graph-canvas').click({ position: { x: 3, y: 3 } });
     await expect(control).toBeHidden(); await expect(editor.locator('.selected-wire')).toHaveCount(0);
-    await pointerSelect(editor, 'speech.provisional to transcript.provisional');
+    await pointerSelect(editor, 'speech.provisional to transcript.replace');
     await expect(control).toBeVisible(); await expect(control).toHaveText('Disconnect');
     const box = await control.boundingBox(), viewport = await editor.locator('.graph-scroll').boundingBox();
     expect(box.width).toBeGreaterThanOrEqual(112); expect(box.height).toBeGreaterThanOrEqual(44);
@@ -77,7 +78,7 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
     })).toBe(0);
     // A native pointer click acts on the selected edge, without any key press.
     await control.click();
-    await expect(wireFor(editor, 'speech.provisional to transcript.provisional')).toHaveCount(0);
+    await expect(wireFor(editor, 'speech.provisional to transcript.replace')).toHaveCount(0);
     await expect(control).toBeHidden(); await expect(editor.locator('.graph-scroll')).toBeFocused();
     await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length - 1);
     await expect(editor.locator('.graph-node')).toHaveCount(before.nodes.length);
@@ -86,7 +87,7 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
     await save(editor);
     const after = await saved(live);
     expect(after.nodes).toEqual(before.nodes);
-    expect(after.edges).toEqual(before.edges.filter(e => !(e.to[0] === 'transcript' && e.to[1] === 'provisional')));
+    expect(after.edges).toEqual(before.edges.filter(e => !(e.to[0] === 'transcript' && e.to[1] === 'replace')));
     await editor.reload(); await expect(editor.locator('.graph-wire')).toHaveCount(after.edges.length);
     expect(await saved(live)).toEqual(after); await expect(control).toBeHidden();
   });
@@ -155,9 +156,9 @@ for (const key of ['Delete', 'Backspace']) test(`focused wire ${key} and keyboar
   expect(await saved(live)).toEqual(before); // Invalid draft cannot be saved.
   await port(editor, 'audio', 'output', 'audio').click(); await port(editor, 'speech', 'input', 'audio').click();
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  const optional = wireFor(editor, 'speech.provisional to transcript.provisional');
+  const optional = wireFor(editor, 'speech.provisional to transcript.replace');
   await optional.focus(); await optional.press('Space'); await optional.press('Tab');
-  const action = editor.getByRole('button', { name: 'Disconnect speech.provisional to transcript.provisional', exact: true });
+  const action = editor.getByRole('button', { name: 'Disconnect speech.provisional to transcript.replace', exact: true });
   await expect(action).toBeFocused();
   await action.press('Shift+Tab'); await expect(optional).toBeFocused();
   await optional.press('Tab'); await action.press('Escape');
@@ -166,7 +167,7 @@ for (const key of ['Delete', 'Backspace']) test(`focused wire ${key} and keyboar
   await action.press(key === 'Delete' ? 'Enter' : 'Space');
   await expect(optional).toHaveCount(0); await expect(editor.locator('.graph-scroll')).toBeFocused();
   await save(editor);
-  expect((await saved(live)).edges).toEqual([...before.edges.filter(e => !(e.to[0] === 'transcript' && e.to[1] === 'provisional') && e.from[0] !== 'audio'), before.edges[0]]);
+  expect((await saved(live)).edges).toEqual([...before.edges.filter(e => !(e.to[0] === 'transcript' && e.to[1] === 'replace') && e.from[0] !== 'audio'), before.edges[0]]);
 });
 
 test('native touch selects and disconnects without hover; saved removal applies only to the next session', async ({ graphExtension: f }) => {
@@ -175,8 +176,8 @@ test('native touch selects and disconnects without hover; saved removal applies 
   await startGraph(live); const before = await saved(live);
   const workers = await live.evaluate(() => window.graphWorkers.length);
   await editor.locator('#graph-zoom').selectOption('0.5');
-  await touch(editor, await wirePoint(editor, 'speech.provisional to transcript.provisional'));
-  const wire = wireFor(editor, 'speech.provisional to transcript.provisional'), control = editor.locator('#graph-disconnect');
+  await touch(editor, await wirePoint(editor, 'speech.provisional to transcript.replace'));
+  const wire = wireFor(editor, 'speech.provisional to transcript.replace'), control = editor.locator('#graph-disconnect');
   await expect(wire).toHaveAttribute('aria-pressed', 'true'); await expect(wire).toHaveClass(/selected-wire/);
   await expect(control).toBeVisible();
   expect(await saved(live)).toEqual(before); await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length);
@@ -186,13 +187,13 @@ test('native touch selects and disconnects without hover; saved removal applies 
   await expect(editor.locator('#graph-state')).toContainText('earlier graph');
   expect(await live.evaluate(() => window.graphWorkers.length)).toBe(workers);
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'active preview' }));
-  await expect(live.locator('#partial')).toHaveText('active preview');
+  await expect(live.locator('[data-display="transcript"] .display-preview')).toHaveText('active preview');
   await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled(); await startGraph(live);
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'next preview' }));
-  await expect(live.locator('#partial')).toBeEmpty();
-  await emitFinal(live, 'next final'); await expect(live.locator('#final')).toHaveText('next final\n');
+  await expect(live.locator('[data-display="transcript"] .display-preview')).toBeEmpty();
+  await emitFinal(live, 'next final'); await expect(live.locator('[data-display="transcript"] .display-items')).toHaveText('next final\n');
   await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
-  expect((await saved(live)).edges).toEqual(before.edges.filter(e => !(e.to[0] === 'transcript' && e.to[1] === 'provisional')));
+  expect((await saved(live)).edges).toEqual(before.edges.filter(e => !(e.to[0] === 'transcript' && e.to[1] === 'replace')));
 });
 
 test('click and drag reconnect a populated input, preserving fan-out; identical and invalid attempts keep old edge', async ({ graphExtension: f }) => {
@@ -233,67 +234,32 @@ async function fixtureTranslation(f, live) {
   });
 }
 
-for (const direction of ['ja-en', 'en-ja']) {
-  test(`${direction}: persisted version 4 primitive translation routes render interim/completed text after migration`, async ({ graphExtension: f }) => {
-    const live = await openGraph(f), editor = live.editor;
-    await editor.locator('#translation-direction').selectOption(direction);
-    for (const name of ['finalSource', 'finalStatus', 'finalIndex', 'finalError', 'provisionalSource', 'provisionalStatus', 'provisionalError']) await disconnectWire(editor, `translation.${name} to translated.${name}`);
-    for (const [output, input] of [['provisional', 'provisionalText'], ['text', 'text']]) {
-      await port(editor, 'translation', 'output', output).click(); await port(editor, 'translated', 'input', input).click();
+for (const version of [4, 5]) for (const direction of ['ja-en', 'en-ja']) for (const paired of [false, true]) {
+  test(`v${version} ${direction}: migration preserves ${paired ? 'indexed pairs' : 'plain routes'} through Stop, errors and Cancel`, async ({ graphExtension: f }) => {
+    let live = await openGraph(f); const legacy = legacyGraph({ direction }, version);
+    if (!paired) {
+      legacy.edges = legacy.edges.filter(e => e.to[0] !== 'translated');
+      legacy.edges.push({ from: ['translation', 'provisional'], to: ['translated', 'provisionalText'] }, { from: ['translation', 'text'], to: ['translated', 'text'] });
     }
-    await expect(editor.locator('#graph-errors')).toBeEmpty(); await save(editor);
-    const routes = (await saved(live)).edges;
-    await live.evaluate(() => {
-      const key = 'processing-graph-v1', graph = JSON.parse(localStorage.getItem(key));
-      graph.version = 4; localStorage.setItem(key, JSON.stringify(graph));
-    });
-    await live.close(); const reopened = await openGraph(f);
-    expect((await saved(reopened)).version).toBe(5);
-    expect((await saved(reopened)).edges).toEqual(routes);
-    await fixtureTranslation(f, reopened);
-    await startGraph(reopened);
-    await reopened.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));
-    await expect(reopened.locator('#partial-english')).toHaveText('Translated preview');
-    await expect(reopened.locator('#paired-provisional-source')).toBeHidden();
-    await expect(reopened.locator('#partial-english')).not.toHaveAttribute('data-status');
-    await expect(reopened.locator('#translated-text')).toBeEmpty();
-    await emitFinal(reopened, 'completed');
-    await expect(reopened.locator('#translated-text')).toHaveText('Translated completed\n');
-    await expect(reopened.locator('#partial-english')).toBeEmpty();
-    await expect(reopened.locator('#translated-text')).not.toHaveAttribute('data-status');
-    await expect(reopened.locator('#paired-finals li')).toHaveCount(0);
-    await expect(reopened.locator('#final')).toHaveText('completed\n');
-    await reopened.locator('#stop').click(); await expect(reopened.locator('#start')).toBeEnabled();
+    await live.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), legacy);
+    await live.close(); live = await openGraph(f); const graph = await saved(live);
+    expect(graph.version).toBe(6); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
+    await fixtureTranslation(f, live); await startGraph(live);
+    const text = live.locator('[data-display="translated"] .display-preview');
+    await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));
+    await expect(text).toContainText('Translated preview');
+    await emitFinal(live, 'pending');
+    if (paired) await expect(text).toContainText('Translating…');
+    await expect(paired ? text : live.locator('[data-display="translated"] .display-items')).toContainText('Translated pending');
+    await emitFinal(live, 'fail');
+    if (paired) await expect(text).toContainText('Translation failed: Fixture translation failure');
+    await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
+    await startGraph(live); await expect(text).toBeEmpty();
+    await emitFinal(live, 'pending cancellation');
+    if (paired) await expect(text).toContainText('Translating…');
+    await live.locator('#cancel-session').click();
+    if (paired) await expect(text).toContainText('Translation canceled');
+    else await expect(text).toBeEmpty();
+    expect(await saved(live)).toEqual(graph);
   });
 }
-
-for (const direction of ['ja-en', 'en-ja']) test(`${direction}: saved version 4 paired view remains operational with pending, completed, error and canceled states`, async ({ graphExtension: f }) => {
-  let live = await openGraph(f);
-  await live.editor.locator('#translation-direction').selectOption(direction);
-  await save(live.editor);
-  await live.evaluate(async () => {
-    const { GRAPH_KEY } = await import('./graph.js');
-    const graph = JSON.parse(localStorage.getItem(GRAPH_KEY)); graph.version = 4;
-    graph.edges = graph.edges.filter(route => route.to[0] !== 'translated');
-    graph.edges.push({ from: ['translation', 'finalResult'], to: ['translated', 'final'] },
-      { from: ['translation', 'provisionalResult'], to: ['translated', 'provisional'] });
-    localStorage.setItem(GRAPH_KEY, JSON.stringify(graph));
-  });
-  await live.close(); live = await openGraph(f); const graph = await saved(live);
-  expect(graph.version).toBe(5);
-  await live.editor.reload(); expect(await saved(live)).toEqual(graph);
-  await fixtureTranslation(f, live); await startGraph(live);
-  await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));
-  await expect(live.locator('#partial-english')).toHaveText('Translated preview');
-  await expect(live.locator('#partial-translation-source')).toHaveText('preview');
-  await emitFinal(live, 'pending'); await expect(live.locator('#paired-finals pre[data-status="pending"]')).toHaveCount(1);
-  await expect(live.locator('#paired-finals pre[data-status="complete"]')).toHaveText('Translated pending');
-  await emitFinal(live, 'fail'); await expect(live.locator('#paired-finals pre[data-status="error"]')).toContainText('Fixture translation failure');
-  // Inference failure disables this optional branch for the session. A fresh
-  // session is needed to exercise cancellation of a genuinely pending job.
-  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled(); await startGraph(live);
-  await emitFinal(live, 'pending cancellation'); await expect(live.locator('#paired-finals pre[data-status="pending"]')).toHaveCount(1);
-  await live.locator('#cancel-session').click(); await expect(live.locator('#paired-finals pre[data-status="canceled"]')).toHaveText('Translation canceled');
-  await expect(live.locator('#plain-translation')).toBeHidden();
-  expect(await saved(live)).toEqual(graph);
-});

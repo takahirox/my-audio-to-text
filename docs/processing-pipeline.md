@@ -26,7 +26,8 @@ node and a transcript sink connected by named ports. The
 [Chrome extension](chrome-extension.md) uses the
 same runtime and speech node with its own tab source and UI. OPUS-MT and
 TranslateGemma provide separate local Japanese → English text nodes and test
-pages. Realtime ASR-to-translation integration, summarization, topic processing,
+pages. The extension implements ASR-to-translation graph integration with generic
+Live TEXT sinks and optional bounded formatting. Summarization, topic processing,
 persistent history and personalized ASR remain future capabilities.
 
 ## Node and port concepts
@@ -79,9 +80,8 @@ larger input before processing. Future transport/orchestration should carry
 data and lifecycle signals without deciding ASR, translation or summarization
 policy for individual processors.
 
-The transcription example is executable today. The connections to translation
-and other processors below are architectural illustrations; independent text
-translation pages do not implement realtime ASR-to-translation integration:
+The transcription example is executable today. The extension uses generic display sinks and graph wiring for ASR/translation.
+Further processors below remain architectural illustrations:
 
 ```text
 Tab Audio → Speech-to-Text → Transcript
@@ -140,3 +140,14 @@ A graphical node editor, plugin marketplace and general workflow framework are
 not current implementation priorities. A universal plugin SDK, workflow
 language or distributed runtime is not currently required. Revisit broader
 orchestration only when real implementations demonstrate a need.
+
+## Graph-driven Live text (#99)
+
+The extension separates producer, formatting and display responsibilities. Any
+TEXT producer can connect to `LiveTextDisplay.replace` or `.append`; a bounded
+`TextFormatter` is optional. Live renders sink labels/output by active graph Node
+order, not ASR/translation identity. A narrow paired compatibility formatter
+preserves indexed translation history while still emitting only TEXT to Live.
+See [version 6 migration and exact display/formatting semantics](extension-graph.md).
+Independent streams update latest formatter values; only directly grouped
+`emitOutputs`/`receiveInputs` updates preserve one producer's association.

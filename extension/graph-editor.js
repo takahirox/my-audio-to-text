@@ -14,7 +14,7 @@ const typeLabel = contract => contract.name.split(' {')[0];
 export class GraphEditor {
   constructor(root, graph, { onSave, onDraft = () => {}, onLoad = () => {} }) {
     this.root = root; this.onSave = onSave; this.onDraft = onDraft; this.onLoad = onLoad;
-    this.saved = assertGraph(graph); this.draft = structuredClone(graph); this.zoom = 1;
+    this.saved = assertGraph(graph); this.draft = structuredClone(this.saved); this.zoom = 1;
     const toolbar = el('div', undefined, 'graph-toolbar');
     this.types = el('select'); this.types.setAttribute('aria-label', 'Node type'); this.types.id = 'graph-node-type';
     for (const [type, definition] of Object.entries(NODE_TYPES)) {
@@ -46,7 +46,7 @@ export class GraphEditor {
     zoomLabel.append(this.zoomControl); toolbar.append(zoomLabel);
     this.summary = el('p'); this.summary.id = 'graph-state'; this.summary.setAttribute('role', 'status');
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
-    this.hint = el('p', 'Connect: click an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Click or tap a wire to select it, then use its nearby Disconnect button. Keyboard: select with Enter/Space, Tab to Disconnect, or Delete/Backspace on a wire. Escape or clicking blank canvas clears selection. Translation display: use provisionalText/text for plain TEXT. For paired rows, connect text, finalSource, finalStatus, finalIndex, finalError directly from one translator; add provisionalText, provisionalSource, provisionalStatus, provisionalError for previews. Separate branches cannot be joined. Select a Node heading for settings; drag or use arrow keys to move it.');
+    this.hint = el('p', 'Connect: click an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Click or tap a wire to select it, then use its nearby Disconnect button. Keyboard: select with Enter/Space, Tab to Disconnect, or Delete/Backspace on a wire. Escape or clicking blank canvas clears selection. Live text display: replace updates a preview/value; append commits an item and clears the preview. Add any number of labeled displays. Text formatter uses {1}–{4}, literal newlines and {{ / }} escapes; independent inputs use their latest values. Select a Node heading for settings; drag or use arrow keys to move it.');
     const workspace = el('div', undefined, 'graph-workspace');
     const palette = el('aside', undefined, 'graph-palette'); palette.setAttribute('aria-label', 'Node palette'); palette.append(el('h2', 'Nodes'));
     for (const [type, definition] of Object.entries(NODE_TYPES)) palette.append(button(`+ ${definition.label}`, null, () => this.addNode(type)));
@@ -97,10 +97,10 @@ export class GraphEditor {
   receiveSaved(graph) {
     const dirty = this.isDirty(); this.saved = assertGraph(graph);
     if (dirty) this.externalChange = true;
-    else { this.draft = structuredClone(graph); this.externalChange = false; }
+    else { this.draft = structuredClone(this.saved); this.externalChange = false; }
     this.draw();
   }
-  setSaved(graph) { this.saved = assertGraph(graph); this.draft = structuredClone(graph); this.selected = null; this.externalChange = false; this.error = ''; this.draw(); }
+  setSaved(graph) { this.saved = assertGraph(graph); this.draft = structuredClone(this.saved); this.selected = null; this.externalChange = false; this.error = ''; this.draw(); }
   setActive(graph, state, tabId) { this.active = graph; this.state = state; this.tabId = tabId; this.updateSummary(); }
   updateSummary() {
     const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(this.saved);
@@ -140,8 +140,14 @@ export class GraphEditor {
       select.value = node.settings[key]; select.onchange = () => { node.settings[key] = select.value; this.draw(); };
       label.append(select); this.inspector.append(label);
     }
+    for (const [key, spec] of Object.entries(definition.textSettings || {})) {
+      const label = el('label', key + ' '), control = el(spec.multiline ? 'textarea' : 'input');
+      control.setAttribute('aria-label', `${node.id} ${key}`); control.maxLength = spec.maxLength; control.value = node.settings[key];
+      control.onchange = () => { node.settings[key] = control.value; this.draw(); };
+      label.append(control); this.inspector.append(label);
+    }
     if (definition.help) this.inspector.append(el('p', definition.help));
-    if (!definition.settings) this.inspector.append(el('p', 'This Node has no configurable settings.'));
+    if (!definition.settings && !definition.textSettings) this.inspector.append(el('p', 'This Node has no configurable settings.'));
     for (const [side, ports] of [['Input', definition.inputs], ['Output', definition.outputs]]) {
       for (const [name, contract] of Object.entries(ports)) this.inspector.append(el('p', `${side} ${name}: ${contract.name}`, 'muted'));
     }

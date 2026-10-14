@@ -1,4 +1,4 @@
-# Executable extension processing graphs (#75, #81, #87, #95)
+# Executable extension processing graphs (#75, #81, #87, #95, #99)
 
 Open **Graph Editor** from Live or Models. It opens a separate full-size
 extension tab. The left **Nodes** palette lists every supported concrete Node;
@@ -20,7 +20,7 @@ focused, Tab moves to Disconnect; Enter/Space activates it. Delete/Backspace on
 a focused wire also removes it. Escape or clicking blank canvas clears selection
 and hides Disconnect. After removal, focus returns to the scrollable canvas.
 Remove deletes a Node and its edges. Select a heading to
-edit language/voice in the right **Settings** inspector. OPUS-MT directions are
+edit display labels, templates, language/voice in the right **Settings** inspector. OPUS-MT directions are
 separate executable Node types.
 
 **Validate draft** reports connection/settings errors. **Save graph** validates
@@ -46,90 +46,112 @@ Fresh installs use current-tab audio → SpeechToText → original transcript,
 with an OPUS-MT Japanese → English paired translation branch. Existing boolean
 translation enablement/direction preferences migrate once, including a saved
 transcription-only choice. The editor's **Draft translation** controls edit this
-same graph and require Save; there is no second preferences store. Removing
-OPUS-MT also removes its view and dependent translated-audio branch.
-Version 1/2/3/4 descriptions migrate explicitly to version 5 using the same
-storage key. Legacy field sinks become focused TEXT sinks. `FinalText` and
-`TranslatedFinalText` are removed by reconnecting every downstream route to the
-producer's final string output; fan-out is preserved. TranslationView routes
-expand to correlated primitive ports. Ambiguous/malformed routes fail visibly;
-Reset and Save in Graph Editor, then reconnect the desired text paths to recover.
-Outputs are never silently dropped. Page/media handles are never saved with a
-graph. Media selection is still available in Live.
-Version 4 `finalResult → final` expands to
-`text/finalSource/finalStatus/finalIndex/finalError`;
-`provisionalResult → provisional` expands to
-`provisionalText/provisionalSource/provisionalStatus/provisionalError`.
-TEXT-only routes remain unchanged. Default graphs use correlated primitive ports.
-A corrupt/unknown-version saved graph displays an error and prevents Start
-until a valid graph is saved. Reset and Save in the editor to recover. Storage
-failures remain visible.
+same graph and require Save; there is no second preferences store. The convenience
+direction control changes all configured OPUS-MT Nodes; choose concrete Node
+types in the graph for independently directed branches. Removing
+OPUS-MT also removes exclusively dependent formatting/display/audio branches.
+Shared sinks with other connected producers remain.
+Version 1–5 descriptions migrate explicitly to version 6 using the same storage
+key. Legacy field sinks become focused TEXT sinks; extraction adapters reconnect
+every downstream route, preserving fan-out. Version 4 paired result edges first
+expand to primitive bundles. Version 5 `TranscriptView` becomes `LiveTextDisplay`
+with `provisional → replace` and `final → append`. Its direction becomes display
+language and the next-session direction preference. Plain `TranslationView`
+becomes a generic display with `provisionalText → replace` and `text → append`.
+
+A paired `TranslationView` becomes a generic display with the same ID/position,
+plus a **Paired text formatter (compatibility)**. Every original source, status,
+index, error and text wire is redirected to this formatter. It formats indexed
+source/translation history into TEXT, feeding the display's `replace`. Pending
+rows update in place; repeated identical sources remain distinct; errors and
+cancellation remain visible. Translation direction comes from the connected
+processing Node, never the display label. Generated IDs avoid collisions.
+Descriptions do not persist text history; completed history within a session is
+retained through Stop/Cancel and saving a draft. A fresh Start resets outputs.
+Malformed/ambiguous routes, incomplete paired bundles or migration exceeding the
+24-Node/64-edge bound fail visibly without overwriting the saved description.
+Fix/import the desired routes or Reset and Save in Graph Editor to recover.
+Page/media handles are never saved with a graph.
 
 ## Supported graph and ports
 
-The version 5 description is JSON with `version`, `nodes` and `edges`. Each Node
-has `id`, concrete `type`, `settings`, and `position: { x, y }`. Each edge has
-`from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`. No implicit routes, payload
-wrappers, model registry or remote execution are added. [The schema and default](../extension/graph.js)
-are shared by storage, editor and execution; [the builder](../extension/graph-runtime.js)
-constructs a real `Pipeline` with exactly those named-port edges.
+Version 6 is JSON with `version`, `nodes`, `edges`, and an optional
+`translationDirection` next-session preference (used when no translator exists).
+Each Node has `id`, concrete `type`, `settings`, and `position: { x, y }`.
+Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
+[Schema/defaults](../extension/graph.js), editor, storage and the
+[builder](../extension/graph-runtime.js) use the same named-port description.
 
-| Concrete type | Inputs | Outputs / implementation |
+| Concrete type | Inputs | Outputs / behavior |
 | --- | --- | --- |
-| ChromeTabAudio | — | audio: captured mono 16 kHz PCM; ExtensionTabAudioNode |
-| SelectedPageMediaAudio | — | audio: selected element only, normalized mono 16 kHz PCM |
-| MicrophoneAudio | — | audio: explicitly permitted microphone, normalized mono 16 kHz PCM |
-| FocusedInputTextOutputNode | text: TEXT (one plain string input) | append to user-focused field in the toolbar-invoked document |
-| SpeechToText | audio: captured PCM | provisional/final: TEXT; SpeechToTextNode |
-| TranscriptView | provisional (optional)/final: TEXT | original/provisional/final UI; TranscriptOutputNode |
-| OpusMtJaEn | provisional (optional)/text: TEXT | provisional/text, provisionalSource/Status/Error, finalSource/Status/Error: TEXT; finalIndex: NUMBER; TranslationSchedulerNode with OpusMtTranslationNode |
-| OpusMtEnJa | provisional (optional)/text: TEXT | provisional/text, provisionalSource/Status/Error, finalSource/Status/Error: TEXT; finalIndex: NUMBER; TranslationSchedulerNode with EnglishToJapaneseOpusMtTranslationNode |
-| TranslationView | text/provisionalText and source/status/error TEXT inputs, finalIndex NUMBER (see modes below) | paired, ordered original/translated rows or plain interim/completed translated text |
-| Supertonic3 | text: TEXT | audio: SYNTHESIZED_AUDIO; Supertonic3TextToSpeechNode (ja/en, F1/M1) |
-| Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; KokoroTextToSpeechNode (Japanese jf_alpha / English af_heart) |
-| AudioOutput | audio: SYNTHESIZED_AUDIO | separate native audio player / WAV; AudioOutputNode |
+| ChromeTabAudio | — | audio: mono 16 kHz PCM |
+| SelectedPageMediaAudio | — | audio: selected-element mono 16 kHz PCM |
+| MicrophoneAudio | — | audio: explicitly permitted microphone PCM |
+| FocusedInputTextOutputNode | text: TEXT | append verbatim to focused editable field |
+| SpeechToText | audio: PCM | provisional/final: TEXT |
+| LiveTextDisplay | replace / append: TEXT, individually optional | one labeled Live region; at least one input must connect |
+| TextFormatter | input1–input4: TEXT, individually optional | text: TEXT; at least one input must connect |
+| OpusMtJaEn / OpusMtEnJa | provisional (optional) / text: TEXT | successful provisional/text plus grouped source/status/error TEXT, finalIndex NUMBER |
+| PairedTextFormatter | complete translator final bundle, optional complete preview bundle | text: TEXT containing indexed source/translation/status history; compatibility only |
+| Supertonic3 / Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; configured language/voice |
+| AudioOutput | audio: SYNTHESIZED_AUDIO | native audio player / WAV |
 
-Exactly one audio source and one ASR are required. At least one output destination
-is required; original and translation views are independent optional sinks.
-Multiple source Nodes are rejected before capture to avoid mixing ASR state. At most one paired
-translation branch is supported by the Live session coordinator. Edges are
-validated by shared contract identity, independent of producer identity. Interim
-inputs are optional; processor final/text inputs remain required. View streams are
-independent: a transcript view can consume a translated TEXT stream, while the
-paired view retains its own source/result/status from one grouped emission.
-Unknown types/settings/ports, duplicate edges, multiple connections to one
-input, missing required inputs and cycles fail before Save or Worker startup.
-Graphs are bounded to 24 Nodes/64 edges. ASR audio and generated TTS audio have
-different contract identities and cannot connect interchangeably.
+Exactly one audio source and one ASR are required in this capture graph. At least
+one output destination is required. No Live display is required for focused-field
+or audio-only output. Multiple translators and displays are supported. Type
+identity determines compatibility; generic sinks accept arbitrary TEXT producers.
+Unknown settings/ports/types, duplicate IDs/edges, multiple routes into one input,
+missing required connections and cycles fail before Save or Worker startup.
 
-### Translation display modes
+### Generic text displays
 
-The existing **Paired translation / Translated** Node supports two exclusive
-representations, selected by its connected inputs:
+[The reusable TEXT Nodes](../web/text-nodes.js) are shared, Chrome-independent
+Pipeline implementations. `LiveTextDisplay` owns a replace value plus an ordered list of appended items.
+Replace updates the current value verbatim, including clearing with `''`. Every
+append adds one new item, even when empty or equal to a previous item, and clears
+the pending replace value. Append wins if both inputs arrive in a directly grouped
+emission, independent of property order. A later independent replace starts a new
+preview: no source matching, deduplication or model knowledge is inferred.
+With append connected, Stop/Cancel discard the uncommitted preview and retain
+items. A replace-only display retains its current value for copying. Start uses
+fresh sink instances. The compatibility formatter clears its own preview and
+retains completed history on Stop; Cancel marks pending rows canceled locally.
 
-- **Plain TEXT:** connect either direction's `OpusMt.provisional → TranslationView.provisionalText`
-  for replacing interim text, and/or `OpusMt.text → TranslationView.text` for
-  appending completed text. At least one TEXT input must be connected. Completed
-  text appears in its own completed display, never as an interim stream. These
-  inputs consume only strings: they create no source text, IDs, statuses, indexes,
-  correlation or paired rows. The independent original transcript remains
-  available when its own view is connected. Finalization clears the scheduler's
-  primitive preview; Stop/Cancel clear the display preview.
-- **Paired primitives:** connect the same translator's `text`, `finalSource`,
-  `finalStatus`, `finalIndex`, and `finalError` to the identically named view
-  inputs. Optionally connect its `provisional` to `provisionalText` along with
-  `provisionalSource`, `provisionalStatus`, and `provisionalError`. Each update
-  is one `emitOutputs` group, delivered through `receiveInputs`. Pending/error
-  groups omit text; complete groups include it. Index identifies the final row,
-  including repeated identical source strings. The view preserves ordered pairs
-  and pending/complete/error/canceled rendering.
+Live renders one region per configured sink, ordered by Node array order, with
+its user-supplied label (1–120 characters) and optional language. Labels and all
+values use `textContent`, never HTML. Each region has Copy text. Runtime/model,
+capture, target and error status remain outside display content. The active graph
+owns labels/routes throughout a session; saving a draft applies only on the next
+Start. Stopped history keeps the last graph's labels until then. Output-only graphs
+render no text regions and add no implicit fallback display.
 
-To switch to plain display, disconnect the source/status/index/error inputs;
-keep the text routes. To switch to paired display, add the complete bundle.
-Partial bundles or wires from independent processor branches are rejected:
-matching TEXT contracts cannot establish correlation across separate emissions.
-No metadata inputs are required in plain mode. See the
-[shared runtime semantics](pipeline-runtime.md#correlated-primitive-outputs).
+### Optional bounded formatting
+
+`TextFormatter` accepts up to four plain TEXT inputs. Its template (at most 2048
+characters) supports only `{1}`–`{4}`, literal labels/newlines and doubled braces:
+`{{` renders `{`, `}}` renders `}`. Other unescaped braces are invalid. For example,
+`Source: {1}` followed by a literal newline and `Result: {2}` composes two values.
+Absent values are empty strings; received empty strings explicitly clear values.
+Input text is substituted once, never interpreted as template syntax or HTML.
+There are no expressions, scripts, property access or full template engine.
+
+Each input emission updates the latest values and emits one formatted TEXT string
+immediately. `receiveInputs()` applies a directly grouped `emitOutputs()` update
+once. Separate emissions/branches produce separate updates using cached latest
+values; they are **not automatically correlated**, even when strings or timings
+match. Use a direct grouped producer when association is required. Formatting is
+optional: ASR, translation, correction, LLM or another TEXT producer can feed a
+generic sink directly. Model availability only limits which production processors
+are currently exposed in Graph Editor.
+
+`PairedTextFormatter` is the narrow compatibility strategy for existing indexed
+translation behavior that a latest-value template cannot reproduce. It requires
+matching direct primitive outputs from one translator. It emits whole-history
+TEXT replacements, so pending/error/completed row updates never append duplicates.
+It is also used by the default bilingual graph; Live has no paired-row renderer.
+New typed display sinks can later add their own contract, Node state and a small
+renderer keyed to the sink type. They need not bind Live to producer/model types.
+This iteration introduces no image/chart/video types, renderer SDK or event bus.
 
 ## Concrete input and output targets
 
@@ -167,7 +189,7 @@ Closed shadow roots and restricted/cross-origin frames require Live Copy.
 
 A missing/stale document or lost permission/transport skips or detaches only
 that output. ASR, translation, TTS, Live and other branches continue. If all text
-destinations are unavailable, Live explicitly reports **No text destination is
+destinations are unavailable and no audio output exists, Live explicitly reports **No text destination is
 active**. Stop and invoke the page toolbar again to recover. Navigation/closure
 invalidates the pinned document; it never follows another tab or injects into a
 new document automatically. Tab/media capture retains its existing stop-on-tab-
