@@ -3,7 +3,8 @@
 This desktop Chromium Manifest V3 PoC starts local transcription for the tab
 on which you invoke its toolbar action. It uses the same ReazonSpeech ja-en,
 Silero VAD and hayamimi utterance policy as the [Node Playground speech test page](node-playground.md). There is no
-recognition server. The default whole-tab graph needs no page injection or
+recognition server. Graph Editor also offers local multilingual Whisper tiny for
+English or Text-driven Japanese recognition; see [Whisper setup and testing](whisper-node.md). The default whole-tab graph needs no page injection or
 media picker. Optional microphone, selected media and page-field outputs are
 configured in Graph Editor and explicitly targeted in Live.
 
@@ -123,7 +124,7 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 
 Save a graph with exactly one whole-tab, selected-media or microphone Input and
 one or more outputs. Live shows **Input and output targets** and separate target
-status/errors. Connect `SpeechToText.final → FocusedInputTextOutputNode.text`
+status/errors. Connect `SpeechToTextReazonSpeech.final → FocusedInputTextOutputNode.text`
 or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
 strings can fan out to TTS and other consumers. For final-only output, select
 ASR `final` or translation `text`, rather than `provisional`. The paired Live

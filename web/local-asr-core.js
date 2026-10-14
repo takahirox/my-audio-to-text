@@ -6,7 +6,8 @@ const backlogError = () => new Error('Backend is over 30 seconds behind. Capture
 // Normalized 16 kHz mono Float32Array input -> recognition events. No capture or DOM.
 // workerFactory is the deterministic-test seam; production owns two isolated workers.
 export class LocalAsrCore {
-  constructor(onEvent, { workerFactory = path => new Worker(new URL(path, import.meta.url).href) } = {}) {
+  constructor(onEvent, { workerFactory = path => new Worker(new URL(path, import.meta.url).href), whisper = false } = {}) {
+    this.whisper = whisper;
     this.onEvent = onEvent;
     this.workerFactory = workerFactory;
     this.state = 'released'; this.session = 0;
@@ -20,10 +21,10 @@ export class LocalAsrCore {
     if (this.state !== 'released') throw new Error('Release the ASR core before loading again.');
     this.state = 'loading'; this.asrReady = this.vadReady = false;
     try {
-      this.worker = this.createWorker('./sherpa-worker.js', false);
+      this.worker = this.createWorker(this.whisper ? './whisper-worker.js' : './sherpa-worker.js', false);
       this.vadWorker = this.createWorker('./silero-worker.js', true);
       this.vadWorker.postMessage({ type: 'load' });
-      this.worker.postMessage({ type: 'load' });
+      this.worker.postMessage({ type: 'load', ...(this.whisper ? { language: this.language ?? 'en' } : {}) });
     } catch (error) { this.fail(error); }
   }
   createWorker(path, vad) {
@@ -49,7 +50,7 @@ export class LocalAsrCore {
       message => this.worker.postMessage({ ...message, session }, [message.audio.buffer]),
       () => { this.latestPartials.clear(); this.state = 'ready'; this.diagnostics(); this.emit('stopped'); },
       (event, id) => this.emit('speech', { event, id }),
-      { maxDuration },
+      { maxDuration, finalOnly: this.whisper },
     );
     try { this.vadWorker.postMessage({ type: 'vad-start', session }); }
     catch (error) { this.fail(error); }

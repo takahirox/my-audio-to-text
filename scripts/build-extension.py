@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Package the extension with the shared pipeline and prepared local models."""
 from pathlib import Path
+import hashlib
+import json
 import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_FILES = (
+    "whisper-node.js", "whisper-worker.js", "whisper-config.js", "text-constant-node.js",
     "pipeline.js", "port-contracts.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
     "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "supertonic3-worker.js", "supertonic3-runtime.js",
     "kokoro-worker.js", "kokoro-english.js", "kokoro-japanese.js", "kokoro-hepburn.js",
@@ -23,6 +26,11 @@ def main():
             "transformers.js", "ort-wasm-simd-threaded.asyncify.mjs",
             "ort-wasm-simd-threaded.asyncify.wasm", "transformers-LICENSE")):
         raise SystemExit("Missing translation runtime. Run npm run prepare:translation-assets after prepare:assets.")
+    whisper = json.loads((ROOT / "scripts" / "whisper-assets.json").read_text())
+    for entry in whisper["files"]:
+        asset = vendor / "whisper" / "tiny" / entry["path"]
+        if not asset.is_file() or asset.stat().st_size != entry["bytes"] or hashlib.sha256(asset.read_bytes()).hexdigest() != entry["sha256"]:
+            raise SystemExit("Missing or invalid pinned Whisper model. Run npm run prepare:whisper-assets after prepare:assets.")
     tts = ROOT / "web" / "tts-assets"
     if any(not (tts / name).is_file() for name in (
             "ort.mjs", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm",

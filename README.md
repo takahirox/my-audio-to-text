@@ -18,7 +18,7 @@ provisional / final transcript
 
 Capture helpers normalize audio to mono 16 kHz PCM before passing it to the [Local ASR Core](docs/local-asr-core.md). ReazonSpeech ja-en, sherpa-onnx, Silero VAD and the hayamimi-inspired simulated-streaming policy are the core's current implementation. This replaceable ASR baseline is one processing capability within the product vision.
 
-The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR with optional OPUS-MT through a scheduling adapter. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; paired translation diagnostics use a separate optional result port. See the [contract audit](docs/port-contracts.md). Summary/history composition remains future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass, Japanese-only ReazonSpeech and Whisper experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
+The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR with optional OPUS-MT through a scheduling adapter. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; paired translation diagnostics use a separate optional result port. See the [contract audit](docs/port-contracts.md). Summary/history composition remains future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
 
 ## Node Playground
 
@@ -43,7 +43,7 @@ model downloads start on Generate. See [TTS pins, terms and testing](docs/tts-no
 and [real inference evidence](docs/evidence/tts-73.md). ASR → translation → TTS
 composition remains future work.
 
-The retained hayamimi-inspired path uses 0.8-second pre-roll, provisional recognition about every 0.5 seconds of active speech, a 0.35-second trailing-silence endpoint, and a 6-second default maximum audio segment including pre-roll. The extension's reusable Number source can configure a 1–12 second cap, including decimals, through optional SpeechToText.maxDuration before session startup; saved edits apply next session. Continuous speech splits without audio gaps. This is an audio cap, not final-result latency: mid-sentence cuts may reduce accuracy. See [configuration and validation limits](docs/extension-graph.md#maximum-speech-segment-duration). Stop finalizes active speech. Silero VAD and ASR run in separate workers; inference is serialized, superseded previews are coalesced, and pending audio is bounded at 30 seconds. ReazonSpeech uses the evidence-based one-thread default from [Issue #38](docs/evidence/reazon-38.md).
+The retained hayamimi-inspired path uses 0.8-second pre-roll, provisional recognition about every 0.5 seconds of active speech, a 0.35-second trailing-silence endpoint, and a 6-second default maximum audio segment including pre-roll. The extension's reusable Number source can configure a 1–12 second cap, including decimals, through optional SpeechToTextReazonSpeech.maxDuration before session startup; saved edits apply next session. Continuous speech splits without audio gaps. This is an audio cap, not final-result latency: mid-sentence cuts may reduce accuracy. See [configuration and validation limits](docs/extension-graph.md#maximum-speech-segment-duration). Stop finalizes active speech. Silero VAD and ASR run in separate workers; inference is serialized, superseded previews are coalesced, and pending audio is bounded at 30 seconds. ReazonSpeech uses the evidence-based one-thread default from [Issue #38](docs/evidence/reazon-38.md).
 
 Microphone or browser-tab audio feeds normalized PCM into the documented [local ASR core boundary](docs/local-asr-core.md); capture/resampling stays outside recognition orchestration. For tab audio, use a desktop Chromium browser and choose a tab with “Share tab audio” enabled in the browser sharing picker.
 
@@ -68,7 +68,14 @@ From a fresh checkout, build the unpacked extension with one command:
 npm run setup:extension
 ```
 
-Setup installs npm dependencies, downloads/verifies the ASR models and prepares
+The extension Graph Editor exposes **ReazonSpeech ja-en ASR**, **Whisper tiny
+(multilingual) ASR**, and a reusable **Text** constant. Whisper defaults to
+English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
+Japanese. Whisper emits completed segments only. The default stays
+ChromeTabAudio → ReazonSpeech → one LiveTextDisplay. See [Whisper pins, setup,
+usage and real-model validation](docs/whisper-node.md).
+
+Setup installs npm dependencies, downloads/verifies the ReazonSpeech and Whisper ASR models and prepares
 translation/TTS runtimes, then produces `dist/chrome-extension/`. Optional
 translation/TTS **weights** download only on demand through **Download / retry**
 in Models. Open `chrome://extensions`, enable **Developer mode**, choose

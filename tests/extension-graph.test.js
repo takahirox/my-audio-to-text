@@ -51,7 +51,7 @@ const audioGraph = (type, translated = false) => {
 
 test('fresh graph is minimal; only explicit legacy translation choices migrate; saved graphs take precedence', () => {
   const fresh = storage(), minimal = defaultGraph();
-  assert.deepEqual(minimal.nodes.map(n => n.type), ['ChromeTabAudio', 'SpeechToText', 'LiveTextDisplay']);
+  assert.deepEqual(minimal.nodes.map(n => n.type), ['ChromeTabAudio', 'SpeechToTextReazonSpeech', 'LiveTextDisplay']);
   assert.deepEqual(minimal.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'final', 'transcript', 'append')]);
   assert.deepEqual(minimal.nodes[2].settings, { label: 'Text', language: 'und' });
   assert.deepEqual(readGraph(fresh), minimal);
@@ -112,7 +112,7 @@ test('versions 1–5 preserve paired bundles, direction, fan-out and explicitly 
   for (const version of [1, 2, 3, 4, 5]) for (const direction of ['ja-en', 'en-ja']) {
     const saved = legacyGraph({ direction }, version), store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(saved));
     const migrated = readGraph(store);
-    assert.equal(migrated.version, 6); assert.equal(migrated.translationDirection, direction);
+    assert.equal(migrated.version, 7); assert.equal(migrated.translationDirection, direction);
     assert.deepEqual(migrated.nodes.map(n => n.type), defaultGraph({ enabled: true, direction }).nodes.map(n => n.type));
     assert.deepEqual(migrated.edges.map(JSON.stringify).sort(), defaultGraph({ enabled: true, direction }).edges.map(JSON.stringify).sort());
     assert.equal(migrated.nodes.at(-1).settings.direction, direction);

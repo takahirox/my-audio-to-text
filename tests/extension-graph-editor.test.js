@@ -31,7 +31,7 @@ test('type mismatch, self-connection, unknown ports, split correlated display an
   connect(e, 'translation', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'speech', 'final', 'translated-format', 'text'); assert.deepEqual(e.draft.edges, before);
   assert.match(e.error, /matching direct outputs/);
-  e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToText.outputs.final };
+  e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToTextReazonSpeech.outputs.final };
   e.connect('translation', 'text', NODE_TYPES.OpusMtJaEn.inputs.text); assert.deepEqual(e.draft.edges, before);
   assert.match(e.error, /Unknown port/);
   e.draft.nodes.push(graphNode('OpusMtEnJa', 'second'));

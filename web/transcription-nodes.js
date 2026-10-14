@@ -142,7 +142,7 @@ export class SpeechToTextNode {
     if (!this.stopped || this.disposed || this.context?.signal.aborted || this.core?.state !== 'ready') {
       throw new Error('A new speech session requires a successfully drained node.');
     }
-    const next = new SpeechToTextNode({ onEvent, maxDuration });
+    const next = new this.constructor({ onEvent, maxDuration });
     next.core = this.core; next.loading = deferred(); next.loading.resolve();
     next.core.onEvent = event => next.receiveEvent(event);
     this.core = null; this.context = null;

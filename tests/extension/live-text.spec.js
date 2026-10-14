@@ -57,7 +57,7 @@ for (const id of ['constructor', 'toString', 'hasOwnProperty']) {
     await live.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), legacy);
     await live.close(); live = await openGraph({ ...f, url: `${f.url}?error=&tab=42` });
     const migrated = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-    expect(migrated.version).toBe(6);
+    expect(migrated.version).toBe(7);
     expect(migrated.nodes.find(node => node.id === id).type).toBe('LiveTextDisplay');
     expect(migrated.edges.filter(route => route.to[0] === id)).toEqual([
       { from: ['speech', 'provisional'], to: [id, 'replace'] },

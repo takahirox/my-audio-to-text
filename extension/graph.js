@@ -6,9 +6,11 @@ import { PAIRED_INPUTS } from './paired-text-formatter.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 import { NUMBER } from '../web/port-contracts.js';
 import { finiteNumber } from '../web/number-node.js';
+import { whisperLanguage } from '../web/whisper-config.js';
 import { maxDurationSamples } from '../web/local-asr-config.js';
 
-export const GRAPH_VERSION = 6;
+export const GRAPH_VERSION = 7;
+export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper'];
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
@@ -18,9 +20,11 @@ export const NODE_TYPES = Object.freeze({
   ChromeTabAudio: { label: 'Chrome tab audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM } },
   SelectedPageMediaAudio: { label: 'Selected page media audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Choose a media element in Live. Top frame only; unsupported media requires whole-tab capture.' },
   MicrophoneAudio: { label: 'Microphone audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Press Start in Live to request microphone permission.' },
-  FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect SpeechToText.final or a processor’s completed text output; no separate authorization or field picker.' },
-  Number: { label: 'Number', inputs: {}, outputs: { value: NUMBER }, numberSettings: { value: { default: 6 } }, help: 'Reusable finite numeric constant. Select this Node to edit value. Units and limits belong to its consumer. SpeechToText.maxDuration accepts 1–12 seconds, including decimals; saves apply next session.' },
-  SpeechToText: { label: 'Speech to text', inputs: { audio: MONO_16KHZ_PCM, maxDuration: NUMBER }, optionalInputs: ['maxDuration'], outputs: paired(TEXT), help: 'Optional maxDuration: connect Number.value for a 1–12 second audio segment cap (default 6 seconds). Includes pre-roll; decimals round down to whole 16 kHz samples. Frozen before capture; saved edits apply next session. VAD can end sooner. Mid-sentence splits may reduce recognition quality. Inference and final display can take longer than the cap.' },
+  FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect SpeechToTextReazonSpeech.final or a processor’s completed text output; no separate authorization or field picker.' },
+  Number: { label: 'Number', inputs: {}, outputs: { value: NUMBER }, numberSettings: { value: { default: 6 } }, help: 'Reusable finite numeric constant. Select this Node to edit value. Units and limits belong to its consumer. SpeechToTextReazonSpeech.maxDuration accepts 1–12 seconds, including decimals; saves apply next session.' },
+  SpeechToTextReazonSpeech: { label: 'ReazonSpeech ja-en ASR', inputs: { audio: MONO_16KHZ_PCM, maxDuration: NUMBER }, optionalInputs: ['maxDuration'], outputs: paired(TEXT), help: 'Optional maxDuration: connect Number.value for a 1–12 second audio segment cap (default 6 seconds). Includes pre-roll; decimals round down to whole 16 kHz samples. Frozen before capture; saved edits apply next session. VAD can end sooner. Mid-sentence splits may reduce recognition quality. Inference and final display can take longer than the cap.' },
+  Text: { label: 'Text', inputs: {}, outputs: { value: TEXT }, textSettings: { value: { default: '', multiline: true } }, help: 'Reusable literal text constant, including empty text. Delivered once at session start to ordinary TEXT consumers. Text.value → Whisper.language is bound before model loading; saves apply next session.' },
+  SpeechToTextWhisper: { label: 'Whisper tiny (multilingual) ASR', inputs: { audio: MONO_16KHZ_PCM, language: TEXT }, optionalInputs: ['language'], outputs: paired(TEXT), help: 'Packaged local multilingual Whisper tiny (q8, CPU WASM). Defaults to English (en); connect Text.value for en or ja. Completed segments only: provisional never emits. Silero ends speech at silence or a 6-second cap; Stop drains every segment. No downloads while recording.' },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   LiveTextDisplay: { label: 'Live text display', inputs: { replace: TEXT, append: TEXT }, optionalInputs: ['replace', 'append'], outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Replace changes only the preview. Every append adds one committed item and clears the preview; repeated and empty items are preserved. Stop/Cancel keep committed items and discard preview when append is connected. Start again begins empty. Multiple displays are independent and ordered by graph Node order.' },
@@ -46,7 +50,7 @@ export function graphNode(type, id, x = 20, y = 20) {
 // Translation is an explicit configuration, never part of a new/reset default.
 export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
   direction = direction === 'en-ja' ? 'en-ja' : 'ja-en';
-  const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToText', 'speech', 270, 30), graphNode('LiveTextDisplay', 'transcript', 800, 30)];
+  const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToTextReazonSpeech', 'speech', 270, 30), graphNode('LiveTextDisplay', 'transcript', 800, 30)];
   const edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'final', 'transcript', 'append')];
   if (enabled) {
     nodes[2].settings = { label: 'Original', language: direction === 'en-ja' ? 'en' : 'ja' };
@@ -70,7 +74,7 @@ function unusedId(ids, base) {
 }
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
 export function validateGraph(graph, legacy = false) {
-  const types = legacy ? { ...NODE_TYPES, ...LEGACY_VIEWS } : NODE_TYPES;
+  const types = legacy ? { ...NODE_TYPES, SpeechToText: NODE_TYPES.SpeechToTextReazonSpeech, ...LEGACY_VIEWS } : NODE_TYPES;
   const definitionOf = type => Object.hasOwn(types, type) ? types[type] : undefined;
   const errors = [];
   if (!record(graph) || graph.version !== (legacy ? 5 : GRAPH_VERSION) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return [`Expected version ${legacy ? 5 : GRAPH_VERSION} graph with nodes and edges arrays.`];
@@ -88,7 +92,7 @@ export function validateGraph(graph, legacy = false) {
     for (const key of Object.keys(node.settings)) if (!Object.hasOwn(definition.settings || {}, key) && !Object.hasOwn(definition.textSettings || {}, key) && !Object.hasOwn(definition.numberSettings || {}, key)) errors.push(`Unknown setting: ${node.id}.${key}`);
     for (const key of Object.keys(definition.numberSettings || {})) try { finiteNumber(node.settings[key]); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
     for (const [key, values] of Object.entries(definition.settings || {})) if (!values.includes(node.settings[key])) errors.push(`Invalid setting: ${node.id}.${key}`);
-    for (const [key, spec] of Object.entries(definition.textSettings || {})) if (typeof node.settings[key] !== 'string' || node.settings[key].length > spec.maxLength || (key === 'label' && !node.settings[key].trim())) errors.push(`Invalid setting: ${node.id}.${key}`);
+    for (const [key, spec] of Object.entries(definition.textSettings || {})) if (typeof node.settings[key] !== 'string' || node.settings[key].length > (spec.maxLength ?? Infinity) || (key === 'label' && !node.settings[key].trim())) errors.push(`Invalid setting: ${node.id}.${key}`);
     if (node.type === 'TextFormatter') try { parseTemplate(node.settings.template); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
   }
   for (const connection of graph.edges) {
@@ -101,9 +105,13 @@ export function validateGraph(graph, legacy = false) {
     if (!a || !b) { errors.push(`Unknown edge Node: ${source} → ${target}`); continue; }
     if (!Object.hasOwn(a.outputs, output) || !Object.hasOwn(b.inputs, input)) { errors.push(`Unknown port: ${source}.${output} → ${target}.${input}`); continue; }
     if (a.outputs[output] !== b.inputs[input]) errors.push(`Incompatible port types: ${source}.${output} → ${target}.${input}`);
-    if (nodes.get(target)?.type === 'SpeechToText' && input === 'maxDuration') {
+    if (['SpeechToTextReazonSpeech', ...(legacy ? ['SpeechToText'] : [])].includes(nodes.get(target)?.type) && input === 'maxDuration') {
       if (nodes.get(source)?.type !== 'Number' || output !== 'value') errors.push(`${target}.maxDuration requires Number.value available before session startup.`);
       else try { maxDurationSamples(nodes.get(source).settings?.value); } catch (error) { errors.push(`${target}: ${error.message}`); }
+    }
+    if (nodes.get(target)?.type === 'SpeechToTextWhisper' && input === 'language') {
+      if (nodes.get(source)?.type !== 'Text' || output !== 'value') errors.push(`${target}.language requires Text.value available before session startup.`);
+      else try { whisperLanguage(nodes.get(source).settings?.value); } catch (error) { errors.push(`${target}: ${error.message}`); }
     }
     const destination = JSON.stringify([target, input]);
     if (incoming.has(destination)) errors.push(`Only one connection allowed to ${target}.${input}`);
@@ -119,9 +127,8 @@ export function validateGraph(graph, legacy = false) {
     active.delete(id); visited.add(id);
   }
   for (const id of nodes.keys()) visit(id);
-  const ofType = type => graph.nodes.filter(n => n?.type === type);
   if (graph.nodes.filter(n => INPUT_TYPES.includes(n?.type)).length !== 1) errors.push('Exactly one audio input is required; simultaneous sources are ambiguous.');
-  if (ofType('SpeechToText').length !== 1) errors.push('Exactly one SpeechToText is required.');
+  if (graph.nodes.filter(n => [...ASR_TYPES, ...(legacy ? ['SpeechToText'] : [])].includes(n?.type)).length !== 1) errors.push('Exactly one ASR Node (ReazonSpeech or Whisper) is required.');
   for (const node of nodes.values()) {
     const definition = definitionOf(node.type);
     if (!definition) continue;
@@ -153,9 +160,14 @@ export function validateGraph(graph, legacy = false) {
 }
 // Rewrite every legacy route explicitly; malformed or ambiguous routes require visible recovery.
 export function migrateGraph(graph) {
-  if (!record(graph) || ![1, 2, 3, 4, 5].includes(graph.version)) return graph;
+  if (!record(graph) || ![1, 2, 3, 4, 5, 6].includes(graph.version)) return graph;
   if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return graph;
   const next = structuredClone(graph);
+  const renameAsr = () => {
+    for (const node of next.nodes) if (node?.type === 'SpeechToText') node.type = 'SpeechToTextReazonSpeech';
+    next.version = GRAPH_VERSION; return next;
+  };
+  if (graph.version === 6) return renameAsr();
   const recovery = (kind, id) => { throw Error(`Cannot migrate ${kind} ${id}: ambiguous or invalid route. Reset and Save in Graph Editor, then reconnect the desired TEXT routes.`); };
   if (graph.version < 3) for (const node of next.nodes) {
     if (!['FocusedInputTextOutputNode', 'SelectedFormFieldTextOutputNode'].includes(node?.type)) continue;
@@ -224,8 +236,7 @@ export function migrateGraph(graph) {
       } else for (const route of routes) route.to[1] = route.to[1] === 'text' ? 'append' : 'replace';
     }
   }
-  next.version = GRAPH_VERSION;
-  return next;
+  return renameAsr();
 }
 export function assertGraph(graph) {
   const migrated = migrateGraph(graph), errors = validateGraph(migrated);
@@ -249,7 +260,7 @@ export function withTranslation(graph, { enabled, direction }) {
     // Choose unused IDs when the user's graph uses the default names elsewhere.
     const ids = new Set(next.nodes.map(n => n.id));
     const unused = base => unusedId(ids, base);
-    const id = unused('translation'), sink = unused('translated'), formatter = unused('translated-format'), speech = next.nodes.find(n => n.type === 'SpeechToText').id;
+    const id = unused('translation'), sink = unused('translated'), formatter = unused('translated-format'), speech = next.nodes.find(n => ASR_TYPES.includes(n.type)).id;
     next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink }, { ...branch.nodes[5], id: formatter });
     for (const port of ['provisional', 'final']) next.edges.push(edge(speech, port, id, port === 'final' ? 'text' : port));
     next.edges.push(...translationViewEdges(id, formatter), edge(formatter, 'text', sink, 'replace'));
@@ -271,7 +282,9 @@ export function withTranslation(graph, { enabled, direction }) {
 export function readGraph(storage) {
   const saved = storage.getItem(GRAPH_KEY);
   if (saved !== null) {
-    const parsed = JSON.parse(saved), graph = assertGraph(parsed);
+    let parsed, graph;
+    try { parsed = JSON.parse(saved); graph = assertGraph(parsed); }
+    catch (error) { throw new Error(`Invalid saved graph: ${error.message} Reset and Save in Graph Editor to recover; the saved graph has been kept.`); }
     if (parsed.version !== GRAPH_VERSION) saveGraph(storage, graph);
     return graph;
   }
