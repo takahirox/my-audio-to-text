@@ -16,6 +16,29 @@ async function saveConcurrent(page) {
   });
 }
 
+test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauthorized', async ({ graphExtension: f }) => {
+  const page = await openGraph(f);
+  const graph = await page.evaluate(async () => {
+    const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
+    const graph = defaultGraph();
+    graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'parked-output'),
+      graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'unfinished-output'));
+    graph.edges.push(edge('unfinished', 'final', 'unfinished-output', 'text'));
+    saveGraph(localStorage, graph);
+    window.pageAllocations = [];
+    chrome.scripting.executeScript = async () => { window.pageAllocations.push('script'); throw Error('Inactive output requested authorization'); };
+    chrome.tabs.connect = () => { window.pageAllocations.push('connection'); throw Error('Inactive output opened a connection'); };
+    return graph;
+  });
+  await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+  await expect(page.locator('#status')).toHaveText('Transcription active');
+  expect(await page.evaluate(() => window.pageAllocations)).toEqual([]);
+  await expect(page.locator('#target-status')).toBeEmpty();
+  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+  expect(await page.evaluate(() => window.graphWorkers.every(worker => worker.released))).toBe(true);
+});
+
 test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop, Cancel and repeat', async ({ graphExtension: f }) => {
   for (const [file, label] of [['sherpa-worker.js', 'remote'], ['whisper-worker.js', 'local']]) {
     await writeFile(path.join(f.root, 'web', file), `self.onmessage=({data})=>{

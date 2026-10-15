@@ -321,7 +321,7 @@ function concurrentGraph({ fanout = false } = {}) {
   return graph;
 }
 
-for (const mode of ['stop', 'native-end']) {
+for (const mode of ['stop', 'native-end', 'tab-navigation']) {
   test(`shared tab capture delivers identical final PCM to both ASRs on ${mode}`, async () => {
     const f = fixture({ graph: concurrentGraph(), asyncFlush: true });
     for (let repeat = 0; repeat < 2; repeat++) {
@@ -329,7 +329,11 @@ for (const mode of ['stop', 'native-end']) {
       const source = f.sources.at(-1), workers = f.workers.slice(-4);
       assert.equal(f.sources.length, repeat + 1, 'both sources share one native capture');
       // No earlier audio: the only transcript must come from the Stop tail.
-      if (mode === 'native-end') {
+      if (mode === 'tab-navigation') {
+        const active = f.session.session;
+        f.session.tabEnded(42);
+        await active.stopping;
+      } else if (mode === 'native-end') {
         const active = f.session.session;
         source.onEnded();
         await active.stopping;

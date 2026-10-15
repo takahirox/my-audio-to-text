@@ -98,8 +98,12 @@ export function buildGraph(graph, options) {
   const description = executableGraph(graph);
   if (!description.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
   let pipeline;
-  const tabSourceFactory = sharedTabCapture(options.sourceFactory || ((...args) => new ExtensionTab(...args)), () => pipeline.state === 'stopping');
   const nodes = {}, resources = { translations: [], audioSources: new Map(), speechNodes: new Map() };
+  const tabSources = description.nodes.filter(spec => spec.type === 'ChromeTabAudio');
+  // Toolbar-tab navigation ends every tab subscriber even while a microphone
+  // keeps the Pipeline running. Flush before detaching any of those subscribers.
+  const tabSourceFactory = sharedTabCapture(options.sourceFactory || ((...args) => new ExtensionTab(...args)),
+    () => pipeline.state === 'stopping' || tabSources.every(spec => nodes[spec.id].endRequested));
   for (const spec of description.nodes) {
     let node;
     switch (spec.type) {

@@ -96,7 +96,10 @@ echo suppression. Physical-device acoustics and meeting-site behavior were not
 manually tested. Existing concrete ASR queue/duration/model bounds remain;
 resource exhaustion still fails visibly instead of silently dropping audio.
 
-## Check results
+## Earlier implementation check results
+
+These results predate the final shared-capture fixes. Current packaged validation
+and measurements are recorded in the review-fix section below.
 
 - `npm test`: **329 passed**.
 - Selected Chromium browser regression tests: **50 passed**; the nine playground
@@ -126,3 +129,91 @@ engines, standalone Whisper language smoke, standalone Zipformer smoke, real
 ASR-to-field smoke and two real translation directions. Concurrent real Whisper
 and Zipformer were exercised separately as recorded above. No physical-microphone
 or acoustic speaker-isolation check was performed; none is claimed.
+
+## Review-fix validation on the current code
+
+Rebuilt and tested on 2026-10-15 from checkpoint
+`27bcc05612dea030217886f98362d83d5a6d901f` plus these review fixes. Dependencies
+and all assets were prepared using the sequential commands above. Node 24.12.0,
+Playwright 1.63.0 and Chromium 153 were used on macOS. `cmp` confirmed that the
+packaged runtime and target controls match the tested source files byte for byte:
+
+| Source | SHA-256 |
+| --- | --- |
+| `extension/graph-runtime.js` | `0205eadf768193d579c768aa8611d98f06915e63a84578b0ea5dfd12ddca8872` |
+| `extension/target-controls.js` | `81b0883ccdcef1b1a50cff8991b521a44a6997c67046316c39f4a8be6d30c2f7` |
+
+Focused-output preparation now selects executable Nodes. Unit and packaged MV3
+regressions verify that disconnected outputs and outputs behind an incomplete
+ASR branch cause no script injection or page connections, retain their saved
+graph, and leave the working path usable. Active output authorization and native
+toolbar insertion continue to pass.
+
+The native concurrent test now compares the sample counts and sums of every PCM
+chunk delivered to both tab subscribers, including graceful shutdown. This
+exposed a remaining tail-loss case on toolbar-tab navigation: each subscriber
+was ended separately while the microphone kept the Pipeline running. Shared
+capture now recognizes when all tab subscribers have been requested to end and
+flushes before detaching any of them. A new tail-only unit regression failed
+before this fix and passes afterward. Ending just one subscriber still leaves
+its peer live.
+
+Current results:
+
+- `npm test`: **333 passed**.
+- `npm run build:extension` and `git diff --check`: **passed**.
+- Selected Chromium browser regressions: **49 passed**, with one TTS source
+  download failure because that run preceded TTS asset preparation. That exact
+  test passed after preparation (**1 passed**).
+- The same selected WebKit browser regressions: **50 passed**.
+- The complete MV3 sweep produced **137 passes, eight opt-in skips and one
+  failure** in the newly strengthened native concurrent test. Its first failure
+  compared microphone PCM because the microphone class inherits from the tab
+  class; correcting the instrumentation then exposed the navigation tail loss
+  described above. All other full-sweep cases passed.
+- After fixing navigation and rebuilding, `graph-concurrent.spec.js`,
+  `graph-number.spec.js`, `graph-whisper.spec.js` and `graph-zipformer.spec.js`:
+  **19 passed**. These include inactive-output authorization, independent tab/mic
+  models and displays, branch end, Stop/Cancel/repeat, parked Nodes, unrunnable
+  drafts, TEXT-only Start, and model failure/cancellation regressions.
+- On that rebuilt package, the native concurrent test in `targets.spec.js`:
+  **1 passed**, using native toolbar invocation, one shared native tab capture
+  for two tab Sources, the fake microphone device and fixture inference. Both
+  tab subscribers receive identical PCM through navigation and Stop; navigation
+  drains both tab paths while the microphone stays live. Stop/Cancel/repeat
+  release all tracks and Workers.
+- On that same package, `CONCURRENT_SMOKE=1` real Zipformer + Whisper:
+  **1 passed** (two inference sessions plus Cancel). Both displays contain the
+  expected text, Stop drains both, and every model Worker is released. No HTTP
+  requests or page errors occurred.
+
+Reproduce the final targeted package checks after building:
+
+```sh
+npx playwright test --config playwright.extension.config.js tests/extension/graph-concurrent.spec.js tests/extension/graph-number.spec.js tests/extension/graph-whisper.spec.js tests/extension/graph-zipformer.spec.js
+npx playwright test --config playwright.extension.config.js tests/extension/targets.spec.js -g 'native tab capture and permitted'
+CONCURRENT_SMOKE=1 npx playwright test --config playwright.extension.config.js tests/extension/graph-concurrent-smoke.spec.js
+```
+
+[Current raw measurements](graph-115-review-concurrent.json) include the source
+hashes above. The model/capture fixtures and CPU/RSS measurement boundaries are
+the same as in the earlier inference test. Other test processes had completed
+before this measurement run.
+
+| Measurement | Session 1 | Session 2 |
+| --- | ---: | ---: |
+| Load both models | 0.839 s | 0.811 s |
+| First Zipformer text from feed start | 2.388 s | 2.367 s |
+| First Whisper text from feed start | 7.302 s | 7.250 s |
+| Stop drain | 1.879 s | 1.841 s |
+| Feed + drain elapsed | 9.013 s | 8.996 s |
+| Chrome process CPU time during feed/drain | 4.530 CPU s | 6.328 CPU s |
+| Largest sampled sum of Chrome process RSS | 2,326,912 KiB | 2,923,408 KiB |
+
+The full sweep's eight opt-in skips include this concurrent smoke, subsequently
+run explicitly. The other seven opt-ins listed above remain unperformed in this
+review-fix run. Physical microphones, meeting sites and acoustic isolation were
+not tested. RSS is a sampled process sum rather than model-only peak memory;
+the higher second-session RSS does not establish a long-run plateau. Whisper
+again emitted an extra “Thank you.” on the final tail. No post-merge-only
+verification is required.

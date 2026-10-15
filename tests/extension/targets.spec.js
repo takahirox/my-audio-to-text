@@ -380,6 +380,16 @@ test('native tab capture and permitted microphone run together; tab navigation d
     navigator.mediaDevices.getUserMedia=async options=>{
       const stream=await getMedia(options);window.concurrentStreams.push({kind:options.audio?.mandatory?'tab':'mic',stream});return stream;
     };
+    const { ExtensionTabAudioNode } = await import('./tab-audio-node.js');
+    const start = ExtensionTabAudioNode.prototype.start; window.sharedTabDeliveries = [];
+    ExtensionTabAudioNode.prototype.start = function(context) {
+      if (this.constructor !== ExtensionTabAudioNode) return start.call(this, context);
+      const chunks = []; window.sharedTabDeliveries.push(chunks);
+      return start.call(this, { ...context, emit(port, pcm) {
+        chunks.push({ samples: pcm.length, sum: pcm.reduce((sum, value) => sum + value, 0) });
+        context.emit(port, pcm);
+      } });
+    };
   });
   await t.cdp.send('Browser.setPermission',{permission:{name:'microphone'},setting:'granted',origin:t.origin});
   for(const mode of ['branch-end','cancel','stop']) {
@@ -402,6 +412,11 @@ test('native tab capture and permitted microphone run together; tab navigation d
     await t.page.locator(mode==='cancel'?'#cancel-session':'#stop').click();await expect(t.page.locator('#start')).toBeEnabled();
     await expect(t.page.locator('#errors')).toBeEmpty();
     if(mode!=='cancel') await expect(t.page.locator('[data-display="local"] .display-items')).toContainText('confirmed fixture');
+    if(mode!=='cancel') {
+      const [original, copy] = await t.page.evaluate(() => window.sharedTabDeliveries.slice(-2));
+      expect(original.length).toBeGreaterThan(0);
+      expect(copy).toEqual(original); // Includes worklet/resampler PCM delivered during graceful drain.
+    }
     expect(await t.page.evaluate(()=>window.concurrentStreams.every(record=>record.stream.getTracks().every(track=>track.readyState==='ended')))).toBe(true);
     expect(await t.page.evaluate(()=>window.concurrentWorkers.every(worker=>worker.released))).toBe(true);
   }
