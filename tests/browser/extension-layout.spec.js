@@ -34,6 +34,7 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
   await page.getByLabel('Search nodes', { exact: true }).fill('Number');
   await page.locator('#graph-node-type').press('Enter');
   await expect(page.getByLabel('number value', { exact: true })).toBeFocused();
+  await expect(page.getByLabel('number value', { exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.locator('.graph-inspector')).toBeVisible();
   await expect(page.locator('.graph-inspector details')).not.toHaveAttribute('open', '');
   await page.getByLabel('number value', { exact: true }).fill('2.5');
@@ -67,6 +68,20 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
     expect(await page.locator('#graph-save').evaluate(button => getComputedStyle(button).outlineStyle)).toBe('solid');
   }
 });
+
+for (const width of [390, 700]) {
+  test(`keyboard addition reveals the focused setting at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.getByRole('button', { name: 'Add Node', exact: true }).press('Enter');
+    await page.getByLabel('Search nodes', { exact: true }).fill('Number');
+    await page.locator('#graph-node-type').press('Enter');
+    const value = page.getByLabel('number value', { exact: true });
+    // Check before fill/click can automatically scroll an offscreen field.
+    await expect(value).toBeFocused();
+    await expect(value).toBeInViewport({ ratio: 1 });
+    await value.fill('2.5');
+  });
+}
 
 for (const action of ['Close settings', 'Remove transcript']) {
   test(`inspector text edits commit before a single ${action} click`, async ({ page }) => {

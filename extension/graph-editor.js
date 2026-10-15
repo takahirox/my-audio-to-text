@@ -171,7 +171,10 @@ export class GraphEditor {
     this.draft.nodes.push(graphNode(type, id, 30 + (this.draft.nodes.length % 4) * 285, 520 + Math.floor(this.draft.nodes.length / 4) * 60));
     this.selectedNode = id; this.draw();
     const card = this.canvas.querySelector(`[data-node="${id}"]`); card?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    (this.inspector.querySelector('input, select, textarea') || this.inspector.querySelector('button'))?.focus({ preventScroll: true });
+    const setting = this.inspector.querySelector('input, select, textarea') || this.inspector.querySelector('button');
+    setting?.focus({ preventScroll: true });
+    // The inspector stacks below the canvas in narrow windows.
+    setting?.scrollIntoView({ block: 'center', inline: 'nearest' });
   }
   isDirty() { return JSON.stringify(this.draft) !== JSON.stringify(this.saved); }
   receiveSaved(graph) {

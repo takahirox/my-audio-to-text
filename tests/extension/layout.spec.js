@@ -14,6 +14,8 @@ test('MV3 palette search/categories, contextual settings, keyboard help and draf
   if (process.env.UPDATE_UI_SCREENSHOTS) await editor.screenshot({ path: 'docs/evidence/ui-109-palette.png', fullPage: true });
   await editor.locator('#graph-node-type').press('Enter');
   await expect(editor.getByLabel('number value', { exact: true })).toBeFocused();
+  // Check before fill can automatically scroll an offscreen field.
+  await expect(editor.getByLabel('number value', { exact: true })).toBeInViewport({ ratio: 1 });
   await editor.getByLabel('number value', { exact: true }).fill('3.5');
   await editor.keyboard.press('Escape'); await expect(editor.locator('#graph-palette-toggle')).toBeFocused();
   await editor.locator('#graph-fit').click();
