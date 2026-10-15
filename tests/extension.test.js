@@ -8,7 +8,7 @@ import { MONO_16KHZ_PCM, TEXT } from '../web/transcription-nodes.js';
 import { TabSession } from '../extension/session.js';
 import { defaultGraph, graphNode, edge } from '../extension/graph.js';
 
-function fixture({ holdLoad = false, holdSource = false, sourceError, stopError, graph, pageConnectionFactory } = {}) {
+function fixture({ holdLoad = false, holdSource = false, asyncFlush = false, sourceError, stopError, graph, pageConnectionFactory } = {}) {
   const workers = [], sources = [], views = [];
   const session = new TabSession(view => views.push(view), {
     graph, pageConnectionFactory,
@@ -42,6 +42,7 @@ function fixture({ holdLoad = false, holdSource = false, sourceError, stopError,
         async stop(flush = true) {
           this.stops.push(flush);
           if (stopError && flush) throw new Error(stopError);
+          if (flush && asyncFlush) await drain();
           if (flush) onAudio(new Float32Array(37).fill(0.05));
         },
       };
@@ -318,6 +319,31 @@ function concurrentGraph({ fanout = false } = {}) {
   graph.nodes.push(graphNode('ChromeTabAudio', 'second-audio'), graphNode('SpeechToTextReazonSpeech', 'second-speech'), graphNode('LiveTextDisplay', 'second-display'));
   graph.edges.push(edge(fanout ? 'audio' : 'second-audio', 'audio', 'second-speech', 'audio'), edge('second-speech', 'final', 'second-display', 'append'));
   return graph;
+}
+
+for (const mode of ['stop', 'native-end']) {
+  test(`shared tab capture delivers identical final PCM to both ASRs on ${mode}`, async () => {
+    const f = fixture({ graph: concurrentGraph(), asyncFlush: true });
+    for (let repeat = 0; repeat < 2; repeat++) {
+      await f.session.start(42);
+      const source = f.sources.at(-1), workers = f.workers.slice(-4);
+      assert.equal(f.sources.length, repeat + 1, 'both sources share one native capture');
+      // No earlier audio: the only transcript must come from the Stop tail.
+      if (mode === 'native-end') {
+        const active = f.session.session;
+        source.onEnded();
+        await active.stopping;
+      } else await f.session.stop();
+      assert.equal(f.session.view.error, '');
+      assert.deepEqual(f.session.view.displays.transcript.items, ['final text']);
+      assert.deepEqual(f.session.view.displays['second-display'].items, ['final text']);
+      const deliveries = workers.filter(worker => worker.path.includes('silero')).map(worker =>
+        worker.messages.filter(message => message.type === 'vad-audio').map(message => message.audio));
+      assert.deepEqual(deliveries, [[new Float32Array(37).fill(0.05)], [new Float32Array(37).fill(0.05)]]);
+      assert.deepEqual(source.stops, [true], 'flush the native capture once');
+      assert.ok(workers.every(worker => worker.terminated));
+    }
+  });
 }
 
 test('independent same-type ASRs route, drain on branch end, Stop, Cancel and repeat without losing peers', async () => {

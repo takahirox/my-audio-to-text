@@ -57,7 +57,7 @@ class PreparedTtsNode {
 
 // Chrome permits one capture of a tab. Repeated tab Source Nodes subscribe to
 // the same normalized capture; ending one subscriber must not end its peers.
-function sharedTabCapture(factory) {
+function sharedTabCapture(factory, stopping) {
   let capture;
   return (tabId, onAudio, onEnded) => {
     const listener = { onAudio, onEnded };
@@ -66,19 +66,28 @@ function sharedTabCapture(factory) {
       start() {
         if (!capture) {
           const listeners = new Set();
-          const source = factory(tabId,
+          const shared = { listeners };
+          shared.source = factory(tabId,
             audio => { for (const item of listeners) item.onAudio(audio); },
-            () => { for (const item of [...listeners]) item.onEnded(); });
-          capture = { source, listeners };
+            () => {
+              shared.ended = true;
+              for (const item of [...listeners]) item.onEnded();
+            });
+          capture = shared;
         }
         owned = capture; owned.listeners.add(listener);
         return owned.starting ??= Promise.resolve().then(() => owned.source.start());
       },
       async stop(flush = true) {
         if (!owned || !owned.listeners.has(listener)) return;
-        if (owned.listeners.size > 1) { owned.listeners.delete(listener); return; }
+        if (owned.listeners.size > 1 && !owned.ended && !stopping()) { owned.listeners.delete(listener); return; }
         if (capture === owned) capture = null;
-        await owned.source.stop(flush);
+        // Whole-graph Stop and native end flush before any subscriber closes.
+        // Pipeline drains sources sequentially, so waiting for the last one
+        // would lose the final worklet/resampler PCM in earlier branches.
+        // Cancellation must still interrupt an in-progress graceful flush.
+        if (flush) await (owned.stopping ??= Promise.resolve().then(() => owned.source.stop(true)));
+        else await owned.source.stop(false);
         owned.listeners.delete(listener);
       },
     };
@@ -88,7 +97,8 @@ function sharedTabCapture(factory) {
 export function buildGraph(graph, options) {
   const description = executableGraph(graph);
   if (!description.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
-  const tabSourceFactory = sharedTabCapture(options.sourceFactory || ((...args) => new ExtensionTab(...args)));
+  let pipeline;
+  const tabSourceFactory = sharedTabCapture(options.sourceFactory || ((...args) => new ExtensionTab(...args)), () => pipeline.state === 'stopping');
   const nodes = {}, resources = { translations: [], audioSources: new Map(), speechNodes: new Map() };
   for (const spec of description.nodes) {
     let node;
@@ -141,5 +151,6 @@ export function buildGraph(graph, options) {
     }
     return true;
   });
-  return { ...resources, description, pipeline: new Pipeline({ nodes, connections, onError: options.onError }) };
+  pipeline = new Pipeline({ nodes, connections, onError: options.onError });
+  return { ...resources, description, pipeline };
 }
