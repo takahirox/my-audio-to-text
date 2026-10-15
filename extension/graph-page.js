@@ -1,4 +1,4 @@
-import { readGraph, saveGraph, defaultGraph, GRAPH_KEY, graphPreferences, withTranslation } from './graph.js';
+import { readGraph, saveGraph, defaultGraph, GRAPH_KEY } from './graph.js';
 import { GraphEditor } from './graph-editor.js';
 
 const element = id => document.getElementById(id);
@@ -13,21 +13,10 @@ async function persist(next) {
     element('errors').textContent = ''; return saved;
   });
 }
-editor = new GraphEditor(element('graph-editor'), graph, { onSave: persist, onDraft: draft => {
-  const preferences = graphPreferences(draft);
-  element('translation-enabled').checked = preferences.enabled;
-  element('translation-direction').value = preferences.direction;
-}, onLoad: () => {
+editor = new GraphEditor(element('graph-editor'), graph, { onSave: persist, onLoad: () => {
   const next = readGraph(localStorage);
   conflict = false; base = localStorage.getItem(GRAPH_KEY); return next;
 } });
-function translationChange() {
-  try {
-    editor.draft = withTranslation(editor.draft, { enabled: element('translation-enabled').checked, direction: element('translation-direction').value });
-    editor.draw();
-  } catch (error) { element('errors').textContent = `Complete the draft connections first: ${error.message}`; }
-}
-element('translation-enabled').onchange = element('translation-direction').onchange = translationChange;
 window.addEventListener('storage', event => {
   if (event.key !== GRAPH_KEY && event.key !== null) return;
   try {

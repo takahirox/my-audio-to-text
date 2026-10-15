@@ -1,3 +1,4 @@
+import { openPalette } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
@@ -48,7 +49,7 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   await startGraph(page);
   expect(await page.evaluate(() => window.capBeforeCapture)).toBe(96000);
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  await editor.locator('#graph-node-type').selectOption('Number'); await editor.locator('#graph-add').click();
+  await openPalette(editor); await editor.locator('#graph-node-type').selectOption('Number'); await editor.locator('#graph-add').click();
   await editor.getByLabel('number value', { exact: true }).fill('1.25');
   await editor.getByRole('button', { name: 'number output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();

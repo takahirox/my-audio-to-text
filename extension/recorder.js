@@ -27,9 +27,11 @@ const session = new TabSession(view => {
   targetControls?.render();
   const running = view.state !== 'idle';
   const pending = running && JSON.stringify(view.activeGraph) !== JSON.stringify(view.savedGraph);
-  element('saved-state').textContent = pending ? 'Saved graph changed. This session keeps its active graph; changes apply on Start again.' : 'Saved graph applies on the next start.';
+  element('saved-state').textContent = pending ? 'Saved graph changed. This session keeps its active graph; changes apply on Start.' : '';
+  element('translation-status').hidden = !view.translationStatus || view.translationStatus === 'Translation off';
   renderTextRegions(element('live-displays'), view.activeGraph || view.savedGraph, view.displays);
   element('translation-status').textContent = view.translationStatus;
+  element('no-live-displays').hidden = !!element('live-displays').children.length;
   element('tts-output').hidden = !view.ttsStatus && !audioURLs.size;
   element('model-recovery').hidden = !/missing|evict|retry|unavailable/i.test(`${view.translationStatus} ${view.ttsStatus}`);
   element('cancel-session').disabled = !running;

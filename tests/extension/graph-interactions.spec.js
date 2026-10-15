@@ -1,3 +1,4 @@
+import { clickGraphAction, openTranslation } from './ui-controls.js';
 import { legacyGraph } from '../fixtures/legacy-graph.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -83,7 +84,7 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
     await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length - 1);
     await expect(editor.locator('.graph-node')).toHaveCount(before.nodes.length);
     await expect(editor.locator('#graph-errors')).toBeEmpty();
-    await editor.locator('#graph-validate').click(); await expect(editor.locator('#graph-errors')).toContainText('Draft valid');
+    await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Draft valid');
     await save(editor);
     const after = await saved(live);
     expect(after.nodes).toEqual(before.nodes);
@@ -95,7 +96,7 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
 
 test('selected-edge control follows zoom, canvas scrolling and a narrow layout', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
-  await editor.setViewportSize({ width: 1600, height: 1000 });
+  await editor.setViewportSize({ width: 1600, height: 650 });
   await pointerSelect(editor, 'audio.audio to speech.audio');
   const control = editor.locator('#graph-disconnect'), scroll = editor.locator('.graph-scroll');
   await editor.locator('#graph-zoom').selectOption('1.5');
@@ -198,7 +199,7 @@ test('native touch selects and disconnects without hover; saved removal applies 
 
 test('click and drag reconnect a populated input, preserving fan-out; identical and invalid attempts keep old edge', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
-  await editor.locator('#translation-enabled').check(); await save(editor);
+  await openTranslation(editor); await editor.locator('#translation-enabled').check(); await save(editor);
   const original = await saved(live);
   await editor.setViewportSize({ width: 1600, height: 1000 });
   const output = name => port(editor, 'speech', 'output', name), input = port(editor, 'translation', 'input', 'text');

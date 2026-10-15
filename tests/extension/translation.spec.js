@@ -1,3 +1,4 @@
+import { openTranslation } from './ui-controls.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -158,7 +159,7 @@ for (const direction of ['ja-en', 'en-ja']) {
   });
 
   test(`${direction}: paired formatter alone retains indexed repeated source alignment, errors and cancellation under MV3 CSP`, async ({ translationExtension: f }) => {
-    await instrument(f); const page = await open(f); await page.editor.getByRole('button', { name: 'Remove transcript', exact: true }).click(); await page.editor.locator('#graph-save').click();
+    await instrument(f); const page = await open(f); await page.editor.getByRole('button', { name: 'Select transcript', exact: true }).click(); await page.editor.getByRole('button', { name: 'Remove transcript', exact: true }).click(); await page.editor.locator('#graph-save').click();
     await expect(page.editor.locator('#graph-errors')).toBeEmpty(); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
     await expect(page.locator('.live-text-region')).toHaveCount(1);
     await emit(page, 'partial', 'preview'); await expect(pairText(page)).toContainText(`${target}: ${target}: preview`);
@@ -218,13 +219,13 @@ test('saved processing direction applies next session; generic labels and existi
   await instrument(f); const page = await openRecorder(f); await setDirection(page, 'en-ja'); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
   await setDirection(page, 'ja-en'); await emit(page, 'final', 'Hello'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('English: Hello\nJapanese: Japanese: Hello');
   await prepare(page); expect(f.requests).toHaveLength(14); await start(page); await expect(pairText(page)).toBeEmpty(); await emit(page, 'final', '日本語'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('Japanese: 日本語\nEnglish: English: 日本語');
-  await page.editor.locator('#translation-enabled').uncheck(); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await f.context.setOffline(true); await start(page); await expect(page.locator('#translation-status')).toHaveText('Translation off'); await expect(page.locator('.live-text-region')).toHaveCount(1); await emit(page, 'final', 'Original only'); await expect(originalItems(page)).toHaveText('Original only\n'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(14);
+  await openTranslation(page.editor); await page.editor.locator('#translation-enabled').uncheck(); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await f.context.setOffline(true); await start(page); await expect(page.locator('#translation-status')).toHaveText('Translation off'); await expect(page.locator('.live-text-region')).toHaveCount(1); await emit(page, 'final', 'Original only'); await expect(originalItems(page)).toHaveText('Original only\n'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(14);
 });
 
 function model(page, selector) { return page.models.locator(`#opus-${page.direction} ${selector}`); }
 async function setDirection(page, direction) {
-  await page.editor.locator('#translation-enabled').check();
-  await page.editor.locator('#translation-direction').selectOption(direction);
+  await openTranslation(page.editor); await page.editor.locator('#translation-enabled').check();
+  await openTranslation(page.editor); await page.editor.locator('#translation-direction').selectOption(direction);
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); page.direction = direction;
 }
 

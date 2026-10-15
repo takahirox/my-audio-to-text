@@ -1,3 +1,4 @@
+import { openPalette, openTranslation } from './ui-controls.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -111,9 +112,9 @@ export async function emitFinal(page, text) {
 }
 export async function addAudioPath(page, type) {
   const editor = page.editor;
-  await editor.locator('#translation-enabled').uncheck();
+  await openTranslation(editor); await editor.locator('#translation-enabled').uncheck();
   for (const node of [type, 'AudioOutput']) {
-    await editor.locator('#graph-node-type').selectOption(node); await editor.locator('#graph-add').click();
+    await openPalette(editor); await editor.locator('#graph-node-type').selectOption(node); await editor.locator('#graph-add').click();
   }
   for (const [source, output, target, input] of [['speech', 'final', type.toLowerCase(), 'text'], [type.toLowerCase(), 'audio', 'audiooutput', 'audio']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();

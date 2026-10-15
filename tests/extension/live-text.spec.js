@@ -1,3 +1,4 @@
+import { openPalette, openTranslation } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.js';
@@ -13,26 +14,26 @@ test('MV3 Live keeps displays, controls, accessible status and actionable errors
   await expect(live.getByRole('region', { name: 'Recording', exact: true })).toBeVisible();
   await expect(live.locator('#tab-status')).toHaveText('Capture target · whole tab 42');
   await expect(live.getByRole('alert')).toHaveText('Capture denied. Invoke the toolbar action to retry.');
-  await expect(live.getByRole('button', { name: 'Start again', exact: true })).toBeEnabled();
-  await expect(live.getByRole('button', { name: 'Stop / finalize', exact: true })).toBeDisabled();
-  await expect(live.getByRole('button', { name: 'Cancel session', exact: true })).toBeDisabled();
+  await expect(live.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
+  await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeDisabled();
+  await expect(live.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
   await expect(live.locator('.live-text-region')).toHaveCount(1);
   const display = live.getByRole('region', { name: 'Text', exact: true });
   await expect(display.getByRole('heading', { name: 'Text', exact: true })).toBeVisible();
   await expect(display.getByRole('button', { name: 'Copy text', exact: true })).toBeDisabled();
   await expect(display.locator('.display-preview')).toHaveAttribute('aria-live', 'polite');
   await expect(display.locator('.display-items')).toHaveAttribute('aria-live', 'polite');
-  await live.getByRole('button', { name: 'Start again', exact: true }).click();
+  await live.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(live.locator('#status')).toHaveAttribute('role', 'status');
   await expect(live.locator('#status')).toHaveText('Transcription active');
   await expect(live.locator('#errors')).toBeEmpty();
-  await expect(live.getByRole('button', { name: 'Stop / finalize', exact: true })).toBeEnabled();
-  await expect(live.getByRole('button', { name: 'Cancel session', exact: true })).toBeEnabled();
+  await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
+  await expect(live.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
   await emitFinal(live, 'Visible result');
   await expect(display.locator('li pre')).toHaveText(['Visible result']);
   await expect(display.getByRole('button', { name: 'Copy text', exact: true })).toBeEnabled();
-  await live.getByRole('button', { name: 'Stop / finalize', exact: true }).click();
-  await expect(live.getByRole('button', { name: 'Start again', exact: true })).toBeEnabled();
+  await live.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(live.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
   await expect(display.locator('li pre')).toHaveText(['Visible result']);
 });
 
@@ -123,7 +124,7 @@ test('MV3 generic regions show ASR, translation and formatter TEXT with custom l
 
 test('MV3 formatter directly grouped primitive inputs emit one snapshot; independent updates emit immediately', async ({ graphExtension: f }) => {
   const live = await openGraph(f); await fixtureTranslation(f, live);
-  await live.editor.locator('#translation-enabled').uncheck(); await live.editor.locator('#graph-save').click(); await startGraph(live);
+  await openTranslation(live.editor); await live.editor.locator('#translation-enabled').uncheck(); await live.editor.locator('#graph-save').click(); await startGraph(live);
   await live.evaluate(async () => {
     const { Pipeline } = await import('../web/pipeline.js'), { TEXT } = await import('../web/port-contracts.js');
     const { TextFormatterNode, LiveTextDisplayNode } = await import('../web/text-nodes.js');
@@ -250,7 +251,7 @@ test('MV3 palette translation can be added and run; custom saved graph survives 
   let live = await openGraph(f); await fixtureTranslation(f, live);
   const editor = live.editor;
   for (const type of ['OpusMtEnJa', 'LiveTextDisplay']) {
-    await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
+    await openPalette(editor); await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
   }
   for (const [source, output, target, input] of [['speech', 'final', 'opusmtenja', 'text'], ['opusmtenja', 'text', 'livetextdisplay', 'append']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
