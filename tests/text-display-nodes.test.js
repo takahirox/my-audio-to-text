@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT } from '../web/port-contracts.js';
 import { LiveTextDisplayNode, TextFormatterNode, parseTemplate } from '../web/text-nodes.js';
-import { defaultGraph, graphNode, edge, validateGraph, assertGraph } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, validateGraph, graphWarnings, assertGraph } from '../extension/graph.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const context = () => ({ signal: new AbortController().signal });
 
@@ -56,7 +56,7 @@ test('validation accepts multiple generic sinks and translators, output-only pat
   for (const [id, key, value] of [['other', 'label', ''], ['other', 'label', 'a'.repeat(121)], ['format', 'template', '{5}']]) {
     const invalid = structuredClone(graph); invalid.nodes.find(n => n.id === id).settings[key] = value; assert.throws(() => assertGraph(invalid));
   }
-  const disconnected = structuredClone(graph); disconnected.edges = disconnected.edges.filter(e => e.to[0] !== 'other'); assert.match(validateGraph(disconnected).join(' '), /at least one TEXT/);
+  const disconnected = structuredClone(graph); disconnected.edges = disconnected.edges.filter(e => e.to[0] !== 'other'); assert.match(graphWarnings(disconnected).join(' '), /at least one TEXT/);
   const only = defaultGraph({ enabled: false }); only.nodes = only.nodes.filter(n => n.id !== 'transcript'); only.edges = only.edges.filter(e => e.to[0] !== 'transcript');
   only.nodes.push(graphNode('FocusedInputTextOutputNode', 'field')); only.edges.push(edge('speech', 'final', 'field', 'text')); assert.deepEqual(validateGraph(only), []);
 });

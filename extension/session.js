@@ -1,7 +1,7 @@
 import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
 import { translationDirection } from './translation-preferences.js';
-import { assertGraph, defaultGraph, graphPreferences, withTranslation, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
+import { assertGraph, executableGraph, defaultGraph, graphPreferences, withTranslation, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
 
 // Owns tab targeting and the window's UI. Nodes own capture and recognition.
@@ -27,30 +27,42 @@ export class TabSession {
   update(values = {}) { Object.assign(this.view, values); this.render({ ...this.view }); }
   async start(tabId, { microphoneGesture = false } = {}) {
     if (this.session) return; // A second invocation never retargets live capture.
-    let graph;
-    try { graph = assertGraph(this.graph); } catch (error) { this.update({ error: error.message }); return; }
+    let graph, snapshot;
+    try {
+      snapshot = assertGraph(this.graph); graph = executableGraph(snapshot);
+      if (!graph.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination in Graph Editor.');
+    } catch (error) { this.update({ error: error.message }); return; }
     const preferences = graphPreferences(graph);
     const hasDisplay = graph.nodes.some(node => node.type === 'LiveTextDisplay');
     const hasAudioOutput = graph.nodes.some(node => node.type === 'AudioOutput');
-    const sourceType = graph.nodes.find(n => INPUT_TYPES.includes(n.type)).type;
-    if (sourceType === 'MicrophoneAudio' && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.' }); return; }
+    const sources = graph.nodes.filter(n => INPUT_TYPES.includes(n.type));
+    const microphones = sources.filter(n => n.type === 'MicrophoneAudio');
+    if (sources.some(node => node.type !== 'MicrophoneAudio') && !Number.isInteger(tabId)) {
+      this.update({ error: 'Invoke the toolbar action on the target tab before starting tab or selected-media capture.' }); return;
+    }
+    if (microphones.length && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.' }); return; }
     for (const node of graph.nodes.filter(n => n.type === 'SelectedPageMediaAudio')) {
       const target = this.targets[node.id];
       if (!target || !target.mediaId || target.tabId !== tabId) {
         this.update({ tabId, error: `Select and authorize the target for ${node.id} in Live before Start.` }); return;
       }
     }
-    const session = { tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), sourceType, direction: preferences.direction, translationEnabled: preferences.enabled }; this.session = session;
-    this.update({ state: 'loading', tabId, activeGraph: graph, displays: {}, ttsStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: `Loading ${NODE_TYPES[graph.nodes.find(n => ASR_TYPES.includes(n.type)).type].label}${graph.nodes.some(n => n.type === 'SpeechToTextZipformerEn') ? '' : ' + Silero'}…`, error: '', signal: '' });
+    const session = { microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
+    session.started = new Promise(resolve => { session.markStarted = resolve; });
+    this.session = session;
+    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
     try {
-      if (sourceType === 'MicrophoneAudio') {
+      if (microphones.length) {
         // Request directly from the explicit Start action, before loading models.
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
+        let stream;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false }); }
+        catch (error) { throw Error(`${microphones.map(node => node.id).join(', ')}: Microphone capture unavailable: ${error.message || error}`); }
         if (this.session !== session) { stream.getTracks().forEach(track => track.stop()); return; }
-        session.microphoneStream = stream;
+        session.microphoneStreams.set(microphones[0].id, stream);
+        for (const node of microphones.slice(1)) session.microphoneStreams.set(node.id, stream.clone());
       }
       Object.assign(session, buildGraph(graph, {
-        tabId, outputTarget: session.outputTarget, targets: session.targets, microphoneStream: session.microphoneStream, pageConnectionFactory: this.pageConnectionFactory,
+        tabId, outputTarget: session.outputTarget, targets: session.targets, microphoneStreams: session.microphoneStreams, pageConnectionFactory: this.pageConnectionFactory,
         onTargetState: (id, state, active) => {
           if (this.session === session && state) {
             session.targetStates[id] = state;
@@ -68,21 +80,22 @@ export class TabSession {
         onSynthesizedAudio: (audio, signal) => {
           if (this.session === session && !signal.aborted) return this.onSynthesizedAudio(audio, signal);
         },
-        onSpeechEvent: event => {
+        onSpeechEvent: (event, id) => {
           if (this.session !== session) return;
-          if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: event.message });
-          else if (event.type === 'error' && session.pipeline?.state === 'idle') this.fail(event.message);
+          if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: `${id}: ${event.message}` });
+          else if (event.type === 'error' && session.pipeline?.state === 'idle') this.fail(`${id}: ${event.message}`);
         },
         onDisplay: (id, state) => {
           if (this.session === session) this.update({ displays: { ...this.view.displays, [id]: state } });
         },
-        onCapturedAudio: pcm => {
+        onCapturedAudio: (pcm, id) => {
           if (this.session !== session) return;
-          if (!session.signal && pcm.some(sample => Math.abs(sample) > 0.00001)) {
-            session.signal = true; this.update({ signal: sourceType === 'ChromeTabAudio' ? 'Tab audio signal detected.' : 'Audio input signal detected.' });
+          if (!session.sourceStates[id] && pcm.some(sample => Math.abs(sample) > 0.00001)) {
+            session.sourceStates[id] = 'Audio signal detected.';
+            this.update({ signal: this.sourceStatus(session) });
           }
         },
-        onEnded: () => { if (this.session === session) void this.stop(); },
+        onEnded: id => { if (this.session === session) void this.sourceEnded(session, id); },
         onTranslationState: (state, id) => {
           if (this.session !== session) return;
           session.translationStates ||= {};
@@ -90,18 +103,56 @@ export class TabSession {
           const statuses = Object.entries(session.translationStates);
           this.update({ translationStatus: statuses.length === 1 ? state : statuses.map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
-        onError: error => { if (this.session === session) this.fail(error.cause?.message || error.message); },
+        onError: error => { if (this.session === session) this.fail(error.message); },
       }));
-      await session.speech.load();
+      await Promise.all([...session.speechNodes].map(async ([id, node]) => {
+        try { await node.load(); } catch (error) { throw Error(`${id}: ${error.message || error}`); }
+      }));
       if (this.session !== session) return;
-      this.update({ state: 'starting', status: `Starting ${sourceType === 'MicrophoneAudio' ? 'microphone' : sourceType === 'SelectedPageMediaAudio' ? 'selected media' : 'current-tab'} capture…` });
+      this.update({ state: 'starting', status: sources.length ? `Starting ${sources.length} audio source(s)…` : 'Starting processing paths…' });
       await session.pipeline.start();
+      session.markStarted();
       if (this.session !== session || this.view.state !== 'starting') return;
-      this.update({ state: 'running', status: 'Transcription active',
-        signal: session.signal ? (sourceType === 'ChromeTabAudio' ? 'Tab audio signal detected.' : 'Audio input signal detected.') : sourceType === 'MicrophoneAudio' ? 'No audio signal yet. Check microphone permission, input volume and device selection.' : 'No audio signal yet. Play audio or check whether the tab is muted.' });
+      this.update({ state: 'running', status: sources.length ? 'Transcription active' : 'Processing active',
+        signal: this.sourceStatus(session) });
     } catch (error) {
       if (this.session === session) this.fail(error.message || String(error));
     }
+  }
+  releaseMicrophones(session) {
+    for (const stream of session?.microphoneStreams?.values() || []) stream.getTracks().forEach(track => track.stop());
+    session?.microphoneStreams?.clear();
+  }
+  sourceStatus(session) {
+    return session.description.nodes.filter(node => INPUT_TYPES.includes(node.type)).map(node =>
+      `${node.id}: ${session.sourceStates[node.id] || (node.type === 'MicrophoneAudio'
+        ? 'No audio signal yet. Check microphone permission, input volume and device selection.'
+        : node.type === 'ChromeTabAudio' ? 'No audio signal yet. Play audio or check whether the tab is muted.' : 'No audio signal yet. Play the selected media.')}`).join('\n');
+  }
+  sourceEnded(session, id) {
+    if (session.endedSources.has(id) || session.stopping) return;
+    session.endedSources.add(id);
+    session.sourceStates[id] = 'Capture ended; finalizing this path.';
+    this.update({ signal: this.sourceStatus(session) });
+    // When all live capture ends, retain the existing full-session Stop policy.
+    if (session.endedSources.size === session.audioSources.size) return this.stop();
+    // Drain only Nodes with no remaining live source ancestor. A formatter with
+    // another live input stays open; one-source fan-out drains all its branches.
+    const live = new Set([...session.audioSources.keys()].filter(source => !session.endedSources.has(source)));
+    for (const entry of session.pipeline.order) {
+      if (session.description.edges.some(route => route.to[0] === entry.id && live.has(route.from[0]))) live.add(entry.id);
+    }
+    const finished = session.pipeline.order.filter(entry => !live.has(entry.id)).map(entry => entry.id);
+    return session.branchDrain = (session.branchDrain || Promise.resolve()).then(async () => {
+      await session.started;
+      if (this.session !== session) return;
+      await session.pipeline.drain(finished);
+      for (const nodeId of finished) {
+        const entry = session.pipeline.entries.get(nodeId);
+        if (entry.node.finish) entry.node.finish();
+        await entry.node.dispose?.();
+      }
+    }).catch(error => { if (this.session === session) this.fail(error.message || String(error)); });
   }
   stop() {
     const session = this.session;
@@ -116,14 +167,15 @@ export class TabSession {
     // Schedule before ending the source: onEnded can reenter stop().
     return session.stopping = Promise.resolve().then(async () => {
       try {
-        if (starting) session.audio.end();
+        if (starting) for (const node of session.audioSources.values()) node.end();
+        await session.branchDrain;
         await session.pipeline.stop();
         if (this.session !== session) return;
         this.clearDisplayPreviews(session);
         await session.pipeline.dispose();
         if (this.session !== session) return;
         this.session = null;
-        session.microphoneStream?.getTracks().forEach(track => track.stop());
+        this.releaseMicrophones(session);
         this.update({ state: 'idle', status: 'Stopped. Outputs are ready.' });
       } catch (error) { if (this.session === session) this.fail(error.message || String(error)); }
     });
@@ -140,10 +192,11 @@ export class TabSession {
       }
     }
     this.clearDisplayPreviews(session);
+    session?.markStarted?.();
     this.session = null;
-    session?.microphoneStream?.getTracks().forEach(track => track.stop());
+    this.releaseMicrophones(session);
     void session?.pipeline?.dispose().catch(() => {});
-    this.update({ state: 'idle', signal: '', translationStatus: session?.translation ? 'Translation canceled' : this.view.translationStatus });
+    this.update({ state: 'idle', signal: '', translationStatus: session?.translations?.length ? 'Translation canceled' : this.view.translationStatus });
   }
   clearDisplayPreviews(session) {
     for (const spec of session?.description?.nodes || []) if (spec.type === 'LiveTextDisplay') session.pipeline.entries.get(spec.id).node.finish();
@@ -178,7 +231,11 @@ export class TabSession {
       }
     }
     for (const [id, target] of Object.entries(this.targets)) if (target.tabId === tabId) delete this.targets[id];
-    if (this.session?.tabId === tabId && this.session.sourceType !== 'MicrophoneAudio') void this.stop();
+    if (this.session?.tabId === tabId) for (const [id, node] of this.session.audioSources || []) {
+      if (this.session.description.nodes.find(spec => spec.id === id).type !== 'MicrophoneAudio') {
+        node.end(); void this.sourceEnded(this.session, id);
+      }
+    }
     // Each output port reports its own detachment; preserve peer/skip statuses.
     this.update();
   }

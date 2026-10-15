@@ -12,7 +12,7 @@ test('MV3 Live keeps displays, controls, accessible status and actionable errors
     await expect(live.locator('body')).not.toContainText(text);
   }
   await expect(live.getByRole('region', { name: 'Recording', exact: true })).toBeVisible();
-  await expect(live.locator('#tab-status')).toHaveText('Capture target · whole tab 42');
+  await expect(live.locator('#tab-status')).toHaveText('audio · whole tab 42');
   await expect(live.getByRole('alert')).toHaveText('Capture denied. Invoke the toolbar action to retry.');
   await expect(live.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
   await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeDisabled();

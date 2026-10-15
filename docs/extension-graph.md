@@ -30,8 +30,11 @@ usage only when needed. OPUS-MT directions are
 separate executable Node types.
 
 **Graph actions** contains **Validate draft**, **Load saved**, **Reset draft to
-default** and the optional **Translation preset**. Validation reports
-connection/settings errors. **Save graph** validates
+default**, **Show optional warnings** and the optional **Translation preset**.
+Optional warnings are off by default and the preference persists locally.
+**Validate draft** explicitly reports blocking **Error:** diagnostics and optional
+**Warning:** diagnostics, including incomplete, disconnected and unused Nodes.
+Normal editing hides optional warnings. **Save graph** checks structural validity
 and stores the draft in extension-origin localStorage. **Load saved** discards
 unsaved edits after confirmation; **Reset draft to default** also confirms
 before replacing an unsaved draft and creates a recovery draft, which still
@@ -88,17 +91,17 @@ cancellation remain visible. Translation direction comes from the connected
 processing Node, never the display label. Generated IDs avoid collisions.
 Descriptions do not persist text history; completed history within a session is
 retained through Stop/Cancel and saving a draft. A fresh Start resets outputs.
-Malformed/ambiguous routes, incomplete paired bundles or migration exceeding the
-24-Node/64-edge bound fail visibly without overwriting the saved description.
+Malformed or ambiguously correlated routes fail visibly without overwriting the
+saved description. Incomplete paired bundles remain saveable inactive drafts.
+There is no Node/edge count cap.
 Fix/import the desired routes or Reset and Save in Graph Editor to recover.
 Version 7 Whisper graphs remove only outgoing `Whisper.provisional` edges,
 which never produced events; no edge is redirected to final. All other nodes,
-routes, settings and positions are preserved. If removal leaves an invalid
-graph, storage stays untouched and an error names the affected connections.
-Graph Editor opens an unsaved repair draft retaining the affected graph and
-removing only those dead edges. Deliberately reconnect a valid TEXT output
-(for committed Whisper text, `final → append`) or remove an unused destination,
-then Save. See [Whisper migration](whisper-node.md#saved-graph-migration).
+routes, settings and positions are preserved. Destinations left without an input
+remain in the saved draft, inactive until reconnected. No edge is redirected;
+choose the desired TEXT semantics explicitly (for committed Whisper text,
+`final → append`). Structurally malformed migration results still fail visibly.
+See [Whisper migration](whisper-node.md#saved-graph-migration).
 Page/media handles are never saved with a graph.
 
 ## Supported graph and ports
@@ -127,19 +130,70 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | Supertonic3 / Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; configured language/voice |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | native audio player / WAV |
 
-Exactly one audio source and one ASR are required in this capture graph. At least
-one output destination is required. No Live display is required for focused-field
-or audio-only output. Multiple translators and displays are supported. Type
-identity determines compatibility; generic sinks accept arbitrary TEXT producers.
-Unknown settings/ports/types, duplicate IDs/edges, multiple routes into one input,
-missing required connections and cycles fail before Save or Worker startup.
+Multiple audio sources, same-type or different ASRs, translators, processors and
+sinks can run independently. A source may fan out to several compatible ASRs;
+constant TEXT → translation/formatter/TTS paths need no audio or ASR. Unknown
+settings/ports/types, duplicate IDs/edges, incompatible contracts, multiple routes
+into one input, cycles and wrongly correlated metadata remain blocking errors.
+A missing required input, unconnected producer or absence of outputs is a draft
+warning, never a Save blocker. Positions accept finite nonnegative coordinates
+without the old 4000-pixel ceiling; Node and edge count caps are removed. The
+existing 64-character safe ID syntax and per-Node configuration/data bounds
+remain part of the stored format and concrete Port/runtime contracts.
+
+### Stored drafts and concurrent execution
+
+Start snapshots the saved description. A Node is ready when its required inputs
+have ready producers; input-consuming Nodes also need at least one available
+input. A paired formatter needs its complete correlated final bundle, plus a
+complete provisional bundle if any provisional ports are connected. Only ready
+ancestors of ready output sinks participate. Edges from incomplete branches into
+optional inputs remain saved and inactive. No edge is redirected or merged.
+Inactive sources/models/processors create no Workers, downloads, permission
+requests or media capture. A draft with no executable path saves and reloads;
+Start explains that it needs a complete source-to-output path before any resources
+are allocated. Malformed settings/wiring remain errors even in parked Nodes. Consumer-specific
+startup value checks (Whisper language and ReazonSpeech duration) are warnings
+while their consumer is inactive and become blocking errors when it participates.
+
+For two independent transcript displays, connect:
+
+- `ChromeTabAudio.audio → SpeechToTextZipformerEn.audio`, with `final → remote.append`
+  and optional `provisional → remote.replace` on a LiveTextDisplay labeled Remote speaker.
+- `MicrophoneAudio.audio → SpeechToTextWhisper.audio`, with `final → local.append`
+  on another LiveTextDisplay labeled Local speaker. ReazonSpeech is another option.
+
+Every active ASR loads its own configured model before capture starts. Microphone
+permission is requested directly by the explicit Live Start gesture only when an
+active path uses it. Toolbar invocation asks the user to press Start in that case.
+Multiple microphone Nodes share one permission grant with separately owned cloned
+tracks. Repeated ChromeTabAudio Nodes share one normalized tab capture because
+Chrome permits one capture per tab; subscribers and ASRs retain independent routes.
+All tab Sources currently target the toolbar-invoked tab; selected-media sources
+retain individually selected handles.
+
+Source-end closes/drains/disposes Nodes without another live source ancestor.
+Consumers shared with a live path remain open; when all captures end, the session
+finalizes. Tab navigation/closure ends tab/media captures and detaches field sinks,
+while microphone paths continue. Stop drains every participating path in dependency
+order. Cancel invalidates queued emissions and releases all models/captures,
+including partial loading and late permission grants; repeat starts fresh. Capture
+signals and model progress/errors include Node IDs. Fatal capture/ASR errors retain
+the existing fail-session policy, release all resources and allow retry; translation,
+TTS and field-output availability remain branch-local failures.
+
+Tab audio may already contain the local speaker, and microphones may pick up
+speaker playback. Independent displays do not promise speaker separation or echo
+removal. Each active model costs additional CPU/memory and may increase latency;
+existing bounded ASR queues still fail visibly on overload. See the reproducible
+[concurrent validation and measurements](evidence/graph-115.md).
 
 ### Whisper and reusable Text constants
 
 To transcribe English, remove the ReazonSpeech Node and add **Whisper tiny
 (multilingual) ASR**. Connect the audio source to `audio` and
-`final → LiveTextDisplay.append` only. Keep exactly
-one ASR. Any existing final TEXT consumer (TextFormatter, OPUS-MT, focused field,
+`final → LiveTextDisplay.append` only. Additional ASRs may use independent
+sources or share compatible source fan-out. Any existing final TEXT consumer (TextFormatter, OPUS-MT, focused field,
 or TTS) can receive Whisper finals with its existing port. The default/reset
 graph continues to use ReazonSpeech ja-en. Remove any old maxDuration edge and
 unused Number Node on replacement; Whisper has a fixed 6-second cap.
@@ -494,8 +548,8 @@ processor with only `audio: MONO_16KHZ_PCM` input and real online
 `provisional: TEXT` / `final: TEXT` outputs. Search for Zipformer or English in
 Add Node. Replace the ASR, reconnect the audio source, then connect provisional
 to `LiveTextDisplay.replace` and final to `LiveTextDisplay.append`. Remove an
-unused Number/Text configuration source when replacing the old ASR. Exactly
-one of ReazonSpeech, Whisper or Zipformer is required. Existing TEXT sinks and
+unused Number/Text configuration source when replacing the old ASR, or leave it
+parked. ReazonSpeech, Whisper and Zipformer can coexist with independent settings. Existing TEXT sinks and
 translation presets use the same contracts.
 
 The graph stays at version 8: no migration or rewriting of existing v8 graphs,

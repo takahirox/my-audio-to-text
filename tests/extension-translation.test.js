@@ -201,7 +201,7 @@ for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]
   const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
   if (!original) { graph.nodes = graph.nodes.filter(n => n.id !== 'transcript'); graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); }
   graph.edges.reverse(); f.session.setGraph(graph); await f.session.start(42);
-  const speech = f.session.session.speech;
+  const speech = f.session.session.speechNodes.get('speech');
   speech.receiveEvent({ type: 'partial', text: 'old', id: 0 }); await tick();
   speech.receiveEvent({ type: 'partial', text: 'latest', id: 0 }); await tick();
   f.translation.complete(0, 'stale'); await tick(); assert.doesNotMatch(display(f, 'translated').preview, /stale/);
@@ -222,7 +222,7 @@ for (const direction of ['ja-en', 'en-ja']) for (const ports of [['replace'], ['
   const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
   graph.nodes = graph.nodes.filter(n => n.id !== 'translated-format'); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated-format' && e.from[0] !== 'translated-format');
   for (const port of ports) graph.edges.push({ from: ['translation', port === 'append' ? 'text' : 'provisional'], to: ['translated', port] });
-  f.session.setGraph(graph); await f.session.start(42); const speech = f.session.session.speech;
+  f.session.setGraph(graph); await f.session.start(42); const speech = f.session.session.speechNodes.get('speech');
   speech.receiveEvent({ type: 'partial', text: 'preview' }); await tick(); assert.equal(display(f, 'translated').preview, '');
   f.translation.complete(0, 'translated preview'); await tick(); assert.equal(display(f, 'translated').preview, ports.includes('replace') ? 'translated preview' : '');
   speech.receiveEvent({ type: 'final', text: 'final' }); await tick(); assert.equal(display(f, 'translated').preview, '');
@@ -232,11 +232,11 @@ for (const direction of ['ja-en', 'en-ja']) for (const ports of [['replace'], ['
 
 test('paired compatibility retains error history and visibly cancels pending rows, ignoring late replies', async () => {
   const f = sessionFixture(); f.session.setTranslation(true); await f.session.start(42);
-  f.session.session.speech.receiveEvent({ type: 'final', text: 'pending', id: 0 }); await tick();
+  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'pending', id: 0 }); await tick();
   f.session.cancel(); f.translation.complete(0, 'late'); await tick();
   assert.match(display(f, 'translated').preview, /pending\n.*Translation canceled/); assert.doesNotMatch(display(f, 'translated').preview, /late/);
   f.session.prepareTranslation = async () => { throw Error('cache unavailable'); }; await f.session.start(42);
-  f.session.session.speech.receiveEvent({ type: 'final', text: 'failed', id: 0 }); await tick(); await f.session.stop();
+  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'failed', id: 0 }); await tick(); await f.session.stop();
   assert.match(display(f, 'translated').preview, /failed\n.*Translation failed: cache unavailable/); assert.deepEqual(display(f).items, ['failed']);
 });
 
@@ -255,7 +255,7 @@ test('active processing direction and display labels remain immutable when a dif
   f.session.setGraph(defaultGraph({ enabled: true, direction: 'en-ja' })); await f.session.start(42);
   const active = f.session.view.activeGraph; f.session.setTranslationDirection('ja-en');
   assert.equal(f.session.view.activeGraph, active); assert.deepEqual(preparations, ['en-ja']);
-  f.session.session.speech.receiveEvent({ type: 'final', text: 'Hello', id: 0 }); await tick(); f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
+  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello', id: 0 }); await tick(); f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
   assert.equal(display(f, 'translated').preview, 'English: Hello\nJapanese: こんにちは');
   await f.session.start(42); assert.deepEqual(preparations, ['en-ja', 'ja-en']); assert.equal(display(f, 'translated').preview, ''); f.session.cancel();
 });
@@ -285,7 +285,7 @@ test('independent sinks consume plain TEXT and append clears only its own replac
   const f = sessionFixture(); f.session.setTranslation(true); await f.session.start(42);
   const original = f.session.session.pipeline.entries.get('transcript');
   original.node.receive('replace', 'independent preview', original.context);
-  f.session.session.translation.receive('provisional', 'translation source'); await tick();
+  f.session.session.translations[0].receive('provisional', 'translation source'); await tick();
   assert.equal(display(f).preview, 'independent preview'); assert.match(display(f, 'translated').preview, /translation source/);
   original.node.receive('append', 'committed', original.context); assert.equal(display(f).preview, '');
   f.translation.complete(0, 'translated'); await tick(); assert.match(display(f, 'translated').preview, /translated/);
@@ -300,7 +300,7 @@ test('multiple translator runtime statuses retain each branch failure independen
   f.session.setGraph(graph); await f.session.start(42); await tick();
   assert.match(f.session.view.translationStatus, /translation: Translation unavailable: Forward cache unavailable/);
   assert.match(f.session.view.translationStatus, /reverse: Local OPUS-MT ready/);
-  f.session.session.speech.receiveEvent({ type: 'final', text: 'Hello' }); await tick();
+  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
   f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
   assert.match(display(f, 'translated').preview, /Forward cache unavailable/);
   assert.deepEqual(display(f, 'reverse-display').items, ['こんにちは']);

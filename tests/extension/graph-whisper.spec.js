@@ -73,7 +73,7 @@ test('MV3 palette and help offer only the implemented Whisper output; ReazonSpee
   await expect(editor.locator('.graph-inspector')).not.toContainText('Output provisional');
 });
 
-for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'keeps storage and opens an actionable repair draft' : 'saves only the version and removal of dead edges'}`, async ({ graphExtension: f }) => {
+for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'keeps an incomplete destination as a saved draft' : 'saves only the version and removal of dead edges'}`, async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
   const original = await page.evaluate(async unsafe => {
     const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js');
@@ -91,21 +91,10 @@ for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'k
   await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(0);
   const saved = () => editor.evaluate(() => localStorage.getItem('processing-graph-v1'));
   if (unsafe) {
-    await expect(editor.locator('#errors')).toContainText('speech.provisional → affected.replace');
-    await expect(editor.locator('#errors')).toContainText('Edit the affected connections');
-    await expect(editor.locator('#graph-errors')).toContainText('Required connection missing: affected');
-    await expect(editor.locator('#graph-state')).toContainText('Unsaved draft');
+    await expect(editor.locator('#errors')).toBeEmpty();
+    await expect(editor.locator('#graph-errors')).toBeEmpty();
     await expect(editor.getByRole('button', { name: 'Select affected', exact: true })).toHaveCount(1);
     await expect(editor.locator('[data-node="speech"]')).toHaveCSS('left', '333px');
-    expect(await saved()).toBe(raw);
-    await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-    expect(await saved()).toBe(raw);
-    await clickGraphAction(editor, 'graph-load'); expect(await saved()).toBe(raw);
-    await editor.getByRole('button', { name: 'speech output final', exact: true }).click();
-    await editor.getByRole('button', { name: 'affected input append', exact: true }).click();
-    expected.edges.push({ from: ['speech', 'final'], to: ['affected', 'append'] });
-    await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-    await expect(editor.locator('#errors')).toBeEmpty();
   }
   await expect.poll(saved).toBe(JSON.stringify(expected));
   await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();

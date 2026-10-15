@@ -1,4 +1,4 @@
-import { FIELD_TYPES, INPUT_TYPES } from './graph.js';
+import { FIELD_TYPES, INPUT_TYPES, executableGraph } from './graph.js';
 import { authorizePage, PageConnection } from './page-target.js';
 
 export class TargetControls {
@@ -54,7 +54,7 @@ export class TargetControls {
   }
   async prepareFocusedOutput(tabId) {
     this.session.outputTarget = null;
-    if (!this.session.graph.nodes.some(node => FIELD_TYPES.includes(node.type))) return;
+    if (!executableGraph(this.session.graph).nodes.some(node => FIELD_TYPES.includes(node.type))) return;
     this.busy = true; this.render(); this.session.update();
     try {
       const target = await authorizePage(tabId);

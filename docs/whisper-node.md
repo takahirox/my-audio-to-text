@@ -11,7 +11,7 @@ before model loading with instructions to correct or disconnect the Text Node.
 ## Use in Graph Editor
 
 Remove ReazonSpeech, add Whisper, connect the audio source's `audio` to Whisper's
-`audio`, and connect `final → LiveTextDisplay.append` only. Only one ASR is
+`audio`, and connect `final → LiveTextDisplay.append` only. Multiple independent ASRs are
 allowed. Whisper's final text can also feed the existing TextFormatter, OPUS-MT, focused-field output or TTS
 ports directly. You can deliberately connect final to `LiveTextDisplay.replace`
 for preview-style replacement instead of committed history. No translator is
@@ -40,15 +40,12 @@ positions, settings, final routes and unrelated routes are preserved. No edge
 is automatically redirected to final. Valid results are saved in the same
 storage key. Graphs without these edges only change version.
 
-If removal leaves a missing required connection (including a display with no
-remaining input), loading reports the exact removed connection and validation
-errors without changing storage. Graph Editor opens the affected graph as an
-**unsaved repair draft**, with only the dead edges removed. Deliberately connect
-an available TEXT output to the affected destination, or remove an unused
-Node, then Save. For committed Whisper text, choose `final → append`; choose
-`final → replace` only if replacement behavior is intended. An invalid draft
-cannot overwrite the saved graph. ReazonSpeech keeps its provisional/final
-outputs and default preview/committed wiring.
+If removal leaves a missing input, the destination remains in the saved draft
+and stays inactive until connected. Optional warnings and explicit Validate draft
+explain the incomplete branch. Choose `final → append` for committed Whisper
+text, or `final → replace` for replacement semantics. No route is silently
+redirected. Structural wiring/settings errors still prevent saving or execution.
+ReazonSpeech keeps its provisional/final outputs and default wiring.
 
 ## Recognition policy
 
@@ -120,7 +117,7 @@ python3 scripts/prepare-reazon-ja-en-fixtures.py
 npm run test:whisper-real
 ```
 
-Unit tests cover version 7 dead-edge migration and non-destructive repair,
+Unit tests cover version 7 dead-edge migration and retained incomplete drafts,
 lossless version 6 migration, earlier migrations, defaults and
 invalid recovery; literal Text persistence, configuration order and invalid
 types/codes; model replacement, formatter compatibility; final-only segmentation,

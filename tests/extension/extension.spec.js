@@ -134,7 +134,7 @@ for (const fallback of [false, true]) {
     expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);
     expect(await page.evaluate(() => window.mediaOptions.audio.mandatory)).toEqual({ chromeMediaSource: 'tab', chromeMediaSourceId: 'fixture-id' });
     expect(await page.evaluate(() => window.mediaOptions.video)).toBe(false);
-    await expect(page.locator('#signal')).toHaveText('Tab audio signal detected.');
+    await expect(page.locator('#signal')).toHaveText('audio: Audio signal detected.');
     const inputs = await page.evaluate(() => window.inputs.filter(m => m.type === 'vad-audio'));
     expect(inputs.length).toBeGreaterThan(0);
     expect(inputs.every(m => m.float32 && m.length <= 2048)).toBe(true);
@@ -192,7 +192,7 @@ test('model preload progress and cancellation leave capture unrequested and retr
   const page = await setup(extension, { mode: 'loading' });
   await expect(page.locator('#status')).toContainText('Loading ReazonSpeech');
   await page.evaluate(() => window.workers[0].postMessage({ type: 'fixture-progress' }));
-  await expect(page.locator('#status')).toHaveText('Loading fixture models…');
+  await expect(page.locator('#status')).toHaveText('speech: Loading fixture models…');
   expect(await page.evaluate(() => window.requests)).toEqual([]);
   await page.locator('#stop').click();
   await expect(page.locator('#status')).toHaveText('Stopped before capture started.');
@@ -332,7 +332,7 @@ test('real toolbar invocation captures the current tab without a picker, repeats
   await expect(recorder.locator('#status')).not.toBeEmpty();
   await expect(recorder.locator('#errors')).toHaveText('');
   await expect(recorder.locator('#status')).toHaveText('Transcription active');
-  await expect(recorder.locator('#signal')).toHaveText('Tab audio signal detected.');
+  await expect(recorder.locator('#signal')).toHaveText('audio: Audio signal detected.');
   await expect(recorder.locator('[data-display="transcript"] .display-preview')).toHaveText('extension transcript');
   await expect(recorder.locator('#errors')).toBeEmpty();
   // Another toolbar invocation during capture focuses the existing window and

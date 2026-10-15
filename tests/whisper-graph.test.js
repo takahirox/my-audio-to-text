@@ -28,7 +28,7 @@ function fixture({ language, hold, failure } = {}) {
   graph.nodes.at(-2).settings.template = 'Final: {1}';
   graph.edges.push(edge('speech', 'final', 'format', 'input1'), edge('format', 'text', 'formatted', 'append'));
   const built = buildGraph(graph, {
-    sourceFactory: () => ({ start() {}, stop() { built.audio.context?.emit('audio', new Float32Array()); } }),
+    sourceFactory: () => ({ start() {}, stop() { built.audioSources.get('audio').context?.emit('audio', new Float32Array()); } }),
     whisperWorkerFactory: path => {
       const worker = { path, terminated: false, messages: [], postMessage(data) {
         this.messages.push(data);
@@ -52,7 +52,7 @@ function fixture({ language, hold, failure } = {}) {
     },
     onDisplay: (id, state) => { if (id === 'transcript') { finals.splice(0, finals.length, ...state.items); previews.push(state.preview); } },
   });
-  return { ...built, workers, finals, previews, requests };
+  return { ...built, speech: built.speechNodes.get('speech'), workers, finals, previews, requests };
 }
 
 test('Whisper schema and concrete runtime expose exactly final; ReazonSpeech retains both outputs and default routes', async () => {
@@ -107,36 +107,17 @@ test('v7 migration removes only dead Whisper edges, preserving all custom nodes,
   }
 });
 
-test('v7 unsafe Whisper migration names the connection, preserves storage and offers an explicit repair draft', () => {
+test('v7 dead Whisper routes migrate to saveable incomplete drafts without redirecting ports', () => {
   for (const [type, port] of [['LiveTextDisplay', 'replace'], ['FocusedInputTextOutputNode', 'text'], ['OpusMtEnJa', 'text']]) {
     const graph = whisperGraph('ja'); graph.version = 7;
     graph.nodes.push(graphNode(type, 'affected', 555, 444));
     graph.edges.push(edge('speech', 'provisional', 'affected', port));
-    if (type === 'OpusMtEnJa') {
-      graph.nodes.push(graphNode('LiveTextDisplay', 'translated'));
-      graph.edges.push(edge('affected', 'text', 'translated', 'append'));
-    }
-    const storage = store(), saved = JSON.stringify(graph); storage.setItem(GRAPH_KEY, saved);
-    storage.setItem('opus-mt-translation-preferences', 'keep');
-    let failure;
-    assert.throws(() => readGraph(storage), error => { failure = error; return /speech.provisional → affected\./.test(error.message) && /Edit the affected connections/.test(error.message) && /Required connection missing: affected/.test(error.message); });
-    assert.equal(storage.getItem(GRAPH_KEY), saved);
-    assert.equal(storage.getItem('opus-mt-translation-preferences'), 'keep');
-    const expected = structuredClone(graph); expected.version = GRAPH_VERSION; expected.edges = expected.edges.filter(route => route.from[1] !== 'provisional');
-    assert.deepEqual(failure.recoveryGraph, expected);
-    assert.throws(() => saveGraph(storage, failure.recoveryGraph), /Required connection missing/);
-    assert.equal(storage.getItem(GRAPH_KEY), saved);
-    // Deliberately select the replacement semantics, then explicitly Save.
-    failure.recoveryGraph.edges.push(edge('speech', 'final', 'affected', port));
-    saveGraph(storage, failure.recoveryGraph);
-    assert.deepEqual(readGraph(storage), failure.recoveryGraph);
+    const storage = store(); storage.setItem(GRAPH_KEY, JSON.stringify(graph));
+    const expected = structuredClone(graph); expected.version = GRAPH_VERSION;
+    expected.edges = expected.edges.filter(route => route.from[1] !== 'provisional');
+    assert.deepEqual(readGraph(storage), expected);
+    assert.deepEqual(readGraph(storage), expected);
   }
-  const graph = whisperGraph(); graph.version = 7;
-  graph.edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace')];
-  const storage = store(), saved = JSON.stringify(graph); storage.setItem(GRAPH_KEY, saved);
-  assert.throws(() => readGraph(storage), error => /Unconnected output Node: speech/.test(error.message) &&
-    /Required connection missing: transcript/.test(error.message) && error.recoveryGraph.edges.length === 1);
-  assert.equal(storage.getItem(GRAPH_KEY), saved);
 });
 
 test('v6 rename preserves custom branches, IDs, destinations, settings, positions and Number wiring exactly', () => {
@@ -175,7 +156,7 @@ test('Text is generic, literal, empty-safe and round-trips; ordinary consumers r
   assert.throws(() => new TextNode({ value: 2 }), /string/);
 });
 
-test('model ports and one-ASR rule are honest; Whisper language is a validated startup constant', async () => {
+test('model ports support independent ASRs; Whisper language is a validated startup constant', async () => {
   assert.equal(NODE_TYPES.SpeechToTextReazonSpeech.inputs.language, undefined);
   assert.equal(NODE_TYPES.SpeechToTextWhisper.inputs.maxDuration, undefined);
   for (const language of [undefined, 'en', 'ja']) {
@@ -189,12 +170,12 @@ test('model ports and one-ASR rule are honest; Whisper language is a validated s
   }
   for (const language of ['', 'EN', ' en', 'fr', null, 1]) assert.throws(() => buildGraph(whisperGraph(language), {}), /Whisper.language|Invalid setting/);
   const graph = whisperGraph(); graph.nodes.push(graphNode('SpeechToTextReazonSpeech', 'other'));
-  assert.match(validateGraph(graph).join('\n'), /Exactly one ASR/);
+  assert.deepEqual(validateGraph(graph), []);
   const dynamic = whisperGraph(); dynamic.edges.push(edge('speech', 'final', 'speech', 'language'));
   assert.match(validateGraph(dynamic).join('\n'), /requires Text.value.*startup/);
   const storage = store(), snapshot = whisperGraph('en'); saveGraph(storage, snapshot);
   const built = buildGraph(readGraph(storage), {}); snapshot.nodes.at(-1).settings.value = 'ja'; saveGraph(storage, snapshot);
-  assert.equal(built.speech.language, 'en'); assert.equal(buildGraph(readGraph(storage), {}).speech.language, 'ja');
+  assert.equal(built.speechNodes.get('speech').language, 'en'); assert.equal(buildGraph(readGraph(storage), {}).speechNodes.get('speech').language, 'ja');
   await built.pipeline.dispose();
 });
 
@@ -231,7 +212,7 @@ for (const failure of ['load', 'decode', 'vad-stop']) test(`Whisper ${failure} e
     await assert.rejects(f.pipeline.stop(), /Pipeline failed/); await f.pipeline.dispose();
   }
   assert.ok(f.workers.every(w => w.terminated));
-  const next = fixture(); await next.pipeline.start(); next.speech.receive('audio', new Float32Array(37));
+  const next = fixture(); await next.pipeline.start(); next.speechNodes.get('speech').receive('audio', new Float32Array(37));
   await next.pipeline.stop(); assert.deepEqual(next.finals, ['same text']); await next.pipeline.dispose();
 });
 

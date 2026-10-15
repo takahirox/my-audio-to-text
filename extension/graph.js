@@ -74,12 +74,11 @@ function unusedId(ids, base) {
   ids.add(id); return id;
 }
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
-export function validateGraph(graph, legacy = false) {
+export function validateGraph(graph, legacy = false, optionalWarnings = false) {
   const types = legacy ? { ...NODE_TYPES, SpeechToText: NODE_TYPES.SpeechToTextReazonSpeech, ...LEGACY_VIEWS } : NODE_TYPES;
   const definitionOf = type => Object.hasOwn(types, type) ? types[type] : undefined;
-  const errors = [];
-  if (!record(graph) || graph.version !== (legacy ? 5 : GRAPH_VERSION) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return [`Expected version ${legacy ? 5 : GRAPH_VERSION} graph with nodes and edges arrays.`];
-  if (graph.nodes.length > 24 || graph.edges.length > 64) return ['Graph exceeds the supported size (24 nodes / 64 edges).'];
+  const errors = [], warnings = [], configuration = [];
+  if (!record(graph) || graph.version !== (legacy ? 5 : GRAPH_VERSION) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return optionalWarnings ? [] : [`Expected version ${legacy ? 5 : GRAPH_VERSION} graph with nodes and edges arrays.`];
   if (graph.translationDirection !== undefined && !['ja-en', 'en-ja'].includes(graph.translationDirection)) errors.push('Invalid translation direction preference.');
   const nodes = new Map(), incoming = new Map(), outgoing = new Map(), seen = new Set();
   for (const node of graph.nodes) {
@@ -88,7 +87,7 @@ export function validateGraph(graph, legacy = false) {
     nodes.set(node.id, node);
     const definition = definitionOf(node.type);
     if (!definition) { errors.push(`Unknown Node type: ${node.type}`); continue; }
-    if (!record(node.position) || ![node.position.x, node.position.y].every(n => Number.isFinite(n) && n >= 0 && n <= 4000)) errors.push(`Invalid position: ${node.id}`);
+    if (!record(node.position) || ![node.position.x, node.position.y].every(n => Number.isFinite(n) && n >= 0)) errors.push(`Invalid position: ${node.id}`);
     if (!record(node.settings)) { errors.push(`Invalid settings: ${node.id}`); continue; }
     for (const key of Object.keys(node.settings)) if (!Object.hasOwn(definition.settings || {}, key) && !Object.hasOwn(definition.textSettings || {}, key) && !Object.hasOwn(definition.numberSettings || {}, key)) errors.push(`Unknown setting: ${node.id}.${key}`);
     for (const key of Object.keys(definition.numberSettings || {})) try { finiteNumber(node.settings[key]); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
@@ -108,11 +107,11 @@ export function validateGraph(graph, legacy = false) {
     if (a.outputs[output] !== b.inputs[input]) errors.push(`Incompatible port types: ${source}.${output} → ${target}.${input}`);
     if (['SpeechToTextReazonSpeech', ...(legacy ? ['SpeechToText'] : [])].includes(nodes.get(target)?.type) && input === 'maxDuration') {
       if (nodes.get(source)?.type !== 'Number' || output !== 'value') errors.push(`${target}.maxDuration requires Number.value available before session startup.`);
-      else try { maxDurationSamples(nodes.get(source).settings?.value); } catch (error) { errors.push(`${target}: ${error.message}`); }
+      else try { maxDurationSamples(nodes.get(source).settings?.value); } catch (error) { configuration.push({ target, message: `${target}: ${error.message}` }); }
     }
     if (nodes.get(target)?.type === 'SpeechToTextWhisper' && input === 'language') {
       if (nodes.get(source)?.type !== 'Text' || output !== 'value') errors.push(`${target}.language requires Text.value available before session startup.`);
-      else try { whisperLanguage(nodes.get(source).settings?.value); } catch (error) { errors.push(`${target}: ${error.message}`); }
+      else try { whisperLanguage(nodes.get(source).settings?.value); } catch (error) { configuration.push({ target, message: `${target}: ${error.message}` }); }
     }
     const destination = JSON.stringify([target, input]);
     if (incoming.has(destination)) errors.push(`Only one connection allowed to ${target}.${input}`);
@@ -120,44 +119,91 @@ export function validateGraph(graph, legacy = false) {
     if (!outgoing.has(source)) outgoing.set(source, []);
     outgoing.get(source).push(target);
   }
-  const active = new Set(), visited = new Set();
-  function visit(id) {
-    if (active.has(id)) { errors.push('Graph must be acyclic.'); return; }
-    if (visited.has(id)) return;
-    active.add(id); for (const target of outgoing.get(id) || []) visit(target);
-    active.delete(id); visited.add(id);
+  const degree = new Map([...nodes.keys()].map(id => [id, 0]));
+  for (const targets of outgoing.values()) for (const target of targets) degree.set(target, degree.get(target) + 1);
+  const roots = [...degree.keys()].filter(id => degree.get(id) === 0);
+  for (let index = 0; index < roots.length; index++) for (const target of outgoing.get(roots[index]) || []) {
+    degree.set(target, degree.get(target) - 1);
+    if (!degree.get(target)) roots.push(target);
   }
-  for (const id of nodes.keys()) visit(id);
-  if (graph.nodes.filter(n => INPUT_TYPES.includes(n?.type)).length !== 1) errors.push('Exactly one audio input is required; simultaneous sources are ambiguous.');
-  if (graph.nodes.filter(n => [...ASR_TYPES, ...(legacy ? ['SpeechToText'] : [])].includes(n?.type)).length !== 1) errors.push('Exactly one ASR Node (ReazonSpeech, Whisper or English Zipformer) is required.');
+  if (roots.length !== nodes.size) errors.push('Graph must be acyclic.');
   for (const node of nodes.values()) {
     const definition = definitionOf(node.type);
     if (!definition) continue;
     if (node.type === 'LiveTextDisplay' || node.type === 'TextFormatter') {
-      if (!Object.keys(definition.inputs).some(port => incoming.has(JSON.stringify([node.id, port])))) errors.push(`Required connection missing: ${node.id} needs at least one TEXT input`);
+      if (!Object.keys(definition.inputs).some(port => incoming.has(JSON.stringify([node.id, port])))) warnings.push(`Required connection missing: ${node.id} needs at least one TEXT input`);
     }
     if (node.type === 'TranslationView' || node.type === 'PairedTextFormatter') {
       const connected = port => incoming.has(JSON.stringify([node.id, port]));
-      if (!connected('text') && !connected('provisionalText')) errors.push(`Required connection missing: ${node.id}.text or provisionalText`);
+      if (!connected('text') && !connected('provisionalText')) warnings.push(`Required connection missing: ${node.id}.text or provisionalText`);
       // A paired view can only use directly grouped outputs from one scheduler.
       // Type compatibility alone cannot guarantee association across branches.
       const metadata = ['finalSource', 'finalStatus', 'finalIndex', 'finalError', 'provisionalSource', 'provisionalStatus', 'provisionalError'];
       if (node.type === 'PairedTextFormatter' || metadata.some(connected)) {
         const ports = ['text', 'finalSource', 'finalStatus', 'finalIndex', 'finalError'];
         if (['provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError'].some(connected)) ports.push('provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError');
-        const source = incoming.get(JSON.stringify([node.id, 'finalSource']))?.[0];
+        const source = ports.map(port => incoming.get(JSON.stringify([node.id, port]))).find(Boolean)?.[0];
         for (const port of ports) {
           const route = incoming.get(JSON.stringify([node.id, port]));
-          if (!route) errors.push(`Required connection missing: ${node.id}.${port} for correlated display`);
+          if (!route) warnings.push(`Required connection missing: ${node.id}.${port} for correlated display`);
           else if (!translators.includes(nodes.get(source)?.type) || route[0] !== source || route[1] !== (port === 'provisionalText' ? 'provisional' : port)) errors.push(`Correlated display ${node.id}.${port} requires matching direct outputs from one translator.`);
         }
       }
     }
-    for (const port of Object.keys(definition.inputs)) if (!definition.optionalInputs?.includes(port) && !incoming.has(JSON.stringify([node.id, port]))) errors.push(`Required connection missing: ${node.id}.${port}`);
-    if (Object.keys(definition.outputs).length && !outgoing.has(node.id)) errors.push(`Unconnected output Node: ${node.id}`);
+    for (const port of Object.keys(definition.inputs)) if (!definition.optionalInputs?.includes(port) && !incoming.has(JSON.stringify([node.id, port]))) warnings.push(`Required connection missing: ${node.id}.${port}`);
+    if (Object.keys(definition.outputs).length && !outgoing.has(node.id)) warnings.push(`Unconnected output Node: ${node.id}`);
   }
-  if (!graph.nodes.some(n => definitionOf(n?.type) && !Object.keys(definitionOf(n.type).outputs).length)) errors.push('At least one output destination is required.');
-  return [...new Set(errors)];
+  if (!graph.nodes.some(n => definitionOf(n?.type) && !Object.keys(definitionOf(n.type).outputs).length)) warnings.push('At least one output destination is required to run.');
+  // A consumer's startup value constraints apply when that consumer participates.
+  // The generic constant and its typed edge remain intact in an unfinished draft.
+  const participating = !legacy && !errors.length ? new Set(selectExecutable(graph).nodes.map(node => node.id)) : null;
+  for (const { target, message } of configuration) {
+    if (!participating || participating.has(target)) errors.push(message);
+    else warnings.push(`${message} (inactive configuration)`);
+  }
+  return [...new Set(optionalWarnings ? warnings : errors)];
+}
+// Storage accepts unfinished branches. Execution includes only ready ancestors of
+// ready sinks; constants are roots too, so text/translation/TTS paths need no ASR.
+export function executableGraph(graph) { return selectExecutable(assertGraph(graph)); }
+function selectExecutable(description) {
+  const ready = new Set(), incoming = new Map(description.nodes.map(node => [node.id, []]));
+  for (const route of description.edges) incoming.get(route.to[0]).push(route);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const node of description.nodes) {
+      if (ready.has(node.id)) continue;
+      const definition = NODE_TYPES[node.type], routes = incoming.get(node.id);
+      const available = port => routes.some(route => route.to[1] === port && ready.has(route.from[0]));
+      let required = Object.keys(definition.inputs).filter(port => !definition.optionalInputs?.includes(port));
+      if (node.type === 'PairedTextFormatter' && routes.some(route => route.to[1].startsWith('provisional'))) {
+        required = [...required, 'provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError'];
+      }
+      if (!required.every(available)) continue;
+      if (Object.keys(definition.inputs).length && !routes.some(route => ready.has(route.from[0]))) continue;
+      ready.add(node.id); changed = true;
+    }
+  }
+  const participating = new Set();
+  const pending = description.nodes.filter(node => ready.has(node.id) && !Object.keys(NODE_TYPES[node.type].outputs).length).map(node => node.id);
+  while (pending.length) {
+    const id = pending.pop();
+    if (participating.has(id)) continue;
+    participating.add(id);
+    for (const route of incoming.get(id)) if (ready.has(route.from[0])) pending.push(route.from[0]);
+  }
+  return { ...description, nodes: description.nodes.filter(node => participating.has(node.id)),
+    edges: description.edges.filter(route => participating.has(route.from[0]) && participating.has(route.to[0])) };
+}
+export function graphWarnings(graph) {
+  const warnings = validateGraph(graph, false, true);
+  if (!validateGraph(graph).length) {
+    const active = new Set(executableGraph(graph).nodes.map(node => node.id));
+    for (const node of graph.nodes) if (!active.has(node.id)) warnings.push(`Inactive Node: ${node.id} does not participate in an executable path.`);
+    if (!active.size) warnings.push('No executable path. Connect a source through complete processors to an output destination.');
+  }
+  return warnings;
 }
 // Rewrite every legacy route explicitly; malformed or ambiguous routes require visible recovery.
 export function migrateGraph(graph) {
@@ -279,6 +325,7 @@ export function withTranslation(graph, { enabled, direction }) {
     const ids = new Set(next.nodes.map(n => n.id));
     const unused = base => unusedId(ids, base);
     const id = unused('translation'), sink = unused('translated'), formatter = unused('translated-format'), speech = next.nodes.find(n => ASR_TYPES.includes(n.type));
+    if (!speech) throw Error('Add an ASR Node before applying the translation preset, or connect translator Nodes individually.');
     next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink }, { ...branch.nodes[5], id: formatter });
     for (const port of Object.keys(NODE_TYPES[speech.type].outputs)) next.edges.push(edge(speech.id, port, id, port === 'final' ? 'text' : port));
     next.edges.push(...translationViewEdges(id, formatter), edge(formatter, 'text', sink, 'replace'));

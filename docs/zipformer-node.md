@@ -21,7 +21,7 @@ SpeechToTextZipformerEn.final       → LiveTextDisplay.append
 Save, then Start in Live. Selected media and microphone sources provide the same
 PCM contract. There is no language or maxDuration input: this is English-only,
 with a fixed policy. Remove any now-unused Number/Text source and configuration
-wire from the old ASR. Exactly one ASR is required. Finals can feed existing
+wire from the old ASR. Multiple ASRs can coexist or share a compatible source. Finals can feed existing
 TEXT formatters, OPUS-MT, focused fields and TTS. All downstream contracts and
 sinks are unchanged. Default/reset remains the three-node ReazonSpeech graph.
 Version 8 graphs are not migrated or rewritten; all existing migrations remain.

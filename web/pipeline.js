@@ -157,7 +157,16 @@ export class Pipeline {
     if (this.state === 'starting') await this.starting;
     if (this.state === 'disposed') return;
     this.state = 'stopping';
-    for (const entry of this.order) {
+    await this.drain(this.order.map(entry => entry.id));
+    if (this.state === 'disposed') return;
+    this.state = 'stopped';
+    if (this.errors.length) throw new AggregateError(this.errors, `Pipeline failed while draining: ${this.errors.map(error => error.message).join(' ')}`);
+  }
+  // Drain a selected set in topological order, preserving shared live consumers.
+  // The caller must ensure no live producer still routes to these Nodes.
+  async drain(nodeIds) {
+    const ids = new Set(nodeIds);
+    for (const entry of this.order.filter(entry => ids.has(entry.id) && !entry.closed)) {
       if (this.state === 'disposed') return;
       try {
         if (!entry.failed) {
@@ -174,9 +183,6 @@ export class Pipeline {
       // stop() promises must include all background output from this node.
       entry.closed = true;
     }
-    if (this.state === 'disposed') return;
-    this.state = 'stopped';
-    if (this.errors.length) throw new AggregateError(this.errors, 'Pipeline failed while draining.');
   }
   dispose() {
     if (this.disposing) return this.disposing;

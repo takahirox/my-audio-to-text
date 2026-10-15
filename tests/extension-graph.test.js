@@ -16,18 +16,18 @@ test('optional Number configuration reloads and binds a snapshot before ASR or c
   const store = storage(), graph = defaultGraph();
   const options = { workerFactory: () => ({ postMessage() {}, terminate() {} }), sourceFactory: () => ({ start() {}, stop() {} }) };
   const unconnected = buildGraph(graph, options);
-  assert.equal(unconnected.speech.maxDuration, 6); await unconnected.pipeline.dispose();
+  assert.equal(unconnected.speechNodes.get('speech').maxDuration, 6); await unconnected.pipeline.dispose();
   graph.nodes.push(graphNode('Number', 'duration'));
   graph.nodes.at(-1).settings.value = 1.234567;
   graph.edges.push(edge('duration', 'value', 'speech', 'maxDuration'));
   saveGraph(store, graph); assert.deepEqual(readGraph(store), graph);
   const built = buildGraph(readGraph(store), options);
-  assert.equal(built.speech.maxDuration, 1.234567);
-  assert.equal(built.speech.core.state, 'released'); // No workers or audio processing yet.
+  assert.equal(built.speechNodes.get('speech').maxDuration, 1.234567);
+  assert.equal(built.speechNodes.get('speech').core.state, 'released'); // No workers or audio processing yet.
   graph.nodes.at(-1).settings.value = 9.5; saveGraph(store, graph);
-  assert.equal(built.speech.maxDuration, 1.234567);
+  assert.equal(built.speechNodes.get('speech').maxDuration, 1.234567);
   const next = buildGraph(readGraph(store), options);
-  assert.equal(next.speech.maxDuration, 9.5);
+  assert.equal(next.speechNodes.get('speech').maxDuration, 9.5);
   assert.deepEqual(built.description.edges, graph.edges);
   await built.pipeline.dispose(); await next.pipeline.dispose();
 });
@@ -96,8 +96,7 @@ for (const [name, edit, pattern] of [
   ['cycle', g => g.edges.push(edge('speech', 'final', 'speech', 'audio')), /acyclic/],
   ['duplicate edge', g => g.edges.push(g.edges[0]), /Duplicate edge/],
   ['multiple incoming edges', g => g.edges.push(edge('speech', 'provisional', 'translation', 'text')), /Only one connection/],
-  ['missing input', g => g.edges = g.edges.filter(e => e.to[0] !== 'translated'), /Required connection/],
-  ['missing source', g => g.nodes.shift(), /Exactly one audio input/],
+  ['missing source', g => g.nodes.shift(), /Unknown edge Node/],
   ['position', g => g.nodes[0].position.x = Infinity, /Invalid position/],
   ['settings', g => g.nodes[2].settings.model = 'remote', /Unknown setting/],
   ['malformed edge', g => g.edges.push({ from: null }), /Malformed/],
@@ -125,7 +124,7 @@ test('versions 1–5 preserve paired bundles, direction, fan-out and explicitly 
     assert.equal(migrated.nodes.length, 5);
     assert.deepEqual(migrated.edges.filter(e => e.to[0] === 'translated').map(e => e.to[1]), ports.map(p => p === 'text' ? 'append' : 'replace'));
     graph.edges.push(edge('translation', 'finalSource', 'translated', 'finalSource'));
-    assert.throws(() => assertGraph(graph), /Required connection missing/);
+    assert.doesNotThrow(() => assertGraph(graph));
   }
   const split = defaultGraph({ enabled: true }); split.edges.find(e => e.to[0] === 'translated-format' && e.to[1] === 'text').from = ['speech', 'final'];
   assert.match(validateGraph(split).join('\n'), /matching direct outputs/);
@@ -138,9 +137,9 @@ test('concrete supported descriptions instantiate actual Nodes with identical co
   for (const graph of [defaultGraph({ enabled: true }), defaultGraph({ enabled: false }), defaultGraph({ enabled: true, direction: 'en-ja' }), audioGraph('Supertonic3'), audioGraph('Kokoro', true)]) {
     const result = buildGraph(graph, { tabId: 42, onTranscript() {}, onTranslation() {}, onTranslationState() {}, prepareTranslation() {}, onSynthesizedAudio() {} });
     assert.ok(result.pipeline instanceof Pipeline);
-    assert.ok(result.audio instanceof ExtensionTabAudioNode); assert.ok(result.speech instanceof SpeechToTextNode);
+    assert.ok(result.audioSources.get('audio') instanceof ExtensionTabAudioNode); assert.ok(result.speechNodes.get('speech') instanceof SpeechToTextNode);
     assert.ok(result.pipeline.entries.get('transcript').node instanceof LiveTextDisplayNode);
-    if (result.translation) assert.ok(result.translation instanceof TranslationSchedulerNode);
+    for (const translation of result.translations) assert.ok(translation instanceof TranslationSchedulerNode);
     for (const spec of graph.nodes) {
       const actual = result.pipeline.entries.get(spec.id);
       assert.deepEqual(actual.inputs, NODE_TYPES[spec.type].inputs); assert.deepEqual(actual.outputs, NODE_TYPES[spec.type].outputs);
@@ -184,12 +183,12 @@ test('saved translation TEXT → actual Kokoro Node graph drains only completed 
     prepareTranslation: async () => {}, prepareTts: async () => {}, onDisplay: (id, state) => { if (id === 'transcript') rows.splice(0, rows.length, ...state.items); },
     onTranslation() {}, onTranslationState() {}, onSynthesizedAudio: value => audio.push(value) });
   await built.pipeline.start();
-  built.speech.receiveEvent({ type: 'partial', text: 'provisional', id: 0 });
+  built.speechNodes.get('speech').receiveEvent({ type: 'partial', text: 'provisional', id: 0 });
   await new Promise(resolve => setImmediate(resolve)); assert.deepEqual(texts, []);
-  built.speech.receiveEvent({ type: 'final', text: 'one', id: 0 });
-  built.speech.receiveEvent({ type: 'final', text: 'two', id: 1 });
+  built.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'one', id: 0 });
+  built.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'two', id: 1 });
   const long = 'a'.repeat(299) + '😀' + 'b'.repeat(302);
-  built.speech.receiveEvent({ type: 'final', text: long, id: 2 });
+  built.speechNodes.get('speech').receiveEvent({ type: 'final', text: long, id: 2 });
   await built.pipeline.stop(); await built.pipeline.dispose();
   assert.deepEqual(rows, ['one', 'two', long]); assert.deepEqual(texts.slice(0, 2), ['Translated one', 'Translated two']);
   assert.equal(texts.slice(2).join(''), 'Translated ' + long); assert.ok(texts.every(text => text.length <= 300 && !/[\uD800-\uDBFF]$/.test(text)));
@@ -212,7 +211,7 @@ test('TEXT edges depend on contract identity; interim and diagnostic inputs are 
   assert.match(validateGraph(graph).join('\n'), /acyclic/);
 });
 
-test('v5 migration preserves independent language, maximum IDs and fan-out; capacity recovery never overwrites storage', () => {
+test('v5 migration preserves independent language, maximum IDs and fan-out; large drafts migrate without a node cap', () => {
   const legacy = legacyGraph({ direction: 'en-ja' }, 5), longId = 'x'.repeat(64);
   legacy.nodes.find(n => n.id === 'transcript').settings.direction = 'ja-en';
   legacy.nodes.find(n => n.id === 'translated').id = longId;
@@ -226,7 +225,7 @@ test('v5 migration preserves independent language, maximum IDs and fan-out; capa
   assert.ok(migrated.edges.some(e => JSON.stringify(e) === JSON.stringify(edge('translation', 'text', 'field', 'text'))));
   while (legacy.nodes.length < 24) { const id = 'field-' + legacy.nodes.length; legacy.nodes.push(graphNode('FocusedInputTextOutputNode', id)); legacy.edges.push(edge('speech', 'final', id, 'text')); }
   const store = storage(), saved = JSON.stringify(legacy); store.setItem(GRAPH_KEY, saved);
-  assert.throws(() => readGraph(store), /Graph exceeds/); assert.equal(store.getItem(GRAPH_KEY), saved);
+  assert.equal(readGraph(store).nodes.length, 25);
 });
 
 test('disabling translation retains a shared display and all unaffected routes', () => {

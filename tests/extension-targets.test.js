@@ -7,6 +7,7 @@ import { TEXT } from '../web/translation-nodes.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { legacyGraph, legacyAdapter } from './fixtures/legacy-graph.js';
 import { Pipeline } from '../web/pipeline.js';
+import { TargetControls } from '../extension/target-controls.js';
 
 function fieldGraph(translated = false) {
   const graph = defaultGraph({ enabled: translated });
@@ -14,6 +15,46 @@ function fieldGraph(translated = false) {
   graph.edges.push(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', 'field', 'text'));
   return graph;
 }
+test('toolbar preparation authorizes only executable focused outputs, leaving parked and incomplete outputs unallocated', async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'chrome');
+  const calls = [];
+  Object.defineProperty(globalThis, 'chrome', { configurable: true, value: {
+    scripting: { async executeScript(options) { calls.push(['script', options]); return [{ documentId: 'document' }]; } },
+    tabs: { connect(tabId, options) {
+      calls.push(['connect', tabId, options]);
+      let reply;
+      return {
+        onMessage: { addListener(listener) { reply = listener; } }, onDisconnect: { addListener() {} },
+        postMessage(message) { calls.push(['request', message.action]); reply({ request: message.request, result: { label: 'Test page' } }); },
+        disconnect() { calls.push(['disconnect']); },
+      };
+    } },
+  } });
+  try {
+    const parked = defaultGraph(); parked.nodes.push(graphNode('FocusedInputTextOutputNode', 'parked'));
+    const incomplete = defaultGraph();
+    incomplete.nodes.push(graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'field'));
+    incomplete.edges.push(edge('unfinished', 'final', 'field', 'text'));
+    for (const graph of [parked, incomplete, fieldGraph()]) {
+      const session = { graph, outputTarget: { tabId: 99, documentId: 'stale' }, update() {} };
+      const controls = Object.assign(Object.create(TargetControls.prototype), { session, render() {} });
+      await controls.prepareFocusedOutput(42);
+      if (graph === parked || graph === incomplete) {
+        assert.deepEqual(calls, [], 'inactive outputs must not inject scripts or open page connections');
+        assert.equal(session.outputTarget, null, 'stale authorization is cleared');
+        assert.equal(controls.busy, undefined);
+      } else {
+        assert.deepEqual(calls.map(([action]) => action), ['script', 'connect', 'request', 'disconnect']);
+        assert.deepEqual(calls[0][1].target, { tabId: 42, frameIds: [0] });
+        assert.deepEqual(calls[1].slice(1), [42, { name: 'local-page-target', documentId: 'document' }]);
+        assert.equal(session.outputTarget.documentId, 'document');
+        assert.equal(session.outputTarget.tabId, 42);
+      }
+    }
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'chrome', descriptor); else delete globalThis.chrome;
+  }
+});
 test('direct TEXT input accepts different producers and all audio sources; structured diagnostics cannot connect', () => {
   assert.deepEqual(NODE_TYPES.FocusedInputTextOutputNode.inputs, { text: TEXT });
   assert.equal(NODE_TYPES.SelectedFormFieldTextOutputNode, undefined);
