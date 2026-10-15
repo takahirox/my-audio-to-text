@@ -51,7 +51,7 @@ test('fresh install and Reset save the minimal graph; explicit translation, visu
   await clickGraphAction(page.editor, 'graph-load'); await expect(page.editor.locator('#graph-errors')).toBeEmpty();
   // Remove and reconnect a required named port.
   await disconnectWire(page.editor, 'audio.audio to speech.audio');
-  await expect(page.editor.locator('#graph-errors')).toContainText('Required connection');
+  await expect(page.editor.locator('#graph-errors')).toBeEmpty();
   await page.editor.getByRole('button', { name: 'speech output final', exact: true }).click();
   await expect(page.editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
   await page.editor.getByRole('button', { name: 'audio output audio', exact: true }).click();
@@ -142,14 +142,13 @@ for (const type of ['Supertonic3', 'Kokoro']) {
   });
 }
 
-test('saved cycles, type mismatches, unknown ports/types and missing inputs refuse invocation before creating any Workers', async ({ graphExtension: f }) => {
+test('saved cycles, type mismatches, unknown ports/types refuse invocation before creating any Workers', async ({ graphExtension: f }) => {
   const page = await openGraph(f), valid = await saved(page);
   for (const [label, edit] of [
     ['acyclic', graph => graph.edges.push({ from: ['speech', 'final'], to: ['speech', 'audio'] })],
     ['Incompatible port types', graph => graph.edges[0].from = ['speech', 'final']],
     ['Unknown port', graph => graph.edges[0].from[1] = 'missing'],
     ['Unknown Node type', graph => graph.nodes[0].type = 'UnverifiedModel'],
-    ['Required connection', graph => graph.edges.shift()],
   ]) {
     const graph = structuredClone(valid); edit(graph);
     await page.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), graph); await page.reload(); await page.editor.reload();

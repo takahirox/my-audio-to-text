@@ -1,7 +1,7 @@
 import { TargetControls } from './target-controls.js';
 import { TabSession } from './session.js';
 import { renderTextRegions } from './live-text-regions.js';
-import { readGraph, defaultGraph, GRAPH_KEY, INPUT_TYPES } from './graph.js';
+import { readGraph, defaultGraph, GRAPH_KEY, INPUT_TYPES, executableGraph } from './graph.js';
 import { audioToWav } from '../web/synthesized-audio.js';
 
 const element = id => document.getElementById(id);
@@ -16,17 +16,17 @@ function clearAudio() {
   for (const url of audioURLs) URL.revokeObjectURL(url);
   audioURLs.clear(); element('audio-outputs').replaceChildren();
 }
-function graphState(view) { return { graph: view.activeGraph, state: view.state, tabId: view.tabId }; }
+function graphState(view) { return { graph: view.activeSavedGraph, state: view.state, tabId: view.tabId }; }
 const session = new TabSession(view => {
   for (const id of ['status', 'signal']) element(id).textContent = view[id];
   element('errors').textContent = graphError || view.error;
-  const input = (view.state !== 'idle' ? view.activeGraph : view.savedGraph)?.nodes.find(node => INPUT_TYPES.includes(node.type));
-  element('tab-status').textContent = input?.type === 'MicrophoneAudio' ? 'Capture target · microphone' : Number.isInteger(view.tabId) ? `Capture target · ${input?.type === 'SelectedPageMediaAudio' ? 'selected media in' : 'whole'} tab ${view.tabId}` : 'Invoke the toolbar action on a tab.';
+  const inputs = (view.state !== 'idle' ? view.activeGraph : view.savedGraph)?.nodes.filter(node => INPUT_TYPES.includes(node.type)) || [];
+  element('tab-status').textContent = inputs.length ? inputs.map(node => `${node.id} · ${node.type === 'MicrophoneAudio' ? 'microphone' : `${node.type === 'SelectedPageMediaAudio' ? 'selected media in' : 'whole'} tab ${view.tabId ?? '(invoke toolbar)'}`}`).join('\n') : 'No active audio sources.';
   element('tts-status').textContent = view.ttsStatus;
   element('target-status').textContent = view.targetStatus;
   targetControls?.render();
   const running = view.state !== 'idle';
-  const pending = running && JSON.stringify(view.activeGraph) !== JSON.stringify(view.savedGraph);
+  const pending = running && JSON.stringify(view.activeSavedGraph) !== JSON.stringify(view.savedGraph);
   element('saved-state').textContent = pending ? 'Saved graph changed. This session keeps its active graph; changes apply on Start.' : '';
   element('translation-status').hidden = !view.translationStatus || view.translationStatus === 'Translation off';
   renderTextRegions(element('live-displays'), view.activeGraph || view.savedGraph, view.displays);
@@ -35,7 +35,8 @@ const session = new TabSession(view => {
   element('tts-output').hidden = !view.ttsStatus && !audioURLs.size;
   element('model-recovery').hidden = !/missing|evict|retry|unavailable/i.test(`${view.translationStatus} ${view.ttsStatus}`);
   element('cancel-session').disabled = !running;
-  element('start').disabled = !!graphError || running || !!targetControls?.busy || (!Number.isInteger(view.tabId) && !view.savedGraph.nodes.some(node => node.type === 'MicrophoneAudio'));
+  const needsTab = executableGraph(view.savedGraph).nodes.some(node => ['ChromeTabAudio', 'SelectedPageMediaAudio'].includes(node.type));
+  element('start').disabled = !!graphError || running || !!targetControls?.busy || (needsTab && !Number.isInteger(view.tabId));
   element('stop').disabled = !['loading', 'starting', 'running'].includes(view.state);
   const nextState = JSON.stringify(graphState(view));
   if (!closed && nextState !== publishedState) { publishedState = nextState; stateChannel.postMessage(graphState(view)); }

@@ -58,7 +58,8 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .target-row { border-top: 1px solid var(--border); padding: .5rem 0; overflow-wrap: anywhere; }
 .target-row button { margin: .2rem; font-size: .8rem; }
 .target-row select { max-width: 100%; }
-#target-status { white-space: pre-line; overflow-wrap: anywhere; font-size: .85rem; }
+#status, #signal, #tab-status, #target-status { white-space: pre-line; overflow-wrap: anywhere; }
+#target-status { font-size: .85rem; }
 
 #translation-status { white-space: pre-line; overflow-wrap: anywhere; }
 

@@ -3,13 +3,14 @@ import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode } from '../web/translation-nodes.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
 import { AudioOutputNode } from '../web/synthesized-audio.js';
+import { ExtensionTab } from './tab-source.js';
 import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
 import { LiveTextDisplayNode, TextFormatterNode } from '../web/text-nodes.js';
 import { PairedTextFormatterNode } from './paired-text-formatter.js';
-import { assertGraph } from './graph.js';
+import { executableGraph, INPUT_TYPES, ASR_TYPES } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 import { TextNode } from '../web/text-constant-node.js';
 import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
@@ -54,33 +55,65 @@ class PreparedTtsNode {
   dispose() { return this.node.dispose(); }
 }
 
+// Chrome permits one capture of a tab. Repeated tab Source Nodes subscribe to
+// the same normalized capture; ending one subscriber must not end its peers.
+function sharedTabCapture(factory) {
+  let capture;
+  return (tabId, onAudio, onEnded) => {
+    const listener = { onAudio, onEnded };
+    let owned;
+    return {
+      start() {
+        if (!capture) {
+          const listeners = new Set();
+          const source = factory(tabId,
+            audio => { for (const item of listeners) item.onAudio(audio); },
+            () => { for (const item of [...listeners]) item.onEnded(); });
+          capture = { source, listeners };
+        }
+        owned = capture; owned.listeners.add(listener);
+        return owned.starting ??= Promise.resolve().then(() => owned.source.start());
+      },
+      async stop(flush = true) {
+        if (!owned || !owned.listeners.has(listener)) return;
+        if (owned.listeners.size > 1) { owned.listeners.delete(listener); return; }
+        if (capture === owned) capture = null;
+        await owned.source.stop(flush);
+        owned.listeners.delete(listener);
+      },
+    };
+  };
+}
+
 export function buildGraph(graph, options) {
-  const description = assertGraph(graph);
-  const nodes = {}, resources = { translations: [] };
+  const description = executableGraph(graph);
+  if (!description.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
+  const tabSourceFactory = sharedTabCapture(options.sourceFactory || ((...args) => new ExtensionTab(...args)));
+  const nodes = {}, resources = { translations: [], audioSources: new Map(), speechNodes: new Map() };
   for (const spec of description.nodes) {
     let node;
     switch (spec.type) {
       case 'Text': node = new TextNode(spec.settings); break;
       case 'Number': node = new NumberNode(spec.settings); break;
       case 'ChromeTabAudio':
-        node = resources.audio = new ExtensionTabAudioNode(options.tabId, { sourceFactory: options.sourceFactory, onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
+        node = new ExtensionTabAudioNode(options.tabId, { sourceFactory: tabSourceFactory, onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'SelectedPageMediaAudio':
-        node = resources.audio = new SelectedPageMediaAudioNode(options.targets?.[spec.id], { onAudio: options.onCapturedAudio, onEnded: options.onEnded, onState: state => options.onTargetState?.(spec.id, state) }); break;
+        node = new SelectedPageMediaAudioNode(options.targets?.[spec.id], { onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id), onState: state => options.onTargetState?.(spec.id, state) }); break;
       case 'MicrophoneAudio':
-        node = resources.audio = new ExtensionMicrophoneAudioNode(options.microphoneStream, { onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
+        node = new ExtensionMicrophoneAudioNode(options.microphoneStreams?.get(spec.id), { onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'FocusedInputTextOutputNode':
         node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active) => options.onTargetState?.(spec.id, state, active) }); break;
       case 'SpeechToTextZipformerEn':
-        node = resources.speech = new SpeechToTextZipformerEnNode({ workerFactory: options.zipformerWorkerFactory, onEvent: options.onSpeechEvent }); break;
+        node = new SpeechToTextZipformerEnNode({ workerFactory: options.zipformerWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'SpeechToTextWhisper':
-        node = resources.speech = new SpeechToTextWhisperNode({ workerFactory: options.whisperWorkerFactory, onEvent: options.onSpeechEvent }); break;
+        node = new SpeechToTextWhisperNode({ workerFactory: options.whisperWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'SpeechToTextReazonSpeech':
-        node = resources.speech = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: options.onSpeechEvent }); break;
+        node = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'LiveTextDisplay': node = new LiveTextDisplayNode(state => options.onDisplay?.(spec.id, state), { appendConnected: description.edges.some(edge => edge.to[0] === spec.id && edge.to[1] === 'append') }); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
       case 'PairedTextFormatter': node = new PairedTextFormatterNode(spec.settings); break;
       case 'OpusMtJaEn': case 'OpusMtEnJa':
-        node = resources.translation = new TranslationSchedulerNode({ prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
+        node = new TranslationSchedulerNode({ prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
           TranslationNode: spec.type === 'OpusMtEnJa' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
           workerFactory: options.translationWorkerFactory, onState: state => options.onTranslationState?.(state, spec.id) }); resources.translations.push(node); break;
       case 'Supertonic3': case 'Kokoro': {
@@ -93,6 +126,8 @@ export function buildGraph(graph, options) {
       default: throw new Error(`Unsupported Node: ${spec.type}`);
     }
     nodes[spec.id] = node;
+    if (INPUT_TYPES.includes(spec.type)) resources.audioSources.set(spec.id, node);
+    if (ASR_TYPES.includes(spec.type)) resources.speechNodes.set(spec.id, node);
   }
   // Resolve constant configuration edges synchronously from this validated
   // snapshot. Pipeline starts consumers before producers; a normal start-time

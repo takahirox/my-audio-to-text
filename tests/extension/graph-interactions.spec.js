@@ -35,8 +35,9 @@ for (const action of ['Close settings', 'Remove transcript']) {
       await expect(editor.locator('.graph-node')).toHaveCount(expected.nodes.length);
       await expect(editor.locator('.graph-wire')).toHaveCount(expected.edges.length);
       await editor.locator('#graph-save').click();
-      await expect(editor.locator('#graph-errors')).toContainText('Unconnected output Node');
-      expect(await saved(live)).toEqual(before);
+      await expect(editor.locator('#graph-save')).toBeEnabled();
+      await expect(editor.locator('#graph-errors')).toBeEmpty();
+      expect(await saved(live)).toEqual(expected);
       return;
     }
     await save(editor);
@@ -188,9 +189,9 @@ for (const key of ['Delete', 'Backspace']) test(`focused wire ${key} and keyboar
   await expect(wire).toBeFocused();
   await wire.press(key); await expect(wire).toHaveCount(0);
   await expect(editor.locator('.graph-scroll')).toBeFocused();
-  await expect(editor.locator('#graph-errors')).toContainText('Required connection');
+  await expect(editor.locator('#graph-errors')).toBeEmpty();
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  expect(await saved(live)).toEqual(before); // Invalid draft cannot be saved.
+  expect(await saved(live)).toEqual({ ...before, edges: before.edges.filter(route => route.to[1] !== 'audio') }); // Incomplete drafts are saveable.
   await port(editor, 'audio', 'output', 'audio').click(); await port(editor, 'speech', 'input', 'audio').click();
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   const optional = wireFor(editor, 'speech.provisional to transcript.replace');

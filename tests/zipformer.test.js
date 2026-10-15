@@ -72,14 +72,14 @@ test('typed graph, opt-in definition and runtime assembly preserve v8 defaults, 
   graph.edges.push(edge('speech', 'final', 'format', 'input1'), edge('format', 'text', 'field', 'text'));
   assert.deepEqual(validateGraph(graph), []);
   assert.deepEqual(validateGraph(withTranslation(graph, { enabled: true, direction: 'en-ja' })), []);
-  const built = buildGraph(graph, {}); assert.ok(built.speech instanceof SpeechToTextZipformerEnNode); await built.pipeline.dispose();
+  const built = buildGraph(graph, {}); assert.ok(built.speechNodes.get('speech') instanceof SpeechToTextZipformerEnNode); await built.pipeline.dispose();
   for (const type of ASR_TYPES) {
     const saved = defaultGraph(); saved.nodes[1].type = type;
     if (type === 'SpeechToTextWhisper') saved.edges = saved.edges.filter(e => e.from[1] !== 'provisional');
     const raw = JSON.stringify(saved), storage = { getItem: key => key === GRAPH_KEY ? raw : null, setItem() { throw Error('v8 must not rewrite'); } };
     assert.deepEqual(readGraph(storage), saved); assert.equal(migrateGraph(saved), saved);
   }
-  graph.nodes.push(graphNode('SpeechToTextWhisper', 'second')); assert.match(validateGraph(graph).join('\n'), /Exactly one ASR/);
+  graph.nodes.push(graphNode('SpeechToTextWhisper', 'second')); assert.deepEqual(validateGraph(graph), []);
 });
 
 test('owned bounded PCM, provisional before final, ordered repeated finals, Stop tail and warm repeat session', async () => {

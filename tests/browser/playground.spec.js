@@ -133,7 +133,9 @@ test('Pages repository prefix preserves navigation, isolation, assets and the pr
 test('microphone denial is visible and leaves retry available', async ({ page }) => {
   await fakeBackend(page);
   await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
+    const mediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { value: mediaDevices });
+    mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
   });
   await page.goto('./nodes/speech-to-text/'); await expect(page.locator('#load')).toBeEnabled();
   await page.locator('#load').click(); await page.locator('#start').click();
@@ -169,7 +171,9 @@ test('capture, Stop, repeat, and release on a mobile-sized page', async ({ brows
 test('canceling pending microphone permission releases a late-granted track', async ({ page }) => {
   await fakeBackend(page);
   await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = () => new Promise((resolve) => {
+    const mediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { value: mediaDevices });
+    mediaDevices.getUserMedia = () => new Promise((resolve) => {
       window.grant = () => resolve({ getTracks: () => [{ stop: () => { window.lateTrackStopped = true; } }] });
     });
   });
@@ -320,7 +324,9 @@ for (const action of ['drain', 'cancel']) {
 test('hiding while microphone permission is pending drains and discards the late grant', async ({ page }) => {
   await fakeBackend(page);
   await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = () => new Promise(resolve => {
+    const mediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { value: mediaDevices });
+    mediaDevices.getUserMedia = () => new Promise(resolve => {
       window.grant = () => resolve({ getTracks: () => [{ stop: () => { window.lateTrackStopped = true; } }] });
     });
   });

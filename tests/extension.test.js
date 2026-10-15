@@ -59,17 +59,17 @@ test('Number duration is set before capture; saves during load/capture affect on
   const f = fixture({ graph, holdLoad: true });
   const starting = f.session.start(42); await drain();
   assert.equal(f.sources.length, 0);
-  assert.equal(f.session.session.speech.maxDuration, 2.5);
+  assert.equal(f.session.session.speechNodes.get('speech').maxDuration, 2.5);
   graph.nodes.at(-1).settings.value = 3.75; f.session.setGraph(graph);
   f.workers.forEach(w => w.reply({ type: 'ready' })); await starting;
-  assert.equal(f.session.session.speech.core.simulation.maxSamples, 40000);
+  assert.equal(f.session.session.speechNodes.get('speech').core.simulation.maxSamples, 40000);
   graph.nodes.at(-1).settings.value = 1.25; f.session.setGraph(graph);
   f.sources[0].onAudio(new Float32Array(40000).fill(0.05)); await drain();
   assert.equal(f.workers[0].messages.find(m => m.type === 'decode').audio.length, 40000);
   await f.session.stop();
   const next = f.session.start(42); await drain();
   f.workers.slice(-2).forEach(w => w.reply({ type: 'ready' })); await next;
-  assert.equal(f.session.session.speech.core.simulation.maxSamples, 20000);
+  assert.equal(f.session.session.speechNodes.get('speech').core.simulation.maxSamples, 20000);
   f.session.cancel(); await drain(); assert.ok(f.workers.every(w => w.terminated));
 });
 
@@ -106,7 +106,7 @@ test('stale document disables focused output while Live continues; cancellation 
   const f = fixture({ graph: fieldOutputs(), pageConnectionFactory: () => ({ request: async () => { throw Error('Permission lost'); }, close() {} }) });
   f.session.outputTarget = { tabId: 42, documentId: 'stale', label: 'Page' };
   await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /Permission lost/);
-  f.session.session.speech.receiveEvent({ type: 'final', id: 1, text: 'Live continues' }); await drain(); assert.match((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), /Live continues/);
+  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', id: 1, text: 'Live continues' }); await drain(); assert.match((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), /Live continues/);
   f.session.cancel(); await drain(); assert.ok(f.workers.every(worker => worker.terminated)); assert.equal(f.sources[0].stops.at(-1), false);
 });
 
@@ -311,4 +311,121 @@ with tempfile.TemporaryDirectory() as tmp:
     assert manifest['cross_origin_embedder_policy']['value'] == 'require-corp'
 `], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+function concurrentGraph({ fanout = false } = {}) {
+  const graph = defaultGraph();
+  graph.nodes.push(graphNode('ChromeTabAudio', 'second-audio'), graphNode('SpeechToTextReazonSpeech', 'second-speech'), graphNode('LiveTextDisplay', 'second-display'));
+  graph.edges.push(edge(fanout ? 'audio' : 'second-audio', 'audio', 'second-speech', 'audio'), edge('second-speech', 'final', 'second-display', 'append'));
+  return graph;
+}
+
+test('independent same-type ASRs route, drain on branch end, Stop, Cancel and repeat without losing peers', async () => {
+  const f = fixture({ graph: concurrentGraph() });
+  await f.session.start(42);
+  assert.equal(f.workers.length, 4); assert.equal(f.sources.length, 1);
+  const active = f.session.session;
+  active.speechNodes.get('speech').receiveEvent({ type: 'final', id: 0, text: 'remote' });
+  active.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 0, text: 'local' });
+  await drain();
+  assert.deepEqual(f.session.view.displays.transcript.items, ['remote']);
+  assert.deepEqual(f.session.view.displays['second-display'].items, ['local']);
+  active.audioSources.get('audio').end(); await active.branchDrain;
+  assert.equal(f.session.view.state, 'running');
+  assert.equal(active.pipeline.entries.get('speech').closed, true);
+  assert.equal(active.pipeline.entries.get('second-speech').closed, false);
+  assert.equal(f.workers.filter(worker => worker.terminated).length, 2);
+  active.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 1, text: 'still local' }); await drain();
+  assert.deepEqual(f.session.view.displays['second-display'].items, ['local', 'still local']);
+  await f.session.stop(); assert.ok(f.workers.every(worker => worker.terminated));
+  assert.ok(f.sources.every(source => source.stops.length === 1));
+  await f.session.start(42); assert.equal(f.workers.length, 8);
+  f.session.cancel(); await drain(); assert.ok(f.workers.every(worker => worker.terminated));
+});
+
+test('fan-out uses one capture with independent same-type model processors and settings', async () => {
+  const graph = concurrentGraph({ fanout: true });
+  graph.nodes.push(graphNode('Number', 'duration'));
+  graph.nodes.at(-1).settings.value = 1.5;
+  graph.edges.push(edge('duration', 'value', 'second-speech', 'maxDuration'));
+  const f = fixture({ graph }); await f.session.start(42);
+  assert.equal(f.sources.length, 1); assert.equal(f.workers.length, 4);
+  assert.equal(f.session.session.speechNodes.get('speech').maxDuration, 6);
+  assert.equal(f.session.session.speechNodes.get('second-speech').maxDuration, 1.5);
+  f.sources[0].onAudio(new Float32Array(3200).fill(.1)); await drain();
+  await f.session.stop();
+  assert.deepEqual(f.session.view.displays.transcript.items, ['final text']);
+  assert.deepEqual(f.session.view.displays['second-display'].items, ['final text']);
+});
+
+test('parked and incomplete nodes do not load models, request microphone permission or capture', async () => {
+  const graph = defaultGraph();
+  for (const [type, id] of [['MicrophoneAudio', 'parked-mic'], ['SpeechToTextWhisper', 'parked-model'], ['TextFormatter', 'unfinished'], ['Kokoro', 'parked-tts'], ['LiveTextDisplay', 'parked-output']]) graph.nodes.push(graphNode(type, id));
+  graph.edges.push(edge('parked-model', 'final', 'unfinished', 'input1'), edge('unfinished', 'text', 'parked-output', 'append'));
+  const f = fixture({ graph }); await f.session.start(42);
+  assert.equal(f.session.view.state, 'running'); assert.equal(f.workers.length, 2); assert.equal(f.sources.length, 1);
+  assert.deepEqual([...f.session.session.pipeline.entries.keys()], ['audio', 'speech', 'transcript']);
+  assert.deepEqual(f.session.graph, graph); await f.session.stop();
+  const draft = { version: 8, nodes: graph.nodes.slice(3), edges: [] };
+  f.session.setGraph(draft); await f.session.start(42, { microphoneGesture: true });
+  assert.match(f.session.view.error, /No executable path/); assert.equal(f.session.view.state, 'idle');
+  assert.equal(f.workers.length, 2); assert.equal(f.sources.length, 1);
+});
+
+test('a shared formatter stays live after one input path ends', async () => {
+  const graph = concurrentGraph(); graph.nodes.push(graphNode('TextFormatter', 'shared'), graphNode('LiveTextDisplay', 'combined'));
+  graph.nodes.at(-2).settings.template = '{1}/{2}';
+  graph.edges.push(edge('speech', 'final', 'shared', 'input1'), edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'replace'));
+  const f = fixture({ graph }); await f.session.start(42); const active = f.session.session;
+  active.audioSources.get('audio').end(); await active.branchDrain;
+  assert.equal(active.pipeline.entries.get('shared').closed, false);
+  active.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 0, text: 'peer' }); await drain();
+  assert.match(f.session.view.displays.combined.preview, /peer/); await f.session.stop();
+});
+
+test('active microphone permission requires a gesture; Cancel releases a late grant before models load', async () => {
+  const graph = defaultGraph(); graph.nodes[0].type = 'MicrophoneAudio';
+  const original = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+  let grant, requests = 0, stops = 0;
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia() { requests++; return new Promise(resolve => { grant = resolve; }); } } });
+  try {
+    const f = fixture({ graph }); await f.session.start();
+    assert.match(f.session.view.status, /Press Start/); assert.equal(requests, 0);
+    const starting = f.session.start(undefined, { microphoneGesture: true });
+    assert.equal(requests, 1); assert.equal(f.workers.length, 0);
+    f.session.cancel(); grant({ getTracks: () => [{ stop() { stops++; } }] }); await starting;
+    assert.equal(stops, 1); assert.equal(f.workers.length, 0); assert.equal(f.session.view.state, 'idle');
+  } finally { if (original) Object.defineProperty(navigator,'mediaDevices',original); else delete navigator.mediaDevices; }
+});
+
+test('one concurrent model load failure cancels all models before capture and permits retry', async () => {
+  const f = fixture({ graph: concurrentGraph(), holdLoad: true });
+  const starting = f.session.start(42); await drain(); assert.equal(f.workers.length, 4);
+  f.workers[0].reply({ type: 'error', message: 'Model readiness failed' }); await starting; await drain();
+  assert.match(f.session.view.error, /speech.*Model readiness failed/);
+  assert.ok(f.workers.every(worker => worker.terminated)); assert.equal(f.sources.length, 0);
+  const retry = f.session.start(42); await drain();
+  f.workers.slice(4).forEach(worker => worker.reply({ type: 'ready' })); await retry;
+  assert.equal(f.session.view.state, 'running'); f.session.cancel(); await drain();
+  assert.ok(f.workers.every(worker => worker.terminated));
+});
+
+test('source status preserves valid IDs that also name Object prototype properties', async () => {
+  const graph = defaultGraph(); graph.nodes[0].id = 'toString'; graph.edges[0].from[0] = 'toString';
+  const f = fixture({ graph }); await f.session.start(42);
+  assert.match(f.session.view.signal, /toString: No audio signal yet/);
+  f.sources[0].onAudio(new Float32Array([.1]));
+  assert.equal(f.session.view.signal, 'toString: Audio signal detected.'); await f.session.stop();
+});
+
+test('one source ending during concurrent model preload waits for startup before draining its Nodes', async () => {
+  const f = fixture({ graph: concurrentGraph(), holdLoad: true });
+  const starting = f.session.start(42); await drain(); const active = f.session.session;
+  active.audioSources.get('audio').end(); const branch = f.session.sourceEnded(active, 'audio');
+  await drain(); assert.equal(f.session.view.state, 'loading'); assert.equal(f.session.view.error, '');
+  assert.ok(f.workers.every(worker => !worker.terminated));
+  f.workers.forEach(worker => worker.reply({ type: 'ready' })); await starting; await branch;
+  assert.equal(f.session.view.state, 'running'); assert.equal(active.pipeline.entries.get('speech').closed, true);
+  assert.equal(active.pipeline.entries.get('second-speech').closed, false); assert.equal(f.sources.length, 1);
+  f.session.cancel(); await drain(); assert.ok(f.workers.every(worker => worker.terminated));
 });

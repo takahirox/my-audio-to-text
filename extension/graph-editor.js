@@ -1,4 +1,4 @@
-import { NODE_TYPES, graphNode, defaultGraph, edge, validateGraph, assertGraph, graphPreferences, withTranslation } from './graph.js';
+import { NODE_TYPES, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph, graphPreferences, withTranslation } from './graph.js';
 
 const el = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -43,7 +43,7 @@ export class GraphEditor {
         } catch (error) { this.error = error.message; }
         this.draw();
       }),
-      button('Validate draft', 'graph-validate', () => { this.closeActions(); this.error = validateGraph(this.draft).join('\n') || 'Draft valid. Save to use next session.'; this.draw(); }));
+      button('Validate draft', 'graph-validate', () => { this.closeActions(); this.error = this.diagnostics(true) || 'Draft valid. Save to use next session.'; this.draw(); }));
     // This explicit bulk preset is optional. Individual translator types remain
     // available in the palette, including graphs with both directions.
     const translation = el('details'); translation.id = 'graph-translation'; translation.append(el('summary', 'Translation preset'));
@@ -61,10 +61,17 @@ export class GraphEditor {
       catch (error) { this.error = `Complete the draft connections first: ${error.message}`; this.draw(); }
     };
     this.translationEnabled.onchange = this.translationDirection.onchange = changeTranslation;
+    const warningLabel = el('label'); this.warningPreference = el('input'); this.warningPreference.type = 'checkbox';
+    this.warningPreference.id = 'graph-optional-warnings';
+    this.warningPreference.checked = localStorage.getItem('graph-show-optional-warnings') === 'true';
+    this.warningPreference.onchange = () => {
+      localStorage.setItem('graph-show-optional-warnings', String(this.warningPreference.checked)); this.draw();
+    };
+    warningLabel.append(this.warningPreference, ' Show optional warnings'); commands.append(warningLabel);
     commands.append(translation); this.actions.append(commands);
     this.help = el('dialog', undefined, 'graph-help'); this.help.setAttribute('aria-label', 'Graph Editor help');
     this.help.append(el('h2', 'Graph Editor help'),
-      el('p', 'Edit a draft, then Save a valid graph for the next recording. The active session keeps its graph. Reset replaces the draft; Load saved discards draft changes after confirmation.'),
+      el('p', 'Park disconnected or incomplete Nodes and Save a structurally valid draft. Start runs only complete paths to outputs. Use Graph actions → Validate draft or Show optional warnings for diagnostics. Saved edits apply to the next session; the active session keeps its graph. Reset replaces the draft; Load saved discards draft changes after confirmation.'),
       el('p', 'Add nodes using search and categories. Select a node heading for settings and optional node help. Drag a heading or use arrow keys to move it.'),
       el('p', 'Connect by clicking an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Select a wire, then use its nearby Disconnect button. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape or blank canvas clears selection.'),
       el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire to reveal Disconnect.'),
@@ -132,6 +139,10 @@ export class GraphEditor {
     });
     this.draw();
   }
+  diagnostics(includeWarnings = this.warningPreference?.checked) {
+    return [...validateGraph(this.draft).map(message => `Error: ${message}`),
+      ...(includeWarnings ? graphWarnings(this.draft).map(message => `Warning: ${message}`) : [])].join('\n');
+  }
   closeActions() {
     this.actions.open = false; this.actions.querySelector('summary').focus({ preventScroll: true });
   }
@@ -197,10 +208,9 @@ export class GraphEditor {
       const identical = this.draft.edges.some(e => JSON.stringify(e) === JSON.stringify(proposed));
       if (!identical) {
         const candidate = { ...this.draft, edges: this.draft.edges.filter(e => e.to[0] !== id || e.to[1] !== port).concat(proposed) };
-        // Drafts can be incomplete. Reject newly introduced constraints, while
-        // allowing the ordinary missing-input/unconnected-output draft errors.
+        // Drafts can be incomplete. Reject newly introduced structural errors.
         const previous = new Set(validateGraph(this.draft));
-        const errors = validateGraph(candidate).filter(message => !previous.has(message) && !/^(Required connection missing:|Unconnected output Node:)/.test(message));
+        const errors = validateGraph(candidate).filter(message => !previous.has(message));
         if (errors.length) this.error = errors.join('\n');
         else this.draft.edges = candidate.edges;
       }
@@ -218,7 +228,7 @@ export class GraphEditor {
     node.settings[key] = value;
     // Settings do not change canvas geometry or ports. Keep controls in place
     // so a field's blur/change cannot remove the target of a pending click.
-    this.errors.textContent = validateGraph(this.draft).join('\n'); this.updateSummary();
+    this.errors.textContent = this.diagnostics(); this.updateSummary();
     this.onDraft(structuredClone(this.draft));
   }
   drawInspector() {
@@ -271,7 +281,7 @@ export class GraphEditor {
   draw() {
     if (!this.draft.edges.includes(this.selectedEdge)) this.selectedEdge = null;
     this.canvas.replaceChildren(this.svg); this.svg.replaceChildren();
-    this.errors.textContent = this.error || validateGraph(this.draft).join('\n'); this.error = '';
+    this.errors.textContent = this.error || this.diagnostics(); this.error = '';
     this.updateSummary(); this.drawInspector();
     const preferences = graphPreferences(this.draft), translators = this.draft.nodes.filter(node => ['OpusMtJaEn', 'OpusMtEnJa'].includes(node.type));
     this.translationEnabled.checked = preferences.enabled; this.translationDirection.value = preferences.direction;
@@ -290,7 +300,7 @@ export class GraphEditor {
       heading.onkeydown = event => {
         const delta = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[event.key];
         if (!delta) return; event.preventDefault(); this.selectedNode = node.id;
-        node.position.x = Math.max(0, Math.min(4000, node.position.x + delta[0])); node.position.y = Math.max(0, Math.min(4000, node.position.y + delta[1])); this.draw();
+        node.position.x = Math.max(0, node.position.x + delta[0]); node.position.y = Math.max(0, node.position.y + delta[1]); this.draw();
         this.canvas.querySelector(`[data-node="${node.id}"] .graph-heading`).focus();
       };
       heading.onpointerdown = event => {
@@ -299,7 +309,7 @@ export class GraphEditor {
         heading.onpointermove = move => {
           if (Math.abs(move.clientX - x) + Math.abs(move.clientY - y) < 3) return;
           moved = true;
-          node.position.x = Math.max(0, Math.min(4000, origin.x + (move.clientX - x) / this.zoom)); node.position.y = Math.max(0, Math.min(4000, origin.y + (move.clientY - y) / this.zoom));
+          node.position.x = Math.max(0, origin.x + (move.clientX - x) / this.zoom); node.position.y = Math.max(0, origin.y + (move.clientY - y) / this.zoom);
           card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`; this.drawWires();
         };
         const done = () => { heading.onpointermove = null; heading.onpointerup = heading.onpointercancel = null; if (moved) this.draw(); };

@@ -38,7 +38,7 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and the same-ta
     await expect(live.locator('#target-status')).toContainText('connected and authorized');
     await expect(live.getByRole('button', { name: /Authorize capture|Pick field|Use next toolbar/ })).toHaveCount(0);
     await website.locator('#play').click(); await website.locator('#field').click();
-    await expect(live.locator('#signal')).toHaveText('Tab audio signal detected.');
+    await expect(live.locator('#signal')).toHaveText('audio: Audio signal detected.');
     await expect.poll(() => website.locator('audio').evaluate(audio => audio.ended), { timeout: 30000 }).toBe(true);
     await live.locator('#stop').click(); await expect(live.locator('#status')).toContainText('Stopped', { timeout: 120000 });
     const finals = (await live.locator('[data-display="transcript"] .display-items').textContent()).split('\n').map(text => text.trim()).filter(Boolean);

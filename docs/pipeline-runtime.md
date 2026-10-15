@@ -335,3 +335,17 @@ separate original transcript branch. Connect the correction's `text` output
 directly to translation or other `TEXT` consumers. It can be omitted or
 explicitly bypassed, with no default graph or extension change. See
 [model, lifecycle, conservative policy and evaluation](correction-node.md).
+
+## Extension drafts and source completion
+
+The Extension validates stored structure separately from execution. It selects
+complete paths to ready sinks before constructing a Pipeline; parked Nodes never
+allocate resources. Multiple active source/model instances retain their own
+contexts, queues and routes. See [the graph policy](extension-graph.md#stored-drafts-and-concurrent-execution).
+
+`Pipeline.drain(nodeIds)` applies the same topological queue/stop/close sequence
+to a selected set. The caller must ensure no live producer can deliver to that
+set and serialize it with full Stop. The Extension computes the live-source
+reachability set and drains only its complement on source completion. Shared
+consumers remain open. Closed entries are skipped by subsequent full Stop;
+Cancel/dispose invalidates all entries, including a drain in progress.

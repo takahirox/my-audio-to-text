@@ -361,3 +361,48 @@ test('unsupported/protection markers and audio-less media expose fallback withou
   await t.page.locator('#start').click(); await expect(t.page.locator('#errors')).toContainText('No capturable audio track'); await expect(t.page.locator('#errors')).toContainText('Chrome tab audio');
   expect(await t.page.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).length)).toBe(0);
 });
+
+test('native tab capture and permitted microphone run together; tab navigation drains only its path', async ({ targets: t }) => {
+  await t.page.evaluate(async () => {
+    const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
+    const graph = defaultGraph();
+    graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextReazonSpeech','local-asr'),graphNode('LiveTextDisplay','local'),
+      graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextReazonSpeech','copy-asr'),graphNode('LiveTextDisplay','copy-display'));
+    graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local','append'),
+      edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-display','append'));
+    saveGraph(localStorage,graph);window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));
+    const NativeWorker=Worker;window.concurrentWorkers=[];
+    window.Worker=class extends NativeWorker {
+      constructor(...args){super(...args);window.concurrentWorkers.push(this);}
+      terminate(){this.released=true;return super.terminate();}
+    };
+    const getMedia=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);window.concurrentStreams=[];
+    navigator.mediaDevices.getUserMedia=async options=>{
+      const stream=await getMedia(options);window.concurrentStreams.push({kind:options.audio?.mandatory?'tab':'mic',stream});return stream;
+    };
+  });
+  await t.cdp.send('Browser.setPermission',{permission:{name:'microphone'},setting:'granted',origin:t.origin});
+  for(const mode of ['branch-end','cancel','stop']) {
+    await t.website.locator('#play').click();await t.invoke();
+    await expect(t.page.locator('#status')).toContainText('Press Start');
+    const count=await t.page.evaluate(()=>window.concurrentStreams.length);
+    await t.page.locator('#start').click();await expect(t.page.locator('#status')).toHaveText('Transcription active');
+    await expect(t.page.locator('#signal')).toContainText('audio: Audio signal detected.');
+    await expect(t.page.locator('#signal')).toContainText('mic: Audio signal detected.');
+    expect(await t.page.evaluate(()=>window.concurrentStreams.length)).toBe(count+2);
+    expect(await t.page.evaluate(()=>window.concurrentWorkers.filter(worker=>!worker.released).length)).toBe(6);
+    if(mode==='branch-end') {
+      await t.website.goto(t.webOrigin+'/?ended');
+      await expect(t.page.locator('[data-display="transcript"] .display-items')).toContainText('confirmed fixture');
+      await expect(t.page.locator('[data-display="copy-display"] .display-items')).toContainText('confirmed fixture');
+      await expect(t.page.locator('#status')).toHaveText('Transcription active');
+      await expect.poll(()=>t.page.evaluate(()=>window.concurrentWorkers.filter(worker=>!worker.released).length)).toBe(2);
+      expect(await t.page.evaluate(()=>window.concurrentStreams.findLast(record=>record.kind==='mic').stream.getAudioTracks()[0].readyState)).toBe('live');
+    }
+    await t.page.locator(mode==='cancel'?'#cancel-session':'#stop').click();await expect(t.page.locator('#start')).toBeEnabled();
+    await expect(t.page.locator('#errors')).toBeEmpty();
+    if(mode!=='cancel') await expect(t.page.locator('[data-display="local"] .display-items')).toContainText('confirmed fixture');
+    expect(await t.page.evaluate(()=>window.concurrentStreams.every(record=>record.stream.getTracks().every(track=>track.readyState==='ended')))).toBe(true);
+    expect(await t.page.evaluate(()=>window.concurrentWorkers.every(worker=>worker.released))).toBe(true);
+  }
+});

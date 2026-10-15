@@ -128,8 +128,10 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 
 ## Optional page and microphone workflows
 
-Save a graph with exactly one whole-tab, selected-media or microphone Input and
-one or more outputs. Live shows **Input and output targets** and separate target
+Save a graph with whole-tab, selected-media and/or microphone Inputs and
+one or more outputs. Multiple independent ASRs and displays run concurrently;
+parked or unfinished Nodes remain saved but inactive. See the
+[execution and permission policy](extension-graph.md#stored-drafts-and-concurrent-execution). Live shows **Input and output targets** and separate target
 status/errors. Connect `SpeechToTextReazonSpeech.final → FocusedInputTextOutputNode.text`
 or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
 strings can fan out to TTS and other consumers. For final-only output, select
@@ -223,7 +225,7 @@ See the [Issue #61 validation evidence](evidence/extension-pipeline-61.md).
 An optional manual speech check can use Google Meet, YouTube or another tab:
 confirm audible playback, evolving provisional text, final text after Stop,
 and cleanup after closing the tab/window. This PoC does not include participant
-labels, overlays, simultaneous microphone input, Web Store publication or
+labels, overlays, Web Store publication or
 cross-browser extension support. No post-merge verification is required by #61.
 
 ## Optional OPUS-MT Japanese ↔ English (#69 / #71)

@@ -21,8 +21,9 @@ this is not native streaming recognition.
 
 The [Local ASR Core](local-asr-core.md) separates recognition from capture,
 resampling and UI. The [Node Playground speech test page](node-playground.md)
-reuses this capability through microphone/tab source nodes, one speech-to-text
-node and a transcript sink connected by named ports. The
+reuses this capability through microphone/tab source nodes, a speech-to-text
+node and a transcript sink connected by named ports. The Extension can run
+several such paths concurrently. The
 [Chrome extension](chrome-extension.md) uses the
 same runtime and speech node with its own tab source and UI. OPUS-MT and
 TranslateGemma provide separate local Japanese → English text nodes and test
