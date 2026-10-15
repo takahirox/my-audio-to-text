@@ -4,7 +4,9 @@ This desktop Chromium Manifest V3 PoC starts local transcription for the tab
 on which you invoke its toolbar action. It uses the same ReazonSpeech ja-en,
 Silero VAD and hayamimi utterance policy as the [Node Playground speech test page](node-playground.md). There is no
 recognition server. Graph Editor also offers local multilingual Whisper tiny for
-English or Text-driven Japanese recognition; see [Whisper setup and testing](whisper-node.md). The default whole-tab graph needs no page injection or
+English or Text-driven Japanese recognition; see [Whisper setup and testing](whisper-node.md). For incremental English previews,
+choose [Streaming Zipformer English ASR](zipformer-node.md). The default whole-tab
+graph needs no page injection or
 media picker. Optional microphone, selected media and page-field outputs are
 configured in Graph Editor and explicitly targeted in Live.
 
@@ -58,13 +60,15 @@ npm run setup:extension
 ```
 
 It runs `npm ci`, `prepare:assets`, `prepare:translation-assets`,
-`prepare:tts-assets` and `build:extension` in that order, stopping at the first
+`prepare:whisper-assets`, `prepare:tts-assets`, `prepare:zipformer-assets` and
+`build:extension` in that order, stopping at the first
 failure. ASR preparation recreates `web/vendor/`, so translation preparation
 must follow it. The individual npm scripts remain available.
 
 Asset preparation needs network access on a fresh checkout: it downloads and
 verifies the pinned ASR models and runtimes, staging an approximately
-91 MB ASR runtime/model distribution. Building copies the maintained Web pipeline,
+91 MB ReazonSpeech/Silero distribution, 44 MB Whisper weights and
+58 MB English online Zipformer distribution. Building copies the maintained Web pipeline,
 nodes, core, workers, configuration, capture helpers, models and license notices
 into `dist/chrome-extension/`. Translation preparation adds about 28 MB of
 checksum-pinned runtime JS/MJS/WASM. TTS preparation stages about 77 MB of reviewed

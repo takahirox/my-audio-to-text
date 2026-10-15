@@ -8,14 +8,14 @@ import { buildGraph } from './graph-runtime.js';
 export class TabSession {
   constructor(render, {
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
-    sourceFactory, pageConnectionFactory, whisperWorkerFactory,
+    sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph({ enabled: false }),
     ttsWorkerFactory, prepareTts, onSynthesizedAudio = () => {},
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
   } = {}) {
-    this.whisperWorkerFactory = whisperWorkerFactory;
+    this.whisperWorkerFactory = whisperWorkerFactory; this.zipformerWorkerFactory = zipformerWorkerFactory;
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
     this.pageConnectionFactory = pageConnectionFactory; this.targets = {}; this.outputTarget = null;
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation;
@@ -41,7 +41,7 @@ export class TabSession {
       }
     }
     const session = { tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), sourceType, direction: preferences.direction, translationEnabled: preferences.enabled }; this.session = session;
-    this.update({ state: 'loading', tabId, activeGraph: graph, displays: {}, ttsStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: `Loading ${NODE_TYPES[graph.nodes.find(n => ASR_TYPES.includes(n.type)).type].label} + Silero…`, error: '', signal: '' });
+    this.update({ state: 'loading', tabId, activeGraph: graph, displays: {}, ttsStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: `Loading ${NODE_TYPES[graph.nodes.find(n => ASR_TYPES.includes(n.type)).type].label}${graph.nodes.some(n => n.type === 'SpeechToTextZipformerEn') ? '' : ' + Silero'}…`, error: '', signal: '' });
     try {
       if (sourceType === 'MicrophoneAudio') {
         // Request directly from the explicit Start action, before loading models.
@@ -61,7 +61,7 @@ export class TabSession {
             this.update({ targetStatus: statuses.join('\n') });
           }
         },
-        workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, sourceFactory: this.sourceFactory,
+        workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, zipformerWorkerFactory: this.zipformerWorkerFactory, sourceFactory: this.sourceFactory,
         translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
         ttsWorkerFactory: this.ttsWorkerFactory, prepareTts: this.prepareTts,
         onTtsState: ttsStatus => { if (this.session === session) this.update({ ttsStatus }); },

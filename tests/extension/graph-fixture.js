@@ -8,8 +8,9 @@ import path from 'node:path';
 
 export const test = base.extend({
   graphExtension: async ({}, use, info) => {
+    const zipformerReal = info.file.endsWith('graph-zipformer-smoke.spec.js');
     const whisperReal = info.file.endsWith('graph-whisper-smoke.spec.js');
-    const real = whisperReal || info.file.endsWith('graph-tts-smoke.spec.js');
+    const real = zipformerReal || whisperReal || info.file.endsWith('graph-tts-smoke.spec.js');
     const temporary = await mkdtemp(path.join(tmpdir(), 'extension-graph-'));
     const root = path.join(temporary, 'extension'), profile = path.join(temporary, 'profile');
     let context;
@@ -29,7 +30,7 @@ export const test = base.extend({
     const load = async () => (await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root })).id;
     try {
       await cp(path.resolve('dist/chrome-extension'), root, { recursive: true,
-        filter: source => (whisperReal || !source.includes(`${path.sep}vendor`)) && (real || !source.includes(`${path.sep}tts-assets`)) });
+        filter: source => (zipformerReal || whisperReal || !source.includes(`${path.sep}vendor`)) && (real || !source.includes(`${path.sep}tts-assets`)) });
       // ASR/capture are fixtures even in TTS smoke. TTS smoke uses every real
       // packaged TTS runtime/frontend and real checkpoint, with no replacements.
       for (const role of (whisperReal ? [] : ['sherpa', 'silero'])) await writeFile(path.join(root, `web/${role}-worker.js`), `

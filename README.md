@@ -69,15 +69,17 @@ npm run setup:extension
 ```
 
 The extension Graph Editor exposes **ReazonSpeech ja-en ASR**, **Whisper tiny
-(multilingual) ASR**, and a reusable **Text** constant. Whisper defaults to
-English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
+(multilingual) ASR**, **Streaming Zipformer English ASR**, and a reusable **Text**
+constant. Whisper defaults to English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
 Japanese. Whisper exposes only `final: TEXT`; connect it to
 `LiveTextDisplay.append` for completed segments. The default stays
 ChromeTabAudio → ReazonSpeech → one LiveTextDisplay. See [Whisper pins, setup,
-usage and real-model validation](docs/whisper-node.md).
+usage and real-model validation](docs/whisper-node.md). For real incremental English
+previews, opt into [English online Zipformer](docs/zipformer-node.md): connect
+`provisional → LiveTextDisplay.replace` and `final → LiveTextDisplay.append`.
 
-Setup installs npm dependencies, downloads/verifies the ReazonSpeech and Whisper ASR models and prepares
-translation/TTS runtimes, then produces `dist/chrome-extension/`. Optional
+Setup installs npm dependencies, downloads/verifies ReazonSpeech, Whisper and
+English Zipformer ASR models and prepares translation/TTS runtimes, then produces `dist/chrome-extension/`. Optional
 translation/TTS **weights** download only on demand through **Download / retry**
 in Models. Open `chrome://extensions`, enable **Developer mode**, choose
 **Load unpacked** and select `dist/chrome-extension`. With assets already

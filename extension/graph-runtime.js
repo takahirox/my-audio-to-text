@@ -13,6 +13,7 @@ import { assertGraph } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 import { TextNode } from '../web/text-constant-node.js';
 import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
+import { SpeechToTextZipformerEnNode } from '../web/zipformer-node.js';
 import { NumberNode } from '../web/number-node.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
@@ -69,6 +70,8 @@ export function buildGraph(graph, options) {
         node = resources.audio = new ExtensionMicrophoneAudioNode(options.microphoneStream, { onAudio: options.onCapturedAudio, onEnded: options.onEnded }); break;
       case 'FocusedInputTextOutputNode':
         node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active) => options.onTargetState?.(spec.id, state, active) }); break;
+      case 'SpeechToTextZipformerEn':
+        node = resources.speech = new SpeechToTextZipformerEnNode({ workerFactory: options.zipformerWorkerFactory, onEvent: options.onSpeechEvent }); break;
       case 'SpeechToTextWhisper':
         node = resources.speech = new SpeechToTextWhisperNode({ workerFactory: options.whisperWorkerFactory, onEvent: options.onSpeechEvent }); break;
       case 'SpeechToTextReazonSpeech':
