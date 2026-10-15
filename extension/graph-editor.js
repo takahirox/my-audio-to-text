@@ -12,9 +12,9 @@ const button = (label, id, action) => {
 };
 const typeLabel = contract => contract.name.split(' {')[0];
 export class GraphEditor {
-  constructor(root, graph, { onSave, onDraft = () => {}, onLoad = () => {} }) {
+  constructor(root, graph, { onSave, onDraft = () => {}, onLoad = () => {}, recoveryGraph }) {
     this.root = root; this.onSave = onSave; this.onDraft = onDraft; this.onLoad = onLoad;
-    this.saved = assertGraph(graph); this.draft = structuredClone(this.saved); this.zoom = 1;
+    this.saved = recoveryGraph ? null : assertGraph(graph); this.draft = structuredClone(recoveryGraph || this.saved); this.zoom = 1;
     const toolbar = el('div', undefined, 'graph-toolbar');
     this.saveButton = button('Save graph', 'graph-save', async () => {
       this.actions.open = false; this.saveButton.disabled = true; this.saveButton.textContent = 'Saving…';

@@ -1,4 +1,4 @@
-import { openPalette } from './ui-controls.js';
+import { openPalette, clickGraphAction } from './ui-controls.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
@@ -31,6 +31,9 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   const editor = page.editor; await openPalette(editor);
   await expect(editor.getByRole('option', { name: 'ReazonSpeech ja-en ASR', exact: true })).toHaveCount(1);
   await expect(editor.getByRole('option', { name: 'Whisper tiny (multilingual) ASR', exact: true })).toHaveCount(1);
+  await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toHaveCount(1);
+  await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(0);
+  await expect(editor.locator('[data-node="speech"] [data-side="output"]')).toHaveCount(1);
   await editor.locator('#graph-palette-toggle').click();
   await editor.getByRole('button', { name: 'Select language', exact: true }).click();
   await expect(editor.getByLabel('language value', { exact: true })).toHaveValue('en');
@@ -54,6 +57,59 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
     await expect(editor.locator('#graph-errors')).toContainText('Whisper.language must be en or ja');
   }
   expect(f.requests).toEqual([]);
+});
+
+test('MV3 palette and help offer only the implemented Whisper output; ReazonSpeech retains preview and final', async ({ graphExtension: f }) => {
+  const page = await openGraph(f), editor = page.editor;
+  await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(1);
+  await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toHaveCount(1);
+  await openPalette(editor); await editor.locator('#graph-node-type').selectOption('SpeechToTextWhisper');
+  await editor.locator('#graph-add').click();
+  const card = editor.locator('[data-node="speechtotextwhisper"]');
+  await expect(card.locator('[data-side="output"]')).toHaveCount(1);
+  await expect(card.locator('[data-side="output"][data-port="final"]')).toHaveCount(1);
+  await editor.locator('.graph-inspector summary').click();
+  await expect(editor.locator('.graph-inspector')).toContainText('Output final: text');
+  await expect(editor.locator('.graph-inspector')).not.toContainText('Output provisional');
+});
+
+for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'keeps storage and opens an actionable repair draft' : 'saves only the version and removal of dead edges'}`, async ({ graphExtension: f }) => {
+  const page = await openGraph(f), editor = page.editor;
+  const original = await page.evaluate(async unsafe => {
+    const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js');
+    const graph = defaultGraph(); graph.version = 7; graph.nodes[1].type = 'SpeechToTextWhisper';
+    graph.nodes[1].position = { x: 333, y: 111 }; graph.nodes[2].settings.label = 'Saved custom label';
+    if (unsafe) {
+      graph.nodes.push(graphNode('LiveTextDisplay', 'affected', 123, 456));
+      graph.edges.push(edge('speech', 'provisional', 'affected', 'replace'));
+    }
+    localStorage.setItem(GRAPH_KEY, JSON.stringify(graph)); return graph;
+  }, unsafe);
+  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = 8;
+  expected.edges = expected.edges.filter(route => route.from[1] !== 'provisional');
+  await editor.reload();
+  await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(0);
+  const saved = () => editor.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  if (unsafe) {
+    await expect(editor.locator('#errors')).toContainText('speech.provisional → affected.replace');
+    await expect(editor.locator('#errors')).toContainText('Edit the affected connections');
+    await expect(editor.locator('#graph-errors')).toContainText('Required connection missing: affected');
+    await expect(editor.locator('#graph-state')).toContainText('Unsaved draft');
+    await expect(editor.getByRole('button', { name: 'Select affected', exact: true })).toHaveCount(1);
+    await expect(editor.locator('[data-node="speech"]')).toHaveCSS('left', '333px');
+    expect(await saved()).toBe(raw);
+    await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+    expect(await saved()).toBe(raw);
+    await clickGraphAction(editor, 'graph-load'); expect(await saved()).toBe(raw);
+    await editor.getByRole('button', { name: 'speech output final', exact: true }).click();
+    await editor.getByRole('button', { name: 'affected input append', exact: true }).click();
+    expected.edges.push({ from: ['speech', 'final'], to: ['affected', 'append'] });
+    await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+    await expect(editor.locator('#errors')).toBeEmpty();
+  }
+  await expect.poll(saved).toBe(JSON.stringify(expected));
+  await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
+  expect(await saved()).toBe(JSON.stringify(expected));
 });
 
 test('MV3 Text literal and empty values round-trip and deliver once to an ordinary TEXT consumer', async ({ graphExtension: f }) => {

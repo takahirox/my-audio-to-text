@@ -9,7 +9,7 @@ import { finiteNumber } from '../web/number-node.js';
 import { whisperLanguage } from '../web/whisper-config.js';
 import { maxDurationSamples } from '../web/local-asr-config.js';
 
-export const GRAPH_VERSION = 7;
+export const GRAPH_VERSION = 8;
 export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper'];
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
@@ -24,7 +24,7 @@ export const NODE_TYPES = Object.freeze({
   Number: { label: 'Number', inputs: {}, outputs: { value: NUMBER }, numberSettings: { value: { default: 6 } }, help: 'Reusable finite numeric constant. Select this Node to edit value. Units and limits belong to its consumer. SpeechToTextReazonSpeech.maxDuration accepts 1–12 seconds, including decimals; saves apply next session.' },
   SpeechToTextReazonSpeech: { label: 'ReazonSpeech ja-en ASR', inputs: { audio: MONO_16KHZ_PCM, maxDuration: NUMBER }, optionalInputs: ['maxDuration'], outputs: paired(TEXT), help: 'Optional maxDuration: connect Number.value for a 1–12 second audio segment cap (default 6 seconds). Includes pre-roll; decimals round down to whole 16 kHz samples. Frozen before capture; saved edits apply next session. VAD can end sooner. Mid-sentence splits may reduce recognition quality. Inference and final display can take longer than the cap.' },
   Text: { label: 'Text', inputs: {}, outputs: { value: TEXT }, textSettings: { value: { default: '', multiline: true } }, help: 'Reusable literal text constant, including empty text. Delivered once at session start to ordinary TEXT consumers. Text.value → Whisper.language is bound before model loading; saves apply next session.' },
-  SpeechToTextWhisper: { label: 'Whisper tiny (multilingual) ASR', inputs: { audio: MONO_16KHZ_PCM, language: TEXT }, optionalInputs: ['language'], outputs: paired(TEXT), help: 'Packaged local multilingual Whisper tiny (q8, CPU WASM). Defaults to English (en); connect Text.value for en or ja. Completed segments only: provisional never emits. Silero ends speech at silence or a 6-second cap; Stop drains every segment. No downloads while recording.' },
+  SpeechToTextWhisper: { label: 'Whisper tiny (multilingual) ASR', inputs: { audio: MONO_16KHZ_PCM, language: TEXT }, optionalInputs: ['language'], outputs: { final: TEXT }, help: 'Packaged local multilingual Whisper tiny (q8, CPU WASM). Defaults to English (en); connect Text.value for en or ja. Only final: TEXT is available; connect final to LiveTextDisplay.append for committed segments. Silero ends speech at silence or a 6-second cap; Stop drains every segment. No downloads while recording.' },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   LiveTextDisplay: { label: 'Live text display', inputs: { replace: TEXT, append: TEXT }, optionalInputs: ['replace', 'append'], outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Replace changes only the preview. Every append adds one committed item and clears the preview; repeated and empty items are preserved. Stop/Cancel keep committed items and discard preview when append is connected. Start again begins empty. Multiple displays are independent and ordered by graph Node order.' },
@@ -160,12 +160,29 @@ export function validateGraph(graph, legacy = false) {
 }
 // Rewrite every legacy route explicitly; malformed or ambiguous routes require visible recovery.
 export function migrateGraph(graph) {
-  if (!record(graph) || ![1, 2, 3, 4, 5, 6].includes(graph.version)) return graph;
+  if (!record(graph) || ![1, 2, 3, 4, 5, 6, 7].includes(graph.version)) return graph;
   if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return graph;
   const next = structuredClone(graph);
+  if (graph.version === 7) {
+    const whisperIds = new Set(next.nodes.filter(node => node?.type === 'SpeechToTextWhisper').map(node => node.id));
+    const dead = next.edges.filter(route => Array.isArray(route?.from) && route.from.length === 2 &&
+      whisperIds.has(route.from[0]) && route.from[1] === 'provisional' &&
+      Array.isArray(route.to) && route.to.length === 2 && route.to.every(value => typeof value === 'string'));
+    next.edges = next.edges.filter(route => !dead.includes(route));
+    next.version = GRAPH_VERSION;
+    const errors = validateGraph(next);
+    if (dead.length && errors.length) {
+      const routes = dead.map(route => `${route.from.join('.')} → ${route.to.join('.')}`).join(', ');
+      const error = new Error(`Cannot migrate saved Whisper connections: ${routes}. Whisper only provides final: TEXT. Removing these dead provisional connections leaves an invalid graph: ${errors.join(' ')} Edit the affected connections in Graph Editor: deliberately connect a supported TEXT output (for example Whisper final → LiveTextDisplay.append), or remove an unused destination, then Save. No connection was redirected; the saved graph has been kept.`);
+      // Only offer a repair draft when the remaining graph is safe to render.
+      if (errors.every(message => /^(Required connection missing:|Unconnected output Node:)/.test(message))) error.recoveryGraph = next;
+      throw error;
+    }
+    return next;
+  }
   const renameAsr = () => {
     for (const node of next.nodes) if (node?.type === 'SpeechToText') node.type = 'SpeechToTextReazonSpeech';
-    next.version = GRAPH_VERSION; return next;
+    next.version = 7; return migrateGraph(next);
   };
   if (graph.version === 6) return renameAsr();
   const recovery = (kind, id) => { throw Error(`Cannot migrate ${kind} ${id}: ambiguous or invalid route. Reset and Save in Graph Editor, then reconnect the desired TEXT routes.`); };
@@ -260,9 +277,9 @@ export function withTranslation(graph, { enabled, direction }) {
     // Choose unused IDs when the user's graph uses the default names elsewhere.
     const ids = new Set(next.nodes.map(n => n.id));
     const unused = base => unusedId(ids, base);
-    const id = unused('translation'), sink = unused('translated'), formatter = unused('translated-format'), speech = next.nodes.find(n => ASR_TYPES.includes(n.type)).id;
+    const id = unused('translation'), sink = unused('translated'), formatter = unused('translated-format'), speech = next.nodes.find(n => ASR_TYPES.includes(n.type));
     next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink }, { ...branch.nodes[5], id: formatter });
-    for (const port of ['provisional', 'final']) next.edges.push(edge(speech, port, id, port === 'final' ? 'text' : port));
+    for (const port of Object.keys(NODE_TYPES[speech.type].outputs)) next.edges.push(edge(speech.id, port, id, port === 'final' ? 'text' : port));
     next.edges.push(...translationViewEdges(id, formatter), edge(formatter, 'text', sink, 'replace'));
   } else {
     const removed = new Set(next.nodes.filter(n => translators.includes(n.type) || n.type === 'TranslationView').map(n => n.id));
@@ -284,7 +301,11 @@ export function readGraph(storage) {
   if (saved !== null) {
     let parsed, graph;
     try { parsed = JSON.parse(saved); graph = assertGraph(parsed); }
-    catch (error) { throw new Error(`Invalid saved graph: ${error.message} Reset and Save in Graph Editor to recover; the saved graph has been kept.`); }
+    catch (error) {
+      const failure = new Error(`Invalid saved graph: ${error.message}${error.recoveryGraph ? '' : ' Reset and Save in Graph Editor to recover; the saved graph has been kept.'}`);
+      if (error.recoveryGraph) failure.recoveryGraph = error.recoveryGraph;
+      throw failure;
+    }
     if (parsed.version !== GRAPH_VERSION) saveGraph(storage, graph);
     return graph;
   }

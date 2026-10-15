@@ -9,7 +9,7 @@ Contracts are identities; receiving Nodes validate their payloads.
 | --- | --- | --- |
 | Capture sources: microphone, browser tab, extension tab/selected media | `audio: MONO_16KHZ_PCM`, normalized mono 16 kHz Float32Array | Target, permission, resampler and diagnostics |
 | Text | `value: TEXT`, any literal string, including empty | One emission at session start; direct language edges bind before loading |
-| SpeechToTextWhisper | `audio: PCM`, optional startup `language: TEXT` (en/ja; default en); `final: TEXT`, silent `provisional: TEXT` | Multilingual tiny q8, Silero, fixed 6 s segments; Stop drains / Cancel releases |
+| SpeechToTextWhisper | `audio: PCM`, optional startup `language: TEXT` (en/ja; default en); `final: TEXT` only | Multilingual tiny q8, Silero, fixed 6 s segments; Stop drains / Cancel releases |
 | Number | `value: NUMBER`, finite numeric constant | Consumers define units and domain limits |
 | SpeechToTextReazonSpeech / TranscriptOutput / speech Playground | `audio: PCM`, optional startup `maxDuration: NUMBER` in seconds; `provisional: TEXT`, `final: TEXT`, plain strings | Frozen session cap (default 6 s, supported 1–12 s), core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
@@ -64,8 +64,11 @@ for independent field consumers.
 
 ## Graphs and supported topology
 
-Version 7 graphs explicitly migrate versions 1–6. Version 6 changes only
-SpeechToText to SpeechToTextReazonSpeech, preserving every ID and route.
+Version 8 graphs explicitly migrate versions 1–7. Version 7 removes only
+never-functional Whisper provisional edges; invalid results preserve storage
+and open an explicit repair draft with actionable connection errors. No edge
+is redirected to final. See [migration recovery](whisper-node.md#saved-graph-migration).
+Version 6 changes only SpeechToText to SpeechToTextReazonSpeech, preserving every ID and route.
 Extraction adapters are bypassed
 while preserving all downstream routes and fan-out. Version 4 paired result edges
 expand to direct primitive connections; TEXT-only legacy views become generic
@@ -73,7 +76,8 @@ replace/append displays. Paired legacy views
 retain every primitive route through a compatibility formatter into a generic
 replace display.
 Malformed or ambiguous routes fail visibly with Reset and Save recovery, and the
-stored graph remains untouched on failure. Nothing is silently dropped.
+stored graph remains untouched on failure. Only the documented dead Whisper
+provisional edges are removed during version 7 migration.
 
 The editor validates types, one incoming edge per input, required/optional inputs,
 settings and acyclicity. Paired display requires the complete final bundle from

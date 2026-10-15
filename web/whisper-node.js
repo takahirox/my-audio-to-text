@@ -6,6 +6,7 @@ import { whisperLanguage } from './whisper-config.js';
 // goes to Whisper. It never performs or publishes provisional inference.
 export class SpeechToTextWhisperNode extends SpeechToTextNode {
   inputs = { audio: MONO_16KHZ_PCM, language: TEXT };
+  outputs = { final: TEXT };
   constructor({ language = 'en', workerFactory, ...options } = {}) {
     super({ ...options, maxDuration: 6 });
     this.language = whisperLanguage(language);

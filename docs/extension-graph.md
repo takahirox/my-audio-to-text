@@ -71,7 +71,7 @@ OPUS-MT also removes exclusively dependent formatting/display/audio branches.
 Shared sinks with other connected producers remain.
 Version 6 `SpeechToText` Nodes become `SpeechToTextReazonSpeech`, with no added
 ASR, changed IDs, settings, positions, edges or destinations.
-Version 1–6 descriptions migrate explicitly to version 7 using the same storage
+Version 1–7 descriptions migrate explicitly to version 8 using the same storage
 key. Legacy field sinks become focused TEXT sinks; extraction adapters reconnect
 every downstream route, preserving fan-out. Version 4 paired result edges first
 expand to primitive bundles. Version 5 `TranscriptView` becomes `LiveTextDisplay`
@@ -91,11 +91,19 @@ retained through Stop/Cancel and saving a draft. A fresh Start resets outputs.
 Malformed/ambiguous routes, incomplete paired bundles or migration exceeding the
 24-Node/64-edge bound fail visibly without overwriting the saved description.
 Fix/import the desired routes or Reset and Save in Graph Editor to recover.
+Version 7 Whisper graphs remove only outgoing `Whisper.provisional` edges,
+which never produced events; no edge is redirected to final. All other nodes,
+routes, settings and positions are preserved. If removal leaves an invalid
+graph, storage stays untouched and an error names the affected connections.
+Graph Editor opens an unsaved repair draft retaining the affected graph and
+removing only those dead edges. Deliberately reconnect a valid TEXT output
+(for committed Whisper text, `final → append`) or remove an unused destination,
+then Save. See [Whisper migration](whisper-node.md#saved-graph-migration).
 Page/media handles are never saved with a graph.
 
 ## Supported graph and ports
 
-Version 7 is JSON with `version`, `nodes`, `edges`, and an optional
+Version 8 is JSON with `version`, `nodes`, `edges`, and an optional
 `translationDirection` next-session preference (used when no translator exists).
 Each Node has `id`, concrete `type`, `settings`, and `position: { x, y }`.
 Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
@@ -109,7 +117,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | MicrophoneAudio | — | audio: explicitly permitted microphone PCM |
 | FocusedInputTextOutputNode | text: TEXT | append verbatim to focused editable field |
 | Text | — | value: TEXT; editable literal string, including empty |
-| SpeechToTextWhisper | audio: PCM; language: TEXT (optional startup en/ja, defaults to en) | final: TEXT; provisional declared for replacement compatibility but never emits |
+| SpeechToTextWhisper | audio: PCM; language: TEXT (optional startup en/ja, defaults to en) | final: TEXT only |
 | Number | — | value: NUMBER; editable finite constant |
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | replace / append: TEXT, individually optional | one labeled Live region; at least one input must connect |
@@ -129,8 +137,8 @@ missing required connections and cycles fail before Save or Worker startup.
 ### Whisper and reusable Text constants
 
 To transcribe English, remove the ReazonSpeech Node and add **Whisper tiny
-(multilingual) ASR**. Reconnect the audio source to `audio` and the same
-`provisional → replace` / `final → append` wires to LiveTextDisplay. Keep exactly
+(multilingual) ASR**. Connect the audio source to `audio` and
+`final → LiveTextDisplay.append` only. Keep exactly
 one ASR. Any existing final TEXT consumer (TextFormatter, OPUS-MT, focused field,
 or TTS) can receive Whisper finals with its existing port. The default/reset
 graph continues to use ReazonSpeech ja-en. Remove any old maxDuration edge and
@@ -152,7 +160,8 @@ loading Workers and removes that edge from the continuous delivery path. The
 same Text may also feed ordinary TEXT consumers. Saved edits apply next session.
 
 Whisper produces **completed segments only**, without provisional recognition.
-Its compatible provisional port stays silent. Segments end on Silero's trailing
+Its only output is `final: TEXT`. You may deliberately connect final to
+`LiveTextDisplay.replace` for replacement behavior. Segments end on Silero's trailing
 silence or a fixed 6-second audio cap; continuous speech splits at the next
 sample without repeating pre-roll. Stop drains queued finals and active speech;
 Cancel discards pending results and terminates Workers. Pending audio is bounded
