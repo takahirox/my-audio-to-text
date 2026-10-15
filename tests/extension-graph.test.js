@@ -112,7 +112,7 @@ test('versions 1–5 preserve paired bundles, direction, fan-out and explicitly 
   for (const version of [1, 2, 3, 4, 5]) for (const direction of ['ja-en', 'en-ja']) {
     const saved = legacyGraph({ direction }, version), store = storage(); store.setItem(GRAPH_KEY, JSON.stringify(saved));
     const migrated = readGraph(store);
-    assert.equal(migrated.version, 7); assert.equal(migrated.translationDirection, direction);
+    assert.equal(migrated.version, 8); assert.equal(migrated.translationDirection, direction);
     assert.deepEqual(migrated.nodes.map(n => n.type), defaultGraph({ enabled: true, direction }).nodes.map(n => n.type));
     assert.deepEqual(migrated.edges.map(JSON.stringify).sort(), defaultGraph({ enabled: true, direction }).edges.map(JSON.stringify).sort());
     assert.equal(migrated.nodes.at(-1).settings.direction, direction);

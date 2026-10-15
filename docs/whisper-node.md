@@ -11,11 +11,11 @@ before model loading with instructions to correct or disconnect the Text Node.
 ## Use in Graph Editor
 
 Remove ReazonSpeech, add Whisper, connect the audio source's `audio` to Whisper's
-`audio`, and reconnect `provisional → LiveTextDisplay.replace` and
-`final → LiveTextDisplay.append`. Only one ASR is allowed. Whisper's final text
-can also feed the existing TextFormatter, OPUS-MT, focused-field output or TTS
-ports directly. No translator is required. Remove any old maxDuration edge and
-unused Number Node when replacing ReazonSpeech; Whisper has a fixed 6-second
+`audio`, and connect `final → LiveTextDisplay.append` only. Only one ASR is
+allowed. Whisper's final text can also feed the existing TextFormatter, OPUS-MT, focused-field output or TTS
+ports directly. You can deliberately connect final to `LiveTextDisplay.replace`
+for preview-style replacement instead of committed history. No translator is
+required. Remove any old maxDuration edge and unused Number Node when replacing ReazonSpeech; Whisper has a fixed 6-second
 cap. Defaults/reset still use ReazonSpeech.
 
 For Japanese, add **Text**, select its heading, edit value to `ja`, and connect
@@ -32,6 +32,24 @@ configuration edge from continuous delivery. The same constant can fan out to
 ordinary TEXT consumers. Dynamic language producers are rejected; saved changes
 affect the next session, including saves made while loading or recording.
 
+## Saved graph migration
+
+Graph version 8 migrates version 7 by removing only outgoing
+`SpeechToTextWhisper.provisional` connections, which never emitted events. IDs,
+positions, settings, final routes and unrelated routes are preserved. No edge
+is automatically redirected to final. Valid results are saved in the same
+storage key. Graphs without these edges only change version.
+
+If removal leaves a missing required connection (including a display with no
+remaining input), loading reports the exact removed connection and validation
+errors without changing storage. Graph Editor opens the affected graph as an
+**unsaved repair draft**, with only the dead edges removed. Deliberately connect
+an available TEXT output to the affected destination, or remove an unused
+Node, then Save. For committed Whisper text, choose `final → append`; choose
+`final → replace` only if replacement behavior is intended. An invalid draft
+cannot overwrite the saved graph. ReazonSpeech keeps its provisional/final
+outputs and default preview/committed wiring.
+
 ## Recognition policy
 
 Whisper's audio port accepts the same mono 16 kHz Float32Array PCM as ReazonSpeech.
@@ -41,9 +59,9 @@ at the next sample without overlapping already committed segments. Inference is
 serial; total pending audio is bounded at 30 seconds. Overflow fails visibly and
 stops capture instead of silently dropping committed speech.
 
-This implementation performs **completed segment inference only**. The
-provisional TEXT output exists for interchangeable graph connections but never
-emits; it does not promise streaming previews or real-time latency. Every final
+This implementation performs **completed segment inference only**, exposing
+exactly `final: TEXT` in the editor and runtime. There is no provisional output
+or streaming preview. It does not promise real-time latency. Every final
 is a committed segment, including equal strings in successive segments. Existing
 core session/request IDs reject stale/duplicate finals before fan-out. Stop
 flushes the source/VAD tail and drains all queued inference and downstream TEXT
@@ -101,7 +119,8 @@ python3 scripts/prepare-reazon-ja-en-fixtures.py
 npm run test:whisper-real
 ```
 
-Unit tests cover lossless version 6 migration, earlier migrations, defaults and
+Unit tests cover version 7 dead-edge migration and non-destructive repair,
+lossless version 6 migration, earlier migrations, defaults and
 invalid recovery; literal Text persistence, configuration order and invalid
 types/codes; model replacement, formatter compatibility; final-only segmentation,
 audio boundary accounting, repeated text, Stop, Cancel, overflow, worker errors

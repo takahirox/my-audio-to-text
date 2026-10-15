@@ -54,3 +54,15 @@ test('Number connects only to NUMBER; invalid duration edits and TEXT/PCM edges 
   connect(e, 'duration', 'value', 'speech', 'maxDuration');
   assert.deepEqual(e.draft.edges.at(-1), edge('duration', 'value', 'speech', 'maxDuration'));
 });
+
+test('Whisper editor connections reject the removed output and accept final for either display port', () => {
+  const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextWhisper';
+  graph.edges = graph.edges.filter(route => route.from[1] !== 'provisional');
+  const e = editor(graph), before = structuredClone(graph.edges);
+  e.selected = { id: 'speech', port: 'provisional', contract: NODE_TYPES.SpeechToTextWhisper.outputs.final };
+  e.connect('transcript', 'replace', NODE_TYPES.LiveTextDisplay.inputs.replace);
+  assert.match(e.error, /Unknown port: speech.provisional → transcript.replace/);
+  assert.deepEqual(e.draft.edges, before);
+  connect(e, 'speech', 'final', 'transcript', 'replace');
+  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript', 'replace')]);
+});

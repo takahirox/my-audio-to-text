@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, GRAPH_KEY, NODE_TYPES } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, GRAPH_KEY, GRAPH_VERSION, NODE_TYPES, withTranslation } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { TextNode } from '../web/text-constant-node.js';
+import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
 import { TEXT } from '../web/port-contracts.js';
 
@@ -13,6 +14,7 @@ function store() {
 }
 function whisperGraph(language) {
   const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextWhisper';
+  graph.edges = graph.edges.filter(route => route.from[1] !== 'provisional');
   if (language !== undefined) {
     graph.nodes.push(graphNode('Text', 'language')); graph.nodes.at(-1).settings.value = language;
     graph.edges.push(edge('language', 'value', 'speech', 'language'));
@@ -53,6 +55,90 @@ function fixture({ language, hold, failure } = {}) {
   return { ...built, workers, finals, previews, requests };
 }
 
+test('Whisper schema and concrete runtime expose exactly final; ReazonSpeech retains both outputs and default routes', async () => {
+  assert.deepEqual(NODE_TYPES.SpeechToTextWhisper.outputs, { final: TEXT });
+  assert.deepEqual(new SpeechToTextWhisperNode().outputs, { final: TEXT });
+  assert.deepEqual(NODE_TYPES.SpeechToTextReazonSpeech.outputs, { provisional: TEXT, final: TEXT });
+  assert.deepEqual(new SpeechToTextNode().outputs, { provisional: TEXT, final: TEXT });
+  assert.deepEqual(defaultGraph().edges.slice(1), [edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'final', 'transcript', 'append')]);
+  const graph = whisperGraph();
+  assert.deepEqual(validateGraph(graph), []);
+  const built = buildGraph(graph, {});
+  assert.deepEqual(built.pipeline.entries.get('speech').outputs, NODE_TYPES.SpeechToTextWhisper.outputs);
+  await built.pipeline.dispose();
+  graph.edges.push(edge('speech', 'provisional', 'transcript', 'replace'));
+  assert.match(validateGraph(graph).join('\n'), /Unknown port: speech.provisional → transcript.replace/);
+  const storage = store(), saved = JSON.stringify(whisperGraph()); storage.setItem(GRAPH_KEY, saved);
+  assert.throws(() => saveGraph(storage, graph), /Unknown port: speech.provisional/);
+  assert.equal(storage.getItem(GRAPH_KEY), saved);
+});
+
+test('Whisper finals connect to replace, append, completed translation and other TEXT consumers; preset uses implemented outputs', () => {
+  for (const port of ['replace', 'append']) {
+    const graph = whisperGraph(); graph.edges.at(-1).to[1] = port;
+    assert.deepEqual(validateGraph(graph), []);
+    for (const direction of ['ja-en', 'en-ja']) {
+      const translated = withTranslation(graph, { enabled: true, direction });
+      assert.deepEqual(validateGraph(translated), []);
+      assert.deepEqual(translated.edges.filter(route => route.to[0] === 'translation'), [edge('speech', 'final', 'translation', 'text')]);
+      assert.deepEqual(withTranslation(translated, { enabled: false, direction }), { ...graph, translationDirection: direction });
+    }
+  }
+});
+
+test('v7 migration removes only dead Whisper edges, preserving all custom nodes, routes, settings and positions', () => {
+  for (const dead of [false, true]) for (const whisper of [false, true]) for (const enabled of [false, true]) {
+    const graph = withTranslation(whisper ? whisperGraph('ja') : defaultGraph(), { enabled, direction: 'en-ja' });
+    graph.version = 7;
+    graph.nodes[1].position = { x: 42, y: 777 };
+    graph.nodes[2].settings = { label: 'Custom display', language: 'ja' };
+    graph.nodes.push(graphNode('Text', 'literal'), graphNode('TextFormatter', 'format'), graphNode('FocusedInputTextOutputNode', 'field'));
+    graph.nodes.at(-3).settings.value = 'literal\n😀'; graph.nodes.at(-2).settings.template = '{1}: {2}';
+    graph.edges.push(edge('literal', 'value', 'format', 'input1'), edge('speech', 'final', 'format', 'input2'), edge('format', 'text', 'field', 'text'));
+    if (dead && whisper) graph.edges.push(edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'provisional', 'format', 'input3'));
+    const original = structuredClone(graph), storage = store(); storage.setItem(GRAPH_KEY, JSON.stringify(graph));
+    const expected = structuredClone(graph); expected.version = GRAPH_VERSION;
+    if (whisper) expected.edges = expected.edges.filter(route => !(route.from[0] === 'speech' && route.from[1] === 'provisional'));
+    assert.deepEqual(readGraph(storage), expected);
+    assert.deepEqual(JSON.parse(storage.getItem(GRAPH_KEY)), expected);
+    assert.deepEqual(readGraph(storage), expected);
+    assert.deepEqual(saveGraph(storage, expected), expected);
+    assert.deepEqual(graph, original);
+  }
+});
+
+test('v7 unsafe Whisper migration names the connection, preserves storage and offers an explicit repair draft', () => {
+  for (const [type, port] of [['LiveTextDisplay', 'replace'], ['FocusedInputTextOutputNode', 'text'], ['OpusMtEnJa', 'text']]) {
+    const graph = whisperGraph('ja'); graph.version = 7;
+    graph.nodes.push(graphNode(type, 'affected', 555, 444));
+    graph.edges.push(edge('speech', 'provisional', 'affected', port));
+    if (type === 'OpusMtEnJa') {
+      graph.nodes.push(graphNode('LiveTextDisplay', 'translated'));
+      graph.edges.push(edge('affected', 'text', 'translated', 'append'));
+    }
+    const storage = store(), saved = JSON.stringify(graph); storage.setItem(GRAPH_KEY, saved);
+    storage.setItem('opus-mt-translation-preferences', 'keep');
+    let failure;
+    assert.throws(() => readGraph(storage), error => { failure = error; return /speech.provisional → affected\./.test(error.message) && /Edit the affected connections/.test(error.message) && /Required connection missing: affected/.test(error.message); });
+    assert.equal(storage.getItem(GRAPH_KEY), saved);
+    assert.equal(storage.getItem('opus-mt-translation-preferences'), 'keep');
+    const expected = structuredClone(graph); expected.version = GRAPH_VERSION; expected.edges = expected.edges.filter(route => route.from[1] !== 'provisional');
+    assert.deepEqual(failure.recoveryGraph, expected);
+    assert.throws(() => saveGraph(storage, failure.recoveryGraph), /Required connection missing/);
+    assert.equal(storage.getItem(GRAPH_KEY), saved);
+    // Deliberately select the replacement semantics, then explicitly Save.
+    failure.recoveryGraph.edges.push(edge('speech', 'final', 'affected', port));
+    saveGraph(storage, failure.recoveryGraph);
+    assert.deepEqual(readGraph(storage), failure.recoveryGraph);
+  }
+  const graph = whisperGraph(); graph.version = 7;
+  graph.edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace')];
+  const storage = store(), saved = JSON.stringify(graph); storage.setItem(GRAPH_KEY, saved);
+  assert.throws(() => readGraph(storage), error => /Unconnected output Node: speech/.test(error.message) &&
+    /Required connection missing: transcript/.test(error.message) && error.recoveryGraph.edges.length === 1);
+  assert.equal(storage.getItem(GRAPH_KEY), saved);
+});
+
 test('v6 rename preserves custom branches, IDs, destinations, settings, positions and Number wiring exactly', () => {
   for (const enabled of [false, true]) {
     const graph = defaultGraph({ enabled, direction: 'en-ja' });
@@ -63,7 +149,7 @@ test('v6 rename preserves custom branches, IDs, destinations, settings, position
     graph.edges.push(edge('cap', 'value', 'speech', 'maxDuration'), edge('speech', 'final', 'format', 'input1'), edge('format', 'text', 'field', 'text'));
     const original = structuredClone(graph), storage = store(); storage.setItem(GRAPH_KEY, JSON.stringify(graph));
     const migrated = readGraph(storage);
-    const expected = structuredClone(original); expected.version = 7; expected.nodes[1].type = 'SpeechToTextReazonSpeech';
+    const expected = structuredClone(original); expected.version = GRAPH_VERSION; expected.nodes[1].type = 'SpeechToTextReazonSpeech';
     assert.deepEqual(migrated, expected); assert.deepEqual(readGraph(storage), expected); assert.deepEqual(graph, original);
     assert.equal(migrated.nodes.filter(n => n.type.startsWith('SpeechToText')).length, 1);
     graph.edges.push(edge('speech', 'final', 'field', 'audio'));

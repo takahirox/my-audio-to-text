@@ -71,7 +71,8 @@ npm run setup:extension
 The extension Graph Editor exposes **ReazonSpeech ja-en ASR**, **Whisper tiny
 (multilingual) ASR**, and a reusable **Text** constant. Whisper defaults to
 English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
-Japanese. Whisper emits completed segments only. The default stays
+Japanese. Whisper exposes only `final: TEXT`; connect it to
+`LiveTextDisplay.append` for completed segments. The default stays
 ChromeTabAudio → ReazonSpeech → one LiveTextDisplay. See [Whisper pins, setup,
 usage and real-model validation](docs/whisper-node.md).
 

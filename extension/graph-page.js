@@ -2,9 +2,13 @@ import { readGraph, saveGraph, defaultGraph, GRAPH_KEY } from './graph.js';
 import { GraphEditor } from './graph-editor.js';
 
 const element = id => document.getElementById(id);
-let graph, editor, base, conflict = false;
+let graph, editor, base, recoveryGraph, conflict = false;
 try { graph = readGraph(localStorage); }
-catch (error) { element('errors').textContent = `Saved graph unavailable: ${error.message}. Reset draft and Save to recover.`; graph = defaultGraph(); }
+catch (error) {
+  recoveryGraph = error.recoveryGraph;
+  element('errors').textContent = `Saved graph unavailable: ${error.message}${recoveryGraph ? ' The affected graph is open as an unsaved repair draft.' : '. Reset draft and Save to recover.'}`;
+  graph = defaultGraph();
+}
 base = localStorage.getItem(GRAPH_KEY);
 async function persist(next) {
   return navigator.locks.request('processing-graph-save', async () => {
@@ -13,7 +17,7 @@ async function persist(next) {
     element('errors').textContent = ''; return saved;
   });
 }
-editor = new GraphEditor(element('graph-editor'), graph, { onSave: persist, onLoad: () => {
+editor = new GraphEditor(element('graph-editor'), graph, { recoveryGraph, onSave: persist, onLoad: () => {
   const next = readGraph(localStorage);
   conflict = false; base = localStorage.getItem(GRAPH_KEY); return next;
 } });
