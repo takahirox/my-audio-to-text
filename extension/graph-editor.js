@@ -211,6 +211,13 @@ export class GraphEditor {
     if (this.selectedEdge === connection) this.selectedEdge = null;
     this.draw();
   }
+  updateSetting(node, key, value) {
+    node.settings[key] = value;
+    // Settings do not change canvas geometry or ports. Keep controls in place
+    // so a field's blur/change cannot remove the target of a pending click.
+    this.errors.textContent = validateGraph(this.draft).join('\n'); this.updateSummary();
+    this.onDraft(structuredClone(this.draft));
+  }
   drawInspector() {
     const focused = this.inspector.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
     this.inspector.replaceChildren(el('h2', 'Settings'));
@@ -222,13 +229,13 @@ export class GraphEditor {
     for (const [key, values] of Object.entries(definition.settings || {})) {
       const label = el('label', key + ' '), select = el('select'); select.setAttribute('aria-label', `${node.id} ${key}`);
       for (const value of values) { const option = el('option', value); option.value = value; select.append(option); }
-      select.value = node.settings[key]; select.onchange = () => { node.settings[key] = select.value; this.draw(); };
+      select.value = node.settings[key]; select.onchange = () => this.updateSetting(node, key, select.value);
       label.append(select); this.inspector.append(label);
     }
     for (const [key, spec] of Object.entries(definition.textSettings || {})) {
       const label = el('label', key + ' '), control = el(spec.multiline ? 'textarea' : 'input');
       control.setAttribute('aria-label', `${node.id} ${key}`); if (spec.maxLength !== undefined) control.maxLength = spec.maxLength; control.value = node.settings[key];
-      control.onchange = () => { node.settings[key] = control.value; this.draw(); };
+      control.onchange = () => this.updateSetting(node, key, control.value);
       label.append(control); this.inspector.append(label);
     }
     for (const key of Object.keys(definition.numberSettings || {})) {
@@ -238,8 +245,7 @@ export class GraphEditor {
       control.oninput = () => {
         // Empty / malformed input must remain invalid, never become zero or a
         // default through coercion. JSON also preserves this as invalid null.
-        node.settings[key] = control.valueAsNumber;
-        this.errors.textContent = validateGraph(this.draft).join('\n'); this.updateSummary();
+        this.updateSetting(node, key, control.valueAsNumber);
       };
       label.append(control); this.inspector.append(label);
     }

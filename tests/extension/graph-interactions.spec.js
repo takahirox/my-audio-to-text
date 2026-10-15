@@ -12,6 +12,42 @@ async function save(page) {
 }
 
 const wireFor = (editor, route) => editor.getByRole('button', { name: `Select connection ${route}`, exact: true });
+for (const action of ['Close settings', 'Remove transcript']) {
+  test(`packaged inspector commits text edits before a single ${action} click`, async ({ graphExtension: f }) => {
+    const live = await openGraph(f), editor = live.editor, before = await saved(live);
+    await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
+    await editor.getByLabel('transcript label', { exact: true }).fill('Edited output');
+    await editor.getByRole('button', { name: action, exact: true }).click();
+    await expect(editor.locator('.graph-inspector')).toBeHidden();
+    await expect(editor.locator('.graph-scroll')).toBeFocused();
+    await expect(editor.locator('#graph-state')).toContainText('Unsaved draft');
+    expect(await saved(live)).toEqual(before);
+    const expected = structuredClone(before);
+    if (action === 'Close settings') {
+      expected.nodes.find(node => node.id === 'transcript').settings.label = 'Edited output';
+      await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
+      await expect(editor.getByLabel('transcript label', { exact: true })).toHaveValue('Edited output');
+      await expect(editor.locator('#graph-errors')).toBeEmpty();
+    } else {
+      expected.nodes = expected.nodes.filter(node => node.id !== 'transcript');
+      expected.edges = expected.edges.filter(edge => edge.from[0] !== 'transcript' && edge.to[0] !== 'transcript');
+      await expect(editor.locator('[data-node="transcript"]')).toHaveCount(0);
+      await expect(editor.locator('.graph-node')).toHaveCount(expected.nodes.length);
+      await expect(editor.locator('.graph-wire')).toHaveCount(expected.edges.length);
+      await editor.locator('#graph-save').click();
+      await expect(editor.locator('#graph-errors')).toContainText('Unconnected output Node');
+      expect(await saved(live)).toEqual(before);
+      return;
+    }
+    await save(editor);
+    expect(await saved(live)).toEqual(expected);
+    await editor.reload();
+    await expect(editor.locator('#graph-state')).toContainText('Saved graph');
+    await expect(editor.locator('.graph-node')).toHaveCount(expected.nodes.length);
+    await expect(editor.locator('.graph-wire')).toHaveCount(expected.edges.length);
+  });
+}
+
 async function wirePoint(editor, route) {
   const wire = wireFor(editor, route);
   await wire.scrollIntoViewIfNeeded();

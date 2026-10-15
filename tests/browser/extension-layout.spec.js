@@ -68,6 +68,46 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
   }
 });
 
+for (const action of ['Close settings', 'Remove transcript']) {
+  test(`inspector text edits commit before a single ${action} click`, async ({ page }) => {
+    const before = await page.evaluate(async () => {
+      const { readGraph } = await import('/extension/graph.js');
+      return { graph: readGraph(localStorage), stored: localStorage.getItem('processing-graph-v1') };
+    });
+    await page.getByRole('button', { name: 'Select transcript', exact: true }).click();
+    await page.getByLabel('transcript label', { exact: true }).fill('Edited output');
+    // Keep the field focused: the native click must commit its change on blur
+    // without replacing the command between pointerdown and click.
+    await page.getByRole('button', { name: action, exact: true }).click();
+    await expect(page.locator('.graph-inspector')).toBeHidden();
+    await expect(page.locator('.graph-scroll')).toBeFocused();
+    await expect(page.locator('#graph-state')).toContainText('Unsaved draft');
+    expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before.stored);
+    const expected = structuredClone(before.graph);
+    if (action === 'Close settings') {
+      expected.nodes.find(node => node.id === 'transcript').settings.label = 'Edited output';
+      await page.getByRole('button', { name: 'Select transcript', exact: true }).click();
+      await expect(page.getByLabel('transcript label', { exact: true })).toHaveValue('Edited output');
+      await expect(page.locator('#graph-errors')).toBeEmpty();
+    } else {
+      expected.nodes = expected.nodes.filter(node => node.id !== 'transcript');
+      expected.edges = expected.edges.filter(edge => edge.from[0] !== 'transcript' && edge.to[0] !== 'transcript');
+      await expect(page.locator('[data-node="transcript"]')).toHaveCount(0);
+      await expect(page.locator('.graph-node')).toHaveCount(expected.nodes.length);
+      await expect(page.locator('.graph-wire')).toHaveCount(expected.edges.length);
+      // Removing the only output leaves an invalid draft; Save must still
+      // reject it rather than silently applying the removal.
+      await page.locator('#graph-save').click();
+      await expect(page.locator('#graph-errors')).toContainText('Unconnected output Node');
+      expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before.stored);
+      return;
+    }
+    await page.locator('#graph-save').click();
+    await expect(page.locator('#graph-state')).toContainText('Saved graph');
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(expected);
+  });
+}
+
 test('live regions preserve committed DOM and plain text; previews are distinct and graph-driven', async ({ page }) => {
   const html = await readFile('extension/recorder.html', 'utf8');
   await page.setContent(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''));
