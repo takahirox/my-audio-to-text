@@ -62,7 +62,7 @@ def main():
     for name in SHARED_FILES:
         shutil.copy2(ROOT / "web" / name, target / "web" / name)
     for name in ("vendor", "licenses", "tts-assets"):
-        # Runtime code is packaged; OPUS-MT/TTS weights are cached only on request.
+        # Runtime code is packaged; OPUS-MT/TTS weights are cached after Save or explicit preparation.
         shutil.copytree(ROOT / "web" / name, target / "web" / name)
     print(f"Load unpacked: {target}")
 

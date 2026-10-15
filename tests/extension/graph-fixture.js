@@ -1,4 +1,4 @@
-import { openPalette, openTranslation } from './ui-controls.js';
+import { openPalette, loadTranslationFixture } from './ui-controls.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -22,7 +22,10 @@ export const test = base.extend({
       if (mode === 'error') { response.writeHead(503); response.end(); return; }
       const body = bodies.get(request.url.slice(1));
       if (!body) { response.writeHead(404); response.end(); return; }
-      response.writeHead(200); response.write(body.subarray(0, 100));
+      response.writeHead(200);
+      if (mode === 'corrupt') { response.end(Buffer.alloc(body.length)); return; }
+      if (mode === 'short') { response.end(body.subarray(0, 50)); return; }
+      response.write(body.subarray(0, 100));
       if (mode !== 'hold') response.end(body.subarray(100));
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -37,7 +40,7 @@ export const test = base.extend({
       for (const role of (whisperReal || concurrentReal ? [] : ['sherpa', 'silero'])) await writeFile(path.join(root, `web/${role}-worker.js`), `
         self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready'});if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});};`);
       if (!real) {
-        for (const file of ['supertonic3-assets.json', 'kokoro-assets.json']) {
+        for (const file of ['opus-mt-assets.json', 'opus-mt-en-ja-assets.json', 'supertonic3-assets.json', 'kokoro-assets.json']) {
           const entries = JSON.parse(await readFile(path.join(root, 'extension', file), 'utf8')).map(entry => {
             const key = file + '/' + entry.path;
             let body = Buffer.alloc(entry.path.endsWith('.bin') ? 510 * 256 * 4 : 8192);
@@ -114,7 +117,7 @@ export async function emitFinal(page, text) {
 }
 export async function addAudioPath(page, type) {
   const editor = page.editor;
-  await openTranslation(editor); await editor.locator('#translation-enabled').uncheck();
+  await loadTranslationFixture(editor, 'ja-en', false);
   for (const node of [type, 'AudioOutput']) {
     await openPalette(editor); await editor.locator('#graph-node-type').selectOption(node); await editor.locator('#graph-add').click();
   }

@@ -1,4 +1,4 @@
-import { NODE_TYPES, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph, graphPreferences, withTranslation } from './graph.js';
+import { NODE_TYPES, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
 
 const el = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -44,23 +44,6 @@ export class GraphEditor {
         this.draw();
       }),
       button('Validate draft', 'graph-validate', () => { this.closeActions(); this.error = this.diagnostics(true) || 'Draft valid. Save to use next session.'; this.draw(); }));
-    // This explicit bulk preset is optional. Individual translator types remain
-    // available in the palette, including graphs with both directions.
-    const translation = el('details'); translation.id = 'graph-translation'; translation.append(el('summary', 'Translation preset'));
-    const translationLabel = el('label'); this.translationEnabled = el('input'); this.translationEnabled.type = 'checkbox'; this.translationEnabled.id = 'translation-enabled';
-    translationLabel.append(this.translationEnabled, ' Include OPUS-MT');
-    const directionLabel = el('label', 'Preset direction '); this.translationDirection = el('select'); this.translationDirection.id = 'translation-direction';
-    for (const [value, label] of [['ja-en', 'Japanese → English'], ['en-ja', 'English → Japanese']]) {
-      const option = el('option', label); option.value = value; this.translationDirection.append(option);
-    }
-    directionLabel.append(this.translationDirection);
-    this.translationState = el('p', undefined, 'muted');
-    translation.append(this.translationState, translationLabel, directionLabel, el('p', 'Edits all OPUS-MT branches in this draft. Disabling removes their dependent outputs. Save to use next session.', 'muted'));
-    const changeTranslation = () => {
-      try { this.draft = withTranslation(this.draft, { enabled: this.translationEnabled.checked, direction: this.translationDirection.value }); this.draw(); }
-      catch (error) { this.error = `Complete the draft connections first: ${error.message}`; this.draw(); }
-    };
-    this.translationEnabled.onchange = this.translationDirection.onchange = changeTranslation;
     const warningLabel = el('label'); this.warningPreference = el('input'); this.warningPreference.type = 'checkbox';
     this.warningPreference.id = 'graph-optional-warnings';
     this.warningPreference.checked = localStorage.getItem('graph-show-optional-warnings') === 'true';
@@ -68,14 +51,14 @@ export class GraphEditor {
       localStorage.setItem('graph-show-optional-warnings', String(this.warningPreference.checked)); this.draw();
     };
     warningLabel.append(this.warningPreference, ' Show optional warnings'); commands.append(warningLabel);
-    commands.append(translation); this.actions.append(commands);
+    this.actions.append(commands);
     this.help = el('dialog', undefined, 'graph-help'); this.help.setAttribute('aria-label', 'Graph Editor help');
     this.help.append(el('h2', 'Graph Editor help'),
       el('p', 'Park disconnected or incomplete Nodes and Save a structurally valid draft. Start runs only complete paths to outputs. Use Graph actions → Validate draft or Show optional warnings for diagnostics. Saved edits apply to the next session; the active session keeps its graph. Reset replaces the draft; Load saved discards draft changes after confirmation.'),
       el('p', 'Add nodes using search and categories. Select a node heading for settings and optional node help. Drag a heading or use arrow keys to move it.'),
       el('p', 'Connect by clicking an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Select a wire, then use its nearby Disconnect button. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape or blank canvas clears selection.'),
       el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire to reveal Disconnect.'),
-      el('p', 'Live displays are graph outputs. Replace changes a preview; append commits an item and clears the preview. Add independent displays as needed. Language belongs to each model or display; add OPUS-MT nodes for translation and prepare weights in Models.'),
+      el('p', 'Live displays are graph outputs. Replace changes a preview; append commits an item and clears the preview. Add independent displays as needed. Language belongs to each model or display; add OPUS-MT Nodes for translation. Save graph prepares required optional model weights, with progress, cancellation and retry below the graph. Models offers cache diagnostics and recovery.'),
       button('Close help', null, () => this.help.close()));
     this.paletteButton = button('Add Node', 'graph-palette-toggle', () => this.togglePalette()); this.paletteButton.setAttribute('aria-expanded', 'false'); this.paletteButton.setAttribute('aria-controls', 'graph-palette');
     this.helpButton = button('Help', 'graph-help', () => this.help.showModal());
@@ -283,9 +266,6 @@ export class GraphEditor {
     this.canvas.replaceChildren(this.svg); this.svg.replaceChildren();
     this.errors.textContent = this.error || this.diagnostics(); this.error = '';
     this.updateSummary(); this.drawInspector();
-    const preferences = graphPreferences(this.draft), translators = this.draft.nodes.filter(node => ['OpusMtJaEn', 'OpusMtEnJa'].includes(node.type));
-    this.translationEnabled.checked = preferences.enabled; this.translationDirection.value = preferences.direction;
-    this.translationState.textContent = translators.length ? `Draft: ${translators.map(node => NODE_TYPES[node.type].label).join(', ')}` : 'No translation nodes in this draft.';
     const width = Math.max(1100, ...this.draft.nodes.map(n => n.position.x + 285)), height = Math.max(700, ...this.draft.nodes.map(n => n.position.y + 250));
     this.canvas.style.width = `${width}px`; this.canvas.style.height = `${height}px`; this.canvas.style.transform = `scale(${this.zoom})`;
     this.extent.style.width = `${width * this.zoom}px`; this.extent.style.height = `${height * this.zoom}px`;
