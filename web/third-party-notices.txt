@@ -83,3 +83,21 @@ Whisper tiny (multilingual, q8)
   Base: https://huggingface.co/openai/whisper-tiny
   Prepared checksum-pinned tokenizer/processor and q8 encoder/merged decoder
   packaged locally for extension inference. No remote model fetches at session start.
+
+English streaming Zipformer 20M (2023-02-17, epoch 99)
+  Model and sherpa-onnx online runtime: Apache License 2.0.
+  Export: csukuangfj, derived from desh2608/icefall-asr-librispeech-pruned-transducer-stateless7-streaming-small.
+  https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/tree/d42f2d9f7ca24806fb667456a18a9f1b60f70d16
+  Runtime: sherpa-onnx v1.13.2 English online ASR SIMD WASM distribution.
+  https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.2/wasm/asr
+  License: ./licenses/sherpa-onnx.txt
+  Upstream model card retained in ./vendor/zipformer-en/model-README.md.
+  Preparation replaces the archive's larger ASR weights and preload table with
+  the pinned 20M int8 encoder/joiner and float decoder; runtime code is unchanged.
+  Pinned test_wavs/0.wav and 1.wav stay in the development cache only.
+  Upstream speech fixtures: English read speech distributed with this model;
+  the model card declares Apache 2.0. LibriSpeech corpus attribution:
+  Vassil Panayotov, Guoguo Chen, Daniel Povey, Sanjeev Khudanpur (ICASSP 2015),
+  derived from LibriVox recordings. Corpus license CC BY 4.0: https://www.openslr.org/12
+  https://creativecommons.org/licenses/by/4.0/
+  See docs/zipformer-node.md for pins, sizes, supported configuration and evidence.

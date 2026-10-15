@@ -7,6 +7,7 @@ import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_FILES = (
+    "zipformer-node.js", "zipformer-worker.js", "zipformer-core.js", "zipformer-segments.js", "zipformer-config.js",
     "whisper-node.js", "whisper-worker.js", "whisper-config.js", "text-constant-node.js",
     "pipeline.js", "port-contracts.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
     "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "supertonic3-worker.js", "supertonic3-runtime.js",
@@ -31,6 +32,19 @@ def main():
         asset = vendor / "whisper" / "tiny" / entry["path"]
         if not asset.is_file() or asset.stat().st_size != entry["bytes"] or hashlib.sha256(asset.read_bytes()).hexdigest() != entry["sha256"]:
             raise SystemExit("Missing or invalid pinned Whisper model. Run npm run prepare:whisper-assets after prepare:assets.")
+    specification = json.loads((ROOT / "scripts" / "zipformer-assets.json").read_text())
+    manifest_path = vendor / "zipformer-en" / "manifest.json"
+    if not manifest_path.is_file():
+        raise SystemExit("Missing English Zipformer. Run npm run prepare:zipformer-assets after prepare:assets.")
+    manifest = json.loads(manifest_path.read_text())
+    if manifest["specification"] != specification:
+        raise SystemExit("Outdated English Zipformer specification; prepare assets again.")
+    if manifest["files"] != specification["bundle"]:
+        raise SystemExit("English Zipformer bundle manifest differs from pinned checksums.")
+    for entry in specification["bundle"]:
+        asset = vendor / "zipformer-en" / entry["path"]
+        if not asset.is_file() or asset.stat().st_size != entry["bytes"] or hashlib.sha256(asset.read_bytes()).hexdigest() != entry["sha256"]:
+            raise SystemExit("Invalid pinned English Zipformer asset; prepare assets again.")
     tts = ROOT / "web" / "tts-assets"
     if any(not (tts / name).is_file() for name in (
             "ort.mjs", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm",

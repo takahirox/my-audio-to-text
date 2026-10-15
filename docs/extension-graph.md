@@ -486,3 +486,19 @@ No post-merge verification is required for the locally unpacked extension.
 committed state from DOM replacement, source final-ID filtering and intentional
 new-session resets, and record default/migration, selection/scroll and palette
 translation checks with optional real-model limits.
+
+## English streaming ASR
+
+`SpeechToTextZipformerEn` (**Streaming Zipformer English ASR**) is an opt-in
+processor with only `audio: MONO_16KHZ_PCM` input and real online
+`provisional: TEXT` / `final: TEXT` outputs. Search for Zipformer or English in
+Add Node. Replace the ASR, reconnect the audio source, then connect provisional
+to `LiveTextDisplay.replace` and final to `LiveTextDisplay.append`. Remove an
+unused Number/Text configuration source when replacing the old ASR. Exactly
+one of ReazonSpeech, Whisper or Zipformer is required. Existing TEXT sinks and
+translation presets use the same contracts.
+
+The graph stays at version 8: no migration or rewriting of existing v8 graphs,
+IDs, settings, routes or positions is needed. Earlier migrations and the minimal
+ReazonSpeech default stay intact. See [model pins, fixed 12-second segments,
+Stop/drain, setup and limitations](zipformer-node.md).

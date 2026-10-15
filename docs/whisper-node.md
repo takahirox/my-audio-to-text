@@ -84,7 +84,7 @@ fresh resources and empty display state.
 - License: OpenAI Whisper MIT, retained in [whisper.txt](../web/licenses/whisper.txt)
   and third-party notices. Existing runtime/VAD licenses continue to apply.
 
-`npm run setup:extension` prepares both ASR models and runtimes then builds.
+`npm run setup:extension` prepares all three ASR models and runtimes then builds.
 For an existing checkout:
 
 ```sh
@@ -92,6 +92,7 @@ npm ci
 npm run prepare:assets
 npm run prepare:translation-assets
 npm run prepare:whisper-assets
+npm run prepare:zipformer-assets
 npm run prepare:tts-assets
 npm run build:extension
 ```

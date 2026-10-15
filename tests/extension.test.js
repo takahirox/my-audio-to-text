@@ -278,6 +278,14 @@ with tempfile.TemporaryDirectory() as tmp:
     (root / 'scripts').mkdir()
     import hashlib
     (root / 'scripts' / 'whisper-assets.json').write_text(json.dumps({'files': [{'path': 'fixture.onnx', 'bytes': 22, 'sha256': hashlib.sha256(b'pinned Whisper fixture').hexdigest()}]}))
+    zipformer = root / 'web/vendor/zipformer-en'
+    zipformer.mkdir()
+    content = b'pinned online fixture'
+    (zipformer / 'sherpa-onnx-wasm-main-asr.data').write_bytes(content)
+    zip_entries = [{'path': 'sherpa-onnx-wasm-main-asr.data', 'bytes': len(content), 'sha256': hashlib.sha256(content).hexdigest()}]
+    zip_spec = {'files': [], 'bundle': zip_entries}
+    (root / 'scripts/zipformer-assets.json').write_text(json.dumps(zip_spec))
+    (zipformer / 'manifest.json').write_text(json.dumps({'specification': zip_spec, 'files': zip_entries}))
     build.main()
     target = root / 'dist' / 'chrome-extension'
     assert {'pipeline.js', 'transcription-nodes.js'} <= set(build.SHARED_FILES)

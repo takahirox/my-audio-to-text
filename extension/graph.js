@@ -10,7 +10,7 @@ import { whisperLanguage } from '../web/whisper-config.js';
 import { maxDurationSamples } from '../web/local-asr-config.js';
 
 export const GRAPH_VERSION = 8;
-export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper'];
+export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn'];
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
@@ -25,6 +25,7 @@ export const NODE_TYPES = Object.freeze({
   SpeechToTextReazonSpeech: { label: 'ReazonSpeech ja-en ASR', inputs: { audio: MONO_16KHZ_PCM, maxDuration: NUMBER }, optionalInputs: ['maxDuration'], outputs: paired(TEXT), help: 'Optional maxDuration: connect Number.value for a 1–12 second audio segment cap (default 6 seconds). Includes pre-roll; decimals round down to whole 16 kHz samples. Frozen before capture; saved edits apply next session. VAD can end sooner. Mid-sentence splits may reduce recognition quality. Inference and final display can take longer than the cap.' },
   Text: { label: 'Text', inputs: {}, outputs: { value: TEXT }, textSettings: { value: { default: '', multiline: true } }, help: 'Reusable literal text constant, including empty text. Delivered once at session start to ordinary TEXT consumers. Text.value → Whisper.language is bound before model loading; saves apply next session.' },
   SpeechToTextWhisper: { label: 'Whisper tiny (multilingual) ASR', inputs: { audio: MONO_16KHZ_PCM, language: TEXT }, optionalInputs: ['language'], outputs: { final: TEXT }, help: 'Packaged local multilingual Whisper tiny (q8, CPU WASM). Defaults to English (en); connect Text.value for en or ja. Only final: TEXT is available; connect final to LiveTextDisplay.append for committed segments. Silero ends speech at silence or a 6-second cap; Stop drains every segment. No downloads while recording.' },
+  SpeechToTextZipformerEn: { label: 'Streaming Zipformer English ASR', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT), help: 'Packaged English-only 20M Zipformer, real online CPU WASM recognition. Incremental provisional → LiveTextDisplay.replace; final → LiveTextDisplay.append. Fixed 12-second segments, Stop flushes the tail. No Silero gating or silence endpoint; silence counts toward the cap. Up to 30 seconds of backlog; overflow fails visibly. No downloads while recording.' },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
   LiveTextDisplay: { label: 'Live text display', inputs: { replace: TEXT, append: TEXT }, optionalInputs: ['replace', 'append'], outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Replace changes only the preview. Every append adds one committed item and clears the preview; repeated and empty items are preserved. Stop/Cancel keep committed items and discard preview when append is connected. Start again begins empty. Multiple displays are independent and ordered by graph Node order.' },
@@ -128,7 +129,7 @@ export function validateGraph(graph, legacy = false) {
   }
   for (const id of nodes.keys()) visit(id);
   if (graph.nodes.filter(n => INPUT_TYPES.includes(n?.type)).length !== 1) errors.push('Exactly one audio input is required; simultaneous sources are ambiguous.');
-  if (graph.nodes.filter(n => [...ASR_TYPES, ...(legacy ? ['SpeechToText'] : [])].includes(n?.type)).length !== 1) errors.push('Exactly one ASR Node (ReazonSpeech or Whisper) is required.');
+  if (graph.nodes.filter(n => [...ASR_TYPES, ...(legacy ? ['SpeechToText'] : [])].includes(n?.type)).length !== 1) errors.push('Exactly one ASR Node (ReazonSpeech, Whisper or English Zipformer) is required.');
   for (const node of nodes.values()) {
     const definition = definitionOf(node.type);
     if (!definition) continue;
