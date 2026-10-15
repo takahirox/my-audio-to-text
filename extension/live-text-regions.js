@@ -9,17 +9,22 @@ export function renderTextRegions(root, graph, displays) {
       region = document.createElement('section'); region.className = 'panel live-text-region'; region.dataset.display = spec.id;
       const heading = document.createElement('h2'), copy = document.createElement('button'), notice = document.createElement('p'), preview = document.createElement('pre'), items = document.createElement('ol');
       heading.className = 'display-label'; preview.className = 'display-preview'; items.className = 'display-items';
-      preview.setAttribute('aria-live', 'polite'); items.setAttribute('aria-live', 'polite'); notice.setAttribute('role', 'status');
+      preview.setAttribute('aria-live', 'polite'); items.setAttribute('aria-live', 'polite'); items.setAttribute('aria-label', 'Committed text'); notice.setAttribute('role', 'status');
       copy.textContent = 'Copy text';
       copy.onclick = async () => {
         try { await navigator.clipboard.writeText(region.displayText); notice.textContent = 'Text copied.'; }
         catch { notice.textContent = 'Clipboard unavailable. Select and copy the text in this region.'; }
       };
-      region.append(heading, copy, notice, items, preview);
+      const header = document.createElement('div'); header.className = 'section-heading'; header.append(heading, copy);
+      region.append(header, notice, items, preview);
     }
     const heading = region.querySelector('h2');
     if (heading.textContent !== spec.settings.label) heading.textContent = spec.settings.label;
     region.setAttribute('aria-label', spec.settings.label); region.lang = spec.settings.language;
+    const hasAppend = graph.edges.some(connection => connection.to[0] === spec.id && connection.to[1] === 'append');
+    const previewLabel = hasAppend ? 'Preview' : 'Current value';
+    region.querySelector('.display-preview').dataset.label = previewLabel;
+    region.querySelector('.display-preview').setAttribute('aria-label', previewLabel);
     const state = (Object.hasOwn(displays, spec.id) && displays[spec.id]) || { preview: '', items: [] };
     if (region.displayState !== state) {
       const items = region.querySelector('ol');

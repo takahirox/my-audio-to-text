@@ -1,3 +1,4 @@
+import { clickGraphAction, openTranslation } from './ui-controls.js';
 import { legacyGraph } from '../fixtures/legacy-graph.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -11,6 +12,42 @@ async function save(page) {
 }
 
 const wireFor = (editor, route) => editor.getByRole('button', { name: `Select connection ${route}`, exact: true });
+for (const action of ['Close settings', 'Remove transcript']) {
+  test(`packaged inspector commits text edits before a single ${action} click`, async ({ graphExtension: f }) => {
+    const live = await openGraph(f), editor = live.editor, before = await saved(live);
+    await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
+    await editor.getByLabel('transcript label', { exact: true }).fill('Edited output');
+    await editor.getByRole('button', { name: action, exact: true }).click();
+    await expect(editor.locator('.graph-inspector')).toBeHidden();
+    await expect(editor.locator('.graph-scroll')).toBeFocused();
+    await expect(editor.locator('#graph-state')).toContainText('Unsaved draft');
+    expect(await saved(live)).toEqual(before);
+    const expected = structuredClone(before);
+    if (action === 'Close settings') {
+      expected.nodes.find(node => node.id === 'transcript').settings.label = 'Edited output';
+      await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
+      await expect(editor.getByLabel('transcript label', { exact: true })).toHaveValue('Edited output');
+      await expect(editor.locator('#graph-errors')).toBeEmpty();
+    } else {
+      expected.nodes = expected.nodes.filter(node => node.id !== 'transcript');
+      expected.edges = expected.edges.filter(edge => edge.from[0] !== 'transcript' && edge.to[0] !== 'transcript');
+      await expect(editor.locator('[data-node="transcript"]')).toHaveCount(0);
+      await expect(editor.locator('.graph-node')).toHaveCount(expected.nodes.length);
+      await expect(editor.locator('.graph-wire')).toHaveCount(expected.edges.length);
+      await editor.locator('#graph-save').click();
+      await expect(editor.locator('#graph-errors')).toContainText('Unconnected output Node');
+      expect(await saved(live)).toEqual(before);
+      return;
+    }
+    await save(editor);
+    expect(await saved(live)).toEqual(expected);
+    await editor.reload();
+    await expect(editor.locator('#graph-state')).toContainText('Saved graph');
+    await expect(editor.locator('.graph-node')).toHaveCount(expected.nodes.length);
+    await expect(editor.locator('.graph-wire')).toHaveCount(expected.edges.length);
+  });
+}
+
 async function wirePoint(editor, route) {
   const wire = wireFor(editor, route);
   await wire.scrollIntoViewIfNeeded();
@@ -83,7 +120,7 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
     await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length - 1);
     await expect(editor.locator('.graph-node')).toHaveCount(before.nodes.length);
     await expect(editor.locator('#graph-errors')).toBeEmpty();
-    await editor.locator('#graph-validate').click(); await expect(editor.locator('#graph-errors')).toContainText('Draft valid');
+    await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Draft valid');
     await save(editor);
     const after = await saved(live);
     expect(after.nodes).toEqual(before.nodes);
@@ -95,7 +132,7 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
 
 test('selected-edge control follows zoom, canvas scrolling and a narrow layout', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
-  await editor.setViewportSize({ width: 1600, height: 1000 });
+  await editor.setViewportSize({ width: 1600, height: 650 });
   await pointerSelect(editor, 'audio.audio to speech.audio');
   const control = editor.locator('#graph-disconnect'), scroll = editor.locator('.graph-scroll');
   await editor.locator('#graph-zoom').selectOption('1.5');
@@ -198,7 +235,7 @@ test('native touch selects and disconnects without hover; saved removal applies 
 
 test('click and drag reconnect a populated input, preserving fan-out; identical and invalid attempts keep old edge', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
-  await editor.locator('#translation-enabled').check(); await save(editor);
+  await openTranslation(editor); await editor.locator('#translation-enabled').check(); await save(editor);
   const original = await saved(live);
   await editor.setViewportSize({ width: 1600, height: 1000 });
   const output = name => port(editor, 'speech', 'output', name), input = port(editor, 'translation', 'input', 'text');

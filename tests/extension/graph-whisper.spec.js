@@ -1,3 +1,4 @@
+import { openPalette } from './ui-controls.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
@@ -27,9 +28,10 @@ async function mockRuntime(f) {
 
 test('MV3 Whisper worker routes completed PCM, binds Text language, freezes saves, drains and repeats', async ({ graphExtension: f }) => {
   await mockRuntime(f); const page = await openGraph(f); await selectWhisper(page, 'en');
-  const editor = page.editor;
+  const editor = page.editor; await openPalette(editor);
   await expect(editor.getByRole('option', { name: 'ReazonSpeech ja-en ASR', exact: true })).toHaveCount(1);
   await expect(editor.getByRole('option', { name: 'Whisper tiny (multilingual) ASR', exact: true })).toHaveCount(1);
+  await editor.locator('#graph-palette-toggle').click();
   await editor.getByRole('button', { name: 'Select language', exact: true }).click();
   await expect(editor.getByLabel('language value', { exact: true })).toHaveValue('en');
   await startGraph(page);
@@ -56,7 +58,7 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
 
 test('MV3 Text literal and empty values round-trip and deliver once to an ordinary TEXT consumer', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
-  await editor.locator('#graph-node-type').selectOption('Text'); await editor.locator('#graph-add').click();
+  await openPalette(editor); await editor.locator('#graph-node-type').selectOption('Text'); await editor.locator('#graph-add').click();
   await editor.getByRole('button', { name: 'text output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
   await editor.getByRole('button', { name: 'transcript input replace', exact: true }).click();

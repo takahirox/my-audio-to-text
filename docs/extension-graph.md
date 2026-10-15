@@ -1,12 +1,15 @@
 # Executable extension processing graphs (#75, #81, #87, #95, #99)
 
 Open **Graph Editor** from Live or Models. It opens a separate full-size
-extension tab. The left **Nodes** palette lists every supported concrete Node;
-use its buttons or the Add Node selector. Drag a heading (or focus it and use
+extension tab. **Add Node** opens a searchable palette with source/input,
+processor, constant/utility and output categories. Choose a result and use
+**Add selected node** or Enter. Escape closes the palette and returns focus to
+Add Node. The palette stays available for adding several nodes. Drag a heading (or focus it and use
 arrow keys) to move a Node. Click an output then a compatible named input, or
 drag between ports, to connect. Ports show their contract types; incompatible
 inputs are disabled during connection. Escape cancels a selected port. Use the
-canvas scrollbars and **Canvas zoom** to navigate a large graph. Connecting to
+canvas scrollbars, touch scrolling, **Canvas zoom** and **Fit graph** to navigate
+a large graph. **Help** opens the detailed editing instructions on demand. Connecting to
 an occupied input replaces only its incoming wire; other inputs and source
 fan-out stay intact. Repeating the same connection changes nothing. Invalid
 connections keep the previous wire. Click a wire directly on the canvas (or
@@ -19,17 +22,23 @@ preferring space clear of Nodes, ports and other wires. With a selected wire
 focused, Tab moves to Disconnect; Enter/Space activates it. Delete/Backspace on
 a focused wire also removes it. Escape or clicking blank canvas clears selection
 and hides Disconnect. After removal, focus returns to the scrollable canvas.
-Remove deletes a Node and its edges. Select a heading to
-edit display labels, templates, language/voice in the right **Settings** inspector. OPUS-MT directions are
+**Remove Node** in the selected node’s inspector deletes it and its edges. Select a heading to
+edit display labels, templates, language/voice in the contextual **Settings**
+inspector (below the canvas in narrow windows). Close settings or click blank
+canvas to reclaim space. **Node help and ports** reveals contracts and detailed
+usage only when needed. OPUS-MT directions are
 separate executable Node types.
 
-**Validate draft** reports connection/settings errors. **Save graph** validates
+**Graph actions** contains **Validate draft**, **Load saved**, **Reset draft to
+default** and the optional **Translation preset**. Validation reports
+connection/settings errors. **Save graph** validates
 and stores the draft in extension-origin localStorage. **Load saved** discards
-unsaved edits; **Reset draft to default** creates a recovery draft, which still
+unsaved edits after confirmation; **Reset draft to default** also confirms
+before replacing an unsaved draft and creates a recovery draft, which still
 needs Save. The status distinguishes unsaved draft, saved next-session graph
 and immutable active-session graph, queried from Live. Saving during capture
 never changes Nodes, Workers, languages or routes in that session. Stop/finalize
-or Cancel, then Start again to use the saved graph. Opening or closing the editor
+or Cancel, then Start to use the saved graph. Opening or closing the editor
 or Models does not start, stop or retarget capture. **Live window** focuses the
 existing recorder; without one, it explains how to invoke the toolbar.
 
@@ -53,8 +62,9 @@ preferences migrate once when no graph is saved: only `enabled: true` adds the
 translation branch. Missing/corrupt preferences use the minimal default; saved
 graphs always take precedence, preserving custom settings and routes.
 
-The editor's **Draft translation** controls edit this same graph and require
-Save; there is no second preferences store. The convenience
+The optional **Graph actions → Translation preset** controls edit this same
+graph and require Save; there is no second preferences store. The convenience
+preset lists the actual translator directions present in the draft. Its
 direction control changes all configured OPUS-MT Nodes; choose concrete Node
 types in the graph for independently directed branches. Removing
 OPUS-MT also removes exclusively dependent formatting/display/audio branches.
@@ -201,13 +211,22 @@ items. A replace-only display retains its current value for copying. Start uses
 fresh sink instances. The compatibility formatter clears its own preview and
 retains completed history on Stop; Cancel marks pending rows canceled locally.
 
+Live places configured outputs above its compact recording panel. Start, Stop
+(finalize pending work) and Cancel (discard pending work) retain their existing
+lifecycle. Capture target, progress, errors and model recovery remain visible;
+**Input and output targets** reveals optional target controls. The routine
+translation-off and unchanged-saved-graph notices do not take space.
+
 Live renders one region per configured sink, ordered by Node array order, with
 its user-supplied label (1–120 characters) and optional language. Labels and all
 values use `textContent`, never HTML. Committed DOM items with an unchanged
 prefix stay attached; only new items are appended. Preview updates are separate,
 so ordinary previews/appends retain committed text selection and do not force a
 scroll jump. Resets and replaced/shortened histories remove stale items. Each
-region has Copy text. Runtime/model, capture, target and error status remain
+region has Copy text. Committed items use the main text style. A dashed, labeled
+**Preview** block marks uncommitted text when append is connected; replace-only
+displays use **Current value**. These labels are visual/accessibility metadata,
+never part of the output or copied text. Runtime/model, capture, target and error status remain
 outside display content. The active graph
 owns labels/routes throughout a session; saving a draft applies only on the next
 Start. Stopped history keeps the last graph's labels until then. Output-only graphs

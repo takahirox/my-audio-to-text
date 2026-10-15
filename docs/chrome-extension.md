@@ -25,15 +25,17 @@ The extension keeps its own toolbar/transcript UI and packaging; it is not a Nod
 
 The extension has three screens with a consistent dark appearance:
 
-- **Live** is the compact toolbar-opened recorder window. It shows the actual
-  capture target/status, Start/Stop/Cancel, a distinctly marked provisional pair,
-  ordered completed original/translation rows, **Copy final text**, and generated
-  audio players/WAV downloads for configured TTS paths. Final text is also
-  selectable in the full original transcript disclosure.
-- **Graph Editor** opens a separate wide tab with a Node palette, scrollable and
-  zoomable typed-port canvas, connections and selected-Node settings inspector.
-  Draft edits require Save and apply only on the next session. Conflicting saves
-  from another editor preserve the draft and require Load saved.
+- **Live** puts graph-configured text displays and generated audio first. It
+  supports zero, one or multiple independently labeled text regions, committed
+  items, distinct Preview/Current value blocks and **Copy text**. A compact
+  recording panel retains Start/Stop/Cancel, capture target, errors, progress and
+  model recovery. Optional input/output targeting is collapsed until requested.
+- **Graph Editor** opens a separate wide tab dominated by the typed-port canvas.
+  **Add Node** opens search and categories; node settings appear only on
+  selection. Zoom and Fit graph stay visible, Save is primary, and Graph actions
+  groups load/reset/validation and an optional translation preset. Detailed help
+  opens on demand. Drafts apply next session; external changes retain drafts and
+  require Load saved before saving. Load/reset confirm before discarding edits.
 - **Models** opens a dedicated tab (also Chrome's Extension options page), with
   bundled ReazonSpeech/Silero labels and verified cache controls for both OPUS-MT
   directions and Supertonic 3/Kokoro voices. Opening it never downloads weights.
@@ -43,7 +45,7 @@ Navigation opens auxiliary tabs while Live continues to own the active capture.
 auxiliary tabs does not end the session. A missing optional model links from Live
 to Models; explicitly prepare its direction/voice, then start a new session.
 See [graph editing](extension-graph.md), [model caching](extension-model-cache.md)
-and [#77 validation/screenshots](evidence/ui-77.md).
+and [#109 validation/screenshots](evidence/ui-109.md).
 
 ## Build and load unpacked
 
@@ -222,23 +224,26 @@ cross-browser extension support. No post-merge verification is required by #61.
 
 ## Optional OPUS-MT Japanese ↔ English (#69 / #71)
 
-Fresh installs default to the saved transcription + Japanese → English translation
-graph. Earlier enablement/direction preferences migrate into it. The saved graph
+Fresh installs default to a minimal transcription graph. Translation is an
+explicit graph addition. Earlier enablement/direction preferences migrate once
+when no graph is saved. The saved graph
 persists in extension-origin localStorage across window recreation/profile restart;
 transcripts are not saved. A new toolbar invocation uses the saved graph. See
 [the executable visual graph editor](extension-graph.md) for editing, recovery,
 validation and optional production Supertonic 3 / Kokoro audio paths.
-In Graph Editor, select Japanese → English or English → Japanese in the draft,
-then **Save graph**. In Models, use **Download / retry** on that direction to
+In Graph Editor, add the concrete OPUS-MT direction from **Add Node →
+Processors** and connect it to your desired display/output. Alternatively,
+**Graph actions → Translation preset** adds the paired convenience branch.
+Both routes require **Save graph**. In Models, use **Download / retry** on that direction to
 explicitly download the pinned model data
 (Japanese → English: 238,978,729 bytes, about 239 MB; English → Japanese:
 252,634,769 bytes, about 253 MB; plus cache/write overhead). Progress, readiness,
 failures and cancellation are visible. This control also retries missing,
 corrupt or evicted files and reuses verified complete files. Preparation can run
-while transcription remains active. Check **Include OPUS-MT** in Graph Editor,
-then **Save graph**, Stop capture and **Start again**. The checkbox does not download assets;
+while transcription remains active. Check **Include OPUS-MT** under **Graph actions → Translation preset**,
+then **Save graph**, Stop capture and **Start**. The checkbox does not download assets;
 starting with missing assets reports translation unavailable while preserving ASR.
-The exclusive direction select can change during capture, but applies only to the
+The bulk preset direction can change during capture, but applies only to the
 **next session**: live Pipeline graphs are immutable. Current/last session labels
 and retained final rows keep their captured source/target direction. Model-cache
 readiness/progress are shown per model in Models, independently of the active graph.
