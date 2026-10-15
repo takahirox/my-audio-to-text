@@ -1,7 +1,9 @@
 import { readGraph, saveGraph, defaultGraph, GRAPH_KEY } from './graph.js';
 import { GraphEditor } from './graph-editor.js';
+import { graphModelStatus } from './graph-model-status.js';
 
 const element = id => document.getElementById(id);
+const preparation = graphModelStatus(element('graph-models'));
 let graph, editor, base, recoveryGraph, conflict = false;
 try { graph = readGraph(localStorage); }
 catch (error) {
@@ -11,11 +13,15 @@ catch (error) {
 }
 base = localStorage.getItem(GRAPH_KEY);
 async function persist(next) {
-  return navigator.locks.request('processing-graph-save', async () => {
+  const saved = await navigator.locks.request('processing-graph-save', async () => {
     if (conflict || localStorage.getItem(GRAPH_KEY) !== base) throw new Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');
     const saved = saveGraph(localStorage, next); base = localStorage.getItem(GRAPH_KEY);
     element('errors').textContent = ''; return saved;
   });
+  // Keep preparation outside the persistence transaction and its error path.
+  // The immutable saved snapshot, never the editable draft, chooses assets.
+  preparation.replace(saved);
+  return saved;
 }
 editor = new GraphEditor(element('graph-editor'), graph, { recoveryGraph, onSave: persist, onLoad: () => {
   const next = readGraph(localStorage);
@@ -23,6 +29,9 @@ editor = new GraphEditor(element('graph-editor'), graph, { recoveryGraph, onSave
 } });
 window.addEventListener('storage', event => {
   if (event.key !== GRAPH_KEY && event.key !== null) return;
+  // Another page now owns the saved snapshot. Stop preparing this page's old
+  // requirements; opening/loading a saved graph must not start downloads.
+  preparation.clear();
   try {
     const next = readGraph(localStorage), dirty = editor.isDirty();
     conflict = dirty; editor.receiveSaved(next);

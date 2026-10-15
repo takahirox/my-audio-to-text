@@ -35,7 +35,8 @@ The extension has three screens with a consistent dark appearance:
 - **Graph Editor** opens a separate wide tab dominated by the typed-port canvas.
   **Add Node** opens search and categories; node settings appear only on
   selection. Zoom and Fit graph stay visible, Save is primary, and Graph actions
-  groups load/reset/validation and an optional translation preset. Detailed help
+  groups load/reset/validation and optional warnings. Saving prepares required optional
+  model weights with progress, cancellation and retry. Detailed help
   opens on demand. Drafts apply next session; external changes retain drafts and
   require Load saved before saving. Load/reset confirm before discarding edits.
 - **Models** opens a dedicated tab (also Chrome's Extension options page), with
@@ -45,7 +46,7 @@ The extension has three screens with a consistent dark appearance:
 Navigation opens auxiliary tabs while Live continues to own the active capture.
 **Live window** focuses the existing recorder without invoking capture. Closing
 auxiliary tabs does not end the session. A missing optional model links from Live
-to Models; explicitly prepare its direction/voice, then start a new session.
+to Models for direction/voice-specific recovery; retry preparation, then start a new session.
 See [graph editing](extension-graph.md), [model caching](extension-model-cache.md)
 and [#109 validation/screenshots](evidence/ui-109.md).
 
@@ -73,8 +74,8 @@ nodes, core, workers, configuration, capture helpers, models and license notices
 into `dist/chrome-extension/`. Translation preparation adds about 28 MB of
 checksum-pinned runtime JS/MJS/WASM. TTS preparation stages about 77 MB of reviewed
 runtimes/frontends plus corresponding source. Optional OPUS-MT translation and
-TTS **weights** are downloaded only on demand through **Download / retry** in
-Models; setup does not download or bundle them. These generated files are
+TTS **weights** are prepared after a successful **Save graph** for saved processor
+Nodes, or through **Download / retry** in Models; setup does not download or bundle them. These generated files are
 ignored by Git.
 
 Once assets are prepared, use the quick packaging command after source changes:
@@ -238,23 +239,20 @@ transcripts are not saved. A new toolbar invocation uses the saved graph. See
 [the executable visual graph editor](extension-graph.md) for editing, recovery,
 validation and optional production Supertonic 3 / Kokoro audio paths.
 In Graph Editor, add the concrete OPUS-MT direction from **Add Node →
-Processors** and connect it to your desired display/output. Alternatively,
-**Graph actions → Translation preset** adds the paired convenience branch.
-Both routes require **Save graph**. In Models, use **Download / retry** on that direction to
-explicitly download the pinned model data
-(Japanese → English: 238,978,729 bytes, about 239 MB; English → Japanese:
-252,634,769 bytes, about 253 MB; plus cache/write overhead). Progress, readiness,
-failures and cancellation are visible. This control also retries missing,
-corrupt or evicted files and reuses verified complete files. Preparation can run
-while transcription remains active. Check **Include OPUS-MT** under **Graph actions → Translation preset**,
-then **Save graph**, Stop capture and **Start**. The checkbox does not download assets;
-starting with missing assets reports translation unavailable while preserving ASR.
-The bulk preset direction can change during capture, but applies only to the
-**next session**: live Pipeline graphs are immutable. Current/last session labels
-and retained final rows keep their captured source/target direction. Model-cache
-readiness/progress are shown per model in Models, independently of the active graph.
-Only the selected model downloads; enabling translation never downloads either
-model implicitly. The transcription-only mode works without either translation cache.
+Processors** and connect it to your desired display/output. Add **Paired text
+formatter** for indexed source/translation history if desired. **Save graph**
+stores valid drafts first, then prepares only the directions and voices required
+by saved Nodes, including parked Nodes. No global direction switch changes other
+branches. Japanese → English weights total 238,978,729 bytes (about 239 MB);
+English → Japanese weights total 252,634,769 bytes (about 253 MB), plus cache/write
+overhead. Graph Editor shows per-model verified readiness, byte progress, errors,
+cancellation and retry below the graph. Download failures leave saved graphs intact.
+**Models** retains diagnostics, retry and delete controls for missing, corrupt or
+evicted files. Preparation reuses verified complete files and may run while
+transcription remains active; Start/inference never downloads missing weights.
+Saved graph changes apply to the **next session**: live Pipeline graphs are
+immutable. Current/last session labels and retained final rows keep their captured
+source/target direction. The transcription-only mode needs neither translation cache.
 
 The original provisional text and translation appear together with explicit
 source/output language headings and `lang` attributes. **Translating…**

@@ -4,9 +4,14 @@ export async function openPalette(page) {
   await page.getByLabel('Search nodes', { exact: true }).fill('');
   await page.getByLabel('Node category', { exact: true }).selectOption('All categories');
 }
-export async function openTranslation(page) {
-  if ((await page.locator('.graph-actions').getAttribute('open')) === null) await page.locator('.graph-actions > summary').click();
-  if ((await page.locator('#graph-translation').getAttribute('open')) === null) await page.locator('#graph-translation > summary').click();
+// Seed an existing saved graph for runtime tests. UI composition and automatic
+// Save preparation are covered separately in graph-models.spec.js.
+export async function loadTranslationFixture(page, direction = 'ja-en', enabled = true) {
+  await page.evaluate(async ({ direction, enabled }) => {
+    const { defaultGraph, saveGraph } = await import('./graph.js');
+    saveGraph(localStorage, defaultGraph({ direction, enabled }));
+  }, { direction, enabled });
+  await page.reload();
 }
 export async function clickGraphAction(page, id, { discard = true } = {}) {
   if ((await page.locator('.graph-actions').getAttribute('open')) === null) await page.locator('.graph-actions > summary').click();

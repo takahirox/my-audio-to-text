@@ -1,11 +1,11 @@
 import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.js';
-import { clickGraphAction, openTranslation } from './ui-controls.js';
+import { clickGraphAction } from './ui-controls.js';
 
 test('MV3 palette search/categories, contextual settings, keyboard help and draft discard work in a narrow window', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   await editor.setViewportSize({ width: 390, height: 844 });
   await expect(editor.locator('.graph-inspector')).toBeHidden();
-  await expect(editor.locator('#translation-enabled')).toBeHidden();
+  await expect(editor.locator('#graph-translation')).toHaveCount(0);
   await editor.getByRole('button', { name: 'Add Node', exact: true }).press('Enter');
   await expect(editor.getByLabel('Search nodes', { exact: true })).toBeFocused();
   await editor.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
@@ -35,7 +35,7 @@ test('MV3 palette search/categories, contextual settings, keyboard help and draf
   await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Draft valid');
 });
 
-test('MV3 live outputs precede compact controls; preview, current value and bulk translation state reflect the graph', async ({ graphExtension: f }) => {
+test('MV3 live outputs precede compact controls; preview, current value and independent translation Nodes reflect the graph', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   await live.evaluate(async () => {
     const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
@@ -44,8 +44,10 @@ test('MV3 live outputs precede compact controls; preview, current value and bulk
     graph.edges.push(edge('speech', 'final', 'value', 'replace'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'append'), edge('reverse', 'text', 'reverse-output', 'append'));
     saveGraph(localStorage, graph);
   });
-  await editor.reload(); await openTranslation(editor);
-  await expect(editor.locator('#graph-translation')).toContainText('OPUS-MT Japanese → English, OPUS-MT English → Japanese');
+  await editor.reload();
+  await expect(editor.locator('[data-node=forward]')).toContainText('OPUS-MT Japanese → English');
+  await expect(editor.locator('[data-node=reverse]')).toContainText('OPUS-MT English → Japanese');
+  await expect(editor.locator('#graph-translation')).toHaveCount(0);
   await startGraph(live); await emitFinal(live, '<em>committed</em>');
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'pending' }));
   await expect(live.locator('[data-display="transcript"]').getByLabel('Preview', { exact: true })).toHaveText('pending');

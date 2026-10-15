@@ -1,4 +1,4 @@
-import { openTranslation } from './ui-controls.js';
+import { loadTranslationFixture } from './ui-controls.js';
 import { test, expect, chromium } from '@playwright/test';
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -58,8 +58,7 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
     const editor = await context.newPage(); await editor.goto(`chrome-extension://${id}/extension/graph-editor.html`);
     const models = await context.newPage(); await models.goto(`chrome-extension://${id}/extension/model-cache.html`);
     const card = models.locator(`#opus-${direction}`);
-    await openTranslation(editor); await editor.locator('#translation-direction').selectOption(direction);
-    await openTranslation(editor); await editor.locator('#translation-enabled').check(); await editor.locator('#graph-save').click();
+    await loadTranslationFixture(editor, direction); await editor.locator('#graph-save').click();
     await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
     await card.getByRole('button', { name: 'Download / retry', exact: true }).click();
     await expect(card.locator('.model-status')).toHaveText(/^(Ready|Error.*)/, { timeout: 600000 });

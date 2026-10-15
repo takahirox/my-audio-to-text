@@ -6,13 +6,21 @@ extension menu. The options page manages real OPUS-MT Japanese → English,
 OPUS-MT English → Japanese, Supertonic 3 and Kokoro in the existing verified cache.
 ReazonSpeech ja-en and Silero VAD are labeled **Bundled** because their assets
 are packaged with the extension, with no optional download lifecycle.
-Opening Models checks files only; preparation is explicitly user-initiated.
-No capture, inference, remote executable code or automatic weight downloads run.
+Opening Models checks files only. A successful valid **Save graph** in Graph Editor
+prepares the optional weights required by actual saved OPUS-MT/TTS Node types and
+voices, including parked Nodes. Repeated equivalent Nodes are deduplicated; each
+direction and voice remains independent, with shared verified files reused.
+Packaged ASR assets are unchanged. Editing/loading alone and failed validation or
+storage never trigger preparation. Storage finishes before preparation; download
+failure does not roll it back. No capture, inference, Workers or remote executable
+code starts during preparation. Start/inference remain cache-only.
 Each optional model has independent status, byte progress, error/retry, Cancel,
 Check cache and Delete controls. TTS voice selectors are initialized from saved
 Nodes where present, and never change graph settings. Choose a matching voice
-in Graph Editor, then Save to use it next session. Language/voice and terms are
-shown alongside preparation. Supertonic F1/M1 support Japanese and English;
+in Graph Editor, then Save to prepare it and use it next session. Language/voice and terms are
+shown alongside preparation. Graph Editor also shows per-model status and byte
+progress with cancellation, retry and cache checking after Save; Models remains
+available for recovery after interruption. Supertonic F1/M1 support Japanese and English;
 Kokoro jf_alpha is Japanese and af_heart is English.
 
 The original #67 project-owned `config.json` (46 bytes) and `weights.bin`
@@ -156,7 +164,9 @@ There is no default multi-GB download or large-model CI smoke for this issue.
 npm ci
 npm run prepare:assets
 npm run prepare:translation-assets # existing Web browser suite prerequisites
+npm run prepare:whisper-assets
 npm run prepare:tts-assets
+npm run prepare:zipformer-assets
 npm run build:extension
 npm test
 npm run test:browser
@@ -179,6 +189,12 @@ no capture/inference workers or remote requests start. Page recreation and a
 full Chrome context/profile restart retain validated assets without refetching.
 This verifies persistence in that test profile across that restart, not
 guaranteed long-term retention on every device.
+
+`tests/graph-model-preparation.test.js` covers saved-node selection, direction/voice
+deduplication, packaged ASR exclusion and stale-run cancellation.
+`tests/extension/graph-models.spec.js` exercises direct UI composition, persistence
+before fetching, failed validation/storage, saved parked Nodes, shared weights,
+progress, cancellation, integrity failures/retry and Models recovery.
 
 See [Issue #67 validation evidence](evidence/extension-model-cache-67.md).
 No post-merge human acceptance gate is required. Optional follow-up work can

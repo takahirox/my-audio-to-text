@@ -1,4 +1,4 @@
-import { clickGraphAction, openTranslation } from './ui-controls.js';
+import { clickGraphAction, loadTranslationFixture } from './ui-controls.js';
 import { legacyGraph } from '../fixtures/legacy-graph.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -236,7 +236,7 @@ test('native touch selects and disconnects without hover; saved removal applies 
 
 test('click and drag reconnect a populated input, preserving fan-out; identical and invalid attempts keep old edge', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
-  await openTranslation(editor); await editor.locator('#translation-enabled').check(); await save(editor);
+  await loadTranslationFixture(editor); await save(editor);
   const original = await saved(live);
   await editor.setViewportSize({ width: 1600, height: 1000 });
   const output = name => port(editor, 'speech', 'output', name), input = port(editor, 'translation', 'input', 'text');

@@ -80,8 +80,8 @@ previews, opt into [English online Zipformer](docs/zipformer-node.md): connect
 
 Setup installs npm dependencies, downloads/verifies ReazonSpeech, Whisper and
 English Zipformer ASR models and prepares translation/TTS runtimes, then produces `dist/chrome-extension/`. Optional
-translation/TTS **weights** download only on demand through **Download / retry**
-in Models. Open `chrome://extensions`, enable **Developer mode**, choose
+translation/TTS **weights** prepare after **Save graph** for saved processor Nodes;
+Models provides **Download / retry**, diagnostics and deletion. Open `chrome://extensions`, enable **Developer mode**, choose
 **Load unpacked** and select `dist/chrome-extension`. With assets already
 prepared, run `npm run build:extension` after source changes, then click
 **Reload** on the extension's card. See the [extension guide](docs/chrome-extension.md)

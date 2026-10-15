@@ -30,7 +30,7 @@ usage only when needed. OPUS-MT directions are
 separate executable Node types.
 
 **Graph actions** contains **Validate draft**, **Load saved**, **Reset draft to
-default**, **Show optional warnings** and the optional **Translation preset**.
+default** and **Show optional warnings**.
 Optional warnings are off by default and the preference persists locally.
 **Validate draft** explicitly reports blocking **Error:** diagnostics and optional
 **Warning:** diagnostics, including incomplete, disconnected and unused Nodes.
@@ -65,13 +65,24 @@ preferences migrate once when no graph is saved: only `enabled: true` adds the
 translation branch. Missing/corrupt preferences use the minimal default; saved
 graphs always take precedence, preserving custom settings and routes.
 
-The optional **Graph actions → Translation preset** controls edit this same
-graph and require Save; there is no second preferences store. The convenience
-preset lists the actual translator directions present in the draft. Its
-direction control changes all configured OPUS-MT Nodes; choose concrete Node
-types in the graph for independently directed branches. Removing
-OPUS-MT also removes exclusively dependent formatting/display/audio branches.
-Shared sinks with other connected producers remain.
+Add concrete OPUS-MT Nodes and wire each branch directly; directions are independent.
+Save never switches translator types, rewrites routes or removes parked Nodes.
+After a successful valid **Save graph**, the editor automatically prepares optional
+OPUS-MT and TTS weights selected by every saved model-bearing Node, including
+parked/unconnected Nodes. Duplicate equivalent Nodes share one preparation;
+Supertonic language settings share weights, while each distinct TTS voice is prepared.
+Packaged ASR assets need no runtime preparation. Per-model status and byte progress
+appear below the graph, with **Cancel preparation**, **Retry preparation** and
+**Check cache**. **Ready · Cached and verified** requires the complete pinned set.
+Graph storage finishes first; download errors do not undo Save. Validation or
+storage failure starts no preparation. Editing or loading a graph alone does not
+download weights. A newer Save cancels the previous preparation and uses its saved
+snapshot. A Save in another editor cancels obsolete preparation in this page,
+without starting downloads on load or discarding dirty drafts. Closing the editor
+cancels preparation; Save again or use **Models** for
+recovery, diagnostics, voice-specific retry and deletion. No capture, inference or
+Workers start during Save. Runtime inference remains cache-only.
+
 Version 6 `SpeechToText` Nodes become `SpeechToTextReazonSpeech`, with no added
 ASR, changed IDs, settings, positions, edges or destinations.
 Version 1–7 descriptions migrate explicitly to version 8 using the same storage
@@ -83,7 +94,7 @@ language and the next-session direction preference. Plain `TranslationView`
 becomes a generic display with `provisionalText → replace` and `text → append`.
 
 A paired `TranslationView` becomes a generic display with the same ID/position,
-plus a **Paired text formatter (compatibility)**. Every original source, status,
+plus a **Paired text formatter**. Every original source, status,
 index, error and text wire is redirected to this formatter. It formats indexed
 source/translation history into TEXT, feeding the display's `replace`. Pending
 rows update in place; repeated identical sources remain distinct; errors and
@@ -107,7 +118,8 @@ Page/media handles are never saved with a graph.
 ## Supported graph and ports
 
 Version 8 is JSON with `version`, `nodes`, `edges`, and an optional
-`translationDirection` next-session preference (used when no translator exists).
+`translationDirection` legacy preference, preserved for stored-graph compatibility.
+Processor types and settings choose the actual models; this field never schedules weights.
 Each Node has `id`, concrete `type`, `settings`, and `position: { x, y }`.
 Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 [Schema/defaults](../extension/graph.js), editor, storage and the
@@ -126,7 +138,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | LiveTextDisplay | replace / append: TEXT, individually optional | one labeled Live region; at least one input must connect |
 | TextFormatter | input1–input4: TEXT, individually optional | text: TEXT; at least one input must connect |
 | OpusMtJaEn / OpusMtEnJa | provisional (optional) / text: TEXT | successful provisional/text plus grouped source/status/error TEXT, finalIndex NUMBER |
-| PairedTextFormatter | complete translator final bundle, optional complete preview bundle | text: TEXT containing indexed source/translation/status history; compatibility only |
+| PairedTextFormatter | complete translator final bundle, optional complete preview bundle | text: TEXT containing indexed source/translation/status history |
 | Supertonic3 / Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; configured language/voice |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | native audio player / WAV |
 
@@ -271,7 +283,7 @@ emission, independent of property order. A later independent replace starts a ne
 preview: no source matching, deduplication or model knowledge is inferred.
 With append connected, Stop/Cancel discard the uncommitted preview and retain
 items. A replace-only display retains its current value for copying. Start uses
-fresh sink instances. The compatibility formatter clears its own preview and
+fresh sink instances. The paired text formatter clears its own preview and
 retains completed history on Stop; Cancel marks pending rows canceled locally.
 
 Live places configured outputs above its compact recording panel. Start, Stop
@@ -314,8 +326,8 @@ optional: ASR, translation, correction, LLM or another TEXT producer can feed a
 generic sink directly. Model availability only limits which production processors
 are currently exposed in Graph Editor.
 
-`PairedTextFormatter` is the narrow compatibility strategy for existing indexed
-translation behavior that a latest-value template cannot reproduce. It requires
+`PairedTextFormatter` formats indexed source/translation history that a latest-value
+template cannot reproduce. It requires
 matching direct primitive outputs from one translator. It emits whole-history
 TEXT replacements, so pending/error/completed row updates never append duplicates.
 It is also used by the explicitly enabled bilingual configuration; Live has no
@@ -423,9 +435,9 @@ branch splits long text into ordered snippets of at most 300 UTF-16 units withou
 respects production TTS's input limit. Choose the language/voice matching that
 text. This is not automatic language/voice detection.
 
-Use **Models** to inspect and prepare TTS assets. Select the same voice as the
-TTS Node's inspector settings, then **Download / retry** explicitly prepares
-only its pinned checkpoint and that voice: Supertonic 3 approximately 399 MB;
+Saving a TTS Node prepares its pinned checkpoint and selected voice automatically.
+Use **Models** to inspect, retry or delete assets, selecting the same voice as the
+TTS Node's inspector settings. Optional weight sizes: Supertonic 3 approximately 399 MB;
 Kokoro approximately 93 MB. Both models can be managed without adding a Node.
 Cancel/retry preserves verified files. Model-page voice selection does not edit
 the saved graph. Voice variants share weights; deleting a variant can make
@@ -469,7 +481,7 @@ For source changes with assets already prepared, use `npm run build:extension`.
 See [build, load and reload instructions](chrome-extension.md#build-and-load-unpacked).
 
 Use `EXTENSION_TTS_SMOKE=Supertonic3` or `Kokoro` for one model. Tests download
-weights only through the explicit preparation button. The TTS smoke runs the
+weights after Save or through Models recovery controls. The TTS smoke runs the
 saved description, Pipeline, production TTS Workers/runtimes/frontends and
 native WAV decoding/playback under the real extension CSP; its ASR/capture input
 is a fixture so it establishes TTS integration, not speech-recognition accuracy.
@@ -550,7 +562,7 @@ Add Node. Replace the ASR, reconnect the audio source, then connect provisional
 to `LiveTextDisplay.replace` and final to `LiveTextDisplay.append`. Remove an
 unused Number/Text configuration source when replacing the old ASR, or leave it
 parked. ReazonSpeech, Whisper and Zipformer can coexist with independent settings. Existing TEXT sinks and
-translation presets use the same contracts.
+translation Nodes use the same contracts.
 
 The graph stays at version 8: no migration or rewriting of existing v8 graphs,
 IDs, settings, routes or positions is needed. Earlier migrations and the minimal

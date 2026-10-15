@@ -1,4 +1,4 @@
-import { openPalette, openTranslation } from './ui-controls.js';
+import { openPalette, loadTranslationFixture } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.js';
@@ -124,7 +124,7 @@ test('MV3 generic regions show ASR, translation and formatter TEXT with custom l
 
 test('MV3 formatter directly grouped primitive inputs emit one snapshot; independent updates emit immediately', async ({ graphExtension: f }) => {
   const live = await openGraph(f); await fixtureTranslation(f, live);
-  await openTranslation(live.editor); await live.editor.locator('#translation-enabled').uncheck(); await live.editor.locator('#graph-save').click(); await startGraph(live);
+  await loadTranslationFixture(live.editor, 'ja-en', false); await live.editor.locator('#graph-save').click(); await startGraph(live);
   await live.evaluate(async () => {
     const { Pipeline } = await import('../web/pipeline.js'), { TEXT } = await import('../web/port-contracts.js');
     const { TextFormatterNode, LiveTextDisplayNode } = await import('../web/text-nodes.js');
