@@ -79,8 +79,12 @@ test('Pages repository prefix preserves navigation, isolation, assets and the pr
     window.AudioContext = class extends NativeContext {
       constructor(...args) {
         super(...args);
-        const addModule = this.audioWorklet.addModule.bind(this.audioWorklet);
-        this.audioWorklet.addModule = url => {
+        // Keep WebKit's instrumented AudioWorklet wrapper alive during capture.
+        // Otherwise GC can replace the JS wrapper and lose this observer even
+        // while the native worklet module loads and audio capture succeeds.
+        this.observedWorklet = this.audioWorklet;
+        const addModule = this.observedWorklet.addModule.bind(this.observedWorklet);
+        this.observedWorklet.addModule = url => {
           window.workletURLs.push(url);
           return addModule(url);
         };

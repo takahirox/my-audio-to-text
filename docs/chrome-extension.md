@@ -136,8 +136,8 @@ parked or unfinished Nodes remain saved but inactive. See the
 status/errors. Connect `SpeechToTextReazonSpeech.final → FocusedInputTextOutputNode.text`
 or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
 strings can fan out to TTS and other consumers. For final-only output, select
-ASR `final` or translation `text`, rather than `provisional`. The paired Live
-view uses separate optional result ports; pending/errors never reach text sinks.
+ASR `final` or translation `text`. Bilingual formatting uses grouped primitive
+source/text/error outputs; pending/errors never reach successful translation text sinks.
 
 Invoke the toolbar on the desired normal page. Configured focused output is
 prepared automatically on that same top-level document using `activeTab`, before
@@ -239,8 +239,8 @@ transcripts are not saved. A new toolbar invocation uses the saved graph. See
 [the executable visual graph editor](extension-graph.md) for editing, recovery,
 validation and optional production Supertonic 3 / Kokoro audio paths.
 In Graph Editor, add the concrete OPUS-MT direction from **Add Node →
-Processors** and connect it to your desired display/output. Add **Paired text
-formatter** for indexed source/translation history if desired. **Save graph**
+Processors** and connect it to your desired display/output. Add **Text formatter** for source/translation labels and multiline composition.
+Use its Settings to add/remove numbered inputs and edit the template. **Save graph**
 stores valid drafts first, then prepares only the directions and voices required
 by saved Nodes, including parked Nodes. No global direction switch changes other
 branches. Japanese → English weights total 238,978,729 bytes (about 239 MB);
@@ -254,45 +254,34 @@ Saved graph changes apply to the **next session**: live Pipeline graphs are
 immutable. Current/last session labels and retained final rows keep their captured
 source/target direction. The transcription-only mode needs neither translation cache.
 
-The original provisional text and translation appear together with explicit
-source/output language headings and `lang` attributes. **Translating…**
-means the current original has no completed translation. An **Older interim**
-translation includes its own original text and never claims to match the latest
-original. Each final original is also paired with its translation/status in an ordered
-utterance list; the original final transcript remains available for copying.
-Load/inference failures label affected translations and keep speech working.
-Stop drains final speech and translations before reporting completion. **Cancel session**
-or closing the
-window immediately cancels pending work; transcripts are not persisted.
+The original ASR preview remains available while committed translations are queued.
+Translation publishes completed results only; no provisional translation or pending
+history rows are produced. Runtime status shows loading/readiness/failure. A failure
+can be displayed through the primitive `error` output while successful `text` sinks
+receive nothing. Stop drains final speech and translations. Cancel or closing the
+window discards pending work, releases Workers and ignores late completions.
+Completed display items remain until the next Start; transcripts are not persisted.
 
-The outer graph explicitly connects `SpeechToTextNode.provisional/final` to
-`TranslationSchedulerNode.provisional/text`, and separate
-grouped primitive source/status/error/index/text outputs directly to the paired view.
-The view opts into `receiveInputs`; version 4 paired-result routes migrate explicitly
-to version 5 primitive routes, while TEXT-only routes stay intact. Successful `text`
-outputs connect directly to TTS or focused-field sinks. This session-owned
-adapter takes plain provisional/final TEXT strings into an owned
-inner graph: `source.text → OpusMtTranslationNode.text → TextOutputNode.text`
-for Japanese → English, or the independent `EnglishToJapaneseOpusMtTranslationNode`
-for English → Japanese. Each Node owns its direction-specific Worker; no switchable
-model is placed inside a Node.
-The production translation node owns its module Worker, loads the existing
-pinned checkpoint/runtime, and performs all inference in that Worker.
-There is no shared model manager, duplicate inference or remote inference call.
+For either direction, wire ASR.final → OPUS-MT.text. Connect its source/text/error
+directly to TextFormatter.input1/input2/input3, then formatter.text →
+LiveTextDisplay.append. For example, use `English: {1}` and `Japanese: {2}{3}`
+on separate template lines. Every result appends once, including repeated phrases.
+A direct group clears omitted formatter inputs, so failure cannot reuse an older
+translation. Independent branches have no implied pairing. Plain successful text
+also connects directly to display, field and TTS sinks. See
+[formatter controls and migration recovery](extension-graph.md#optional-bounded-formatting).
 
-Scheduling is deliberately small: one request in flight, one replaceable pending
-provisional, and a FIFO of all nonempty final utterances. New provisional input
-increments a version; outdated in-flight output is ignored. A final invalidates
-old interim work and takes priority when the in-flight call settles. Already
-running inference is allowed to finish; it cannot overwrite new/final content.
-`receive()` returns immediately, so Pipeline input serialization does not hold
-provisional requests behind inference. Stop rejects further provisional work,
-lets ASR finalize, then drains all finals and the translation graph. Dispose
-terminates its Worker and guards late output; a repeated session gets fresh nodes.
-Final rows have stable arrival indices, so asynchronous results cannot reorder
-original/translation pairs. Text over 1,000 characters receives an explicit per-row
-error; other model errors make translation unavailable for that session. The
-production OPUS tokenizer also enforces 512 tokens and caps output at 256 tokens.
+The session-owned scheduler accepts plain committed strings into one FIFO and an
+owned inner graph: source.text → direction-specific OpusMtTranslationNode.text →
+TextOutputNode.text. It runs one inference at a time and keeps request identity
+internal; it never compares equal source strings to join results. Empty/whitespace
+utterances produce an empty translation without inference, preserving order.
+Text over 1,000 characters produces a per-utterance error; model errors make
+translation unavailable for that session while ASR continues. The tokenizer also
+enforces 512 tokens and caps output at 256 tokens. Each Node owns its module Worker,
+pinned runtime/checkpoint and cache-only loading; no remote inference or shared
+model manager is involved. Graceful Stop drains all queued results; Cancel
+terminates inference immediately. Fresh sessions use fresh Nodes.
 
 `extension/opus-mt-assets.json` reviews all seven model files at immutable
 revision `05470cd69b62aa32e3ee64ccfd41279789ee4b1e` with exact sizes and 1 MiB
@@ -342,7 +331,7 @@ EXTENSION_OPUS_SMOKE=en-ja npm run test:extension -- tests/extension/translation
 
 This launches an isolated Chrome-for-Testing profile, triggers the actual toolbar
 action on a tab playing checksum-pinned upstream Japanese or English WAV audio, explicitly
-downloads real OPUS assets under MV3 CSP, and checks original/provisional/final
+downloads real OPUS assets under MV3 CSP, and checks original ASR previews and committed translation
 translations in the selected direction through production ASR and translation.
 The English → Japanese smoke uses the committed [ordinary-English synthetic
 speech fixture](../tests/fixtures/ordinary-english.md) and asserts meanings on

@@ -36,7 +36,9 @@ Record required post-merge verification separately in the Issue and PR validatio
 
 ## Implement and propose a Pull Request
 
-Make the smallest coherent change that fully solves the Issue. Validate it against the expected outcome and pre-merge acceptance criteria, and record required post-merge verification as described above.
+Make the smallest coherent change that fully solves the Issue. Validate it against the expected outcome and pre-merge acceptance criteria, and record required post-merge verification as described above. For saved graph/port
+changes, exercise migration and recovery with original storage retained, grouped
+versus independent delivery, repeated values, and Stop/Cancel before claiming compatibility.
 
 Use the [PR template](../.github/pull_request_template.md) to explain what changed, the resulting behavior, validation, and related Issues. Keep the description accurate as the implementation changes.
 

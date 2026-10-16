@@ -72,7 +72,7 @@ const test = base.extend({
           const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
           const graph = defaultGraph({ enabled: translation }); graph.nodes[0].type = source;
           if (!live) {
-            const views = graph.nodes.filter(node => ['LiveTextDisplay', 'PairedTextFormatter'].includes(node.type)).map(node => node.id);
+            const views = graph.nodes.filter(node => ['LiveTextDisplay', 'TextFormatter'].includes(node.type)).map(node => node.id);
             graph.nodes = graph.nodes.filter(node => !views.includes(node.id)); graph.edges = graph.edges.filter(edge => !views.includes(edge.to[0]) && !views.includes(edge.from[0]));
           }
           for (const [id, type, translated] of outputs) {
@@ -304,9 +304,9 @@ test('completed translations flow directly to TEXT fan-out and paired Live; prov
   });
   await t.graph({ translation: true, outputs: [['out', 'FocusedInputTextOutputNode', true]] }); await t.website.locator('#focused').click(); await t.invoke();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect(t.page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
-  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('[data-display="translated"] .display-preview')).toContainText('translated pending text'); await expect(t.website.locator('#focused')).toHaveValue('manual');
+  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('[data-display="translated"] .display-items')).toBeEmpty(); await expect(t.website.locator('#focused')).toHaveValue('manual');
   await emit(t, 1, 'first'); await emit(t, 1, 'duplicate'); await emit(t, 2, 'second'); await stop(t);
-  await expect(t.website.locator('#focused')).toHaveValue('manualtranslated firsttranslated second'); await expect(t.page.locator('[data-display="translated"] .display-preview')).toContainText('translated second');
+  await expect(t.website.locator('#focused')).toHaveValue('manualtranslated firsttranslated second'); await expect(t.page.locator('[data-display="translated"] .display-items')).toContainText('translated second');
   await expect(t.page.locator('#errors')).toBeEmpty();
 });
 

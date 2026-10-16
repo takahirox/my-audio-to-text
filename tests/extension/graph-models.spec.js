@@ -12,12 +12,12 @@ async function save(editor) {
 }
 const cards = editor => editor.locator('#graph-models .model-card');
 
-test('direct palette/canvas/help use Paired text formatter; Graph actions has no translation preset', async ({ graphExtension: f }) => {
+test('direct palette/canvas/help use ordinary Text formatter; Graph actions has no translation preset', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   await openPalette(editor);
-  await expect(editor.locator('option[value=PairedTextFormatter]')).toHaveText('Paired text formatter');
-  await add(editor, 'PairedTextFormatter');
-  await expect(editor.locator('[data-node=pairedtextformatter] .graph-heading')).toHaveText('Paired text formatter (pairedtextformatter)');
+  await expect(editor.locator('option[value=PairedTextFormatter]')).toHaveCount(0);
+  await add(editor, 'TextFormatter');
+  await expect(editor.locator('[data-node=textformatter] .graph-heading')).toHaveText('Text formatter (textformatter)');
   await editor.getByText('Node help and ports', { exact: true }).click();
   await expect(editor.locator('.graph-inspector')).not.toContainText('compatibility');
   await editor.locator('.graph-actions > summary').click();
@@ -45,7 +45,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
   expect(await editor.evaluate(() => window.beforePersistence)).toEqual(Array(7).fill(false));
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.evaluate(() => window.graphWorkers.length)).toBe(0);
-  const before = await saved(live); expect(before.version).toBe(8); expect(before.edges).toHaveLength(3);
+  const before = await saved(live); expect(before.version).toBe(9); expect(before.edges).toHaveLength(3);
   await save(editor); await expect(cards(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(7);
   for (const corrupt of [true, false]) {
     await editor.evaluate(async corrupt => {
@@ -149,4 +149,36 @@ test('a Save in another editor cancels obsolete preparation without downloading 
   await editor.locator('#graph-save').click();
   await expect(editor.locator('#graph-errors')).toContainText('Load saved');
   expect(f.requests).toHaveLength(1);
+});
+
+
+test('formatter instances add inputs above four, preserve wires, validate edits and reload independently', async ({ graphExtension: f }) => {
+  const live = await openGraph(f), editor = live.editor;
+  await add(editor, 'TextFormatter'); await add(editor, 'TextFormatter');
+  await editor.getByRole('button', { name: 'Select textformatter', exact: true }).click();
+  for (let i = 0; i < 3; i++) await editor.getByRole('button', { name: 'textformatter Add input', exact: true }).click();
+  await expect(editor.getByRole('button', { name: 'textformatter input input7', exact: true })).toBeVisible();
+  await expect(editor.locator('[data-node=textformatter-1] [data-side=input]')).toHaveCount(4);
+  await editor.getByRole('button', { name: 'speech output final', exact: true }).click();
+  await editor.getByRole('button', { name: 'textformatter input input1', exact: true }).click();
+  await editor.getByRole('button', { name: 'speech output final', exact: true }).click();
+  await editor.getByRole('button', { name: 'textformatter input input7', exact: true }).click();
+  const template = editor.getByLabel('textformatter template', { exact: true });
+  await template.fill('English: {1}\nJapanese: {7}\n{{literal}}'); await template.blur(); await save(editor);
+  const before = await saved(live);
+  await editor.getByRole('button', { name: 'textformatter Remove last input', exact: true }).click();
+  await expect(editor.locator('#graph-errors')).toContainText('Input {7} is not configured');
+  await expect(template).toHaveValue('English: {1}\nJapanese: {7}\n{{literal}}');
+  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  expect(await saved(live)).toEqual(before);
+  await template.fill('{1}\n{6}'); await template.blur(); await save(editor);
+  const graph = await saved(live);
+  expect(graph.nodes.find(n => n.id === 'textformatter').settings.inputCount).toBe(6);
+  expect(graph.nodes.find(n => n.id === 'textformatter-1').settings.inputCount).toBe(4);
+  expect(graph.edges).toContainEqual({ from: ['speech', 'final'], to: ['textformatter', 'input1'] });
+  expect(graph.edges.some(e => e.to[1] === 'input7')).toBe(false);
+  await template.fill('{bad}'); await template.blur(); await editor.locator('#graph-save').click();
+  await expect(editor.locator('#graph-errors')).toContainText('literal braces'); expect(await saved(live)).toEqual(graph);
+  await editor.reload(); expect(await saved(live)).toEqual(graph);
+  await expect(editor.locator('[data-node=textformatter] [data-side=input]')).toHaveCount(6);
 });

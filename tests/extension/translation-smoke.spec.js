@@ -12,7 +12,7 @@ import { OPUS_MT, OPUS_MT_EN_JA } from '../../web/translation-models.js';
 // Failures when opted in are reported; never silently skip a device/load error.
 for (const direction of ['ja-en', 'en-ja']) {
 const reverse = direction === 'en-ja';
-test(`real extension ${direction}: native tab audio → ASR → provisional/final OPUS-MT, offline repeat`, async ({}, testInfo) => {
+test(`real extension ${direction}: native tab audio → ASR.final → committed OPUS-MT, offline repeat`, async ({}, testInfo) => {
   test.skip(process.env.EXTENSION_OPUS_SMOKE !== (reverse ? 'en-ja' : '1'), 'Opt-in real extension OPUS-MT smoke. Set EXTENSION_OPUS_SMOKE=1 (ja-en) or en-ja.');
   test.setTimeout(900000);
   const specification = JSON.parse(await readFile('scripts/reazon-ja-en-assets.json', 'utf8'));
@@ -84,23 +84,16 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
       await expect(recorder.locator('#translation-status')).toHaveText(/^(Local OPUS-MT ready|Translation unavailable:.*)$/, { timeout: 120000 });
       expect(await recorder.locator('#translation-status').textContent()).toBe('Local OPUS-MT ready');
       await recorder.evaluate(async () => {
-        window.completedProvisional = []; window.finalPairs = [];
-        const { PairedTextFormatterNode } = await import('./paired-text-formatter.js');
-        const receiveInputs = PairedTextFormatterNode.prototype.receiveInputs;
-        PairedTextFormatterNode.prototype.receiveInputs = function(values, context) {
-          const result = receiveInputs.call(this, values, context);
-          if (this.preview?.source && this.preview.status === 'complete') window.completedProvisional.push({ original: this.preview.source, translated: this.preview.text });
-          window.finalPairs = this.rows.map(row => ({ original: row.source, translated: row.text }));
-          return result;
+        window.finalPairs = [];
+        const { TextFormatterNode } = await import('../web/text-nodes.js');
+        const receiveInputs = TextFormatterNode.prototype.receiveInputs;
+        TextFormatterNode.prototype.receiveInputs = function(values, context) {
+          if (Object.hasOwn(values, 'input2')) window.finalPairs.push({ original: values.input1, translated: values.input2 });
+          return receiveInputs.call(this, values, context);
         };
       });
       await meeting.locator('#play').click();
       await expect(recorder.locator('[data-display="transcript"] .display-preview')).toHaveText(reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/, { timeout: 60000 });
-      await expect.poll(() => recorder.evaluate(() => window.completedProvisional.length), { timeout: 60000 }).toBeGreaterThan(0);
-      const provisional = await recorder.evaluate(() => window.completedProvisional.at(-1));
-      expect(provisional.original).toMatch(reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/);
-      expect(provisional.translated).toMatch(reverse ? /[\u3040-\u30ff\u4e00-\u9fff]/ : /[A-Za-z]/);
-      expect(provisional.translated).not.toMatch(/^(Translating|Translation|Older interim)/);
       await expect.poll(() => meeting.locator('#audio').evaluate(audio => audio.ended), { timeout: 60000 }).toBe(true);
       await recorder.locator('#stop').click(); await expect(recorder.locator('#start')).toBeEnabled({ timeout: 120000 });
       const finals = await recorder.evaluate(() => window.finalPairs);
@@ -123,7 +116,7 @@ test(`real extension ${direction}: native tab audio → ASR → provisional/fina
         try { await graph.start(); await graph.stop(); return outputs; }
         finally { await graph.dispose(); }
       }, ordinaryEnglishFixtures.map(({ text }) => text)) : [];
-      runs.push({ run, offline: !!run, recreatedWindow: !!run, provisional, finals,
+      runs.push({ run, offline: !!run, recreatedWindow: !!run, finals,
         ordinaryTranslations: ordinaryTranslations.map((translated, index) => ({ original: ordinaryEnglishFixtures[index].text, translated })) });
       if (reverse) {
         expect(ordinaryTranslations).toHaveLength(ordinaryEnglishFixtures.length);

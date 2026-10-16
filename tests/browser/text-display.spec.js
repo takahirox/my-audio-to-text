@@ -11,10 +11,10 @@ test('shared TEXT formatter/display Nodes compose grouped and independent stream
     const pipeline = new Pipeline({ nodes: {
       grouped: { outputs: { a: TEXT, b: TEXT }, start(c) { grouped = c.emitOutputs; } },
       independent: { outputs: { text: TEXT }, start(c) { independent = c.emit; } },
-      formatter: new TextFormatterNode({ template: '{1}\n{2}\n{3}\n{{escaped}}' }), current, history,
+      formatter: new TextFormatterNode({ inputCount: 6, template: '{1}\n{5}\n{6}\n{{escaped}}' }), current, history,
     }, connections: [
-      { from: ['grouped', 'a'], to: ['formatter', 'input1'] }, { from: ['grouped', 'b'], to: ['formatter', 'input2'] },
-      { from: ['independent', 'text'], to: ['formatter', 'input3'] },
+      { from: ['grouped', 'a'], to: ['formatter', 'input1'] }, { from: ['grouped', 'b'], to: ['formatter', 'input5'] },
+      { from: ['independent', 'text'], to: ['formatter', 'input6'] },
       { from: ['formatter', 'text'], to: ['current', 'replace'] }, { from: ['formatter', 'text'], to: ['history', 'append'] },
     ] });
     const flush = async () => { await pipeline.entries.get('formatter').queue; await pipeline.entries.get('current').queue; await pipeline.entries.get('history').queue; };

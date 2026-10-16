@@ -1,19 +1,21 @@
 import { MONO_16KHZ_PCM } from '../web/transcription-nodes.js';
 import { TEXT } from '../web/translation-nodes.js';
 import { TRANSLATION_OUTPUTS } from './translation-scheduler.js';
-import { FORMAT_INPUTS, parseTemplate } from '../web/text-nodes.js';
-import { PAIRED_INPUTS } from './paired-text-formatter.js';
+import { FORMAT_INPUTS, formatInputs, parseTemplate } from '../web/text-nodes.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 import { NUMBER } from '../web/port-contracts.js';
 import { finiteNumber } from '../web/number-node.js';
 import { whisperLanguage } from '../web/whisper-config.js';
 import { maxDurationSamples } from '../web/local-asr-config.js';
 
-export const GRAPH_VERSION = 8;
+export const GRAPH_VERSION = 9;
 export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn'];
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
+export const GRAPH_RECOVERY_KEY = 'processing-graph-before-v9';
+// Migration-only contracts; none are supported palette/runtime ports.
+const LEGACY_TRANSLATION_OUTPUTS = { provisional: TEXT, text: TEXT, provisionalSource: TEXT, provisionalStatus: TEXT, provisionalError: TEXT, finalSource: TEXT, finalStatus: TEXT, finalIndex: NUMBER, finalError: TEXT };
 const paired = contract => ({ provisional: contract, final: contract });
 // Fixed concrete production types and their public ports, not a model registry.
 export const NODE_TYPES = Object.freeze({
@@ -26,11 +28,10 @@ export const NODE_TYPES = Object.freeze({
   Text: { label: 'Text', inputs: {}, outputs: { value: TEXT }, textSettings: { value: { default: '', multiline: true } }, help: 'Reusable literal text constant, including empty text. Delivered once at session start to ordinary TEXT consumers. Text.value → Whisper.language is bound before model loading; saves apply next session.' },
   SpeechToTextWhisper: { label: 'Whisper tiny (multilingual) ASR', inputs: { audio: MONO_16KHZ_PCM, language: TEXT }, optionalInputs: ['language'], outputs: { final: TEXT }, help: 'Packaged local multilingual Whisper tiny (q8, CPU WASM). Defaults to English (en); connect Text.value for en or ja. Only final: TEXT is available; connect final to LiveTextDisplay.append for committed segments. Silero ends speech at silence or a 6-second cap; Stop drains every segment. No downloads while recording.' },
   SpeechToTextZipformerEn: { label: 'Streaming Zipformer English ASR', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT), help: 'Packaged English-only 20M Zipformer, real online CPU WASM recognition. Incremental provisional → LiveTextDisplay.replace; final → LiveTextDisplay.append. Fixed 12-second segments, Stop flushes the tail. No Silero gating or silence endpoint; silence counts toward the cap. Up to 30 seconds of backlog; overflow fails visibly. No downloads while recording.' },
-  OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
-  OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS },
+  OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { text: TEXT }, outputs: TRANSLATION_OUTPUTS, help: 'Committed text only. Direct source/text/error outputs form one atomic result. Pending and Cancel emit nothing; Stop drains queued text. Failures emit source/error without successful text.' },
+  OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { text: TEXT }, outputs: TRANSLATION_OUTPUTS, help: 'Committed text only. Direct source/text/error outputs form one atomic result. Pending and Cancel emit nothing; Stop drains queued text. Failures emit source/error without successful text.' },
   LiveTextDisplay: { label: 'Live text display', inputs: { replace: TEXT, append: TEXT }, optionalInputs: ['replace', 'append'], outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Replace changes only the preview. Every append adds one committed item and clears the preview; repeated and empty items are preserved. Stop/Cancel keep committed items and discard preview when append is connected. Start again begins empty. Multiple displays are independent and ordered by graph Node order.' },
-  TextFormatter: { label: 'Text formatter', inputs: FORMAT_INPUTS, optionalInputs: Object.keys(FORMAT_INPUTS), outputs: { text: TEXT }, textSettings: { template: { default: '{1}', maxLength: 2048, multiline: true } }, help: 'Use {1}–{4}, labels and literal newlines. Escape braces as {{ and }}. Missing inputs are empty. Each emission formats the latest input values; only directly grouped emissions update together. Independent branches are not correlated.' },
-  PairedTextFormatter: { label: 'Paired text formatter', inputs: PAIRED_INPUTS, optionalInputs: ['provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError'], outputs: { text: TEXT }, settings: { direction: ['ja-en', 'en-ja'] }, help: 'Formats indexed source/translation history with status and errors. Connect the complete final bundle directly from one translator, optionally its complete preview bundle. Connect text to LiveTextDisplay.replace. Independent branches cannot be paired.' },
+  TextFormatter: { label: 'Text formatter', inputs: FORMAT_INPUTS, optionalInputs: Object.keys(FORMAT_INPUTS), outputs: { text: TEXT }, numberSettings: { inputCount: { default: 4 } }, textSettings: { template: { default: '{1}', maxLength: 2048, multiline: true } }, help: 'Add/remove numbered inputs in Settings. Use {1}, {2}, etc., labels and literal newlines. Escape braces as {{ and }}. Missing inputs are empty. Each emission formats the latest input values; directly grouped emissions replace this producer’s connected inputs together (omitted inputs clear). Independent branches are not correlated.' },
   Supertonic3: { label: 'Supertonic 3 TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { language: ['ja', 'en'], voice: ['F1', 'M1'] } },
   Kokoro: { label: 'Kokoro TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { voice: ['jf_alpha', 'af_heart'] } },
   AudioOutput: { label: 'Audio player / WAV', inputs: { audio: SYNTHESIZED_AUDIO }, outputs: {} },
@@ -38,10 +39,17 @@ export const NODE_TYPES = Object.freeze({
 const LEGACY_VIEWS = {
   TranscriptView: { label: 'Original transcript', inputs: paired(TEXT), optionalInputs: ['provisional'], outputs: {}, settings: { direction: ['ja-en', 'en-ja'] } },
   TranslationView: { label: 'Paired translation / Translated', inputs: {
-    ...Object.fromEntries(Object.entries(TRANSLATION_OUTPUTS).filter(([port]) => port !== 'provisional')), provisionalText: TEXT,
-  }, optionalInputs: [...Object.keys(TRANSLATION_OUTPUTS).filter(port => port !== 'provisional'), 'provisionalText'], outputs: {}, help: 'Plain display: provisionalText and/or text. Paired display: text plus finalSource, finalStatus, finalIndex, finalError from the same translator; optional provisionalText plus provisionalSource, provisionalStatus, provisionalError. Groups travel directly from one producer; separate processor branches cannot be joined.' },
+    ...Object.fromEntries(Object.entries(LEGACY_TRANSLATION_OUTPUTS).filter(([port]) => port !== 'provisional')), provisionalText: TEXT,
+  }, optionalInputs: [...Object.keys(LEGACY_TRANSLATION_OUTPUTS).filter(port => port !== 'provisional'), 'provisionalText'], outputs: {}, help: 'Plain display: provisionalText and/or text. Paired display: text plus finalSource, finalStatus, finalIndex, finalError from the same translator; optional provisionalText plus provisionalSource, provisionalStatus, provisionalError. Groups travel directly from one producer; separate processor branches cannot be joined.' },
 };
-const definitionOf = type => Object.hasOwn(NODE_TYPES, type) ? NODE_TYPES[type] : undefined;
+export function nodeDefinition(node) {
+  const definition = Object.hasOwn(NODE_TYPES, node?.type) ? NODE_TYPES[node.type] : undefined;
+  if (!definition) return undefined;
+  if (node.type !== 'TextFormatter') return definition;
+  let inputs;
+  try { inputs = formatInputs(node.settings?.inputCount); } catch { inputs = {}; }
+  return { ...definition, inputs, optionalInputs: Object.keys(inputs) };
+}
 const translators = ['OpusMtJaEn', 'OpusMtEnJa'];
 export function graphNode(type, id, x = 20, y = 20) {
   const definition = Object.hasOwn(NODE_TYPES, type) ? NODE_TYPES[type] : undefined;
@@ -55,15 +63,21 @@ export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
   const edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'final', 'transcript', 'append')];
   if (enabled) {
     nodes[2].settings = { label: 'Original', language: direction === 'en-ja' ? 'en' : 'ja' };
-    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 230), graphNode('LiveTextDisplay', 'translated', 800, 230), graphNode('PairedTextFormatter', 'translated-format', 530, 230));
-    nodes[4].settings.label = 'Translation'; nodes[5].settings.direction = direction;
-    for (const port of ['provisional', 'final']) edges.push(edge('speech', port, 'translation', port === 'final' ? 'text' : port));
-    edges.push(...translationViewEdges('translation', 'translated-format'), edge('translated-format', 'text', 'translated', 'replace'));
+    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 230), graphNode('LiveTextDisplay', 'translated', 800, 230), graphNode('TextFormatter', 'translated-format', 530, 230));
+    nodes[4].settings.label = 'Translation'; nodes[5].settings = { inputCount: 3, template: translationTemplate(direction) };
+    edges.push(edge('speech', 'final', 'translation', 'text'));
+    edges.push(...translationViewEdges('translation', 'translated-format'), edge('translated-format', 'text', 'translated', 'append'));
   }
   return { version: GRAPH_VERSION, translationDirection: direction, nodes, edges };
 }
 export const edge = (source, output, target, input) => ({ from: [source, output], to: [target, input] });
-export function translationViewEdges(source, target, provisional = true) {
+export function translationTemplate(direction) {
+  return direction === 'en-ja' ? 'English: {1}\nJapanese: {2}{3}' : 'Japanese: {1}\nEnglish: {2}{3}';
+}
+export function translationViewEdges(source, target) {
+  return ['source', 'text', 'error'].map((port, index) => edge(source, port, target, `input${index + 1}`));
+}
+function legacyTranslationViewEdges(source, target, provisional = true) {
   const ports = ['text', 'finalSource', 'finalStatus', 'finalIndex', 'finalError',
     ...(provisional ? ['provisional', 'provisionalSource', 'provisionalStatus', 'provisionalError'] : [])];
   return ports.map(port => edge(source, port, target, port === 'provisional' ? 'provisionalText' : port));
@@ -75,7 +89,8 @@ function unusedId(ids, base) {
 }
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
 export function validateGraph(graph, legacy = false, optionalWarnings = false) {
-  const types = legacy ? { ...NODE_TYPES, SpeechToText: NODE_TYPES.SpeechToTextReazonSpeech, ...LEGACY_VIEWS } : NODE_TYPES;
+  const types = legacy ? { ...NODE_TYPES, SpeechToText: NODE_TYPES.SpeechToTextReazonSpeech, ...LEGACY_VIEWS,
+    ...Object.fromEntries(translators.map(type => [type, { ...NODE_TYPES[type], inputs: { provisional: TEXT, text: TEXT }, optionalInputs: ['provisional'], outputs: LEGACY_TRANSLATION_OUTPUTS }])) } : NODE_TYPES;
   const definitionOf = type => Object.hasOwn(types, type) ? types[type] : undefined;
   const errors = [], warnings = [], configuration = [];
   if (!record(graph) || graph.version !== (legacy ? 5 : GRAPH_VERSION) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return optionalWarnings ? [] : [`Expected version ${legacy ? 5 : GRAPH_VERSION} graph with nodes and edges arrays.`];
@@ -85,7 +100,7 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
     if (!record(node) || typeof node.id !== 'string' || !/^[a-zA-Z][\w-]{0,63}$/.test(node.id)) { errors.push('Invalid Node ID.'); continue; }
     if (nodes.has(node.id)) errors.push(`Duplicate Node ID: ${node.id}`);
     nodes.set(node.id, node);
-    const definition = definitionOf(node.type);
+    const definition = legacy ? definitionOf(node.type) : nodeDefinition(node);
     if (!definition) { errors.push(`Unknown Node type: ${node.type}`); continue; }
     if (!record(node.position) || ![node.position.x, node.position.y].every(n => Number.isFinite(n) && n >= 0)) errors.push(`Invalid position: ${node.id}`);
     if (!record(node.settings)) { errors.push(`Invalid settings: ${node.id}`); continue; }
@@ -93,7 +108,7 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
     for (const key of Object.keys(definition.numberSettings || {})) try { finiteNumber(node.settings[key]); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
     for (const [key, values] of Object.entries(definition.settings || {})) if (!values.includes(node.settings[key])) errors.push(`Invalid setting: ${node.id}.${key}`);
     for (const [key, spec] of Object.entries(definition.textSettings || {})) if (typeof node.settings[key] !== 'string' || node.settings[key].length > (spec.maxLength ?? Infinity) || (key === 'label' && !node.settings[key].trim())) errors.push(`Invalid setting: ${node.id}.${key}`);
-    if (node.type === 'TextFormatter') try { parseTemplate(node.settings.template); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
+    if (!legacy && node.type === 'TextFormatter') try { formatInputs(node.settings.inputCount); parseTemplate(node.settings.template, node.settings.inputCount); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
   }
   for (const connection of graph.edges) {
     if (!record(connection) || !Array.isArray(connection.from) || !Array.isArray(connection.to) || connection.from.length !== 2 || connection.to.length !== 2 || ![...connection.from, ...connection.to].every(s => typeof s === 'string')) { errors.push('Malformed named-port edge.'); continue; }
@@ -101,7 +116,7 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
     if (seen.has(key)) errors.push('Duplicate edge.');
     seen.add(key);
     const [source, output] = connection.from, [target, input] = connection.to;
-    const a = definitionOf(nodes.get(source)?.type), b = definitionOf(nodes.get(target)?.type);
+    const a = legacy ? definitionOf(nodes.get(source)?.type) : nodeDefinition(nodes.get(source)), b = legacy ? definitionOf(nodes.get(target)?.type) : nodeDefinition(nodes.get(target));
     if (!a || !b) { errors.push(`Unknown edge Node: ${source} → ${target}`); continue; }
     if (!Object.hasOwn(a.outputs, output) || !Object.hasOwn(b.inputs, input)) { errors.push(`Unknown port: ${source}.${output} → ${target}.${input}`); continue; }
     if (a.outputs[output] !== b.inputs[input]) errors.push(`Incompatible port types: ${source}.${output} → ${target}.${input}`);
@@ -128,18 +143,18 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
   }
   if (roots.length !== nodes.size) errors.push('Graph must be acyclic.');
   for (const node of nodes.values()) {
-    const definition = definitionOf(node.type);
+    const definition = legacy ? definitionOf(node.type) : nodeDefinition(node);
     if (!definition) continue;
     if (node.type === 'LiveTextDisplay' || node.type === 'TextFormatter') {
       if (!Object.keys(definition.inputs).some(port => incoming.has(JSON.stringify([node.id, port])))) warnings.push(`Required connection missing: ${node.id} needs at least one TEXT input`);
     }
-    if (node.type === 'TranslationView' || node.type === 'PairedTextFormatter') {
+    if (node.type === 'TranslationView') {
       const connected = port => incoming.has(JSON.stringify([node.id, port]));
       if (!connected('text') && !connected('provisionalText')) warnings.push(`Required connection missing: ${node.id}.text or provisionalText`);
       // A paired view can only use directly grouped outputs from one scheduler.
       // Type compatibility alone cannot guarantee association across branches.
       const metadata = ['finalSource', 'finalStatus', 'finalIndex', 'finalError', 'provisionalSource', 'provisionalStatus', 'provisionalError'];
-      if (node.type === 'PairedTextFormatter' || metadata.some(connected)) {
+      if (metadata.some(connected)) {
         const ports = ['text', 'finalSource', 'finalStatus', 'finalIndex', 'finalError'];
         if (['provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError'].some(connected)) ports.push('provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError');
         const source = ports.map(port => incoming.get(JSON.stringify([node.id, port]))).find(Boolean)?.[0];
@@ -174,12 +189,9 @@ function selectExecutable(description) {
     changed = false;
     for (const node of description.nodes) {
       if (ready.has(node.id)) continue;
-      const definition = NODE_TYPES[node.type], routes = incoming.get(node.id);
+      const definition = nodeDefinition(node), routes = incoming.get(node.id);
       const available = port => routes.some(route => route.to[1] === port && ready.has(route.from[0]));
-      let required = Object.keys(definition.inputs).filter(port => !definition.optionalInputs?.includes(port));
-      if (node.type === 'PairedTextFormatter' && routes.some(route => route.to[1].startsWith('provisional'))) {
-        required = [...required, 'provisionalText', 'provisionalSource', 'provisionalStatus', 'provisionalError'];
-      }
+      const required = Object.keys(definition.inputs).filter(port => !definition.optionalInputs?.includes(port));
       if (!required.every(available)) continue;
       if (Object.keys(definition.inputs).length && !routes.some(route => ready.has(route.from[0]))) continue;
       ready.add(node.id); changed = true;
@@ -207,25 +219,18 @@ export function graphWarnings(graph) {
 }
 // Rewrite every legacy route explicitly; malformed or ambiguous routes require visible recovery.
 export function migrateGraph(graph) {
-  if (!record(graph) || ![1, 2, 3, 4, 5, 6, 7].includes(graph.version)) return graph;
+  if (!record(graph) || ![1, 2, 3, 4, 5, 6, 7, 8].includes(graph.version)) return graph;
   if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return graph;
   const next = structuredClone(graph);
+  if (graph.version === 8) return migrateTranslationGraph(next);
   if (graph.version === 7) {
     const whisperIds = new Set(next.nodes.filter(node => node?.type === 'SpeechToTextWhisper').map(node => node.id));
     const dead = next.edges.filter(route => Array.isArray(route?.from) && route.from.length === 2 &&
       whisperIds.has(route.from[0]) && route.from[1] === 'provisional' &&
       Array.isArray(route.to) && route.to.length === 2 && route.to.every(value => typeof value === 'string'));
     next.edges = next.edges.filter(route => !dead.includes(route));
-    next.version = GRAPH_VERSION;
-    const errors = validateGraph(next);
-    if (dead.length && errors.length) {
-      const routes = dead.map(route => `${route.from.join('.')} → ${route.to.join('.')}`).join(', ');
-      const error = new Error(`Cannot migrate saved Whisper connections: ${routes}. Whisper only provides final: TEXT. Removing these dead provisional connections leaves an invalid graph: ${errors.join(' ')} Edit the affected connections in Graph Editor: deliberately connect a supported TEXT output (for example Whisper final → LiveTextDisplay.append), or remove an unused destination, then Save. No connection was redirected; the saved graph has been kept.`);
-      // Only offer a repair draft when the remaining graph is safe to render.
-      if (errors.every(message => /^(Required connection missing:|Unconnected output Node:)/.test(message))) error.recoveryGraph = next;
-      throw error;
-    }
-    return next;
+    next.version = 8;
+    return migrateGraph(next);
   }
   const renameAsr = () => {
     for (const node of next.nodes) if (node?.type === 'SpeechToText') node.type = 'SpeechToTextReazonSpeech';
@@ -273,7 +278,7 @@ export function migrateGraph(graph) {
     const target = next.nodes.find(node => node?.id === route.to?.[0]);
     const final = route.from[1] === 'finalResult';
     if (!translators.includes(source?.type) || target?.type !== 'TranslationView' || route.to[1] !== (final ? 'final' : 'provisional')) recovery('paired translation', source?.id || '?');
-    return translationViewEdges(source.id, target.id).filter(edge => final ? !edge.from[1].startsWith('provisional') : edge.from[1].startsWith('provisional'));
+    return legacyTranslationViewEdges(source.id, target.id).filter(edge => final ? !edge.from[1].startsWith('provisional') : edge.from[1].startsWith('provisional'));
   });
   next.version = 5;
   const legacyErrors = validateGraph(next, true);
@@ -291,7 +296,7 @@ export function migrateGraph(graph) {
       const paired = routes.some(route => route.to[1] === 'finalSource');
       node.type = 'LiveTextDisplay'; node.settings = { label: 'Translation', language: 'und' };
       if (paired) {
-        const id = unused(`${node.id}-format`), formatter = graphNode('PairedTextFormatter', id, Math.min(4000, node.position.x), Math.min(4000, node.position.y + 260));
+        const id = unused(`${node.id}-format`), formatter = { id, type: 'PairedTextFormatter', settings: {}, position: { x: node.position.x, y: node.position.y + 260 } };
         const source = next.nodes.find(source => source.id === routes.find(route => route.to[1] === 'finalSource').from[0]);
         formatter.settings.direction = source.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en';
         next.nodes.push(formatter);
@@ -301,6 +306,53 @@ export function migrateGraph(graph) {
     }
   }
   return renameAsr();
+}
+// Unsupported behavior is offered as an unsaved repair draft; the original is
+// never overwritten until explicit Save, and is then retained under the recovery key.
+function migrateTranslationGraph(next) {
+  const oldPaired = new Set(next.nodes.filter(node => node.type === 'PairedTextFormatter').map(node => node.id));
+  const translationIds = new Set(next.nodes.filter(node => translators.includes(node.type)).map(node => node.id));
+  const changes = [];
+  for (const node of next.nodes) {
+    if (node.type === 'TextFormatter' && node.settings.inputCount === undefined) node.settings.inputCount = 4;
+    if (!oldPaired.has(node.id)) continue;
+    node.type = 'TextFormatter'; node.settings = { inputCount: 3, template: translationTemplate(node.settings.direction) };
+    changes.push(`${node.id}: indexed history/pending previews become committed result formatting`);
+  }
+  next.edges = next.edges.flatMap(route => {
+    const [source, output] = route.from, [target, input] = route.to;
+    if (translationIds.has(target) && input === 'provisional') {
+      changes.push(`${source}.${output} → ${target}.${input}: provisional translation removed`); return [];
+    }
+    if (oldPaired.has(target)) {
+      const port = { finalSource: 'input1', text: 'input2', finalError: 'input3' }[input];
+      if (!port) { changes.push(`${source}.${output} → ${target}.${input}: legacy metadata/preview removed`); return []; }
+      route.to[1] = port;
+    }
+    if (translationIds.has(source)) {
+      const port = { source: 'source', text: 'text', error: 'error', finalSource: 'source', finalError: 'error' }[output];
+      if (!port) { changes.push(`${source}.${output} → ${target}.${input}: unsupported output removed; reconnect deliberately`); return []; }
+      if (output === 'finalSource' || output === 'finalError') changes.push(`${source}.${output} → ${target}.${input}: ${port} now emits committed results only`);
+      route.from[1] = port;
+    }
+    if (oldPaired.has(source)) {
+      const sink = next.nodes.find(node => node.id === target);
+      if (sink?.type === 'LiveTextDisplay' && input === 'replace' &&
+          !next.edges.some(edge => edge.to[0] === target && edge.to[1] === 'append')) {
+        route.to[1] = 'append'; changes.push(`${source} → ${target}: append each committed result once`);
+      } else changes.push(`${source} → ${target}: latest-result TEXT replaces whole-history TEXT; review this route`);
+    }
+    return [route];
+  });
+  next.version = GRAPH_VERSION;
+  if (changes.length) {
+    const error = new Error(`Translation graph migration needs review. ${changes.join('; ')}. No pending rows or provisional translations are emitted. Failures emit source/error only. Review the repair draft and Save; the original saved graph is kept for recovery.`);
+    const errors = validateGraph(next);
+    if (!errors.length) error.recoveryGraph = next;
+    else error.message += ` The converted graph is invalid: ${errors.join(' ')} Export the original recovery copy and repair these routes/settings before import.`;
+    throw error;
+  }
+  return next;
 }
 export function assertGraph(graph) {
   const migrated = migrateGraph(graph), errors = validateGraph(migrated);
@@ -317,7 +369,6 @@ export function withTranslation(graph, { enabled, direction }) {
   const next = assertGraph(graph);
   const current = next.nodes.find(n => translators.includes(n.type));
   next.translationDirection = direction;
-  for (const formatter of next.nodes.filter(n => n.type === 'PairedTextFormatter')) formatter.settings.direction = direction;
   if (enabled && current) for (const node of next.nodes.filter(n => translators.includes(n.type))) node.type = direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn';
   else if (enabled) {
     const branch = defaultGraph({ enabled: true, direction });
@@ -327,8 +378,8 @@ export function withTranslation(graph, { enabled, direction }) {
     const id = unused('translation'), sink = unused('translated'), formatter = unused('translated-format'), speech = next.nodes.find(n => ASR_TYPES.includes(n.type));
     if (!speech) throw Error('Add an ASR Node before applying the translation preset, or connect translator Nodes individually.');
     next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink }, { ...branch.nodes[5], id: formatter });
-    for (const port of Object.keys(NODE_TYPES[speech.type].outputs)) next.edges.push(edge(speech.id, port, id, port === 'final' ? 'text' : port));
-    next.edges.push(...translationViewEdges(id, formatter), edge(formatter, 'text', sink, 'replace'));
+    next.edges.push(edge(speech.id, 'final', id, 'text'));
+    next.edges.push(...translationViewEdges(id, formatter), edge(formatter, 'text', sink, 'append'));
   } else {
     const removed = new Set(next.nodes.filter(n => translators.includes(n.type) || n.type === 'TranslationView').map(n => n.id));
     // Remove downstream audio branch too when its only source is translation.
@@ -365,6 +416,12 @@ export function readGraph(storage) {
 }
 export function saveGraph(storage, graph) {
   const validated = assertGraph(graph);
+  const original = storage.getItem?.(GRAPH_KEY);
+  if (original !== null && original !== undefined) {
+    let version;
+    try { version = JSON.parse(original).version; } catch { /* Keep malformed originals too. */ }
+    if (version !== GRAPH_VERSION) storage.setItem(GRAPH_RECOVERY_KEY, original);
+  }
   storage.setItem(GRAPH_KEY, JSON.stringify(validated));
   storage.removeItem('opus-mt-translation-preferences');
   return validated;

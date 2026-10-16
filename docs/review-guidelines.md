@@ -41,6 +41,10 @@ Also review:
 - clarity and consistency with the current architecture;
 - appropriate tests or validation for the required behavior;
 - documentation updates when behavior changes;
+- port/schema changes tested against saved versions, with visible recovery for
+  behavior differences and no silent loss of unrelated routes or stored content;
+- grouped delivery, independent streams, repeated values and cleanup validated
+  without exposing internal job metadata as public ports;
 - security and privacy implications where relevant.
 
 ## Merge criteria

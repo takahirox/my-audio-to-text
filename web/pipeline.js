@@ -71,8 +71,8 @@ export class Pipeline {
     // Observer failures cannot break delivery to another branch.
     try { this.onError(error, entry.id); } catch { /* errors remain available */ }
   }
-  emit(entry, port, value) { this.emitOutputs(entry, { [port]: value }); }
-  emitOutputs(entry, values) {
+  emit(entry, port, value) { this.emitOutputs(entry, { [port]: value }, false); }
+  emitOutputs(entry, values, grouped = true) {
     if (!entry.active || entry.closed || entry.failed || this.state === 'disposed') return;
     if (!values || typeof values !== 'object' || Array.isArray(values)) {
       this.fail(entry, new TypeError('emitOutputs needs a named output map.')); return;
@@ -90,13 +90,17 @@ export class Pipeline {
       }
     }
     for (const [target, inputs] of deliveries) {
+      // Delivery-local provenance, never payload metadata or cross-branch matching.
+      const groupInputs = grouped ? Object.freeze([...new Set([...entry.routes.values()].flat()
+        .filter(route => route.entry === target).map(route => route.port))]) : undefined;
+      const context = grouped ? Object.freeze({ ...target.context, groupInputs }) : target.context;
       Object.freeze(inputs);
       // One queue item per target: no interleaving while an async hook runs.
       target.queue = target.queue.then(async () => {
         const live = () => target.active && !target.closed && !target.failed && this.state !== 'disposed';
         if (!live()) return;
         if (typeof target.node.receiveInputs === 'function') {
-          await target.node.receiveInputs(inputs, target.context);
+          await target.node.receiveInputs(inputs, context);
         } else for (const [input, value] of Object.entries(inputs)) {
           if (!live()) return;
           await target.node.receive(input, value, target.context);

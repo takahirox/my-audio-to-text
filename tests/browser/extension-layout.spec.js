@@ -110,12 +110,8 @@ for (const action of ['Close settings', 'Remove transcript']) {
       await expect(page.locator('[data-node="transcript"]')).toHaveCount(0);
       await expect(page.locator('.graph-node')).toHaveCount(expected.nodes.length);
       await expect(page.locator('.graph-wire')).toHaveCount(expected.edges.length);
-      // Removing the only output leaves an invalid draft; Save must still
-      // reject it rather than silently applying the removal.
-      await page.locator('#graph-save').click();
-      await expect(page.locator('#graph-errors')).toContainText('Unconnected output Node');
-      expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before.stored);
-      return;
+      // An incomplete draft is saveable; Start selects only executable paths.
+      await expect(page.locator('#graph-errors')).toBeEmpty();
     }
     await page.locator('#graph-save').click();
     await expect(page.locator('#graph-state')).toContainText('Saved graph');
@@ -154,4 +150,36 @@ test('live regions preserve committed DOM and plain text; previews are distinct 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.evaluate(() => window.clearRegions()); await expect(page.locator('.live-text-region')).toHaveCount(0);
+});
+
+
+test('v8 paired formatter migration is visibly reviewed, then saves a recoverable v9 graph', async ({ page }) => {
+  const original = await page.evaluate(async () => {
+    const { defaultGraph, edge, GRAPH_KEY } = await import('/extension/graph.js');
+    const graph = defaultGraph({ enabled: true, direction: 'en-ja' }); graph.version = 8;
+    const formatter = graph.nodes.find(n => n.id === 'translated-format');
+    formatter.type = 'PairedTextFormatter'; formatter.settings = { direction: 'en-ja' };
+    graph.nodes.find(n => n.id === 'translated').settings.label = 'Saved bilingual label';
+    graph.edges = graph.edges.filter(e => e.to[0] !== formatter.id);
+    for (const port of ['text', 'finalSource', 'finalStatus', 'finalIndex', 'finalError']) graph.edges.push(edge('translation', port, formatter.id, port));
+    graph.edges.find(e => e.from[0] === formatter.id).to[1] = 'replace';
+    const raw = JSON.stringify(graph); localStorage.setItem(GRAPH_KEY, raw); return raw;
+  });
+  await page.reload(); await expect(page.locator('#errors')).toContainText('migration needs review');
+  await expect(page.locator('#graph-state')).toContainText('Unsaved draft');
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
+  await page.getByText('Original saved graph (migration recovery copy)', { exact: true }).click();
+  await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(original);
+  await expect(page.locator('option[value=PairedTextFormatter]')).toHaveCount(0);
+  await expect(page.locator('[data-node=translation] [data-side=output]')).toHaveCount(3);
+  await expect(page.locator('[data-node=translated-format] [data-side=input]')).toHaveCount(3);
+  await page.locator('#graph-save').click(); await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  expect(saved.version).toBe(9);
+  expect(saved.nodes.find(n => n.id === 'translated').settings.label).toBe('Saved bilingual label');
+  expect(saved.edges).toContainEqual({ from: ['translated-format', 'text'], to: ['translated', 'append'] });
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v9'))).toBe(original);
+  await page.reload(); await expect(page.locator('#errors')).toBeEmpty();
+  await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(original);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(saved);
 });

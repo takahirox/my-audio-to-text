@@ -24,7 +24,9 @@ with a fixed policy. Remove any now-unused Number/Text source and configuration
 wire from the old ASR. Multiple ASRs can coexist or share a compatible source. Finals can feed existing
 TEXT formatters, OPUS-MT, focused fields and TTS. All downstream contracts and
 sinks are unchanged. Default/reset remains the three-node ReazonSpeech graph.
-Version 8 graphs are not migrated or rewritten; all existing migrations remain.
+Zipformer adds no separate migration. Current version 9 graphs retain these ASR
+contracts; older graphs use the [translation/formatter migration and recovery
+rules](extension-graph.md), preserving unrelated ASR routes and settings.
 
 ## Segmentation and ownership
 

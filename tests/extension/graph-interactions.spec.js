@@ -275,31 +275,34 @@ async function fixtureTranslation(f, live) {
 }
 
 for (const version of [4, 5]) for (const direction of ['ja-en', 'en-ja']) for (const paired of [false, true]) {
-  test(`v${version} ${direction}: migration preserves ${paired ? 'indexed pairs' : 'plain routes'} through Stop, errors and Cancel`, async ({ graphExtension: f }) => {
+  test(`v${version} ${direction}: reviewed migration preserves ${paired ? 'committed pairs' : 'plain routes'} through Stop, errors and Cancel`, async ({ graphExtension: f }) => {
     let live = await openGraph(f); const legacy = legacyGraph({ direction }, version);
     if (!paired) {
       legacy.edges = legacy.edges.filter(e => e.to[0] !== 'translated');
       legacy.edges.push({ from: ['translation', 'provisional'], to: ['translated', 'provisionalText'] }, { from: ['translation', 'text'], to: ['translated', 'text'] });
     }
     await live.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), legacy);
-    await live.close(); live = await openGraph(f); const graph = await saved(live);
-    expect(graph.version).toBe(8); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
+    await live.close(); live = await openGraph(f);
+    await expect(live.editor.locator('#errors')).toContainText('migration needs review');
+    await expect(live.editor.getByLabel('Original saved graph JSON')).toHaveValue(JSON.stringify(legacy));
+    await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
+    const graph = await saved(live);
+    expect(graph.version).toBe(9); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
     await fixtureTranslation(f, live); await startGraph(live);
-    const text = live.locator('[data-display="translated"] .display-preview');
+    const text = live.locator('[data-display="translated"] .display-items');
     await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));
-    await expect(text).toContainText('Translated preview');
+    await expect(text).toBeEmpty();
     await emitFinal(live, 'pending');
-    if (paired) await expect(text).toContainText('Translating…');
+    await expect(text).toBeEmpty();
     await expect(paired ? text : live.locator('[data-display="translated"] .display-items')).toContainText('Translated pending');
     await emitFinal(live, 'fail');
-    if (paired) await expect(text).toContainText('Translation failed: Fixture translation failure');
+    if (paired) await expect(text).toContainText('Fixture translation failure');
     await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
     await startGraph(live); await expect(text).toBeEmpty();
     await emitFinal(live, 'pending cancellation');
-    if (paired) await expect(text).toContainText('Translating…');
+    await expect(text).toBeEmpty();
     await live.locator('#cancel-session').click();
-    if (paired) await expect(text).toContainText('Translation canceled');
-    else await expect(text).toBeEmpty();
+    await expect(text).toBeEmpty();
     expect(await saved(live)).toEqual(graph);
   });
 }

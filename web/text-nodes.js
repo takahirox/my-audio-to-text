@@ -1,16 +1,23 @@
 import { TEXT } from './port-contracts.js';
 
-export const FORMAT_INPUTS = Object.freeze({ input1: TEXT, input2: TEXT, input3: TEXT, input4: TEXT });
+export function formatInputs(inputCount = 4) {
+  if (!Number.isSafeInteger(inputCount) || inputCount < 1) throw Error('Input count must be a positive whole number.');
+  return Object.fromEntries(Array.from({ length: inputCount }, (_, index) => [`input${index + 1}`, TEXT]));
+}
+export const FORMAT_INPUTS = Object.freeze(formatInputs());
 // Only numbered substitutions and doubled-brace escaping. No property access,
 // expressions, HTML interpretation, or recursive expansion of input strings.
-export function parseTemplate(template) {
+export function parseTemplate(template, inputCount = 4) {
   if (typeof template !== 'string' || template.length > 2048) throw Error('Template must be text of at most 2048 characters.');
   const parts = [];
   for (let i = 0; i < template.length;) {
-    const rest = template.slice(i), token = rest.match(/^(\{\{|\}\}|\{[1-4]\})/);
-    if (token) { parts.push(token[0] === '{{' ? '{' : token[0] === '}}' ? '}' : Number(token[0][1])); i += token[0].length; }
-    else {
-      if ('{}'.includes(template[i])) throw Error('Use {1}–{4} for inputs and {{ / }} for literal braces.');
+    const rest = template.slice(i), token = rest.match(/^(\{\{|\}\}|\{[1-9][0-9]*\})/);
+    if (token) {
+      if (token[0] !== '{{' && token[0] !== '}}' && Number(token[0].slice(1, -1)) > inputCount) throw Error(`Input ${token[0]} is not configured. Add inputs or edit the template (1–${inputCount}).`);
+      parts.push(token[0] === '{{' ? '{' : token[0] === '}}' ? '}' : Number(token[0].slice(1, -1)));
+      i += token[0].length;
+    } else {
+      if ('{}'.includes(template[i])) throw Error(`Use {1}–{${inputCount}} for inputs and {{ / }} for literal braces.`);
       parts.push(template[i++]);
     }
   }
@@ -18,14 +25,18 @@ export function parseTemplate(template) {
 }
 
 export class TextFormatterNode {
-  inputs = FORMAT_INPUTS;
   outputs = { text: TEXT };
-  constructor({ template = '{1}' } = {}) { this.parts = parseTemplate(template); this.values = {}; }
+  constructor({ template = '{1}', inputCount = 4 } = {}) {
+    this.inputs = formatInputs(inputCount); this.parts = parseTemplate(template, inputCount); this.values = {};
+  }
   receiveInputs(values, context) {
     if (context.signal.aborted) return;
     for (const [port, value] of Object.entries(values)) {
       if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('TextFormatter expects TEXT inputs.');
     }
+    // Explicit groups are snapshots of this producer's connected inputs.
+    // Omitted siblings clear; independently emitted values retain latest state.
+    for (const port of context.groupInputs || []) if (Object.hasOwn(this.inputs, port)) this.values[port] = '';
     Object.assign(this.values, values);
     context.emit('text', this.parts.map(part => typeof part === 'number' ? this.values[`input${part}`] ?? '' : part).join(''));
   }

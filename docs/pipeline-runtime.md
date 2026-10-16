@@ -95,15 +95,19 @@ in consecutive groups. Async input hooks finish before the next item starts.
 Independent fan-out targets have their own queues: a slow or failed branch does
 not delay another. Background inference completing out of order publishes in
 completion order; the producer owns any required input-order buffering. The
-translation scheduler uses a FIFO of finals and versions to invalidate provisional
-jobs before publishing, rather than asking consumers to compare source text.
+translation scheduler uses a FIFO of committed utterances before publishing,
+rather than asking consumers to compare source text.
 
 Correlation is supported between ports emitted together by **one producer and
 connected directly to one receiver**. Separate processor branches are not joined:
 the runtime does not carry hidden IDs across hops, merge groups, wait for missing
 ports, or synchronize independent consumers. A processor may explicitly publish
-a new group, but has to own its association. A receiving group can be a partial
-update by design; consumers must not infer a pair from separate groups or assume
+a new group, but has to own its association. For an explicit `emitOutputs()` delivery, `context.groupInputs` is a frozen list
+of receiver inputs wired directly from that producer, including omitted siblings.
+It is delivery-local context, not a port payload or cross-hop correlation ID.
+`TextFormatter` treats this as a producer snapshot and clears omitted siblings;
+ordinary `emit()` deliveries carry no groupInputs and retain other latest values.
+A receiving group can otherwise be a partial update by design; consumers must not infer a pair from separate groups or assume
 required graph inputs are included in every emission.
 
 Errors abort the failing target and skip its remaining queued groups; ordinary
@@ -309,18 +313,20 @@ requires no TTS policy or modification.
 
 ## Extension visual graph composition
 
-The [extension graph editor](extension-graph.md) saves a version 8 description
+The [extension graph editor](extension-graph.md) saves a version 9 description
 with concrete production Node types and explicit named-port edges. The extension
 builder constructs this shared Pipeline at each session boundary. ASR, OPUS-MT
 directions, Supertonic 3 and Kokoro remain independent production processors;
 ordinary text flows connect directly through shared `TEXT` ports, and audio
-playback remains a separate Node. Version 1–7 descriptions migrate explicitly
-to version 8, removing extraction adapters while preserving their downstream
+playback remains a separate Node. Version 1–8 descriptions migrate explicitly
+to version 9, removing extraction adapters while preserving their downstream
 routes and fan-out; old paired result edges expand into correlated primitive
 routes. Version 7 removes only dead Whisper provisional connections, with
 non-destructive repair if required inputs become disconnected; Whisper exposes
 only final TEXT, while ReazonSpeech retains both outputs. Legacy views become
-generic TEXT displays; indexed paired behavior is preserved by a narrow compatibility formatter. Shared `LiveTextDisplayNode`
+generic TEXT displays. Version 9 replaces paired formatters with ordinary configurable
+TextFormatter Nodes through a visible, non-destructive migration review. Removed
+status/index/provisional routes stay recoverable in the original JSON backup. Shared `LiveTextDisplayNode`
 and `TextFormatterNode` own text presentation state and bounded formatting.
 Independent formatter inputs update latest values immediately; only directly
 grouped inputs update together. No editor, model selection, storage or inference

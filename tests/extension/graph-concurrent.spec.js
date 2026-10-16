@@ -140,7 +140,7 @@ test('MV3 TEXT-only path starts without a toolbar tab or microphone permission',
   await page.evaluate(async () => {
     const { graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
     const text = graphNode('Text', 'text'); text.settings.value = 'Independent text path';
-    saveGraph(localStorage, { version: 8, nodes: [text, graphNode('LiveTextDisplay', 'display')], edges: [edge('text', 'value', 'display', 'append')] });
+    saveGraph(localStorage, { version: 9, nodes: [text, graphNode('LiveTextDisplay', 'display')], edges: [edge('text', 'value', 'display', 'append')] });
     window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
     navigator.mediaDevices.getUserMedia = () => { throw Error('No microphone permission should be requested'); };
   });

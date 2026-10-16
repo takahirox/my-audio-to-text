@@ -1,4 +1,4 @@
-import { NODE_TYPES, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
+import { NODE_TYPES, nodeDefinition, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
 
 const el = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -138,7 +138,7 @@ export class GraphEditor {
     const selected = this.types.value, query = this.search.value.trim().toLowerCase(); this.types.replaceChildren();
     const groups = new Map();
     for (const [type, definition] of Object.entries(NODE_TYPES)) {
-      const category = ['Number', 'Text', 'TextFormatter', 'PairedTextFormatter'].includes(type) ? 'Constants / utilities'
+      const category = ['Number', 'Text', 'TextFormatter'].includes(type) ? 'Constants / utilities'
         : !Object.keys(definition.inputs).length ? 'Sources / inputs'
         : !Object.keys(definition.outputs).length ? 'Outputs' : 'Processors';
       if ((this.category.value !== 'All categories' && this.category.value !== category) || !`${type} ${definition.label}`.toLowerCase().includes(query)) continue;
@@ -207,6 +207,14 @@ export class GraphEditor {
     if (this.selectedEdge === connection) this.selectedEdge = null;
     this.draw();
   }
+  resizeFormatter(node, delta) {
+    const count = node.settings.inputCount + delta;
+    if (count < 1) return;
+    node.settings.inputCount = count;
+    // Remove only the last port; numbering and all unaffected wires stay stable.
+    this.draft.edges = this.draft.edges.filter(route => route.to[0] !== node.id || route.to[1] !== `input${count + 1}` || delta > 0);
+    this.selected = null; this.draw();
+  }
   updateSetting(node, key, value) {
     node.settings[key] = value;
     // Settings do not change canvas geometry or ports. Keep controls in place
@@ -221,7 +229,7 @@ export class GraphEditor {
     this.inspector.hidden = !node; this.workspace.classList.toggle('has-selection', !!node);
     if (!node) return;
     const close = button('Close settings', null, () => { this.selectedNode = null; this.draw(); this.scroll.focus({ preventScroll: true }); }); this.inspector.append(close);
-    const definition = NODE_TYPES[node.type]; this.inspector.append(el('h3', definition.label), el('p', `Node: ${node.id}`));
+    const definition = nodeDefinition(node); this.inspector.append(el('h3', definition.label), el('p', `Node: ${node.id}`));
     for (const [key, values] of Object.entries(definition.settings || {})) {
       const label = el('label', key + ' '), select = el('select'); select.setAttribute('aria-label', `${node.id} ${key}`);
       for (const value of values) { const option = el('option', value); option.value = value; select.append(option); }
@@ -234,7 +242,15 @@ export class GraphEditor {
       control.onchange = () => this.updateSetting(node, key, control.value);
       label.append(control); this.inspector.append(label);
     }
-    for (const key of Object.keys(definition.numberSettings || {})) {
+    if (node.type === 'TextFormatter') {
+      this.inspector.append(el('p', `${node.settings.inputCount} TEXT inputs. Remove deletes the last input and its wire; template references remain editable.`));
+      const add = button('Add input', null, () => this.resizeFormatter(node, 1));
+      const remove = button('Remove last input', null, () => this.resizeFormatter(node, -1));
+      add.setAttribute('aria-label', `${node.id} Add input`); remove.setAttribute('aria-label', `${node.id} Remove last input`);
+      remove.disabled = node.settings.inputCount <= 1;
+      this.inspector.append(add, remove);
+    }
+    for (const key of Object.keys(definition.numberSettings || {}).filter(key => key !== 'inputCount')) {
       const label = el('label', key + ' '), control = el('input');
       control.type = 'number'; control.step = 'any'; control.value = node.settings[key];
       control.setAttribute('aria-label', `${node.id} ${key}`);
@@ -270,7 +286,7 @@ export class GraphEditor {
     this.canvas.style.width = `${width}px`; this.canvas.style.height = `${height}px`; this.canvas.style.transform = `scale(${this.zoom})`;
     this.extent.style.width = `${width * this.zoom}px`; this.extent.style.height = `${height * this.zoom}px`;
     for (const node of this.draft.nodes) {
-      const definition = NODE_TYPES[node.type], card = el('section', undefined, 'graph-node'); card.dataset.node = node.id;
+      const definition = nodeDefinition(node), card = el('section', undefined, 'graph-node'); card.dataset.node = node.id;
       card.classList.toggle('selected-node', this.selectedNode === node.id);
       card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`;
       const heading = el('button', `${definition.label} (${node.id})`, 'graph-heading'); heading.type = 'button';
@@ -319,7 +335,7 @@ export class GraphEditor {
               this.selected = { id: node.id, port, contract }; event.dataTransfer.setData('text/plain', `${node.id}.${port}`);
               for (const input of this.canvas.querySelectorAll('[data-side="input"]')) {
                 const target = this.draft.nodes.find(n => n.id === input.closest('[data-node]').dataset.node);
-                input.disabled = target.id === node.id || NODE_TYPES[target.type].inputs[input.dataset.port] !== contract;
+                input.disabled = target.id === node.id || nodeDefinition(target).inputs[input.dataset.port] !== contract;
               }
             };
             control.ondragend = () => { this.selected = null; this.draw(); };

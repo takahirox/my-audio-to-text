@@ -1,22 +1,15 @@
 import { Pipeline } from '../web/pipeline.js';
-import { NUMBER } from '../web/port-contracts.js';
 import { OpusMtTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
 
-export const TRANSLATION_OUTPUTS = Object.freeze({
-  provisional: TEXT, text: TEXT,
-  provisionalSource: TEXT, provisionalStatus: TEXT, provisionalError: TEXT,
-  finalSource: TEXT, finalStatus: TEXT, finalIndex: NUMBER, finalError: TEXT,
-});
+export const TRANSLATION_OUTPUTS = Object.freeze({ source: TEXT, text: TEXT, error: TEXT });
 
-// Session-owned adapter, not a generic queue: one in flight, one replaceable
-// provisional, and a FIFO of finals. receive() never waits for inference, so
-// Pipeline's input serialization cannot accumulate obsolete provisional work.
+// Session-owned FIFO of committed utterances. Ordering and request IDs stay internal.
 export class TranslationSchedulerNode {
-  inputs = { provisional: TEXT, text: TEXT };
+  inputs = { text: TEXT };
   outputs = TRANSLATION_OUTPUTS;
   constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, onState = () => {} } = {}) {
     this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
-    this.finals = []; this.version = 0; this.finalIndex = 0;
+    this.finals = [];
   }
   start(context) {
     this.context = context;
@@ -37,88 +30,56 @@ export class TranslationSchedulerNode {
     this.context.signal.throwIfAborted();
     this.onState('Local OPUS-MT ready');
   }
-  emit(job, status, text = '', error = '') {
+  emit(job, text, error = '') {
     if (this.disposed || this.context.signal.aborted) return;
-    if (job.port === 'provisional' && job.version !== this.version) return;
-    const prefix = job.port === 'provisional' ? 'provisional' : 'final';
-    this.context.emitOutputs({
-      [`${prefix}Source`]: job.source, [`${prefix}Status`]: status, [`${prefix}Error`]: error,
-      ...(prefix === 'final' ? { finalIndex: job.index } : {}),
-      // Pending/errors never enter reusable successful text-processing paths.
-      ...(status === 'complete' ? { [job.port]: text } : {}),
-    });
-  }
-  clearProvisional() {
-    this.provisional = null;
-    if (!this.previewActive) return;
-    this.previewActive = false;
-    // Clear at invalidation, before final inference. An older final completion
-    // must not clear a newer preview, and only this scheduler owns this stream.
-    this.emit({ port: 'provisional', source: '', version: this.version }, 'complete');
+    this.context.emitOutputs({ source: job.source, error, ...(error ? {} : { text }) });
   }
   receive(port, source) {
-    if (!['provisional', 'text'].includes(port) || typeof source !== 'string') throw new TypeError('Expected TEXT on provisional or text.');
-    if (this.disposed || (port === 'provisional' && this.stopping)) return;
-    if (!source.trim()) {
-      this.version++;
-      if (port === 'provisional') this.previewActive = true; // explicit empty updates also clear consumers
-      this.clearProvisional();
-      return;
-    }
-    const job = { port, source, version: ++this.version };
-    if (port === 'text') {
-      job.index = this.finalIndex++;
-      this.clearProvisional(); // invalidate queued, in-flight and displayed provisional
-    } else this.previewActive = true;
-    if (this.error) { this.emit(job, 'error', '', this.error); return; }
-    this.emit(job, 'pending');
-    if (port === 'text') this.finals.push(job);
-    else this.provisional = job;
+    if (port !== 'text' || typeof source !== 'string') throw new TypeError('Expected TEXT on text.');
+    if (this.disposed) return;
+    // Empty utterances still have a position in the FIFO; they need no inference.
+    this.finals.push({ source });
     this.pump();
   }
   pump() {
     if (this.working || this.disposed) return;
     this.working = this.run().finally(() => { this.working = null;
-      if (!this.disposed && !this.error && (this.finals.length || this.provisional)) this.pump();
+      if (!this.disposed && this.finals.length) this.pump();
     });
   }
   async run() {
     await this.ready;
-    while (!this.disposed && !this.error && (this.finals.length || this.provisional)) {
-      const job = this.finals.shift() || this.provisional;
-      if (job === this.provisional) this.provisional = null;
+    while (!this.disposed && this.finals.length) {
+      const job = this.finals.shift();
+      if (!job.source.trim()) { this.emit(job, ''); continue; }
+      if (this.error) { this.emit(job, undefined, this.error); continue; }
       if (job.source.length > 1000) {
-        this.emit(job, 'error', '', 'OPUS-MT accepts at most 1,000 characters per utterance.'); continue;
+        this.emit(job, undefined, 'OPUS-MT accepts at most 1,000 characters per utterance.'); continue;
       }
       try {
         const text = await new Promise((resolve, reject) => {
           this.active = { job, resolve, reject };
           this.send(job.source);
         });
-        this.emit(job, 'complete', text);
-      } catch (error) { if (!this.disposed) this.emit(job, 'error', '', error.message); }
+        this.emit(job, text);
+      } catch (error) { if (!this.disposed) this.emit(job, undefined, error?.message || String(error)); }
       finally { this.active = null; }
     }
   }
   failure(error) {
     if (this.disposed || this.error) return;
-    this.error = error.message || String(error);
+    this.error = error?.message || String(error);
     this.onState(`Translation unavailable: ${this.error}`);
     this.active?.reject(error);
-    for (const job of this.finals.splice(0)) this.emit(job, 'error', '', this.error);
-    if (this.provisional) this.emit(this.provisional, 'error', '', this.error);
-    this.provisional = null;
     void this.translation?.dispose().catch(() => {});
   }
-  discardProvisional() { this.stopping = true; this.version++; this.clearProvisional(); }
   async stop() {
-    this.discardProvisional();
     await this.ready;
     await this.working;
     if (!this.error && !this.disposed) await this.translation?.stop();
   }
   dispose() {
-    this.disposed = true; this.provisional = null; this.finals = [];
+    this.disposed = true; this.finals = [];
     this.active?.reject(new DOMException('Translation canceled.', 'AbortError'));
     return this.translation?.dispose();
   }

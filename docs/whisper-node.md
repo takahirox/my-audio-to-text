@@ -38,7 +38,9 @@ Graph version 8 migrates version 7 by removing only outgoing
 `SpeechToTextWhisper.provisional` connections, which never emitted events. IDs,
 positions, settings, final routes and unrelated routes are preserved. No edge
 is automatically redirected to final. Valid results are saved in the same
-storage key. Graphs without these edges only change version.
+storage key. For Whisper-only graphs without these edges, only the version changes.
+Current version 9 also applies the [translation/formatter migration and visible
+recovery rules](extension-graph.md) when those processors occur in an older graph.
 
 If removal leaves a missing input, the destination remains in the saved draft
 and stays inactive until connected. Optional warnings and explicit Validate draft

@@ -18,7 +18,7 @@ provisional / final transcript
 
 Capture helpers normalize audio to mono 16 kHz PCM before passing it to the [Local ASR Core](docs/local-asr-core.md). ReazonSpeech ja-en, sherpa-onnx, Silero VAD and the hayamimi-inspired simulated-streaming policy are the core's current implementation. This replaceable ASR baseline is one processing capability within the product vision.
 
-The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR with optional OPUS-MT through a scheduling adapter. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; paired translation diagnostics use a separate optional result port. See the [contract audit](docs/port-contracts.md). Summary/history composition remains future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
+The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR with optional OPUS-MT through a scheduling adapter. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; the extension groups original `source`, translated `text` and `error` primitives for direct delivery to a configurable `TextFormatter`. See the [contract audit](docs/port-contracts.md). Summary/history composition remains future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
 
 ## Node Playground
 
@@ -54,10 +54,10 @@ transcription from the toolbar without the sharing picker. It reuses the Web
 ASR core and audio helpers, restores audible tab playback, and shows transcripts
 in a compact Live window. Separate Graph Editor and Models tabs provide
 executable graph editing and verified optional model preparation without
-interrupting capture. Optional local OPUS-MT pairs provisional and final
-Japanese transcripts with English or English transcripts with Japanese using an
-exclusive direction choice applied on the next session, after an explicit download
-of the selected model cache. Translation enablement and direction persist;
+interrupting capture. Optional local OPUS-MT pairs committed
+Japanese transcripts with English or English transcripts with Japanese using
+independent direction-specific Nodes and editable TextFormatter templates. Saved
+graph edits apply on the next session, after preparation of required model caches;
 transcripts remain window-local. See its
 guide for building/loading the unpacked extension,
 permissions, lifecycle behavior and automated tests.
@@ -167,6 +167,8 @@ See the [development flow](docs/development-flow.md) for workflow and language p
 The extension Live window renders graph-configured `LiveTextDisplay` sinks with
 custom labels. Fresh setup and Reset default to Chrome tab audio → SpeechToText →
 one display: provisional text replaces only the preview, and each final appends
-a committed item. Translation remains an explicit graph addition. Optional `TextFormatter` Nodes compose primitive TEXT; saved v5
-paired views migrate through a compatibility formatter without losing alignment.
+a committed item. Translation remains an explicit graph addition. Configurable
+`TextFormatter` Nodes compose primitive TEXT with editable multiline templates.
+Older paired views open a reviewed migration draft and keep a recovery copy;
+committed rows replace their former indexed pending/history behavior.
 See [Live display and migration semantics](docs/extension-graph.md).

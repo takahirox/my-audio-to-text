@@ -46,7 +46,7 @@ test('direct grouped formatter update emits once; separate branches emit latest 
   }, connections: [edge('a', 'one', 'formatter', 'input1'), edge('a', 'two', 'formatter', 'input3'), edge('b', 'text', 'formatter', 'input2'), edge('formatter', 'text', 'sink', 'append')] });
   await pipeline.start(); a({ one: 'A', two: 'grouped' }); await tick(); assert.deepEqual(result, ['A||grouped']);
   b('text', 'B'); await tick(); assert.deepEqual(result, ['A||grouped', 'A|B|grouped']);
-  a({ one: 'C' }); await pipeline.stop(); assert.deepEqual(result, ['A||grouped', 'A|B|grouped', 'C|B|grouped']); await pipeline.dispose();
+  a({ one: 'C' }); await pipeline.stop(); assert.deepEqual(result, ['A||grouped', 'A|B|grouped', 'C|B|']); await pipeline.dispose();
 });
 
 test('validation accepts multiple generic sinks and translators, output-only paths and primitive formatters', () => {
@@ -84,4 +84,18 @@ test('committed state has no loss across consecutive preview updates, repeated/e
   assert.deepEqual(latest, { preview: '', items: expected });
   const fresh = new LiveTextDisplayNode(state => latest = state); fresh.start();
   assert.deepEqual(latest, { preview: '', items: [] });
+});
+
+
+test('formatter instances have independent counts above four, safe multi-digit references and literal data', () => {
+  const a = new TextFormatterNode({ inputCount: 12, template: '{12}\n{5}|{{{1}}}' });
+  const b = new TextFormatterNode({ inputCount: 1 });
+  const output = [], c = { ...context(), emit: (_, value) => output.push(value) };
+  a.receiveInputs({ input12: '<script>{5}</script>', input5: 'five', input1: '{12}' }, c);
+  assert.equal(output[0], '<script>{5}</script>\nfive|{{12}}');
+  assert.deepEqual(Object.keys(b.inputs), ['input1']); assert.equal(Object.keys(a.inputs).length, 12);
+  for (const inputCount of [0, -1, 2.5, null, '5', Infinity]) assert.throws(() => new TextFormatterNode({ inputCount }), /positive whole number/);
+  assert.throws(() => new TextFormatterNode({ inputCount: 5, template: '{6}' }), /not configured.*Add inputs/);
+  assert.throws(() => a.receive('input13', 'bad', c), /TEXT/);
+  assert.throws(() => parseTemplate('{01}', 12), /literal braces/);
 });

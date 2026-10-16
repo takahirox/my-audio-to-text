@@ -1,7 +1,7 @@
 # Primitive-first Node/Port contracts
 
-Issues #91, #95 and #99 audit shared Nodes, the Node Playground, and the extension.
-Ordinary text uses shared `TEXT`; Number constants, speech duration and scheduler final indices use shared `NUMBER`
+Issues #91, #95, #99 and #119 audit shared Nodes, the Node Playground, and the extension.
+Ordinary text uses shared `TEXT`; Number constants and speech duration use shared `NUMBER`
 from `web/port-contracts.js`. No BOOLEAN value is consumed, so none is introduced.
 Contracts are identities; receiving Nodes validate their payloads.
 
@@ -14,10 +14,9 @@ Contracts are identities; receiving Nodes validate their payloads.
 | SpeechToTextReazonSpeech / TranscriptOutput / speech Playground | `audio: PCM`, optional startup `maxDuration: NUMBER` in seconds; `provisional: TEXT`, `final: TEXT`, plain strings | Frozen session cap (default 6 s, supported 1–12 s), core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
-| Extension TranslationScheduler (both directions) | Inputs: optional `provisional: TEXT`, required `text: TEXT`; successful `provisional: TEXT` / `text: TEXT` outputs; grouped source/status/error TEXT outputs for each stream and `finalIndex: NUMBER` | Active inference, provisional versions, FIFO finals, model failure and Stop policy |
-| PairedTextFormatter (compatibility) | `text`, `provisionalText`, `finalSource`, `finalStatus`, `finalError`, `provisionalSource`, `provisionalStatus`, `provisionalError`: TEXT; `finalIndex`: NUMBER | Indexed local history emitted as TEXT; uses `receiveInputs`, never joins branches or matches by strings |
+| Extension TranslationScheduler (both directions) | `text: TEXT` input; `source`, `text`, `error`: TEXT outputs | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index/provisional ports |
 | LiveTextDisplay | replace/append: TEXT | Independent replace value and committed list; no processor identity |
-| TextFormatter | input1–input4: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
+| TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
 | TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
 | Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
 | AudioOutput / playback and WAV adapter | `audio: SYNTHESIZED_AUDIO`, `{ samples: Float32Array, sampleRate: positive integer, channels: 1 }` | Playback URLs and cleanup |
@@ -33,57 +32,59 @@ internal interfaces, not Node-to-Node port contracts.
 
 ## Correlated translation primitives
 
-The scheduler uses `context.emitOutputs()` for each pending, complete or error
-update. It publishes `finalSource`, `finalStatus`, `finalIndex`, `finalError`
-together, adding `text` only on successful completion. Final indices are assigned
-on receipt and distinguish repeated identical utterances. A provisional update
-publishes `provisionalSource`, `provisionalStatus`, `provisionalError`, adding
-`provisional` only on completion. There is no unused provisional index port.
-Errors always carry a string; successful/pending updates clear it with `''`.
-Status strings are `pending`, `complete`, or `error`. Cancel marks unresolved
-compatibility rows `canceled` locally before invalidating
-the session and disposing the graph; Live receives only the formatted string.
+The extension scheduler accepts committed `text` only. Each successful utterance
+emits `{ source, text, error: '' }` atomically with `context.emitOutputs()`.
+Empty/whitespace input preserves the original source and emits empty translated
+text without inference, in FIFO order. Failure emits `{ source, error }` with no
+`text` output: successful TEXT consumers (fields, TTS, direct displays) receive
+nothing for failed translations. A size error affects only that utterance; model
+failure reports every queued/future utterance in order and keeps upstream ASR alive.
+Pending work emits no ports. Runtime readiness/failure is visible separately.
+Stop drains every committed job, including repeated phrases and the ASR tail;
+Cancel discards pending jobs, terminates the Worker and suppresses late replies.
+A new session uses fresh Nodes. No provisional translation path remains.
 
-The paired compatibility formatter connects these outputs directly, renaming
-`provisional` to
-`provisionalText`, and consumes each group through `receiveInputs`. Pending/error
-updates intentionally omit successful text. Row objects are formatter-local state;
-no structured text object travels over an edge. `TEXT_RESULT` is
-removed. Ordinary text processors connect only `text` (or preview `provisional`)
-and receive strings without statuses or metadata. Each source/status/error/index
-port is independently reusable with a compatible primitive consumer.
+Direct `TextFormatter` inputs consume one coherent group. An explicit group is a
+snapshot of that producer's connected formatter inputs; omitted siblings clear.
+This makes a source/error result clear a previous translation even when error is
+not wired, without sending a fake successful TEXT to other consumers. Delivery-local
+`context.groupInputs` lists only the inputs wired directly from this producer.
+Ordinary `emit()` updates retain other latest values. Independent producers retain
+their own latest inputs; nothing joins branches, matches equal strings, or infers
+utterance association. Referencing independent streams in one template displays
+latest values, not a correlated pair. Input strings are substituted once as data.
 
-The scheduler coalesces provisional jobs, invalidates stale completions by
-version, prioritizes FIFO finals, and emits each successful final string once.
-Final receipt clears its own preview with an empty completed provisional group
-before inference; an older final completion leaves a newer preview intact. Stop
-clears provisional work and drains all final strings; Cancel ignores late replies.
-ASR distinguishes equal strings by internal utterance IDs and suppresses duplicate
-final IDs. TTS splits long text only inside its own branch, preserving whole text
-for independent field consumers.
+Use `source → input1`, `text → input2`, optional `error → input3`, a multiline
+template and `TextFormatter.text → LiveTextDisplay.append`. Every result adds one
+row; no pending row or history replacement causes duplicate appends. A formatter
+is stateless beyond latest inputs; history belongs to the display. Repeated equal
+utterances are distinct rows. Plain successful `text` still fans out directly to
+compatible sinks. TTS splits long text only inside its branch.
 
 ## Graphs and supported topology
 
-Version 8 graphs explicitly migrate versions 1–7. Version 7 removes only
-never-functional Whisper provisional edges; invalid results preserve storage
-and open an explicit repair draft with actionable connection errors. No edge
-is redirected to final. See [migration recovery](whisper-node.md#saved-graph-migration).
-Version 6 changes only SpeechToText to SpeechToTextReazonSpeech, preserving every ID and route.
-Extraction adapters are bypassed
-while preserving all downstream routes and fan-out. Version 4 paired result edges
-expand to direct primitive connections; TEXT-only legacy views become generic
-replace/append displays. Paired legacy views
-retain every primitive route through a compatibility formatter into a generic
-replace display.
-Malformed or ambiguous routes fail visibly with Reset and Save recovery, and the
-stored graph remains untouched on failure. Only the documented dead Whisper
-provisional edges are removed during version 7 migration.
+Version 9 explicitly migrates versions 1–8. Existing `TextFormatter` instances
+retain four inputs until edited; every instance owns its configured input count.
+Legacy extraction adapters preserve downstream fan-out, ASR renames preserve IDs,
+and dead Whisper previews are removed without redirecting to final. Older paired
+views first expand their historic bundles, then become ordinary `TextFormatter`
+Nodes. Source/text/error routes become input1/input2/input3; other metadata and
+provisional translation routes are listed in a visible migration report.
 
-The editor validates types, one incoming edge per input, required/optional inputs,
-settings and acyclicity. Paired display requires the complete final bundle from
-one translator, plus either no preview bundle or its complete direct bundle.
-Metadata split across independent branches is rejected because it cannot preserve
-correlation. Generic display accepts `replace` and/or `append` from any TEXT
-producer and invents no alignment. Default graphs use paired primitive delivery.
-See [runtime semantics](pipeline-runtime.md#correlated-primitive-outputs) and
-[graph wiring](extension-graph.md).
+Paired history/pending/canceled-row rendering cannot be preserved by a latest-value
+formatter. Migration therefore opens an **unsaved repair draft**, blocks running
+the old graph, and keeps the original storage untouched until the user reviews and
+Saves. A sole paired formatter → display.replace route becomes append; ambiguous
+shared/output routes remain in place for deliberate review. Unrelated nodes,
+labels, positions, literal content and supported fan-out remain unchanged.
+After Save, the original JSON remains under `processing-graph-before-v9` and is
+visible in Graph Editor's **Original saved graph (migration recovery copy)**.
+Malformed/ambiguous older graphs fail visibly without overwriting storage.
+`PairedTextFormatter` has no supported palette or runtime implementation.
+
+The editor validates per-instance ports, template references, primitive types,
+one incoming edge per input, settings and acyclicity. Incomplete branches remain
+saveable; Start selects only executable paths. Generic displays and formatters
+accept arbitrary TEXT producers and invent no alignment. See
+[runtime semantics](pipeline-runtime.md#correlated-primitive-outputs) and
+[graph wiring and migration](extension-graph.md).
