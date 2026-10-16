@@ -58,7 +58,7 @@ for (const id of ['constructor', 'toString', 'hasOwnProperty']) {
     await live.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), legacy);
     await live.close(); live = await openGraph({ ...f, url: `${f.url}?error=&tab=42` });
     const migrated = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-    expect(migrated.version).toBe(8);
+    expect(migrated.version).toBe(9);
     expect(migrated.nodes.find(node => node.id === id).type).toBe('LiveTextDisplay');
     expect(migrated.edges.filter(route => route.to[0] === id)).toEqual([
       { from: ['speech', 'provisional'], to: [id, 'replace'] },
@@ -95,7 +95,7 @@ test('MV3 generic regions show ASR, translation and formatter TEXT with custom l
     const formatted = graphNode('LiveTextDisplay', 'formatted'); formatted.settings.label = 'Corrected / formatted';
     const mirror = graphNode('LiveTextDisplay', 'mirror'); mirror.settings.label = 'Independent mirror';
     graph.nodes.push(formatter, formatted, mirror);
-    graph.edges.push(edge('translation', 'provisional', 'translated', 'replace'), edge('translation', 'text', 'translated', 'append'), edge('speech', 'final', 'format', 'input1'), edge('translation', 'text', 'format', 'input2'), edge('format', 'text', 'formatted', 'append'), edge('speech', 'final', 'mirror', 'replace'));
+    graph.edges.push(edge('translation', 'text', 'translated', 'append'), edge('speech', 'final', 'format', 'input1'), edge('translation', 'text', 'format', 'input2'), edge('format', 'text', 'formatted', 'append'), edge('speech', 'final', 'mirror', 'replace'));
     saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
   });
   await live.editor.reload(); await startGraph(live);

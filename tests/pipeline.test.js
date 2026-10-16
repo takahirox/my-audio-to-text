@@ -271,3 +271,28 @@ for (const mode of ['fail', 'dispose']) test(`ordinary receive stops remaining g
   if (mode === 'fail') await assert.rejects(pipeline.stop(), AggregateError);
   await pipeline.dispose();
 });
+
+
+test('explicit groups carry only direct producer input names; independent emits never inherit group context', async () => {
+  let a, b; const deliveries = [];
+  const pipeline = new Pipeline({ nodes: {
+    a: { outputs: { one: text, two: text }, start(c) { a = c; } },
+    b: { outputs: { one: text }, start(c) { b = c; } },
+    sink: { inputs: { first: text, second: text, independent: text }, receiveInputs(values, c) {
+      deliveries.push({ values, group: c.groupInputs });
+      if (c.groupInputs) assert.ok(Object.isFrozen(c.groupInputs));
+    } },
+  }, connections: [
+    { from: ['a', 'one'], to: ['sink', 'first'] }, { from: ['a', 'two'], to: ['sink', 'second'] },
+    { from: ['b', 'one'], to: ['sink', 'independent'] },
+  ] });
+  await pipeline.start(); a.emitOutputs({ one: 'source', two: 'text' });
+  b.emitOutputs({ one: 'unrelated' }); a.emitOutputs({ one: 'failed source' });
+  a.emit('two', 'ordinary'); await pipeline.stop(); await pipeline.dispose();
+  assert.deepEqual(deliveries, [
+    { values: { first: 'source', second: 'text' }, group: ['first', 'second'] },
+    { values: { independent: 'unrelated' }, group: ['independent'] },
+    { values: { first: 'failed source' }, group: ['first', 'second'] },
+    { values: { second: 'ordinary' }, group: undefined },
+  ]);
+});

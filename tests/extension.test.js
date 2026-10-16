@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { Pipeline } from '../web/pipeline.js';
 import { MONO_16KHZ_PCM, TEXT } from '../web/transcription-nodes.js';
 import { TabSession } from '../extension/session.js';
-import { defaultGraph, graphNode, edge } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, GRAPH_VERSION } from '../extension/graph.js';
 
 function fixture({ holdLoad = false, holdSource = false, asyncFlush = false, sourceError, stopError, graph, pageConnectionFactory } = {}) {
   const workers = [], sources = [], views = [];
@@ -396,7 +396,7 @@ test('parked and incomplete nodes do not load models, request microphone permiss
   assert.equal(f.session.view.state, 'running'); assert.equal(f.workers.length, 2); assert.equal(f.sources.length, 1);
   assert.deepEqual([...f.session.session.pipeline.entries.keys()], ['audio', 'speech', 'transcript']);
   assert.deepEqual(f.session.graph, graph); await f.session.stop();
-  const draft = { version: 8, nodes: graph.nodes.slice(3), edges: [] };
+  const draft = { version: GRAPH_VERSION, nodes: graph.nodes.slice(3), edges: [] };
   f.session.setGraph(draft); await f.session.start(42, { microphoneGesture: true });
   assert.match(f.session.view.error, /No executable path/); assert.equal(f.session.view.state, 'idle');
   assert.equal(f.workers.length, 2); assert.equal(f.sources.length, 1);

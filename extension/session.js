@@ -162,7 +162,6 @@ export class TabSession {
       this.cancel(); this.update({ status: 'Stopped before capture started.' }); return Promise.resolve();
     }
     const starting = this.view.state === 'starting';
-    for (const translation of session.translations || []) translation.discardProvisional();
     this.update({ state: 'stopping', status: 'Finalizing graph outputs…' });
     // Schedule before ending the source: onEnded can reenter stop().
     return session.stopping = Promise.resolve().then(async () => {

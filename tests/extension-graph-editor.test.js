@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GraphEditor } from '../extension/graph-editor.js';
-import { defaultGraph, edge, graphNode, NODE_TYPES } from '../extension/graph.js';
+import { defaultGraph, edge, graphNode, NODE_TYPES, nodeDefinition, validateGraph } from '../extension/graph.js';
 
 // Exercise the same transactional method used by both DOM connection gestures.
 function editor(graph = defaultGraph({ enabled: true })) {
@@ -11,7 +11,7 @@ function editor(graph = defaultGraph({ enabled: true })) {
 }
 function connect(editor, source, output, target, input) {
   editor.selected = { id: source, port: output, contract: NODE_TYPES[editor.draft.nodes.find(n => n.id === source).type].outputs[output] };
-  editor.connect(target, input, NODE_TYPES[editor.draft.nodes.find(n => n.id === target).type].inputs[input]);
+  editor.connect(target, input, nodeDefinition(editor.draft.nodes.find(n => n.id === target)).inputs[input]);
 }
 
 test('reconnect replaces only occupied input; identical connection is a no-op and old source fan-out survives', () => {
@@ -25,12 +25,11 @@ test('reconnect replaces only occupied input; identical connection is a no-op an
   connect(e, 'speech', 'provisional', 'translation', 'text'); assert.deepEqual(e.draft.edges, replacement);
 });
 
-test('type mismatch, self-connection, unknown ports, split correlated display and cycles preserve the prior edge', () => {
+test('type mismatch, self-connection, unknown ports, cycles preserve the prior edge', () => {
   const e = editor(), before = structuredClone(e.draft.edges);
   connect(e, 'audio', 'audio', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'translation', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'speech', 'final', 'translated-format', 'text'); assert.deepEqual(e.draft.edges, before);
-  assert.match(e.error, /matching direct outputs/);
   e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToTextReazonSpeech.outputs.final };
   e.connect('translation', 'text', NODE_TYPES.OpusMtJaEn.inputs.text); assert.deepEqual(e.draft.edges, before);
   assert.match(e.error, /Unknown port/);
@@ -65,4 +64,23 @@ test('Whisper editor connections reject the removed output and accept final for 
   assert.deepEqual(e.draft.edges, before);
   connect(e, 'speech', 'final', 'transcript', 'replace');
   assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript', 'replace')]);
+});
+
+
+test('formatter Add/Remove changes only that instance and the removed last wire; invalid template draft remains editable', () => {
+  const graph = defaultGraph(); graph.nodes.push(graphNode('TextFormatter', 'a'), graphNode('TextFormatter', 'b'));
+  graph.edges.push(edge('speech', 'final', 'a', 'input1'), edge('speech', 'final', 'a', 'input4'), edge('speech', 'final', 'b', 'input4'));
+  const e = editor(graph), a = graph.nodes.at(-2), b = graph.nodes.at(-1);
+  for (let i = 0; i < 3; i++) e.resizeFormatter(a, 1);
+  assert.equal(a.settings.inputCount, 7); assert.equal(b.settings.inputCount, 4);
+  assert.equal(Object.keys(nodeDefinition(a).inputs).length, 7);
+  a.settings.template = '{7}\n{1}'; e.resizeFormatter(a, -1);
+  assert.equal(a.settings.template, '{7}\n{1}'); assert.match(validateGraph(graph).join(' '), /Input \{7\} is not configured/);
+  assert.equal(graph.edges.length, 6, 'unaffected wires preserved');
+  e.resizeFormatter(a, 1); assert.deepEqual(validateGraph(graph), []);
+  for (let i = 0; i < 4; i++) e.resizeFormatter(a, -1);
+  assert.equal(a.settings.inputCount, 3);
+  assert.ok(graph.edges.some(route => route.to[0] === 'a' && route.to[1] === 'input1'));
+  assert.ok(!graph.edges.some(route => route.to[0] === 'a' && route.to[1] === 'input4'));
+  assert.ok(graph.edges.some(route => route.to[0] === 'b' && route.to[1] === 'input4'));
 });

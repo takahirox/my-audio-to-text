@@ -89,7 +89,7 @@ Tab Audio → Speech-to-Text → Transcript
 
 Speech-to-Text.final → Summarizer → Summary
 
-Speech-to-Text.provisional → Translator → Live translation
+Speech-to-Text.final → Translator → TextFormatter → Live translation
 
 Article/Text → Summarizer → Summary
 
@@ -147,8 +147,9 @@ orchestration only when real implementations demonstrate a need.
 The extension separates producer, formatting and display responsibilities. Any
 TEXT producer can connect to `LiveTextDisplay.replace` or `.append`; a bounded
 `TextFormatter` is optional. Live renders sink labels/output by active graph Node
-order, not ASR/translation identity. A narrow paired compatibility formatter
-preserves indexed translation history while still emitting only TEXT to Live.
-See [version 6 migration and exact display/formatting semantics](extension-graph.md).
+order, not ASR/translation identity. Translation exposes only grouped source/text/error
+primitives. Configurable TextFormatter composes latest values; LiveTextDisplay.append
+owns committed history. No status/index ports or model-specific formatter are needed.
+See [version 9 migration and exact display/formatting semantics](extension-graph.md).
 Independent streams update latest formatter values; only directly grouped
 `emitOutputs`/`receiveInputs` updates preserve one producer's association.

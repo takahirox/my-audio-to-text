@@ -1,17 +1,25 @@
-import { readGraph, saveGraph, defaultGraph, GRAPH_KEY } from './graph.js';
+import { readGraph, saveGraph, defaultGraph, GRAPH_KEY, GRAPH_RECOVERY_KEY } from './graph.js';
 import { GraphEditor } from './graph-editor.js';
 import { graphModelStatus } from './graph-model-status.js';
 
 const element = id => document.getElementById(id);
 const preparation = graphModelStatus(element('graph-models'));
-let graph, editor, base, recoveryGraph, conflict = false;
+let graph, editor, base, recoveryGraph, migrationError, conflict = false;
 try { graph = readGraph(localStorage); }
 catch (error) {
-  recoveryGraph = error.recoveryGraph;
+  recoveryGraph = error.recoveryGraph; migrationError = true;
   element('errors').textContent = `Saved graph unavailable: ${error.message}${recoveryGraph ? ' The affected graph is open as an unsaved repair draft.' : '. Reset draft and Save to recover.'}`;
   graph = defaultGraph();
 }
 base = localStorage.getItem(GRAPH_KEY);
+// A plain-text recovery copy is accessible before and after the reviewed Save.
+const recoveryCopy = document.createElement('details');
+const recoveryTitle = document.createElement('summary'); recoveryTitle.textContent = 'Original saved graph (migration recovery copy)';
+const recoveryText = document.createElement('textarea'); recoveryText.readOnly = true;
+recoveryText.setAttribute('aria-label', 'Original saved graph JSON');
+recoveryText.value = (migrationError ? base : '') || localStorage.getItem(GRAPH_RECOVERY_KEY) || '';
+recoveryCopy.hidden = !recoveryText.value; recoveryCopy.append(recoveryTitle, recoveryText);
+element('errors').after(recoveryCopy);
 async function persist(next) {
   const saved = await navigator.locks.request('processing-graph-save', async () => {
     if (conflict || localStorage.getItem(GRAPH_KEY) !== base) throw new Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');

@@ -132,7 +132,7 @@ translation or a quality guarantee. Empty input emits zero outputs; nonempty
 input emits one completed string. Playground requests are processed serially in
 arrival
 order through the Pipeline and worker queue. The extension wraps the same OPUS
-node with a session-owned provisional/final scheduling adapter and verified
+node with a session-owned committed FIFO scheduling adapter and verified
 cache-only loading; see [the extension guide](chrome-extension.md). Worker responses
 can contain zero
 or multiple strings; the adapter emits each in order before completing receive.

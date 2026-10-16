@@ -9,7 +9,6 @@ import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
 import { LiveTextDisplayNode, TextFormatterNode } from '../web/text-nodes.js';
-import { PairedTextFormatterNode } from './paired-text-formatter.js';
 import { executableGraph, INPUT_TYPES, ASR_TYPES } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 import { TextNode } from '../web/text-constant-node.js';
@@ -125,7 +124,6 @@ export function buildGraph(graph, options) {
         node = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'LiveTextDisplay': node = new LiveTextDisplayNode(state => options.onDisplay?.(spec.id, state), { appendConnected: description.edges.some(edge => edge.to[0] === spec.id && edge.to[1] === 'append') }); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
-      case 'PairedTextFormatter': node = new PairedTextFormatterNode(spec.settings); break;
       case 'OpusMtJaEn': case 'OpusMtEnJa':
         node = new TranslationSchedulerNode({ prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
           TranslationNode: spec.type === 'OpusMtEnJa' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,

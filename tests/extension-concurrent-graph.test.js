@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultGraph, graphNode, edge, validateGraph, graphWarnings, executableGraph, saveGraph, readGraph } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, validateGraph, graphWarnings, executableGraph, saveGraph, readGraph, GRAPH_VERSION } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 
 const store = () => { const values = new Map(); return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }; };
 
-test('large v8 drafts retain every Node, route, setting and position beyond old size limits', () => {
+test('large current drafts retain every Node, route, setting and position beyond old size limits', () => {
   const graph = defaultGraph();
   for (let index = 0; index < 100; index++) {
     graph.nodes.push(graphNode('LiveTextDisplay', `display-${index}`, 4500 + index * 300, 5000));
@@ -17,23 +17,23 @@ test('large v8 drafts retain every Node, route, setting and position beyond old 
 
 test('saveable incomplete paths do not contaminate a complete sibling, including incomplete correlated formatters', async () => {
   const graph = defaultGraph({ enabled: true });
-  graph.edges = graph.edges.filter(route => !(route.to[0] === 'translated-format' && route.to[1] === 'finalIndex'));
+  graph.edges = graph.edges.filter(route => route.to[0] !== 'translation');
   graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextWhisper', 'whisper'));
   graph.edges.push(edge('mic','audio','whisper','audio'));
   const storage = store(); saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
   assert.deepEqual(validateGraph(graph), []);
-  assert.match(graphWarnings(graph).join(' '), /finalIndex for correlated display/);
+  assert.match(graphWarnings(graph).join(' '), /translation.text/);
   const active = executableGraph(graph);
   assert.deepEqual(active.nodes.map(node => node.id), ['audio', 'speech', 'transcript']);
   const built = buildGraph(graph, {});
   assert.deepEqual([...built.speechNodes.keys()], ['speech']);
   assert.deepEqual([...built.audioSources.keys()], ['audio']); await built.pipeline.dispose();
-  graph.edges.find(route => route.to[1] === 'finalError').from = ['speech', 'final'];
-  assert.match(validateGraph(graph).join(' '), /matching direct outputs/);
+  graph.edges.find(route => route.to[1] === 'input3').from = ['speech', 'final'];
+  assert.deepEqual(validateGraph(graph), [], 'generic formatting accepts independent producers without claiming correlation');
 });
 
 test('constant text roots execute without audio or ASR, while drafts with no sink stay saveable', async () => {
-  const graph = { version: 8, nodes: [graphNode('Text','text'), graphNode('LiveTextDisplay','display')], edges: [edge('text','value','display','append')] };
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text','text'), graphNode('LiveTextDisplay','display')], edges: [edge('text','value','display','append')] };
   graph.nodes[0].settings.value = 'independent text';
   const states = [], built = buildGraph(graph, { onDisplay: (id, state) => states.push(state) });
   assert.equal(built.speechNodes.size, 0); assert.equal(built.audioSources.size, 0);

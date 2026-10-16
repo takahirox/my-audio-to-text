@@ -83,29 +83,36 @@ cancels preparation; Save again or use **Models** for
 recovery, diagnostics, voice-specific retry and deletion. No capture, inference or
 Workers start during Save. Runtime inference remains cache-only.
 
-Version 6 `SpeechToText` Nodes become `SpeechToTextReazonSpeech`, with no added
-ASR, changed IDs, settings, positions, edges or destinations.
-Version 1–7 descriptions migrate explicitly to version 8 using the same storage
-key. Legacy field sinks become focused TEXT sinks; extraction adapters reconnect
-every downstream route, preserving fan-out. Version 4 paired result edges first
-expand to primitive bundles. Version 5 `TranscriptView` becomes `LiveTextDisplay`
-with `provisional → replace` and `final → append`. Its direction becomes display
-language and the next-session direction preference. Plain `TranslationView`
-becomes a generic display with `provisionalText → replace` and `text → append`.
+Version 9 descriptions migrate versions 1–8 using the same storage key. Legacy
+field sinks become focused TEXT sinks, extraction adapters preserve downstream
+fan-out, and `SpeechToText` becomes `SpeechToTextReazonSpeech`. Legacy transcript
+views become `LiveTextDisplay` with provisional → replace and final → append,
+retaining display IDs/positions and deriving labels/language from old settings.
+Existing generic formatters acquire `inputCount: 4`, preserving every old reference.
 
-A paired `TranslationView` becomes a generic display with the same ID/position,
-plus a **Paired text formatter**. Every original source, status,
-index, error and text wire is redirected to this formatter. It formats indexed
-source/translation history into TEXT, feeding the display's `replace`. Pending
-rows update in place; repeated identical sources remain distinct; errors and
-cancellation remain visible. Translation direction comes from the connected
-processing Node, never the display label. Generated IDs avoid collisions.
-Descriptions do not persist text history; completed history within a session is
-retained through Stop/Cancel and saving a draft. A fresh Start resets outputs.
-Malformed or ambiguously correlated routes fail visibly without overwriting the
-saved description. Incomplete paired bundles remain saveable inactive drafts.
-There is no Node/edge count cap.
-Fix/import the desired routes or Reset and Save in Graph Editor to recover.
+Legacy `TranslationView` / `PairedTextFormatter` configurations transition to
+ordinary `TextFormatter` with three inputs and language labels in its template.
+Direct finalSource/text/finalError wires map to source/text/error → input1/2/3.
+All supported fan-out, unrelated routes, labels, positions and stored literal
+content survive. Provisional translation, public statuses/indices, and indexed
+whole-history pending/error updates are removed. Every affected route and behavior
+change appears in a migration report. A single formatter → display.replace route
+becomes append so each committed result appears once. Shared or other destinations
+keep their routes for explicit review of the new latest-result TEXT semantics.
+
+These behavior changes require a **reviewed migration**: the old saved graph stays
+untouched and cannot run; Graph Editor opens a converted **unsaved repair draft**.
+Review the report and reconnect unsupported routes deliberately, then Save.
+Before and after Save, expand **Original saved graph (migration recovery copy)**
+to copy the complete original JSON, including removed routes/configurations.
+After Save it is stored under `processing-graph-before-v9`; this backup remains
+across page reloads and later ordinary saves. To reattempt recovery, export this
+copy and import it in a compatible version or restore it to the graph storage key.
+Reset changes only the draft and still requires Save. Transcripts/history were
+never persisted in graph JSON; current-session committed output survives Stop/Cancel
+and draft saving, while a fresh Start begins empty. There is no Node/edge count cap.
+Malformed/ambiguous older routes fail visibly without overwriting the saved graph.
+
 Version 7 Whisper graphs remove only outgoing `Whisper.provisional` edges,
 which never produced events; no edge is redirected to final. All other nodes,
 routes, settings and positions are preserved. Destinations left without an input
@@ -117,7 +124,7 @@ Page/media handles are never saved with a graph.
 
 ## Supported graph and ports
 
-Version 8 is JSON with `version`, `nodes`, `edges`, and an optional
+Version 9 is JSON with `version`, `nodes`, `edges`, and an optional
 `translationDirection` legacy preference, preserved for stored-graph compatibility.
 Processor types and settings choose the actual models; this field never schedules weights.
 Each Node has `id`, concrete `type`, `settings`, and `position: { x, y }`.
@@ -136,9 +143,8 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | Number | — | value: NUMBER; editable finite constant |
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | replace / append: TEXT, individually optional | one labeled Live region; at least one input must connect |
-| TextFormatter | input1–input4: TEXT, individually optional | text: TEXT; at least one input must connect |
-| OpusMtJaEn / OpusMtEnJa | provisional (optional) / text: TEXT | successful provisional/text plus grouped source/status/error TEXT, finalIndex NUMBER |
-| PairedTextFormatter | complete translator final bundle, optional complete preview bundle | text: TEXT containing indexed source/translation/status history |
+| TextFormatter | input1…inputN: TEXT, instance-configured, individually optional | text: TEXT; at least one input must connect |
+| OpusMtJaEn / OpusMtEnJa | text: TEXT | source/text/error: TEXT, grouped committed results; no text on failure |
 | Supertonic3 / Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; configured language/voice |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | native audio player / WAV |
 
@@ -157,8 +163,7 @@ remain part of the stored format and concrete Port/runtime contracts.
 
 Start snapshots the saved description. A Node is ready when its required inputs
 have ready producers; input-consuming Nodes also need at least one available
-input. A paired formatter needs its complete correlated final bundle, plus a
-complete provisional bundle if any provisional ports are connected. Only ready
+input. Generic formatters need at least one connected TEXT input. Only ready
 ancestors of ready output sinks participate. Edges from incomplete branches into
 optional inputs remain saved and inactive. No edge is redirected or merged.
 Inactive sources/models/processors create no Workers, downloads, permission
@@ -283,8 +288,8 @@ emission, independent of property order. A later independent replace starts a ne
 preview: no source matching, deduplication or model knowledge is inferred.
 With append connected, Stop/Cancel discard the uncommitted preview and retain
 items. A replace-only display retains its current value for copying. Start uses
-fresh sink instances. The paired text formatter clears its own preview and
-retains completed history on Stop; Cancel marks pending rows canceled locally.
+fresh sink instances. TextFormatter owns only latest input values; all committed
+history stays in display items. Translation pending/Cancel emits no new rows.
 
 Live places configured outputs above its compact recording panel. Start, Stop
 (finalize pending work) and Cancel (discard pending work) retain their existing
@@ -309,32 +314,43 @@ render no text regions and add no implicit fallback display.
 
 ### Optional bounded formatting
 
-`TextFormatter` accepts up to four plain TEXT inputs. Its template (at most 2048
-characters) supports only `{1}`–`{4}`, literal labels/newlines and doubled braces:
-`{{` renders `{`, `}}` renders `}`. Other unescaped braces are invalid. For example,
-`Source: {1}` followed by a literal newline and `Result: {2}` composes two values.
-Absent values are empty strings; received empty strings explicitly clear values.
-Input text is substituted once, never interpreted as template syntax or HTML.
-There are no expressions, scripts, property access or full template engine.
+Select a `TextFormatter` heading and use **Add input** / **Remove last input**
+in Settings. Each instance starts with four TEXT inputs and can grow beyond four.
+Names stay `input1`, `input2`, …; removing deletes only the last port and its wire.
+Other ports/wires and other instances remain unchanged. References to removed
+inputs remain in the editable template and produce an actionable validation error;
+Save cannot overwrite the last valid graph until the template is fixed or the
+input restored. Added inputs begin absent/empty at the next session.
 
-Each input emission updates the latest values and emits one formatted TEXT string
-immediately. `receiveInputs()` applies a directly grouped `emitOutputs()` update
-once. Separate emissions/branches produce separate updates using cached latest
-values; they are **not automatically correlated**, even when strings or timings
-match. Use a direct grouped producer when association is required. Formatting is
-optional: ASR, translation, correction, LLM or another TEXT producer can feed a
-generic sink directly. Model availability only limits which production processors
-are currently exposed in Graph Editor.
+The multiline template (at most 2048 characters) accepts `{1}`, `{2}`, … up to
+the configured count, including multi-digit references. Literal labels, spaces,
+newlines and separators are preserved. `{{` renders `{` and `}}` renders `}`.
+Unknown references, zero/leading-zero indices, expressions and unmatched braces
+are invalid. For example, use `English: {1}` followed by a literal newline and
+`Japanese: {2}`. Incoming strings are data, substituted once, never recursively
+interpreted as template syntax, code or HTML. Absent inputs substitute empty
+strings; an incoming empty string explicitly clears that value. No output is
+emitted until an input arrives.
 
-`PairedTextFormatter` formats indexed source/translation history that a latest-value
-template cannot reproduce. It requires
-matching direct primitive outputs from one translator. It emits whole-history
-TEXT replacements, so pending/error/completed row updates never append duplicates.
-It is also used by the explicitly enabled bilingual configuration; Live has no
-paired-row renderer.
-New typed display sinks can later add their own contract, Node state and a small
-renderer keyed to the sink type. They need not bind Live to producer/model types.
-This iteration introduces no image/chart/video types, renderer SDK or event bus.
+Ordinary input updates emit immediately using latest values. An explicit direct
+`emitOutputs()` group produces one output and replaces only that producer's
+connected inputs together, clearing omitted siblings. Other producers' values
+remain unchanged. Independent streams and separate `emit()` calls are not
+correlated, even with equal strings or matching timing. Group provenance stays
+local to the delivery context, never travels as a structured port value across
+processors. Template/input edits apply at the next session; they emit nothing
+into an active graph and reset latest-value state on fresh Start.
+
+For committed bilingual display, wire ASR.final → OpusMtEnJa.text (or OpusMtJaEn),
+then source/text → input1/input2 and optionally error → input3. Set the template
+freely and connect formatter.text → display.append. Pending translation emits
+nothing; failure emits source/error with no successful text and clears the old
+translation in the directly connected formatter. Every completion/failure appends
+one readable result; repeated utterances stay distinct. Stop drains finals,
+Cancel adds no pending/canceled rows, and both retain completed display items.
+Use display.replace instead when only the latest value is desired. Generic
+formatting owns no history and has no model/language-specific rules.
+`PairedTextFormatter` is migration-only terminology, absent from palette/runtime.
 
 ## Concrete input and output targets
 
@@ -564,7 +580,7 @@ unused Number/Text configuration source when replacing the old ASR, or leave it
 parked. ReazonSpeech, Whisper and Zipformer can coexist with independent settings. Existing TEXT sinks and
 translation Nodes use the same contracts.
 
-The graph stays at version 8: no migration or rewriting of existing v8 graphs,
-IDs, settings, routes or positions is needed. Earlier migrations and the minimal
-ReazonSpeech default stay intact. See [model pins, fixed 12-second segments,
+Adding Zipformer needs no extra migration beyond the current version 9 graph.
+Unrelated ASR nodes, IDs, settings, routes and positions stay intact; earlier
+versions use the migration rules above. The minimal ReazonSpeech default remains. See [model pins, fixed 12-second segments,
 Stop/drain, setup and limitations](zipformer-node.md).
