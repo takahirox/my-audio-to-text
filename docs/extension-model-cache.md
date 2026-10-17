@@ -3,14 +3,16 @@
 Build/load the extension as described in [the extension guide](chrome-extension.md).
 Open **Models** from Live or Graph Editor, or **Extension options** from Chrome's
 extension menu. The options page manages real OPUS-MT Japanese → English,
-OPUS-MT English → Japanese, Supertonic 3 and Kokoro in the existing verified cache.
+OPUS-MT English → Japanese, Supertonic 3, Kokoro, Parakeet v3 and Moonshine Medium English Streaming in the existing verified cache.
 ReazonSpeech ja-en and Silero VAD are labeled **Bundled** because their assets
 are packaged with the extension, with no optional download lifecycle.
 Opening Models checks files only. A successful valid **Save graph** in Graph Editor
-prepares the optional weights required by actual saved OPUS-MT/TTS Node types and
+prepares the optional weights required by actual saved OPUS-MT/TTS/optional-ASR Node types and
 voices, including parked Nodes. Repeated equivalent Nodes are deduplicated; each
 direction and voice remains independent, with shared verified files reused.
-Packaged ASR assets are unchanged. Editing/loading alone and failed validation or
+Existing packaged ASR assets are unchanged. The optional [Parakeet v3 / Moonshine
+Medium Streaming Nodes](optional-asr-nodes.md) prepare 1.26 GB / 305 MB after Save;
+the editor shows memory, GPU and storage guidance before Save. Editing/loading alone and failed validation or
 storage never trigger preparation. Storage finishes before preparation; download
 failure does not roll it back. No capture, inference, Workers or remote executable
 code starts during preparation. Start/inference remain cache-only.

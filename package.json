@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "setup:extension": "npm ci && npm run prepare:assets && npm run prepare:translation-assets && npm run prepare:whisper-assets && npm run prepare:tts-assets && npm run prepare:zipformer-assets && npm run build:extension",
+    "setup:extension": "npm ci && npm run prepare:assets && npm run prepare:translation-assets && npm run prepare:whisper-assets && npm run prepare:tts-assets && npm run prepare:zipformer-assets && npm run prepare:optional-asr-assets && npm run build:extension",
     "build:extension": "python3 scripts/build-extension.py",
     "test:extension": "playwright test --config playwright.extension.config.js",
     "prepare:correction-assets": "python3 scripts/prepare-correction-assets.py",
@@ -19,9 +19,20 @@
     "prepare:whisper-assets": "python3 scripts/prepare-whisper-assets.py",
     "test:whisper-real": "WHISPER_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-whisper-smoke.spec.js",
     "prepare:zipformer-assets": "python3 scripts/prepare-zipformer-assets.py",
-    "test:zipformer-real": "ZIPFORMER_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-zipformer-smoke.spec.js"
+    "test:zipformer-real": "ZIPFORMER_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-zipformer-smoke.spec.js",
+    "prepare:optional-asr-assets": "python3 scripts/prepare-optional-asr-assets.py",
+    "test:optional-asr-real": "OPTIONAL_ASR_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-optional-asr*smoke.spec.js",
+    "prepare:optional-asr-test-models": "python3 scripts/prepare-optional-asr-test-models.py"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"
+  },
+  "dependencies": {
+    "@moonshine-ai/moonshine-wasm": "0.1.5",
+    "onnxruntime-web": "1.24.3",
+    "parakeet.js": "1.4.4"
+  },
+  "overrides": {
+    "onnxruntime-web": "1.24.3"
   }
 }

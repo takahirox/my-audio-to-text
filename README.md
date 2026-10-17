@@ -78,9 +78,16 @@ usage and real-model validation](docs/whisper-node.md). For real incremental Eng
 previews, opt into [English online Zipformer](docs/zipformer-node.md): connect
 `provisional → LiveTextDisplay.replace` and `final → LiveTextDisplay.append`.
 
+The extension also offers independent **Parakeet TDT 0.6B v3** (WebGPU, final
+TEXT only) and **Moonshine Medium Streaming English 245M** (CPU WASM, real
+provisional/final TEXT) Nodes. Save prepares their optional verified weights
+(1.26 GB / 305 MB). Budget substantial memory, especially for both together.
+See [setup, exact pins, licensing, limits and real-model tests](docs/optional-asr-nodes.md)
+and [packaged/native inference evidence](docs/evidence/optional-asr-121.md).
+
 Setup installs npm dependencies, downloads/verifies ReazonSpeech, Whisper and
 English Zipformer ASR models and prepares translation/TTS runtimes, then produces `dist/chrome-extension/`. Optional
-translation/TTS **weights** prepare after **Save graph** for saved processor Nodes;
+translation/TTS and optional ASR **weights** prepare after **Save graph** for saved processor Nodes;
 Models provides **Download / retry**, diagnostics and deletion. Open `chrome://extensions`, enable **Developer mode**, choose
 **Load unpacked** and select `dist/chrome-extension`. With assets already
 prepared, run `npm run build:extension` after source changes, then click

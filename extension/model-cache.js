@@ -1,4 +1,5 @@
 import { ModelAssetCache, storagePersistence } from './model-asset-cache.js';
+import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
 import { ttsManifest } from './tts-cache.js';
@@ -10,6 +11,8 @@ const cards = [];
 let closed = false, savedNodes = [];
 try { savedNodes = readGraph(localStorage).nodes; } catch { /* Models can recover assets even with a broken saved graph. */ }
 const definitions = [
+  { id: 'parakeet-v3', title: 'Parakeet TDT 0.6B v3', size: '1.26 GB download; allow 3 GB storage, 6 GB free RAM/GPU memory. WebGPU shader-f16 required.', manifest: parakeetManifest, terms: 'NVIDIA · CC BY 4.0 · ysdede/istupakov ONNX conversion', url: 'https://huggingface.co/ysdede/parakeet-tdt-0.6b-v3-onnx' },
+  { id: 'moonshine-medium-en', title: 'Moonshine Medium Streaming English (245M)', size: '305 MB download; allow 700 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineManifest, terms: 'Moonshine AI / Useful Sensors · MIT', url: 'https://moonshine-voice.readthedocs.io/en/latest/models/available-models/' },
   { id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', size: 'About 239 MB', manifest: opusMtManifest, terms: 'Helsinki-NLP / ONNX Community · CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
   { id: 'opus-en-ja', title: 'OPUS-MT · English → Japanese', size: 'About 253 MB', manifest: englishToJapaneseOpusMtManifest, terms: 'Helsinki-NLP / Kadonox ONNX conversion · Apache 2.0', url: 'https://huggingface.co/Helsinki-NLP/opus-tatoeba-en-ja' },
   { id: 'supertonic3', type: 'Supertonic3', title: 'Supertonic 3', size: 'About 399 MB', voices: ['F1', 'M1'], terms: 'OpenRAIL-M weights and voices', url: '../web/licenses/tts-notices.txt' },

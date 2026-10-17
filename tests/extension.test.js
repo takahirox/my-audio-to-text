@@ -287,6 +287,10 @@ with tempfile.TemporaryDirectory() as tmp:
     zip_spec = {'files': [], 'bundle': zip_entries}
     (root / 'scripts/zipformer-assets.json').write_text(json.dumps(zip_spec))
     (zipformer / 'manifest.json').write_text(json.dumps({'specification': zip_spec, 'files': zip_entries}))
+    optional = root / 'web/vendor/optional-asr'
+    optional.mkdir()
+    (optional / 'fixture.wasm').write_bytes(content)
+    (root / 'scripts/optional-asr-runtime.json').write_text(json.dumps({'files': [{'path': 'fixture.wasm', 'packagedSha256': hashlib.sha256(content).hexdigest()}]}))
     build.main()
     target = root / 'dist' / 'chrome-extension'
     assert {'pipeline.js', 'transcription-nodes.js'} <= set(build.SHARED_FILES)

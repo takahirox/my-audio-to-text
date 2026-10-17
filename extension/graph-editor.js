@@ -64,6 +64,7 @@ export class GraphEditor {
     this.helpButton = button('Help', 'graph-help', () => this.help.showModal());
     this.help.onclose = () => this.helpButton.focus();
     toolbar.append(this.saveButton, this.summary, this.paletteButton, this.actions, this.helpButton);
+    this.assetNotice = el('p'); this.assetNotice.id = 'graph-asset-notice'; this.assetNotice.hidden = true;
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
     this.workspace = el('div', undefined, 'graph-workspace');
     this.palette = el('aside', undefined, 'graph-palette'); this.palette.id = 'graph-palette'; this.palette.hidden = true; this.palette.setAttribute('aria-label', 'Node palette');
@@ -105,7 +106,7 @@ export class GraphEditor {
     this.zoomControl.value = '1'; this.zoomControl.onchange = () => { this.zoom = Number(this.zoomControl.value); this.draw(); };
     zoomLabel.append(this.zoomControl); viewportActions.append(zoomLabel, button('Fit graph', 'graph-fit', () => this.fit()));
     viewport.append(viewportActions, this.scroll); this.workspace.append(viewport, this.inspector, this.palette);
-    root.replaceChildren(toolbar, this.errors, this.workspace, this.help);
+    root.replaceChildren(toolbar, this.assetNotice, this.errors, this.workspace, this.help);
     root.addEventListener('keydown', event => {
       const wire = event.target.closest('.graph-wire');
       if (event.key === 'Escape') {
@@ -181,6 +182,8 @@ export class GraphEditor {
   setActive(graph, state, tabId) { this.active = graph; this.state = state; this.tabId = tabId; this.updateSummary(); }
   updateSummary() {
     const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(this.saved);
+    const notices = [...new Set(this.draft.nodes.map(node => NODE_TYPES[node.type]?.preparationNotice).filter(Boolean))];
+    this.assetNotice.hidden = !notices.length; this.assetNotice.textContent = notices.join(' ') + (notices.length > 1 ? ' For both together, allow at least 12 GB free memory. Device needs vary.' : ' Device needs vary.');
     this.summary.textContent = `${this.isDirty() ? 'Unsaved draft' : 'Saved graph'} · ${running ? `Active${Number.isInteger(this.tabId) ? ` · tab ${this.tabId}` : ''}${pending ? ' · earlier graph; saved edits apply next session' : ''}` : 'No active recording'}`;
     if (this.externalChange) this.summary.textContent += ' · Saved graph changed elsewhere; draft kept. Load saved before saving.';
     this.summary.classList.toggle('graph-conflict', !!this.externalChange);
