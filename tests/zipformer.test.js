@@ -75,7 +75,7 @@ test('typed graph, opt-in definition and runtime assembly preserve v8 defaults, 
   const built = buildGraph(graph, {}); assert.ok(built.speechNodes.get('speech') instanceof SpeechToTextZipformerEnNode); await built.pipeline.dispose();
   for (const type of ASR_TYPES) {
     const saved = defaultGraph(); saved.nodes[1].type = type;
-    if (type === 'SpeechToTextWhisper') saved.edges = saved.edges.filter(e => e.from[1] !== 'provisional');
+    if (!Object.hasOwn(NODE_TYPES[type].outputs, 'provisional')) saved.edges = saved.edges.filter(e => e.from[1] !== 'provisional');
     const raw = JSON.stringify(saved), storage = { getItem: key => key === GRAPH_KEY ? raw : null, setItem() { throw Error('v8 must not rewrite'); } };
     assert.deepEqual(readGraph(storage), saved); assert.equal(migrateGraph(saved), saved);
   }

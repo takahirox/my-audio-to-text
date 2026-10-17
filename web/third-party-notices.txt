@@ -101,3 +101,34 @@ English streaming Zipformer 20M (2023-02-17, epoch 99)
   derived from LibriVox recordings. Corpus license CC BY 4.0: https://www.openslr.org/12
   https://creativecommons.org/licenses/by/4.0/
   See docs/zipformer-node.md for pins, sizes, supported configuration and evidence.
+
+Optional extension Parakeet TDT 0.6B v3
+  NVIDIA Parakeet TDT 0.6B v3, CC BY 4.0.
+  https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+  ONNX conversion: ysdede/parakeet-tdt-0.6b-v3-onnx at
+  f88260fa0777fe0868dda6df85d1a98f012a4a7a, based on istupakov's v3 conversion
+  at 8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce.
+  FP16 encoder (cast-fixed derivative), int8 decoder, JS mel preprocessing.
+  Full license: ./licenses/parakeet-v3-cc-by-4.0.txt
+  Conversion attribution retained: ./licenses/parakeet-v3-attribution.md
+  Retain NVIDIA and converter attribution, CC BY link, and identify modifications.
+  parakeet.js 1.4.4 (Yunus Seyhan Dede), MIT; pinned ORT Web 1.24.3, MIT.
+  Runtime licenses: ./vendor/optional-asr/parakeet.js-LICENSE and
+  ./licenses/optional-asr-onnxruntime.txt.
+  Local changes to parakeet.js: packaged ORT import/paths; sequential strict-GPU
+  session initialization. No model changes beyond the upstream conversion.
+
+Optional extension Moonshine Voice English Medium Streaming (245M)
+  Useful Sensors, Inc. / Moonshine AI; English streaming weights and runtime MIT.
+  Official dated quantized_26_07_30 checkpoint, pinned by file/chunk SHA-256.
+  @moonshine-ai/moonshine-wasm 0.1.5, source commit
+  234f60faa0eb388b01cdf7e60aca232af37aefda.
+  https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/
+  License: ./licenses/moonshine.txt
+  Bundled dependency notices and source availability (including unmodified
+  MPL-covered Eigen): ./licenses/moonshine-third-party.txt
+  WASM binary unchanged. Generated JS adapts two Emscripten invoker factories
+  to ordinary closures for MV3 CSP; scripts/moonshine-csp.py records the changes.
+  Neither model's weights are bundled by setup/build. Save graph prepares only
+  saved-node requirements; inference is local/cache-only. Exact pins, download
+  sizes, source/terms review and measured limits: docs/optional-asr-nodes.md.

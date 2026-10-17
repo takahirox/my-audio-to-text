@@ -8,13 +8,14 @@ import { buildGraph } from './graph-runtime.js';
 export class TabSession {
   constructor(render, {
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
-    sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory,
+    sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph({ enabled: false }),
     ttsWorkerFactory, prepareTts, onSynthesizedAudio = () => {},
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
   } = {}) {
+    this.parakeetWorkerFactory = parakeetWorkerFactory; this.moonshineWorkerFactory = moonshineWorkerFactory;
     this.whisperWorkerFactory = whisperWorkerFactory; this.zipformerWorkerFactory = zipformerWorkerFactory;
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
     this.pageConnectionFactory = pageConnectionFactory; this.targets = {}; this.outputTarget = null;
@@ -73,7 +74,7 @@ export class TabSession {
             this.update({ targetStatus: statuses.join('\n') });
           }
         },
-        workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, zipformerWorkerFactory: this.zipformerWorkerFactory, sourceFactory: this.sourceFactory,
+        workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, zipformerWorkerFactory: this.zipformerWorkerFactory, parakeetWorkerFactory: this.parakeetWorkerFactory, moonshineWorkerFactory: this.moonshineWorkerFactory, sourceFactory: this.sourceFactory,
         translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
         ttsWorkerFactory: this.ttsWorkerFactory, prepareTts: this.prepareTts,
         onTtsState: ttsStatus => { if (this.session === session) this.update({ ttsStatus }); },
@@ -82,7 +83,10 @@ export class TabSession {
         },
         onSpeechEvent: (event, id) => {
           if (this.session !== session) return;
-          if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: `${id}: ${event.message}` });
+          if (event.type === 'error' && event.branchUnavailable) {
+            session.asrErrors ||= {}; session.asrErrors[id] = event.message;
+            this.update({ error: Object.entries(session.asrErrors).map(([id, message]) => `${id}: ${message}`).join('\n') });
+          } else if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: `${id}: ${event.message}` });
           else if (event.type === 'error' && session.pipeline?.state === 'idle') this.fail(`${id}: ${event.message}`);
         },
         onDisplay: (id, state) => {

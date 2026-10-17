@@ -7,6 +7,8 @@ import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_FILES = (
+    "optional-asr-core.js", "optional-asr-node.js", "parakeet-v3-node.js", "parakeet-v3-worker.js", "parakeet-v3-segments.js",
+    "moonshine-medium-node.js", "moonshine-medium-worker.js", "moonshine-medium-stream.js",
     "zipformer-node.js", "zipformer-worker.js", "zipformer-core.js", "zipformer-segments.js", "zipformer-config.js",
     "whisper-node.js", "whisper-worker.js", "whisper-config.js", "text-constant-node.js",
     "pipeline.js", "port-contracts.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
@@ -45,6 +47,11 @@ def main():
         asset = vendor / "zipformer-en" / entry["path"]
         if not asset.is_file() or asset.stat().st_size != entry["bytes"] or hashlib.sha256(asset.read_bytes()).hexdigest() != entry["sha256"]:
             raise SystemExit("Invalid pinned English Zipformer asset; prepare assets again.")
+    optional = json.loads((ROOT / "scripts/optional-asr-runtime.json").read_text())
+    for entry in optional["files"]:
+        asset = vendor / "optional-asr" / entry["path"]
+        if not asset.is_file() or hashlib.sha256(asset.read_bytes()).hexdigest() != entry["packagedSha256"]:
+            raise SystemExit("Missing or invalid optional ASR runtime. Run npm run prepare:optional-asr-assets.")
     tts = ROOT / "web" / "tts-assets"
     if any(not (tts / name).is_file() for name in (
             "ort.mjs", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm",

@@ -5,7 +5,8 @@ on which you invoke its toolbar action. It uses the same ReazonSpeech ja-en,
 Silero VAD and hayamimi utterance policy as the [Node Playground speech test page](node-playground.md). There is no
 recognition server. Graph Editor also offers local multilingual Whisper tiny for
 English or Text-driven Japanese recognition; see [Whisper setup and testing](whisper-node.md). For incremental English previews,
-choose [Streaming Zipformer English ASR](zipformer-node.md). The default whole-tab
+choose [Streaming Zipformer English ASR](zipformer-node.md), or opt into the independent
+[Parakeet v3 and Moonshine Medium Streaming Nodes](optional-asr-nodes.md). The default whole-tab
 graph needs no page injection or
 media picker. Optional microphone, selected media and page-field outputs are
 configured in Graph Editor and explicitly targeted in Live.
@@ -61,7 +62,8 @@ npm run setup:extension
 ```
 
 It runs `npm ci`, `prepare:assets`, `prepare:translation-assets`,
-`prepare:whisper-assets`, `prepare:tts-assets`, `prepare:zipformer-assets` and
+`prepare:whisper-assets`, `prepare:tts-assets`, `prepare:zipformer-assets`,
+`prepare:optional-asr-assets` and
 `build:extension` in that order, stopping at the first
 failure. ASR preparation recreates `web/vendor/`, so translation preparation
 must follow it. The individual npm scripts remain available.
@@ -73,8 +75,10 @@ verifies the pinned ASR models and runtimes, staging an approximately
 nodes, core, workers, configuration, capture helpers, models and license notices
 into `dist/chrome-extension/`. Translation preparation adds about 28 MB of
 checksum-pinned runtime JS/MJS/WASM. TTS preparation stages about 77 MB of reviewed
-runtimes/frontends plus corresponding source. Optional OPUS-MT translation and
-TTS **weights** are prepared after a successful **Save graph** for saved processor
+runtimes/frontends plus corresponding source. Optional ASR preparation adds about
+41 MB of pinned runtimes, with the CSP adaptation and licenses described in
+[optional ASR setup](optional-asr-nodes.md); the 1.26 GB / 305 MB weights stay out of the bundle. Optional OPUS-MT translation and
+TTS and optional Parakeet/Moonshine ASR **weights** are prepared after a successful **Save graph** for saved processor
 Nodes, or through **Download / retry** in Models; setup does not download or bundle them. These generated files are
 ignored by Git.
 

@@ -71,7 +71,9 @@ After a successful valid **Save graph**, the editor automatically prepares optio
 OPUS-MT and TTS weights selected by every saved model-bearing Node, including
 parked/unconnected Nodes. Duplicate equivalent Nodes share one preparation;
 Supertonic language settings share weights, while each distinct TTS voice is prepared.
-Packaged ASR assets need no runtime preparation. Per-model status and byte progress
+Existing packaged ASR assets need no runtime preparation. Optional Parakeet v3
+and Moonshine Medium Streaming weights follow saved-node preparation, including
+parked Nodes; [download/memory guidance](optional-asr-nodes.md) appears before Save. Per-model status and byte progress
 appear below the graph, with **Cancel preparation**, **Retry preparation** and
 **Check cache**. **Ready · Cached and verified** requires the complete pinned set.
 Graph storage finishes first; download errors do not undo Save. Validation or
@@ -139,6 +141,8 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | MicrophoneAudio | — | audio: explicitly permitted microphone PCM |
 | FocusedInputTextOutputNode | text: TEXT | append verbatim to focused editable field |
 | Text | — | value: TEXT; editable literal string, including empty |
+| SpeechToTextParakeetV3 | audio: PCM | final: TEXT only |
+| SpeechToTextMoonshineMediumEn | audio: PCM | provisional: TEXT; final: TEXT |
 | SpeechToTextWhisper | audio: PCM; language: TEXT (optional startup en/ja, defaults to en) | final: TEXT only |
 | Number | — | value: NUMBER; editable finite constant |
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
@@ -197,7 +201,9 @@ order. Cancel invalidates queued emissions and releases all models/captures,
 including partial loading and late permission grants; repeat starts fresh. Capture
 signals and model progress/errors include Node IDs. Fatal capture/ASR errors retain
 the existing fail-session policy, release all resources and allow retry; translation,
-TTS and field-output availability remain branch-local failures.
+TTS, field-output and optional Parakeet/Moonshine ASR availability remain
+branch-local failures. A failed optional ASR clears its preview and reports its
+Node ID/recovery instructions while peer paths continue.
 
 Tab audio may already contain the local speaker, and microphones may pick up
 speaker playback. Independent displays do not promise speaker separation or echo
@@ -584,3 +590,13 @@ Adding Zipformer needs no extra migration beyond the current version 9 graph.
 Unrelated ASR nodes, IDs, settings, routes and positions stay intact; earlier
 versions use the migration rules above. The minimal ReazonSpeech default remains. See [model pins, fixed 12-second segments,
 Stop/drain, setup and limitations](zipformer-node.md).
+
+## Optional Parakeet v3 and Moonshine Medium Streaming
+
+Search Add Node for Parakeet or Moonshine. These independent concrete Nodes use
+the same normalized audio sources and final TEXT fan-out as existing ASRs.
+Parakeet exposes final only; Moonshine exposes demonstrated native provisional
+and final. Both can coexist without changing Graph v9 or the default graph.
+Save prepares the saved Nodes' checksum-pinned optional weights, including parked
+Nodes. See [model-specific setup, GPU/memory limits, endpointing and lifecycle](optional-asr-nodes.md)
+and [real packaged/concurrent/native validation](evidence/optional-asr-121.md).

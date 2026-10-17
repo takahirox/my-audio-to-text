@@ -1,16 +1,19 @@
 import { ModelAssetCache } from './model-asset-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
+import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
 import { ttsManifest } from './tts-cache.js';
 
 // Follow every saved model-bearing Node, including parked Nodes. Language does
-// not change Supertonic's weights; its voice does. ASR assets stay packaged.
+// not change Supertonic's weights; its voice does. Existing ASR assets stay packaged; optional ASR weights follow Save.
 export function graphModelRequirements(graph) {
   const requirements = new Map();
   for (const node of graph.nodes) {
     let requirement;
     if (node.type === 'OpusMtJaEn') requirement = { key: 'opus-ja-en', id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', manifest: opusMtManifest };
     else if (node.type === 'OpusMtEnJa') requirement = { key: 'opus-en-ja', id: 'opus-en-ja', title: 'OPUS-MT · English → Japanese', manifest: englishToJapaneseOpusMtManifest };
+    else if (node.type === 'SpeechToTextParakeetV3') requirement = { key: 'parakeet-v3', id: 'parakeet-v3', title: 'Parakeet v3 · 1.26 GB download · WebGPU shader-f16 · allow 6 GB RAM/GPU memory, 3 GB storage', manifest: parakeetManifest };
+    else if (node.type === 'SpeechToTextMoonshineMediumEn') requirement = { key: 'moonshine-medium-en', id: 'moonshine-medium-en', title: 'Moonshine Medium English Streaming · 305 MB download · CPU WASM · allow 2 GB RAM, 700 MB storage', manifest: moonshineManifest };
     else if (['Supertonic3', 'Kokoro'].includes(node.type)) {
       const { type } = node, settings = { ...node.settings }, id = type.toLowerCase();
       requirement = { key: `${id}:${settings.voice}`, id, title: `${type === 'Supertonic3' ? 'Supertonic 3' : 'Kokoro'} · ${settings.voice}`,

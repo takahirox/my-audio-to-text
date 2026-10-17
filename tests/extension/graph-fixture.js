@@ -40,6 +40,23 @@ export const test = base.extend({
       for (const role of (whisperReal || concurrentReal ? [] : ['sherpa', 'silero'])) await writeFile(path.join(root, `web/${role}-worker.js`), `
         self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready'});if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});};`);
       if (!real) {
+        for (const key of ['parakeet-v3', 'moonshine-medium-en']) {
+          const file = `${key}-assets.json`, spec = JSON.parse(await readFile(path.join(root, 'extension', file), 'utf8'));
+          const body = Buffer.alloc(8192, 17); bodies.set(file, body);
+          spec.files = [{ path: 'weights.bin', bytes: body.length, sha256Chunks: [createHash('sha256').update(body).digest('hex')], sourceURL: `http://127.0.0.1:${server.address().port}/${file}` }];
+          await writeFile(path.join(root, 'extension', file), JSON.stringify(spec));
+        }
+        for (const file of ['parakeet-v3-worker.js', 'moonshine-medium-worker.js']) await writeFile(path.join(root, 'web', file), `
+          let session;
+          self.onmessage = ({data}) => {
+            if (data.type === 'load') postMessage({type:'ready'});
+            if (data.type === 'start') session = data.session;
+            if (data.type === 'fixture-final') postMessage({type:'final',session,id:data.id,text:data.text});
+            if (data.type === 'fixture-partial') postMessage({type:'partial',session,id:data.id,text:data.text});
+            if (data.type === 'fixture-error') postMessage({type:'error',session,message:'Controlled optional ASR error'});
+            if (data.type === 'audio') postMessage({type:'consumed',session,sequence:data.sequence});
+            if (data.type === 'stop') postMessage({type:'stopped',session});
+          };`);
         for (const file of ['opus-mt-assets.json', 'opus-mt-en-ja-assets.json', 'supertonic3-assets.json', 'kokoro-assets.json']) {
           const entries = JSON.parse(await readFile(path.join(root, 'extension', file), 'utf8')).map(entry => {
             const key = file + '/' + entry.path;

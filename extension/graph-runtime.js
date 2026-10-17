@@ -14,6 +14,8 @@ import { verifiedTtsCache } from './tts-cache.js';
 import { TextNode } from '../web/text-constant-node.js';
 import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
 import { SpeechToTextZipformerEnNode } from '../web/zipformer-node.js';
+import { SpeechToTextParakeetV3Node } from '../web/parakeet-v3-node.js';
+import { SpeechToTextMoonshineMediumEnNode } from '../web/moonshine-medium-node.js';
 import { NumberNode } from '../web/number-node.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
@@ -116,6 +118,10 @@ export function buildGraph(graph, options) {
         node = new ExtensionMicrophoneAudioNode(options.microphoneStreams?.get(spec.id), { onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'FocusedInputTextOutputNode':
         node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active) => options.onTargetState?.(spec.id, state, active) }); break;
+      case 'SpeechToTextParakeetV3':
+        node = new SpeechToTextParakeetV3Node({ workerFactory: options.parakeetWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
+      case 'SpeechToTextMoonshineMediumEn':
+        node = new SpeechToTextMoonshineMediumEnNode({ workerFactory: options.moonshineWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'SpeechToTextZipformerEn':
         node = new SpeechToTextZipformerEnNode({ workerFactory: options.zipformerWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'SpeechToTextWhisper':
