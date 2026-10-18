@@ -1,5 +1,9 @@
 # my-audio-to-text
 
+The Chrome extension also supports [local IfCondition branching](docs/if-condition-node.md):
+edit a natural-language condition and route the original TEXT to Yes or No with
+a small browser-local classifier. Save prepares its verified 14 MB model.
+
 A local-first composable processing system that connects reusable input and processing capabilities into pipelines for useful derived information.
 
 ## Current implemented capabilities

@@ -213,7 +213,7 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.editor.setViewportSize({ width: 1440, height: 1000 });
   await live.models.setViewportSize({ width: 1200, height: 1000 });
   await expect(live.models.getByText('ReazonSpeech ja-en · Bundled', { exact: true })).toBeVisible();
-  await expect(live.models.locator('.model-status')).toHaveText(Array(6).fill('Not downloaded'));
+  await expect(live.models.locator('.model-status')).toHaveText(Array(7).fill('Not downloaded'));
   expect(await live.models.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   if (process.env.UPDATE_UI_SCREENSHOTS) {
