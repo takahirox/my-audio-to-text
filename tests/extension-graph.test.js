@@ -184,9 +184,12 @@ test('direction and translation controls retain saved audio nodes; disabling tra
   assert.equal(withTranslation(audioGraph('Kokoro', true), { enabled: false, direction: 'en-ja' }).nodes.length, 3);
 });
 
-test('saved translation TEXT → actual Kokoro Node graph drains only completed finals in order, even with reordered edges', async () => {
+for (const type of ['OpusMtJaEn', 'TranslateGemmaEnJa']) test(`${type}: ASR final TEXT → actual formatter, field and Kokoro Nodes drains completed finals in order`, async () => {
   const graph = audioGraph('Kokoro', true); graph.edges.reverse();
-  const texts = [], audio = [], rows = [], workers = [];
+  graph.nodes.find(node => node.id === 'translation').type = type;
+  graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'field'));
+  graph.edges.push(edge('translation', 'text', 'field', 'text'));
+  const texts = [], fieldTexts = [], audio = [], rows = [], workers = [];
   const factory = () => url => {
     const worker = { url, released: false, postMessage(data) {
       queueMicrotask(() => {
@@ -203,8 +206,10 @@ test('saved translation TEXT → actual Kokoro Node graph drains only completed 
     workers.push(worker); return worker;
   };
   const built = buildGraph(graph, { tabId: 42, sourceFactory: () => ({ start() {}, stop() {} }),
+    outputTarget: { tabId: 42, documentId: 'owned-document', label: 'Test field' },
+    pageConnectionFactory: () => ({ request: async (type, value) => { if (type === 'append') fieldTexts.push(value.text); return { inserted: true }; }, close() {} }),
     workerFactory: factory(), translationWorkerFactory: factory(), ttsWorkerFactory: factory(),
-    prepareTranslation: async () => {}, prepareTts: async () => {}, onDisplay: (id, state) => { if (id === 'transcript') rows.splice(0, rows.length, ...state.items); },
+    prepareTranslation: async () => {}, prepareTranslateGemma: async () => {}, prepareTts: async () => {}, onDisplay: (id, state) => { if (id === 'transcript') rows.splice(0, rows.length, ...state.items); },
     onTranslation() {}, onTranslationState() {}, onSynthesizedAudio: value => audio.push(value) });
   await built.pipeline.start();
   built.speechNodes.get('speech').receiveEvent({ type: 'partial', text: 'provisional', id: 0 });
@@ -215,6 +220,7 @@ test('saved translation TEXT → actual Kokoro Node graph drains only completed 
   built.speechNodes.get('speech').receiveEvent({ type: 'final', text: long, id: 2 });
   await built.pipeline.stop(); await built.pipeline.dispose();
   assert.deepEqual(rows, ['one', 'two', long]); assert.deepEqual(texts.slice(0, 2), ['Translated one', 'Translated two']);
+  assert.deepEqual(fieldTexts, ['Translated one', 'Translated two', 'Translated ' + long]);
   assert.equal(texts.slice(2).join(''), 'Translated ' + long); assert.ok(texts.every(text => text.length <= 300 && !/[\uD800-\uDBFF]$/.test(text)));
   assert.equal(audio.length, texts.length);
   assert.ok(workers.every(worker => worker.released));

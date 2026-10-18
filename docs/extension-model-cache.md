@@ -3,11 +3,11 @@
 Build/load the extension as described in [the extension guide](chrome-extension.md).
 Open **Models** from Live or Graph Editor, or **Extension options** from Chrome's
 extension menu. The options page manages real OPUS-MT Japanese → English,
-OPUS-MT English → Japanese, Supertonic 3, Kokoro, Parakeet v3 and Moonshine Medium English Streaming in the existing verified cache.
+OPUS-MT English → Japanese, TranslateGemma 4B English ↔ Japanese, Supertonic 3, Kokoro, Parakeet v3 and Moonshine Medium English Streaming in the existing verified cache.
 ReazonSpeech ja-en and Silero VAD are labeled **Bundled** because their assets
 are packaged with the extension, with no optional download lifecycle.
 Opening Models checks files only. A successful valid **Save graph** in Graph Editor
-prepares the optional weights required by actual saved OPUS-MT/TTS/optional-ASR Node types and
+prepares the optional weights required by actual saved OPUS-MT/TranslateGemma/TTS/optional-ASR Node types and
 voices, including parked Nodes. Repeated equivalent Nodes are deduplicated; each
 direction and voice remains independent, with shared verified files reused.
 Existing packaged ASR assets are unchanged. The optional [Parakeet v3 / Moonshine
@@ -201,3 +201,21 @@ progress, cancellation, integrity failures/retry and Models recovery.
 See [Issue #67 validation evidence](evidence/extension-model-cache-67.md).
 No post-merge human acceptance gate is required. Optional follow-up work can
 measure real device persistence and multi-GB performance separately.
+
+### TranslateGemma 4B (#124)
+
+`TranslateGemmaEnJa` and `TranslateGemmaJaEn` share one pinned q4 manifest and
+cache: **3,111,911,678 bytes**, including both ONNX external-data shards and the
+translation template. Save prepares it only when either Node is saved (parked
+Nodes included). Models exposes a single TranslateGemma card with integrity
+checks, Cancel/retry and deletion. Opening Models never downloads weights.
+No weight fetch is allowed during recording: extension Workers disable remote
+loading and use only the verified allowlist. Save failures do not erase graphs;
+cache/quota/eviction failures require preparation and a fresh run.
+
+Allow 7 GB free storage and several GB free RAM/GPU memory, more for concurrent
+Nodes. Each Worker checks WebGPU and adapter support; load/inference errors
+report hardware/memory guidance without fallback. Read [Gemma notice and
+upstream terms](../web/licenses/gemma-notices.txt) before download/use; the public
+ONNX conversion remains subject to Google Gemma Terms and Prohibited Use Policy.
+See [provenance, manifest review and smoke commands](translation-nodes.md#translategemma-in-the-extension-124).

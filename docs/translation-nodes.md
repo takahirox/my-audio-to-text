@@ -3,9 +3,11 @@
 Checkpoint investigation preceded implementation. Each production processor has
 a fixed direction and plain string input/output. The original OPUS-MT and
 TranslateGemma nodes remain **Japanese → English**; #71 adds the independent
-`EnglishToJapaneseOpusMtTranslationNode` and `opus-mt-en-ja-worker.js`. The
-extension chooses one fixed Node before starting each session. TranslateGemma's underlying multilingual checkpoint
-can represent other directions, but this node exposes only the verified direction.
+`EnglishToJapaneseOpusMtTranslationNode` and `opus-mt-en-ja-worker.js`.
+Each configured translator fixes its direction before the session starts;
+multiple independent Nodes can coexist. #124 adds concrete English → Japanese
+and Japanese → English TranslateGemma Graph Editor Nodes sharing the same
+checkpoint. The original Playground Node remains Japanese → English.
 
 | Node | Immutable checkpoint | Execution | Weight assets |
 | --- | --- | --- | --- |
@@ -36,7 +38,11 @@ There are no floating CDN runtime imports. This version follows the compatible
 and its lockfile. The original `google/translategemma-4b-it` safetensors are not
 browser ONNX assets; the chosen conversion removes the image tower. Only text is
 accepted. The model-specific content object and pinned tokenizer chat template
-supply `source_lang_code: 'ja'` and `target_lang_code: 'en'`.
+supply `source_lang_code: 'ja'` / `target_lang_code: 'en'` for the original Node
+and `source_lang_code: 'en'` / `target_lang_code: 'ja'` for
+`EnglishToJapaneseTranslateGemmaTranslationNode`. Each concrete Node fixes its
+direction in the load request, validated inside the owned Worker; no global
+model/language setting or new conversion is needed.
 
 ## Attribution and distribution
 
@@ -131,7 +137,7 @@ that cap. This is a smoke/comparison surface for short text, not long-document
 translation or a quality guarantee. Empty input emits zero outputs; nonempty
 input emits one completed string. Playground requests are processed serially in
 arrival
-order through the Pipeline and worker queue. The extension wraps the same OPUS
+order through the Pipeline and worker queue. The extension wraps the same translation
 node with a session-owned committed FIFO scheduling adapter and verified
 cache-only loading; see [the extension guide](chrome-extension.md). Worker responses
 can contain zero
@@ -190,3 +196,76 @@ and immutable model URLs. All page/worker/runtime URLs must preserve
 `ASR_BASE_URL=https://takahirox.github.io/my-audio-to-text/` on the deployed origin
 if needed. Local prefix checks do not establish deployment. Do not close #71
 until this verification is recorded. The unpacked extension has no deployment gate.
+
+## TranslateGemma in the extension (#124)
+
+Graph version 9 adds `TranslateGemmaEnJa` (**TranslateGemma 4B English → Japanese**)
+and `TranslateGemmaJaEn` (**Japanese → English**). Defaults, existing OPUS-MT
+Nodes and migrations are unchanged. Add either processor; there is no translation
+preset. Connect `Text.value → TranslateGemmaEnJa.text → LiveTextDisplay.append`
+(using the processor's `text` output), or
+`ChromeTabAudio.audio → SpeechToTextZipformerEn.audio`,
+`SpeechToTextZipformerEn.final → TranslateGemmaEnJa.text`. English Whisper,
+Moonshine, Parakeet or ReazonSpeech final TEXT can feed the same input.
+
+For bilingual history, connect `source`, `text`, `error` directly to three
+`TextFormatter` inputs and set a template such as
+`English: {1}\nJapanese: {2}{3}`. Each completed result is grouped; failures
+emit source/error only and clear stale translation in the formatter. Successful
+`text` can fan out to plain Live, a focused field or Japanese TTS without a
+model-specific sink. Pending work and Cancel produce no text. Stop drains the
+committed FIFO; repeated input remains separate. Each active processor owns its
+Worker and GPU session; independent branches retain separate state and memory.
+
+Save graph persists first, then prepares only referenced optional model weights,
+including parked Nodes. Both Gemma directions share the same eight-file manifest,
+**3,111,911,678 bytes** including `chat_template.jinja`, and one cache identity.
+[`extension/translategemma-assets.json`](../extension/translategemma-assets.json)
+contains immutable URLs, whole-file SHA-256 and 1 MiB chunk hashes.
+`scripts/review-translategemma-assets.py` compares the committed manifest to
+upstream metadata, LFS hashes (or Git blob hashes for small files), and every
+downloaded byte; it never changes the manifest or downloads during build.
+Weights remain optional and outside the extension bundle.
+
+Allow **7 GB free storage** for weights and browser write overhead, plus several
+GB free RAM/GPU memory per active Node. These are planning estimates, not an
+availability guarantee. Models supports progress, Cancel, retry, deletion,
+persistence requests and integrity checks. Failed downloads never undo Save.
+Quota errors or eviction require recovery and a fresh session. Runtime verifies
+the cache, disables remote model loading, and serves optional missing files from
+a local missing-model path. There are no weight downloads during recording.
+All executable JS/MJS/WASM is packaged under the existing MV3 CSP, including the
+matching asyncify WebGPU loader. Worker GPU/adapter errors are explicit; runtime
+and memory failures have recovery guidance. There is no OPUS-MT/CPU/cloud fallback.
+
+Read [Gemma Terms of Use](https://ai.google.dev/gemma/terms),
+[Prohibited Use Policy](https://ai.google.dev/gemma/prohibited_use_policy) and the
+[packaged notice](../web/licenses/gemma-notices.txt) before Save/preparation or
+use. Gemma use constitutes agreement under the upstream terms; the application
+does not accept gated-repository terms on the user's behalf, collect tokens, or
+bypass access controls. If public asset access changes, preparation fails rather
+than circumventing it. The public text-only ONNX conversion does not remove
+Google's terms, policy or redistribution obligations. No weights are mirrored or
+redistributed by setup/build. Redistributing weights/derivatives requires the
+full agreement, notice, enforceable restrictions and applicable modification
+notices specified upstream.
+
+Real packaged MV3 verification (no model/inference mocks):
+
+```sh
+npm run setup:extension
+TRANSLATEGEMMA_SMOKE=1 npm run test:extension -- tests/extension/translategemma-smoke.spec.js
+```
+
+This prepares 3.112 GB from the pinned public URLs through Save, reuses the cache
+on a second Save, and runs semantic conversational/meeting fixtures online and
+offline on fresh Workers, plus Japanese → English. Set `EXTENSION_HEADED=1`
+if the local headless browser lacks hardware WebGPU. The optional
+`TRANSLATEGEMMA_ASSET_DIR=.cache/translategemma` uses already reviewed real bytes
+from a loopback asset mirror with unchanged hashes (no model/runtime replacement);
+run `python3 scripts/review-translategemma-assets.py` first. Public URL CORS/COEP
+is checked separately in that mode. Tests record hardware limitations honestly;
+no skipped device check counts as inference success. See
+[#124 evidence](evidence/translation-124.md). These fixtures are meaning checks,
+not comparative quality evidence. Any OPUS-MT quality comparison remains a
+separate user evaluation. No post-merge-only check is introduced by #124.

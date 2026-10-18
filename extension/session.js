@@ -11,7 +11,7 @@ export class TabSession {
     sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph({ enabled: false }),
-    ttsWorkerFactory, prepareTts, onSynthesizedAudio = () => {},
+    ttsWorkerFactory, prepareTts, prepareTranslateGemma, onSynthesizedAudio = () => {},
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
   } = {}) {
@@ -19,7 +19,7 @@ export class TabSession {
     this.whisperWorkerFactory = whisperWorkerFactory; this.zipformerWorkerFactory = zipformerWorkerFactory;
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
     this.pageConnectionFactory = pageConnectionFactory; this.targets = {}; this.outputTarget = null;
-    this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation;
+    this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation; this.prepareTranslateGemma = prepareTranslateGemma;
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
     const preferences = graphPreferences(this.graph);
     this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, displays: {}, ttsStatus: '', targetStatus: '', translationStatus: 'Translation off' };
@@ -51,7 +51,7 @@ export class TabSession {
     const session = { microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
     session.started = new Promise(resolve => { session.markStarted = resolve; });
     this.session = session;
-    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Loading local OPUS-MT…' : 'Translation off', status: graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
+    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Preparing local translation…' : 'Translation off', status: graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
     try {
       if (microphones.length) {
         // Request directly from the explicit Start action, before loading models.
@@ -76,6 +76,7 @@ export class TabSession {
         },
         workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, zipformerWorkerFactory: this.zipformerWorkerFactory, parakeetWorkerFactory: this.parakeetWorkerFactory, moonshineWorkerFactory: this.moonshineWorkerFactory, sourceFactory: this.sourceFactory,
         translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
+        prepareTranslateGemma: this.prepareTranslateGemma,
         ttsWorkerFactory: this.ttsWorkerFactory, prepareTts: this.prepareTts,
         onTtsState: ttsStatus => { if (this.session === session) this.update({ ttsStatus }); },
         onSynthesizedAudio: (audio, signal) => {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage checksum-pinned browser runtimes; model weights download only on Run."""
+"""Stage pinned runtimes only; weights follow Playground Run or extension Save."""
 import hashlib
 import io
 import shutil

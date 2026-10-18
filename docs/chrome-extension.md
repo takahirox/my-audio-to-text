@@ -42,7 +42,7 @@ The extension has three screens with a consistent dark appearance:
   require Load saved before saving. Load/reset confirm before discarding edits.
 - **Models** opens a dedicated tab (also Chrome's Extension options page), with
   bundled ReazonSpeech/Silero labels and verified cache controls for both OPUS-MT
-  directions and Supertonic 3/Kokoro voices. Opening it never downloads weights.
+  directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Opening it never downloads weights.
 
 Navigation opens auxiliary tabs while Live continues to own the active capture.
 **Live window** focuses the existing recorder without invoking capture. Closing
@@ -77,7 +77,7 @@ into `dist/chrome-extension/`. Translation preparation adds about 28 MB of
 checksum-pinned runtime JS/MJS/WASM. TTS preparation stages about 77 MB of reviewed
 runtimes/frontends plus corresponding source. Optional ASR preparation adds about
 41 MB of pinned runtimes, with the CSP adaptation and licenses described in
-[optional ASR setup](optional-asr-nodes.md); the 1.26 GB / 305 MB weights stay out of the bundle. Optional OPUS-MT translation and
+[optional ASR setup](optional-asr-nodes.md); the 1.26 GB / 305 MB weights stay out of the bundle. Optional OPUS-MT / TranslateGemma translation and
 TTS and optional Parakeet/Moonshine ASR **weights** are prepared after a successful **Save graph** for saved processor
 Nodes, or through **Download / retry** in Models; setup does not download or bundle them. These generated files are
 ignored by Git.
@@ -314,7 +314,7 @@ Input text is sent only to the owned local Worker. OPUS-MT / Helsinki-NLP and ON
 Community attribution and CC BY 4.0, plus English → Japanese base Apache 2.0
 terms and Kadonox attribution, are shown next to the download control; see
 [translation nodes](translation-nodes.md) for the pinned runtime archive hashes,
-model limitations and license details. TranslateGemma is not integrated.
+model limitations and license details. TranslateGemma 4B is also available as concrete English → Japanese / Japanese → English Nodes; see the TranslateGemma section below.
 
 ### Translation checks
 
@@ -353,3 +353,26 @@ do not establish translation. The English → Japanese Worker recases uppercase
 English for inference; the copyable original and paired source stay unchanged.
 No post-merge verification is required for the
 unpacked extension; Web Store distribution is separate future work.
+
+## TranslateGemma 4B English → Japanese
+
+Add **TranslateGemma 4B English → Japanese** in Graph Editor. Connect
+`ChromeTabAudio → English ASR.final → TranslateGemma.text`; connect its completed
+`text` to `LiveTextDisplay.append`, a focused field or Japanese TTS. For a
+controlled text test, connect `Text.value → TranslateGemma.text → Live.append`.
+For bilingual display, connect `source/text/error` directly to a `TextFormatter`
+and then Live. Japanese → English is a separate Node using the same weights.
+No preset or global language/model switch is added.
+
+Before Save/use, read the linked Gemma Terms and Prohibited Use Policy in
+**Help / Models**. Save prepares **3.112 GB** of optional weights only when the
+graph contains either Gemma Node, including parked Nodes; both directions reuse
+one verified cache. Allow **7 GB free storage**, several GB free RAM/GPU memory
+and supported **Worker WebGPU**. Each active Node owns a separate GPU session.
+Save remains successful if preparation fails; use Cancel/retry or Models for
+recovery. Recording never fetches weights. GPU/adapter/memory failures are visible;
+there is no CPU, OPUS-MT or remote fallback. The public ONNX conversion remains
+subject to Google's upstream terms. See [runtime, provenance, terms and real-test
+commands](translation-nodes.md#translategemma-in-the-extension-124) and
+[#124 validation evidence](evidence/translation-124.md). No translation-quality
+superiority to OPUS-MT is assumed.
