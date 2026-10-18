@@ -3,6 +3,7 @@ import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
 import { translateGemmaManifest } from './translategemma-cache.js';
 import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
+import { ifConditionManifest } from './if-condition-cache.js';
 import { ttsManifest } from './tts-cache.js';
 
 // Follow every saved model-bearing Node, including parked Nodes. Language does
@@ -11,7 +12,8 @@ export function graphModelRequirements(graph) {
   const requirements = new Map();
   for (const node of graph.nodes) {
     let requirement;
-    if (node.type === 'OpusMtJaEn') requirement = { key: 'opus-ja-en', id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', manifest: opusMtManifest };
+    if (node.type === 'IfCondition') requirement = { key: 'if-condition', id: 'if-condition', title: 'IfCondition · XtremeDistil · 14 MB · CPU WASM · allow 250 MB RAM per Node', manifest: ifConditionManifest };
+    else if (node.type === 'OpusMtJaEn') requirement = { key: 'opus-ja-en', id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', manifest: opusMtManifest };
     else if (node.type === 'OpusMtEnJa') requirement = { key: 'opus-en-ja', id: 'opus-en-ja', title: 'OPUS-MT · English → Japanese', manifest: englishToJapaneseOpusMtManifest };
     else if (['TranslateGemmaEnJa', 'TranslateGemmaJaEn'].includes(node.type)) requirement = { key: 'translategemma', id: 'translategemma', title: 'TranslateGemma 4B · 3.112 GB download · several GB RAM/GPU memory · WebGPU · Gemma Terms apply', manifest: translateGemmaManifest };
     else if (node.type === 'SpeechToTextParakeetV3') requirement = { key: 'parakeet-v3', id: 'parakeet-v3', title: 'Parakeet v3 · 1.26 GB download · WebGPU shader-f16 · allow 6 GB RAM/GPU memory, 3 GB storage', manifest: parakeetManifest };

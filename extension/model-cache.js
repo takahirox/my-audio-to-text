@@ -2,6 +2,7 @@ import { ModelAssetCache, storagePersistence } from './model-asset-cache.js';
 import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
+import { ifConditionManifest } from './if-condition-cache.js';
 import { translateGemmaManifest } from './translategemma-cache.js';
 import { ttsManifest } from './tts-cache.js';
 import { readGraph } from './graph.js';
@@ -12,6 +13,7 @@ const cards = [];
 let closed = false, savedNodes = [];
 try { savedNodes = readGraph(localStorage).nodes; } catch { /* Models can recover assets even with a broken saved graph. */ }
 const definitions = [
+  { id: 'if-condition', title: 'IfCondition · XtremeDistil', size: '14 MB download; allow 40 MB storage and 250 MB free RAM per active Node. CPU WASM.', manifest: ifConditionManifest, terms: 'Moritz Laurer / Microsoft · MIT', url: '../web/licenses/if-condition-model.txt' },
   { id: 'parakeet-v3', title: 'Parakeet TDT 0.6B v3', size: '1.26 GB download; allow 3 GB storage, 6 GB free RAM/GPU memory. WebGPU shader-f16 required.', manifest: parakeetManifest, terms: 'NVIDIA · CC BY 4.0 · ysdede/istupakov ONNX conversion', url: 'https://huggingface.co/ysdede/parakeet-tdt-0.6b-v3-onnx' },
   { id: 'moonshine-medium-en', title: 'Moonshine Medium Streaming English (245M)', size: '305 MB download; allow 700 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineManifest, terms: 'Moonshine AI / Useful Sensors · MIT', url: 'https://moonshine-voice.readthedocs.io/en/latest/models/available-models/' },
   { id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', size: 'About 239 MB', manifest: opusMtManifest, terms: 'Helsinki-NLP / ONNX Community · CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },

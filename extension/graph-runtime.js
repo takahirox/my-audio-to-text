@@ -17,6 +17,7 @@ import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
 import { SpeechToTextZipformerEnNode } from '../web/zipformer-node.js';
 import { SpeechToTextParakeetV3Node } from '../web/parakeet-v3-node.js';
 import { SpeechToTextMoonshineMediumEnNode } from '../web/moonshine-medium-node.js';
+import { IfConditionNode } from '../web/if-condition-node.js';
 import { NumberNode } from '../web/number-node.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
@@ -55,6 +56,12 @@ class PreparedTtsNode {
     if (!this.failed) try { await this.node.stop(); } catch (error) { if (!this.context.signal.aborted) await this.failure(error); }
   }
   dispose() { return this.node.dispose(); }
+}
+
+// Keep a failed decision branch isolated, just as optional ASR/TTS branches.
+// The production Node reports the error, terminates its Worker and emits no guess.
+class GraphIfConditionNode extends IfConditionNode {
+  start(context) { return super.start({ ...context, fail() {} }); }
 }
 
 // Chrome permits one capture of a tab. Repeated tab Source Nodes subscribe to
@@ -110,6 +117,9 @@ export function buildGraph(graph, options) {
     let node;
     switch (spec.type) {
       case 'Text': node = new TextNode(spec.settings); break;
+      case 'IfCondition':
+        node = new GraphIfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,
+          onEvent: event => options.onIfConditionEvent?.(event, spec.id) }); break;
       case 'Number': node = new NumberNode(spec.settings); break;
       case 'ChromeTabAudio':
         node = new ExtensionTabAudioNode(options.tabId, { sourceFactory: tabSourceFactory, onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;

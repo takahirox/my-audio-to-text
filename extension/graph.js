@@ -4,6 +4,7 @@ import { TRANSLATION_OUTPUTS } from './translation-scheduler.js';
 import { FORMAT_INPUTS, formatInputs, parseTemplate } from '../web/text-nodes.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 import { NUMBER } from '../web/port-contracts.js';
+import { validateCondition, MAX_CONDITION_CHARS } from '../web/if-condition-policy.js';
 import { finiteNumber } from '../web/number-node.js';
 import { whisperLanguage } from '../web/whisper-config.js';
 import { maxDurationSamples } from '../web/local-asr-config.js';
@@ -32,6 +33,7 @@ export const NODE_TYPES = Object.freeze({
   SpeechToTextMoonshineMediumEn: { label: 'Moonshine Medium Streaming English ASR', preparationNotice: 'Moonshine Medium English Streaming: Save prepares 305 MB. Allow 700 MB storage and 2 GB free RAM; CPU WASM.', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT), help: 'Optional 245M English Medium Streaming, CPU WASM. Save prepares 305 MB of weights; allow at least 2 GB free RAM and 700 MB free storage. Native provisional → LiveTextDisplay.replace; committed final → append. Updates from 0.5 seconds, native endpointing; history renews every 30 seconds after drain. Hard boundaries can split words. 30-second backlog limit. Local inference; no recording-time downloads.' },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { text: TEXT }, outputs: TRANSLATION_OUTPUTS, help: 'Committed text only. Direct source/text/error outputs form one atomic result. Pending and Cancel emit nothing; Stop drains queued text. Failures emit source/error without successful text.' },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { text: TEXT }, outputs: TRANSLATION_OUTPUTS, help: 'Committed text only. Direct source/text/error outputs form one atomic result. Pending and Cancel emit nothing; Stop drains queued text. Failures emit source/error without successful text.' },
+  IfCondition: { label: 'IfCondition · local AI', inputs: { text: TEXT }, outputs: { yes: TEXT, no: TEXT }, textSettings: { condition: { default: 'Is this a question?', maxLength: MAX_CONDITION_CHARS, multiline: true } }, help: 'Evaluate an English natural-language condition locally. Yes/No carries the original text unchanged to exactly one branch. Empty/whitespace text takes No. Save prepares model assets; Start loads an owned CPU WASM Worker. Ambiguous decisions, errors or overflow stop this Node visibly; other paths continue. Stop drains; Cancel discards pending text. Conditions apply next session.' },
   TranslateGemmaEnJa: { label: 'TranslateGemma 4B English → Japanese', inputs: { text: TEXT }, outputs: TRANSLATION_OUTPUTS,
     preparationNotice: 'TranslateGemma 4B: Save prepares 3.112 GB shared by both directions. Allow 7 GB free storage and several GB free RAM/GPU memory; Worker WebGPU required. Use is subject to Google Gemma Terms of Use and Prohibited Use Policy (see Help / Models).',
     help: 'English → Japanese, browser-local q4. Connect English ASR.final or Text.value → text. Completed source/text/error form one atomic result; text connects to TextFormatter, Live append, fields or Japanese TTS. Stop drains; Cancel emits nothing. Save prepares 3.112 GB; no recording-time downloads or CPU/cloud fallback. Several GB RAM/GPU memory and WebGPU required. Google Gemma Terms and Prohibited Use Policy apply, including to this public ONNX conversion; see Help / Models before use.' },
@@ -116,6 +118,7 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
     for (const key of Object.keys(definition.numberSettings || {})) try { finiteNumber(node.settings[key]); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
     for (const [key, values] of Object.entries(definition.settings || {})) if (!values.includes(node.settings[key])) errors.push(`Invalid setting: ${node.id}.${key}`);
     for (const [key, spec] of Object.entries(definition.textSettings || {})) if (typeof node.settings[key] !== 'string' || node.settings[key].length > (spec.maxLength ?? Infinity) || (key === 'label' && !node.settings[key].trim())) errors.push(`Invalid setting: ${node.id}.${key}`);
+    if (!legacy && node.type === 'IfCondition') try { validateCondition(node.settings.condition); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
     if (!legacy && node.type === 'TextFormatter') try { formatInputs(node.settings.inputCount); parseTemplate(node.settings.template, node.settings.inputCount); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
   }
   for (const connection of graph.edges) {

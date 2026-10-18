@@ -11,7 +11,8 @@ export const test = base.extend({
     const concurrentReal = info.file.endsWith('graph-concurrent-smoke.spec.js');
     const zipformerReal = info.file.endsWith('graph-zipformer-smoke.spec.js');
     const whisperReal = info.file.endsWith('graph-whisper-smoke.spec.js');
-    const real = concurrentReal || zipformerReal || whisperReal || info.file.endsWith('graph-tts-smoke.spec.js');
+    const ifConditionReal = info.file.endsWith('graph-if-condition-smoke.spec.js');
+    const real = ifConditionReal || concurrentReal || zipformerReal || whisperReal || info.file.endsWith('graph-tts-smoke.spec.js');
     const temporary = await mkdtemp(path.join(tmpdir(), 'extension-graph-'));
     const root = path.join(temporary, 'extension'), profile = path.join(temporary, 'profile');
     let context;
@@ -34,7 +35,7 @@ export const test = base.extend({
     const load = async () => (await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root })).id;
     try {
       await cp(path.resolve('dist/chrome-extension'), root, { recursive: true,
-        filter: source => (concurrentReal || zipformerReal || whisperReal || !source.includes(`${path.sep}vendor`)) && (real || !source.includes(`${path.sep}tts-assets`)) });
+        filter: source => (ifConditionReal || concurrentReal || zipformerReal || whisperReal || !source.includes(`${path.sep}vendor`)) && (real || !source.includes(`${path.sep}tts-assets`)) });
       // ASR/capture are fixtures even in TTS smoke. TTS smoke uses every real
       // packaged TTS runtime/frontend and real checkpoint, with no replacements.
       for (const role of (whisperReal || concurrentReal ? [] : ['sherpa', 'silero'])) await writeFile(path.join(root, `web/${role}-worker.js`), `
@@ -114,6 +115,7 @@ export const test = base.extend({
       }
       context = await launch(); const id = await load();
       const f = { context, root, id, url: `chrome-extension://${id}/extension/recorder.html`, requests,
+        asset(key, body) { bodies.set(key, body); return `http://127.0.0.1:${server.address().port}/${key}`; },
         mode(value) { mode = value; }, async restart() { await context.close(); context = await launch(); expect(await load()).toBe(id); this.context = context; } };
       await use(f);
     } finally { await context?.close(); for (const response of connections) response.destroy(); await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); }

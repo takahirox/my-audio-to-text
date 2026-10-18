@@ -11,6 +11,7 @@ SHARED_FILES = (
     "moonshine-medium-node.js", "moonshine-medium-worker.js", "moonshine-medium-stream.js",
     "zipformer-node.js", "zipformer-worker.js", "zipformer-core.js", "zipformer-segments.js", "zipformer-config.js",
     "whisper-node.js", "whisper-worker.js", "whisper-config.js", "text-constant-node.js",
+    "if-condition-model.js", "if-condition-node.js", "if-condition-policy.js", "if-condition-worker.js",
     "pipeline.js", "port-contracts.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
     "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "supertonic3-worker.js", "supertonic3-runtime.js",
     "kokoro-worker.js", "kokoro-english.js", "kokoro-japanese.js", "kokoro-hepburn.js",
@@ -29,6 +30,11 @@ def main():
             "transformers.js", "ort-wasm-simd-threaded.asyncify.mjs",
             "ort-wasm-simd-threaded.asyncify.wasm", "transformers-LICENSE")):
         raise SystemExit("Missing translation runtime. Run npm run prepare:translation-assets after prepare:assets.")
+    decision_runtime = json.loads((ROOT / "scripts/if-condition-runtime.json").read_text())
+    for entry in decision_runtime["files"]:
+        asset = vendor / "translation" / entry["path"]
+        if not asset.is_file() or asset.stat().st_size != entry["bytes"] or hashlib.sha256(asset.read_bytes()).hexdigest() != entry["sha256"]:
+            raise SystemExit("Invalid pinned IfCondition runtime. Run npm run prepare:translation-assets.")
     whisper = json.loads((ROOT / "scripts" / "whisper-assets.json").read_text())
     for entry in whisper["files"]:
         asset = vendor / "whisper" / "tiny" / entry["path"]

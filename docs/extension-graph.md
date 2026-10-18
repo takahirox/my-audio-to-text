@@ -1,5 +1,11 @@
 # Executable extension processing graphs (#75, #81, #87, #95, #99)
 
+[IfCondition](if-condition-node.md) is an ordinary reusable TEXT processor with
+`text` input, an editable English condition and `yes` / `no` TEXT outputs. Both
+outputs preserve the original input string; only the selected branch emits.
+Its pinned local model is prepared through Save graph, and errors stop only that
+instance with a visible status. It does not change version 9 or Pipeline routing.
+
 Open **Graph Editor** from Live or Models. It opens a separate full-size
 extension tab. **Add Node** opens a searchable palette with source/input,
 processor, constant/utility and output categories. Choose a result and use

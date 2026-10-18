@@ -22,7 +22,9 @@
     "test:zipformer-real": "ZIPFORMER_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-zipformer-smoke.spec.js",
     "prepare:optional-asr-assets": "python3 scripts/prepare-optional-asr-assets.py",
     "test:optional-asr-real": "OPTIONAL_ASR_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-optional-asr*smoke.spec.js",
-    "prepare:optional-asr-test-models": "python3 scripts/prepare-optional-asr-test-models.py"
+    "prepare:optional-asr-test-models": "python3 scripts/prepare-optional-asr-test-models.py",
+    "prepare:if-condition-test-model": "python3 scripts/prepare-if-condition-test-model.py",
+    "test:if-condition-real": "IF_CONDITION_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-if-condition-smoke.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"
