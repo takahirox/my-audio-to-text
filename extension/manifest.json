@@ -3,7 +3,7 @@
   "name": "Local current-tab transcription",
   "version": "0.1.0",
   "minimum_chrome_version": "116",
-  "description": "Transcribe tab audio locally with ReazonSpeech, Whisper tiny or streaming English Zipformer; optionally translate with OPUS-MT.",
+  "description": "Transcribe tab audio locally and compose translation with OPUS-MT or TranslateGemma 4B English/Japanese Nodes.",
   "permissions": ["activeTab", "tabCapture", "scripting"],
   "action": { "default_title": "Transcribe this tab" },
   "background": { "service_worker": "extension/background.js", "type": "module" },

@@ -7,13 +7,14 @@ export const TRANSLATION_OUTPUTS = Object.freeze({ source: TEXT, text: TEXT, err
 export class TranslationSchedulerNode {
   inputs = { text: TEXT };
   outputs = TRANSLATION_OUTPUTS;
-  constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, onState = () => {} } = {}) {
+  constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, modelName = 'OPUS-MT', onState = () => {} } = {}) {
     this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
+    this.modelName = modelName;
     this.finals = [];
   }
   start(context) {
     this.context = context;
-    this.onState('Loading local OPUS-MT…');
+    this.onState(`Loading local ${this.modelName}…`);
     this.ready = this.load().catch(error => { this.failure(error); });
   }
   async load() {
@@ -28,7 +29,7 @@ export class TranslationSchedulerNode {
     ], onError: error => this.failure(error.cause || error) });
     await this.translation.start();
     this.context.signal.throwIfAborted();
-    this.onState('Local OPUS-MT ready');
+    this.onState(`Local ${this.modelName} ready`);
   }
   emit(job, text, error = '') {
     if (this.disposed || this.context.signal.aborted) return;
@@ -54,7 +55,7 @@ export class TranslationSchedulerNode {
       if (!job.source.trim()) { this.emit(job, ''); continue; }
       if (this.error) { this.emit(job, undefined, this.error); continue; }
       if (job.source.length > 1000) {
-        this.emit(job, undefined, 'OPUS-MT accepts at most 1,000 characters per utterance.'); continue;
+        this.emit(job, undefined, `${this.modelName} accepts at most 1,000 characters per utterance.`); continue;
       }
       try {
         const text = await new Promise((resolve, reject) => {

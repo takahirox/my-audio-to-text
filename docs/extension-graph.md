@@ -148,7 +148,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | replace / append: TEXT, individually optional | one labeled Live region; at least one input must connect |
 | TextFormatter | input1…inputN: TEXT, instance-configured, individually optional | text: TEXT; at least one input must connect |
-| OpusMtJaEn / OpusMtEnJa | text: TEXT | source/text/error: TEXT, grouped committed results; no text on failure |
+| OpusMtJaEn / OpusMtEnJa / TranslateGemmaEnJa / TranslateGemmaJaEn | text: TEXT | source/text/error: TEXT, grouped committed results; no text on failure |
 | Supertonic3 / Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; configured language/voice |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | native audio player / WAV |
 
@@ -485,8 +485,8 @@ and uses a reviewed custom cache. Eviction requires another explicit download.
 No remote script source, inference endpoint or GPU probe is added. Page adapters
 use scoped `activeTab` plus `scripting`, with no persistent host permissions.
 
-TranslateGemma is **not selectable**. Verifying its MV3 packaging, WebGPU and
-asset terms is a documented next step, as permitted by #75.
+TranslateGemma is now selectable in both directions with the same primitive TEXT
+contracts; see the #124 section below for MV3 packaging, WebGPU, assets and terms.
 
 ## Validation
 
@@ -600,3 +600,25 @@ and final. Both can coexist without changing Graph v9 or the default graph.
 Save prepares the saved Nodes' checksum-pinned optional weights, including parked
 Nodes. See [model-specific setup, GPU/memory limits, endpointing and lifecycle](optional-asr-nodes.md)
 and [real packaged/concurrent/native validation](evidence/optional-asr-121.md).
+
+### TranslateGemma 4B processors (#124)
+
+Add **TranslateGemma 4B English → Japanese** or **Japanese → English** in the
+Processors palette. Both use the existing `text: TEXT` input and grouped
+`source/text/error: TEXT` outputs; connect them just like OPUS-MT. English ASR
+final or a Text constant can feed English → Japanese. Direct text fan-out to
+Live.append, a focused field and Japanese TTS works without display changes.
+For bilingual history, connect source/text/error to three TextFormatter inputs.
+Pending/Cancel emit nothing; Stop drains. Parked Nodes remain saved and are
+prepared on Save but run only on a complete source-to-sink path. Multiple
+independent model Nodes own separate Workers and require memory for each.
+
+Graph version stays **9** and existing defaults/saved routes/migrations remain
+unchanged. Save prepares one shared **3.112 GB** checkpoint for both directions;
+preparation failures do not undo storage. Allow 7 GB free storage and several GB
+RAM/GPU memory; Worker WebGPU and a usable adapter are required. Missing/evicted
+weights need Save or Models recovery before starting. No runtime downloads,
+cloud API or automatic fallback. Read Google Gemma Terms and Prohibited Use
+Policy in Help / Models before preparation or use; a public ONNX conversion
+does not waive upstream terms. See [full setup and attribution](translation-nodes.md#translategemma-in-the-extension-124)
+and [#124 validation](evidence/translation-124.md).
