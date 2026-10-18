@@ -61,7 +61,7 @@ class WorkerTranslationNode {
       throw new TypeError('Invalid translation Worker output.');
     }
     if (this.requireSingleOutput && (result.texts.length !== 1 || !result.texts[0].trim())) {
-      throw new Error('OPUS-MT returned no single nonempty translation.');
+      throw new Error('Translation model returned no single nonempty translation.');
     }
     for (const value of result.texts) context.emit('text', value);
   }
@@ -87,7 +87,14 @@ export class EnglishToJapaneseOpusMtTranslationNode extends WorkerTranslationNod
   constructor(options) { super(new URL('./opus-mt-en-ja-worker.js', import.meta.url), options); }
 }
 export class TranslateGemmaTranslationNode extends WorkerTranslationNode {
-  constructor(options) { super(new URL('./translategemma-worker.js', import.meta.url), options); }
+  constructor(options) { super(new URL('./translategemma-worker.js', import.meta.url), {
+    ...options, loadOptions: { ...options?.loadOptions, direction: 'ja-en' },
+  }); }
+}
+export class EnglishToJapaneseTranslateGemmaTranslationNode extends WorkerTranslationNode {
+  constructor(options) { super(new URL('./translategemma-worker.js', import.meta.url), {
+    ...options, loadOptions: { ...options?.loadOptions, direction: 'en-ja' },
+  }); }
 }
 
 export class TextInputNode {

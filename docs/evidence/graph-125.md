@@ -1,7 +1,8 @@
 # Issue #125 validation
 
 Implementation and validation performed on 2026-10-18. No post-merge-only check
-is required. No push, PR, merge or GitHub comment was performed.
+is required. The implementation stage performed no push, PR, merge or GitHub
+comment; publication-stage validation is recorded below.
 
 ## Real inference
 
@@ -87,3 +88,18 @@ microphone/tab-capture hardware or ASR accuracy. Two initial real-smoke runs wer
 interrupted while a fixture's overlapping canvas nodes blocked its settings
 click; their partial progress was not counted as inference acceptance. The
 corrected fixture and completed real smoke above provide that evidence.
+
+## Integration before PR publication
+
+Merged `main` at `6d6b86d849e109fe5a98ea6f87eb0085534580df` (TranslateGemma
+PR #126) into the Issue #125 branch. Resolved additive conflicts in the graph
+Node catalog, Models imports and session options/status handling, retaining both
+IfCondition and TranslateGemma behavior. The PR diff remains limited to #125.
+
+After `npm ci`, `npm test` passed **408/408**, with zero failures or skips, and
+`git diff --check` passed. The initial unit run before dependency installation
+had one failure because the optional ASR packaging test needs installed npm
+sources; installation resolved it. Extension build/browser and real-model checks
+were not repeated in this fresh publication worktree, which lacks the prepared
+vendor/model assets. Their results above apply to the implementation revision,
+not to a new run after the integration merge.

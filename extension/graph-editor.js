@@ -58,7 +58,9 @@ export class GraphEditor {
       el('p', 'Add nodes using search and categories. Select a node heading for settings and optional node help. Drag a heading or use arrow keys to move it.'),
       el('p', 'Connect by clicking an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Select a wire, then use its nearby Disconnect button. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape or blank canvas clears selection.'),
       el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire to reveal Disconnect.'),
-      el('p', 'Live displays are graph outputs. Replace changes a preview; append commits an item and clears the preview. Add independent displays as needed. Language belongs to each model or display; add OPUS-MT Nodes for translation. Save graph prepares required optional model weights, with progress, cancellation and retry below the graph. Models offers cache diagnostics and recovery.'),
+      el('p', 'Live displays are graph outputs. Replace changes a preview; append commits an item and clears the preview. Add independent displays as needed. Language belongs to each model or display; add OPUS-MT or TranslateGemma 4B Nodes for translation. Save graph prepares required optional model weights, with progress, cancellation and retry below the graph. Models offers cache diagnostics and recovery.'),
+      el('p', 'TranslateGemma 4B English → Japanese: connect English ASR.final or Text.value → text, then text → Live.append, or source/text/error → TextFormatter inputs. Both directions share a 3.112 GB download; allow 7 GB free storage and several GB free RAM/GPU memory. Requires Worker WebGPU; no fallback. Saving a graph containing either direction prepares these weights, including parked Nodes. Google Gemma Terms of Use and Prohibited Use Policy apply to use of this public ONNX conversion.'),
+      (() => { const link = el('a', 'TranslateGemma terms, prohibited-use policy and attribution'); link.href = '../web/licenses/gemma-notices.txt'; return link; })(),
       button('Close help', null, () => this.help.close()));
     this.paletteButton = button('Add Node', 'graph-palette-toggle', () => this.togglePalette()); this.paletteButton.setAttribute('aria-expanded', 'false'); this.paletteButton.setAttribute('aria-controls', 'graph-palette');
     this.helpButton = button('Help', 'graph-help', () => this.help.showModal());
@@ -183,7 +185,7 @@ export class GraphEditor {
   updateSummary() {
     const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(this.saved);
     const notices = [...new Set(this.draft.nodes.map(node => NODE_TYPES[node.type]?.preparationNotice).filter(Boolean))];
-    this.assetNotice.hidden = !notices.length; this.assetNotice.textContent = notices.join(' ') + (notices.length > 1 ? ' For both together, allow at least 12 GB free memory. Device needs vary.' : ' Device needs vary.');
+    this.assetNotice.hidden = !notices.length; this.assetNotice.textContent = notices.join(' ') + ' Each active model Node owns its Worker and needs additional memory; directions share stored weights only. Device needs vary.';
     this.summary.textContent = `${this.isDirty() ? 'Unsaved draft' : 'Saved graph'} · ${running ? `Active${Number.isInteger(this.tabId) ? ` · tab ${this.tabId}` : ''}${pending ? ' · earlier graph; saved edits apply next session' : ''}` : 'No active recording'}`;
     if (this.externalChange) this.summary.textContent += ' · Saved graph changed elsewhere; draft kept. Load saved before saving.';
     this.summary.classList.toggle('graph-conflict', !!this.externalChange);

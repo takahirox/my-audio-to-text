@@ -58,7 +58,7 @@ export const test = base.extend({
             if (data.type === 'audio') postMessage({type:'consumed',session,sequence:data.sequence});
             if (data.type === 'stop') postMessage({type:'stopped',session});
           };`);
-        for (const file of ['opus-mt-assets.json', 'opus-mt-en-ja-assets.json', 'supertonic3-assets.json', 'kokoro-assets.json']) {
+        for (const file of ['opus-mt-assets.json', 'opus-mt-en-ja-assets.json', 'translategemma-assets.json', 'supertonic3-assets.json', 'kokoro-assets.json']) {
           const entries = JSON.parse(await readFile(path.join(root, 'extension', file), 'utf8')).map(entry => {
             const key = file + '/' + entry.path;
             let body = Buffer.alloc(entry.path.endsWith('.bin') ? 510 * 256 * 4 : 8192);
@@ -68,6 +68,29 @@ export const test = base.extend({
             return { path: entry.path, bytes: body.length, sha256Chunks: [createHash('sha256').update(body).digest('hex')], sourceURL: `http://127.0.0.1:${server.address().port}/${key}` };
           });
           await writeFile(path.join(root, 'extension', file), JSON.stringify(entries));
+        }
+        if (info.file.endsWith('translategemma.spec.js')) {
+          const file = path.join(root, 'web/translategemma-worker.js');
+          const production = await readFile(file, 'utf8');
+          await writeFile(file, `Object.defineProperty(navigator, 'gpu', { value: { requestAdapter: async () => ({}) } });\n${production}`);
+          await mkdir(path.join(root, 'web/vendor/translation'), { recursive: true });
+          await writeFile(path.join(root, 'web/vendor/translation/transformers.js'), `
+            export const env = { backends: { onnx: { wasm: {} } } };
+            export async function pipeline(task, id, options) {
+              if (task !== 'text-generation' || options.dtype !== 'q4' || options.device !== 'webgpu') throw Error('Wrong Gemma runtime options');
+              if (env.allowRemoteModels !== false || env.useBrowserCache !== false || !env.useCustomCache) throw Error('Cache-only runtime required');
+              for (const file of ['config.json','generation_config.json','tokenizer_config.json','tokenizer.json','chat_template.jinja','onnx/model_q4.onnx','onnx/model_q4.onnx_data','onnx/model_q4.onnx_data_1']) {
+                if (!await env.customCache.match('https://huggingface.co/'+id+'/resolve/'+options.revision+'/'+file)) throw Error('Missing verified asset');
+              }
+              return async messages => {
+                const c = messages[0].content[0];
+                if (c.type !== 'text' || !['en','ja'].includes(c.source_lang_code) || c.target_lang_code === c.source_lang_code) throw Error('Wrong direction prompt');
+                if (c.text === 'slow') await new Promise(r => setTimeout(r,2000));
+                if (c.text === 'fail') throw Error('Controlled GPU memory failure');
+                return [{ generated_text: [...messages,{role:'assistant',content:(c.target_lang_code === 'ja' ? 'Japanese: ' : 'English: ')+c.text}] }];
+              };
+            }
+          `);
         }
         await mkdir(path.join(root, 'web/tts-assets'), { recursive: true });
         await writeFile(path.join(root, 'web/tts-assets/ort.mjs'), `

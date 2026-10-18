@@ -56,7 +56,9 @@ TranslateGemma 4B (text only)
   Prohibited Use Policy: https://ai.google.dev/gemma/prohibited_use_policy
   The conversion has no independent license/model card at this revision.
   Upstream terms still apply; public download availability does not remove them.
-  Weights downloaded on Run, not mirrored or redistributed in this project.
+  Playground weights download on Run; extension weights prepare after Save graph
+  or Models Download / retry, never during recording. Not mirrored or redistributed.
+  Both extension directions share the pinned checkpoint. See licenses/gemma-notices.txt.
 
 Translation setup, assets, supported directions, terms and browser limits:
   https://github.com/takahirox/my-audio-to-text/blob/main/docs/translation-nodes.md

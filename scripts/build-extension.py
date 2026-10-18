@@ -15,7 +15,7 @@ SHARED_FILES = (
     "pipeline.js", "port-contracts.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
     "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "supertonic3-worker.js", "supertonic3-runtime.js",
     "kokoro-worker.js", "kokoro-english.js", "kokoro-japanese.js", "kokoro-hepburn.js",
-    "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js", "opus-mt-en-ja-worker.js",
+    "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js", "opus-mt-en-ja-worker.js", "translategemma-worker.js",
     "audio.js", "capture-worklet.js", "local-asr-core.js", "local-asr-config.js",
     "reazon-simulation.js", "reazon-config.js", "sherpa-worker.js", "silero-worker.js",
     "third-party-notices.txt",
@@ -75,7 +75,7 @@ def main():
     for name in SHARED_FILES:
         shutil.copy2(ROOT / "web" / name, target / "web" / name)
     for name in ("vendor", "licenses", "tts-assets"):
-        # Runtime code is packaged; OPUS-MT/TTS weights are cached after Save or explicit preparation.
+        # Runtime code is packaged; optional translation/TTS weights are cached after Save or explicit preparation.
         shutil.copytree(ROOT / "web" / name, target / "web" / name)
     print(f"Load unpacked: {target}")
 

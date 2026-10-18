@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
-import { TEXT, OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, TextOutputNode } from '../web/translation-nodes.js';
+import { TEXT, OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode, TextOutputNode } from '../web/translation-nodes.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(Node, respond = message => {
@@ -31,7 +31,7 @@ function fixture(Node, respond = message => {
   return { pipeline, node, workers, output, errors, emit: value => context.emit('text', value) };
 }
 
-for (const Node of [OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode]) {
+for (const Node of [OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode]) {
   test(`${Node.name}: typed ports, order, zero/multiple outputs and drain`, async () => {
     const f = fixture(Node, message => {
       if (message.type === 'load') return { type: 'ready' };
