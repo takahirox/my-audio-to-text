@@ -5,15 +5,19 @@ export const TRANSLATION_OUTPUTS = Object.freeze({ source: TEXT, text: TEXT, err
 
 // Session-owned FIFO of committed utterances. Ordering and request IDs stay internal.
 export class TranslationSchedulerNode {
-  inputs = { text: TEXT };
+  inputs = { text: TEXT, provisional: TEXT };
   outputs = TRANSLATION_OUTPUTS;
-  constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, modelName = 'OPUS-MT', onState = () => {} } = {}) {
+  constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, modelName = 'OPUS-MT', onState = () => {}, windowed = false } = {}) {
     this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
     this.modelName = modelName;
     this.finals = [];
+    this.windowed = windowed;
+    this.revision = 0; this.queuedChars = 0;
   }
   start(context) {
     this.context = context;
+    this.abort = () => { void Promise.resolve(this.dispose()).catch(() => {}); };
+    context.signal.addEventListener('abort', this.abort, { once: true });
     this.onState(`Loading local ${this.modelName}…`);
     this.ready = this.load().catch(error => { this.failure(error); });
   }
@@ -33,25 +37,42 @@ export class TranslationSchedulerNode {
   }
   emit(job, text, error = '') {
     if (this.disposed || this.context.signal.aborted) return;
+    if (job.provisional && job.revision !== this.revision) return;
     this.context.emitOutputs({ source: job.source, error, ...(error ? {} : { text }) });
   }
   receive(port, source) {
-    if (port !== 'text' || typeof source !== 'string') throw new TypeError('Expected TEXT on text.');
+    if ((port !== 'text' && !(this.windowed && port === 'provisional')) || typeof source !== 'string') throw new TypeError('Expected TEXT on text or an enabled provisional input.');
     if (this.disposed) return;
+    if (this.windowed) {
+      if (port === 'provisional' && source.length > 1000) throw Error('Provisional translation accepts at most 1,000 characters.');
+      this.revision++;
+      // One replaceable pending preview, and at most one running inference.
+      // Closing a window invalidates every preview of that window.
+      this.preview = port === 'provisional' ? { source, provisional: true, revision: this.revision } : null;
+      if (port === 'provisional') {
+        this.pump(); return;
+      }
+    }
+    // Bound closed work too. Overflow is an explicit branch failure, never a
+    // silently dropped utterance; the existing default FIFO remains unchanged.
+    if (this.windowed && (this.finals.length >= 32 || this.queuedChars + source.length > 32768)) throw Error('Windowed translation backlog limit exceeded (32 windows / 32,768 characters).');
     // Empty utterances still have a position in the FIFO; they need no inference.
     this.finals.push({ source });
+    this.queuedChars += source.length;
     this.pump();
   }
   pump() {
     if (this.working || this.disposed) return;
     this.working = this.run().finally(() => { this.working = null;
-      if (!this.disposed && this.finals.length) this.pump();
+      if (!this.disposed && (this.finals.length || this.preview)) this.pump();
     });
   }
   async run() {
     await this.ready;
-    while (!this.disposed && this.finals.length) {
-      const job = this.finals.shift();
+    while (!this.disposed && (this.finals.length || this.preview)) {
+      const job = this.finals.length ? this.finals.shift() : this.preview;
+      if (job.provisional) this.preview = null;
+      else this.queuedChars -= job.source.length;
       if (!job.source.trim()) { this.emit(job, ''); continue; }
       if (this.error) { this.emit(job, undefined, this.error); continue; }
       if (job.source.length > 1000) {
@@ -75,12 +96,14 @@ export class TranslationSchedulerNode {
     void this.translation?.dispose().catch(() => {});
   }
   async stop() {
+    this.preview = null; this.revision++;
     await this.ready;
     await this.working;
     if (!this.error && !this.disposed) await this.translation?.stop();
   }
   dispose() {
-    this.disposed = true; this.finals = [];
+    this.context?.signal.removeEventListener('abort', this.abort);
+    this.disposed = true; this.finals = []; this.preview = null; this.queuedChars = 0;
     this.active?.reject(new DOMException('Translation canceled.', 'AbortError'));
     return this.translation?.dispose();
   }
