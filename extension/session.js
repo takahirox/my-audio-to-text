@@ -115,7 +115,16 @@ export class TabSession {
           const statuses = Object.entries(session.translationStates);
           this.update({ translationStatus: statuses.length === 1 ? state : statuses.map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
-        onError: error => { if (this.session === session) this.fail(error.message); },
+        onError: (error, id) => {
+          if (this.session !== session) return;
+          const spec = session.description?.nodes.find(node => node.id === id);
+          const windowPath = ['TextWindow', 'TranslationCommit'].includes(spec?.type) ||
+            session.description?.edges.some(e => e.to[0] === id && e.to[1] === 'text' && session.description.nodes.find(n => n.id === e.from[0])?.type === 'TextWindow');
+          // Experimental buffer/backlog failures belong to their path. Keep
+          // peer capture, displays and already committed items usable.
+          if (windowPath) this.update({ error: [this.view.error, error.message].filter(Boolean).join('\n') });
+          else this.fail(error.message);
+        },
       }));
       await Promise.all([...session.speechNodes].map(async ([id, node]) => {
         try { await node.load(); } catch (error) { throw Error(`${id}: ${error.message || error}`); }

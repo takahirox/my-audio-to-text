@@ -226,7 +226,7 @@ for (const type of ['OpusMtJaEn', 'TranslateGemmaEnJa']) test(`${type}: ASR fina
   assert.ok(workers.every(worker => worker.released));
 });
 
-test('TEXT routing is independent of producer; obsolete translator inputs are rejected', () => {
+test('TEXT routing is independent of producer; ASR previews cannot use the window-only translator input', () => {
   const graph = defaultGraph({ enabled: true });
   graph.edges = graph.edges.filter(route => !(route.to[0] === 'transcript' && route.to[1] === 'replace') && route.to[1] !== 'provisional');
   // A translated stream can be the full transcript destination, independently
@@ -236,7 +236,7 @@ test('TEXT routing is independent of producer; obsolete translator inputs are re
   assert.deepEqual(validateGraph(graph), []);
   assert.ok(buildGraph(graph, {}).pipeline);
   graph.edges.push(edge('speech', 'final', 'translation', 'provisional'));
-  assert.match(validateGraph(graph).join(' '), /Unknown port/); graph.edges.pop();
+  assert.match(validateGraph(graph).join(' '), /same TextWindow/); graph.edges.pop();
   graph.edges.find(route => route.to[0] === 'translation' && route.to[1] === 'text').from = ['translation', 'text'];
   assert.match(validateGraph(graph).join('\n'), /acyclic/);
 });

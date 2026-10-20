@@ -153,8 +153,10 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | Number | — | value: NUMBER; editable finite constant |
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | replace / append: TEXT, individually optional | one labeled Live region; at least one input must connect |
+| TextWindow | text: TEXT | text: TEXT (closed batches); provisional: TEXT (optional open snapshots); length/deadline/sentence settings |
+| TranslationCommit | boundary/source/text/error: TEXT | provisional/final/error: TEXT; opt-in closed-window commits |
 | TextFormatter | input1…inputN: TEXT, instance-configured, individually optional | text: TEXT; at least one input must connect |
-| OpusMtJaEn / OpusMtEnJa / TranslateGemmaEnJa / TranslateGemmaJaEn | text: TEXT | source/text/error: TEXT, grouped committed results; no text on failure |
+| OpusMtJaEn / OpusMtEnJa / TranslateGemmaEnJa / TranslateGemmaJaEn | text: TEXT; provisional: TEXT (optional paired TextWindow snapshot) | source/text/error: TEXT, grouped results; no text on failure |
 | Supertonic3 / Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; configured language/voice |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | native audio player / WAV |
 
@@ -408,8 +410,10 @@ navigation behavior; microphone/Live can continue with output detached.
 
 Final adapters apply a session-local monotonic ID policy when their transcript
 producer supplies IDs, dropping repeated/stale confirmed results before emitting
-plain strings. Completed translations alone emit text; provisional/pending/error
-values do not. Distinct utterances with identical text remain distinct. A source
+plain strings. By default, completed translations alone emit text; pending/error
+values do not. The opt-in [windowed translation path](windowed-translation.md)
+also translates provisional source snapshots; route its results through
+TranslationCommit and connect only final to append-only destinations. Distinct utterances with identical text remain distinct. A source
 without IDs delivers each plain value once; the sink does not deduplicate by text.
 Pipeline serializes each sink. Its page port uses a local sequence outside TEXT
 and never retries an uncertain edit. Stop drains new final deliveries, with no
@@ -628,3 +632,10 @@ cloud API or automatic fallback. Read Google Gemma Terms and Prohibited Use
 Policy in Help / Models before preparation or use; a public ONNX conversion
 does not waive upstream terms. See [full setup and attribution](translation-nodes.md#translategemma-in-the-extension-124)
 and [#124 validation](evidence/translation-124.md).
+
+## Windowed and revisable translation (#128)
+
+The model-independent **TextWindow** and opt-in **TranslationCommit** processors
+use ordinary TEXT ports, require no weights, and retain graph version 9. See
+[connections, limits, lifecycle and measured comparison](windowed-translation.md).
+Defaults and existing per-segment translator paths remain unchanged.

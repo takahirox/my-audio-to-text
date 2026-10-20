@@ -19,6 +19,8 @@ import { SpeechToTextParakeetV3Node } from '../web/parakeet-v3-node.js';
 import { SpeechToTextMoonshineMediumEnNode } from '../web/moonshine-medium-node.js';
 import { IfConditionNode } from '../web/if-condition-node.js';
 import { NumberNode } from '../web/number-node.js';
+import { TextWindowNode } from '../web/text-window-node.js';
+import { TranslationCommitNode } from '../web/translation-commit-node.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
 // assets, initialization or synthesis failure must leave transcription usable.
@@ -115,6 +117,8 @@ export function buildGraph(graph, options) {
     () => pipeline.state === 'stopping' || tabSources.every(spec => nodes[spec.id].endRequested));
   for (const spec of description.nodes) {
     let node;
+    const windowed = description.edges.some(e => e.to[0] === spec.id && e.to[1] === 'text' &&
+      description.nodes.find(n => n.id === e.from[0])?.type === 'TextWindow');
     switch (spec.type) {
       case 'Text': node = new TextNode(spec.settings); break;
       case 'IfCondition':
@@ -140,14 +144,16 @@ export function buildGraph(graph, options) {
       case 'SpeechToTextReazonSpeech':
         node = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'LiveTextDisplay': node = new LiveTextDisplayNode(state => options.onDisplay?.(spec.id, state), { appendConnected: description.edges.some(edge => edge.to[0] === spec.id && edge.to[1] === 'append') }); break;
+      case 'TextWindow': node = new TextWindowNode(spec.settings); break;
+      case 'TranslationCommit': node = new TranslationCommitNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
       case 'TranslateGemmaEnJa': case 'TranslateGemmaJaEn':
-        node = new TranslationSchedulerNode({ prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
+        node = new TranslationSchedulerNode({ windowed, prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
           TranslationNode: spec.type === 'TranslateGemmaEnJa' ? EnglishToJapaneseTranslateGemmaTranslationNode : TranslateGemmaTranslationNode,
           modelName: 'TranslateGemma 4B', workerFactory: options.translationWorkerFactory,
           onState: state => options.onTranslationState?.(state, spec.id) }); resources.translations.push(node); break;
       case 'OpusMtJaEn': case 'OpusMtEnJa':
-        node = new TranslationSchedulerNode({ prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
+        node = new TranslationSchedulerNode({ windowed, prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
           TranslationNode: spec.type === 'OpusMtEnJa' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
           workerFactory: options.translationWorkerFactory, onState: state => options.onTranslationState?.(state, spec.id) }); resources.translations.push(node); break;
       case 'Supertonic3': case 'Kokoro': {

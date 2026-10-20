@@ -1,0 +1,42 @@
+import { TEXT } from './port-contracts.js';
+
+// Direct, grouped scheduler results only. Closed source windows travel on an
+// independent forward edge, before their asynchronous translation can finish.
+// The scheduler suppresses superseded previews and drains closed windows FIFO.
+export class TranslationCommitNode {
+  inputs = { boundary: TEXT, source: TEXT, text: TEXT, error: TEXT };
+  outputs = { provisional: TEXT, final: TEXT, error: TEXT };
+  constructor() { this.boundaries = []; this.chars = 0; }
+  start(context) { this.context = context; }
+  receiveInputs(values, context) {
+    if (this.stopped || context.signal.aborted) return;
+    for (const [port, value] of Object.entries(values)) {
+      if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('TranslationCommit expects TEXT inputs.');
+    }
+    if (Object.hasOwn(values, 'boundary')) {
+      if (Object.keys(values).length !== 1) throw Error('Boundary must come directly from TextWindow.text.');
+      if (values.boundary.length > 1000 || this.boundaries.length >= 32 || this.chars + values.boundary.length > 32768) throw Error('TranslationCommit backlog limit exceeded (32 windows / 32,768 characters). Stop and start again with a slower source.');
+      this.boundaries.push(values.boundary); this.chars += values.boundary.length;
+      context.emit('provisional', '');
+      return;
+    }
+    if (!['source', 'text', 'error'].every(port => context.groupInputs?.includes(port)) ||
+        typeof values.source !== 'string' || typeof values.error !== 'string' || (!values.error && typeof values.text !== 'string')) {
+      throw Error('Connect grouped source/text/error directly from one windowed translator.');
+    }
+    if (this.boundaries.length) {
+      if (values.source !== this.boundaries[0]) throw Error('Translation result does not match the next closed source window.');
+      this.chars -= this.boundaries.shift().length;
+      // A failed final retains its source visibly; never fabricate a translation
+      // or delete previously committed items. Preview failures append nothing.
+      context.emitOutputs({ provisional: '', final: values.error ? `[Translation failed: ${values.error}]\n${values.source}` : values.text, error: values.error });
+    } else {
+      context.emitOutputs({ provisional: values.error ? '' : values.text, error: values.error });
+    }
+  }
+  stop() {
+    this.stopped = true;
+    if (this.boundaries.length) throw Error(`TranslationCommit stopped with ${this.boundaries.length} untranslated source windows.`);
+  }
+  dispose() { this.stopped = true; this.boundaries = []; this.chars = 0; }
+}

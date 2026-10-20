@@ -269,3 +269,14 @@ no skipped device check counts as inference success. See
 [#124 evidence](evidence/translation-124.md). These fixtures are meaning checks,
 not comparative quality evidence. Any OPUS-MT quality comparison remains a
 separate user evaluation. No post-merge-only check is introduced by #124.
+
+## Windowed source text and optional retranslation (#128)
+
+[TextWindow and TranslationCommit](windowed-translation.md) provide bounded
+source batching and an opt-in preview/commit experiment in the extension graph.
+The four extension translators accept an optional provisional TEXT input only
+from the same TextWindow as their text input. Their primitive grouped
+source/text/error outputs remain unchanged. Existing text-only connections and
+standalone web translator Nodes retain their behavior. Use TranslationCommit
+for the experimental path; direct translator text now includes preview results
+when provisional is explicitly connected.
