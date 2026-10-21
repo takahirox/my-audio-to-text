@@ -89,6 +89,23 @@ successful truncated snapshots. Prompt plus output is checked against an
 published card specifies 32,768 context (its config says 128,000); Qwen config
 specifies 262,144. The smaller application budget controls cache/resource use.
 
+Before publishing, conservative lexical checks reject speaker-style labels absent
+from the evidence, explicitly superseded numbers (including Arabic-number
+Japanese-unit variants), and completion claims when the evidence contains no
+completion statement. A rejected candidate can trigger at most two repair
+generations using the original previous note and new transcript. Each generation
+has the same token budget; retries share the existing 180-second request timeout
+and bounded pending-text queue. Successful metrics include per-attempt token
+counts and totals across attempts. If repair fails, no new snapshot is emitted,
+the last successful display remains, and the processor reports an error.
+
+These checks are **not semantic verification**: they can reject topic labels or
+historical-number mentions conservatively and miss unsupported claims in other
+forms, incorrect approval scope, or omitted facts. The actual pinned models still
+fail the required sequential factual smoke; see the latest
+[validation evidence](evidence/meeting-summary-130.md). Passing lexical checks
+does not establish an accurate meeting note or Issue completion.
+
 The isolated packaged runtime is Transformers.js **4.2.0** with its exact
 `onnxruntime-web` **1.26.0-dev.20260416-b7804b056c** dependency. Runtime archives
 and packaged files have SHA-256 pins. Existing translation, Whisper, TTS and

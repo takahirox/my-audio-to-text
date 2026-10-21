@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MeetingSummaryNode } from '../web/meeting-summary-node.js';
 import { MEETING_SUMMARY_TYPES } from '../web/meeting-summary-models.js';
-import { BATCH_CHARS, MAX_PENDING_CHARS, summaryMessages } from '../web/meeting-summary-policy.js';
+import { BATCH_CHARS, MAX_PENDING_CHARS, MAX_SUMMARY_REPAIRS, summaryMessages, summaryGroundingIssues, validatedSummary } from '../web/meeting-summary-policy.js';
 import { TEXT } from '../web/port-contracts.js';
 import { meetingBatches, meetingGraph, meetingFactChecks } from './fixtures/meeting-summary.js';
 import { graphNode, validateGraph, defaultGraph, assertGraph, readGraph, saveGraph } from '../extension/graph.js';
@@ -170,4 +170,36 @@ test('factual checks detect the recorded model defects independently of formatti
   // The checker also recognizes facts the recorded Qwen output gets right.
   assert.equal(checks.qwen35[2].venuePending, true);
   assert.equal(checks.qwen35[2].invitations, true);
+});
+
+test('publication guard rejects recorded invented completion, attribution and corrected amounts', async () => {
+  const evidence = {};
+  for (const key of ['lfm2', 'qwen35']) evidence[key] = JSON.parse(await readFile(new URL(`../docs/evidence/meeting-summary-${key}-130-review.json`, import.meta.url))).runs;
+  assert.ok(summaryGroundingIssues(evidence.lfm2[0].output, '', meetingBatches[0]).some(issue => /completed work/.test(issue)));
+  assert.ok(summaryGroundingIssues(evidence.qwen35[0].output, '', meetingBatches[0]).some(issue => /attribution/.test(issue)));
+  assert.ok(summaryGroundingIssues(evidence.qwen35[1].output, evidence.qwen35[0].output, meetingBatches[1]).some(issue => /300000/.test(issue)));
+  for (const amount of ['300,000円', '300000円', '30万円']) {
+    assert.ok(summaryGroundingIssues('決定事項\n- 予算' + amount, '', meetingBatches[1]).some(issue => /superseded/.test(issue)));
+  }
+  assert.deepEqual(summaryGroundingIssues('決定事項\n- 予算25万円', '', meetingBatches[1]), []);
+  assert.deepEqual(summaryGroundingIssues('- Mika: 招待状は送信済み。', '', 'Mika: Invitations sent.'), []);
+  assert.deepEqual(summaryGroundingIssues('- 完了事項なし。\n- 招待状は未完了。\n- 完了した作業はありません。', '', 'Mika: I will send invitations.'), []);
+  assert.deepEqual(summaryGroundingIssues('- Ken: 300,000円について議論した。', '', 'Ken: We did not approve 300,000 yen.'), []);
+  assert.ok(summaryGroundingIssues('- 予算30万円', '', '訂正：300,000円ではなく250,000円です。').length);
+});
+
+test('grounding repair is bounded, retains original evidence and never returns rejected snapshots', async () => {
+  const requests = [], previous = '議論の要点\n- 承認待ち。';
+  const valid = '議論の要点\n- 提案を検討。\n決定事項\n- 予算250,000円でパイロットを承認。\n未解決の質問・対応事項\n- 会場承認待ち。';
+  const summary = await validatedSummary(async messages => {
+    requests.push(messages);
+    return requests.length === 1 ? '- UnknownSpeaker: 予算30万円。' : valid;
+  }, previous, meetingBatches[1], 'ja');
+  assert.equal(summary, valid); assert.equal(requests.length, 2);
+  assert.ok(requests.every(messages => messages[1].content.includes(JSON.stringify(previous)) && messages[1].content.includes(JSON.stringify(meetingBatches[1]))));
+  assert.match(requests[1][1].content, /unsupported attribution/);
+  assert.match(requests[1][1].content, /superseded number 300000/);
+  let attempts = 0;
+  await assert.rejects(validatedSummary(async () => { attempts++; return '- 作業が完了した。'; }, '', meetingBatches[0], 'ja'), /failed grounding checks/);
+  assert.equal(attempts, MAX_SUMMARY_REPAIRS + 1);
 });

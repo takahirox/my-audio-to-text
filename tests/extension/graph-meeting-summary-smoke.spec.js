@@ -137,7 +137,11 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     });
     expect(factualFailures, `Factual regression; actual outputs saved in ${spec.key}.json`).toEqual([]);
   } finally {
-    if (page) await writeFile(info.outputPath('diagnostics.json'), JSON.stringify({ runs, requests, consoleErrors, status: await page.locator('#summary-status').textContent().catch(() => ''), replies: await page.evaluate(() => window.summaryEvidence).catch(() => []) }, null, 2));
+    if (page) await writeFile(info.outputPath('diagnostics.json'), JSON.stringify({ runs, requests, consoleErrors,
+      model: spec, runtime: JSON.parse(await readFile('scripts/meeting-summary-runtime.json', 'utf8')),
+      host: await page.evaluate(() => ({ browser: navigator.userAgent, isolated: crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency })).catch(() => null),
+      visibleNotes: await page.locator('[data-display="notes"] .display-preview').textContent().catch(() => null),
+      status: await page.locator('#summary-status').textContent().catch(() => ''), replies: await page.evaluate(() => window.summaryEvidence).catch(() => []) }, null, 2));
     await context?.close(); if (server) await new Promise(resolve => server.close(resolve));
     await rm(temporary, { recursive: true, force: true });
   }

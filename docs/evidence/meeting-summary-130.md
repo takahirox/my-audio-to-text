@@ -236,3 +236,61 @@ suite are superseded by the explicit failing real run above. `git diff --check`
 passed. Remaining work is to implement and demonstrate corrected sequential
 outputs for **both** named processors; neither review finding can be closed by
 this test/evidence change.
+
+## Partial publication safeguard (2026-10-21)
+
+**Both P1 findings remain unresolved.** This revision adds a production guard
+against directly detectable unsupported speaker-style labels, explicitly
+superseded numbers (including `300,000` versus `30万`), and completion claims
+without a completion statement in the available evidence. It permits at most
+two repair generations before reporting an error without publishing a snapshot.
+Repairs reuse the original previous note and new transcript, without retaining
+rejected candidates as history. Each attempt keeps the existing context/output
+limits; the whole request keeps the existing timeout and bounded backlog.
+
+These conservative lexical checks can reject legitimate topic labels or mentions
+of historical numbers. They do not establish semantic entailment, completeness,
+correct approval scope, or faithful task ownership. This is a partial mitigation
+of publishing detected defects, **not a completed implementation of #130**.
+
+Additional actual-model experiments tested explicit transition instructions
+without prefilling/repetition penalties, LFM translation before reconciliation,
+Qwen reasoning, an English ledger with Japanese rendering, structured internal
+facts, and draft/audit/rewrite generations. None passed all sequential factual
+checks. Reasoning/audit variants also exhausted output budgets. Those generation
+changes were removed; the retained generation policy and model/runtime pins are
+unchanged except for bounded validation/repair before publication.
+
+Final verification:
+
+- `npm test`: **448 passed**, including 19 summary tests. New tests detect the
+  recorded invented completion, unsupported attributions and stale budget;
+  check Arabic/Japanese-unit equivalents and negative completion statements;
+  and verify bounded repair with the original evidence. Controlled replies in
+  these unit tests are not model-quality evidence.
+- `npm run build:extension`: **passed**, with pinned-runtime integrity checks.
+- Full extension regression run: **172 passed, 16 skipped**. Heavy real-model
+  smokes remain opt-in. The parked summary processor preparation test also
+  passed separately. This does not supersede either failing real smoke below.
+- `MEETING_SUMMARY_CHANNEL=chrome npm run test:meeting-summary-real -- --output
+  .cache/final-guarded-smoke`: **2 failed**. Both actual pinned models, production
+  build/Worker/cache, normal 30-second timer and real Live display were used.
+  Chrome was offline before Start; recorded HTTP(S) requests after Start and
+  console errors were zero. Both live notes remained empty after rejection.
+- LFM failed its first update after bounded repair, still generating unreported
+  completed work and unsupported labels. Qwen failed its first update after
+  bounded repair, still generating `米田` and `山田`. Neither produced an accepted
+  snapshot; later updates, graceful Stop and Cancel were **not reached** in this
+  final run. This is a product failure, not an infrastructure skip.
+- `git diff --check`: **passed**.
+
+Raw final diagnostics include the exact model/runtime revisions, browser,
+source hashes, Worker errors and visible note contents:
+
+- [LFM guarded run](meeting-summary-lfm2-130-guard.json)
+- [Qwen guarded run](meeting-summary-qwen35-130-guard.json)
+
+The unresolved work remains faithful sequential generation/reconciliation for
+both models, followed by passing the unmodified factual smoke through all
+updates, Stop and Cancel. It does not require human confirmation or the user's
+subjective model comparison. Do not approve or close #130 based on this guard.

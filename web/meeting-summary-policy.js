@@ -4,6 +4,54 @@ export const MAX_PENDING_CHARS = 32768;
 export const MAX_SUMMARY_CHARS = 6000;
 export const MAX_PROMPT_TOKENS = 8192;
 export const MAX_NEW_TOKENS = 1024;
+export const MAX_SUMMARY_REPAIRS = 2;
+
+// Conservative checks for directly observable defects, not an entailment or
+// completeness test. In particular these cannot reconcile arbitrary topics.
+function numericValues(text) {
+  return [...text.matchAll(/\d+(?:,\d{3})*(?:\.\d+)?\s*(?:億|万|千)?/gu)].map(match => {
+    const value = match[0].trim();
+    const scale = { 億: 1e8, 万: 1e4, 千: 1e3 }[value.at(-1)] || 1;
+    return Number(value.replaceAll(',', '').replace(/[億万千]/u, '')) * scale;
+  });
+}
+function claimsCompletion(text) {
+  return text.split('\n').some(line => {
+    if (/(?:未完了|完了していな|完了しておら|完了(?:事項|済みの作業|した作業)?[はが：:]?\s*(?:なし|ない|ありません)|\b(?:no|not|none|pending|unfinished)\b)/iu.test(line)) return false;
+    return /(?:完了した|完了済|送信済|送付済|発送済|対応済|作成済|実施済|\b(?:completed|finished|sent)\b)/iu.test(line);
+  });
+}
+export function summaryGroundingIssues(summary, previous, transcript) {
+  const evidence = previous + '\n' + transcript, issues = [];
+  // Speaker-style labels must occur verbatim in the evidence. Topic labels can
+  // also be rejected conservatively; repair can express them as plain bullets.
+  for (const match of summary.matchAll(/^\s*[-*]\s*([\p{L}\p{M}][\p{L}\p{M} .'-]{0,30})\s*[:：]/gmu)) {
+    const label = match[1].trim();
+    if (!evidence.includes(label)) issues.push(`Remove unsupported attribution/label ${JSON.stringify(label)}. Use plain factual bullets; names must occur verbatim in the evidence.`);
+  }
+  // Only explicit corrections authorize this check. Do not treat every number
+  // in a negative statement as a correction, or guess which topic it belongs to.
+  if (/\bcorrection\b|訂正|修正/iu.test(transcript)) {
+    const obsolete = [...transcript.matchAll(/\bnot\s+(\d+(?:,\d{3})*(?:\.\d+)?\s*(?:億|万|千)?)|(\d+(?:,\d{3})*(?:\.\d+)?\s*(?:億|万|千)?)(?:円)?ではな[くい]/giu)]
+      .flatMap(match => numericValues(match[1] || match[2]));
+    const values = new Set(numericValues(summary));
+    for (const value of new Set(obsolete)) if (values.has(value)) issues.push(`Omit the explicitly superseded number ${value}, including equivalent Japanese-unit spellings. Use the corrected value from the new evidence.`);
+  }
+  if (claimsCompletion(summary) && !claimsCompletion(evidence)) issues.push('Remove claims of completed work: neither the previous note nor the new evidence reports completion. Do not invent administrative work.');
+  return [...new Set(issues)];
+}
+
+export async function validatedSummary(generate, previous, transcript, language) {
+  let issues = [];
+  for (let attempt = 0; attempt <= MAX_SUMMARY_REPAIRS; attempt++) {
+    const messages = summaryMessages(previous, transcript, language);
+    if (issues.length) messages[1].content += '\n\nThe previous attempt was rejected. Regenerate the complete note from the original evidence, fixing these problems:\n' + issues.join('\n');
+    const summary = summaryText(await generate(messages));
+    issues = summaryGroundingIssues(summary, previous, transcript);
+    if (!issues.length) return summary;
+  }
+  throw new Error('Meeting summary failed grounding checks after bounded repair; no new snapshot was published. ' + issues.join(' '));
+}
 
 export function summaryLanguage(language = 'ja') {
   if (!['ja', 'en'].includes(language)) throw new TypeError('Summary language must be ja or en.');

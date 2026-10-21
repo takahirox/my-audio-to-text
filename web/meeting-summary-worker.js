@@ -1,5 +1,5 @@
 import { meetingSummaryModel } from './meeting-summary-models.js';
-import { summaryMessages, summaryText, MAX_PROMPT_TOKENS, MAX_NEW_TOKENS } from './meeting-summary-policy.js';
+import { summaryText, validatedSummary, MAX_PROMPT_TOKENS, MAX_NEW_TOKENS } from './meeting-summary-policy.js';
 import { cacheOnlyMeetingSummaryRuntime } from '../extension/meeting-summary-cache.js';
 
 let model, tokenizer, queue = Promise.resolve();
@@ -28,23 +28,27 @@ async function load(type) {
 async function summarize({ previous, text, language }) {
   if (!model) throw new Error('Meeting summary model is not ready.');
   const started = performance.now();
-  const formatted = tokenizer.apply_chat_template(summaryMessages(previous, text, language), {
-    tokenize: false, add_generation_prompt: true, enable_thinking: false,
-  });
-  // Prefill only the first heading/list marker, never meeting content. This
-  // encourages a readable note rather than a structured payload in small LMs.
-  const prefix = language === 'ja' ? '議論の要点\n- ' : 'Discussion points\n- ';
-  const inputs = tokenizer(formatted + prefix, { add_special_tokens: false, truncation: false });
-  const promptTokens = inputs.input_ids.dims.at(-1);
-  if (promptTokens + MAX_NEW_TOKENS > MAX_PROMPT_TOKENS) throw new RangeError('Meeting summary exceeds the 8192-token runtime budget. No evidence was truncated.');
-  // Generation caches live only for this request; the note is the sole history.
-  const output = await model.generate({ ...inputs, max_new_tokens: MAX_NEW_TOKENS, do_sample: false, repetition_penalty: 1.05 });
-  const tokens = output.tolist()[0].slice(promptTokens);
-  const eos = [model.generation_config?.eos_token_id ?? model.config.eos_token_id].flat().map(Number);
-  if (tokens.length === MAX_NEW_TOKENS && !eos.includes(Number(tokens.at(-1)))) throw new Error('Meeting summary reached its output token limit; incomplete snapshot was not published.');
-  const generated = summaryText(tokenizer.decode(tokens, { skip_special_tokens: true }));
-  const summary = summaryText(prefix + generated);
-  return { summary, metrics: { promptTokens, outputTokens: tokens.length, generationMs: performance.now() - started } };
+  const attempts = [];
+  const summary = await validatedSummary(async messages => {
+    const formatted = tokenizer.apply_chat_template(messages, {
+      tokenize: false, add_generation_prompt: true, enable_thinking: false,
+    });
+    // Prefill only the first heading/list marker, never meeting content. This
+    // encourages a readable note rather than a structured payload in small LMs.
+    const prefix = language === 'ja' ? '議論の要点\n- ' : 'Discussion points\n- ';
+    const inputs = tokenizer(formatted + prefix, { add_special_tokens: false, truncation: false });
+    const promptTokens = inputs.input_ids.dims.at(-1);
+    if (promptTokens + MAX_NEW_TOKENS > MAX_PROMPT_TOKENS) throw new RangeError('Meeting summary exceeds the 8192-token runtime budget. No evidence was truncated.');
+    // Generation caches live only for this request; the note is the sole history.
+    const output = await model.generate({ ...inputs, max_new_tokens: MAX_NEW_TOKENS, do_sample: false, repetition_penalty: 1.05 });
+    const tokens = output.tolist()[0].slice(promptTokens);
+    const eos = [model.generation_config?.eos_token_id ?? model.config.eos_token_id].flat().map(Number);
+    if (tokens.length === MAX_NEW_TOKENS && !eos.includes(Number(tokens.at(-1)))) throw new Error('Meeting summary reached its output token limit; incomplete snapshot was not published.');
+    const generated = summaryText(tokenizer.decode(tokens, { skip_special_tokens: true }));
+    attempts.push({ promptTokens, outputTokens: tokens.length });
+    return summaryText(prefix + generated);
+  }, previous, text, language);
+  return { summary, metrics: { promptTokens: attempts.reduce((n, a) => n + a.promptTokens, 0), outputTokens: attempts.reduce((n, a) => n + a.outputTokens, 0), attempts, generationMs: performance.now() - started } };
 }
 self.onmessage = ({ data }) => {
   queue = queue.then(async () => {
