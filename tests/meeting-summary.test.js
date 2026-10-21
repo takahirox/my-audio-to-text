@@ -392,6 +392,93 @@ test('excerpt calendar checks preserve named weekdays rather than accepting a di
 // Faithful controlled translations isolate the shared policy from model quality.
 // Run every review regression through both processor-specific rendering paths.
 for (const processor of MEETING_SUMMARY_TYPES) {
+  test(`${processor}: named actors, recipients and possessive owners stay distinct across sequential updates`, async () => {
+    const cases = [
+      ['Alice will send Bob the report.', 'Bob sent Alice the report.', 'AliceはBobに報告書を送信する予定です。', 'BobはAliceに報告書を送信しました。'],
+      ["Alice will send Bob's report.", "Bob sent Alice's report.", 'AliceはBobの報告書を送信する予定です。', 'BobはAliceの報告書を送信しました。'],
+      ["Alice's team will send Bob's report.", "Bob's team sent Alice's report.", 'AliceのチームはBobの報告書を送信する予定です。', 'BobのチームはAliceの報告書を送信しました。'],
+      ['Alice will send the report to Bob.', 'Alice sent the report from Bob.', 'AliceはBobに報告書を送信する予定です。', 'AliceはBobからの報告書を送信しました。'],
+      ["Alice will send Bob's report.", "Alice's report was sent by Bob.", 'AliceはBobの報告書を送信する予定です。', 'Aliceの報告書はBobによって送信されました。'],
+      ['AliceはBobに報告書を送信する予定です。', 'BobはAliceに報告書を送信しました。', 'AliceはBobに報告書を送信する予定です。', 'BobはAliceに報告書を送信しました。'],
+      ['AliceはBobに報告書を送信する予定です。', 'AliceにBobは報告書を送信しました。', 'AliceはBobに報告書を送信する予定です。', 'AliceにBobは報告書を送信しました。'],
+      ['田中は佐藤に報告書を送信する予定です。', '佐藤は田中に報告書を送信しました。', '田中は佐藤に報告書を送信する予定です。', '佐藤は田中に報告書を送信しました。'],
+      ['田中は佐藤に報告書を送信する予定です。', '田中に佐藤は報告書を送信しました。', '田中は佐藤に報告書を送信する予定です。', '田中に佐藤は報告書を送信しました。'],
+      ['AliceのチームはBobの報告書を送信する予定です。', 'BobのチームはAliceの報告書を送信しました。', 'AliceのチームはBobの報告書を送信する予定です。', 'BobのチームはAliceの報告書を送信しました。'],
+    ];
+    for (const [source, update, rendered, updated] of cases) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && /[一-龯]/u.test(source)) continue;
+        const pair = [[source, language === 'ja' ? rendered : source], [update, language === 'ja' ? updated : update]];
+        for (const order of [pair, [...pair].reverse()]) {
+          const first = await reconciledSummary(async () => order[0][1], [], `Ken: ${order[0][0]}`, language, processor);
+          const saved = structuredClone(first.records);
+          const next = await reconciledSummary(async () => order[1][1], first.records, `Ken: ${order[1][0]}`, language, processor);
+          assert.deepEqual(first.records, saved);
+          assert.deepEqual(next.records[0], saved[0]);
+          assert.equal(next.records.length, 2, `${source} -> ${update}`);
+          assert.equal(next.records.find(r => r.source === source).section, 'open');
+          assert.equal(next.records.find(r => r.source === update).section, 'complete');
+          for (const [, text] of pair) assert.ok(next.summary.includes(text));
+          const repeated = await reconciledSummary(async () => order[1][1], next.records, `Ken: ${order[1][0]}`, language, processor);
+          assert.deepEqual(repeated.records, next.records);
+        }
+      }
+    }
+    // A status change with the same explicit roles still completes its task.
+    for (const [source, update] of [
+      ['Alice will send Bob the report.', 'Alice sent Bob the report.'],
+      ["Alice will send Bob's report.", "Alice sent Bob's report."],
+      ['AliceはBobに報告書を送信する予定です。', 'AliceはBobに報告書を送信しました。'],
+    ]) {
+      const language = /[一-龯]/u.test(source) ? 'ja' : 'en';
+      const first = await reconciledSummary(async () => source, [], `Ken: ${source}`, language, processor);
+      const next = await reconciledSummary(async () => update, first.records, `Ken: ${update}`, language, processor);
+      assert.equal(next.records.length, 1, update);
+      assert.equal(next.records[0].section, 'complete');
+    }
+    const initial = await reconciledSummary(async messages => messages[1].content, [], 'Ken: Alice has sent Bob the report.', 'en', processor);
+    const reaffirmed = await reconciledSummary(async messages => messages[1].content, initial.records, 'Ken: Alice sent Bob the report.', 'en', processor);
+    const repeated = await reconciledSummary(async messages => messages[1].content, reaffirmed.records, 'Ken: Alice sent Bob the report.', 'en', processor);
+    assert.equal(reaffirmed.records.length, 1);
+    assert.deepEqual(repeated.records, reaffirmed.records);
+  });
+
+  test(`${processor}: Japanese nominalized negation cannot establish completion or decisions`, async () => {
+    for (const [clause, section] of [
+      ['招待状を送信した', 'complete'],
+      ['報告書を送付した', 'complete'],
+      ['作業を完了した', 'complete'],
+      ['会場を承認した', 'decision'],
+      ['計画を決定した', 'decision'],
+      ['契約に合意した', 'decision'],
+    ]) {
+      const affirmative = `${clause}。`;
+      for (const ending of ['ことはありません', 'ことがありません', 'こともありません', 'ことはない', 'ことはなかった', 'ことはありませんでした', 'ことは一度もありません', '事はありません']) {
+        const negative = `${clause}${ending}。`;
+        const generate = async messages => messages[1].content;
+        const initial = await reconciledSummary(generate, [], `Ken: ${negative}`, 'ja', processor);
+        assert.deepEqual(initial.records.map(r => [r.text, r.section]), [[negative, 'open']]);
+        assert.match(initial.summary, /決定事項\n- なし/);
+        assert.doesNotMatch(initial.summary, /完了事項/);
+        assert.deepEqual(summaryGroundingIssues(negative, '', 'No work has been completed.'), []);
+        const first = await reconciledSummary(generate, [], `Ken: ${affirmative}`, 'ja', processor);
+        assert.equal(first.records[0].section, section);
+        const next = await reconciledSummary(generate, first.records, `Ken: ${negative}`, 'ja', processor);
+        assert.equal(next.records.length, 1, negative);
+        assert.equal(next.summary, initial.summary);
+        const repeated = await reconciledSummary(generate, next.records, `Ken: ${negative}`, 'ja', processor);
+        assert.deepEqual(repeated.records, next.records);
+      }
+      // An affirmative experiential construction must remain affirmative.
+      const positive = await reconciledSummary(async messages => messages[1].content, [], `Ken: ${clause}ことがあります。`, 'ja', processor);
+      assert.equal(positive.records[0].section, section);
+      if (section === 'complete') {
+        assert.ok(summaryGroundingIssues(affirmative, '', `${clause}ことはありません。`).some(issue => /completed work/.test(issue)));
+        await assert.rejects(reconciledSummary(async () => affirmative, [], `Ken: ${clause}ことはありません。`, 'ja', processor), /grounding checks/);
+      }
+    }
+  });
+
   test(`${processor}: sequential status updates retain distinct dates, quantities and actor scopes`, async () => {
     const cases = [
       ['The November 12 pilot was approved.', 'The November 13 pilot was not approved.', '11月12日のパイロットは承認されました。', '11月13日のパイロットは承認されていません。'],

@@ -18,11 +18,13 @@ function numericValues(text) {
 function normalizedStatus(text) {
   return text.replace(/[’‘]/gu, "'").replace(/\bwon't\b/giu, 'will not').replace(/\bcan't\b/giu, 'can not').replace(/n't\b/giu, ' not');
 }
+const nominalizedNegation = /(?:した|された|していた|されていた)(?:こと|事)(?:は|が|も)?(?:一度も)?(?:ありません|なかった|ない|なく)/u;
 function hasNegation(text) {
   // Copular negatives also negate status nouns such as 承認済み/送信済み.
   // Keep the whole assertion open rather than inferring an affirmative status
   // from a word that occurs inside its negation.
   if (/(?:では|じゃ|で)(?:ない|なかった|なく|ありません|ありませんでした|なければ)/u.test(text)) return true;
+  if (nominalizedNegation.test(text)) return true;
   return /\b(?:not|never|no|neither|without|withdraw\w*|withdrew|retract\w*|revok\w*|rescind\w*)\b|未(?:決定|承認|完了|完遂|送信|送付|発送|対応|作成|実施)|(?:決定|承認|合意|完了|完遂|送信|送付|発送|対応|作成|実施)(?:して|されて)(?:いな|いません|おら)|(?:承認|完了|合意)[^。.!?]{0,12}(?:いない|いません|いなかった|いませんでした)|承認待|撤回|取り消/iu.test(normalizedStatus(text));
 }
 function hasCondition(text) {
@@ -154,9 +156,37 @@ function actorScope(source) {
 // asking the model to rewrite or delete them. No fixture topics or names.
 function topicKeys(source, text) {
   const main = normalizedStatus(source).replace(/,\s*not\s+(?:for|about|on)\b[^.!?]*/giu, '');
-  const english = [...new Set((main.toLowerCase().match(/[a-z]+/g) || []).filter(w => w.length > 2 && !englishNoise.has(w)).map(w => w === 'sent' ? 'send' : w.replace(/s$/, '')))];
-  const japanese = [...new Set((text.replace(/(送信|送付|発送|対応|作成|実施)済み?/gu, '$1').replace(/送(?:信|付)/gu, '送').replace(japaneseNoise, ' ').match(/[ァ-ヺー]{2,}|[一-龯々]{2,}|送/gu) || []))];
+  // Preserve possessives: Alice's report and a report sent to Alice do not
+  // establish the same owner, even when every bare keyword occurs in both.
+  const english = [...new Set((main.toLowerCase().match(/[a-z]+(?:'s)?/g) || []).filter(w => w.length > 2 && !englishNoise.has(w)).map(w => w === 'sent' ? 'send' : w.endsWith("'s") ? w : w.replace(/s$/, '')))];
+  const japanese = [...new Set((text.replace(nominalizedNegation, '').replace(/(送信|送付|発送|対応|作成|実施)済み?/gu, '$1').replace(/送(?:信|付)/gu, '送').replace(japaneseNoise, ' ').match(/[ァ-ヺー]{2,}|[一-龯々]{2,}|送/gu) || []))];
   return { english, japanese };
+}
+function roleOrderMatches(keys, other) {
+  // A bag of topic words cannot prove who acted on whose behalf. Compare the
+  // order of shared content anchors, excluding status verbs so a genuine
+  // pending -> completed transition can still move the verb. Keep ambiguous
+  // reorderings as separate evidence instead of guessing role equivalence.
+  const anchors = words => words.filter(word => !statusPatterns.some(pattern => pattern.test(word)));
+  const a = anchors(keys), b = anchors(other);
+  return JSON.stringify(a.filter(word => b.includes(word))) === JSON.stringify(b.filter(word => a.includes(word)));
+}
+function namedRoleScope(source) {
+  // Retain explicit ownership/direction markers around spelled-out names too:
+  // ordered keywords alone cannot distinguish "to Bob" from "from Bob", or
+  // AliceはBobに from AliceにBobは. This is a conservative lexical guard;
+  // different syntax is retained, not resolved as an equivalent paraphrase.
+  const calendar = new Set([...weekdays.map(([en]) => en.toLowerCase()), ...'january february march april may june july august september october november december'.split(' ')]);
+  return [...new Set([...normalizedStatus(source).matchAll(/\b(?:(to|from|for|by)\s+)?([A-Z][a-zA-Z'-]*)(?:('s)|([はがにのを]))?/gu)]
+    .filter(([, , name]) => !englishNoise.has(name.toLowerCase()) && !calendar.has(name.toLowerCase()) && !statusPatterns.some(pattern => pattern.test(name)))
+    .map(([, preposition, name, possessive, particle]) => [name.toLowerCase(), preposition || '', possessive || particle || ''].join(':')))];
+}
+function japaneseRoleScope(source) {
+  // Topic/object alternation is normal in status reports (報告書を送信した /
+  // 報告書は送信済み). Direction and possession still cannot be interchanged.
+  return [...new Set([...source.matchAll(/([一-龯々ァ-ヺー]+)([にの])/gu)]
+    .filter(([, noun]) => !noun.endsWith('用')) // Purpose/date qualifiers, e.g. 12日用に.
+    .map(([, noun, particle]) => `${noun}:${particle}`))];
 }
 function overlap(a, b, partial = false) {
   if (!a.length || !b.length) return 0;
@@ -172,6 +202,9 @@ function matchingRecord(records, source, text, state, correction, speaker, numer
     // rather than patching one person's action or status with another's.
     if (speaker !== record.speaker) return;
     const actor = actorScope(source), otherActor = actorScope(record.source);
+    if (JSON.stringify(namedRoleScope(source)) !== JSON.stringify(namedRoleScope(record.source))) return;
+    if (/[ぁ-ゖァ-ヺ一-龯]/u.test(source) && /[ぁ-ゖァ-ヺ一-龯]/u.test(record.source)
+      && JSON.stringify(japaneseRoleScope(source)) !== JSON.stringify(japaneseRoleScope(record.source))) return;
     // Explicit numeric corrections may omit the actor while identifying a
     // quantity. They still cannot transfer that quantity to a different actor.
     if (actor !== otherActor && (!numericCorrection || actor && otherActor)) return;
@@ -194,6 +227,9 @@ function matchingRecord(records, source, text, state, correction, speaker, numer
       && statusPatterns.some(pattern => pattern.test(source) && pattern.test(record.source));
     if (!correction && !statusTransition && state.section !== record.section && !(state.section === 'complete' && record.section === 'open') && !(state.section === 'decision' && record.section === 'discussion')) return;
     const other = topicKeys(record.source, record.text);
+    if (keys.english.length && other.english.length
+      ? !roleOrderMatches(keys.english, other.english)
+      : !roleOrderMatches(keys.japanese, other.japanese)) return;
     // When both sources are English, keep subject scope from that evidence.
     // A translated "not for X" must not overwrite the decision about X.
     // A shared subset does not establish subject equivalence (report versus
