@@ -1,6 +1,27 @@
 # Issue #130: meeting-summary validation
 
-## Current review fixes (2026-10-21)
+## Latest review fixes and validation boundary (2026-10-21)
+
+Fix `aded0f0467568f62608418ebcbdea308b7dac4c7` preserves distinct dates,
+quantities and explicit actor scopes during status reconciliation for both
+processors. It also recognizes established decisions authorizing future actions
+without treating the actions as completed. Sequential controlled regressions
+cover both processors, including uncertainty and proposal guards.
+
+The upstream fix node reported **496 unit tests passed**. Publication independently
+ran the suite: **495 passed, 1 failed** because the worktree lacks
+`node_modules/@moonshine-ai/moonshine-wasm/dist/moonshine.mjs`, required by the
+optional-ASR runtime packaging test. All **67 meeting-summary tests passed** in
+a separate focused run, and `git diff --check` passed. The upstream extension
+build was blocked by missing local model assets; publication did not rerun the
+build or browser inference.
+
+The actual-model recordings and broader results below predate `aded0f0` and
+verify the recorded source hashes, not the latest policy. Packaged real-inference
+validation of the latest changes remains pending for both models. The new
+regressions use controlled renderings and do not establish model accuracy.
+
+## Previous review fixes (2026-10-21)
 
 Japanese interrogatives such as `招待状を送信しましたか。` and
 `会場は承認されましたか。` now remain unresolved evidence even without a
@@ -36,7 +57,7 @@ venue item and exclude the venue from confirmed decisions. A controlled replay
 of all three batches passes every factual assertion for each processor, including
 replacement of Mika's pending invitations with Mika's reported completion.
 
-## Validation
+## Previous validation
 
 - `npm run setup:extension`: passed, including `npm ci`, all seven asset
   preparation scripts and the production extension build.
@@ -60,7 +81,7 @@ MEETING_SUMMARY_SMOKE=1 npx playwright test --config playwright.extension.config
   --output=test-results/questions-130
 ```
 
-## Fresh actual-model evidence
+## Previous actual-model evidence
 
 Completed at `2026-10-21T11:16:20.407Z` (LFM) and `2026-10-21T11:18:07.215Z` (Qwen), on macOS arm64,
 Apple M4 Max / Metal, Playwright 1.63.0 Chromium 153.0.0.0, cross-origin isolated,
@@ -75,7 +96,7 @@ Transformers.js 4.2.0 / ONNX Runtime Web 1.26.0-dev.20260416-b7804b056c.
 Full outputs, factual checks, Worker replies, runtime pins, timings and process
 observations are saved in [LFM evidence](meeting-summary-lfm2-130-questions.json)
 and [Qwen evidence](meeting-summary-qwen35-130-questions.json). Both recordings
-report these final implementation SHA-256 values:
+report these recorded implementation SHA-256 values:
 
 | File | SHA-256 |
 | --- | --- |
@@ -88,7 +109,7 @@ The smoke compared packaged Worker/policy/Node bytes to source before inference;
 both recordings' hashes were verified against source and the package again
 before saving these results. All earlier recordings, including `*-130-negation.json`
 (policy `e6244ef0…`) and `*-130-batching.json` (policy `5f8d9f64…`), are historical
-and do not verify the final policy. These fresh runs also supersede the validation
+and do not verify the recorded policy. These runs also supersede the validation
 gap for the previously reviewed policy `912f60e2…`.
 
 Each test verifies both palette entries, saves its production graph, prepares
