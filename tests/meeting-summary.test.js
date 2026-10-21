@@ -655,6 +655,57 @@ for (const processor of MEETING_SUMMARY_TYPES) {
     }
   });
 
+  test(`${processor}: Japanese interrogatives cannot ground completion or approval`, async () => {
+    const questions = [
+      '招待状を送信しましたか。', '招待状を送信したか', '招待状は送信済みですか。',
+      '招待状は送信されたのでしょうか。', '招待状を送信したのかな。',
+      '招待状を送信したかしら。', '招待状を送信しましたかね。',
+      '招待状を送信したかどうか確認が必要です。',
+      '会場は承認されましたか。', '会場は承認したのか。', '会場は承認済みですか',
+      '会場は承認されましたか？', '会場は承認されましたか?',
+      '招待状を送信しましたか、と確認しています。',
+    ];
+    for (const source of questions) {
+      const result = await reconciledSummary(async () => source, [], `Ken: ${source}`, 'ja', processor);
+      assert.equal(result.records[0].section, 'open', source);
+      assert.match(result.summary, /決定事項\n- なし/);
+      assert.doesNotMatch(result.summary, /完了事項/);
+      assert.ok(result.summary.split('未解決の質問・対応事項')[1].includes(source), source);
+      assert.deepEqual(summaryGroundingIssues(source, '', source), [], source);
+      assert.ok(summaryGroundingIssues('招待状は送信済みです。', '', source).length, source);
+    }
+    await assert.rejects(validatedSummary(async () => '招待状は送信済みです。', '', '招待状を送信しましたか。', 'ja', { processor }), /grounding checks/);
+    // Keep affirmative and proposal controls distinct from interrogatives.
+    for (const [source, section] of [
+      ['招待状を送信しました。', 'complete'], ['会場は承認されました。', 'decision'],
+      ['会場は承認されるかもしれません。', 'discussion'],
+    ]) {
+      const result = await reconciledSummary(async () => source, [], `Ken: ${source}`, 'ja', processor);
+      assert.equal(result.records[0].section, section, source);
+    }
+  });
+
+  test(`${processor}: successive Japanese questions retain pending work and established status`, async () => {
+    for (const [initial, question, section] of [
+      ['招待状は未送信です。', '招待状を送信しましたか。', 'open'],
+      ['会場は未承認です。', '会場は承認されましたか。', 'open'],
+      ['招待状は送信済みです。', '招待状を送信しましたか。', 'complete'],
+      ['会場は承認済みです。', '会場は承認されましたか。', 'decision'],
+      ['招待状12枚を送信しました。', '訂正：招待状は12枚ではなく10枚を送信しましたか。', 'complete'],
+    ]) {
+      const first = await reconciledSummary(async () => initial, [], `Ken: ${initial}`, 'ja', processor);
+      const saved = structuredClone(first.records);
+      const next = await reconciledSummary(async messages => messages[1].content, first.records, `Ken: ${question}`, 'ja', processor);
+      assert.deepEqual(first.records, saved);
+      assert.equal(next.records.length, 2, question);
+      assert.deepEqual(next.records[0], saved[0], question);
+      assert.equal(next.records[0].section, section, initial);
+      assert.equal(next.records[1].section, 'open', question);
+      const repeated = await reconciledSummary(async messages => messages[1].content, next.records, `Ken: ${question}`, 'ja', processor);
+      assert.deepEqual(repeated.records, next.records, question);
+    }
+  });
+
   test(`${processor}: numeric corrections reconcile status as well as quantities`, async () => {
     const cases = [
       ['We approved the pilot budget of 900 yen.', 'Correction: we have not approved the pilot budget of 800 yen, not 900.', '予算900円のパイロットを承認しました。', '予算800円のパイロットは承認していません。', 'open'],

@@ -2,6 +2,19 @@
 
 ## Current review fixes (2026-10-21)
 
+Japanese interrogatives such as `招待状を送信しましたか。` and
+`会場は承認されましたか。` now remain unresolved evidence even without a
+question mark. Classification, completion grounding and reconciliation share
+the same detector, including plain/polite endings, `かな`, `かしら`, `かね` and
+`かどうか`. Questions cannot establish completion/approval, replace pending
+work or retract established facts. A question phrased as a numeric correction
+also cannot patch earlier quantities. Exact repeated questions deduplicate.
+
+Both processors have sequential controlled regressions for pending and confirmed
+states followed by questions, repeated questions, numeric-correction questions,
+and rejection of a translation that invents completion from a question.
+Affirmative and `かもしれません` proposal controls retain their respective states.
+
 Japanese copular negatives, including `承認済みではありません` and
 `送信済みではありません`, now keep assertions in open work. When the same
 identified speaker retracts an earlier affirmative statement, the negative
@@ -29,7 +42,7 @@ replacement of Mika's pending invitations with Mika's reported completion.
   preparation scripts and the production extension build.
 - `python3 scripts/review-meeting-summary-assets.py`: passed; both immutable
   model downloads verified and generated manifests were unchanged.
-- `npm test`: **484 passed**, including **55 meeting-summary tests**.
+- `npm test`: **492 passed**, including **63 meeting-summary tests**.
 - Focused packaged MV3 regressions below: **34 passed**.
 - Actual pinned-model offline MV3 smokes below: **2 passed**; all per-batch
   factual assertions passed for both models.
@@ -40,16 +53,16 @@ npx playwright test --config playwright.extension.config.js \
   tests/extension/graph-meeting-summary.spec.js tests/extension/graph.spec.js \
   tests/extension/graph-if-condition.spec.js tests/extension/live-text.spec.js \
   tests/extension/windowed-translation.spec.js \
-  --output=test-results/negation-130-regressions
+  --output=test-results/questions-130-regressions
 
 MEETING_SUMMARY_SMOKE=1 npx playwright test --config playwright.extension.config.js \
   tests/extension/graph-meeting-summary-smoke.spec.js \
-  --output=test-results/negation-130
+  --output=test-results/questions-130
 ```
 
 ## Fresh actual-model evidence
 
-Completed at `2026-10-21T10:38:48.473Z` (LFM) and `2026-10-21T10:40:40.270Z` (Qwen), on macOS arm64,
+Completed at `2026-10-21T11:16:20.407Z` (LFM) and `2026-10-21T11:18:07.215Z` (Qwen), on macOS arm64,
 Apple M4 Max / Metal, Playwright 1.63.0 Chromium 153.0.0.0, cross-origin isolated,
 with 16 reported logical cores. Both use WebGPU q4f16 and the isolated packaged
 Transformers.js 4.2.0 / ONNX Runtime Web 1.26.0-dev.20260416-b7804b056c.
@@ -60,21 +73,23 @@ Transformers.js 4.2.0 / ONNX Runtime Web 1.26.0-dev.20260416-b7804b056c.
 | onnx-community/Qwen3.5-2B-ONNX-OPT | `ed446636739bf426e73c5a00714fd8e010d36c21` | 1,402,859,425 |
 
 Full outputs, factual checks, Worker replies, runtime pins, timings and process
-observations are saved in [LFM evidence](meeting-summary-lfm2-130-negation.json)
-and [Qwen evidence](meeting-summary-qwen35-130-negation.json). Both recordings
+observations are saved in [LFM evidence](meeting-summary-lfm2-130-questions.json)
+and [Qwen evidence](meeting-summary-qwen35-130-questions.json). Both recordings
 report these final implementation SHA-256 values:
 
 | File | SHA-256 |
 | --- | --- |
 | `web/meeting-summary-worker.js` | `667c64884a5000767020de23fc4f566882829e56cc179ec5473e60e32ddc1793` |
-| `web/meeting-summary-policy.js` | `e6244ef05663b926345cfa558c1fc79ea0e198eff78113b5a1c8ce4b2ce12515` |
+| `web/meeting-summary-policy.js` | `66ca1cf626b9b95d7e1e093b4332d6831a911c114139a11a457dd0f468a9bc4d` |
 | `web/meeting-summary-node.js` | `1b2a3c52b35dead5176d7f61423eab6b94523f02f8fda6c23e3082f36bdb76f5` |
 | `tests/fixtures/meeting-summary.js` (fixture used by both runs) | `74e0ab32d91991127f4457fe8706f8c2265dd61e2e9af7a4b7f7f5839ed123e7` |
 
 The smoke compared packaged Worker/policy/Node bytes to source before inference;
 both recordings' hashes were verified against source and the package again
-before saving these results. All earlier recordings, including `*-130-batching.json`
-(policy `5f8d9f64…`), are historical and do not verify the final policy.
+before saving these results. All earlier recordings, including `*-130-negation.json`
+(policy `e6244ef0…`) and `*-130-batching.json` (policy `5f8d9f64…`), are historical
+and do not verify the final policy. These fresh runs also supersede the validation
+gap for the previously reviewed policy `912f60e2…`.
 
 Each test verifies both palette entries, saves its production graph, prepares
 its exact pinned model from loopback, checks cache reuse on a second Save and
@@ -97,22 +112,23 @@ remains unknown. The final open section contains no stale invitations task.
 
 | Measurement | LFM | Qwen |
 | --- | ---: | ---: |
-| Worker initialization | 1.349 s | 2.726 s |
-| Start to active | 1.836 s | 2.868 s |
-| First decoded token, first update | 0.842 s | 1.183 s |
-| First generation | 1.446 s | 2.269 s |
-| Second generation | 0.595 s | 2.134 s |
-| Stop tail generation | 0.360 s | 0.909 s |
-| First update including batch wait | 31.011 s | 32.108 s |
-| Second update including batch wait | 30.613 s | 32.177 s |
-| Stop tail observed latency | 0.444 s | 0.971 s |
-| Highest sampled sum of owned Chrome process RSS | 3379 MiB | 4426 MiB |
+| Worker initialization | 1.542 s | 2.572 s |
+| Start to active | 1.826 s | 2.834 s |
+| First decoded token, first update | 0.802 s | 0.973 s |
+| First generation | 1.342 s | 2.001 s |
+| Second generation | 0.507 s | 1.324 s |
+| Stop tail generation | 0.340 s | 0.717 s |
+| First update including batch wait | 31.090 s | 31.788 s |
+| Second update including batch wait | 30.528 s | 31.347 s |
+| Stop tail observed latency | 0.383 s | 0.770 s |
+| Highest sampled sum of owned Chrome process RSS | 2856 MiB | 3733 MiB |
 
-Focused extension regressions overlapped the LFM run. These are observations,
-not isolated benchmarks or latency guarantees. RSS includes browser, renderer
-and GPU processes and can double-count shared pages; it is neither isolated model
-memory nor a measured peak. Process CPU times are recorded; CPU utilization,
-GPU kernel load, free VRAM and peak GPU allocation were not measured.
+Focused extension regressions finished before these sequential inference runs.
+These are observations, not isolated benchmarks or latency guarantees. RSS
+includes browser, renderer and GPU processes and can double-count shared pages;
+it is neither isolated model memory nor a measured peak. Process CPU times are
+recorded; CPU utilization, GPU kernel load, free VRAM and peak GPU allocation
+were not measured.
 
 Final LFM snapshot:
 
@@ -150,11 +166,12 @@ Final Qwen snapshot:
 
 ## Boundaries and limitations
 
-Actual-model fixtures are in `tests/fixtures/meeting-summary.js`. Copular
-negation/retraction variants, attribution/subject matching, batch boundaries,
-overflow and unchanged output use deterministic tests with controlled faithful
-renderings. The actual-model fixture exercises the negative venue statement;
-it does not establish general negation or translation accuracy. It tests
+Actual-model fixtures are in `tests/fixtures/meeting-summary.js`. Japanese
+interrogative variants, copular negation/retraction variants, attribution/subject
+matching, batch boundaries, overflow and unchanged output use deterministic
+tests with controlled faithful renderings. The actual-model fixture exercises
+the negative venue statement, not the new interrogative variants; it does not
+establish general interrogative, negation or translation accuracy. It tests
 summaries rather than ASR accuracy. All actual-model batches are below the
 2,000-code-unit trigger. Oversized evidence is covered by deterministic tests.
 

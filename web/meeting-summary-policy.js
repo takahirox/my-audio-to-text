@@ -33,9 +33,14 @@ function hasRequestOrWish(text) {
   // 承認したい contains 承認した, and 送信済みにしてください contains 送信済.
   return /\b(?:need\w*|want\w*|wish\w*|hop(?:e[sd]?|ing)|please|require[sd]?|requiring)\b|\b(?:request|ask)(?:s|ed|ing)?\s+(?:that|to|for)\b|必要|必須|(?:希望|要望|依頼)(?:し|する)|(?:し|され|させ)た(?:い|く|かった)|(?:して|されて)(?:ほし|欲し|もら|いただ|くださ|下さ|くれ)|ください|下さい/iu.test(text);
 }
+function hasQuestion(text) {
+  // Japanese questions need no question mark. Include sentence-final particles
+  // and embedded "whether" evidence, without treating かもしれない as a question.
+  return /[?？]|かどうか|か(?:な|しら|ね)?\s*(?:[。.!！、,」』”"）)]|$)/u.test(text);
+}
 function claimsCompletion(text) {
   return normalizedStatus(text).split('\n').some(line => {
-    if (/[?？]/u.test(line) || hasNegation(line) || hasCondition(line) || hasRequestOrWish(line)) return false;
+    if (hasQuestion(line) || hasNegation(line) || hasCondition(line) || hasRequestOrWish(line)) return false;
     if (/(?:未(?:完了|完遂)|(?:完了|完遂)(?:していな|しておら|されていな|されておら)|(?:完了|完遂)(?:事項|済みの作業|した作業)?[はが：:]?\s*(?:なし|ない|ありません)|\b(?:no|not|none|pending|unfinished)\b)/iu.test(line)) return false;
     return /(?:(?:完了|完遂)(?:した|しました|している|しています|された|されました|済)|(?:送信|送付|発送|対応|作成|実施)(?:した|しました|された|されました|済)|\b(?:completed|finished|sent)\b)/iu.test(line);
   });
@@ -54,7 +59,7 @@ export function summaryGroundingIssues(summary, previous, transcript, exactValue
   }
   // Only explicit corrections authorize this check. Do not treat every number
   // in a negative statement as a correction, or guess which topic it belongs to.
-  if (/\bcorrection\b|訂正|修正/iu.test(transcript)) {
+  if (!hasQuestion(transcript) && /\bcorrection\b|訂正|修正/iu.test(transcript)) {
     const obsolete = [...transcript.matchAll(/\bnot\s+(\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[億万千])?)|(\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[億万千])?)(?:円)?ではな[くい]/giu)]
       .flatMap(match => numericValues(match[1] || match[2]));
     const values = new Set(numericValues(summary));
@@ -152,6 +157,9 @@ function matchingRecord(records, source, text, state, correction, speaker, numer
     // section changes must retain different or missing speaker labels too,
     // rather than patching one person's action or status with another's.
     if (speaker !== record.speaker) return;
+    // A new question is evidence of uncertainty, even when prefixed with
+    // "correction". It cannot replace a pending task or an established fact.
+    if (hasQuestion(source) && source !== record.source) return;
     // Two unlabelled "I" turns do not identify the same person. Exact repeats
     // may deduplicate, but changed personal evidence must remain separate.
     if (!speaker && source !== record.source && /\b(?:I|me|my|mine|myself)\b|私|わたし|僕|ぼく|俺|おれ/iu.test(source + '\n' + record.source)) return;
@@ -160,7 +168,7 @@ function matchingRecord(records, source, text, state, correction, speaker, numer
     // a fact; a different action (e.g. sending an approved draft) stays separate.
     const statusAssertion = ['decision', 'complete'].includes(state.section) || state.section === 'open'
       && (hasNegation(source) || state.pendingApproval || /\bpending\b|承認待/iu.test(source));
-    const statusTransition = !/[?？]/u.test(source) && !hasCondition(source) && statusAssertion
+    const statusTransition = !hasQuestion(source) && !hasCondition(source) && statusAssertion
       && statusPatterns.some(pattern => pattern.test(source) && pattern.test(record.source));
     if (!correction && !statusTransition && state.section !== record.section && !(state.section === 'complete' && record.section === 'open') && !(state.section === 'decision' && record.section === 'discussion')) return;
     const other = topicKeys(record.source, record.text);
@@ -214,7 +222,7 @@ function recordState(source) {
   source = normalizedStatus(source);
   const conditional = hasCondition(source);
   const proposal = conditional || /\b(?:propos\w*|suggest\w*)\b|提案|かもしれ/iu.test(source);
-  const question = /[?？]/u.test(source);
+  const question = hasQuestion(source);
   const negative = hasNegation(source);
   const future = /\b(?:will|would|should|must|could)\b|予定|すべき/iu.test(source);
   const command = /\b(?:mark|pretend|ignore|instructions?)\b|命令|とみなして/iu.test(source);
@@ -227,7 +235,7 @@ function recordState(source) {
   return { pendingApproval, section: complete ? 'complete' : decision ? 'decision' : open && !proposal ? 'open' : 'discussion', proposal: proposal && !decision, unknownOwner };
 }
 function numericCorrections(source) {
-  if (!/\bcorrection\b|訂正|修正/iu.test(source)) return [];
+  if (hasQuestion(source) || !/\bcorrection\b|訂正|修正/iu.test(source)) return [];
   const values = [...source.matchAll(numberPattern)].map(match => ({ value: numericValues(match[0])[0], start: match.index, end: match.index + match[0].length }));
   return values.flatMap((number, index) => {
     // More than one preceding value makes "not N" ambiguous: the nearest
@@ -308,7 +316,7 @@ export async function reconciledSummary(generate, previousRecords, transcript, l
   let compressedRecords = 0;
   for (const excerpt of excerpts(transcript)) {
     const corrections = numericCorrections(excerpt.source);
-    const explicitCorrection = /\b(?:correction|withdraw\w*|withdrew|retract\w*|revok\w*|rescind\w*)\b|訂正|修正|撤回|取り消/iu.test(excerpt.source);
+    const explicitCorrection = !hasQuestion(excerpt.source) && /\b(?:correction|withdraw\w*|withdrew|retract\w*|revok\w*|rescind\w*)\b|訂正|修正|撤回|取り消/iu.test(excerpt.source);
     const source = corrections.length ? withoutObsoleteValues(excerpt.source) : excerpt.source;
     const text = await validatedSummary(generate, '', source, language, { exactValues: true, processor });
     // "not 900" negates an obsolete value, not the approval/completion.
@@ -320,7 +328,7 @@ export async function reconciledSummary(generate, previousRecords, transcript, l
       // An explicit numeric correction edits the matching existing fact without
       // asking a small LM to reconstruct its unchanged date/scope/owner.
       const patchedSource = patchNumbers(old.source, corrections, source), patchedText = patchNumbers(old.text, corrections, text);
-      if (state.section !== old.section && (state.proposal || /[?？]/u.test(source) || statusPatterns.some(pattern => pattern.test(source)))) {
+      if (state.section !== old.section && (state.proposal || hasQuestion(source) || statusPatterns.some(pattern => pattern.test(source)))) {
         // Patching the number into an old affirmative sentence would preserve
         // a retracted decision/completion. Publish the new status evidence,
         // including questions or conditional uncertainty, instead.
