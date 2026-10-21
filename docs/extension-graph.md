@@ -1,5 +1,10 @@
 # Executable extension processing graphs (#75, #81, #87, #95, #99)
 
+[Meeting summary processors](meeting-summary-nodes.md) independently support
+LFM2.5 1.2B JP and Qwen3.5 2B with committed `text: TEXT` input and complete
+`summary: TEXT` snapshots for `LiveTextDisplay.replace`. Save prepares their
+pinned assets; each owns a local WebGPU Worker and bounded incremental context.
+
 [IfCondition](if-condition-node.md) is an ordinary reusable TEXT processor with
 `text` input, an editable English condition and `yes` / `no` TEXT outputs. Both
 outputs preserve the original input string; only the selected branch emits.

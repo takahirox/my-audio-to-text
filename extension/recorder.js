@@ -23,6 +23,8 @@ const session = new TabSession(view => {
   const inputs = (view.state !== 'idle' ? view.activeGraph : view.savedGraph)?.nodes.filter(node => INPUT_TYPES.includes(node.type)) || [];
   element('tab-status').textContent = inputs.length ? inputs.map(node => `${node.id} · ${node.type === 'MicrophoneAudio' ? 'microphone' : `${node.type === 'SelectedPageMediaAudio' ? 'selected media in' : 'whole'} tab ${view.tabId ?? '(invoke toolbar)'}`}`).join('\n') : 'No active audio sources.';
   element('tts-status').textContent = view.ttsStatus;
+  element('summary-status').textContent = view.summaryStatus;
+  element('summary-status').hidden = !view.summaryStatus;
   element('condition-status').textContent = view.conditionStatus;
   element('condition-status').hidden = !view.conditionStatus;
   element('target-status').textContent = view.targetStatus;
@@ -35,7 +37,7 @@ const session = new TabSession(view => {
   element('translation-status').textContent = view.translationStatus;
   element('no-live-displays').hidden = !!element('live-displays').children.length;
   element('tts-output').hidden = !view.ttsStatus && !audioURLs.size;
-  element('model-recovery').hidden = !/missing|evict|retry|unavailable/i.test(`${view.translationStatus} ${view.ttsStatus} ${view.conditionStatus}`);
+  element('model-recovery').hidden = !/missing|evict|retry|unavailable/i.test(`${view.translationStatus} ${view.ttsStatus} ${view.conditionStatus} ${view.summaryStatus}`);
   element('cancel-session').disabled = !running;
   const needsTab = executableGraph(view.savedGraph).nodes.some(node => ['ChromeTabAudio', 'SelectedPageMediaAudio'].includes(node.type));
   element('start').disabled = !!graphError || running || !!targetControls?.busy || (needsTab && !Number.isInteger(view.tabId));

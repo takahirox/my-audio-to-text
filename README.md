@@ -4,6 +4,12 @@ The Chrome extension also supports [local IfCondition branching](docs/if-conditi
 edit a natural-language condition and route the original TEXT to Yes or No with
 a small browser-local classifier. Save prepares its verified 14 MB model.
 
+The extension also has independent [LFM2.5 1.2B JP and Qwen3.5 2B meeting-summary
+draft processors](docs/meeting-summary-nodes.md). They incrementally update a
+Japanese or English note from committed TEXT, using Save-prepared local WebGPU
+models. Connect `summary → LiveTextDisplay.replace`. Read the recorded accuracy
+limitations before relying on generated decisions, owners or task status.
+
 A local-first composable processing system that connects reusable input and processing capabilities into pipelines for useful derived information.
 
 ## Current implemented capabilities
@@ -22,7 +28,7 @@ provisional / final transcript
 
 Capture helpers normalize audio to mono 16 kHz PCM before passing it to the [Local ASR Core](docs/local-asr-core.md). ReazonSpeech ja-en, sherpa-onnx, Silero VAD and the hayamimi-inspired simulated-streaming policy are the core's current implementation. This replaceable ASR baseline is one processing capability within the product vision.
 
-The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR or Text constants with optional OPUS-MT or TranslateGemma 4B (English → Japanese and Japanese → English) through the same scheduling adapter. TranslateGemma requires a 3.112 GB Save-time download, Worker WebGPU and several GB RAM/GPU memory; Google Gemma Terms and Prohibited Use Policy apply. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; the extension groups original `source`, translated `text` and `error` primitives for direct delivery to a configurable `TextFormatter`. See the [contract audit](docs/port-contracts.md). Summary/history composition remains future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
+The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR or Text constants with optional OPUS-MT or TranslateGemma 4B (English → Japanese and Japanese → English) through the same scheduling adapter. TranslateGemma requires a 3.112 GB Save-time download, Worker WebGPU and several GB RAM/GPU memory; Google Gemma Terms and Prohibited Use Policy apply. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; the extension groups original `source`, translated `text` and `error` primitives for direct delivery to a configurable `TextFormatter`. See the [contract audit](docs/port-contracts.md). The extension supports bounded incremental meeting-summary drafts; persistent history storage and broader summary/history composition remain future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
 
 ## Node Playground
 
@@ -90,8 +96,8 @@ See [setup, exact pins, licensing, limits and real-model tests](docs/optional-as
 and [packaged/native inference evidence](docs/evidence/optional-asr-121.md).
 
 Setup installs npm dependencies, downloads/verifies ReazonSpeech, Whisper and
-English Zipformer ASR models and prepares translation/TTS runtimes, then produces `dist/chrome-extension/`. Optional
-translation/TTS and optional ASR **weights** prepare after **Save graph** for saved processor Nodes;
+English Zipformer ASR models and prepares translation/TTS/meeting-summary runtimes, then produces `dist/chrome-extension/`. Optional
+translation/TTS, meeting-summary and optional ASR **weights** prepare after **Save graph** for saved processor Nodes;
 Models provides **Download / retry**, diagnostics and deletion. Open `chrome://extensions`, enable **Developer mode**, choose
 **Load unpacked** and select `dist/chrome-extension`. With assets already
 prepared, run `npm run build:extension` after source changes, then click

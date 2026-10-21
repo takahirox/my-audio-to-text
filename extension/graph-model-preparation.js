@@ -1,3 +1,5 @@
+import { meetingSummaryManifest } from './meeting-summary-cache.js';
+import { MEETING_SUMMARY_TYPES, meetingSummaryModel } from '../web/meeting-summary-models.js';
 import { ModelAssetCache } from './model-asset-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
@@ -12,7 +14,13 @@ export function graphModelRequirements(graph) {
   const requirements = new Map();
   for (const node of graph.nodes) {
     let requirement;
-    if (node.type === 'IfCondition') requirement = { key: 'if-condition', id: 'if-condition', title: 'IfCondition · XtremeDistil · 14 MB · CPU WASM · allow 250 MB RAM per Node', manifest: ifConditionManifest };
+    if (MEETING_SUMMARY_TYPES.includes(node.type)) {
+      const model = meetingSummaryModel(node.type), type = node.type;
+      requirement = { key: model.key, id: model.key, title: model.label + (type === 'MeetingSummaryLfm2'
+        ? ' · 749 MB · allow 2 GB storage, 4 GB free RAM/GPU per Node (estimate) · WebGPU shader-f16 · LFM 1.0 terms apply (Models)'
+        : ' · 1.403 GB · allow 3 GB storage, 6 GB free RAM/GPU per Node (estimate) · WebGPU shader-f16 · Apache 2.0 (Models)'), manifest: () => meetingSummaryManifest(type) };
+    }
+    else if (node.type === 'IfCondition') requirement = { key: 'if-condition', id: 'if-condition', title: 'IfCondition · XtremeDistil · 14 MB · CPU WASM · allow 250 MB RAM per Node', manifest: ifConditionManifest };
     else if (node.type === 'OpusMtJaEn') requirement = { key: 'opus-ja-en', id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', manifest: opusMtManifest };
     else if (node.type === 'OpusMtEnJa') requirement = { key: 'opus-en-ja', id: 'opus-en-ja', title: 'OPUS-MT · English → Japanese', manifest: englishToJapaneseOpusMtManifest };
     else if (['TranslateGemmaEnJa', 'TranslateGemmaJaEn'].includes(node.type)) requirement = { key: 'translategemma', id: 'translategemma', title: 'TranslateGemma 4B · 3.112 GB download · several GB RAM/GPU memory · WebGPU · Gemma Terms apply', manifest: translateGemmaManifest };
