@@ -36,9 +36,9 @@ function hasRequestOrWish(text) {
   return /\b(?:need\w*|want\w*|wish\w*|hop(?:e[sd]?|ing)|please|require[sd]?|requiring)\b|\b(?:request|ask)(?:s|ed|ing)?\s+(?:that|to|for)\b|必要|必須|(?:希望|要望|依頼)(?:し|する)|(?:し|され|させ)た(?:い|く|かった)|(?:して|されて)(?:ほし|欲し|もら|いただ|くださ|下さ|くれ)|ください|下さい/iu.test(text);
 }
 function hasQuestion(text) {
-  // Japanese questions need no question mark. Include sentence-final particles
-  // and embedded "whether" evidence, without treating かもしれない as a question.
-  return /[?？]|かどうか|か(?:な|しら|ね)?\s*(?:[。.!！、,」』”"）)]|$)/u.test(text);
+  // Embedded questions need no question mark in either language. Include
+  // Japanese final particles, without treating かもしれない as a question.
+  return /[?？]|\bwhether\b|かどうか|か(?:な|しら|ね)?\s*(?:[。.!！、,」』”"）)]|$)/iu.test(text);
 }
 function claimsCompletion(text) {
   return normalizedStatus(text).split('\n').some(line => {

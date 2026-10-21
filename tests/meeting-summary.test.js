@@ -830,6 +830,55 @@ for (const processor of MEETING_SUMMARY_TYPES) {
     }
   });
 
+  test(`${processor}: English embedded questions cannot establish approval or completion`, async () => {
+    const questions = [
+      ['We are checking whether the venue was approved.', '会場が承認されたかどうか確認しています。'],
+      ['We discussed whether the invitations were sent.', '招待状が送信されたかどうか話し合いました。'],
+      ['WHETHER the invitations were sent remains unclear.', '招待状が送信されたかどうかは不明です。'],
+    ];
+    for (const [source, japanese] of questions) {
+      for (const language of ['ja', 'en']) {
+        const rendered = language === 'ja' ? japanese : source;
+        const result = await reconciledSummary(async () => rendered, [], source, language, processor);
+        assert.equal(result.records[0].section, 'open', source);
+        assert.match(result.summary, language === 'ja' ? /決定事項\n- なし/ : /Confirmed decisions\n- None/);
+        assert.doesNotMatch(result.summary, /Completed tasks|完了事項/);
+        assert.ok(result.summary.split(language === 'ja' ? '未解決の質問・対応事項' : 'Open questions/action items')[1].includes(rendered));
+        assert.deepEqual(summaryGroundingIssues(rendered, '', source), [], source);
+      }
+    }
+    for (const [language, affirmative] of [['ja', '招待状は送信済みです。'], ['en', 'The invitations were sent.']]) {
+      const source = questions[1][0];
+      assert.ok(summaryGroundingIssues(affirmative, '', source).length);
+      await assert.rejects(validatedSummary(async () => affirmative, '', source, language, { processor }), /grounding checks/);
+    }
+  });
+
+  test(`${processor}: successive English embedded questions preserve pending and established evidence`, async () => {
+    for (const [initial, renderedInitial, question, renderedQuestion, section] of [
+      ['The venue approval is pending.', '会場は承認待ちです。', 'We are checking whether the venue was approved.', '会場が承認されたかどうか確認しています。', 'open'],
+      ['The invitations have not been sent.', '招待状は送信されていません。', 'We discussed whether the invitations were sent.', '招待状が送信されたかどうか話し合いました。', 'open'],
+      ['The venue was approved.', '会場は承認されました。', 'We are checking whether the venue was approved.', '会場が承認されたかどうか確認しています。', 'decision'],
+      ['The invitations were sent.', '招待状は送信されました。', 'We discussed whether the invitations were sent.', '招待状が送信されたかどうか話し合いました。', 'complete'],
+      ['We completed 12 invitations.', '招待状12枚を完了しました。', 'Correction: we discussed whether we completed 10 invitations, not 12.', '訂正：招待状は12枚ではなく10枚を完了したかどうか話し合いました。', 'complete'],
+    ]) {
+      for (const language of ['ja', 'en']) {
+        const first = await reconciledSummary(async () => language === 'ja' ? renderedInitial : initial, [], `Ken: ${initial}`, language, processor);
+        const saved = structuredClone(first.records);
+        const render = async () => language === 'ja' ? renderedQuestion : question;
+        const next = await reconciledSummary(render, first.records, `Ken: ${question}`, language, processor);
+        assert.deepEqual(first.records, saved);
+        assert.equal(next.records.length, 2, question);
+        assert.deepEqual(next.records[0], saved[0], question);
+        assert.equal(next.records[0].section, section, initial);
+        assert.equal(next.records[1].section, 'open', question);
+        assert.equal(next.records[1].source, question);
+        const repeated = await reconciledSummary(render, next.records, `Ken: ${question}`, language, processor);
+        assert.deepEqual(repeated.records, next.records, question);
+      }
+    }
+  });
+
   test(`${processor}: Japanese interrogatives cannot ground completion or approval`, async () => {
     const questions = [
       '招待状を送信しましたか。', '招待状を送信したか', '招待状は送信済みですか。',

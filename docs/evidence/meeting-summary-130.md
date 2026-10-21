@@ -1,6 +1,25 @@
 # Issue #130: meeting-summary validation
 
-## Latest review fixes (2026-10-21)
+## Embedded-question review fix (2026-10-21)
+
+English embedded questions containing `whether` now use the same uncertainty
+detector as Japanese embedded questions. They remain open evidence rather than
+establishing approval or completion, cannot ground an affirmative completion
+translation, and cannot replace earlier pending work or established facts.
+Controlled English/Japanese renderings cover both processors, sequential
+updates, repeated questions and question-shaped numeric corrections. These
+regressions isolate deterministic policy behavior from model accuracy.
+
+- `node --test tests/meeting-summary.test.js`: **75 passed**.
+- `npm ci`: passed; restored the missing Moonshine dependency.
+- `npm test`: **504 passed, 0 failed, 0 skipped** after dependency installation.
+- `npm run build:extension`: blocked by missing local models; requests
+  `npm run prepare:assets`.
+- Packaged browser and real-inference smokes were not rerun for this change.
+  The recordings below validate their recorded source bytes and predate this
+  policy edit; they do not establish actual-model behavior for `whether` inputs.
+
+## Prior role/negation review fixes (2026-10-21)
 
 Both processors retain separate evidence when named actors/recipients or
 possessive owners differ. Reconciliation checks ordered content anchors,
@@ -17,7 +36,7 @@ possessive owners, Japanese particles, repeated input, same-role affirmative
 transitions, nominalized negative variants and affirmative controls. Faithful
 controlled renderings test policy invariants, not model translation accuracy.
 
-## Checks on the current implementation
+## Recorded checks before the embedded-question fix
 
 - `npm ci`: passed; restored the missing Moonshine dependency.
 - All pinned ASR, translation, optional-ASR, meeting-summary and TTS assets were
@@ -52,7 +71,7 @@ MEETING_SUMMARY_SMOKE=1 npx playwright test --config playwright.extension.config
   --output=test-results/review-fixes-130-real
 ```
 
-## Current real-inference recordings
+## Most recent real-inference recordings (before the embedded-question fix)
 
 Completed at `2026-10-21T11:53:46.789Z` (LFM) and
 `2026-10-21T11:55:32.520Z` (Qwen). Full outputs, factual assertions, Worker replies,
@@ -60,7 +79,7 @@ runtime pins and process observations are in the
 [LFM recording](meeting-summary-lfm2-130-roles-negation.json) and
 [Qwen recording](meeting-summary-qwen35-130-roles-negation.json).
 
-Both recordings match the three current implementation source/package SHA-256
+Both recordings match the three recorded implementation source/package SHA-256
 values below. The smoke compares packaged Worker/policy/Node bytes to source
 before inference; the hashes were checked again before saving the recordings.
 The unchanged test fixture hash is included for reproduction.
@@ -183,4 +202,4 @@ required post-merge verification was discovered.
 
 Other existing JSON recordings in this directory are historical and verify only
 their recorded source hashes. In particular, the earlier `*-130-questions.json`
-recordings with policy `66ca1cf…` do not validate the current policy above.
+recordings with policy `66ca1cf…` do not validate the recorded policy above.
