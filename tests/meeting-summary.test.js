@@ -336,6 +336,70 @@ test('excerpt calendar checks preserve named weekdays rather than accepting a di
 // Faithful controlled translations isolate the shared policy from model quality.
 // Run every review regression through both processor-specific rendering paths.
 for (const processor of MEETING_SUMMARY_TYPES) {
+  test(`${processor}: numeric corrections reconcile status as well as quantities`, async () => {
+    const cases = [
+      ['We approved the pilot budget of 900 yen.', 'Correction: we have not approved the pilot budget of 800 yen, not 900.', '予算900円のパイロットを承認しました。', '予算800円のパイロットは承認していません。', 'open'],
+      ['We completed 900 invitations.', 'Correction: we have not completed 800 invitations, not 900.', '招待状900枚は完了しました。', '招待状800枚は完了していません。', 'open'],
+      ['We approved the pilot budget of 900 yen.', 'Correction: we might approve the pilot budget of 800 yen, not 900.', '予算900円のパイロットを承認しました。', '予算800円のパイロットを承認するかもしれません。', 'discussion'],
+      ['We approved the pilot budget of 900 yen.', 'Correction: the pilot budget of 800 yen is only a proposal, not 900.', '予算900円のパイロットを承認しました。', '予算800円のパイロットは提案です。', 'discussion'],
+      ['We have not approved the pilot budget of 900 yen.', 'Correction: we approved the pilot budget of 800 yen, not 900.', '予算900円のパイロットは承認していません。', '予算800円のパイロットを承認しました。', 'decision'],
+      ['パイロットの予算900円を承認しました。', '訂正：パイロットの予算は900円ではなく800円で、承認していません。', 'パイロットの予算900円を承認しました。', 'パイロットの予算は800円で、承認していません。', 'open'],
+    ];
+    for (const [source, correction, rendered, updated, section] of cases) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const first = await reconciledSummary(async () => language === 'ja' ? rendered : source, [], source, language, processor);
+        const saved = structuredClone(first.records);
+        const next = await reconciledSummary(async messages => language === 'ja' ? updated : messages[1].content, first.records, correction, language, processor);
+        assert.deepEqual(first.records, saved);
+        assert.equal(next.records.length, 1, correction);
+        assert.equal(next.records[0].section, section, correction);
+        assert.doesNotMatch(next.summary, /900/);
+        assert.doesNotMatch(next.records[0].source, /900/);
+        assert.match(next.summary, /800/);
+        if (section !== 'decision') assert.match(next.summary, language === 'ja' ? /決定事項\n- なし/ : /Confirmed decisions\n- None/);
+        assert.doesNotMatch(next.summary, /Completed tasks|完了事項/);
+      }
+    }
+  });
+
+  test(`${processor}: same-subject status transitions do not require correction keywords`, async () => {
+    const cases = [
+      ['The venue approval is pending.', 'The venue is approved.', '会場は承認待ちです。', '会場は承認済みです。', 'decision'],
+      ['The venue is approved.', 'The venue is not approved.', '会場は承認済みです。', '会場は承認されていません。', 'open'],
+      ['The invitations have been sent.', 'The invitations have not been sent.', '招待状は送信済みです。', '招待状は送信されていません。', 'open'],
+      ['The invitations have not been sent.', 'The invitations have been sent.', '招待状は送信されていません。', '招待状は送信済みです。', 'complete'],
+      ['会場は承認待ちです。', '会場は承認済みです。', '会場は承認待ちです。', '会場は承認済みです。', 'decision'],
+      ['招待状は送信済みです。', '招待状は送信されていません。', '招待状は送信済みです。', '招待状は送信されていません。', 'open'],
+    ];
+    for (const [source, update, rendered, updated, section] of cases) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const first = await reconciledSummary(async () => language === 'ja' ? rendered : source, [], source, language, processor);
+        const saved = structuredClone(first.records);
+        const next = await reconciledSummary(async () => language === 'ja' ? updated : update, first.records, update, language, processor);
+        assert.deepEqual(first.records, saved);
+        assert.equal(next.records.length, 1, update);
+        assert.equal(next.records[0].section, section, update);
+        assert.equal(next.records[0].text, language === 'ja' ? updated : update);
+        assert.ok(!next.summary.includes(language === 'ja' ? rendered : source));
+      }
+    }
+    // A question, conditional, future task or different subject/action cannot
+    // revoke an established fact merely by sharing a topic or status word.
+    for (const update of ['Have we approved the venue?', 'If the venue is approved, we could meet.', 'We will send the invitations.', 'The contract approval is pending.']) {
+      const source = update.includes('invitations') ? 'The invitations have been sent.' : 'The venue is approved.';
+      const first = await reconciledSummary(async () => source, [], source, 'en', processor);
+      const next = await reconciledSummary(async () => update, first.records, update, 'en', processor);
+      assert.equal(next.records.length, 2, update);
+      assert.equal(next.records[0].text, source);
+    }
+    const first = await reconciledSummary(async () => 'The draft is approved.', [], 'The draft is approved.', 'en', processor);
+    const next = await reconciledSummary(async () => 'The draft has not been sent.', first.records, 'The draft has not been sent.', 'en', processor);
+    assert.equal(next.records.length, 2);
+    assert.equal(next.records[0].section, 'decision');
+  });
+
   test(`${processor}: contractions, negation and conditional scope never assert decisions or completion`, async () => {
     const cases = [
       ["The venue isn't approved.", '会場は承認されていません。', 'open'],

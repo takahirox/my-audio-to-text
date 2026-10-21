@@ -1,177 +1,164 @@
-# Issue #130: reconciliation and actual-model evidence
+# Issue #130: status reconciliation and current packaged inference evidence
 
-## Review reconciliation fixes (2026-10-21)
+## Review fixes (2026-10-21)
 
-The shared policy now conservatively classifies negation, contractions and
-conditional statements; reconciles explicit decision/completion withdrawals;
-scopes numeric corrections independently in source and rendered text; and merges
-reaffirmations without dropping compatible dates, budgets or other details.
-Ambiguous numeric targets retain evidence with a visible uncertainty label rather
-than silently changing equal dates or unrelated quantities.
+Numeric corrections now reconcile approval/completion as well as quantities. For
+example, an approved 900-yen pilot followed by “Correction: we have not approved
+the pilot budget of 800 yen, not 900” becomes an open, unapproved 800-yen item.
+The obsolete-number clause no longer negates an otherwise affirmative status.
+Corrections that make a fact conditional or proposed retain that uncertainty
+instead of patching a new number into the old confirmed sentence.
 
-- `npm ci --no-audit --no-fund`: passed; pinned dependencies installed.
-- `npm test`: **464 passed**, including **35 meeting-summary tests**. New
-  regressions exercise both processor types with controlled English/Japanese
-  renderings, sequential withdrawals, repeated numeric values and reaffirmations.
-  These establish deterministic policy behavior, not model semantic accuracy.
-- `npm run build:extension`: blocked by missing prepared local assets
-  (`Missing local models. Run npm run prepare:assets first.`).
-- Packaged browser regressions and both actual-model smokes were not rerun:
-  `web/vendor`, `dist` and the local model cache are absent in this worktree.
-- `git diff --check`: passed.
+Clear same-subject status assertions replace pending/approved or sent/unsent
+records in either direction without requiring a correction keyword. Matching
+checks the status predicate as well as the subject, so sending an approved draft
+remains a separate action. Questions, conditions and independent future tasks
+remain separate evidence. Unrelated or tied subject matches remain conservative.
 
-The recorded real-model JSONs below predate these policy fixes. Their source
-hashes do not validate the updated policy; their outputs, measurements and test
-counts remain historical evidence. Model/runtime pins and rendering prompts have
-not changed. The remaining sections describe that earlier run.
+Four new parameterized tests cover both processors, English/Japanese output,
+English/Japanese evidence, sequential transitions, numeric status corrections,
+uncertainty, transactionality and unrelated-action safeguards. These controlled
+renderings verify deterministic policy behavior, not model translation accuracy.
 
-## Previously recorded actual-model run
+## Reproduction and checks
 
-**Both earlier factual smoke failures were resolved for the recorded source hashes.** Both
-actual pinned models passed all unchanged factual assertions across three sequential
-English/Japanese batches in packaged offline Chrome MV3, with a real Live display,
-graceful Stop and Cancel after an actual decoded token. This is fixture-specific
-evidence, not a guarantee of general semantic accuracy or a model ranking.
-
-## What changed
-
-The old whole-note rewrite repeatedly invented names/completed work, lost approval
-scope and retained corrected values. Bounded repair alone left both Live displays
-empty. The Worker now renders only short new evidence excerpts and reconciles them
-with a bounded previous note. Code preserves original speaker labels, proposal and
-unknown-owner markers, explicit approval/completion state and numeric corrections.
-A completed task replaces its matching open item without replacing a decision.
-Unrelated or ambiguous topic matches are retained separately. No fixture-specific
-content, model/inference mocks, replacement checkpoints or canned summaries are
-used. Model/runtime revisions and integrity pins are unchanged.
-
-Number/scale and named-weekday preservation checks reject mistranslations (including
-250,000 yen becoming 250万円 or Friday becoming Saturday). Calendar translation
-hints and short model-specific rendering instructions address the observed errors.
-Repairs keep the evidence unchanged, place feedback in the system message and
-commit no partial batch. Record/source/rendered-text bounds and lossy eviction are
-described in [the processor guide](../meeting-summary-nodes.md).
-
-## Reproduction and boundaries
-
-After the asset preparation steps in the guide:
+Run from the repository root with Node/npm, Python 3 and Playwright Chromium
+installed. No model/runtime pins were changed by asset preparation.
 
 ```sh
+npm run setup:extension
+python3 scripts/review-meeting-summary-assets.py
 npm test
-npm run build:extension
-MEETING_SUMMARY_CHANNEL=chrome npm run test:meeting-summary-real -- --output .cache/reconciled-final-values
-npm run test:extension -- --output .cache/extension-regressions
+npm run test:browser -- --project=chromium --workers=1 --output=test-results/browser-130
+npm run test:extension -- --output=test-results/extension-130
+npm run test:meeting-summary-real -- --output=test-results/summary-130
 ```
 
-Recorded 2026-10-21T04:44:35.521Z / 2026-10-21T04:46:22.803Z, macOS 26.6.2/arm64,
-Apple M4 Max, 64 GiB physical RAM, Google Chrome 155.0.8059.85 (headless).
-The reduced browser user agent is retained in the raw evidence.
-Playwright 1.63.0; cross-origin isolation and Worker WebGPU shader-f16 were active.
-ANGLE used Metal / Apple M4 Max. Other browser regressions ran on the host, so
-latencies are observations rather than controlled benchmarks or promised targets.
+- `setup:extension`: passed, including pinned asset preparation, runtime integrity
+  checks and `build:extension`; the missing-assets build blocker is resolved.
+- Asset review/download: both existing manifests reproduced without a diff;
+  748,958,502 LFM bytes and 1,402,859,425 Qwen bytes verified locally.
+- `npm test`: **468 passed**, including **39 meeting-summary tests**.
+- Chromium browser suite: **119 passed, 9 skipped** (opt-in inference/benchmark
+  tests). WebKit was not rerun.
+- Packaged extension suite: **172 passed, 16 skipped**, covering graph storage,
+  pipeline/ASR, translation, IfCondition, TTS, asset preparation and lifecycle
+  regressions. Heavy inference tests remain opt-in; the two meeting-summary
+  skips are superseded by the explicit actual-model run below.
+- Both real-model MV3 smokes: **2 passed**, with all existing factual assertions
+  retained. The final implementation was exercised, not historical built code.
+- `git diff --check`: passed.
 
-Each smoke used the production graph, owned Worker, tokenizer, packaged runtime,
-exact verified model bytes and LiveTextDisplay.replace. Save fetched unchanged
-pinned bytes over loopback, reused cache on a second Save, and graph reload retained
-Japanese settings and wiring. Both processor options appeared in the palette.
-Chrome was made offline before Start. The controllable committed TEXT producer
-is the only source fixture; ASR/native capture and the other heavy inference paths
-are outside this smoke. HTTP(S) requests after Start, CSP violations and console
-errors were zero. No inference/runtime/model mocks were used.
+## Fresh actual-model runs
 
-Updates 1 and 2 used the normal 30-second timer. Stop drained update 3 before its
-timer, retained the final snapshot and released the Worker. A new session cleared
-context; Cancel was triggered on its first actual decoded token, released the
-Worker and emitted no new result or Live write. This replaces a polling assertion
-that could miss a subsecond generation status, while exercising real inference.
+Completed at 2026-10-21 05:14 UTC (LFM) and 05:16 UTC (Qwen), on macOS arm64,
+Apple M4 Max / Metal, Playwright 1.63.0 Chromium 153.0.0.0, with cross-origin
+isolation and 16 reported logical cores. The runtime is the isolated packaged
+Transformers.js 4.2.0 / ORT 1.26.0-dev.20260416-b7804b056c WebGPU q4f16 path.
 
-Exact built Worker/policy/Node SHA-256 hashes are included in each JSON, and the
-smoke checks built bytes against source before execution. Model byte counts,
-immutable revisions, runtime/file integrity pins, all outputs/factual checks,
-Worker replies and process observations are in:
+| Model | Immutable revision | Prepared bytes |
+| --- | --- | ---: |
+| LiquidAI/LFM2.5-1.2B-JP-202606-ONNX | `01b5a0a33d22253d5ee52b367d2375eeb113b7cd` | 748,958,502 |
+| onnx-community/Qwen3.5-2B-ONNX-OPT | `ed446636739bf426e73c5a00714fd8e010d36c21` | 1,402,859,425 |
 
-- [LFM current run](meeting-summary-lfm2-130-reconciled.json)
-- [Qwen current run](meeting-summary-qwen35-130-reconciled.json)
+Full outputs, runtime pins, Worker replies, source hashes, timings and process
+observations are saved in [LFM evidence](meeting-summary-lfm2-130-status.json)
+and [Qwen evidence](meeting-summary-qwen35-130-status.json). Both report policy
+SHA-256 `bbabb38ce6c81ff7cb62fd8237c74bff2b256a52326eeca1930a695b791b9eb3`.
+The smoke compares packaged Worker/policy/Node bytes to source before running;
+the evidence hashes were checked again against the final source files.
 
-## Observed results
+Each test selects/saves/reloads its production graph, verifies both palette
+entries, downloads the exact pinned model bytes from loopback during Save,
+checks cache reuse on a second Save, and reloads the saved graph. A controllable
+committed TEXT producer supplies the three English/Japanese fixture batches;
+Model inference uses actual owned Workers, packaged runtimes and the real Live
+display, without inference mocks.
+The entire context is offline before Start. Each real model emits nonempty
+Japanese snapshots to `LiveTextDisplay.replace`, performs a second update,
+and drains the third accepted batch on graceful Stop. Both preserve the final
+snapshot and release all owned Workers. A fresh session clears the note; Cancel
+on its first actual decoded token releases the Worker with no result or late
+Live write. Both observed **zero HTTP requests after Start**, **zero recorder CSP
+violations**, and **zero console errors**. This tests summaries, not ASR accuracy.
 
 | Measurement | LFM | Qwen |
 | --- | ---: | ---: |
-| Prepared model bytes | 748,958,502 | 1,402,859,425 |
-| Worker initialization | 1.036 s | 2.462 s |
-| Start to active | 1.325 s | 2.831 s |
-| First decoded token, first update | 0.737 s | 0.945 s |
-| First generation | 1.272 s | 1.981 s |
-| Second generation | 0.484 s | 1.384 s |
-| Stop tail generation | 0.320 s | 0.708 s |
-| First update including batch wait | 31.033 s | 31.652 s |
-| Second update including batch wait | 30.496 s | 31.400 s |
-| Stop tail observed latency | 0.369 s | 0.747 s |
-| Highest sampled sum of owned Chrome process RSS | 3646 MiB | 4390 MiB |
+| Worker initialization | 1.349 s | 2.268 s |
+| Start to active | 1.829 s | 2.325 s |
+| First decoded token, first update | 0.793 s | 1.077 s |
+| First generation | 1.335 s | 2.165 s |
+| Second generation | 0.514 s | 1.394 s |
+| Stop tail generation | 0.347 s | 0.708 s |
+| First update including batch wait | 30.871 s | 32.106 s |
+| Second update including batch wait | 30.533 s | 31.414 s |
+| Stop tail observed latency | 0.382 s | 0.746 s |
+| Highest sampled sum of owned Chrome process RSS | 3370 MiB | 4701 MiB |
 
-RSS includes browser, renderer and GPU processes and can double-count shared pages;
-it is not isolated model allocation or measured peak memory. Process CPU times
-are recorded, but utilization, GPU kernel load, free VRAM and peak GPU allocation
-were not measured. Concurrent model instances still require their own weights and
-working memory; the guide’s 4/6 GB allowances remain planning estimates.
+Other regression suites were running on the host during these smokes, so these
+are observations, not isolated performance benchmarks or latency guarantees.
+RSS includes browser, renderer and GPU processes and can double-count shared
+pages; it is not isolated model allocation or measured peak memory. Process CPU
+times are recorded, but utilization, GPU kernel load, free VRAM and peak GPU
+allocation were not measured. Concurrent summary-model inference was not tested;
+each instance requires its own weights and working memory.
 
-All per-batch factual checks pass: proposal remains unapproved initially; the
-250,000-yen pilot becomes approved while venue approval remains pending; Friday
-invitations remain open before becoming completed; accessibility ownership stays
-unknown; repetition does not invent people or completed administrative work.
+All per-batch factual checks pass: the initial pilot is a proposal, its corrected
+250,000-yen budget becomes approved, venue approval remains pending, invitations
+stay open until explicitly reported sent, and accessibility ownership stays
+unknown. No recorded invented names or completed administrative work recur.
 
 Final LFM snapshot:
 
 ```text
 議論の要点
-- なし
+- 【提案】【担当者不明】Mika: 誰かがアクセシビリティを確認すべきですが、誰が担当するかは分かりません。
 決定事項
 - Ken: 承認済み。11月12日に予算250,000円でパイロットを開始することを決定しました。
 完了事項
 - ミカ: 招待状は送信済みです。
 未解決の質問・対応事項
+- Ken: 私たちはまだ承認が必要です。（承認待ち）
+- ケン: 私たちはパイロットではなく、会場の承認をまだ必要としています。 会場はまだ承認されていません。（承認待ち）
 - 【担当者不明】ケン: アクセシビリティの確認担当者は不明です。
-- ケン: 会場はまだ承認されていません。（承認待ち）
 ```
 
 Final Qwen snapshot:
 
 ```text
 議論の要点
-- なし
+- 【提案】【担当者不明】Mika: 誰かがアクセシビリティを確認してください。誰か分かりません。
 決定事項
 - Ken: 承認されました。11 月 12 日に 25 万円でのパイロット事業を開始することになりました。
 完了事項
 - ミカ: 招待状は送信済みです。
 未解決の質問・対応事項
+- Ken: まだ承認が必要です。（承認待ち）
+- ケン: 会場への承認は必要ですが、パイロットへの承認は不要です。 会場はまだ未承認です。（承認待ち）
 - 【担当者不明】ケン: アクセシビリティの確認担当者は不明です。
-- ケン: 会場はまだ未承認です。（承認待ち）
 ```
 
-## Checks and limitations
+## Boundaries and limitations
 
-- `npm test`: **456 passed**, including **27 meeting-summary tests**. Controlled
-  renderings test reconciliation, ambiguity, number/weekday guards, memory bounds
-  and transactional failure; they do not establish model quality.
-- `npm run build:extension`: **passed**, including runtime integrity validation.
-- Final actual-model offline smoke: **2 passed**; no factual assertions relaxed.
-- Full extension regressions: **172 passed, 16 skipped**. Heavy inference
-  smokes remain opt-in; the two summary skips are superseded by the explicit
-  passing real-model run above. Other heavy inference paths were not rerun.
-- `git diff --check`: **passed**.
+The deterministic review regressions use controlled faithful renderings. The
+actual-model fixture is `tests/fixtures/meeting-summary.js`; it establishes
+local inference and fixture-specific factual/lifecycle behavior, not general
+semantic accuracy or subjective quality. The new outputs retain an unspecified
+“still need approval” item and repeated accessibility evidence across sections;
+Qwen renders the initial accessibility suggestion awkwardly as a request.
+Lexical reconciliation intentionally retains ambiguous subjects instead of
+guessing which old fact to remove. It can miss paraphrases, conflate similar
+subjects, leave duplicate or stale evidence, or misclassify unfamiliar wording.
+Models can omit/mistranslate facts or follow hostile text. Bounded history
+eviction can lose earlier facts. Keep the transcript and verify AI drafts.
 
-Extraction is conservative and lexical, not general semantic verification. Models
-can still mistranslate, omit detail or follow hostile text, and matching can miss
-paraphrases or conflate similar subjects. Unfamiliar approval/completion phrasing
-may remain in discussion rather than being promoted. Ambiguous corrections can
-leave older items alongside new evidence. History eviction can omit earlier facts.
-English output, arbitrary long meetings, simultaneous heavy model instances and
-other hardware were not newly measured by these real-model runs. Keep the source
-transcript and verify AI drafts. Subjective comparison and model preference remain
-out of scope; no human acceptance result or automatic winner is asserted.
+English model output, arbitrary long meetings, simultaneous heavy models and
+other hardware were not newly measured. Heavy inference smokes for unrelated
+ASR/translation/IfCondition/TTS models remain opt-in and were not rerun; their
+unit and available browser/extension regressions were run. No human quality
+result, automatic winner or default preference is asserted. No deployment-only
+or required post-merge verification was discovered.
 
-The previous failures remain available as historical diagnostics:
-[LFM completion guard](meeting-summary-lfm2-130-completion-guard.json) and
-[Qwen completion guard](meeting-summary-qwen35-130-completion-guard.json).
-They describe the superseded whole-note implementation, not the current successful
-path. No deployment-only or required post-merge verification was discovered.
+Earlier [LFM](meeting-summary-lfm2-130-reconciled.json) and
+[Qwen](meeting-summary-qwen35-130-reconciled.json) recordings are historical and
+are superseded for current-source validation by the fresh status-run evidence.

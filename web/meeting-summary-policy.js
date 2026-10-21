@@ -112,7 +112,15 @@ const MAX_RECORDS = 32;
 const MAX_MEMORY_CHARS = 12000;
 const numberPattern = /\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[億万千])?/gu;
 const englishNoise = new Set(('a an and are as at be been being by can correction could decided decision approved approval agreed confirmed do does for from had has have i in is it me might must need not of on only or our proposed proposal should still that the their them there these they this to was we were will with would yen you someone who know don withdraw withdrawn withdrew retract retracted revoke revoked rescind rescinded').split(' '));
-const japaneseNoise = /(?:月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日|未|完了|担当者|責任者|不明|未定|必要|提案|決定|修正|訂正|開始|万円|予定)/gu;
+const japaneseNoise = /(?:月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日|未|完了|担当者|責任者|不明|未定|必要|提案|承認待|承認|合意|決定|修正|訂正|開始|万円|予定)/gu;
+const statusPatterns = [
+  /\b(?:approv\w*|approval)\b|承認/iu,
+  /\b(?:decid\w*|decision)\b|決定/iu,
+  /\bagree\w*\b|合意/iu,
+  /\bconfirm\w*\b|確定/iu,
+  /\b(?:send|sending|sent)\b|送信|送付|発送/iu,
+  /\b(?:finish\w*|complet\w*)\b|完了|完遂/iu,
+];
 
 // Lexical matching deliberately retains ambiguous/unrelated items rather than
 // asking the model to rewrite or delete them. No fixture topics or names.
@@ -131,7 +139,14 @@ function matchingRecord(records, source, text, state, correction) {
   const keys = topicKeys(source, text);
   let match = -1, best = 0.99, ambiguous = false;
   records.forEach((record, index) => {
-    if (!correction && state.section !== record.section && !(state.section === 'complete' && record.section === 'open') && !(state.section === 'decision' && record.section === 'discussion')) return;
+    // An assertion about the same status can supersede it in either direction
+    // without a special correction keyword. Questions/conditions do not revoke
+    // a fact; a different action (e.g. sending an approved draft) stays separate.
+    const statusAssertion = ['decision', 'complete'].includes(state.section) || state.section === 'open'
+      && (hasNegation(source) || state.pendingApproval || /\bpending\b|承認待/iu.test(source));
+    const statusTransition = !/[?？]/u.test(source) && !hasCondition(source) && statusAssertion
+      && statusPatterns.some(pattern => pattern.test(source) && pattern.test(record.source));
+    if (!correction && !statusTransition && state.section !== record.section && !(state.section === 'complete' && record.section === 'open') && !(state.section === 'decision' && record.section === 'discussion')) return;
     const other = topicKeys(record.source, record.text);
     // When both sources are English, keep subject scope from that evidence.
     // A translated "not for X" must not overwrite the decision about X.
@@ -268,21 +283,27 @@ export async function reconciledSummary(generate, previousRecords, transcript, l
     const explicitCorrection = /\b(?:correction|withdraw\w*|withdrew|retract\w*|revok\w*|rescind\w*)\b|訂正|修正|撤回|取り消/iu.test(excerpt.source);
     const source = corrections.length ? withoutObsoleteValues(excerpt.source) : excerpt.source;
     const text = await validatedSummary(generate, '', source, language, { exactValues: true, processor });
-    const state = recordState(excerpt.source);
+    // "not 900" negates an obsolete value, not the approval/completion.
+    const state = recordState(source);
     const index = matchingRecord(records, source, text, state, explicitCorrection);
     const old = records[index];
+    const record = { ...excerpt, source, text, ...state, ...(corrections.length && index < 0 ? { uncertainCorrection: true } : {}) };
     if (old && corrections.length && corrections.some(c => numericValues(old.text).includes(c.old))) {
       // An explicit numeric correction edits the matching existing fact without
       // asking a small LM to reconstruct its unchanged date/scope/owner.
       const patchedSource = patchNumbers(old.source, corrections, source), patchedText = patchNumbers(old.text, corrections, text);
-      if (patchedSource !== null && patchedText !== null) records[index] = { ...old, source: patchedSource, text: patchedText };
+      if (state.section !== old.section && (state.proposal || /[?？]/u.test(source) || statusPatterns.some(pattern => pattern.test(source)))) {
+        // Patching the number into an old affirmative sentence would preserve
+        // a retracted decision/completion. Publish the new status evidence,
+        // including questions or conditional uncertainty, instead.
+        records[index] = record;
+      } else if (patchedSource !== null && patchedText !== null) records[index] = { ...old, source: patchedSource, text: patchedText };
       else {
         // Keep both pieces of evidence, but do not present an uncertain target
         // as a current confirmed fact or silently guess a date/quantity.
         records[index] = { ...old, source: old.source + ' ' + excerpt.source, text: old.text + ' ' + text, section: 'discussion', uncertainCorrection: true };
       }
     } else {
-      const record = { ...excerpt, text, ...state, ...(corrections.length && index < 0 ? { uncertainCorrection: true } : {}) };
       if (index >= 0) records.splice(index, 1, !explicitCorrection && old.section === state.section ? mergeReaffirmation(old, record) : record); else records.push(record);
     }
     const newest = index >= 0 ? records[index] : records.at(-1);

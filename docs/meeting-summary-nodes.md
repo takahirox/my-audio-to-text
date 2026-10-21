@@ -65,11 +65,17 @@ English contractions) and conditional language prevent promotion to a confirmed
 decision or completed task. Compatible records with unambiguous matching subject
 words are updated; unrelated or tied matches are retained separately. Explicit
 withdrawals and corrections can move a former decision or completion back to open
-work. Reaffirmations retain compatible earlier details rather than replacing a
-dated, budgeted decision with a shorter statement.
+work. Clear same-subject approval/completion assertions also replace the previous
+status without a correction keyword. Without an explicit correction, questions
+and conditions stay separate; matching distinguishes approving a draft from
+sending it. Reaffirmations retain
+compatible earlier details rather than replacing a dated, budgeted decision
+with a shorter statement.
 
 An explicit numerical correction patches only an identified quantity in both
 the source and its rendering, preserving unrelated equal numbers and dates.
+If the correction also changes approval/completion or makes it uncertain, the
+new status evidence replaces the old sentence rather than inheriting its status.
 Ambiguous targets retain the evidence with a visible **Correction target unclear**
 label (Japanese: **訂正対象不明**); a matched record with an ambiguous correction
 moves to discussion rather than remaining confirmed. A completed task replaces
