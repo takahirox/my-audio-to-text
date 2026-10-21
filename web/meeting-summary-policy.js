@@ -24,9 +24,14 @@ function hasNegation(text) {
 function hasCondition(text) {
   return /\b(?:if|unless|when|once|until|assuming|provided|could|would|might|should)\b|\bmay\s+(?:be|have|approve|decide|agree|confirm|complete|finish|send)\b|subject to|たら|なら|場合|すれば|次第/iu.test(text);
 }
+function hasRequestOrWish(text) {
+  // Status words inside a request or wish are not assertions. In particular,
+  // 承認したい contains 承認した, and 送信済みにしてください contains 送信済.
+  return /\b(?:need\w*|want\w*|wish\w*|hop(?:e[sd]?|ing)|please|require[sd]?|requiring)\b|\b(?:request|ask)(?:s|ed|ing)?\s+(?:that|to|for)\b|必要|必須|(?:希望|要望|依頼)(?:し|する)|(?:し|され|させ)た(?:い|く|かった)|(?:して|されて)(?:ほし|欲し|もら|いただ|くださ|下さ|くれ)|ください|下さい/iu.test(text);
+}
 function claimsCompletion(text) {
   return normalizedStatus(text).split('\n').some(line => {
-    if (hasNegation(line) || hasCondition(line)) return false;
+    if (hasNegation(line) || hasCondition(line) || hasRequestOrWish(line)) return false;
     if (/(?:未(?:完了|完遂)|(?:完了|完遂)(?:していな|しておら|されていな|されておら)|(?:完了|完遂)(?:事項|済みの作業|した作業)?[はが：:]?\s*(?:なし|ない|ありません)|\b(?:no|not|none|pending|unfinished)\b)/iu.test(line)) return false;
     return /(?:(?:完了|完遂)(?:した|しました|している|しています|された|されました|済)|送信済|送付済|発送済|対応済|作成済|実施済|\b(?:completed|finished|sent)\b)/iu.test(line);
   });
@@ -191,9 +196,10 @@ function recordState(source) {
   const negative = hasNegation(source);
   const future = /\b(?:will|would|should|must|could)\b|予定|すべき/iu.test(source);
   const command = /\b(?:mark|pretend|ignore|instructions?)\b|命令|とみなして/iu.test(source);
-  const complete = !question && !negative && !conditional && !future && !command && claimsCompletion(source);
-  const decision = !question && !negative && !conditional && !future && !proposal && !command && /\b(?:decided|agreed|approved|confirmed)\b|(?:決定|合意|承認)(?:した|しました|された|されました|済)|決まった/iu.test(source);
-  const open = question || negative || /\b(?:will|must|should|need|pending|unknown|unresolved|unclear|unassigned)\b|不明|未承認|承認待|必要|未完了|予定|すべき/iu.test(source);
+  const requestOrWish = hasRequestOrWish(source);
+  const complete = !question && !negative && !conditional && !future && !proposal && !command && !requestOrWish && claimsCompletion(source);
+  const decision = !question && !negative && !conditional && !future && !proposal && !command && !requestOrWish && /\b(?:decided|agreed|approved|confirmed)\b|(?:決定|合意|承認)(?:した|しました|された|されました|済)|決まった/iu.test(source);
+  const open = question || negative || requestOrWish || /\b(?:will|must|should|need|pending|unknown|unresolved|unclear|unassigned)\b|不明|未承認|承認待|必要|未完了|予定|すべき/iu.test(source);
   const unknownOwner = /(?:do not|don't) know who|(?:owner|responsib[^.!?]{0,20})[^.!?]{0,20}(?:unknown|unassigned)|(?:担当者|責任者)[^。.!?]{0,15}(?:不明|未定)/iu.test(source);
   const pendingApproval = !question && open && /\b(?:need|pending|await)[^.!?]*approval|未承認|承認待/iu.test(source);
   return { pendingApproval, section: complete ? 'complete' : decision ? 'decision' : open && !proposal ? 'open' : 'discussion', proposal: proposal && !decision, unknownOwner };

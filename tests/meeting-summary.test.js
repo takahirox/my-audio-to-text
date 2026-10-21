@@ -336,6 +336,48 @@ test('excerpt calendar checks preserve named weekdays rather than accepting a di
 // Faithful controlled translations isolate the shared policy from model quality.
 // Run every review regression through both processor-specific rendering paths.
 for (const processor of MEETING_SUMMARY_TYPES) {
+  test(`${processor}: requests and wishes remain open instead of confirming decisions or completion`, async () => {
+    const cases = [
+      ['We need to get the venue approved.', '会場は承認が必要です。'],
+      ['We want the venue approved.', '会場を承認してほしいです。'],
+      ['We hope the invitations have been sent.', '招待状が送信済みであることを希望します。'],
+      ['Please have the invitations sent.', '招待状を送信してください。'],
+      ['We need the invitations completed.', '招待状を完了する必要があります。'],
+      ['予算を承認したいです。', '予算を承認したいです。'],
+      ['予算を承認したかったです。', '予算を承認したかったです。'],
+      ['会場を承認してほしいです。', '会場を承認してほしいです。'],
+      ['招待状は送信済みにしてください。', '招待状は送信済みにしてください。'],
+      ['招待状を完了したいです。', '招待状を完了したいです。'],
+      ['招待状を完了していただきたいです。', '招待状を完了していただきたいです。'],
+    ];
+    for (const [source, text] of cases) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const rendered = language === 'ja' ? text : source;
+        const result = await reconciledSummary(async () => rendered, [], source, language, processor);
+        assert.equal(result.records.length, 1, source);
+        assert.equal(result.records[0].section, 'open', source);
+        assert.match(result.summary, language === 'ja' ? /決定事項\n- なし/ : /Confirmed decisions\n- None/);
+        assert.doesNotMatch(result.summary, /Completed tasks|完了事項/);
+        assert.ok(result.summary.split(language === 'ja' ? '未解決の質問・対応事項' : 'Open questions/action items')[1].includes(rendered), source);
+      }
+    }
+    // A request containing a past-tense status word cannot ground an actual
+    // completion claim, even if the rendering drops the request's modality.
+    assert.ok(summaryGroundingIssues('招待状は送信済みです。', '', '招待状は送信済みにしてください。').length);
+    assert.ok(summaryGroundingIssues('The invitations have been sent.', '', 'We hope the invitations have been sent.').length);
+    for (const [source, text, section] of [
+      ['We approved the venue.', '会場を承認しました。', 'decision'],
+      ['予算を承認した。', '予算を承認した。', 'decision'],
+      ['会場は承認済みです。', '会場は承認済みです。', 'decision'],
+      ['The invitations have been sent.', '招待状は送信済みです。', 'complete'],
+      ['招待状を完了しました。', '招待状を完了しました。', 'complete'],
+    ]) {
+      const result = await reconciledSummary(async () => text, [], source, 'ja', processor);
+      assert.equal(result.records[0].section, section, source);
+    }
+  });
+
   test(`${processor}: numeric corrections reconcile status as well as quantities`, async () => {
     const cases = [
       ['We approved the pilot budget of 900 yen.', 'Correction: we have not approved the pilot budget of 800 yen, not 900.', '予算900円のパイロットを承認しました。', '予算800円のパイロットは承認していません。', 'open'],
