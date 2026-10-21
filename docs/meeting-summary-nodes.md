@@ -3,10 +3,9 @@
 Issue #130 adds two independent processors under **Add node → Processors**:
 **Meeting Summary · LFM2.5 1.2B JP** and **Meeting Summary · Qwen3.5 2B**.
 Each accepts committed `text: TEXT` and emits one complete `summary: TEXT`.
-Both real local inference paths are implemented and smoke-tested. The recorded
-fixtures still expose factual errors and missed state changes; **Issue #130's
-semantic acceptance criterion is not fully met**. See the evidence before
-considering this implementation ready for Issue closure.
+Both use real local inference with bounded, extractive note reconciliation.
+See the [current factual smoke and its boundaries](evidence/meeting-summary-130.md)
+before relying on model output.
 Connect `ASR.final`, `TextWindow.text` or `Text.value` to `text`, then `summary`
 to a dedicated `LiveTextDisplay.replace`. Leave that display's append port
 disconnected so Stop/Cancel retain the last successful note. Other TEXT
@@ -49,17 +48,38 @@ a three-minute deadline; Cancel can interrupt either.
 The Live status identifies updated notes as AI drafts and asks users to verify
 facts, decisions and owners against the transcript.
 
-Prompts request discussion points, confirmed decisions, and open questions/action
-items. They separate proposals from decisions and completed from open tasks,
-preserve numbers, corrections and uncertainty, and prohibit invented owners,
-facts or missing speech. Evidence uses quoted strings in a separate user message,
-with escaped chat delimiters and explicit data boundaries. These instructions reduce risk; they do not guarantee model
-obedience, factual accuracy or resistance to transcript prompt injection.
+The Worker keeps the previous successful note as at most **32 evidence-linked
+records**, with a **12,000-code-unit** total for source anchors, rendered text and
+speaker labels, and a **6,000-code-unit** visible snapshot. It splits only the
+new batch into short excerpts (at most 32 model calls before repairs). The local
+model renders these excerpts in the requested language; it never rewrites the
+whole old note. Source speaker labels are preserved separately from model text
+and identify the speaker, not an inferred task owner. Explicit unknown ownership
+and pending approval remain visible. Sections are assembled in code, including
+completed work when reported. No fixture-specific content or canned summaries
+are used.
 
-The previous summary is **lossy history compression**. Earlier facts can be
-omitted or distorted and cannot be recovered from the model's note. Keep an
-independent transcript display/record when exact evidence matters. This feature
-does not claim to verify decisions or owners automatically.
+Conservative English/Japanese source cues distinguish proposals, explicit
+decisions, open work, questions and reported completion. Compatible records with
+unambiguous matching subject words are updated; unrelated or tied matches are
+retained separately. An explicit numerical correction patches the matching old
+record while preserving its other details. A completed task replaces its matching
+open item without overwriting a decision about the same object. New records and
+replacements are committed only after the entire batch succeeds.
+
+Evidence is a separate user message with escaped chat delimiters. Short rendering
+instructions differ for the two models based on actual-model checks; Qwen uses
+an English instruction for Japanese terminology. These are not instructions from
+the transcript. They do not guarantee obedience or resistance to prompt injection.
+
+This is **lossy history compression**, not semantic verification. Source-cue and
+lexical matching can miss paraphrases, combine overly similar topics, leave stale
+or duplicate items, misclassify unfamiliar phrasing, or lose a fact in translation.
+When memory is full, older discussion/completed items are evicted first, then
+older remaining items; the Live status reports the omission count. Earlier facts
+cannot be recovered from this bounded note. Keep an independent transcript when
+exact evidence matters and verify decisions and owners against it. Passing the
+recorded fixtures is not a general factual-accuracy or quality guarantee.
 
 ## Pinned models, runtime and terms
 
@@ -80,31 +100,27 @@ Both use q4f16, Worker WebGPU and `shader-f16`; no CPU fallback. LFM loads
 `decoder_model_merged_q4f16`, each with one external data file; the vision
 encoder/processor are unnecessary. Both pinned tokenizers, configs, generation
 configs and chat templates are included. Chat templates come from tokenizer
-metadata; Qwen thinking is disabled. Only the first heading and bullet marker
-are prefilled to encourage plain notes; all meeting content comes from inference.
-Prompts target 1,000 characters. Generation is greedy with a 1.05 repetition
-penalty and up to 1,024 new tokens; exhausted output budgets are errors, never
-successful truncated snapshots. Prompt plus output is checked against an
-8,192-token application budget without silently truncating evidence. LFM's
-published card specifies 32,768 context (its config says 128,000); Qwen config
-specifies 262,144. The smaller application budget controls cache/resource use.
+metadata; Qwen thinking is disabled. Generation is greedy, without heading
+prefill or a repetition penalty. Each excerpt allows up to 1,024 new tokens;
+exhausted output budgets are errors, never successful truncated snapshots.
+Prompt plus output is checked against an 8,192-token application budget without
+silently truncating evidence. LFM's published card specifies 32,768 context
+(its config says 128,000); Qwen config specifies 262,144. Temporary generation
+caches are released after each excerpt; only the bounded note records persist.
 
-Before publishing, conservative lexical checks reject speaker-style labels absent
-from the evidence, explicitly superseded numbers (including Arabic-number
-Japanese-unit variants), and completion claims when the evidence contains no
-completion statement. A rejected candidate can trigger at most two repair
-generations using the original previous note and new transcript. Each generation
-has the same token budget; retries share the existing 180-second request timeout
-and bounded pending-text queue. Successful metrics include per-attempt token
-counts and totals across attempts. If repair fails, no new snapshot is emitted,
-the last successful display remains, and the processor reports an error.
-
-These checks are **not semantic verification**: they can reject topic labels or
-historical-number mentions conservatively and miss unsupported claims in other
-forms, incorrect approval scope, or omitted facts. The actual pinned models still
-fail the required sequential factual smoke; see the latest
-[validation evidence](evidence/meeting-summary-130.md). Passing lexical checks
-does not establish an accurate meeting note or Issue completion.
+Before accepting an excerpt, lexical checks reject unsupported speaker-style
+labels, explicitly superseded numbers and unreported completion claims. Numeric
+values and named weekdays must survive rendering without omission, introduction
+or scale changes. Calendar translation hints preserve weekdays; equivalent
+Japanese-unit spellings and English month names are recognized. These
+checks can conservatively reject legitimate number-word or unit conversions.
+A rejected excerpt permits at most two repair generations with unchanged evidence
+and repair instructions in the system message. All excerpts and repairs share the
+same 180-second request deadline and bounded pending-text queue. A failed excerpt
+publishes no partial batch and leaves the previous note intact. Metrics record
+per-call/total token counts, first decoded-token time, total inference time and
+history omissions. The first-token progress event is internal Worker telemetry,
+not a public graph Port.
 
 The isolated packaged runtime is Transformers.js **4.2.0** with its exact
 `onnxruntime-web` **1.26.0-dev.20260416-b7804b056c** dependency. Runtime archives

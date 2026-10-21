@@ -1,6 +1,7 @@
 import { test, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,8 +17,14 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
   const spec = meetingSummaryModel(type), temporary = await mkdtemp(path.join(os.tmpdir(), 'meeting-summary-'));
   const root = path.join(temporary, 'extension'), requests = [], downloads = [], consoleErrors = [], runs = [], observations = [];
   let context, page, editor, server;
+  const sourceSHA256 = {};
   try {
     await cp(path.resolve('dist/chrome-extension'), root, { recursive: true });
+    for (const name of ['web/meeting-summary-worker.js', 'web/meeting-summary-policy.js', 'web/meeting-summary-node.js']) {
+      const bytes = await readFile(path.join(root, name));
+      expect(bytes.equals(await readFile(name)), `Rebuild changed source: ${name}`).toBe(true);
+      sourceSHA256[name] = createHash('sha256').update(bytes).digest('hex');
+    }
     const manifestPath = path.join(root, 'extension', spec.key + '-assets.json');
     const files = JSON.parse(await readFile(manifestPath, 'utf8'));
     server = createServer((request, response) => {
@@ -55,7 +62,14 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
       window.Worker = class extends NativeWorker {
         constructor(...args) {
           super(...args); window.summaryWorkers.push(this);
-          this.addEventListener('message', ({ data }) => { window.summaryEvidence.push({ at: performance.now(), ...data }); });
+          this.addEventListener('message', ({ data }) => {
+            window.summaryEvidence.push({ at: performance.now(), ...data });
+            if (window.cancelSummaryOnToken && data.type === 'progress' && data.stage === 'first-token') {
+              window.cancelSummaryOnToken = false;
+              window.summaryCancelToken = data;
+              document.querySelector('#cancel-session').click();
+            }
+          });
         }
         terminate() { this.released = true; super.terminate(); }
       };
@@ -117,16 +131,20 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     expect(await page.evaluate(() => window.summaryWorkers.every(w => w.released))).toBe(true);
     await expect(page.locator('[data-display="transcript"] .display-items li')).toHaveCount(3);
     // Fresh session resets context; Cancel during real generation cannot write.
+    const beforeCancel = await page.evaluate(() => { window.cancelSummaryOnToken = true; return window.summaryEvidence.length; });
     await page.locator('#start').click(); await expect(page.locator('#status')).toHaveText('Processing active', { timeout: 180000 });
     await expect(notes).toBeEmpty();
-    await expect(page.locator('#summary-status')).toContainText('updating summary', { timeout: 60000 });
-    await page.locator('#cancel-session').click();
+    // Cancel on a real decoded token, not a short-lived status string that a
+    // polling assertion can miss when inference completes in <500 ms.
+    await page.waitForFunction(() => window.summaryCancelToken && window.summaryWorkers.every(w => w.released), null, { timeout: 60000 });
+    await expect(page.locator('#start')).toBeEnabled();
+    expect(await page.evaluate(index => window.summaryEvidence.slice(index).some(e => e.type === 'result'), beforeCancel)).toBe(false);
     expect(await page.evaluate(() => window.summaryWorkers.every(w => w.released))).toBe(true);
     await expect(notes).toBeEmpty();
     expect(requests).toEqual([]);
     expect(await page.evaluate(() => window.cspViolations)).toEqual([]);
-    runs.push({ gracefulStopRetainedFinal: final, cancel: 'Owned Worker terminated during generation; fresh session cleared notes.' });
-    const evidence = { time: new Date().toISOString(), model: spec, modelBytes: files.reduce((n,f) => n+f.bytes,0),
+    runs.push({ gracefulStopRetainedFinal: final, cancel: 'Owned Worker terminated after its first actual decoded token; fresh session cleared notes and published no result.' });
+    const evidence = { time: new Date().toISOString(), sourceSHA256, model: spec, modelBytes: files.reduce((n,f) => n+f.bytes,0),
       runtime: JSON.parse(await readFile('scripts/meeting-summary-runtime.json', 'utf8')), host, platform: os.platform(), arch: os.arch(), cpu: os.cpus()[0]?.model,
       gpu: gpu.gpu, loadMs, runs, observations, workerReplies: await page.evaluate(() => window.summaryEvidence), requestsAfterStart: requests, consoleErrors,
       boundaries: 'Production graph, Save, verified model cache, packaged runtime/Worker and Live display; controllable Text producer, no ASR. Host memory is not a per-model allocation measurement.' };
@@ -137,7 +155,7 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     });
     expect(factualFailures, `Factual regression; actual outputs saved in ${spec.key}.json`).toEqual([]);
   } finally {
-    if (page) await writeFile(info.outputPath('diagnostics.json'), JSON.stringify({ runs, requests, consoleErrors,
+    if (page) await writeFile(info.outputPath('diagnostics.json'), JSON.stringify({ sourceSHA256, runs, requests, consoleErrors,
       model: spec, runtime: JSON.parse(await readFile('scripts/meeting-summary-runtime.json', 'utf8')),
       host: await page.evaluate(() => ({ browser: navigator.userAgent, isolated: crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency })).catch(() => null),
       visibleNotes: await page.locator('[data-display="notes"] .display-preview').textContent().catch(() => null),

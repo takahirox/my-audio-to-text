@@ -1,11 +1,12 @@
 import { meetingSummaryModel } from './meeting-summary-models.js';
-import { summaryText, validatedSummary, MAX_PROMPT_TOKENS, MAX_NEW_TOKENS } from './meeting-summary-policy.js';
+import { summaryText, reconciledSummary, MAX_PROMPT_TOKENS, MAX_NEW_TOKENS } from './meeting-summary-policy.js';
 import { cacheOnlyMeetingSummaryRuntime } from '../extension/meeting-summary-cache.js';
 
-let model, tokenizer, queue = Promise.resolve();
+let records = [], lastSummary = '';
+let model, tokenizer, processorType, queue = Promise.resolve();
 async function load(type) {
   if (model) throw new Error('Meeting summary Worker already loaded.');
-  const spec = meetingSummaryModel(type);
+  const spec = meetingSummaryModel(type); processorType = type;
   const adapter = await self.navigator.gpu?.requestAdapter();
   if (!adapter?.features.has('shader-f16')) throw new Error('Meeting summary requires Worker WebGPU with shader-f16. Check Chrome hardware acceleration and available GPU memory.');
   const { PreTrainedTokenizer, AutoModelForCausalLM, env } = await import('./vendor/meeting-summary/transformers.js');
@@ -25,30 +26,38 @@ async function load(type) {
     await (await env.customCache.match(base + 'tokenizer_config.json')).json());
   model = await AutoModelForCausalLM.from_pretrained(spec.id, options);
 }
-async function summarize({ previous, text, language }) {
+async function summarize({ id, previous, text, language }) {
   if (!model) throw new Error('Meeting summary model is not ready.');
   const started = performance.now();
   const attempts = [];
-  const summary = await validatedSummary(async messages => {
+  let firstTokenMs;
+  if (previous !== lastSummary) throw new Error('Meeting summary history does not match this session.');
+  const result = await reconciledSummary(async messages => {
     const formatted = tokenizer.apply_chat_template(messages, {
       tokenize: false, add_generation_prompt: true, enable_thinking: false,
     });
-    // Prefill only the first heading/list marker, never meeting content. This
-    // encourages a readable note rather than a structured payload in small LMs.
-    const prefix = language === 'ja' ? '議論の要点\n- ' : 'Discussion points\n- ';
-    const inputs = tokenizer(formatted + prefix, { add_special_tokens: false, truncation: false });
+    const inputs = tokenizer(formatted, { add_special_tokens: false, truncation: false });
     const promptTokens = inputs.input_ids.dims.at(-1);
     if (promptTokens + MAX_NEW_TOKENS > MAX_PROMPT_TOKENS) throw new RangeError('Meeting summary exceeds the 8192-token runtime budget. No evidence was truncated.');
     // Generation caches live only for this request; the note is the sole history.
-    const output = await model.generate({ ...inputs, max_new_tokens: MAX_NEW_TOKENS, do_sample: false, repetition_penalty: 1.05 });
+    let prompt = true;
+    const streamer = { put() {
+      if (prompt) { prompt = false; return; }
+      if (firstTokenMs === undefined) {
+        firstTokenMs = performance.now() - started;
+        self.postMessage({ type: 'progress', id, stage: 'first-token', elapsedMs: firstTokenMs, message: 'Updating summary locally…' });
+      }
+    }, end() {} };
+    const output = await model.generate({ ...inputs, max_new_tokens: MAX_NEW_TOKENS, do_sample: false, streamer });
     const tokens = output.tolist()[0].slice(promptTokens);
     const eos = [model.generation_config?.eos_token_id ?? model.config.eos_token_id].flat().map(Number);
     if (tokens.length === MAX_NEW_TOKENS && !eos.includes(Number(tokens.at(-1)))) throw new Error('Meeting summary reached its output token limit; incomplete snapshot was not published.');
     const generated = summaryText(tokenizer.decode(tokens, { skip_special_tokens: true }));
     attempts.push({ promptTokens, outputTokens: tokens.length });
-    return summaryText(prefix + generated);
-  }, previous, text, language);
-  return { summary, metrics: { promptTokens: attempts.reduce((n, a) => n + a.promptTokens, 0), outputTokens: attempts.reduce((n, a) => n + a.outputTokens, 0), attempts, generationMs: performance.now() - started } };
+    return generated;
+  }, records, text, language, processorType);
+  records = result.records; lastSummary = result.summary;
+  return { summary: result.summary, metrics: { firstTokenMs, compressedRecords: result.compressedRecords, promptTokens: attempts.reduce((n, a) => n + a.promptTokens, 0), outputTokens: attempts.reduce((n, a) => n + a.outputTokens, 0), attempts, generationMs: performance.now() - started } };
 }
 self.onmessage = ({ data }) => {
   queue = queue.then(async () => {

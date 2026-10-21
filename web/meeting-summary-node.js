@@ -94,7 +94,8 @@ export class MeetingSummaryNode {
       const summary = summaryText(result.summary);
       this.activeChars = 0;
       if (summary !== this.summary) { this.summary = summary; this.context.emit('summary', summary); }
-      this.event({ type: 'updated', message: `${this.model.label}: AI draft updated · verify facts, decisions and owners against the transcript`, metrics: result.metrics });
+      const compression = result.metrics?.compressedRecords ? ` · ${result.metrics.compressedRecords} older note items omitted to keep history bounded` : '';
+      this.event({ type: 'updated', message: `${this.model.label}: AI draft updated · verify facts, decisions and owners against the transcript${compression}`, metrics: result.metrics });
     }
     if (!this.disposed && this.overflow && !this.text) {
       this.event({ type: 'error', message: this.overflow });
