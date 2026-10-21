@@ -392,6 +392,61 @@ test('excerpt calendar checks preserve named weekdays rather than accepting a di
 // Faithful controlled translations isolate the shared policy from model quality.
 // Run every review regression through both processor-specific rendering paths.
 for (const processor of MEETING_SUMMARY_TYPES) {
+  test(`${processor}: Japanese copular negation stays open initially and retracts the same speaker's status`, async () => {
+    for (const [subject, status, section] of [
+      ['会場', '承認済み', 'decision'],
+      ['計画', '決定済み', 'decision'],
+      ['契約', '合意済み', 'decision'],
+      ['報告書', '送信済み', 'complete'],
+      ['資料', '送付済み', 'complete'],
+      ['作業', '完了済み', 'complete'],
+    ]) {
+      const affirmative = `${subject}は${status}です。`;
+      for (const ending of ['ではありません', 'ではない', 'ではなかった', 'じゃない', 'でない', 'ではありませんでした']) {
+        const negative = `${subject}は${status}${ending}。`;
+        const generate = async messages => messages[1].content;
+        const initial = await reconciledSummary(generate, [], `Alice: ${negative}`, 'ja', processor);
+        assert.deepEqual(initial.records.map(r => [r.text, r.section]), [[negative, 'open']]);
+        assert.match(initial.summary, /決定事項\n- なし/);
+        assert.doesNotMatch(initial.summary, /完了事項/);
+        assert.ok(initial.summary.split('未解決の質問・対応事項')[1].includes(negative));
+        assert.deepEqual(summaryGroundingIssues(negative, '', 'No work has been completed.'), []);
+
+        const first = await reconciledSummary(generate, [], `Alice: ${affirmative}`, 'ja', processor);
+        assert.equal(first.records[0].section, section);
+        const saved = structuredClone(first.records);
+        const retracted = await reconciledSummary(generate, first.records, `Alice: ${negative}`, 'ja', processor);
+        assert.deepEqual(first.records, saved);
+        assert.deepEqual(retracted.records.map(r => [r.speaker, r.text, r.section]), [['Alice', negative, 'open']]);
+        assert.equal(retracted.summary, initial.summary);
+      }
+    }
+  });
+
+  test(`${processor}: acceptance fixture preserves factual transitions with stable speaker identities`, async () => {
+    const translations = new Map([
+      ['We could launch the pilot on November 12 with a budget of 300,000 yen. This is only a proposal.', '11月12日に予算300,000円でパイロットを開始する提案です。'],
+      ['Someone should check accessibility; I do not know who.', 'アクセシビリティを確認すべきですが、担当者は不明です。'],
+      ['We still need approval.', '承認が必要です。'],
+      ['Correction: the proposed budget is 250,000 yen.', '訂正：提案予算は250,000円です。'],
+      ['Approved. We have decided to launch the pilot on November 12 with a 250,000 yen budget.', '承認しました。11月12日に予算250,000円でパイロットを開始すると決定しました。'],
+      ['I will send the invitations by Friday.', '金曜日までに招待状を送る予定です。'],
+      ['We still need approval for the venue, not for the pilot.', 'パイロットではなく会場の承認が必要です。'],
+    ]);
+    let records = [];
+    for (const [index, batch] of meetingBatches.entries()) {
+      const result = await reconciledSummary(async messages => {
+        const source = messages[1].content;
+        if (translations.has(source)) return translations.get(source);
+        assert.match(source, /^(?:招待状|会場|アクセシビリティ)/);
+        return source;
+      }, records, batch, 'ja', processor);
+      records = result.records;
+      const checks = meetingFactChecks(result.summary, index);
+      assert.deepEqual(Object.entries(checks).filter(([, passed]) => !passed), [], result.summary);
+    }
+  });
+
   test(`${processor}: corrections and status changes preserve distinct or unknown speakers' actions`, async () => {
     for (const [source, update, rendered, updated, before, after, numeric] of [
       ['I sent the report.', 'I have not sent the report.', '私は報告書を送信しました。', '私は報告書を送信していません。', 'complete', 'open', false],
@@ -408,7 +463,7 @@ for (const processor of MEETING_SUMMARY_TYPES) {
         const firstText = language === 'ja' ? rendered : source;
         const nextText = language === 'ja' ? updated : update.replace(', not 12', '');
         const label = (speaker, text) => speaker ? `${speaker}: ${text}` : text;
-        const speakers = [['Alice', 'Bob'], ['Alice', ''], ['', 'Bob']];
+        const speakers = [['Alice', 'Bob'], ['Alice', ''], ['', 'Bob'], ['Mika', 'ミカ']];
         if (/\bI\b|私/u.test(source)) speakers.push(['', '']);
         for (const [firstSpeaker, nextSpeaker] of speakers) {
           const first = await reconciledSummary(async () => firstText, [], label(firstSpeaker, source), language, processor);

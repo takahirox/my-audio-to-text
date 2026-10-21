@@ -19,6 +19,10 @@ function normalizedStatus(text) {
   return text.replace(/[’‘]/gu, "'").replace(/\bwon't\b/giu, 'will not').replace(/\bcan't\b/giu, 'can not').replace(/n't\b/giu, ' not');
 }
 function hasNegation(text) {
+  // Copular negatives also negate status nouns such as 承認済み/送信済み.
+  // Keep the whole assertion open rather than inferring an affirmative status
+  // from a word that occurs inside its negation.
+  if (/(?:では|じゃ|で)(?:ない|なかった|なく|ありません|ありませんでした|なければ)/u.test(text)) return true;
   return /\b(?:not|never|no|neither|without|withdraw\w*|withdrew|retract\w*|revok\w*|rescind\w*)\b|未(?:決定|承認|完了|完遂|送信|送付)|(?:決定|承認|合意|完了|完遂|送信|送付)(?:して|されて)(?:いな|いません|おら)|(?:承認|完了|合意)[^。.!?]{0,12}(?:いない|いません|いなかった|いませんでした)|承認待|撤回|取り消/iu.test(normalizedStatus(text));
 }
 function hasCondition(text) {

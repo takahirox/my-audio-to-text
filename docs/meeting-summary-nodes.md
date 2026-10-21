@@ -67,7 +67,8 @@ are used.
 
 Conservative English/Japanese source cues distinguish proposals, explicit
 decisions, open work, questions and reported completion. Negation (including
-English contractions) and conditional language prevent promotion to a confirmed
+English contractions and Japanese copular negatives such as `承認済みではありません`)
+and conditional language prevent promotion to a confirmed
 decision or completed task. Compatible records with unambiguous matching subject
 words are updated; unrelated or tied matches are retained separately. Explicit
 withdrawals and corrections can move a former decision or completion back to open
@@ -81,6 +82,8 @@ speaker labels retain separate records for reaffirmations, corrections and
 status transitions, so one person's action cannot overwrite another's. Changed
 unlabelled first-person statements also stay separate because their actor is
 unknown; exact repetitions can still deduplicate.
+Labels must match exactly across languages: `Mika` and `ミカ` are retained as
+separate speakers because transliteration alone does not establish identity.
 
 An explicit numerical correction patches only an identified quantity in both
 the source and its rendering, preserving unrelated equal numbers and dates.

@@ -1,11 +1,13 @@
 import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
 
 // Evidence deliberately includes proposals, a correction, repetition, a changed
-// task state, and an owner that must remain unknown. These are not gold outputs.
+// task state, and an owner that must remain unknown. Speaker labels stay
+// identical across languages: transliteration alone does not establish identity.
+// These are not gold outputs.
 export const meetingBatches = [
   'Mika: We could launch the pilot on November 12 with a budget of 300,000 yen. This is only a proposal. Someone should check accessibility; I do not know who. Ken: We still need approval.',
   'Mika: Correction: the proposed budget is 250,000 yen, not 300,000. Ken: Approved. We have decided to launch the pilot on November 12 with a 250,000 yen budget. Mika: I will send the invitations by Friday. Ken: We still need approval for the venue, not for the pilot.',
-  'ミカ: 招待状は送信済みです。ケン: 会場はまだ未承認です。アクセシビリティの確認担当者は不明です。ケン: 会場はまだ未承認です。',
+  'Mika: 招待状は送信済みです。Ken: 会場は承認済みではありません。アクセシビリティの確認担当者は不明です。Ken: 会場は承認済みではありません。',
 ];
 export function meetingGraph(type) {
   const nodes = [graphNode('Text', 'input'), graphNode(type, 'summary'), graphNode('LiveTextDisplay', 'notes'), graphNode('LiveTextDisplay', 'transcript')];
@@ -43,7 +45,8 @@ export function meetingFactChecks(summary, batch) {
   else Object.assign(checks, {
     correctedBudget: /250,?000|25万/.test(summary) && !/300,?000|30万/.test(decisions),
     pilotApproved: /パイロット|試験|pilot/i.test(decisions) && /11月12日/.test(summary) && !/未承認|承認待|追加承認/.test(decisions),
-    venuePending: /会場[^\n]*(?:未承認|承認待|承認が必要|承認は未|未.*承認)/.test(open),
+    venuePending: /会場[^\n]*(?:未承認|承認待|承認が必要|承認は未|未.*承認|承認済みでは(?:ありません|ない))/.test(open),
+    venueNotConfirmed: !/会場/.test(decisions),
     invitations: batch === 1
       ? /招待[^\n]*(?:金曜|Friday)|(?:金曜|Friday)[^\n]*招待/.test(summary) && !/招待[^\n]*(?:送信済|送付済|送信.*完了|送付.*完了)/.test(summary)
       : /招待[^\n]*(?:送信済|送付済|送信.*完了|送付.*完了)/.test(summary) && !/招待/.test(open),
