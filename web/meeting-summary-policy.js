@@ -1,4 +1,4 @@
-export const BATCH_CHARS = 2000;
+export const BATCH_CHARS = 2000; // Trigger/packing target, never a fragment cut point.
 export const BATCH_WAIT_MS = 30000;
 export const MAX_PENDING_CHARS = 32768;
 export const MAX_SUMMARY_CHARS = 6000;
@@ -98,7 +98,7 @@ export function summaryText(value) {
 }
 export function summaryMessages(previous, transcript, language, processor) {
   summaryLanguage(language);
-  if (typeof previous !== 'string' || previous.length > MAX_SUMMARY_CHARS || typeof transcript !== 'string' || transcript.length > BATCH_CHARS) throw new RangeError('Meeting summary prompt exceeds text bounds.');
+  if (typeof previous !== 'string' || previous.length > MAX_SUMMARY_CHARS || typeof transcript !== 'string' || transcript.length > MAX_PENDING_CHARS) throw new RangeError('Meeting summary prompt exceeds text bounds.');
   // One evidence excerpt at a time: asking these small models to rewrite an
   // entire note caused invented people/work and lost transitions. State and
   // headings are reconciled separately below; this call only renders evidence.
@@ -287,7 +287,7 @@ function snapshot(records, language) {
 // transcript. Only newly accepted excerpts are passed to the model.
 export async function reconciledSummary(generate, previousRecords, transcript, language, processor) {
   summaryLanguage(language);
-  if (typeof transcript !== 'string' || transcript.length > BATCH_CHARS) throw new RangeError('Meeting summary prompt exceeds text bounds.');
+  if (typeof transcript !== 'string' || transcript.length > MAX_PENDING_CHARS) throw new RangeError('Meeting summary prompt exceeds text bounds.');
   const records = previousRecords.map(record => ({ ...record }));
   let compressedRecords = 0;
   for (const excerpt of excerpts(transcript)) {

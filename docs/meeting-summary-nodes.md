@@ -21,9 +21,15 @@ migrations, drafts and default graph are unchanged.
 
 The first pending committed fragment starts a 30-second timer. At 2,000 UTF-16
 code units, or when the timer expires, the Node sends **only the previous
-successful summary and the new batch**. Long inputs split without dividing a
-surrogate pair. Fragments retain order and repeats; adjacent fragments get a
-newline. Empty/whitespace-only inputs do nothing. Input is committed evidence:
+successful summary and the new batch**. The 2,000-code-unit size is a trigger
+and packing target: batches keep committed fragments whole so that negation or
+conditions cannot be separated from their claims. A single oversized fragment
+is processed intact within the 32,768-code-unit backlog cap; the Worker divides
+it only at sentence/speaker boundaries, retaining continuation context. An
+excerpt exceeding the prompt, output or note budget fails explicitly without
+truncating evidence or publishing a partial snapshot. Fragments retain order
+and repeats; adjacent fragments get a newline. Empty/whitespace-only inputs do
+nothing. Input is committed evidence:
 successive input values are new fragments, not edits to a previously submitted
 transcript. Do not connect a revising provisional stream to this port.
 

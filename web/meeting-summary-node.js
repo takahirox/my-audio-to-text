@@ -10,8 +10,9 @@ export class MeetingSummaryNode {
     loadTimeoutMs = 180000, generationTimeoutMs = 180000 } = {}) {
     this.model = meetingSummaryModel(type);
     Object.assign(this, { type, language: summaryLanguage(language), onEvent, workerFactory, loadTimeoutMs, generationTimeoutMs });
-    this.text = ''; this.summary = ''; this.sequence = 0; this.pending = new Map();
+    this.fragments = []; this.summary = ''; this.sequence = 0; this.pending = new Map();
   }
+  get text() { return this.fragments.join('\n'); }
   event(event) { try { this.onEvent(event); } catch { /* observer only */ } }
   async start(context) {
     if (this.started || this.disposed) throw new Error('Meeting summary requires a fresh session instance.');
@@ -66,7 +67,7 @@ export class MeetingSummaryNode {
         this.event({ type: 'error', message: this.overflow });
         this.flush(); return;
       }
-      this.text = this.text ? this.text + '\n' + text : text;
+      this.fragments.push(text);
       if (this.text.length >= BATCH_CHARS) this.flush();
       else if (!this.timer) this.timer = setTimeout(() => { this.timer = null; this.flush(); }, BATCH_WAIT_MS);
     } catch (error) { this.failure(error); }
@@ -85,9 +86,14 @@ export class MeetingSummaryNode {
     await this.ready;
     while (!this.disposed && this.text && (this.stopping || this.due || this.text.length >= BATCH_CHARS)) {
       clearTimeout(this.timer); this.timer = null; this.due = false;
-      let end = Math.min(BATCH_CHARS, this.text.length);
-      if (end < this.text.length && /[\uD800-\uDBFF]/.test(this.text[end - 1])) end--;
-      const text = this.text.slice(0, end); this.text = this.text.slice(end); this.activeChars = text.length;
+      // The character target must never separate a qualifier from its claim.
+      // Keep even an oversized fragment whole; the Worker splits at sentence
+      // boundaries and enforces its token budget without truncating evidence.
+      let count = 1, chars = this.fragments[0].length;
+      while (count < this.fragments.length && chars + 1 + this.fragments[count].length <= BATCH_CHARS) {
+        chars += 1 + this.fragments[count++].length;
+      }
+      const text = this.fragments.splice(0, count).join('\n'); this.activeChars = text.length;
       this.event({ type: 'generating', message: `${this.model.label}: updating summary…` });
       const result = await this.request('summarize', 'result', { previous: this.summary, text, language: this.language });
       if (this.disposed || this.context.signal.aborted) return;
@@ -124,6 +130,6 @@ export class MeetingSummaryNode {
       this.worker.terminate(); this.worker = null;
     }
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new DOMException('Meeting summary canceled.', 'AbortError')); }
-    this.pending.clear(); this.text = ''; this.summary = ''; this.activeChars = 0;
+    this.pending.clear(); this.fragments = []; this.summary = ''; this.activeChars = 0;
   }
 }

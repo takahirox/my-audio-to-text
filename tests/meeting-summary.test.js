@@ -12,11 +12,15 @@ import { readFile } from 'node:fs/promises';
 import { defineAssetSet } from '../extension/model-asset-cache.js';
 import { meetingSummaryModel } from '../web/meeting-summary-models.js';
 
-function fixture(type, { hold = false, failLoad = false } = {}) {
+function fixture(type, { hold = false, failLoad = false, render } = {}) {
   const messages = [], outputs = [], errors = [], events = [];
+  let records = [];
   const worker = { terminate() { this.terminated = true; }, postMessage(data) {
     messages.push(data);
     if (data.type === 'load') queueMicrotask(() => this.reply(data.id, failLoad ? 'error' : 'ready', { message: 'Missing assets' }));
+    else if (render) reconciledSummary(render, records, data.text, data.language, type).then(result => {
+      records = result.records; this.reply(data.id, 'result', result);
+    }, error => this.reply(data.id, 'error', { message: error.message }));
     else if (!hold) queueMicrotask(() => this.reply(data.id, 'result', { summary: 'Note ' + messages.filter(m => m.type === 'summarize').length }));
   }, reply(id, type, fields = {}) { this.onmessage?.({ data: { type, id, ...fields } }); } };
   const controller = new AbortController();
@@ -63,12 +67,12 @@ for (const type of MEETING_SUMMARY_TYPES) {
     assert.deepEqual(f.outputs, [{ port: 'summary', value: 'Complete note' }]);
   });
 
-  test(`${type}: character cap splits safely, overflow drains accepted text, Cancel invalidates late replies`, async t => {
+  test(`${type}: oversized fragments stay whole, overflow drains accepted text, Cancel invalidates late replies`, async t => {
     const f = fixture(type); t.after(() => f.node.dispose()); await f.node.start(f.context);
     const text = 'x'.repeat(BATCH_CHARS - 1) + '😀' + 'y'.repeat(2500);
     f.node.receive('text', text); await f.node.stop();
     const batches = f.messages.filter(m => m.type === 'summarize').map(m => m.text);
-    assert.equal(batches.join(''), text); assert.ok(batches.every(b => b.length <= BATCH_CHARS && !/[\uD800-\uDBFF]$/.test(b)));
+    assert.deepEqual(batches, [text]);
     const overflow = fixture(type, { hold: true }); t.after(() => overflow.node.dispose()); await overflow.node.start(overflow.context);
     overflow.node.receive('text', 'accepted'); overflow.node.receive('text', 'x'.repeat(MAX_PENDING_CHARS)); await turn();
     assert.ok(overflow.events.some(e => /rejected/.test(e.message))); assert.equal(overflow.messages.at(-1).text, 'accepted');
@@ -78,6 +82,58 @@ for (const type of MEETING_SUMMARY_TYPES) {
     const late = canceled.worker.onmessage, id = canceled.messages.at(-1).id;
     canceled.controller.abort(); late({ data: { id, type: 'result', summary: 'late' } }); await turn();
     assert.deepEqual(canceled.outputs, []); assert.ok(canceled.worker.terminated); assert.equal(canceled.node.text, '');
+  });
+
+  test(`${type}: batch boundaries retain negation and conditions through production reconciliation`, async t => {
+    const longNegation = 'We have not, despite ' + 'further discussion and review, '.repeat(75) + 'approved the venue.';
+    const longCondition = 'If, after ' + 'further discussion and review, '.repeat(75) + 'the venue is approved, the venue is confirmed.';
+    const cases = [
+      // The review reproduction formerly split "not" from "approved".
+      [['Status. '.repeat(248) + 'Ok. ', 'We have not approved the venue.'], 'We have not approved the venue.'],
+      // This boundary formerly left "If " in one batch and a positive claim in the next.
+      [['Status. '.repeat(249) + 'Ok. ', 'If approved, the venue is confirmed.'], 'If approved, the venue is confirmed.'],
+      // Oversized individual fragments retain their continuation, too.
+      [['Status. '.repeat(248) + 'Ok. We have not approved the venue.'], 'We have not approved the venue.'],
+      [['Status. '.repeat(249) + 'Ok. If approved, the venue is confirmed.'], 'If approved, the venue is confirmed.'],
+      // A single long sentence cannot be cut at the character target either.
+      [[longNegation], longNegation],
+      [[longCondition], longCondition],
+      [['状況。'.repeat(665), '会場は承認されていません。'], '会場は承認されていません。'],
+      [['状況。'.repeat(665) + '承認されたら会場を使用します。'], '承認されたら会場を使用します。'],
+    ];
+    for (const [fragments, assertion] of cases) {
+      // Identity renderings isolate deterministic batching/reconciliation from
+      // model accuracy; all state/section handling is the production policy.
+      const f = fixture(type, { render: async messages => messages[1].content });
+      const japanese = assertion.startsWith('会場') || assertion.startsWith('承認');
+      t.after(() => f.node.dispose()); f.node.language = japanese ? 'ja' : 'en'; await f.node.start(f.context);
+      for (const fragment of fragments) f.node.receive('text', fragment);
+      await f.node.stop();
+      const batches = f.messages.filter(m => m.type === 'summarize');
+      assert.deepEqual(batches.map(m => m.text), fragments);
+      assert.deepEqual(f.errors, []);
+      assert.ok(f.outputs.length);
+      assert.ok(f.outputs.at(-1).value.includes(assertion));
+      assert.match(f.outputs.at(-1).value, japanese ? /決定事項\n- なし/ : /Confirmed decisions\n- None/);
+      assert.doesNotMatch(f.outputs.at(-1).value, /Completed tasks|完了事項/);
+      assert.ok(f.worker.terminated);
+    }
+  });
+
+  test(`${type}: oversized active evidence counts toward the backlog cap`, async t => {
+    const f = fixture(type, { hold: true }); t.after(() => f.node.dispose()); await f.node.start(f.context);
+    const accepted = 'x'.repeat(MAX_PENDING_CHARS - 3);
+    f.node.receive('text', accepted); await turn();
+    f.node.receive('text', 'end');
+    f.node.receive('text', 'rejected');
+    assert.ok(f.events.some(e => /overflowing fragment was rejected/.test(e.message)));
+    const stopping = f.node.stop();
+    f.worker.reply(f.messages.at(-1).id, 'result', { summary: 'First snapshot' }); await turn();
+    assert.equal(f.messages.at(-1).text, 'end');
+    f.worker.reply(f.messages.at(-1).id, 'result', { summary: 'Final snapshot' }); await stopping;
+    assert.deepEqual(f.messages.filter(m => m.type === 'summarize').map(m => m.text), [accepted, 'end']);
+    assert.equal(f.outputs.at(-1).value, 'Final snapshot');
+    assert.ok(f.worker.terminated); assert.deepEqual(f.node.fragments, []);
   });
 
   test(`${type}: v9 graph Save/reload, independent branches and missing model isolation`, async () => {

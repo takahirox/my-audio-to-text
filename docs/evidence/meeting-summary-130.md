@@ -1,6 +1,31 @@
-# Issue #130: attribution, subject scope and current packaged inference evidence
+# Issue #130: meeting-summary validation
 
-## Review fixes (2026-10-21)
+## Batch-boundary correction (2026-10-21)
+
+The Node now packs whole committed fragments instead of cutting at exactly
+2,000 code units. An oversized fragment remains intact for the Worker's existing
+sentence/speaker segmentation, so negation and conditional context survive the
+batching threshold. The 32,768-code-unit active-plus-pending cap remains enforced;
+token, output, note and generation-time budgets are unchanged. Evidence that
+cannot fit those budgets fails explicitly rather than being truncated.
+
+Deterministic regressions cover both processors with English/Japanese evidence,
+the review's `We have not approved the venue.` reproduction, conditional claims,
+oversized fragments and single long sentences. Faithful controlled renderings
+run through production reconciliation and verify that the final snapshot has no
+confirmed decision or completed task. An additional regression verifies that
+oversized in-flight evidence counts toward overflow and that Stop drains the
+accepted tail. These checks test batching/state invariants, not model quality.
+
+Validation in the fix worktree: `npm ci` passed; `npm test` passed **478 tests**,
+including **49 meeting-summary tests**. `npm run build:extension` was attempted
+but stopped at its missing prepared-local-model prerequisite (`web/vendor` is
+absent). Packaged browser and real-inference checks were not rerun here. The
+remaining sections describe the **prior attribution/subject revision**; its
+recorded model outputs and source hashes are historical evidence, not inference
+verification of this batching change.
+
+## Prior attribution/subject review fixes (2026-10-21)
 
 Reaffirmations from different speakers remain separate records. For example,
 `Alice: I approved the pilot on November 12.` followed by
