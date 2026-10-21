@@ -23,10 +23,10 @@ function hasNegation(text) {
   // Keep the whole assertion open rather than inferring an affirmative status
   // from a word that occurs inside its negation.
   if (/(?:では|じゃ|で)(?:ない|なかった|なく|ありません|ありませんでした|なければ)/u.test(text)) return true;
-  return /\b(?:not|never|no|neither|without|withdraw\w*|withdrew|retract\w*|revok\w*|rescind\w*)\b|未(?:決定|承認|完了|完遂|送信|送付)|(?:決定|承認|合意|完了|完遂|送信|送付)(?:して|されて)(?:いな|いません|おら)|(?:承認|完了|合意)[^。.!?]{0,12}(?:いない|いません|いなかった|いませんでした)|承認待|撤回|取り消/iu.test(normalizedStatus(text));
+  return /\b(?:not|never|no|neither|without|withdraw\w*|withdrew|retract\w*|revok\w*|rescind\w*)\b|未(?:決定|承認|完了|完遂|送信|送付|発送|対応|作成|実施)|(?:決定|承認|合意|完了|完遂|送信|送付|発送|対応|作成|実施)(?:して|されて)(?:いな|いません|おら)|(?:承認|完了|合意)[^。.!?]{0,12}(?:いない|いません|いなかった|いませんでした)|承認待|撤回|取り消/iu.test(normalizedStatus(text));
 }
 function hasCondition(text) {
-  return /\b(?:if|unless|when|once|until|assuming|provided|could|would|might|should)\b|\bmay\s+(?:be|have|approve|decide|agree|confirm|complete|finish|send)\b|subject to|たら|なら|場合|すれば|次第/iu.test(text);
+  return /\b(?:if|unless|when|once|until|assuming|provided|could|would|might|should|hypothetical|hypothetically)\b|\bmay\s+(?:be|have|approve|decide|agree|confirm|complete|finish|send)\b|subject to|たら|なら|場合|すれば|次第|仮の話|仮定|仮に/iu.test(text);
 }
 function hasRequestOrWish(text) {
   // Status words inside a request or wish are not assertions. In particular,
@@ -35,9 +35,9 @@ function hasRequestOrWish(text) {
 }
 function claimsCompletion(text) {
   return normalizedStatus(text).split('\n').some(line => {
-    if (hasNegation(line) || hasCondition(line) || hasRequestOrWish(line)) return false;
+    if (/[?？]/u.test(line) || hasNegation(line) || hasCondition(line) || hasRequestOrWish(line)) return false;
     if (/(?:未(?:完了|完遂)|(?:完了|完遂)(?:していな|しておら|されていな|されておら)|(?:完了|完遂)(?:事項|済みの作業|した作業)?[はが：:]?\s*(?:なし|ない|ありません)|\b(?:no|not|none|pending|unfinished)\b)/iu.test(line)) return false;
-    return /(?:(?:完了|完遂)(?:した|しました|している|しています|された|されました|済)|送信済|送付済|発送済|対応済|作成済|実施済|\b(?:completed|finished|sent)\b)/iu.test(line);
+    return /(?:(?:完了|完遂)(?:した|しました|している|しています|された|されました|済)|(?:送信|送付|発送|対応|作成|実施)(?:した|しました|された|されました|済)|\b(?:completed|finished|sent)\b)/iu.test(line);
   });
 }
 const weekdays = [['Monday', '月曜'], ['Tuesday', '火曜'], ['Wednesday', '水曜'], ['Thursday', '木曜'], ['Friday', '金曜'], ['Saturday', '土曜'], ['Sunday', '日曜']];
@@ -136,7 +136,7 @@ const statusPatterns = [
 function topicKeys(source, text) {
   const main = normalizedStatus(source).replace(/,\s*not\s+(?:for|about|on)\b[^.!?]*/giu, '');
   const english = [...new Set((main.toLowerCase().match(/[a-z]+/g) || []).filter(w => w.length > 2 && !englishNoise.has(w)).map(w => w === 'sent' ? 'send' : w.replace(/s$/, '')))];
-  const japanese = [...new Set((text.replace(/送(?:信済|付済|信|付)/gu, '送').replace(japaneseNoise, ' ').match(/[ァ-ヺー]{2,}|[一-龯々]{2,}|送/gu) || []))];
+  const japanese = [...new Set((text.replace(/(送信|送付|発送|対応|作成|実施)済み?/gu, '$1').replace(/送(?:信|付)/gu, '送').replace(japaneseNoise, ' ').match(/[ァ-ヺー]{2,}|[一-龯々]{2,}|送/gu) || []))];
   return { english, japanese };
 }
 function overlap(a, b, partial = false) {
@@ -177,6 +177,13 @@ function matchingRecord(records, source, text, state, correction, speaker, numer
   return ambiguous ? -1 : match;
 }
 
+function qualifyingContinuation(source) {
+  // These continuations refer back to the preceding assertion. Render and
+  // classify them together so a sentence boundary cannot confirm a claim
+  // whose own speaker immediately qualifies or retracts it.
+  return /^(?:\b(?:this|that|it|but|however|actually|in fact|in reality|to clarify|correction)\b|これ|それ|ただし|しかし|でも|実際には|実は|訂正)/iu.test(source)
+    && (hasNegation(source) || hasCondition(source) || /\b(?:propos\w*|suggest\w*)\b|提案|かもしれ/iu.test(source));
+}
 function excerpts(transcript) {
   const labels = [...transcript.matchAll(/(?:^|(?<=[.!?。！？])\s*|\n)([\p{L}\p{M}][\p{L}\p{M} .'-]{0,29})[:：]\s*/gmu)].filter(match => !/^(?:correction|note|decision|action|訂正|修正|注記)$/iu.test(match[1]));
   const turns = [];
@@ -184,11 +191,12 @@ function excerpts(transcript) {
   for (let i = 0; i < labels.length; i++) turns.push({ speaker: labels[i][1].trim(), source: transcript.slice(labels[i].index + labels[i][0].length, labels[i + 1]?.index ?? transcript.length) });
   const result = [];
   for (const turn of turns) {
+    const turnStart = result.length;
     const parts = turn.source.split(/(?<=[。！？!?])\s*|(?<=\.)\s+(?=[A-Z])/u).filter(s => s.trim());
     for (let i = 0; i < parts.length; i++) {
       let source = parts[i].trim();
       if (/^(?:Approved|Agreed|Yes)[.!]?$/iu.test(source) && parts[i + 1]) source += ' ' + parts[++i].trim();
-      if (/^(?:(?:This|That|It) is (?:only |just )?(?:a )?(?:proposal|suggestion)|これは.*提案)/iu.test(source) && result.at(-1)?.speaker === turn.speaker) result.at(-1).source += ' ' + source;
+      if (result.length > turnStart && qualifyingContinuation(source)) result.at(-1).source += ' ' + source;
       else result.push({ speaker: turn.speaker, source });
     }
   }

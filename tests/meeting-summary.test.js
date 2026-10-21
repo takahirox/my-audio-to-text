@@ -392,6 +392,80 @@ test('excerpt calendar checks preserve named weekdays rather than accepting a di
 // Faithful controlled translations isolate the shared policy from model quality.
 // Run every review regression through both processor-specific rendering paths.
 for (const processor of MEETING_SUMMARY_TYPES) {
+  test(`${processor}: Japanese completion reports replace pending work with either past-tense or status renderings`, async t => {
+    for (const [subject, action] of [['招待状', '送信'], ['資料', '送付'], ['荷物', '発送'], ['問い合わせ', '対応'], ['報告書', '作成'], ['確認', '実施']]) {
+      const pending = `${subject}は${action}予定です。`;
+      for (const ending of ['した', 'しました', 'された', 'されました']) {
+        const source = `${subject}を${action}${ending}。`;
+        for (const rendered of [source, `${subject}は${action}済みです。`]) {
+          const first = await reconciledSummary(async () => pending, [], `Mika: ${pending}`, 'ja', processor);
+          assert.equal(first.records[0].section, 'open');
+          const saved = structuredClone(first.records);
+          const next = await reconciledSummary(async () => rendered, first.records, `Mika: ${source}`, 'ja', processor);
+          assert.deepEqual(first.records, saved);
+          assert.deepEqual(next.records.map(r => [r.speaker, r.text, r.section]), [['Mika', rendered, 'complete']]);
+          assert.match(next.summary, /完了事項\n- Mika:/);
+          assert.equal(next.summary.split('未解決の質問・対応事項')[1].trim(), '- なし');
+          assert.deepEqual(summaryGroundingIssues(rendered, '', source), []);
+          assert.ok(summaryGroundingIssues(rendered, '', pending).some(issue => /completed work/.test(issue)));
+          const repeated = await reconciledSummary(async () => rendered, next.records, `Mika: ${source}`, 'ja', processor);
+          assert.equal(repeated.summary, next.summary);
+        }
+      }
+      const retracted = `${subject}を${action}しました。実際には${action}していません。`;
+      const result = await reconciledSummary(async messages => messages[1].content, [], `Mika: ${retracted}`, 'ja', processor);
+      assert.deepEqual(result.records.map(r => r.section), ['open']);
+      assert.ok(summaryGroundingIssues(`${subject}は${action}済みです。`, '', retracted).some(issue => /completed work/.test(issue)));
+    }
+    for (const source of ['招待状を送信したいです。', '招待状を送信してください。', '招待状を送信したら報告します。', '招待状を送信しましたか？', '招待状は送信していません。']) {
+      const result = await reconciledSummary(async () => source, [], `Mika: ${source}`, 'ja', processor);
+      assert.notEqual(result.records[0].section, 'complete', source);
+      assert.ok(summaryGroundingIssues('招待状は送信済みです。', '', source).some(issue => /completed work/.test(issue)), source);
+    }
+    // Exercise the actual node's publication/error path with a faithful status
+    // paraphrase, rather than treating the controlled renderer as model proof.
+    const f = fixture(processor, { render: async messages => messages[1].content.replace('招待状を送信しました。', '招待状は送信済みです。') });
+    t.after(() => f.node.dispose());
+    await f.node.start(f.context);
+    f.node.receive('text', 'Mika: 招待状は送信予定です。'); await f.node.flush();
+    f.node.receive('text', 'Mika: 招待状を送信しました。'); await f.node.stop();
+    assert.deepEqual(f.errors, []);
+    assert.equal(f.outputs.length, 2);
+    assert.match(f.outputs[1].value, /完了事項\n- Mika: 招待状は送信済みです。/);
+    assert.equal(f.outputs[1].value.split('未解決の質問・対応事項')[1].trim(), '- なし');
+  });
+
+  test(`${processor}: qualifying and retracting continuations stay with the assertion before rendering`, async () => {
+    const cases = [
+      ['ja', '会場は承認済みです。これは仮の話で、実際には承認していません。'],
+      ['ja', '招待状を送信しました。これは仮の話で、実際には送信していません。'],
+      ['ja', '会場は承認済みです。これは仮の話です。'],
+      ['ja', '招待状は送信済みです。しかし、実際には送信していません。'],
+      ['ja', '会場は承認済みです。訂正：会場は承認していません。'],
+      ['en', 'The venue is approved. This is hypothetical; we have not actually approved it.'],
+      ['en', 'The invitations have been sent. That was hypothetical; they have not actually been sent.'],
+      ['en', 'The venue is approved. This is hypothetical.'],
+      ['en', 'The invitations have been sent. However, they have not actually been sent.'],
+      ['en', 'The venue is approved. Actually, we have not approved it.'],
+    ];
+    for (const [language, source] of cases) {
+      const seen = [];
+      const result = await reconciledSummary(async messages => { seen.push(messages[1].content); return messages[1].content; }, [], `Mika: ${source}`, language, processor);
+      // No isolated affirmative sentence may reach inference or the note.
+      assert.deepEqual(seen, [source.replace(/(?<=[。])(?=\S)/gu, ' ')]);
+      assert.equal(result.records.length, 1);
+      assert.ok(!result.records.some(r => ['decision', 'complete'].includes(r.section)), source);
+      assert.match(result.summary, language === 'ja' ? /決定事項\n- なし/ : /Confirmed decisions\n- None/);
+      assert.doesNotMatch(result.summary, /完了事項|Completed tasks/);
+      assert.equal(result.records[0].text, seen[0]);
+    }
+    // Do not attach qualifiers across identified turns or absorb a subsequent
+    // independent affirmative into the qualified assertion.
+    const source = 'Mika: The venue is approved. This is hypothetical. The invitations have been sent. Ken: This is only a proposal.';
+    const result = await reconciledSummary(async messages => messages[1].content, [], source, 'en', processor);
+    assert.deepEqual(result.records.map(r => [r.speaker, r.section]), [['Mika', 'discussion'], ['Mika', 'complete'], ['Ken', 'discussion']]);
+  });
+
   test(`${processor}: Japanese copular negation stays open initially and retracts the same speaker's status`, async () => {
     for (const [subject, status, section] of [
       ['会場', '承認済み', 'decision'],
