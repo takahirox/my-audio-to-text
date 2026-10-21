@@ -27,6 +27,9 @@ export function meetingFactChecks(summary, batch) {
     } else if (section) sections[section] += line + '\n';
   }
   const decisions = sections['決定事項'] || '', completed = sections['完了事項'] || '', open = sections['未解決の質問・対応事項'] || '';
+  const completionClaim = summary.split('\n').some(line =>
+    /(?:完了|完遂)(?:した|しました|している|しています|されました|された|済)/.test(line)
+    && !/(?:未完了|未完遂|していない|されていない|作業はありません)/.test(line));
   const checks = {
     readableSections: ['議論の要点', '決定事項', '未解決の質問・対応事項'].every(key => key in sections),
     unknownAccessibilityOwner: /(?:アクセシビリティ|アクセス性|アクセスチェック)[^\n]*(?:不明|分からない|わからない)|不明[^\n]*(?:アクセシビリティ|アクセス性|アクセスチェック)/.test(summary),
@@ -34,9 +37,7 @@ export function meetingFactChecks(summary, batch) {
   };
   if (batch === 0) Object.assign(checks, {
     proposalNotDecision: /なし|None|未決定|未確定|未定|承認待|未承認/.test(decisions) && !/11月12|30万|300,000/.test(decisions),
-    noInventedCompletedWork: completed
-      ? /^[-*]*(?:なし|None|無)[。.]?\s*$/.test(completed.trim())
-      : !/完了した|完了済/.test(summary),
+    noInventedCompletedWork: !completionClaim && (!completed || /^[-*]*(?:なし|None|無)[。.]?\s*$/.test(completed.trim())),
     proposalRetained: /11月12日/.test(summary) && /300,?000|30万/.test(summary),
   });
   else Object.assign(checks, {

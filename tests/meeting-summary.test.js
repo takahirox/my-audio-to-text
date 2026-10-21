@@ -203,3 +203,31 @@ test('grounding repair is bounded, retains original evidence and never returns r
   await assert.rejects(validatedSummary(async () => { attempts++; return '- 作業が完了した。'; }, '', meetingBatches[0], 'ja'), /failed grounding checks/);
   assert.equal(attempts, MAX_SUMMARY_REPAIRS + 1);
 });
+
+test('unreported completion stays rejected when paraphrased as accomplishment or polite Japanese', async () => {
+  const source = 'Mika: We are discussing the proposal. No work has been reported complete.';
+  const drafts = [
+    // Actual wording observed in a rejected local-model repair experiment.
+    '提案内容の記録と責任者への確認依頼が完遂された。',
+    '確認依頼を完遂しました。',
+    '確認依頼を完了しました。',
+    '確認依頼は完遂している。',
+    '確認依頼は完了しています。',
+    '確認依頼が完了されました。',
+  ];
+  for (const draft of drafts) {
+    assert.ok(summaryGroundingIssues('- ' + draft, '', source).some(issue => /completed work/.test(issue)), draft);
+    assert.equal(meetingFactChecks('議論の要点\n- ' + draft + '\n決定事項\n- なし\n未解決の質問・対応事項\n- なし', 0).noInventedCompletedWork, false, draft);
+    assert.equal(meetingFactChecks('議論の要点\n- ' + draft + '\n完了事項\n- なし\n決定事項\n- なし\n未解決の質問・対応事項\n- なし', 0).noInventedCompletedWork, false, draft);
+  }
+  for (const negative of ['確認依頼は未完遂。', '確認依頼は完遂していない。', '完遂した作業はありません。', '確認依頼は完了されていない。']) {
+    assert.deepEqual(summaryGroundingIssues('- ' + negative, '', source), [], negative);
+  }
+  const completed = '- Mika: 確認依頼を完遂しました。';
+  assert.deepEqual(summaryGroundingIssues(completed, '', 'Mika: I completed the confirmation request.'), []);
+  let attempts = 0;
+  await assert.rejects(validatedSummary(async () => {
+    return drafts[attempts++];
+  }, '', source, 'ja'), /failed grounding checks/);
+  assert.equal(attempts, MAX_SUMMARY_REPAIRS + 1);
+});

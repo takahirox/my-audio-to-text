@@ -17,8 +17,8 @@ function numericValues(text) {
 }
 function claimsCompletion(text) {
   return text.split('\n').some(line => {
-    if (/(?:未完了|完了していな|完了しておら|完了(?:事項|済みの作業|した作業)?[はが：:]?\s*(?:なし|ない|ありません)|\b(?:no|not|none|pending|unfinished)\b)/iu.test(line)) return false;
-    return /(?:完了した|完了済|送信済|送付済|発送済|対応済|作成済|実施済|\b(?:completed|finished|sent)\b)/iu.test(line);
+    if (/(?:未(?:完了|完遂)|(?:完了|完遂)(?:していな|しておら|されていな|されておら)|(?:完了|完遂)(?:事項|済みの作業|した作業)?[はが：:]?\s*(?:なし|ない|ありません)|\b(?:no|not|none|pending|unfinished)\b)/iu.test(line)) return false;
+    return /(?:(?:完了|完遂)(?:した|しました|している|しています|された|されました|済)|送信済|送付済|発送済|対応済|作成済|実施済|\b(?:completed|finished|sent)\b)/iu.test(line);
   });
 }
 export function summaryGroundingIssues(summary, previous, transcript) {

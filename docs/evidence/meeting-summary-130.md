@@ -294,3 +294,52 @@ The unresolved work remains faithful sequential generation/reconciliation for
 both models, followed by passing the unmodified factual smoke through all
 updates, Stop and Cancel. It does not require human confirmation or the user's
 subjective model comparison. Do not approve or close #130 based on this guard.
+
+## Completion-claim coverage revision (2026-10-21)
+
+**Both P1 findings remain unresolved.** The retained production change only
+closes another lexical publication-guard gap: unreported work described as
+`完遂された`, `完遂しました` or polite/passive forms of `完了` is now rejected.
+Explicit negation and reported completion remain permitted. The independent
+fixture checker also detects these claims outside the completed-work section,
+even if that section separately says there was no completed work. Unit coverage
+checks rejection through the bounded repair limit, not just detection.
+
+Actual-model experiments with repair conversation context and decoder word
+blocking did not solve reconciliation. LFM substituted `完遂された` for rejected
+completion wording, still invented administrative work, and missed the pilot
+approval transition. The old fixture checker incorrectly passed that completion
+claim. Qwen exhausted its output budget in the constrained repair experiment.
+A separate Qwen thinking-mode probe exhausted 4,096 tokens without completing a
+note, then reported WebGPU buffer errors on subsequent calls. These experimental
+generation changes were removed. No rejected draft, word-blocking policy,
+increased generation budget or thinking-mode change is retained in production.
+The model checkpoints, asset pins, runtime and generation prompts are unchanged.
+
+Final verification uses the retained guard change, the normal 30-second batch
+timer and the existing offline MV3 factual smoke, without relaxing its assertions.
+Save verifies exact pinned assets, reload preserves the graph, and inference uses
+production owned Workers and the packaged runtime. The final runs still fail
+before publishing the first note: LFM continues reporting ungrounded completed
+work; Qwen continues generating unsupported speaker labels. Both visible notes
+remain empty. Subsequent updates, graceful Stop and Cancel are **not reached**
+in these final runs. No HTTP(S) requests after Start or console errors were
+recorded. These are unresolved product failures, not human-review questions or
+infrastructure skips.
+
+- `npm test`: **449 passed**, including **20 meeting-summary tests**.
+- `npm run build:extension`: **passed**, including runtime integrity validation.
+- Final summary editor/preparation regression: **1 passed**.
+- Full extension regressions: **172 passed, 16 skipped**. Heavy real-model
+  smokes remain opt-in; these skips do not supersede the two failing real runs.
+- `MEETING_SUMMARY_CHANNEL=chrome npm run test:meeting-summary-real -- --output
+  .cache/final-completion-guard`: **2 failed** as described above.
+
+Final raw diagnostics, model/runtime revisions and source hashes:
+
+- [LFM completion-guard run](meeting-summary-lfm2-130-completion-guard.json)
+- [Qwen completion-guard run](meeting-summary-qwen35-130-completion-guard.json)
+
+This is a partial safeguard correction. Neither finding can be marked resolved,
+and #130 must remain open until both models generate faithful sequential notes
+and pass the factual smoke through Stop and Cancel.
