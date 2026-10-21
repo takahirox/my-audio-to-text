@@ -136,6 +136,20 @@ const statusPatterns = [
   /\b(?:finish\w*|complet\w*)\b|完了|完遂/iu,
 ];
 
+function actorScope(source) {
+  // A speaker can report several actors' statuses. Keep explicit pronouns and
+  // possessives even though topic matching removes grammatical words. Singular
+  // first-person evidence uses the speaker identity checks below.
+  const groups = [
+    /\b(?:we|us|our|ours|ourselves)\b|私たち|私達|我々|われわれ|当社|自社/iu,
+    /\b(?:they|them|their|theirs|themselves)\b|彼ら|彼女ら|他社|先方/iu,
+    /\b(?:you|your|yours|yourself|yourselves)\b|あなた|貴社|御社/iu,
+    /\b(?:he|him|his|himself)\b|彼(?!ら|女)/iu,
+    /\b(?:she|her|hers|herself)\b|彼女(?!ら)/iu,
+  ];
+  return groups.flatMap((pattern, index) => pattern.test(source) ? [index] : []).join(',');
+}
+
 // Lexical matching deliberately retains ambiguous/unrelated items rather than
 // asking the model to rewrite or delete them. No fixture topics or names.
 function topicKeys(source, text) {
@@ -157,6 +171,14 @@ function matchingRecord(records, source, text, state, correction, speaker, numer
     // section changes must retain different or missing speaker labels too,
     // rather than patching one person's action or status with another's.
     if (speaker !== record.speaker) return;
+    const actor = actorScope(source), otherActor = actorScope(record.source);
+    // Explicit numeric corrections may omit the actor while identifying a
+    // quantity. They still cannot transfer that quantity to a different actor.
+    if (actor !== otherActor && (!numericCorrection || actor && otherActor)) return;
+    // Ordinary status updates must retain date/quantity identity. Only the
+    // explicit numeric-correction path may change numbers, scoped below by
+    // patchNumbers; a missing number does not establish the same subject.
+    if (!numericCorrection && JSON.stringify(numericValues(source)) !== JSON.stringify(numericValues(record.source))) return;
     // A new question is evidence of uncertainty, even when prefixed with
     // "correction". It cannot replace a pending task or an established fact.
     if (hasQuestion(source) && source !== record.source) return;
@@ -228,7 +250,11 @@ function recordState(source) {
   const command = /\b(?:mark|pretend|ignore|instructions?)\b|命令|とみなして/iu.test(source);
   const requestOrWish = hasRequestOrWish(source);
   const complete = !question && !negative && !conditional && !future && !proposal && !command && !requestOrWish && claimsCompletion(source);
-  const decision = !question && !negative && !conditional && !future && !proposal && !command && !requestOrWish && /\b(?:decided|agreed|approved|confirmed)\b|(?:決定|合意|承認)(?:した|しました|された|されました|済)|決まった/iu.test(source);
+  // Future wording can describe the action authorized by an established
+  // decision ("decided that we will launch"). Exclude status words governed
+  // by a future modal ("will have approved"), not the earlier decision.
+  const decisionEvidence = source.replace(/\b(?:will|would|should|must|could)\b[^.!?;]*/giu, '');
+  const decision = !question && !negative && !conditional && !proposal && !command && !requestOrWish && /\b(?:decided|agreed|approved|confirmed)\b|(?:決定|合意|承認)(?:した|しました|された|されました|済)|決まった/iu.test(decisionEvidence);
   const open = question || negative || requestOrWish || /\b(?:will|must|should|need|pending|unknown|unresolved|unclear|unassigned)\b|不明|未承認|承認待|必要|未完了|予定|すべき/iu.test(source);
   const unknownOwner = /(?:do not|don't) know who|(?:owner|responsib[^.!?]{0,20})[^.!?]{0,20}(?:unknown|unassigned)|(?:担当者|責任者)[^。.!?]{0,15}(?:不明|未定)/iu.test(source);
   const pendingApproval = !question && open && /\b(?:need|pending|await)[^.!?]*approval|未承認|承認待/iu.test(source);

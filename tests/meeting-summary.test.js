@@ -392,6 +392,94 @@ test('excerpt calendar checks preserve named weekdays rather than accepting a di
 // Faithful controlled translations isolate the shared policy from model quality.
 // Run every review regression through both processor-specific rendering paths.
 for (const processor of MEETING_SUMMARY_TYPES) {
+  test(`${processor}: sequential status updates retain distinct dates, quantities and actor scopes`, async () => {
+    const cases = [
+      ['The November 12 pilot was approved.', 'The November 13 pilot was not approved.', '11月12日のパイロットは承認されました。', '11月13日のパイロットは承認されていません。'],
+      ['11月12日のパイロットは承認されました。', '11月13日のパイロットは承認されていません。', '11月12日のパイロットは承認されました。', '11月13日のパイロットは承認されていません。'],
+      ['We approved 12 laptops.', 'We have not approved 13 laptops.', 'ノートパソコン12台を承認しました。', 'ノートパソコン13台は承認していません。'],
+      ['We approved the November 12 pilot.', 'We have not approved the pilot.', '11月12日のパイロットを承認しました。', 'パイロットは承認していません。'],
+      ['Our team approved the venue.', 'Their team has not approved the venue.', '私たちのチームは会場を承認しました。', '彼らのチームは会場を承認していません。'],
+      ['Our team approved the venue.', 'The team has not approved the venue.', '私たちのチームは会場を承認しました。', 'チームは会場を承認していません。'],
+      ['We approved the venue.', 'They have not approved the venue.', '私たちは会場を承認しました。', '彼らは会場を承認していません。'],
+      ['私たちのチームは会場を承認しました。', '彼らのチームは会場を承認していません。', '私たちのチームは会場を承認しました。', '彼らのチームは会場を承認していません。'],
+      ['私たちのチームは会場を承認しました。', 'チームは会場を承認していません。', '私たちのチームは会場を承認しました。', 'チームは会場を承認していません。'],
+      ['Our team approved 12 laptops.', 'Correction: their team has not approved 10 laptops, not 12.', '私たちのチームはノートパソコン12台を承認しました。', '彼らのチームはノートパソコン10台を承認していません。'],
+    ];
+    for (const [source, update, rendered, updated] of cases) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const pair = [[source, language === 'ja' ? rendered : source], [update, language === 'ja' ? updated : update.replace(', not 12', '')]];
+        for (const order of [pair, [...pair].reverse()]) {
+          const first = await reconciledSummary(async () => order[0][1], [], `Mika: ${order[0][0]}`, language, processor);
+          const saved = structuredClone(first.records);
+          const next = await reconciledSummary(async () => order[1][1], first.records, `Mika: ${order[1][0]}`, language, processor);
+          assert.deepEqual(first.records, saved);
+          assert.equal(next.records.length, 2, `${source} -> ${update}`);
+          assert.deepEqual(next.records[0], saved[0]);
+          assert.deepEqual(next.records.map(r => r.section), order[0][0] === source ? ['decision', 'open'] : ['open', 'decision']);
+          for (const [, text] of pair) assert.ok(next.summary.includes(text), next.summary);
+          if (!update.startsWith('Correction:')) {
+            const repeated = await reconciledSummary(async () => order[1][1], next.records, `Mika: ${order[1][0]}`, language, processor);
+            assert.deepEqual(repeated.records, next.records);
+          }
+        }
+      }
+    }
+    // A language switch does not identify an omitted group actor either.
+    const first = await reconciledSummary(async () => '私たちのチームは会場を承認しました。', [], 'Mika: Our team approved the venue.', 'ja', processor);
+    const next = await reconciledSummary(async () => 'チームは会場を承認していません。', first.records, 'Mika: チームは会場を承認していません。', 'ja', processor);
+    assert.equal(next.records.length, 2);
+    assert.deepEqual(next.records[0], first.records[0]);
+    // Matching qualifiers still permit a real status transition.
+    for (const [source, update] of [
+      ['The November 12 pilot was approved.', 'The November 12 pilot was not approved.'],
+      ['11月12日のパイロットは承認されました。', '11月12日のパイロットは承認されていません。'],
+      ['Our team approved the venue.', 'Our team has not approved the venue.'],
+      ['We approved the venue.', 'Our approval for the venue was withdrawn.'],
+    ]) {
+      const language = /[a-z]/iu.test(source) ? 'en' : 'ja';
+      const first = await reconciledSummary(async () => source, [], `Mika: ${source}`, language, processor);
+      const next = await reconciledSummary(async () => update, first.records, `Mika: ${update}`, language, processor);
+      assert.equal(next.records.length, 1, update);
+      assert.equal(next.records[0].section, 'open', update);
+    }
+  });
+
+  test(`${processor}: established decisions can authorize future actions without completing them`, async () => {
+    const cases = [
+      ['We decided that we will launch the pilot.', 'パイロットを開始すると決定しました。', 'decision'],
+      ['We agreed that we will send the invitations.', '招待状を送信すると合意しました。', 'decision'],
+      ['We confirmed that we will launch the pilot.', 'パイロットを開始すると決定しました。', 'decision'],
+      ['パイロットを開始する予定と決定しました。', 'パイロットを開始する予定と決定しました。', 'decision'],
+      ['We will have approved the pilot.', 'パイロットを承認する予定です。', 'open'],
+      ['We will have decided to launch the pilot.', 'パイロットを開始すると決定する予定です。', 'open'],
+      ['We will have sent the invitations.', '招待状を送信する予定です。', 'open'],
+      ['We proposed that we will launch the pilot.', 'パイロットを開始する予定と提案しました。', 'discussion'],
+      ['If we decided to launch the pilot, we will send invitations.', 'パイロットの開始を決定した場合は招待状を送信します。', 'discussion'],
+      ['We might have decided that we will launch the pilot.', 'パイロットを開始すると決定したかもしれません。', 'discussion'],
+      ['Have we decided that we will launch the pilot?', 'パイロットを開始すると決定しましたか。', 'open'],
+      ['We have not decided that we will launch the pilot.', 'パイロットを開始するとは決定していません。', 'open'],
+    ];
+    for (const [source, rendered, section] of cases) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const text = language === 'ja' ? rendered : source;
+        const result = await reconciledSummary(async () => text, [], `Ken: ${source}`, language, processor);
+        assert.equal(result.records[0].section, section, source);
+        assert.doesNotMatch(result.summary, /Completed tasks|完了事項/);
+        const heading = language === 'ja' ? '決定事項' : 'Confirmed decisions';
+        if (section === 'decision') assert.ok(result.summary.includes(`${heading}\n- Ken: ${text}`), result.summary);
+        else assert.ok(result.summary.includes(`${heading}\n- ${language === 'ja' ? 'なし' : 'None'}`), result.summary);
+      }
+    }
+    const proposal = 'We proposed that we will launch the pilot.';
+    const first = await reconciledSummary(async () => proposal, [], `Ken: ${proposal}`, 'en', processor);
+    const decided = await reconciledSummary(async () => cases[0][0], first.records, `Ken: ${cases[0][0]}`, 'en', processor);
+    assert.equal(decided.records.length, 1);
+    assert.equal(decided.records[0].section, 'decision');
+    assert.match(decided.summary, /Confirmed decisions\n- Ken: We decided that we will launch the pilot\./);
+  });
+
   test(`${processor}: Japanese completion reports replace pending work with either past-tense or status renderings`, async t => {
     for (const [subject, action] of [['招待状', '送信'], ['資料', '送付'], ['荷物', '発送'], ['問い合わせ', '対応'], ['報告書', '作成'], ['確認', '実施']]) {
       const pending = `${subject}は${action}予定です。`;
