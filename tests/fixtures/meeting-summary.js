@@ -13,3 +13,39 @@ export function meetingGraph(type) {
   nodes[2].settings = { label: 'Meeting notes', language: 'ja' };
   return { version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'replace'), edge('input', 'value', 'transcript', 'append')] };
 }
+
+// Objective regression checks for the recorded #130 failures, not a quality
+// score. Accept spelling/spacing variants and the original three-section format.
+export function meetingFactChecks(summary, batch) {
+  summary = summary.replace(/[ \t]/g, '');
+  const sections = {};
+  let section;
+  for (const line of summary.split('\n')) {
+    const heading = line.replace(/^[#*\s]+|[*\s]+$/g, '');
+    if (['議論の要点', '決定事項', '完了事項', '未解決の質問・対応事項'].includes(heading)) {
+      section = heading; sections[section] = '';
+    } else if (section) sections[section] += line + '\n';
+  }
+  const decisions = sections['決定事項'] || '', completed = sections['完了事項'] || '', open = sections['未解決の質問・対応事項'] || '';
+  const checks = {
+    readableSections: ['議論の要点', '決定事項', '未解決の質問・対応事項'].every(key => key in sections),
+    unknownAccessibilityOwner: /(?:アクセシビリティ|アクセス性|アクセスチェック)[^\n]*(?:不明|分からない|わからない)|不明[^\n]*(?:アクセシビリティ|アクセス性|アクセスチェック)/.test(summary),
+    noRecordedInventedNames: !/米田|山田|山本/.test(summary),
+  };
+  if (batch === 0) Object.assign(checks, {
+    proposalNotDecision: /なし|None|未決定|未確定|未定|承認待|未承認/.test(decisions) && !/11月12|30万|300,000/.test(decisions),
+    noInventedCompletedWork: completed
+      ? /^[-*]*(?:なし|None|無)[。.]?\s*$/.test(completed.trim())
+      : !/完了した|完了済/.test(summary),
+    proposalRetained: /11月12日/.test(summary) && /300,?000|30万/.test(summary),
+  });
+  else Object.assign(checks, {
+    correctedBudget: /250,?000|25万/.test(summary) && !/300,?000|30万/.test(decisions),
+    pilotApproved: /パイロット|試験|pilot/i.test(decisions) && /11月12日/.test(summary) && !/未承認|承認待|追加承認/.test(decisions),
+    venuePending: /会場[^\n]*(?:未承認|承認待|承認が必要|承認は未|未.*承認)/.test(open),
+    invitations: batch === 1
+      ? /招待[^\n]*(?:金曜|Friday)|(?:金曜|Friday)[^\n]*招待/.test(summary) && !/招待[^\n]*(?:送信済|送付済|送信.*完了|送付.*完了)/.test(summary)
+      : /招待[^\n]*(?:送信済|送付済|送信.*完了|送付.*完了)/.test(summary) && !/招待/.test(open),
+  });
+  return checks;
+}

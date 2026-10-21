@@ -170,3 +170,69 @@ LFM 1.0 license text and commercial/redistribution conditions are packaged and
 linked. Qwen's source license is Apache 2.0; the optimized export has an empty
 card and does not publish its exact converter command/version. That provenance
 boundary is disclosed in the guide; it was not reconstructed or invented.
+
+
+## Review revision attempt: factual regression checks (2026-10-21)
+
+**Neither P1 review finding is resolved.** The production policy, Worker,
+models and immutable runtime pins are unchanged by this revision. The retained
+change closes a validation gap: the real MV3 smoke now checks the sequential
+fixture's proposal/decision transition, corrected budget, completed invitations,
+pending venue approval, unknown accessibility owner and the recorded invented
+speaker names. It records all per-batch checks before asserting, after the
+existing Stop/Cancel and offline checks. These lexical checks target known
+regressions; they are not an exhaustive semantic accuracy evaluator.
+
+The unit regression verifies that both original outputs have readable sections
+and independently detects the specific factual defects, while recognizing the
+venue/invitation facts Qwen did retain. Passing unit tests establish that the
+checker catches the recorded failures, not that inference is accurate.
+
+Uncommitted experiments tested shorter prompts, explicit completed-work sections,
+unrelated transition examples, English versus Japanese instructions, translation
+before drafting, separate section generation, source-statement selection and
+classification, conversational summary history, and English summary state with
+Japanese rendering. They used the same actual pinned models and packaged MV3
+Workers. Iteration copies reduced the batching timer to 100 ms; these were
+prompt experiments, not the final lifecycle verification. No variant met the
+sequential factual checks for both models, and all experimental production
+changes were removed. No fixtures were substituted for generated summaries.
+
+The final verification uses the original production implementation, normal
+30-second batching, the production build and actual pinned models in offline
+Chrome. Its results and raw outputs are recorded below. This is unresolved
+implementation work; it is not awaiting the user's subjective comparison or
+human confirmation, and does not establish acceptance or Issue completion.
+
+
+- `npm test`: **446 passed**.
+- `npm run build:extension`: **passed**, including packaged runtime integrity checks.
+- Parked summary processor editor/preparation regression: **1 passed**.
+- `MEETING_SUMMARY_CHANNEL=chrome npm run test:meeting-summary-real -- --output .cache/factual-regression`:
+  **2 failed on factual assertions** after all three real generations, full
+  snapshot delivery, graceful Stop and Cancel checks. Both runs made **zero
+  HTTP(S) requests after Start** and recorded no console errors. These are
+  product defects, not infrastructure skips.
+
+Raw final verification artifacts:
+
+- [LFM review run](meeting-summary-lfm2-130-review.json)
+- [Qwen review run](meeting-summary-qwen35-130-review.json)
+
+| Model | Batch | Failed regression checks |
+| --- | --- | --- |
+| meeting-summary-qwen35 | 1 | noRecordedInventedNames, proposalNotDecision |
+| meeting-summary-qwen35 | 2 | unknownAccessibilityOwner, noRecordedInventedNames, correctedBudget, venuePending, invitations |
+| meeting-summary-qwen35 | 3 | noRecordedInventedNames, correctedBudget |
+| meeting-summary-lfm2 | 1 | proposalNotDecision, noInventedCompletedWork |
+| meeting-summary-lfm2 | 2 | pilotApproved, venuePending, invitations |
+| meeting-summary-lfm2 | 3 | unknownAccessibilityOwner, pilotApproved, venuePending, invitations |
+
+
+Full extension regressions: `npm run test:extension -- --output
+.cache/extension-regressions` completed with **172 passed, 16 skipped**. Existing
+heavy inference smokes remain opt-in; the two summary inference skips in this
+suite are superseded by the explicit failing real run above. `git diff --check`
+passed. Remaining work is to implement and demonstrate corrected sequential
+outputs for **both** named processors; neither review finding can be closed by
+this test/evidence change.

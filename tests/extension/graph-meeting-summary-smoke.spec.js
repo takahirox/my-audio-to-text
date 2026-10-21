@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { MEETING_SUMMARY_TYPES, meetingSummaryModel } from '../../web/meeting-summary-models.js';
-import { meetingBatches, meetingGraph } from '../fixtures/meeting-summary.js';
+import { meetingBatches, meetingGraph, meetingFactChecks } from '../fixtures/meeting-summary.js';
 
 // No inference/model/runtime mocks. Only a controllable committed TEXT producer.
 // Loopback serves exact pinned bytes to Save; Start and inference are offline.
@@ -106,7 +106,8 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
       expect(output).not.toContain('```');
       expect(output.trim()).not.toMatch(/^\{/);
       if (index === 1) expect(output).not.toBe(runs[0].output);
-      runs.push({ batch: index + 1, latencyIncludingBatchWaitMs: Date.now() - before, output });
+      const facts = meetingFactChecks(output, index);
+      runs.push({ batch: index + 1, latencyIncludingBatchWaitMs: Date.now() - before, output, facts });
       console.log(`${type}: batch ${index + 1} emitted ${output.length} characters`);
       await observe(`batch-${index + 1}`);
     }
@@ -130,6 +131,11 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
       gpu: gpu.gpu, loadMs, runs, observations, workerReplies: await page.evaluate(() => window.summaryEvidence), requestsAfterStart: requests, consoleErrors,
       boundaries: 'Production graph, Save, verified model cache, packaged runtime/Worker and Live display; controllable Text producer, no ASR. Host memory is not a per-model allocation measurement.' };
     await writeFile(info.outputPath(spec.key + '.json'), JSON.stringify(evidence, null, 2) + '\n');
+    const factualFailures = runs.filter(run => run.facts).flatMap(run => {
+      const failed = Object.entries(run.facts).filter(([, passed]) => !passed).map(([fact]) => fact);
+      return failed.length ? [{ batch: run.batch, failed }] : [];
+    });
+    expect(factualFailures, `Factual regression; actual outputs saved in ${spec.key}.json`).toEqual([]);
   } finally {
     if (page) await writeFile(info.outputPath('diagnostics.json'), JSON.stringify({ runs, requests, consoleErrors, status: await page.locator('#summary-status').textContent().catch(() => ''), replies: await page.evaluate(() => window.summaryEvidence).catch(() => []) }, null, 2));
     await context?.close(); if (server) await new Promise(resolve => server.close(resolve));
