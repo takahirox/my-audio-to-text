@@ -17,15 +17,16 @@ confirmed decision or completed task. An additional regression verifies that
 oversized in-flight evidence counts toward overflow and that Stop drains the
 accepted tail. These checks test batching/state invariants, not model quality.
 
-Validation in the fix worktree: `npm ci` passed; `npm test` passed **478 tests**,
-including **49 meeting-summary tests**. `npm run build:extension` was attempted
-but stopped at its missing prepared-local-model prerequisite (`web/vendor` is
-absent). Packaged browser and real-inference checks were not rerun here. The
-remaining sections describe the **prior attribution/subject revision**; its
-recorded model outputs and source hashes are historical evidence, not inference
-verification of this batching change.
+Current-source validation after the batching fix: `npm ci`, all seven asset
+preparation scripts, `build:extension`, all **478 unit tests** (including **49
+meeting-summary tests**), Chromium regressions and both actual pinned-model
+smokes passed. Packaged extension regression results are recorded below. The
+new inference recordings verify the Worker, policy and Node bytes from reviewed
+checkpoint `2fd805516be470f9470d07e219c26635887747db`; only evidence files changed
+during this validation. Earlier recordings are historical. No model pins,
+runtime pins, production code or factual smoke assertions changed.
 
-## Prior attribution/subject review fixes (2026-10-21)
+## Attribution/subject review fixes (2026-10-21)
 
 Reaffirmations from different speakers remain separate records. For example,
 `Alice: I approved the pilot on November 12.` followed by
@@ -66,12 +67,13 @@ npm run test:meeting-summary-real -- --output=test-results/summary-130
   Missing dependencies/assets no longer block checks.
 - Asset review/download: existing manifests reproduced without a diff;
   748,958,502 LFM bytes and 1,402,859,425 Qwen bytes verified locally.
-- `npm test`: **474 passed**, including **45 meeting-summary tests**.
+- `npm test`: **478 passed**, including **49 meeting-summary tests**.
 - Chromium browser suite: **119 passed, 9 skipped** (opt-in inference/benchmark
-  tests). The first launch hit an occupied port 8000; a temporary configuration
+  tests). Port 8000 was already occupied; a temporary configuration
   importing the repository configuration used port 8127 for this worktree's
-  unchanged PagesHandler server/base URL. Repository-prefix coverage remained
-  enabled. No unrelated server was stopped. WebKit was not rerun.
+  unchanged PagesHandler server/base URL and the repository root as its server
+  working directory. Repository-prefix coverage remained enabled. No
+  unrelated server was stopped. WebKit was not rerun.
 - Packaged extension suite: **172 passed, 16 skipped**, covering graph storage,
   pipeline/ASR, translation, IfCondition, TTS, asset preparation and lifecycle.
   Heavy model inference tests remain opt-in.
@@ -81,7 +83,7 @@ npm run test:meeting-summary-real -- --output=test-results/summary-130
 
 ## Fresh actual-model runs
 
-Completed at 2026-10-21 08:16 UTC (LFM) and 08:18 UTC (Qwen), on macOS arm64,
+Completed at 2026-10-21 09:44 UTC (LFM) and 09:46 UTC (Qwen), on macOS arm64,
 Apple M4 Max / Metal, Playwright 1.63.0 Chromium 153.0.0.0, cross-origin isolated,
 with 16 reported logical cores. The isolated packaged runtime is Transformers.js
 4.2.0 / ORT 1.26.0-dev.20260416-b7804b056c, WebGPU q4f16.
@@ -92,14 +94,20 @@ with 16 reported logical cores. The isolated packaged runtime is Transformers.js
 | onnx-community/Qwen3.5-2B-ONNX-OPT | `ed446636739bf426e73c5a00714fd8e010d36c21` | 1,402,859,425 |
 
 Full per-batch outputs, Worker replies, runtime pins, hashes, timings and process
-observations are saved in [LFM evidence](meeting-summary-lfm2-130-attribution-scope.json)
-and [Qwen evidence](meeting-summary-qwen35-130-attribution-scope.json).
-Both report current policy SHA-256
-`480a6b9b2f9dc527b487874753304f47777a6049f0dbea90a33b12cb78ce5603`.
+observations are saved in [LFM evidence](meeting-summary-lfm2-130-batching.json)
+and [Qwen evidence](meeting-summary-qwen35-130-batching.json).
+Both report these current-source SHA-256 values:
+
+| File | SHA-256 |
+| --- | --- |
+| `web/meeting-summary-worker.js` | `667c64884a5000767020de23fc4f566882829e56cc179ec5473e60e32ddc1793` |
+| `web/meeting-summary-policy.js` | `5f8d9f642e64b5cddaa269c8a1009d78d27269820a8843ae6e91d55e4ab8f732` |
+| `web/meeting-summary-node.js` | `1b2a3c52b35dead5176d7f61423eab6b94523f02f8fda6c23e3082f36bdb76f5` |
+
 The smoke compared packaged Worker/policy/Node bytes to source before running;
 all three evidence hashes were verified against source again before recording.
-All earlier recordings, including the `*-130-status.json` runs with policy
-`bbabb38c…`, are historical and do not establish validation of this implementation.
+All earlier recordings, including `*-130-attribution-scope.json` (policy
+`480a6b9b…`), are historical and do not verify this batching revision.
 
 Each test verifies both palette entries, saves its production graph, prepares the
 exact pinned model from loopback, checks cache reuse on a second Save and reloads
@@ -118,18 +126,18 @@ errors**.
 
 | Measurement | LFM | Qwen |
 | --- | ---: | ---: |
-| Worker initialization | 1.457 s | 2.424 s |
-| Start to active | 1.832 s | 2.830 s |
-| First decoded token, first update | 0.835 s | 1.083 s |
-| First generation | 1.457 s | 2.179 s |
-| Second generation | 0.519 s | 1.419 s |
-| Stop tail generation | 0.352 s | 0.724 s |
-| First update including batch wait | 31.132 s | 31.820 s |
-| Second update including batch wait | 30.538 s | 31.441 s |
-| Stop tail observed latency | 0.397 s | 0.765 s |
-| Highest sampled sum of owned Chrome process RSS | 3481 MiB | 3423 MiB |
+| Worker initialization | 1.425 s | 2.787 s |
+| Start to active | 1.829 s | 2.839 s |
+| First decoded token, first update | 1.052 s | 1.312 s |
+| First generation | 1.668 s | 2.541 s |
+| Second generation | 0.635 s | 2.064 s |
+| Stop tail generation | 0.364 s | 1.179 s |
+| First update including batch wait | 31.191 s | 32.539 s |
+| Second update including batch wait | 30.664 s | 32.097 s |
+| Stop tail observed latency | 0.423 s | 1.274 s |
+| Highest sampled sum of owned Chrome process RSS | 3069 MiB | 4066 MiB |
 
-Browser/extension regressions ran concurrently on the host; these are observations,
+Extension regressions ran concurrently on the host; these are observations,
 not isolated benchmarks or latency guarantees. RSS includes browser, renderer and
 GPU processes and can double-count shared pages. It is not isolated model memory
 or a measured peak. Process CPU times are recorded; utilization, GPU kernel load,
@@ -175,9 +183,12 @@ Final Qwen snapshot:
 
 ## Boundaries and limitations
 
-Actual-model fixtures are in `tests/fixtures/meeting-summary.js`; the new
-attribution/subject regressions use controlled faithful renderings. Together they
-verify current-source local inference, lifecycle and fixture-specific behavior,
+Actual-model fixtures are in `tests/fixtures/meeting-summary.js`; the
+batch-boundary and attribution/subject regressions use controlled faithful
+renderings. Actual-model batches are below the 2,000-code-unit trigger; oversized
+fragments, conditional/negative claims at the boundary and overflow are covered
+by deterministic tests, not additional actual-model boundary fixtures. Together
+they verify current-source local inference, lifecycle and fixture-specific behavior,
 not general semantic accuracy or subjective quality. Both outputs retain an
 unspecified approval item and repeated accessibility evidence. Preserving
 separate speaker labels now also retains separate Ken/ケン venue evidence; Qwen
