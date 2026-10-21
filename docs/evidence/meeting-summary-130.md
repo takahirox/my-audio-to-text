@@ -1,7 +1,34 @@
-# Issue #130: current reconciliation and actual-model evidence
+# Issue #130: reconciliation and actual-model evidence
 
-**Both reviewed factual smoke failures are resolved in this revision.** Both
-actual pinned models pass all unchanged factual assertions across three sequential
+## Review reconciliation fixes (2026-10-21)
+
+The shared policy now conservatively classifies negation, contractions and
+conditional statements; reconciles explicit decision/completion withdrawals;
+scopes numeric corrections independently in source and rendered text; and merges
+reaffirmations without dropping compatible dates, budgets or other details.
+Ambiguous numeric targets retain evidence with a visible uncertainty label rather
+than silently changing equal dates or unrelated quantities.
+
+- `npm ci --no-audit --no-fund`: passed; pinned dependencies installed.
+- `npm test`: **464 passed**, including **35 meeting-summary tests**. New
+  regressions exercise both processor types with controlled English/Japanese
+  renderings, sequential withdrawals, repeated numeric values and reaffirmations.
+  These establish deterministic policy behavior, not model semantic accuracy.
+- `npm run build:extension`: blocked by missing prepared local assets
+  (`Missing local models. Run npm run prepare:assets first.`).
+- Packaged browser regressions and both actual-model smokes were not rerun:
+  `web/vendor`, `dist` and the local model cache are absent in this worktree.
+- `git diff --check`: passed.
+
+The recorded real-model JSONs below predate these policy fixes. Their source
+hashes do not validate the updated policy; their outputs, measurements and test
+counts remain historical evidence. Model/runtime pins and rendering prompts have
+not changed. The remaining sections describe that earlier run.
+
+## Previously recorded actual-model run
+
+**Both earlier factual smoke failures were resolved for the recorded source hashes.** Both
+actual pinned models passed all unchanged factual assertions across three sequential
 English/Japanese batches in packaged offline Chrome MV3, with a real Live display,
 graceful Stop and Cancel after an actual decoded token. This is fixture-specific
 evidence, not a guarantee of general semantic accuracy or a model ranking.

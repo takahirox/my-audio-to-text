@@ -264,7 +264,7 @@ test('excerpt reconciliation preserves corrections, proposal/approval scope and 
   const third = await reconciledSummary(generate, second.records, 'Alex: 原稿は送信済みです。Jo: 契約はまだ未承認です。Jo: 契約はまだ未承認です。', 'ja');
   assert.match(third.summary, /完了事項\n- Alex: 原稿は送信済み/);
   assert.doesNotMatch(third.summary.split('未解決の質問・対応事項')[1], /月曜日までに原稿を送る/);
-  assert.equal(third.records.filter(r => r.text === '契約はまだ未承認です。').length, 1);
+  assert.equal(third.records.filter(r => r.text.includes('契約はまだ未承認です。')).length, 1);
   assert.ok(seen.every(text => !text.includes('前回')));
 });
 
@@ -332,3 +332,123 @@ test('excerpt calendar checks preserve named weekdays rather than accepting a di
   assert.match(calls[0][0].content, /Friday = 金曜日/);
   assert.match(calls[1][0].content, /unsupported weekday Saturday/);
 });
+
+// Faithful controlled translations isolate the shared policy from model quality.
+// Run every review regression through both processor-specific rendering paths.
+for (const processor of MEETING_SUMMARY_TYPES) {
+  test(`${processor}: contractions, negation and conditional scope never assert decisions or completion`, async () => {
+    const cases = [
+      ["The venue isn't approved.", '会場は承認されていません。', 'open'],
+      ["The invitations haven't been sent yet.", '招待状はまだ送信されていません。', 'open'],
+      ['The invitations haven’t yet been sent.', '招待状はまだ送信されていません。', 'open'],
+      ["We didn't finish the report.", '報告書は終わっていません。', 'open'],
+      ['If approved, we could launch the pilot.', '承認されたらパイロットを開始できます。', 'discussion'],
+      ['If the invitations were sent, we could close registration.', '招待状を送信済みなら登録を締め切れます。', 'discussion'],
+      ['We could have approved the pilot.', 'パイロットを承認できたかもしれません。', 'discussion'],
+      ['We may have approved the pilot.', 'パイロットを承認したかもしれません。', 'discussion'],
+      ['会場は承認されていません。', '会場は承認されていません。', 'open'],
+      ['招待状はまだ送信されていません。', '招待状はまだ送信されていません。', 'open'],
+      ['承認されたらパイロットを開始します。', '承認されたらパイロットを開始します。', 'discussion'],
+    ];
+    for (const [source, translation, section] of cases) {
+      for (const language of ['ja', 'en']) {
+        // English output uses the English evidence verbatim; Japanese-source
+        // cases are exercised in Japanese only.
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const result = await reconciledSummary(async () => language === 'ja' ? translation : source, [], source, language, processor);
+        assert.equal(result.records[0].section, section, source);
+        assert.ok(!result.records.some(r => ['decision', 'complete'].includes(r.section)), source);
+      }
+    }
+    const positive = await reconciledSummary(async () => 'We approved the venue for May 12.', [], 'We approved the venue for May 12.', 'en', processor);
+    assert.equal(positive.records[0].section, 'decision');
+    assert.ok(summaryGroundingIssues('招待状は送信済みです。', '', "The invitations haven't been sent yet.").some(issue => /completed work/.test(issue)));
+  });
+
+  test(`${processor}: explicit decision withdrawals and completion retractions replace superseded status`, async () => {
+    const cases = [
+      ['We approved the pilot budget.', 'Correction: we have not approved the pilot budget.', 'パイロットの予算を承認しました。', '訂正：パイロットの予算は承認していません。', 'decision'],
+      ['We approved the pilot budget.', 'We withdrew approval for the pilot budget.', 'パイロットの予算を承認しました。', 'パイロットの予算の承認を撤回しました。', 'decision'],
+      ['The invitations have been sent.', "Correction: the invitations haven't been sent.", '招待状は送信済みです。', '訂正：招待状は送信されていません。', 'complete'],
+      ['パイロットの予算を承認しました。', '訂正：パイロットの予算は承認していません。', 'パイロットの予算を承認しました。', '訂正：パイロットの予算は承認していません。', 'decision'],
+      ['招待状は送信済みです。', '訂正：招待状は送信されていません。', '招待状は送信済みです。', '訂正：招待状は送信されていません。', 'complete'],
+    ];
+    for (const [source, correction, text, correctedText, section] of cases) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const first = await reconciledSummary(async () => language === 'ja' ? text : source, [], source, language, processor);
+        assert.equal(first.records[0].section, section);
+        const saved = structuredClone(first.records);
+        const next = await reconciledSummary(async () => language === 'ja' ? correctedText : correction, first.records, correction, language, processor);
+        assert.deepEqual(first.records, saved);
+        assert.equal(next.records.length, 1, correction);
+        assert.equal(next.records[0].section, 'open', correction);
+        assert.equal(next.records[0].text, language === 'ja' ? correctedText : correction);
+      }
+    }
+  });
+
+  test(`${processor}: numeric corrections identify quantities independently of equal dates and other values`, async () => {
+    const cases = [
+      ['We approved 12 laptops for December 12.', 'Correction: we approved 10 laptops, not 12.', '12月12日用にノートパソコン12台を承認しました。', 'ノートパソコン10台を承認しました。', '12月12日用にノートパソコン10台を承認しました。'],
+      ['We approved 12 laptops and 12 monitors for December 12.', 'Correction: we approved 10 laptops, not 12.', '12月12日用にノートパソコン12台とモニター12個を承認しました。', 'ノートパソコン10台を承認しました。', '12月12日用にノートパソコン10台とモニター12個を承認しました。'],
+      ['We approved 12 laptops and 12 monitors for December 12.', 'Correction: we approved 10 laptops, not 12.', '12月12日用にノートパソコン12台とモニター12台を承認しました。', 'ノートパソコン10台を承認しました。', '12月12日用にノートパソコン10台とモニター12台を承認しました。'],
+      ['12月12日用にノートパソコン12台を承認しました。', '訂正：ノートパソコンは12台ではなく10台です。', '12月12日用にノートパソコン12台を承認しました。', 'ノートパソコンは10台です。', '12月12日用にノートパソコン10台を承認しました。'],
+    ];
+    for (const [source, correction, text, correctedText, expected] of cases) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const first = await reconciledSummary(async () => language === 'ja' ? text : source, [], source, language, processor);
+        const saved = structuredClone(first.records);
+        const next = await reconciledSummary(async () => language === 'ja' ? correctedText : correction.replace(', not 12', ''), first.records, correction, language, processor);
+        const patchedSource = source.replace(/12(?= laptops|台)/u, '10');
+        assert.deepEqual(first.records, saved);
+        assert.equal(next.records.length, 1);
+        assert.equal(next.records[0].text, language === 'ja' ? expected : patchedSource);
+        assert.equal(next.records[0].source, patchedSource);
+      }
+    }
+    // Neither source nor translation identifies which of two equal quantities
+    // changed. Preserve the evidence and expose uncertainty instead of guessing.
+    const source = 'We approved 12 laptops and 12 monitors for the pilot.';
+    const first = await reconciledSummary(async () => source, [], source, 'en', processor);
+    const next = await reconciledSummary(async () => 'Correction: the pilot has 10.', first.records, 'Correction: the pilot has 10, not 12.', 'en', processor);
+    assert.equal(next.records[0].section, 'discussion');
+    assert.equal(next.records[0].uncertainCorrection, true);
+    assert.match(next.summary, /Correction target unclear/);
+    assert.match(next.summary, /12 laptops and 12 monitors/);
+    const datedSource = 'We approved 12 laptops for December 12.';
+    const dated = await reconciledSummary(async () => datedSource, [], datedSource, 'en', processor);
+    const ambiguousDate = await reconciledSummary(async () => 'Correction: we approved 10 laptops for December 14.', dated.records, 'Correction: we approved 10 laptops for December 14, not 12.', 'en', processor);
+    assert.equal(ambiguousDate.records[0].section, 'discussion');
+    assert.equal(ambiguousDate.records[0].uncertainCorrection, true);
+    assert.ok(ambiguousDate.records[0].text.includes(datedSource));
+    assert.match(ambiguousDate.summary, /Correction target unclear/);
+    const unlabelledSource = 'We approved 12 laptops for the pilot on December 12.';
+    const unlabelled = await reconciledSummary(async () => unlabelledSource, [], unlabelledSource, 'en', processor);
+    const unlabelledCorrection = await reconciledSummary(async () => 'Correction: the pilot has 10.', unlabelled.records, 'Correction: the pilot has 10, not 12.', 'en', processor);
+    assert.equal(unlabelledCorrection.records[0].uncertainCorrection, true);
+    assert.ok(unlabelledCorrection.records[0].text.includes(unlabelledSource));
+  });
+
+  test(`${processor}: shorter reaffirmations and partial updates retain established dates and budgets`, async () => {
+    for (const language of ['ja', 'en']) {
+      const source = 'We approved the pilot on November 12 with a budget of 250,000 yen.';
+      const text = language === 'ja' ? '11月12日に予算250,000円でパイロットを承認しました。' : source;
+      const first = await reconciledSummary(async () => text, [], source, language, processor);
+      const reaffirmation = 'The pilot is approved.';
+      const next = await reconciledSummary(async () => language === 'ja' ? 'パイロットは承認済みです。' : reaffirmation, first.records, reaffirmation, language, processor);
+      assert.equal(next.records.length, 1);
+      assert.equal(next.records[0].section, 'decision');
+      assert.ok(next.records[0].text.includes(text));
+      const repeated = await reconciledSummary(async () => language === 'ja' ? 'パイロットは承認済みです。' : reaffirmation, next.records, reaffirmation, language, processor);
+      assert.equal(repeated.summary, next.summary);
+      const partial = 'The pilot budget is approved at 250,000 yen.';
+      const partialText = language === 'ja' ? 'パイロットの予算は250,000円で承認済みです。' : partial;
+      const last = await reconciledSummary(async () => partialText, repeated.records, partial, language, processor);
+      assert.equal(last.records.length, 1);
+      assert.ok(last.records[0].text.includes(text));
+      assert.ok(last.records[0].text.includes(partialText));
+    }
+  });
+}

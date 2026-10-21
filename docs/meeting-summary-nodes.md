@@ -60,12 +60,21 @@ completed work when reported. No fixture-specific content or canned summaries
 are used.
 
 Conservative English/Japanese source cues distinguish proposals, explicit
-decisions, open work, questions and reported completion. Compatible records with
-unambiguous matching subject words are updated; unrelated or tied matches are
-retained separately. An explicit numerical correction patches the matching old
-record while preserving its other details. A completed task replaces its matching
-open item without overwriting a decision about the same object. New records and
-replacements are committed only after the entire batch succeeds.
+decisions, open work, questions and reported completion. Negation (including
+English contractions) and conditional language prevent promotion to a confirmed
+decision or completed task. Compatible records with unambiguous matching subject
+words are updated; unrelated or tied matches are retained separately. Explicit
+withdrawals and corrections can move a former decision or completion back to open
+work. Reaffirmations retain compatible earlier details rather than replacing a
+dated, budgeted decision with a shorter statement.
+
+An explicit numerical correction patches only an identified quantity in both
+the source and its rendering, preserving unrelated equal numbers and dates.
+Ambiguous targets retain the evidence with a visible **Correction target unclear**
+label (Japanese: **訂正対象不明**); a matched record with an ambiguous correction
+moves to discussion rather than remaining confirmed. A completed task replaces
+its matching open item without overwriting a decision about the same object.
+New records and replacements are committed only after the entire batch succeeds.
 
 Evidence is a separate user message with escaped chat delimiters. Short rendering
 instructions differ for the two models based on actual-model checks; Qwen uses

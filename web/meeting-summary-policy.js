@@ -15,8 +15,18 @@ function numericValues(text) {
     return Number(value.replaceAll(',', '').replace(/[億万千]/u, '')) * scale;
   });
 }
+function normalizedStatus(text) {
+  return text.replace(/[’‘]/gu, "'").replace(/\bwon't\b/giu, 'will not').replace(/\bcan't\b/giu, 'can not').replace(/n't\b/giu, ' not');
+}
+function hasNegation(text) {
+  return /\b(?:not|never|no|neither|without|withdraw\w*|withdrew|retract\w*|revok\w*|rescind\w*)\b|未(?:決定|承認|完了|完遂|送信|送付)|(?:決定|承認|合意|完了|完遂|送信|送付)(?:して|されて)(?:いな|いません|おら)|(?:承認|完了|合意)[^。.!?]{0,12}(?:いない|いません|いなかった|いませんでした)|承認待|撤回|取り消/iu.test(normalizedStatus(text));
+}
+function hasCondition(text) {
+  return /\b(?:if|unless|when|once|until|assuming|provided|could|would|might|should)\b|\bmay\s+(?:be|have|approve|decide|agree|confirm|complete|finish|send)\b|subject to|たら|なら|場合|すれば|次第/iu.test(text);
+}
 function claimsCompletion(text) {
-  return text.split('\n').some(line => {
+  return normalizedStatus(text).split('\n').some(line => {
+    if (hasNegation(line) || hasCondition(line)) return false;
     if (/(?:未(?:完了|完遂)|(?:完了|完遂)(?:していな|しておら|されていな|されておら)|(?:完了|完遂)(?:事項|済みの作業|した作業)?[はが：:]?\s*(?:なし|ない|ありません)|\b(?:no|not|none|pending|unfinished)\b)/iu.test(line)) return false;
     return /(?:(?:完了|完遂)(?:した|しました|している|しています|された|されました|済)|送信済|送付済|発送済|対応済|作成済|実施済|\b(?:completed|finished|sent)\b)/iu.test(line);
   });
@@ -101,13 +111,13 @@ export function summaryMessages(previous, transcript, language, processor) {
 const MAX_RECORDS = 32;
 const MAX_MEMORY_CHARS = 12000;
 const numberPattern = /\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[億万千])?/gu;
-const englishNoise = new Set(('a an and are as at be been being by can correction could decided decision do does for from had has have i in is it me might must need not of on only or our proposed proposal should still that the their them there these they this to was we were will with would yen you someone who know don').split(' '));
+const englishNoise = new Set(('a an and are as at be been being by can correction could decided decision approved approval agreed confirmed do does for from had has have i in is it me might must need not of on only or our proposed proposal should still that the their them there these they this to was we were will with would yen you someone who know don withdraw withdrawn withdrew retract retracted revoke revoked rescind rescinded').split(' '));
 const japaneseNoise = /(?:月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日|未|完了|担当者|責任者|不明|未定|必要|提案|決定|修正|訂正|開始|万円|予定)/gu;
 
 // Lexical matching deliberately retains ambiguous/unrelated items rather than
 // asking the model to rewrite or delete them. No fixture topics or names.
 function topicKeys(source, text) {
-  const main = source.replace(/,\s*not\s+(?:for|about|on)\b[^.!?]*/giu, '');
+  const main = normalizedStatus(source).replace(/,\s*not\s+(?:for|about|on)\b[^.!?]*/giu, '');
   const english = [...new Set((main.toLowerCase().match(/[a-z]+/g) || []).filter(w => w.length > 2 && !englishNoise.has(w)).map(w => w === 'sent' ? 'send' : w.replace(/s$/, '')))];
   const japanese = [...new Set((text.replace(/送(?:信済|付済|信|付)/gu, '送').replace(japaneseNoise, ' ').match(/[ァ-ヺー]{2,}|[一-龯々]{2,}|送/gu) || []))];
   return { english, japanese };
@@ -159,13 +169,15 @@ function excerpts(transcript) {
   return result;
 }
 function recordState(source) {
-  const proposal = /\b(?:could|propos\w*|suggest\w*|might)\b|提案|かもしれ/iu.test(source);
+  source = normalizedStatus(source);
+  const conditional = hasCondition(source);
+  const proposal = conditional || /\b(?:propos\w*|suggest\w*)\b|提案|かもしれ/iu.test(source);
   const question = /[?？]/u.test(source);
-  const negative = /\b(?:not|never|no)\s+(?:yet\s+)?(?:decided|agreed|approved|confirmed|completed|finished|sent)|未(?:決定|承認|完了|送信|送付)|(?:決定|承認|合意)(?:していな|されていな)|承認待/iu.test(source);
+  const negative = hasNegation(source);
   const future = /\b(?:will|would|should|must|could)\b|予定|すべき/iu.test(source);
   const command = /\b(?:mark|pretend|ignore|instructions?)\b|命令|とみなして/iu.test(source);
-  const complete = !question && !future && !command && claimsCompletion(source);
-  const decision = !question && !negative && !command && /\b(?:decided|agreed|approved|confirmed)\b|(?:決定|合意|承認)(?:した|しました|された|されました|済)|決まった/iu.test(source);
+  const complete = !question && !negative && !conditional && !future && !command && claimsCompletion(source);
+  const decision = !question && !negative && !conditional && !future && !proposal && !command && /\b(?:decided|agreed|approved|confirmed)\b|(?:決定|合意|承認)(?:した|しました|された|されました|済)|決まった/iu.test(source);
   const open = question || negative || /\b(?:will|must|should|need|pending|unknown|unresolved|unclear|unassigned)\b|不明|未承認|承認待|必要|未完了|予定|すべき/iu.test(source);
   const unknownOwner = /(?:do not|don't) know who|(?:owner|responsib[^.!?]{0,20})[^.!?]{0,20}(?:unknown|unassigned)|(?:担当者|責任者)[^。.!?]{0,15}(?:不明|未定)/iu.test(source);
   const pendingApproval = !question && open && /\b(?:need|pending|await)[^.!?]*approval|未承認|承認待/iu.test(source);
@@ -175,19 +187,59 @@ function numericCorrections(source) {
   if (!/\bcorrection\b|訂正|修正/iu.test(source)) return [];
   const values = [...source.matchAll(numberPattern)].map(match => ({ value: numericValues(match[0])[0], start: match.index, end: match.index + match[0].length }));
   return values.flatMap((number, index) => {
-    if (/\bnot\s*$/iu.test(source.slice(0, number.start)) && index) return [{ old: number.value, current: values[index - 1].value }];
-    if (/^(?:円)?ではな[くい]/u.test(source.slice(number.end)) && values[index + 1]) return [{ old: number.value, current: values[index + 1].value }];
+    // More than one preceding value makes "not N" ambiguous: the nearest
+    // number can be an unrelated date rather than the corrected quantity.
+    if (/\bnot\s*$/iu.test(source.slice(0, number.start)) && index) return [{ old: number.value, current: index === 1 ? values[0].value : null }];
+    if (/^(?:円|台|人|件|個|枚|本)?ではな[くい]/u.test(source.slice(number.end)) && values[index + 1]) return [{ old: number.value, current: values[index + 1].value }];
     return [];
   });
 }
 function withoutObsoleteValues(source) {
-  return source.replace(/,?\s*\bnot\s+\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[億万千])?\s*(?:yen|円)?/giu, '').replace(/\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[億万千])?(?:円)?ではな[くい]/gu, '');
+  return source.replace(/,?\s*\bnot\s+\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[億万千])?\s*(?:yen|円)?/giu, '').replace(/\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[億万千])?(?:円|台|人|件|個|枚|本)?ではな[くい]/gu, '');
 }
-function patchNumbers(text, corrections) {
-  return text.replace(numberPattern, value => {
-    const correction = corrections.find(c => c.old === numericValues(value)[0]);
-    return correction ? String(correction.current) : value;
-  });
+// Match the local quantity, not every equal value in a record. Source and
+// rendering are checked independently: translation may reorder dates/counts.
+function numberContext(text, match) {
+  const before = text.slice(0, match.index).trimEnd(), after = text.slice(match.index + match[0].length).trimStart();
+  const suffix = after.match(/^(?:[年月日時分秒円台人件個枚本]|[a-z]+)/iu)?.[0]?.toLowerCase() || '';
+  const month = before.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)$/iu)?.[0];
+  const word = before.match(/[a-z]+$|[ァ-ヺー]+$|[一-龯々]+$/iu)?.[0]?.toLowerCase() || '';
+  const prefix = englishNoise.has(word) ? '' : word;
+  return { suffix, prefix, date: !!month || /^[年月日時分秒]$/u.test(suffix) };
+}
+function patchNumbers(text, corrections, evidence) {
+  let result = text;
+  for (const correction of corrections) {
+    const anchors = [...evidence.matchAll(numberPattern)].filter(m => numericValues(m[0])[0] === correction.current);
+    if (anchors.length !== 1) return null;
+    const context = numberContext(evidence, anchors[0]);
+    let candidates = [...result.matchAll(numberPattern)].filter(m => numericValues(m[0])[0] === correction.old);
+    // An unlabelled replacement does not establish whether a repeated old
+    // number denotes a date or a quantity. Keep both candidates in that case.
+    if (context.date || context.suffix && (!englishNoise.has(context.suffix) || context.suffix === 'yen')) {
+      candidates = candidates.filter(m => numberContext(result, m).date === context.date);
+    }
+    if (candidates.length > 1) {
+      const scoped = candidates.filter(m => {
+        const other = numberContext(result, m);
+        return context.suffix && context.suffix === other.suffix;
+      });
+      if (scoped.length) candidates = scoped;
+    }
+    if (candidates.length > 1) candidates = candidates.filter(m => context.prefix && numberContext(result, m).prefix === context.prefix);
+    if (candidates.length !== 1) return null;
+    const match = candidates[0];
+    const other = numberContext(result, match);
+    if (context.suffix && other.suffix && context.suffix !== other.suffix) return null;
+    result = result.slice(0, match.index) + correction.current + result.slice(match.index + match[0].length);
+  }
+  return result;
+}
+function mergeReaffirmation(old, record) {
+  const combine = (a, b) => a === b || a.includes(b) ? a : b.includes(a) ? b : `${a} ${b}`;
+  return { ...record, source: combine(old.source, record.source), text: combine(old.text, record.text),
+    unknownOwner: old.unknownOwner || record.unknownOwner, pendingApproval: old.pendingApproval || record.pendingApproval,
+    ...(old.uncertainCorrection ? { uncertainCorrection: true } : {}) };
 }
 function snapshot(records, language) {
   const ja = language === 'ja';
@@ -198,6 +250,7 @@ function snapshot(records, language) {
     return [headings[index], ...(items.length ? items.map(record => '- ' +
       (record.proposal ? (ja ? '【提案】' : '[Proposal] ') : '') +
       (record.unknownOwner ? (ja ? '【担当者不明】' : '[Owner unknown] ') : '') +
+      (record.uncertainCorrection ? (ja ? '【訂正対象不明】' : '[Correction target unclear] ') : '') +
       (record.speaker ? record.speaker + ': ' : '') + record.text + (record.pendingApproval ? (ja ? '（承認待ち）' : ' [Approval pending]') : '')) : [ja ? '- なし' : '- None'])];
   }).join('\n');
 }
@@ -212,18 +265,25 @@ export async function reconciledSummary(generate, previousRecords, transcript, l
   let compressedRecords = 0;
   for (const excerpt of excerpts(transcript)) {
     const corrections = numericCorrections(excerpt.source);
+    const explicitCorrection = /\b(?:correction|withdraw\w*|withdrew|retract\w*|revok\w*|rescind\w*)\b|訂正|修正|撤回|取り消/iu.test(excerpt.source);
     const source = corrections.length ? withoutObsoleteValues(excerpt.source) : excerpt.source;
     const text = await validatedSummary(generate, '', source, language, { exactValues: true, processor });
     const state = recordState(excerpt.source);
-    const index = matchingRecord(records, source, text, state, corrections.length);
+    const index = matchingRecord(records, source, text, state, explicitCorrection);
     const old = records[index];
     if (old && corrections.length && corrections.some(c => numericValues(old.text).includes(c.old))) {
       // An explicit numeric correction edits the matching existing fact without
       // asking a small LM to reconstruct its unchanged date/scope/owner.
-      records[index] = { ...old, source: patchNumbers(old.source, corrections), text: patchNumbers(old.text, corrections) };
+      const patchedSource = patchNumbers(old.source, corrections, source), patchedText = patchNumbers(old.text, corrections, text);
+      if (patchedSource !== null && patchedText !== null) records[index] = { ...old, source: patchedSource, text: patchedText };
+      else {
+        // Keep both pieces of evidence, but do not present an uncertain target
+        // as a current confirmed fact or silently guess a date/quantity.
+        records[index] = { ...old, source: old.source + ' ' + excerpt.source, text: old.text + ' ' + text, section: 'discussion', uncertainCorrection: true };
+      }
     } else {
-      const record = { ...excerpt, text, ...state };
-      if (index >= 0) records.splice(index, 1, record); else records.push(record);
+      const record = { ...excerpt, text, ...state, ...(corrections.length && index < 0 ? { uncertainCorrection: true } : {}) };
+      if (index >= 0) records.splice(index, 1, !explicitCorrection && old.section === state.section ? mergeReaffirmation(old, record) : record); else records.push(record);
     }
     const newest = index >= 0 ? records[index] : records.at(-1);
     // Prefer retaining open work/decisions over older discussion/completed work.
