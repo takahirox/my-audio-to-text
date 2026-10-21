@@ -830,6 +830,56 @@ for (const processor of MEETING_SUMMARY_TYPES) {
     }
   });
 
+  test(`${processor}: readiness, expectations and plans retain prospective status`, async () => {
+    const cases = [
+      ['The invitations are ready to be sent.', '招待状は送信する準備ができています。', 'open'],
+      ['The invitations are expected to be sent tomorrow.', '招待状は明日送信される見込みです。', 'open'],
+      ['The invitations are scheduled to be sent tomorrow.', '招待状は明日送信される予定です。', 'open'],
+      ['The invitations are going to be sent.', '招待状は送信される予定です。', 'open'],
+      ['The invitations will have been sent by tomorrow.', '招待状は明日までに送信される予定です。', 'open'],
+      ['The venue is expected to be approved.', '会場は承認される見込みです。', 'open'],
+      ['We plan to send the invitations after the venue is approved.', '会場が承認された後で招待状を送信する計画です。', 'discussion'],
+      ['We intended to have the invitations sent.', '招待状を送信してもらうつもりでした。', 'discussion'],
+      ['招待状は送信する準備ができています。', '招待状は送信する準備ができています。', 'open'],
+      ['招待状は明日送信される予定です。', '招待状は明日送信される予定です。', 'open'],
+      ['招待状は明日送信される見込みです。', '招待状は明日送信される見込みです。', 'open'],
+    ];
+    for (const [source, japanese, section] of cases) {
+      for (const language of /[a-z]/iu.test(source) ? ['en', 'ja'] : ['ja']) {
+        const rendered = language === 'ja' ? japanese : source;
+        const generate = async () => rendered;
+        const first = await reconciledSummary(generate, [], source, language, processor);
+        assert.equal(first.records[0].section, section, source);
+        assert.equal(first.records[0].proposal, section === 'discussion', source);
+        assert.match(first.summary, language === 'ja' ? /決定事項\n- なし/ : /Confirmed decisions\n- None/);
+        assert.doesNotMatch(first.summary, /Completed tasks|完了事項/);
+        const repeated = await reconciledSummary(generate, first.records, source, language, processor);
+        assert.equal(repeated.summary, first.summary, source);
+        assert.ok(summaryGroundingIssues('招待状は送信済みです。', '', source).some(issue => /completed work/.test(issue)), source);
+      }
+    }
+    // A modality-dropping rendering must fail publication, not merely appear
+    // under an open heading with an affirmative completion sentence.
+    for (const source of [cases[0][0], cases[1][0], cases[6][0]]) {
+      await assert.rejects(reconciledSummary(async () => '招待状は送信済みです。', [], source, 'ja', processor), /grounding checks/);
+    }
+    for (const [source, japanese, section] of [
+      ['The invitations have been sent.', '招待状は送信済みです。', 'complete'],
+      ['The invitations were sent yesterday.', '招待状は昨日送信されました。', 'complete'],
+      ['The plan is approved.', '計画は承認済みです。', 'decision'],
+      ['We decided that we will send the invitations.', '招待状を送信することを決定しました。', 'decision'],
+      ['We decided the invitations are ready to be sent.', '招待状は送信する準備ができていると確認しました。', 'decision'],
+    ]) {
+      const result = await reconciledSummary(async () => japanese, [], source, 'ja', processor);
+      assert.equal(result.records[0].section, section, source);
+      assert.deepEqual(summaryGroundingIssues(japanese, '', source), [], source);
+    }
+    const pending = await reconciledSummary(async () => cases[0][1], [], cases[0][0], 'ja', processor);
+    const completed = await reconciledSummary(async () => '招待状は送信済みです。', pending.records, 'The invitations have been sent.', 'ja', processor);
+    assert.ok(completed.records.some(record => record.section === 'complete'));
+    assert.ok(completed.summary.includes('完了事項\n- 招待状は送信済みです。'));
+  });
+
   test(`${processor}: English embedded questions cannot establish approval or completion`, async () => {
     const questions = [
       ['We are checking whether the venue was approved.', '会場が承認されたかどうか確認しています。'],

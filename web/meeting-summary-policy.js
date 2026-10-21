@@ -40,9 +40,15 @@ function hasQuestion(text) {
   // Japanese final particles, without treating かもしれない as a question.
   return /[?？]|\bwhether\b|かどうか|か(?:な|しら|ね)?\s*(?:[。.!！、,」』”"）)]|$)/iu.test(text);
 }
+// Past participles under readiness, expectation or planning do not establish
+// completion/approval. Share their scope with classification and grounding.
+const prospectiveStatus = /\b(?:will|would|should|must|could)\b|\b(?:ready|expected|scheduled|due|set|about|going)\s+to\b|\b(?:plan(?:s|ned|ning)?|intend(?:s|ed|ing)?)\s+to\b/iu;
+function hasProspectiveStatus(text) {
+  return prospectiveStatus.test(text) || /予定|見込み|つもり|すべき|(?:する|される|した|された)(?:計画|準備)/u.test(text);
+}
 function claimsCompletion(text) {
   return normalizedStatus(text).split('\n').some(line => {
-    if (hasQuestion(line) || hasNegation(line) || hasCondition(line) || hasRequestOrWish(line)) return false;
+    if (hasQuestion(line) || hasNegation(line) || hasCondition(line) || hasRequestOrWish(line) || hasProspectiveStatus(line)) return false;
     if (/(?:未(?:完了|完遂)|(?:完了|完遂)(?:していな|しておら|されていな|されておら)|(?:完了|完遂)(?:事項|済みの作業|した作業)?[はが：:]?\s*(?:なし|ない|ありません)|\b(?:no|not|none|pending|unfinished)\b)/iu.test(line)) return false;
     return /(?:(?:完了|完遂)(?:した|しました|している|しています|された|されました|済)|(?:送信|送付|発送|対応|作成|実施)(?:した|しました|された|されました|済)|\b(?:completed|finished|sent)\b)/iu.test(line);
   });
@@ -279,19 +285,20 @@ function excerpts(transcript) {
 function recordState(source) {
   source = normalizedStatus(source);
   const conditional = hasCondition(source);
-  const proposal = conditional || /\b(?:propos\w*|suggest\w*)\b|提案|かもしれ/iu.test(source);
+  const proposal = conditional || /\b(?:propos\w*|suggest\w*)\b|\b(?:plan(?:s|ned|ning)?|intend(?:s|ed|ing)?)\s+to\b|提案|(?:する|される)計画|つもり|かもしれ/iu.test(source);
   const question = hasQuestion(source);
   const negative = hasNegation(source);
-  const future = /\b(?:will|would|should|must|could)\b|予定|すべき/iu.test(source);
+  const future = hasProspectiveStatus(source);
   const command = /\b(?:mark|pretend|ignore|instructions?)\b|命令|とみなして/iu.test(source);
   const requestOrWish = hasRequestOrWish(source);
   const complete = !question && !negative && !conditional && !future && !proposal && !command && !requestOrWish && claimsCompletion(source);
   // Future wording can describe the action authorized by an established
   // decision ("decided that we will launch"). Exclude status words governed
-  // by a future modal ("will have approved"), not the earlier decision.
-  const decisionEvidence = source.replace(/\b(?:will|would|should|must|could)\b[^.!?;]*/giu, '');
+  // by a prospective scope ("plan to send after the venue is approved"), not
+  // an earlier decision ("decided the invitations are ready to be sent").
+  const decisionEvidence = source.replace(new RegExp('(?:' + prospectiveStatus.source + ')[^.!?;]*', 'giu'), '');
   const decision = !question && !negative && !conditional && !proposal && !command && !requestOrWish && /\b(?:decided|agreed|approved|confirmed)\b|(?:決定|合意|承認)(?:した|しました|された|されました|済)|決まった/iu.test(decisionEvidence);
-  const open = question || negative || requestOrWish || /\b(?:will|must|should|need|pending|unknown|unresolved|unclear|unassigned)\b|不明|未承認|承認待|必要|未完了|予定|すべき/iu.test(source);
+  const open = question || negative || requestOrWish || future || /\b(?:need|pending|unknown|unresolved|unclear|unassigned)\b|不明|未承認|承認待|必要|未完了/iu.test(source);
   const unknownOwner = /(?:do not|don't) know who|(?:owner|responsib[^.!?]{0,20})[^.!?]{0,20}(?:unknown|unassigned)|(?:担当者|責任者)[^。.!?]{0,15}(?:不明|未定)/iu.test(source);
   const pendingApproval = !question && open && /\b(?:need|pending|await)[^.!?]*approval|未承認|承認待/iu.test(source);
   return { pendingApproval, section: complete ? 'complete' : decision ? 'decision' : open && !proposal ? 'open' : 'discussion', proposal: proposal && !decision, unknownOwner };
