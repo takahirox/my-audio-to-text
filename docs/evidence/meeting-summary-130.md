@@ -1,5 +1,39 @@
 # Issue #130: meeting-summary validation
 
+## Actor identity review fix (2026-10-21)
+
+Speaker identity is now checked before matching any correction or status change,
+as well as reaffirmations. `Alice: I sent the report.` followed by
+`Bob: I have not sent the report.` retains Alice's completed action and Bob's
+open action separately. A numeric correction by Bob likewise cannot patch
+Alice's `I approved 12 laptops.` into `I approved 10 laptops.` Missing speaker
+labels do not match identified speakers. Changed unlabelled first-person claims
+remain separate because they do not establish a shared actor; exact repetitions
+still deduplicate. Same identified speakers can still correct their own numbers
+and retract approval or completion.
+
+The added regressions failed on the previous policy for both processors and
+pass with the guard. They cover English/Japanese renderings, English/Japanese
+source evidence, status changes with and without correction keywords, numeric
+corrections with and without status changes, missing labels, anonymous personal
+claims, unchanged prior records and same-speaker controls. These use faithful
+controlled renderings to isolate reconciliation from model accuracy.
+
+Validation: `npm ci`, `npm run setup:extension` (all seven asset preparation
+scripts and the extension build), and all **480 unit tests** passed, including
+**51 meeting-summary tests**. The packaged policy matches the reviewed source.
+All **34 focused MV3 tests** passed with:
+
+```sh
+npx playwright test --config playwright.extension.config.js \
+  tests/extension/graph-meeting-summary.spec.js tests/extension/graph.spec.js \
+  tests/extension/graph-if-condition.spec.js tests/extension/live-text.spec.js \
+  tests/extension/windowed-translation.spec.js --output=test-results/actor-scope-130
+```
+
+Real-model inference has not been rerun for this guard change; the recordings
+below remain evidence of their recorded source revisions.
+
 ## Batch-boundary correction (2026-10-21)
 
 The Node now packs whole committed fragments instead of cutting at exactly

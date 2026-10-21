@@ -392,6 +392,49 @@ test('excerpt calendar checks preserve named weekdays rather than accepting a di
 // Faithful controlled translations isolate the shared policy from model quality.
 // Run every review regression through both processor-specific rendering paths.
 for (const processor of MEETING_SUMMARY_TYPES) {
+  test(`${processor}: corrections and status changes preserve distinct or unknown speakers' actions`, async () => {
+    for (const [source, update, rendered, updated, before, after, numeric] of [
+      ['I sent the report.', 'I have not sent the report.', '私は報告書を送信しました。', '私は報告書を送信していません。', 'complete', 'open', false],
+      ['I approved the laptops.', 'I have not approved the laptops.', '私はノートパソコンを承認しました。', '私はノートパソコンを承認していません。', 'decision', 'open', false],
+      ['I sent the report.', 'Correction: I have not sent the report.', '私は報告書を送信しました。', '訂正：私は報告書を送信していません。', 'complete', 'open', false],
+      ['I approved 12 laptops.', 'Correction: I approved 10 laptops, not 12.', '私はノートパソコン12台を承認しました。', '私はノートパソコン10台を承認しました。', 'decision', 'decision', true],
+      ['I approved 12 laptops.', 'Correction: I have not approved 10 laptops, not 12.', '私はノートパソコン12台を承認しました。', '私はノートパソコン10台を承認していません。', 'decision', 'open', true],
+      ['私の報告書は送信済みです。', '私の報告書は送信されていません。', '私の報告書は送信済みです。', '私の報告書は送信されていません。', 'complete', 'open', false],
+      ['報告書は送信済みです。', '訂正：報告書は送信されていません。', '報告書は送信済みです。', '訂正：報告書は送信されていません。', 'complete', 'open', false],
+      ['私はノートパソコン12台を承認しました。', '訂正：私はノートパソコン12台ではなく10台を承認しました。', '私はノートパソコン12台を承認しました。', '私はノートパソコン10台を承認しました。', 'decision', 'decision', true],
+    ]) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const firstText = language === 'ja' ? rendered : source;
+        const nextText = language === 'ja' ? updated : update.replace(', not 12', '');
+        const label = (speaker, text) => speaker ? `${speaker}: ${text}` : text;
+        const speakers = [['Alice', 'Bob'], ['Alice', ''], ['', 'Bob']];
+        if (/\bI\b|私/u.test(source)) speakers.push(['', '']);
+        for (const [firstSpeaker, nextSpeaker] of speakers) {
+          const first = await reconciledSummary(async () => firstText, [], label(firstSpeaker, source), language, processor);
+          const saved = structuredClone(first.records);
+          const repeated = await reconciledSummary(async () => firstText, first.records, label(firstSpeaker, source), language, processor);
+          assert.equal(repeated.summary, first.summary);
+          const next = await reconciledSummary(async () => nextText, first.records, label(nextSpeaker, update), language, processor);
+          assert.deepEqual(first.records, saved);
+          assert.equal(next.records.length, 2, `${source} -> ${update}`);
+          assert.deepEqual(next.records[0], saved[0]);
+          assert.deepEqual(next.records.map(r => [r.speaker, r.text, r.section]), [[firstSpeaker, firstText, before], [nextSpeaker, nextText, after]]);
+          assert.ok(next.summary.includes(label(firstSpeaker, firstText)));
+          assert.ok(next.summary.includes(label(nextSpeaker, nextText)));
+          if (numeric) assert.equal(next.records[1].uncertainCorrection, true);
+        }
+        // The same identified actor can still retract or correct their action.
+        const first = await reconciledSummary(async () => firstText, [], label('Alice', source), language, processor);
+        const same = await reconciledSummary(async () => nextText, first.records, label('Alice', update), language, processor);
+        assert.equal(same.records.length, 1, update);
+        assert.equal(same.records[0].speaker, 'Alice');
+        assert.equal(same.records[0].section, after);
+        assert.equal(same.records[0].text, numeric && before === after ? firstText.replace('12', '10') : nextText);
+      }
+    }
+  });
+
   test(`${processor}: reaffirmations preserve each retained statement's speaker`, async () => {
     for (const language of ['ja', 'en']) {
       for (const [source, update, rendered, updated] of [

@@ -76,9 +76,11 @@ status without a correction keyword. Without an explicit correction, questions
 and conditions stay separate; matching distinguishes approving a draft from
 sending it. Subject matching checks both keyword sets, so a report and its
 appendix remain separate. Shorter reaffirmations with omitted scope also stay
-separate, retaining the earlier dated, budgeted decision. Reaffirmations by a
-different speaker retain separate records so first-person statements keep
-their original attribution.
+separate, retaining the earlier dated, budgeted decision. Different or missing
+speaker labels retain separate records for reaffirmations, corrections and
+status transitions, so one person's action cannot overwrite another's. Changed
+unlabelled first-person statements also stay separate because their actor is
+unknown; exact repetitions can still deduplicate.
 
 An explicit numerical correction patches only an identified quantity in both
 the source and its rendering, preserving unrelated equal numbers and dates.

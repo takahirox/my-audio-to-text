@@ -144,9 +144,13 @@ function matchingRecord(records, source, text, state, correction, speaker, numer
   const keys = topicKeys(source, text);
   let match = -1, best = 0.99, ambiguous = false;
   records.forEach((record, index) => {
-    // Reaffirmations retain evidence verbatim. Keep separate turns rather than
-    // moving an earlier speaker's first-person statement under a new label.
-    if (!correction && state.section === record.section && speaker !== record.speaker) return;
+    // Topic/status overlap cannot establish a shared actor. Corrections and
+    // section changes must retain different or missing speaker labels too,
+    // rather than patching one person's action or status with another's.
+    if (speaker !== record.speaker) return;
+    // Two unlabelled "I" turns do not identify the same person. Exact repeats
+    // may deduplicate, but changed personal evidence must remain separate.
+    if (!speaker && source !== record.source && /\b(?:I|me|my|mine|myself)\b|私|わたし|僕|ぼく|俺|おれ/iu.test(source + '\n' + record.source)) return;
     // An assertion about the same status can supersede it in either direction
     // without a special correction keyword. Questions/conditions do not revoke
     // a fact; a different action (e.g. sending an approved draft) stays separate.
