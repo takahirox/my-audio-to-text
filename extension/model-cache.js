@@ -1,3 +1,4 @@
+import { meetingSummaryManifest } from './meeting-summary-cache.js';
 import { ModelAssetCache, storagePersistence } from './model-asset-cache.js';
 import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
@@ -13,6 +14,8 @@ const cards = [];
 let closed = false, savedNodes = [];
 try { savedNodes = readGraph(localStorage).nodes; } catch { /* Models can recover assets even with a broken saved graph. */ }
 const definitions = [
+  { id: 'meeting-summary-lfm2', title: 'Meeting Summary · LFM2.5 1.2B JP', size: '749 MB download; allow 2 GB storage and 4 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Summary history is lossy.', manifest: () => meetingSummaryManifest('MeetingSummaryLfm2'), terms: 'Liquid AI · LFM Open License 1.0. Commercial use above the $10M annual revenue threshold needs a separate license; redistribution requires the license and preserved notices.', url: '../web/licenses/meeting-summary-lfm2.txt' },
+  { id: 'meeting-summary-qwen35', title: 'Meeting Summary · Qwen3.5 2B', size: '1.403 GB download; allow 3 GB storage and 6 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Text-only ONNX Community optimized conversion of Qwen/Qwen3.5-2B; export card has no conversion details. Summary history is lossy.', manifest: () => meetingSummaryManifest('MeetingSummaryQwen35'), terms: 'Qwen Team · Apache 2.0 source license. See Help documentation for pinned conversion provenance and evidence.', url: '../web/licenses/meeting-summary-qwen35.txt' },
   { id: 'if-condition', title: 'IfCondition · XtremeDistil', size: '14 MB download; allow 40 MB storage and 250 MB free RAM per active Node. CPU WASM.', manifest: ifConditionManifest, terms: 'Moritz Laurer / Microsoft · MIT', url: '../web/licenses/if-condition-model.txt' },
   { id: 'parakeet-v3', title: 'Parakeet TDT 0.6B v3', size: '1.26 GB download; allow 3 GB storage, 6 GB free RAM/GPU memory. WebGPU shader-f16 required.', manifest: parakeetManifest, terms: 'NVIDIA · CC BY 4.0 · ysdede/istupakov ONNX conversion', url: 'https://huggingface.co/ysdede/parakeet-tdt-0.6b-v3-onnx' },
   { id: 'moonshine-medium-en', title: 'Moonshine Medium Streaming English (245M)', size: '305 MB download; allow 700 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineManifest, terms: 'Moonshine AI / Useful Sensors · MIT', url: 'https://moonshine-voice.readthedocs.io/en/latest/models/available-models/' },

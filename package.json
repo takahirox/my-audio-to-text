@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "setup:extension": "npm ci && npm run prepare:assets && npm run prepare:translation-assets && npm run prepare:whisper-assets && npm run prepare:tts-assets && npm run prepare:zipformer-assets && npm run prepare:optional-asr-assets && npm run build:extension",
+    "setup:extension": "npm ci && npm run prepare:assets && npm run prepare:translation-assets && npm run prepare:whisper-assets && npm run prepare:tts-assets && npm run prepare:zipformer-assets && npm run prepare:optional-asr-assets && npm run prepare:meeting-summary-assets && npm run build:extension",
     "build:extension": "python3 scripts/build-extension.py",
     "test:extension": "playwright test --config playwright.extension.config.js",
     "prepare:correction-assets": "python3 scripts/prepare-correction-assets.py",
@@ -24,7 +24,9 @@
     "test:optional-asr-real": "OPTIONAL_ASR_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-optional-asr*smoke.spec.js",
     "prepare:optional-asr-test-models": "python3 scripts/prepare-optional-asr-test-models.py",
     "prepare:if-condition-test-model": "python3 scripts/prepare-if-condition-test-model.py",
-    "test:if-condition-real": "IF_CONDITION_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-if-condition-smoke.spec.js"
+    "test:if-condition-real": "IF_CONDITION_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-if-condition-smoke.spec.js",
+    "prepare:meeting-summary-assets": "python3 scripts/prepare-meeting-summary-assets.py",
+    "test:meeting-summary-real": "MEETING_SUMMARY_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-meeting-summary-smoke.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"

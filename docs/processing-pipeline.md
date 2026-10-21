@@ -28,8 +28,10 @@ several such paths concurrently. The
 same runtime and speech node with its own tab source and UI. OPUS-MT and
 TranslateGemma provide separate local Japanese → English text nodes and test
 pages. The extension implements ASR-to-translation graph integration with generic
-Live TEXT sinks and optional bounded formatting. Summarization, topic processing,
-persistent history and personalized ASR remain future capabilities.
+Live TEXT sinks and optional bounded formatting. The extension also implements
+two [bounded incremental meeting-summary draft processors](meeting-summary-nodes.md)
+with recorded accuracy limitations. Topic processing, persistent history and
+personalized ASR remain future capabilities.
 
 ## Node and port concepts
 
@@ -100,8 +102,10 @@ Transcript/history → Topic extraction/analysis → Visualization
 
 Capture and transcription are executable today, and final text can connect
 directly to the independent translation, correction, TTS and text-output nodes.
-History storage, article/text inputs and summary/analysis connections above are
-future examples. In particular,
+Committed TEXT can also feed the extension's meeting-summary Nodes directly;
+their complete summary snapshots feed a generic Live replace sink. History
+storage, article inputs and broader analysis connections remain future examples.
+In particular,
 `.provisional` is the SpeechToTextNode port for the existing core's `partial`
 events. Provisional replacements and committed events may feed different
 consumers from the same speech-to-text unit.

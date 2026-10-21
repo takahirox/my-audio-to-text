@@ -278,6 +278,10 @@ with tempfile.TemporaryDirectory() as tmp:
     (whisper / 'fixture.onnx').write_bytes(b'pinned Whisper fixture')
     (root / 'scripts').mkdir()
     import hashlib
+    summary_runtime = root / 'web/vendor/meeting-summary'
+    summary_runtime.mkdir()
+    (summary_runtime / 'transformers.js').write_bytes(b'pinned isolated summary runtime fixture')
+    (root / 'scripts/meeting-summary-runtime.json').write_text(json.dumps({'files': [{'path': path.name, 'bytes': path.stat().st_size, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for path in summary_runtime.iterdir()]}))
     (root / 'scripts/if-condition-runtime.json').write_text(json.dumps({'files': [{'path': path.name, 'bytes': path.stat().st_size, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for path in translation.iterdir()]}))
     (root / 'scripts' / 'whisper-assets.json').write_text(json.dumps({'files': [{'path': 'fixture.onnx', 'bytes': 22, 'sha256': hashlib.sha256(b'pinned Whisper fixture').hexdigest()}]}))
     zipformer = root / 'web/vendor/zipformer-en'

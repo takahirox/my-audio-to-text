@@ -1,3 +1,4 @@
+import { MeetingSummaryNode } from '../web/meeting-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
@@ -60,8 +61,12 @@ class PreparedTtsNode {
   dispose() { return this.node.dispose(); }
 }
 
-// Keep a failed decision branch isolated, just as optional ASR/TTS branches.
-// The production Node reports the error, terminates its Worker and emits no guess.
+// Keep optional language-model failures local, just as optional ASR/TTS errors.
+// Each production Node reports its error and terminates its owned Worker.
+class GraphMeetingSummaryNode extends MeetingSummaryNode {
+  start(context) { return super.start({ ...context, fail() {} }); }
+}
+
 class GraphIfConditionNode extends IfConditionNode {
   start(context) { return super.start({ ...context, fail() {} }); }
 }
@@ -121,6 +126,9 @@ export function buildGraph(graph, options) {
       description.nodes.find(n => n.id === e.from[0])?.type === 'TextWindow');
     switch (spec.type) {
       case 'Text': node = new TextNode(spec.settings); break;
+      case 'MeetingSummaryLfm2': case 'MeetingSummaryQwen35':
+        node = new GraphMeetingSummaryNode({ ...spec.settings, type: spec.type, workerFactory: options.meetingSummaryWorkerFactory,
+          onEvent: event => options.onMeetingSummaryEvent?.(event, spec.id) }); break;
       case 'IfCondition':
         node = new GraphIfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,
           onEvent: event => options.onIfConditionEvent?.(event, spec.id) }); break;

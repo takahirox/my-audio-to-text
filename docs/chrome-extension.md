@@ -63,7 +63,7 @@ npm run setup:extension
 
 It runs `npm ci`, `prepare:assets`, `prepare:translation-assets`,
 `prepare:whisper-assets`, `prepare:tts-assets`, `prepare:zipformer-assets`,
-`prepare:optional-asr-assets` and
+`prepare:optional-asr-assets`, `prepare:meeting-summary-assets` and
 `build:extension` in that order, stopping at the first
 failure. ASR preparation recreates `web/vendor/`, so translation preparation
 must follow it. The individual npm scripts remain available.

@@ -142,3 +142,22 @@ IfCondition zero-shot classifier
   Model and base model cards declare MIT. Attribution/license notice:
   ./licenses/if-condition-model.txt
   Weights are prepared and integrity-verified after Save, never packaged code.
+
+Local meeting summary processors (Issue #130)
+  Liquid AI: LFM2.5-1.2B-JP-202606-ONNX, q4f16
+  Revision 01b5a0a33d22253d5ee52b367d2375eeb113b7cd
+  LFM Open License 1.0, including commercial-use revenue conditions and
+  redistribution obligations: ./licenses/meeting-summary-lfm2.txt
+  ONNX Community: Qwen3.5-2B-ONNX-OPT, q4f16 text-only sessions
+  Revision ed446636739bf426e73c5a00714fd8e010d36c21
+  Source Qwen/Qwen3.5-2B (Qwen Team), Apache 2.0:
+  ./licenses/meeting-summary-qwen35.txt
+  Conversion card supplies no exporter/version details or separate license.
+  Isolated Transformers.js 4.2.0 (Apache 2.0; packaged
+  vendor/meeting-summary/transformers-LICENSE) and ONNX Runtime Web
+  1.26.0-dev.20260416-b7804b056c (Microsoft, MIT;
+  ./licenses/onnxruntime-translation.txt). Runtime archives/files are pinned in
+  scripts/meeting-summary-runtime.json. Executable JS/WASM is packaged;
+  unmodified model data is prepared after Save, not during inference.
+  Details, provenance limits, memory guidance and evidence:
+  docs/meeting-summary-nodes.md
