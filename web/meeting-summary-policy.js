@@ -116,7 +116,7 @@ export function summaryMessages(previous, transcript, language, processor) {
 const MAX_RECORDS = 32;
 const MAX_MEMORY_CHARS = 12000;
 const numberPattern = /\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[億万千])?/gu;
-const englishNoise = new Set(('a an and are as at be been being by can correction could decided decision approved approval agreed confirmed do does for from had has have i in is it me might must need not of on only or our proposed proposal should still that the their them there these they this to was we were will with would yen you someone who know don withdraw withdrawn withdrew retract retracted revoke revoked rescind rescinded').split(' '));
+const englishNoise = new Set(('a an and are as at be been being by can correction could decided decision approved approval agreed confirmed do does for from had has have i in is it me might must need not pending yet of on only or our proposed proposal should still that the their them there these they this to was we were will with would yen you someone who know don withdraw withdrawn withdrew retract retracted revoke revoked rescind rescinded').split(' '));
 const japaneseNoise = /(?:月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日|未|完了|担当者|責任者|不明|未定|必要|提案|承認待|承認|合意|決定|修正|訂正|開始|万円|予定)/gu;
 const statusPatterns = [
   /\b(?:approv\w*|approval)\b|承認/iu,
@@ -135,15 +135,18 @@ function topicKeys(source, text) {
   const japanese = [...new Set((text.replace(/送(?:信済|付済|信|付)/gu, '送').replace(japaneseNoise, ' ').match(/[ァ-ヺー]{2,}|[一-龯々]{2,}|送/gu) || []))];
   return { english, japanese };
 }
-function overlap(a, b) {
+function overlap(a, b, partial = false) {
   if (!a.length || !b.length) return 0;
   const shared = a.filter(key => b.includes(key)).length;
-  return shared / Math.min(a.length, b.length);
+  return shared / (partial ? Math.min(a.length, b.length) : Math.max(a.length, b.length));
 }
-function matchingRecord(records, source, text, state, correction) {
+function matchingRecord(records, source, text, state, correction, speaker, numericCorrection) {
   const keys = topicKeys(source, text);
   let match = -1, best = 0.99, ambiguous = false;
   records.forEach((record, index) => {
+    // Reaffirmations retain evidence verbatim. Keep separate turns rather than
+    // moving an earlier speaker's first-person statement under a new label.
+    if (!correction && state.section === record.section && speaker !== record.speaker) return;
     // An assertion about the same status can supersede it in either direction
     // without a special correction keyword. Questions/conditions do not revoke
     // a fact; a different action (e.g. sending an approved draft) stays separate.
@@ -155,8 +158,11 @@ function matchingRecord(records, source, text, state, correction) {
     const other = topicKeys(record.source, record.text);
     // When both sources are English, keep subject scope from that evidence.
     // A translated "not for X" must not overwrite the decision about X.
+    // A shared subset does not establish subject equivalence (report versus
+    // report appendix). Only an explicit numeric correction can target part of
+    // an existing record; its quantity scope is checked by patchNumbers below.
     const score = keys.english.length && other.english.length
-      ? overlap(keys.english, other.english) : overlap(keys.japanese, other.japanese);
+      ? overlap(keys.english, other.english, numericCorrection) : overlap(keys.japanese, other.japanese, numericCorrection);
     if (score > best) { best = score; match = index; ambiguous = false; }
     else if (score === best) ambiguous = true;
   });
@@ -291,7 +297,7 @@ export async function reconciledSummary(generate, previousRecords, transcript, l
     const text = await validatedSummary(generate, '', source, language, { exactValues: true, processor });
     // "not 900" negates an obsolete value, not the approval/completion.
     const state = recordState(source);
-    const index = matchingRecord(records, source, text, state, explicitCorrection);
+    const index = matchingRecord(records, source, text, state, explicitCorrection, excerpt.speaker, corrections.length > 0);
     const old = records[index];
     const record = { ...excerpt, source, text, ...state, ...(corrections.length && index < 0 ? { uncertainCorrection: true } : {}) };
     if (old && corrections.length && corrections.some(c => numericValues(old.text).includes(c.old))) {

@@ -68,9 +68,11 @@ withdrawals and corrections can move a former decision or completion back to ope
 work. Clear same-subject approval/completion assertions also replace the previous
 status without a correction keyword. Without an explicit correction, questions
 and conditions stay separate; matching distinguishes approving a draft from
-sending it. Reaffirmations retain
-compatible earlier details rather than replacing a dated, budgeted decision
-with a shorter statement.
+sending it. Subject matching checks both keyword sets, so a report and its
+appendix remain separate. Shorter reaffirmations with omitted scope also stay
+separate, retaining the earlier dated, budgeted decision. Reaffirmations by a
+different speaker retain separate records so first-person statements keep
+their original attribution.
 
 An explicit numerical correction patches only an identified quantity in both
 the source and its rendering, preserving unrelated equal numbers and dates.

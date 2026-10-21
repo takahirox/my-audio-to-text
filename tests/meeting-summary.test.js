@@ -336,6 +336,55 @@ test('excerpt calendar checks preserve named weekdays rather than accepting a di
 // Faithful controlled translations isolate the shared policy from model quality.
 // Run every review regression through both processor-specific rendering paths.
 for (const processor of MEETING_SUMMARY_TYPES) {
+  test(`${processor}: reaffirmations preserve each retained statement's speaker`, async () => {
+    for (const language of ['ja', 'en']) {
+      for (const [source, update, rendered, updated] of [
+        ['I approved the pilot on November 12.', 'The pilot is approved.', '私は11月12日にパイロットを承認しました。', 'パイロットは承認済みです。'],
+        ['I approved the pilot.', 'I approved the pilot.', '私はパイロットを承認しました。', '私はパイロットを承認しました。'],
+        ['私はパイロットを承認しました。', 'パイロットは承認済みです。', '私はパイロットを承認しました。', 'パイロットは承認済みです。'],
+      ]) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const firstText = language === 'ja' ? rendered : source;
+        const nextText = language === 'ja' ? updated : update;
+        const first = await reconciledSummary(async () => firstText, [], `Alice: ${source}`, language, processor);
+        const saved = structuredClone(first.records);
+        for (const speaker of ['Bob', '']) {
+          const next = await reconciledSummary(async () => nextText, first.records, speaker ? `${speaker}: ${update}` : update, language, processor);
+          assert.deepEqual(first.records, saved);
+          assert.equal(next.records.length, 2);
+          assert.deepEqual(next.records.map(r => [r.speaker, r.text]), [['Alice', firstText], [speaker, nextText]]);
+          assert.ok(next.summary.includes(`Alice: ${firstText}`));
+          if (speaker) assert.ok(next.summary.includes(`Bob: ${nextText}`));
+          const repeated = await reconciledSummary(async () => nextText, next.records, speaker ? `${speaker}: ${update}` : update, language, processor);
+          assert.equal(repeated.summary, next.summary);
+        }
+      }
+    }
+  });
+
+  test(`${processor}: status reconciliation retains distinct subject scopes in either order`, async () => {
+    for (const [source, update, rendered, updated] of [
+      ['The report has been sent.', 'The report appendix has not been sent.', '報告書は送信済みです。', '報告書の付録は送信されていません。'],
+      ['The report is approved.', 'The report appendix is not approved.', '報告書は承認済みです。', '報告書の付録は承認されていません。'],
+      ['報告書は送信済みです。', '報告書の付録は送信されていません。', '報告書は送信済みです。', '報告書の付録は送信されていません。'],
+    ]) {
+      for (const language of ['ja', 'en']) {
+        if (language === 'en' && !/[a-z]/iu.test(source)) continue;
+        const pair = [[source, language === 'ja' ? rendered : source], [update, language === 'ja' ? updated : update]];
+        for (const order of [pair, [...pair].reverse()]) {
+          const first = await reconciledSummary(async () => order[0][1], [], order[0][0], language, processor);
+          const saved = structuredClone(first.records);
+          const next = await reconciledSummary(async () => order[1][1], first.records, order[1][0], language, processor);
+          assert.deepEqual(first.records, saved);
+          assert.equal(next.records.length, 2);
+          for (const [, expected] of pair) assert.ok(next.summary.includes(expected));
+          assert.equal(next.records.find(r => r.source === update).section, 'open');
+          assert.equal(next.records.find(r => r.source === source).section, source.includes('approved') ? 'decision' : 'complete');
+        }
+      }
+    }
+  });
+
   test(`${processor}: requests and wishes remain open instead of confirming decisions or completion`, async () => {
     const cases = [
       ['We need to get the venue approved.', '会場は承認が必要です。'],
@@ -544,7 +593,9 @@ for (const processor of MEETING_SUMMARY_TYPES) {
       const first = await reconciledSummary(async () => text, [], source, language, processor);
       const reaffirmation = 'The pilot is approved.';
       const next = await reconciledSummary(async () => language === 'ja' ? 'パイロットは承認済みです。' : reaffirmation, first.records, reaffirmation, language, processor);
-      assert.equal(next.records.length, 1);
+      // A shorter statement may omit subject qualifiers. Keep it separately
+      // instead of guessing equivalence; the detailed fact remains intact.
+      assert.equal(next.records.length, 2);
       assert.equal(next.records[0].section, 'decision');
       assert.ok(next.records[0].text.includes(text));
       const repeated = await reconciledSummary(async () => language === 'ja' ? 'パイロットは承認済みです。' : reaffirmation, next.records, reaffirmation, language, processor);
@@ -552,9 +603,9 @@ for (const processor of MEETING_SUMMARY_TYPES) {
       const partial = 'The pilot budget is approved at 250,000 yen.';
       const partialText = language === 'ja' ? 'パイロットの予算は250,000円で承認済みです。' : partial;
       const last = await reconciledSummary(async () => partialText, repeated.records, partial, language, processor);
-      assert.equal(last.records.length, 1);
+      assert.equal(last.records.length, 3);
       assert.ok(last.records[0].text.includes(text));
-      assert.ok(last.records[0].text.includes(partialText));
+      assert.ok(last.summary.includes(partialText));
     }
   });
 }
