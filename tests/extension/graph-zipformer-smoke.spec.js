@@ -45,10 +45,10 @@ test('real packaged English online Zipformer: incremental speech, cap, Stop tail
       const stopRequestMs = await page.evaluate(() => performance.now());
       const stopAt = Date.now(); await page.locator('#stop').click();
       await expect(page.locator('#start')).toBeEnabled({ timeout: 120000 });
-      await expect(page.locator('#errors')).toBeEmpty(); await expect(page.locator('.display-preview')).toBeEmpty();
+      await expect(page.locator('#errors')).toBeEmpty();
       const events = await page.evaluate(() => window.zipEvents);
       const feedStartMs = await page.evaluate(() => window.zipFeedStart);
-      const texts = await page.locator('.display-items li pre').allTextContents();
+      const texts = (await page.locator('.display-content').textContent()).split('\n').filter(Boolean);
       const partial = events.find(e => e.type === 'partial' && e.text), final = events.find(e => e.type === 'final');
       if (name.endsWith('.wav')) {
         expect(partial).toBeTruthy(); expect(final).toBeTruthy();

@@ -100,7 +100,7 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     });
     const host = await page.evaluate(() => ({ browser: navigator.userAgent, isolated: crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency }));
     await context.setOffline(true); requests.length = 0;
-    const notes = page.locator('[data-display="notes"] .display-preview');
+    const notes = page.locator('[data-display="notes"] .display-content');
     const started = Date.now(); await page.locator('#start').click();
     await expect(page.locator('#status')).toHaveText('Processing active', { timeout: 180000 });
     expect(await page.locator('#summary-status').textContent()).not.toContain('unavailable');
@@ -129,7 +129,7 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     const final = await notes.textContent();
     await expect(page.locator('#errors')).toBeEmpty();
     expect(await page.evaluate(() => window.summaryWorkers.every(w => w.released))).toBe(true);
-    await expect(page.locator('[data-display="transcript"] .display-items li')).toHaveCount(3);
+    await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText(meetingBatches.join('\n'));
     // Fresh session resets context; Cancel during real generation cannot write.
     const beforeCancel = await page.evaluate(() => { window.cancelSummaryOnToken = true; return window.summaryEvidence.length; });
     await page.locator('#start').click(); await expect(page.locator('#status')).toHaveText('Processing active', { timeout: 180000 });
@@ -158,7 +158,7 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     if (page) await writeFile(info.outputPath('diagnostics.json'), JSON.stringify({ sourceSHA256, runs, requests, consoleErrors,
       model: spec, runtime: JSON.parse(await readFile('scripts/meeting-summary-runtime.json', 'utf8')),
       host: await page.evaluate(() => ({ browser: navigator.userAgent, isolated: crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency })).catch(() => null),
-      visibleNotes: await page.locator('[data-display="notes"] .display-preview').textContent().catch(() => null),
+      visibleNotes: await page.locator('[data-display="notes"] .display-content').textContent().catch(() => null),
       status: await page.locator('#summary-status').textContent().catch(() => ''), replies: await page.evaluate(() => window.summaryEvidence).catch(() => []) }, null, 2));
     await context?.close(); if (server) await new Promise(resolve => server.close(resolve));
     await rm(temporary, { recursive: true, force: true });

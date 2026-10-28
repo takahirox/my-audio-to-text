@@ -43,27 +43,59 @@ export class TextFormatterNode {
   receive(port, value, context) { return this.receiveInputs({ [port]: value }, context); }
 }
 
-export class LiveTextDisplayNode {
-  inputs = { replace: TEXT, append: TEXT };
-  outputs = {};
-  constructor(onDisplay = () => {}, { appendConnected = false } = {}) { this.onDisplay = onDisplay; this.appendConnected = appendConnected; this.preview = ''; this.items = []; }
-  publish() { this.onDisplay({ preview: this.preview, items: [...this.items] }); }
-  start() { this.publish(); }
+// Immutable strings can share their existing prefix in JS engines. Keep one
+// growing committed string instead of copying an item array on every event.
+export class TextAccumulatorNode {
+  inputs = { append: TEXT, preview: TEXT };
+  outputs = { text: TEXT };
+  // Migration compatibility only: an old display with no executable append
+  // input retained its latest replacement across Stop and Cancel.
+  constructor({ retainPreviewOnEnd = false } = {}) {
+    this.retainPreviewOnEnd = retainPreviewOnEnd;
+    this.committed = ''; this.count = 0; this.preview = '';
+  }
+  get text() { return this.committed + (this.preview ? (this.count ? '\n' : '') + this.preview : ''); }
+  start(context) {
+    this.committed = ''; this.count = 0; this.preview = '';
+    context.emit('text', '');
+  }
   receiveInputs(values, context) {
     if (context.signal.aborted) return;
     for (const [port, value] of Object.entries(values)) {
-      if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('LiveTextDisplay expects TEXT inputs.');
+      if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('TextAccumulator expects TEXT inputs.');
     }
-    // Append wins in a directly grouped emission regardless of key order.
-    // Every append is a new item (including empty/repeated text), and consumes
-    // the pending preview. Separate later replace emissions start a new preview.
-    if (Object.hasOwn(values, 'replace')) this.preview = values.replace;
-    if (Object.hasOwn(values, 'append')) { this.items.push(values.append); this.preview = ''; }
-    this.publish();
+    // A grouped append wins regardless of key order. Independent deliveries
+    // retain queue order; a later preview starts a new uncommitted tail.
+    if (Object.hasOwn(values, 'preview')) this.preview = values.preview;
+    if (Object.hasOwn(values, 'append')) {
+      this.committed += (this.count ? '\n' : '') + values.append;
+      this.count++; this.preview = '';
+    }
+    context.emit('text', this.text);
   }
-  receive(port, value, context) { return this.receiveInputs({ [port]: value }, context); }
-  clearPreview() { this.preview = ''; this.publish(); }
-  finish() { if (this.appendConnected) this.clearPreview(); }
-  stop() { this.finish(); }
-  dispose() { this.finish(); }
+  receive(port, value, context) { this.receiveInputs({ [port]: value }, context); }
+  stop(context) {
+    if (context.signal.aborted) return;
+    if (this.retainPreviewOnEnd) return;
+    if (this.preview) { this.preview = ''; context.emit('text', this.committed); }
+  }
+  // Cancel drops pending work without publishing to downstream processors.
+  // The session may use this value to restore an immediately connected view.
+  cancel() {
+    if (this.retainPreviewOnEnd) return this.text;
+    this.preview = ''; return this.committed;
+  }
+  dispose() { this.cancel(); }
+}
+
+export class LiveTextDisplayNode {
+  inputs = { content: TEXT };
+  outputs = {};
+  constructor(onDisplay = () => {}) { this.onDisplay = onDisplay; }
+  start() { this.onDisplay(''); }
+  receive(port, value, context) {
+    if (context.signal.aborted) return;
+    if (port !== 'content' || typeof value !== 'string') throw TypeError('LiveTextDisplay expects content: TEXT.');
+    this.onDisplay(value);
+  }
 }

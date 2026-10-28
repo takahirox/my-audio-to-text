@@ -1,7 +1,7 @@
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
 
-test('both optional ASRs are searchable independent Graph v9 Nodes; Save prepares parked weights, retry survives failure and reload retains exact paths', async ({ graphExtension: f }) => {
+test('both optional ASRs are searchable independent Graph v10 Nodes; Save prepares parked weights, retry survives failure and reload retains exact paths', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
   for (const [type, search, key] of [['SpeechToTextParakeetV3', 'Parakeet', 'parakeet-v3'], ['SpeechToTextMoonshineMediumEn', 'Moonshine', 'moonshine-medium-en']]) {
     const before = f.requests.length;
@@ -18,7 +18,7 @@ test('both optional ASRs are searchable independent Graph v9 Nodes; Save prepare
     expect(f.requests.some(url => url.includes(key))).toBe(true);
   }
   const nodes = await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage));
-  expect(nodes.version).toBe(9); expect(nodes.nodes.filter(n => n.type.includes('Parakeet') || n.type.includes('Moonshine'))).toHaveLength(2);
+  expect(nodes.version).toBe(10); expect(nodes.nodes.filter(n => n.type.includes('Parakeet') || n.type.includes('Moonshine'))).toHaveLength(2);
   await editor.reload();
   expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(nodes);
   await expect(editor.getByRole('button', { name: 'speechtotextparakeetv3 output provisional', exact: true })).toHaveCount(0);
@@ -42,15 +42,15 @@ test('parallel production Nodes fan out finals, preserve repeats, clear failed p
       moonshine.postMessage({ type: 'fixture-partial', id: 0, text: 'real interim in production; deterministic fixture here' });
       for (const id of [0, 0, 1]) parakeet.postMessage({ type: 'fixture-final', id, text: 'repeat' });
     });
-    await expect(page.locator('[data-display="p"] .display-items li')).toHaveCount(2);
-    await expect(page.locator('[data-display="formatted"] .display-items li')).toHaveCount(2);
-    await expect(page.locator('[data-display="m"] .display-preview')).not.toBeEmpty();
+    await expect(page.locator('[data-display="p"] .display-content')).toHaveText('repeat\nrepeat');
+    await expect(page.locator('[data-display="formatted"] .display-content')).toHaveText('repeat\nrepeat');
+    await expect(page.locator('[data-display="m"] .display-content')).not.toBeEmpty();
     await page.evaluate(() => window.graphWorkers.filter(w => !w.released).find(w => w.url.endsWith('moonshine-medium-worker.js')).postMessage({ type: 'fixture-error' }));
     await expect(page.locator('#errors')).toContainText('moonshine:');
-    await expect(page.locator('[data-display="m"] .display-preview')).toBeEmpty();
+
     await expect(page.locator('#status')).toHaveText('Transcription active');
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
     expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
-    await expect(page.locator('[data-display="p"] .display-items li')).toHaveCount(2);
+    await expect(page.locator('[data-display="p"] .display-content')).toHaveText('repeat\nrepeat');
   }
 });

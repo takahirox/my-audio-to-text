@@ -28,8 +28,8 @@ test('real packaged concurrent Zipformer and Whisper: independent results, resou
   await page.evaluate(async () => {
     const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
     const graph=defaultGraph();graph.nodes[1].type='SpeechToTextZipformerEn';
-    graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextWhisper','whisper'),graphNode('LiveTextDisplay','local'));
-    graph.edges.push(edge('mic','audio','whisper','audio'),edge('whisper','final','local','append'));saveGraph(localStorage,graph);
+    graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextWhisper','whisper'),graphNode('LiveTextDisplay','local'),graphNode('TextAccumulator','local-accumulator'));
+    graph.edges.push(edge('mic','audio','whisper','audio'),edge('whisper','final','local-accumulator','append'),edge('local-accumulator','text','local','content'));saveGraph(localStorage,graph);
     navigator.mediaDevices.getUserMedia=async()=>({getTracks:()=>[{stop(){}}]});
     const { ExtensionTabAudioNode }=await import('./tab-audio-node.js');
     ExtensionTabAudioNode.prototype.start=function(context){
@@ -62,8 +62,8 @@ test('real packaged concurrent Zipformer and Whisper: independent results, resou
       samples.push(await resources());const stop=Date.now();await page.locator('#stop').click();
       await expect(page.locator('#start')).toBeEnabled({timeout:120000});samples.push(await resources());
       await expect(page.locator('#errors')).toBeEmpty();
-      const remote=await page.locator('[data-display="transcript"] .display-items li pre').allTextContents();
-      const local=await page.locator('[data-display="local"] .display-items li pre').allTextContents();
+      const remote=(await page.locator('[data-display="transcript"] .display-content').textContent()).split('\n').filter(Boolean);
+      const local=(await page.locator('[data-display="local"] .display-content').textContent()).split('\n').filter(Boolean);
       expect(remote.join(' ')).toMatch(/yellow lamps/i);expect(local.join(' ')).toMatch(/yellow lamps/i);
       expect(await page.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
       const timing=await page.evaluate(()=>({feedStart:window.feedStart,events:window.modelEvents}));

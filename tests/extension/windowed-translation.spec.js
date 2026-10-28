@@ -4,7 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { windowGraph, windowTranscript, closedWindows } from '../fixtures/windowed-translation.js';
 
-test('palette settings, text-only Save without weights and version 9 reload', async ({ graphExtension: f }) => {
+test('palette settings, text-only Save without weights and version 10 reload', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   for (const type of ['TextWindow', 'TranslationCommit']) {
     await openPalette(editor); await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
@@ -16,7 +16,7 @@ test('palette settings, text-only Save without weights and version 9 reload', as
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   expect(f.requests).toEqual([]);
   const graph = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(graph.version).toBe(9); expect(graph.nodes.find(n => n.type === 'TextWindow').settings).toEqual({ maxChars: 120, maxWaitMs: 250, sentenceBoundary: 'off' });
+  expect(graph.version).toBe(10); expect(graph.nodes.find(n => n.type === 'TextWindow').settings).toEqual({ maxChars: 120, maxWaitMs: 250, sentenceBoundary: 'off' });
   await editor.reload();
   expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
   await editor.getByRole('button', { name: 'Select textwindow', exact: true }).click();
@@ -59,7 +59,7 @@ for (const mode of ['baseline', 'window', 'revisable']) test(`packaged ${mode}: 
   }, { graph, texts: windowTranscript });
   const expected = mode === 'baseline' ? windowTranscript : closedWindows;
   for (const run of runs) {
-    expect(run.errors).toEqual([]); expect(run.display).toEqual({ preview: '', items: expected.map(s => `訳:${s}`) });
+    expect(run.errors).toEqual([]); expect(run.display).toEqual(expected.map(s => `訳:${s}`).join('\n'));
   }
   expect(await live.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
 });

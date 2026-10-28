@@ -11,7 +11,7 @@ async function saveConcurrent(page) {
       graphNode('MicrophoneAudio', 'parked-mic'), graphNode('Kokoro', 'parked-tts'), graphNode('SpeechToTextWhisper', 'unfinished-model'));
     graph.nodes.find(node => node.id === 'transcript').settings.label = 'Remote speaker';
     graph.nodes.find(node => node.id === 'local-display').settings.label = 'Local speaker';
-    graph.edges.push(edge('mic', 'audio', 'local', 'audio'), edge('local', 'final', 'local-display', 'append'));
+    graph.edges.push(edge('mic', 'audio', 'local', 'audio'), edge('local', 'final', 'local-display', 'content'));
     saveGraph(localStorage, graph); return graph;
   });
 }
@@ -90,11 +90,11 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
     await expect(page.locator('.live-text-region')).toHaveCount(2);
     await expect(page.locator('#signal')).toContainText('audio: Audio signal detected.');
     await expect(page.locator('#signal')).toContainText('mic: Audio signal detected.');
-    await expect(page.locator('[data-display="transcript"] .display-preview')).toHaveText('remote');
+    await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('remote');
     await expect(page.locator('[data-display="parked-mic"]')).toHaveCount(0);
     if (mode === 'branch-end') {
       await page.evaluate(() => window.captureStreams.find(record => record.kind==='tab'&&!record.stopped).stream.getAudioTracks()[0].dispatchEvent(new Event('ended')));
-      await expect(page.locator('[data-display="transcript"] .display-items')).toContainText('remote');
+      await expect(page.locator('[data-display="transcript"] .display-content')).toContainText('remote');
       await expect(page.locator('#status')).toHaveText('Transcription active');
       await expect.poll(() => page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(2);
       expect(await page.evaluate(() => window.captureStreams.some(record => record.kind==='mic'&&!record.stopped))).toBe(true);
@@ -102,8 +102,8 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
     await page.locator(mode === 'cancel' ? '#cancel-session' : '#stop').click();
     await expect(page.locator('#start')).toBeEnabled(); await expect(page.locator('#errors')).toBeEmpty();
     if(mode!=='cancel') {
-      await expect(page.locator('[data-display="transcript"] .display-items')).toContainText('remote');
-      await expect(page.locator('[data-display="local-display"] .display-items')).toContainText('local');
+      await expect(page.locator('[data-display="transcript"] .display-content')).toContainText('remote');
+      await expect(page.locator('[data-display="local-display"] .display-content')).toContainText('local');
     }
     expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
     expect(await page.evaluate(() => window.captureStreams.every(record => record.stopped && record.context.state==='closed'))).toBe(true);
@@ -146,7 +146,7 @@ test('MV3 TEXT-only path starts without a toolbar tab or microphone permission',
   });
   await expect(page.locator('#start')).toBeEnabled(); await page.locator('#start').click();
   await expect(page.locator('#status')).toHaveText('Processing active');
-  await expect(page.locator('.display-items li pre')).toHaveText(['Independent text path']);
+  await expect(page.locator('.display-content')).toHaveText(['Independent text path'].join('\n'));
   expect(await page.evaluate(() => window.graphWorkers.length)).toBe(0);
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await expect(page.locator('#errors')).toBeEmpty();

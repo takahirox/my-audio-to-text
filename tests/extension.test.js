@@ -1,3 +1,4 @@
+import { accumulateDisplay } from './fixtures/text-accumulator.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -90,7 +91,7 @@ test('missing toolbar document skips only focused output; Live drains, retry sna
   await f.session.start(42);
   assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /output skipped: no authorized toolbar document/);
   f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop();
-  assert.equal((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), 'final text\n'); assert.deepEqual(sent, []);
+  assert.equal((f.session.view.displays.transcript || ''), 'final text'); assert.deepEqual(sent, []);
   f.session.outputTarget = { tabId: 42, documentId: 'authorized', label: 'Page' };
   await f.session.start(42); assert.match(f.session.view.targetStatus, /connected and authorized/);
   f.session.outputTarget.documentId = 'changed';
@@ -101,13 +102,13 @@ test('missing toolbar document skips only focused output; Live drains, retry sna
 test('field-only graph reports every unavailable destination without adding a fallback view', async () => {
   const f = fixture({ graph: fieldOutputs({ live: false }), pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
   await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /No text destination is active/);
-  f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop(); assert.equal((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), '');
+  f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop(); assert.equal((f.session.view.displays.transcript || ''), '');
 });
 test('stale document disables focused output while Live continues; cancellation releases capture and workers', async () => {
   const f = fixture({ graph: fieldOutputs(), pageConnectionFactory: () => ({ request: async () => { throw Error('Permission lost'); }, close() {} }) });
   f.session.outputTarget = { tabId: 42, documentId: 'stale', label: 'Page' };
   await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /Permission lost/);
-  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', id: 1, text: 'Live continues' }); await drain(); assert.match((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), /Live continues/);
+  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', id: 1, text: 'Live continues' }); await drain(); assert.match((f.session.view.displays.transcript || ''), /Live continues/);
   f.session.cancel(); await drain(); assert.ok(f.workers.every(worker => worker.terminated)); assert.equal(f.sources[0].stops.at(-1), false);
 });
 
@@ -125,22 +126,22 @@ test('extension session emits provisional/final output, flushes once and clears 
   const graph = session.session.pipeline;
   assert.ok(graph instanceof Pipeline);
   assert.deepEqual(graph.order.map(entry => entry.node.constructor.name),
-    ['ExtensionTabAudioNode', 'SpeechToTextNode', 'LiveTextDisplayNode']);
+    ['ExtensionTabAudioNode', 'SpeechToTextNode', 'TextAccumulatorNode', 'LiveTextDisplayNode']);
   assert.equal(graph.entries.get('audio').outputs.audio, MONO_16KHZ_PCM);
   assert.equal(graph.entries.get('speech').inputs.audio, MONO_16KHZ_PCM);
-  assert.equal(graph.entries.get('transcript').inputs.replace, TEXT);
-  assert.equal(graph.entries.get('transcript').inputs.append, TEXT);
+  assert.equal(graph.entries.get('transcript-accumulator').inputs.preview, TEXT);
+  assert.equal(graph.entries.get('transcript').inputs.content, TEXT);
   sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
-  assert.equal((session.view.displays.transcript?.preview || ''), 'provisional text');
+  assert.equal((session.view.displays.transcript || ''), 'provisional text');
   await session.start(99); assert.equal(sources.length, 1, 'live capture cannot be retargeted');
   await Promise.all([session.stop(), session.stop()]); await drain();
-  assert.equal((session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), 'final text\n');
-  assert.equal((session.view.displays.transcript?.preview || ''), ''); assert.equal(session.view.state, 'idle');
+  assert.equal((session.view.displays.transcript || ''), 'final text');
+  assert.equal((session.view.displays.transcript || ''), 'final text'); assert.equal(session.view.state, 'idle');
   assert.deepEqual(sources[0].stops, [true]);
   assert.equal(workers[1].messages.filter(m => m.type === 'vad-stop').length, 1);
   assert.ok(workers.every(w => w.terminated));
   await session.start(99);
-  assert.equal((session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), ''); assert.equal((session.view.displays.transcript?.preview || ''), '');
+  assert.equal((session.view.displays.transcript || ''), ''); assert.equal((session.view.displays.transcript || ''), '');
   const before = workers[3].messages.length;
   sources[0].onAudio(new Float32Array(16000)); sources[0].onEnded();
   workers[0].reply({ type: 'error', message: 'stale error' });
@@ -170,7 +171,7 @@ test('closing/navigating a target or ending capture finalizes; unrelated tabs do
   f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
   f.session.tabEnded(99); assert.equal(f.session.view.state, 'running');
   f.session.tabEnded(42); f.sources[0].onEnded(); await drain();
-  assert.equal(f.session.view.state, 'idle'); assert.equal((f.session.view.displays.transcript?.items.map(text => text + '\n').join('') || ''), 'final text\n');
+  assert.equal(f.session.view.state, 'idle'); assert.equal((f.session.view.displays.transcript || ''), 'final text');
   assert.deepEqual(f.sources[0].stops, [true]);
 });
 
@@ -327,7 +328,7 @@ function concurrentGraph({ fanout = false } = {}) {
   const graph = defaultGraph();
   graph.nodes.push(graphNode('ChromeTabAudio', 'second-audio'), graphNode('SpeechToTextReazonSpeech', 'second-speech'), graphNode('LiveTextDisplay', 'second-display'));
   graph.edges.push(edge(fanout ? 'audio' : 'second-audio', 'audio', 'second-speech', 'audio'), edge('second-speech', 'final', 'second-display', 'append'));
-  return graph;
+  return accumulateDisplay(graph, 'second-display');
 }
 
 for (const mode of ['stop', 'native-end', 'tab-navigation']) {
@@ -348,8 +349,8 @@ for (const mode of ['stop', 'native-end', 'tab-navigation']) {
         await active.stopping;
       } else await f.session.stop();
       assert.equal(f.session.view.error, '');
-      assert.deepEqual(f.session.view.displays.transcript.items, ['final text']);
-      assert.deepEqual(f.session.view.displays['second-display'].items, ['final text']);
+      assert.deepEqual(f.session.view.displays.transcript, ['final text'].join('\n'));
+      assert.deepEqual(f.session.view.displays['second-display'], ['final text'].join('\n'));
       const deliveries = workers.filter(worker => worker.path.includes('silero')).map(worker =>
         worker.messages.filter(message => message.type === 'vad-audio').map(message => message.audio));
       assert.deepEqual(deliveries, [[new Float32Array(37).fill(0.05)], [new Float32Array(37).fill(0.05)]]);
@@ -367,15 +368,15 @@ test('independent same-type ASRs route, drain on branch end, Stop, Cancel and re
   active.speechNodes.get('speech').receiveEvent({ type: 'final', id: 0, text: 'remote' });
   active.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 0, text: 'local' });
   await drain();
-  assert.deepEqual(f.session.view.displays.transcript.items, ['remote']);
-  assert.deepEqual(f.session.view.displays['second-display'].items, ['local']);
+  assert.deepEqual(f.session.view.displays.transcript, ['remote'].join('\n'));
+  assert.deepEqual(f.session.view.displays['second-display'], ['local'].join('\n'));
   active.audioSources.get('audio').end(); await active.branchDrain;
   assert.equal(f.session.view.state, 'running');
   assert.equal(active.pipeline.entries.get('speech').closed, true);
   assert.equal(active.pipeline.entries.get('second-speech').closed, false);
   assert.equal(f.workers.filter(worker => worker.terminated).length, 2);
   active.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 1, text: 'still local' }); await drain();
-  assert.deepEqual(f.session.view.displays['second-display'].items, ['local', 'still local']);
+  assert.deepEqual(f.session.view.displays['second-display'], ['local', 'still local'].join('\n'));
   await f.session.stop(); assert.ok(f.workers.every(worker => worker.terminated));
   assert.ok(f.sources.every(source => source.stops.length === 1));
   await f.session.start(42); assert.equal(f.workers.length, 8);
@@ -393,17 +394,17 @@ test('fan-out uses one capture with independent same-type model processors and s
   assert.equal(f.session.session.speechNodes.get('second-speech').maxDuration, 1.5);
   f.sources[0].onAudio(new Float32Array(3200).fill(.1)); await drain();
   await f.session.stop();
-  assert.deepEqual(f.session.view.displays.transcript.items, ['final text']);
-  assert.deepEqual(f.session.view.displays['second-display'].items, ['final text']);
+  assert.deepEqual(f.session.view.displays.transcript, ['final text'].join('\n'));
+  assert.deepEqual(f.session.view.displays['second-display'], ['final text'].join('\n'));
 });
 
 test('parked and incomplete nodes do not load models, request microphone permission or capture', async () => {
   const graph = defaultGraph();
   for (const [type, id] of [['MicrophoneAudio', 'parked-mic'], ['SpeechToTextWhisper', 'parked-model'], ['TextFormatter', 'unfinished'], ['Kokoro', 'parked-tts'], ['LiveTextDisplay', 'parked-output']]) graph.nodes.push(graphNode(type, id));
-  graph.edges.push(edge('parked-model', 'final', 'unfinished', 'input1'), edge('unfinished', 'text', 'parked-output', 'append'));
+  graph.edges.push(edge('parked-model', 'final', 'unfinished', 'input1'), edge('unfinished', 'text', 'parked-output', 'content'));
   const f = fixture({ graph }); await f.session.start(42);
   assert.equal(f.session.view.state, 'running'); assert.equal(f.workers.length, 2); assert.equal(f.sources.length, 1);
-  assert.deepEqual([...f.session.session.pipeline.entries.keys()], ['audio', 'speech', 'transcript']);
+  assert.deepEqual([...f.session.session.pipeline.entries.keys()], ['audio', 'speech', 'transcript', 'transcript-accumulator']);
   assert.deepEqual(f.session.graph, graph); await f.session.stop();
   const draft = { version: GRAPH_VERSION, nodes: graph.nodes.slice(3), edges: [] };
   f.session.setGraph(draft); await f.session.start(42, { microphoneGesture: true });
@@ -414,12 +415,12 @@ test('parked and incomplete nodes do not load models, request microphone permiss
 test('a shared formatter stays live after one input path ends', async () => {
   const graph = concurrentGraph(); graph.nodes.push(graphNode('TextFormatter', 'shared'), graphNode('LiveTextDisplay', 'combined'));
   graph.nodes.at(-2).settings.template = '{1}/{2}';
-  graph.edges.push(edge('speech', 'final', 'shared', 'input1'), edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'replace'));
+  graph.edges.push(edge('speech', 'final', 'shared', 'input1'), edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'content'));
   const f = fixture({ graph }); await f.session.start(42); const active = f.session.session;
   active.audioSources.get('audio').end(); await active.branchDrain;
   assert.equal(active.pipeline.entries.get('shared').closed, false);
   active.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 0, text: 'peer' }); await drain();
-  assert.match(f.session.view.displays.combined.preview, /peer/); await f.session.stop();
+  assert.match(f.session.view.displays.combined, /peer/); await f.session.stop();
 });
 
 test('active microphone permission requires a gesture; Cancel releases a late grant before models load', async () => {

@@ -53,7 +53,8 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
         };
         let display;
         const built = buildGraph(graph, { translationWorkerFactory: workerFactory,
-          onDisplay: (_, s) => { display = s; displayEvents.push({ ms: now(), ...s }); } });
+          onDisplay: (_, s) => { display = s; displayEvents.push({ ms: now(), text: s }); } });
+        const accumulator = built.pipeline.entries.get('display-accumulator').node;
         const scheduler = built.translations[0], emit = scheduler.emit.bind(scheduler);
         scheduler.emit = (job, text, error) => {
           if (!job.provisional || job.revision === scheduler.revision) emissions.push({ ms: now(), source: job.source, provisional: !!job.provisional, text, error });
@@ -69,7 +70,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
               // comparison: let a real open-window preview become visible.
               const deadline = performance.now() + 20000;
               const previous = emissions.length;
-              while (!emissions.slice(previous).some(e => e.provisional) || !display?.preview) {
+              while (!emissions.slice(previous).some(e => e.provisional) || !accumulator.preview) {
                 if (performance.now() > deadline) throw Error('Real open-window preview did not arrive.');
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
@@ -77,7 +78,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
             await new Promise(resolve => setTimeout(resolve, 150));
           }
           const stopMs = now(); await built.pipeline.stop();
-          return { mode, readyMs, stopMs, totalMs: now(), inputs, inferences, emissions, displayEvents, display,
+          return { mode, readyMs, stopMs, totalMs: now(), inputs, inferences, emissions, displayEvents, display, preview: accumulator.preview,
             errors: built.pipeline.errors.map(e => e.message), inferenceCount: inferences.length };
         } finally {
           await built.pipeline.dispose();
@@ -92,24 +93,21 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
       expect(run.errors).toEqual([]);
       const finals = run.emissions.filter(e => !e.provisional && e.source);
       expect(finals.map(e => e.source)).toEqual(mode === 'baseline' ? windowTranscript : closedWindows);
-      expect(run.display.items.filter(Boolean)).toEqual(finals.map(e => e.text));
-      expect(run.display.preview).toBe(''); expect(finals.every(e => e.text?.trim() && !e.error)).toBe(true);
-      if (mode === 'revisable-preview') expect(run.displayEvents.some(e => e.preview)).toBe(true);
-      for (let i = 1; i < run.displayEvents.length; i++) {
-        const previous = run.displayEvents[i - 1].items;
-        expect(run.displayEvents[i].items.slice(0, previous.length)).toEqual(previous);
-      }
-      expect(run.display.items.filter(Boolean).slice(mode === 'baseline' ? 2 : 1, mode === 'baseline' ? 4 : 3)[0])
-        .toBe(run.display.items.filter(Boolean)[mode === 'baseline' ? 3 : 2]);
+      const accepted = run.emissions.filter(e => !e.provisional && !e.error && typeof e.text === 'string');
+      expect(run.display).toBe(accepted.map(e => e.text).join('\n'));
+      expect(run.preview).toBe(''); expect(finals.every(e => e.text?.trim() && !e.error)).toBe(true);
+      if (mode === 'revisable-preview') expect(run.displayEvents.some(e => e.text && e.text !== run.display)).toBe(true);
+      const repeatedIndex = mode === 'baseline' ? 2 : 1;
+      expect(finals[repeatedIndex].text).toBe(finals[repeatedIndex + 1].text);
       expect(evidence.requests.slice(first).filter(r => !r.url.startsWith('chrome-extension:'))).toEqual([]);
       console.log(JSON.stringify({ mode, inferences: run.inferenceCount, totalMs: run.totalMs, display: run.display }));
       await page.close();
     }
     expect(evidence.errors).toEqual([]);
     expect(evidence.requests.every(r => r.method === 'GET' && !r.hasBody)).toBe(true);
-    const batched = evidence.runs[1].display.items, revisable = evidence.runs[2].display.items;
+    const batched = evidence.runs[1].display, revisable = evidence.runs[2].display;
     expect(revisable).toEqual(batched);
-    expect(evidence.runs[3].display.items).toEqual(batched);
+    expect(evidence.runs[3].display).toEqual(batched);
   } finally {
     const file = info.outputPath('window-translation-evidence.json'); await writeFile(file, JSON.stringify(evidence, null, 2) + '\n');
     await info.attach('window-translation-evidence', { path: file, contentType: 'application/json' });

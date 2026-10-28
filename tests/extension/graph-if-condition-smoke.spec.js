@@ -20,7 +20,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
  const requests=[],violations=[],runs=[];
  f.context.on('request',request=>{if(request.url().startsWith('http'))requests.push(request.url());});
  await page.evaluate(()=>{window.cspViolations=[];addEventListener('securitypolicyviolation',e=>cspViolations.push({directive:e.violatedDirective,uri:e.blockedURI}));});
- const items=id=>page.locator(`[data-display="${id}"] .display-items li pre`);
+ const items=id=>page.locator(`[data-display="${id}"] .display-content`);
  const cases=[
   {condition:'Is this a question?',texts:[['  What time does the meeting begin?\n','yes'],['The meeting begins at noon.','no'],['The meeting begins at noon.','no'],['','no']]},
   {condition:'Is the sentiment of this text positive?',texts:[['I am delighted with this wonderful gift.','yes'],['I hate this awful product.','no']]},
@@ -34,7 +34,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
    const outputs={yes:[],no:[]},decisions=[];
    for(const [text,branch]of texts){
     const before=Date.now();await emitFinal(page,text);outputs[branch].push(text);
-    await expect(items(branch)).toHaveText(outputs[branch],{timeout:30000});
+    await expect(items(branch)).toHaveText(outputs[branch].join('\n'),{timeout:30000});
     expect(await items(branch==='yes'?'no':'yes').allTextContents()).toEqual(outputs[branch==='yes'?'no':'yes']);
     decisions.push({text,branch,latencyMs:Date.now()-before});
    }
@@ -46,9 +46,9 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
   // while sharing only the same prepared immutable asset cache.
   await page.editor.evaluate(async()=>{
    const {readGraph,saveGraph,graphNode,edge}=await import('./graph.js');const g=readGraph(localStorage);
-   g.nodes.push(graphNode('IfCondition','animal',500,650),graphNode('LiveTextDisplay','animal-yes',1200,300),graphNode('LiveTextDisplay','animal-no',1200,600));
+   g.nodes.push(graphNode('IfCondition','animal',500,650),graphNode('LiveTextDisplay','animal-yes',1200,300),graphNode('LiveTextDisplay','animal-no',1200,600),graphNode('TextAccumulator','animal-yes-acc'),graphNode('TextAccumulator','animal-no-acc'));
    g.nodes.find(n=>n.id==='animal').settings.condition='Does this text mention an animal?';
-   g.edges.push(edge('speech','final','animal','text'),edge('animal','yes','animal-yes','append'),edge('animal','no','animal-no','append'));saveGraph(localStorage,g);
+   g.edges.push(edge('speech','final','animal','text'),edge('animal','yes','animal-yes-acc','append'),edge('animal','no','animal-no-acc','append'),edge('animal-yes-acc','text','animal-yes','content'),edge('animal-no-acc','text','animal-no','content'));saveGraph(localStorage,g);
   });
   await page.editor.reload();await page.editor.locator('#graph-save').click();await expect(page.editor.locator('#graph-save')).toBeEnabled();
   const parallelStart=Date.now();await startGraph(page,120000);

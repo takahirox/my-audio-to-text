@@ -26,7 +26,7 @@ test('MV3 searchable palette, typed audio/TEXT routes and help; production onlin
   await expect(editor.locator('[data-node="speech"] [data-side="input"]')).toHaveCount(1);
   await expect(editor.locator('[data-node="speech"] [data-side="output"]')).toHaveCount(2);
   // Exercise the editor's real connection gesture for all three public routes.
-  for (const [source, output, target, input] of [['audio', 'audio', 'speech', 'audio'], ['speech', 'provisional', 'transcript', 'replace'], ['speech', 'final', 'transcript', 'append']]) {
+  for (const [source, output, target, input] of [['audio', 'audio', 'speech', 'audio'], ['speech', 'provisional', 'transcript-accumulator', 'preview'], ['speech', 'final', 'transcript-accumulator', 'append']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
     await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).click();
   }
@@ -37,11 +37,10 @@ test('MV3 searchable palette, typed audio/TEXT routes and help; production onlin
   for (let i = 0; i < 2; i++) {
     await startGraph(page);
     await page.evaluate(() => window.capture.emit('audio', new Float32Array(3200).fill(.1)));
-    await expect(page.locator('.display-preview')).toHaveText('english 3200');
-    await expect(page.locator('.display-items li')).toHaveCount(0);
+    await expect(page.locator('.display-content')).toHaveText('english 3200');
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-    await expect(page.locator('.display-preview')).toBeEmpty();
-    await expect(page.locator('.display-items li pre')).toHaveText(['english 16000']);
+
+    await expect(page.locator('.display-content')).toHaveText(['english 16000'].join('\n'));
     expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
   }
   expect(f.requests).toEqual([]);
@@ -62,7 +61,7 @@ for (const duringStop of [false, true]) test(`MV3 Zipformer Cancel releases in-f
   if (duringStop) await page.locator('#stop').click();
   await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
   await page.evaluate(() => window.lateCallback({ data: { type: 'final', session: 1, id: 0, text: 'late' } }));
-  await expect(page.locator('.display-items li')).toHaveCount(0); await expect(page.locator('.display-preview')).toBeEmpty();
+  await expect(page.locator('.display-content')).toBeEmpty();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
 });
 

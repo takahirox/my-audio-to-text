@@ -2,7 +2,7 @@
 
 These are independent Chrome extension processor Nodes. Add either or both in
 Graph Editor. Existing ReazonSpeech, Whisper tiny, Zipformer, default graph,
-Graph v9 storage, migration and translation behavior remain unchanged.
+Graph v10 preserves these ASR contracts and migrates saved display state into explicit TextAccumulator processors.
 Successful fixture recognition is **not a quality comparison**, WER/CER result,
 meeting-room validation or user acceptance.
 
@@ -25,8 +25,8 @@ selected-media capture. Capture and resampling use the existing helpers.
 
 | Node | Outputs | Suggested wiring |
 | --- | --- | --- |
-| `SpeechToTextParakeetV3` | `final: TEXT` only | final → LiveTextDisplay.append |
-| `SpeechToTextMoonshineMediumEn` | `provisional: TEXT`, `final: TEXT` | provisional → LiveTextDisplay.replace; final → append |
+| `SpeechToTextParakeetV3` | `final: TEXT` only | final → TextAccumulator.append |
+| `SpeechToTextMoonshineMediumEn` | `provisional: TEXT`, `final: TEXT` | provisional → TextAccumulator.preview; final → append |
 
 Finals are ordinary committed strings. Fan out independently to TextFormatter,
 OPUS-MT.text, focused text output or other TEXT consumers. Each Node owns a
@@ -182,7 +182,7 @@ reads cached model bytes; it cannot fetch missing weights. No speech upload,
 remote inference, recording-time runtime download or silent model fallback.
 
 Deterministic validation: `npm test`, `npm run test:extension`; includes ports,
-Graph v9/default/migrations, Save/reload, parked requirements, preparation retry,
+Graph v10/default/migrations, Save/reload, parked requirements, preparation retry,
 bounded input, repeat/deduplication, tails, native-stream renewal, Cancel, crashes,
 peer-path isolation and Worker release. Existing generic cache tests cover
 corruption, quota, cancellation, cross-page locks and reuse.
@@ -208,3 +208,5 @@ requests, hardware and resource observations. No fake backend establishes real
 inference. Physical microphone, meeting audio, other devices, comparative
 accuracy and user acceptance remain untested/out of scope. There is no required
 post-merge verification for this Issue.
+
+Live displays accept only `content: TEXT` in Graph v10. For transcript history, route final segments to `TextAccumulator.append`, provisional tails to `TextAccumulator.preview`, and `TextAccumulator.text → LiveTextDisplay.content`. Complete summary/formatter snapshots may connect directly to content. Saved v9 display wiring migrates automatically with original recovery copies retained; see [migration and lifecycle](extension-graph.md#graph-v10-display-migration-and-recovery).

@@ -38,14 +38,14 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
     navigator.mediaDevices.getUserMedia = () => { throw Error('Save must not capture'); };
   });
   await add(editor, 'OpusMtEnJa'); await add(editor, 'OpusMtEnJa');
-  expect(f.requests).toEqual([]); expect((await saved(live)).nodes).toHaveLength(3);
+  expect(f.requests).toEqual([]); expect((await saved(live)).nodes).toHaveLength(4);
   await save(editor); await expect(cards(editor)).toHaveCount(1);
   await expect(cards(editor).locator('.model-status')).toContainText('Ready');
   expect(f.requests).toHaveLength(7); expect(f.requests.every(url => url.startsWith('/opus-mt-en-ja-assets.json/'))).toBe(true);
   expect(await editor.evaluate(() => window.beforePersistence)).toEqual(Array(7).fill(false));
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.evaluate(() => window.graphWorkers.length)).toBe(0);
-  const before = await saved(live); expect(before.version).toBe(9); expect(before.edges).toHaveLength(3);
+  const before = await saved(live); expect(before.version).toBe(10); expect(before.edges).toHaveLength(4);
   await save(editor); await expect(cards(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(7);
   for (const corrupt of [true, false]) {
     await editor.evaluate(async corrupt => {
@@ -98,7 +98,7 @@ test('multiple parked model types and voices prepare distinct sets once and reus
   await expect(cards(editor).locator('.model-status')).toHaveText(Array(6).fill('Ready · Cached and verified'));
   expect(new Set(f.requests).size).toBe(f.requests.length);
   for (const voice of ['F1.json', 'M1.json', 'jf_alpha.bin', 'af_heart.bin']) expect(f.requests.some(url => url.endsWith(voice))).toBe(true);
-  expect((await saved(live)).edges).toHaveLength(3);
+  expect((await saved(live)).edges).toHaveLength(4);
   const count = f.requests.length; await save(editor);
   await expect(cards(editor).locator('.model-status')).toHaveText(Array(6).fill('Ready · Cached and verified'));
   expect(f.requests).toHaveLength(count); expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
@@ -145,7 +145,7 @@ test('a Save in another editor cancels obsolete preparation without downloading 
   await expect(editor.locator('#graph-state')).toContainText('draft kept');
   await expect(editor.locator('[data-node=text]')).toHaveCount(1);
   await expect(editor.locator('[data-node=opusmtenja]')).toHaveCount(1);
-  expect((await saved(live)).nodes).toHaveLength(3);
+  expect((await saved(live)).nodes).toHaveLength(4);
   await editor.locator('#graph-save').click();
   await expect(editor.locator('#graph-errors')).toContainText('Load saved');
   expect(f.requests).toHaveLength(1);

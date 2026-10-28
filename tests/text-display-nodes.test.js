@@ -2,30 +2,81 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT } from '../web/port-contracts.js';
-import { LiveTextDisplayNode, TextFormatterNode, parseTemplate } from '../web/text-nodes.js';
-import { defaultGraph, graphNode, edge, validateGraph, graphWarnings, assertGraph } from '../extension/graph.js';
+import { LiveTextDisplayNode, TextAccumulatorNode, TextFormatterNode, parseTemplate } from '../web/text-nodes.js';
+import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph } from '../extension/graph.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const context = () => ({ signal: new AbortController().signal });
 
-test('replace, empty clearing, every append, grouped precedence and literal text are deterministic', () => {
-  const states = [], node = new LiveTextDisplayNode(state => states.push(state)), c = context(); node.start();
-  node.receive('replace', '<b>preview</b>', c); assert.equal(states.at(-1).preview, '<b>preview</b>');
-  node.receive('replace', '', c); assert.equal(states.at(-1).preview, '');
-  node.receive('replace', 'pending', c); node.receive('append', 'committed', c);
-  node.receive('append', 'committed', c); node.receive('append', '', c);
-  node.receiveInputs({ append: 'grouped', replace: 'stale' }, c);
-  assert.deepEqual(states.at(-1), { preview: '', items: ['committed', 'committed', '', 'grouped'] });
-  assert.deepEqual(states[0], { preview: '', items: [] }, 'published snapshots do not change');
-  assert.throws(() => node.receive('append', {}, c), /TEXT/);
-  c.signal = AbortSignal.abort(); node.receive('append', 'late', c); assert.equal(states.at(-1).items.length, 4);
+test('Live is a literal snapshot sink: empty, whitespace, repeated and HTML-looking content', () => {
+  const states = [], node = new LiveTextDisplayNode(text => states.push(text)), c = context(); node.start();
+  assert.deepEqual(node.inputs, { content: TEXT }); assert.deepEqual(node.outputs, {});
+  for (const text of ['first', 'first', '  <b>literal</b>\n', '']) node.receive('content', text, c);
+  assert.deepEqual(states, ['', 'first', 'first', '  <b>literal</b>\n', '']);
+  for (const port of ['append', 'replace', 'other']) assert.throws(() => node.receive(port, 'bad', c), /content: TEXT/);
+  assert.throws(() => node.receive('content', null, c), /TEXT/);
+  node.receive('content', 'late', { signal: AbortSignal.abort() }); assert.equal(states.at(-1), '');
 });
 
-test('independent display instances and TEXT fan-out drain without duplicating a preview', async () => {
-  let emit; const a = new LiveTextDisplayNode(), b = new LiveTextDisplayNode();
-  const pipeline = new Pipeline({ nodes: { source: { outputs: { text: TEXT }, start(c) { emit = c.emit; } }, a, b }, connections: [edge('source', 'text', 'a', 'replace'), edge('source', 'text', 'b', 'append')] });
-  await pipeline.start(); emit('text', 'same'); emit('text', 'same'); await pipeline.stop();
-  assert.equal(a.preview, 'same'); assert.deepEqual(a.items, []); assert.equal(b.preview, ''); assert.deepEqual(b.items, ['same', 'same']);
-  await pipeline.dispose();
+test('accumulator preserves every segment, exact whitespace and duplicates; grouped append wins', () => {
+  const states = [], node = new TextAccumulatorNode(), c = { ...context(), emit: (port, text) => { assert.equal(port, 'text'); states.push(text); } };
+  node.start(c);
+  const segments = ['', 'same', 'same', '', '  raw\n\t', ''];
+  const accepted = [];
+  for (const text of segments) {
+    for (const preview of ['pending', '', 'new tail']) {
+      node.receive('preview', preview, c);
+      assert.equal(states.at(-1), accepted.join('\n') + (preview ? (accepted.length ? '\n' : '') + preview : ''));
+    }
+    node.receive('append', text, c); accepted.push(text);
+    assert.equal(states.at(-1), accepted.join('\n'));
+  }
+  for (const values of [{ preview: 'stale', append: 'group' }, { append: 'group', preview: 'stale' }]) {
+    node.receiveInputs(values, c); accepted.push('group'); assert.equal(states.at(-1), accepted.join('\n'));
+  }
+  const before = states.length;
+  assert.throws(() => node.receiveInputs({ preview: 'valid', append: null }, c), /TEXT/);
+  assert.equal(node.preview, ''); assert.equal(states.length, before);
+  node.receive('append', 'late', { ...c, signal: AbortSignal.abort() }); assert.equal(states.length, before);
+  node.receive('preview', 'remove at Stop', c); node.stop(c); assert.equal(states.at(-1), accepted.join('\n'));
+  node.receive('preview', 'remove at Cancel', c); const publications = states.length;
+  assert.equal(node.cancel(), accepted.join('\n')); node.dispose(); assert.equal(states.length, publications);
+  node.start(c); assert.equal(states.at(-1), ''); assert.equal(node.count, 0);
+});
+
+test('Pipeline grouped/separate delivery, generic formatter fan-out, Stop and Cancel are composable', async () => {
+  let emit, group; const snapshots = [], display = [];
+  const accumulator = new TextAccumulatorNode();
+  const pipeline = new Pipeline({ nodes: {
+    source: { outputs: { final: TEXT, provisional: TEXT }, start(c) { emit = c.emit; group = c.emitOutputs; } }, accumulator,
+    live: new LiveTextDisplayNode(text => display.push(text)), formatter: new TextFormatterNode({ template: 'Transcript: {1}' }),
+    consumer: { inputs: { text: TEXT }, receive(_, value) { snapshots.push(value); } },
+  }, connections: [edge('source', 'final', 'accumulator', 'append'), edge('source', 'provisional', 'accumulator', 'preview'),
+    edge('accumulator', 'text', 'live', 'content'), edge('accumulator', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'consumer', 'text')] });
+  await pipeline.start(); await tick(); snapshots.length = 0; display.length = 0;
+  group({ provisional: 'discard', final: 'A' }); emit('provisional', 'tail'); emit('final', 'A'); emit('provisional', 'Stop removes');
+  await pipeline.stop();
+  assert.deepEqual(display, ['A', 'A\ntail', 'A\nA', 'A\nA\nStop removes', 'A\nA']);
+  assert.deepEqual(snapshots, display.map(s => 'Transcript: ' + s));
+  await pipeline.dispose(); const before = display.length; emit('final', 'stale'); await tick(); assert.equal(display.length, before);
+});
+
+test('long append-only transcripts retain all text and old immutable snapshots without item-array copies', t => {
+  const node = new TextAccumulatorNode(), old = []; let latest;
+  const c = { ...context(), emit: (_, text) => { latest = text; if (node.count === 100) old.push(text); } };
+  node.start(c); const start = performance.now();
+  for (let i = 0; i < 20000; i++) node.receive('append', 'same '.repeat(20), c);
+  const elapsed = performance.now() - start;
+  assert.equal(node.count, 20000); assert.equal(latest, Array(20000).fill('same '.repeat(20)).join('\n'));
+  assert.equal(old[0], Array(100).fill('same '.repeat(20)).join('\n'));
+  t.diagnostic(`20,000 appends / ${latest.length} UTF-16 units: ${elapsed.toFixed(1)} ms (Node snapshot construction; excludes DOM/consumer flattening)`);
+});
+
+test('accumulator palette/save/reload/runtime uses primitive contracts without a display dependency', () => {
+  const graph = { version: defaultGraph().version, nodes: [graphNode('Text', 'source'), graphNode('TextAccumulator', 'acc'), graphNode('FocusedInputTextOutputNode', 'consumer')],
+    edges: [edge('source', 'value', 'acc', 'append'), edge('acc', 'text', 'consumer', 'text')] };
+  assert.deepEqual(validateGraph(graph), []); assert.deepEqual(assertGraph(graph), graph);
+  const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem() {} };
+  saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
 });
 
 test('formatter has bounded substitutions, literal labels/newlines, escaping and missing values', () => {
@@ -42,50 +93,12 @@ test('direct grouped formatter update emits once; separate branches emit latest 
   const pipeline = new Pipeline({ nodes: {
     a: { outputs: { one: TEXT, two: TEXT }, start(c) { a = c.emitOutputs; } },
     b: { outputs: { text: TEXT }, start(c) { b = c.emit; } }, formatter,
-    sink: new LiveTextDisplayNode(state => { if (state.items.length) result.splice(0, result.length, ...state.items); }),
-  }, connections: [edge('a', 'one', 'formatter', 'input1'), edge('a', 'two', 'formatter', 'input3'), edge('b', 'text', 'formatter', 'input2'), edge('formatter', 'text', 'sink', 'append')] });
-  await pipeline.start(); a({ one: 'A', two: 'grouped' }); await tick(); assert.deepEqual(result, ['A||grouped']);
-  b('text', 'B'); await tick(); assert.deepEqual(result, ['A||grouped', 'A|B|grouped']);
-  a({ one: 'C' }); await pipeline.stop(); assert.deepEqual(result, ['A||grouped', 'A|B|grouped', 'C|B|']); await pipeline.dispose();
+    sink: new LiveTextDisplayNode(state => { result.push(state); }),
+  }, connections: [edge('a', 'one', 'formatter', 'input1'), edge('a', 'two', 'formatter', 'input3'), edge('b', 'text', 'formatter', 'input2'), edge('formatter', 'text', 'sink', 'content')] });
+  await pipeline.start(); a({ one: 'A', two: 'grouped' }); await tick(); assert.deepEqual(result, ['', 'A||grouped']);
+  b('text', 'B'); await tick(); assert.deepEqual(result, ['', 'A||grouped', 'A|B|grouped']);
+  a({ one: 'C' }); await pipeline.stop(); assert.deepEqual(result, ['', 'A||grouped', 'A|B|grouped', 'C|B|']); await pipeline.dispose();
 });
-
-test('validation accepts multiple generic sinks and translators, output-only paths and primitive formatters', () => {
-  const graph = defaultGraph(); graph.nodes.push(graphNode('LiveTextDisplay', 'other'), graphNode('TextFormatter', 'format'), graphNode('OpusMtEnJa', 'second'));
-  graph.edges.push(edge('speech', 'final', 'format', 'input1'), edge('format', 'text', 'other', 'append'), edge('speech', 'final', 'second', 'text'), edge('second', 'text', 'other', 'replace'));
-  assert.deepEqual(validateGraph(graph), []);
-  for (const [id, key, value] of [['other', 'label', ''], ['other', 'label', 'a'.repeat(121)], ['format', 'template', '{5}']]) {
-    const invalid = structuredClone(graph); invalid.nodes.find(n => n.id === id).settings[key] = value; assert.throws(() => assertGraph(invalid));
-  }
-  const disconnected = structuredClone(graph); disconnected.edges = disconnected.edges.filter(e => e.to[0] !== 'other'); assert.match(graphWarnings(disconnected).join(' '), /at least one TEXT/);
-  const only = defaultGraph({ enabled: false }); only.nodes = only.nodes.filter(n => n.id !== 'transcript'); only.edges = only.edges.filter(e => e.to[0] !== 'transcript');
-  only.nodes.push(graphNode('FocusedInputTextOutputNode', 'field')); only.edges.push(edge('speech', 'final', 'field', 'text')); assert.deepEqual(validateGraph(only), []);
-});
-
-test('mixed display owns Stop/Cancel preview cleanup; replace-only values and committed items remain', () => {
-  const mixed = new LiveTextDisplayNode(() => {}, { appendConnected: true }), value = new LiveTextDisplayNode(), c = context();
-  mixed.receive('append', 'history', c); mixed.receive('replace', 'pending', c); mixed.stop(); assert.equal(mixed.preview, ''); assert.deepEqual(mixed.items, ['history']);
-  mixed.receive('replace', 'canceled', c); mixed.dispose(); assert.equal(mixed.preview, '');
-  value.receive('replace', 'current value', c); value.stop(); value.dispose(); assert.equal(value.preview, 'current value');
-});
-
-test('committed state has no loss across consecutive preview updates, repeated/empty finals and session teardown', () => {
-  let latest; const node = new LiveTextDisplayNode(state => latest = state, { appendConnected: true }), c = context();
-  const expected = [];
-  node.start();
-  for (const text of ['  <script>literal</script>\n&  ', 'same', 'same', '', '', 'last']) {
-    for (const preview of ['first preview', 'source replacement', '']) {
-      node.receive('replace', preview, c);
-      assert.deepEqual(latest, { preview, items: expected });
-    }
-    node.receive('append', text, c); expected.push(text);
-    assert.deepEqual(latest, { preview: '', items: expected });
-  }
-  node.receive('replace', 'uncommitted', c); node.stop(); node.dispose();
-  assert.deepEqual(latest, { preview: '', items: expected });
-  const fresh = new LiveTextDisplayNode(state => latest = state); fresh.start();
-  assert.deepEqual(latest, { preview: '', items: [] });
-});
-
 
 test('formatter instances have independent counts above four, safe multi-digit references and literal data', () => {
   const a = new TextFormatterNode({ inputCount: 12, template: '{12}\n{5}|{{{1}}}' });

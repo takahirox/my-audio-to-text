@@ -41,7 +41,7 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and the same-ta
     await expect(live.locator('#signal')).toHaveText('audio: Audio signal detected.');
     await expect.poll(() => website.locator('audio').evaluate(audio => audio.ended), { timeout: 30000 }).toBe(true);
     await live.locator('#stop').click(); await expect(live.locator('#status')).toContainText('Stopped', { timeout: 120000 });
-    const finals = (await live.locator('[data-display="transcript"] .display-items').textContent()).split('\n').map(text => text.trim()).filter(Boolean);
+    const finals = (await live.locator('[data-display="transcript"] .display-content').textContent()).split('\n').map(text => text.trim()).filter(Boolean);
     expect(finals.length).toBeGreaterThan(0);
     await expect(website.locator('#field')).toHaveValue('manual' + finals.join('')); await expect(website.locator('#other')).toHaveValue('');
     await expect(live.locator('#errors')).toBeEmpty(); expect(pageErrors).toEqual([]);

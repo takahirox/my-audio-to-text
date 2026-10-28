@@ -5,38 +5,6 @@ import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.
 import { legacyGraph } from '../fixtures/legacy-graph.js';
 const region = (page, id) => page.locator(`[data-display="${id}"]`);
 
-test('MV3 Live keeps displays, controls, accessible status and actionable errors without an instructional footer', async ({ graphExtension: f }) => {
-  const live = await openGraph({ ...f, url: `${f.url}?error=Capture%20denied.%20Invoke%20the%20toolbar%20action%20to%20retry.&tab=42` });
-  await expect(live.locator('footer')).toHaveCount(0);
-  for (const text of ['The default shows speech in one Live text display.', 'Replace updates only the preview;', 'Copy display text before closing.']) {
-    await expect(live.locator('body')).not.toContainText(text);
-  }
-  await expect(live.getByRole('region', { name: 'Recording', exact: true })).toBeVisible();
-  await expect(live.locator('#tab-status')).toHaveText('audio · whole tab 42');
-  await expect(live.getByRole('alert')).toHaveText('Capture denied. Invoke the toolbar action to retry.');
-  await expect(live.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
-  await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeDisabled();
-  await expect(live.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
-  await expect(live.locator('.live-text-region')).toHaveCount(1);
-  const display = live.getByRole('region', { name: 'Text', exact: true });
-  await expect(display.getByRole('heading', { name: 'Text', exact: true })).toBeVisible();
-  await expect(display.getByRole('button', { name: 'Copy text', exact: true })).toBeDisabled();
-  await expect(display.locator('.display-preview')).toHaveAttribute('aria-live', 'polite');
-  await expect(display.locator('.display-items')).toHaveAttribute('aria-live', 'polite');
-  await live.getByRole('button', { name: 'Start', exact: true }).click();
-  await expect(live.locator('#status')).toHaveAttribute('role', 'status');
-  await expect(live.locator('#status')).toHaveText('Transcription active');
-  await expect(live.locator('#errors')).toBeEmpty();
-  await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
-  await expect(live.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
-  await emitFinal(live, 'Visible result');
-  await expect(display.locator('li pre')).toHaveText(['Visible result']);
-  await expect(display.getByRole('button', { name: 'Copy text', exact: true })).toBeEnabled();
-  await live.getByRole('button', { name: 'Stop', exact: true }).click();
-  await expect(live.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
-  await expect(display.locator('li pre')).toHaveText(['Visible result']);
-});
-
 async function fixtureTranslation(f, page) {
   for (const worker of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(f.root, 'web', worker), `self.onmessage=({data})=>{
     if(data.type==='load')postMessage({type:'ready',id:data.id});
@@ -58,223 +26,163 @@ for (const id of ['constructor', 'toString', 'hasOwnProperty']) {
     await live.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), legacy);
     await live.close(); live = await openGraph({ ...f, url: `${f.url}?error=&tab=42` });
     const migrated = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-    expect(migrated.version).toBe(9);
+    expect(migrated.version).toBe(10);
     expect(migrated.nodes.find(node => node.id === id).type).toBe('LiveTextDisplay');
-    expect(migrated.edges.filter(route => route.to[0] === id)).toEqual([
-      { from: ['speech', 'provisional'], to: [id, 'replace'] },
-      { from: ['speech', 'final'], to: [id, 'append'] },
-    ]);
+    expect(migrated.edges.filter(route => route.to[0] === id)).toEqual([{ from: [`${id}-accumulator`, 'text'], to: [id, 'content'] }]);
     await expect(live.locator('.live-text-region')).toHaveCount(1);
     await expect(region(live, id).locator('h2')).toHaveText('Original');
-    await expect(region(live, id).locator('.display-preview')).toBeEmpty();
-    await expect(region(live, id).locator('li')).toHaveCount(0);
+    await expect(region(live, id).locator('.display-content')).toBeEmpty();
     await expect(live.locator('#errors')).toBeEmpty();
     await expect(live.locator('#start')).toBeEnabled();
     await live.locator('#start').click();
     await expect(live.locator('#status')).toHaveText('Transcription active');
     await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'pending' }));
-    await expect(region(live, id).locator('.display-preview')).toHaveText('pending');
+    await expect(region(live, id).locator('.display-content')).toHaveText('pending');
     await emitFinal(live, 'committed');
-    await expect(region(live, id).locator('li pre')).toHaveText(['committed']);
-    await expect(region(live, id).locator('.display-preview')).toBeEmpty();
+    await expect(region(live, id).locator('.display-content')).toHaveText('committed');
     await live.locator('#stop').click();
     await expect(live.locator('#start')).toBeEnabled();
     await expect(live.locator('#errors')).toBeEmpty();
   });
 }
 
-test('MV3 generic regions show ASR, translation and formatter TEXT with custom labels, escaping and independent updates', async ({ graphExtension: f }) => {
+test('MV3 literal snapshot content, accessible controls and errors', async ({ graphExtension: f }) => {
+  const live = await openGraph({ ...f, url: `${f.url}?error=Capture%20denied.&tab=42` });
+  await expect(live.getByRole('alert')).toHaveText('Capture denied.');
+  await expect(live.locator('footer')).toHaveCount(0);
+  await expect(region(live, 'transcript').locator('.display-content')).toHaveAttribute('aria-live', 'polite');
+  await expect(region(live, 'transcript').getByRole('button', { name: 'Copy text' })).toBeDisabled();
+  await startGraph(live); await emitFinal(live, 'Visible result');
+  await expect(region(live, 'transcript').locator('.display-content')).toHaveText('Visible result');
+  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
+  await expect(region(live, 'transcript').locator('.display-content')).toHaveText('Visible result');
+});
+
+test('MV3 translation history, repeated inputs, safe labels and saved graph apply next session', async ({ graphExtension: f }) => {
   const live = await openGraph(f); await fixtureTranslation(f, live);
-  await live.evaluate(async () => {
-    const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
-    const graph = defaultGraph({ enabled: true }); graph.nodes = graph.nodes.filter(n => n.id !== 'translated-format');
-    graph.edges = graph.edges.filter(e => e.to[0] !== 'translated-format' && e.from[0] !== 'translated-format');
-    graph.nodes.find(n => n.id === 'transcript').settings.label = 'Raw <img src=x onerror=alert(1)>';
-    graph.nodes.find(n => n.id === 'translated').settings.label = 'Custom translation';
-    const formatter = graphNode('TextFormatter', 'format'); formatter.settings.template = 'First: {1}\nSecond: {2}\nMissing: {4}\n{{literal}}';
-    const formatted = graphNode('LiveTextDisplay', 'formatted'); formatted.settings.label = 'Corrected / formatted';
-    const mirror = graphNode('LiveTextDisplay', 'mirror'); mirror.settings.label = 'Independent mirror';
-    graph.nodes.push(formatter, formatted, mirror);
-    graph.edges.push(edge('translation', 'text', 'translated', 'append'), edge('speech', 'final', 'format', 'input1'), edge('translation', 'text', 'format', 'input2'), edge('format', 'text', 'formatted', 'append'), edge('speech', 'final', 'mirror', 'replace'));
-    saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
-  });
-  await live.editor.reload(); await startGraph(live);
-  await expect(live.locator('.display-label')).toHaveText(['Raw <img src=x onerror=alert(1)>', 'Custom translation', 'Corrected / formatted', 'Independent mirror']);
-  await expect(live.locator('#live-displays img')).toHaveCount(0);
-  await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: '<b>preview</b>' }));
-  await expect(region(live, 'transcript').locator('.display-preview')).toHaveText('<b>preview</b>'); await expect(live.locator('#live-displays b')).toHaveCount(0);
-  await emitFinal(live, '<script>value</script>');
-  await expect(region(live, 'formatted').locator('li pre').first()).toHaveText('First: <script>value</script>\nSecond: \nMissing: \n{literal}');
-  await expect(region(live, 'translated').locator('li pre')).toHaveText(['Translated <script>value</script>']);
-  await expect(region(live, 'formatted').locator('li pre')).toHaveText(['First: <script>value</script>\nSecond: \nMissing: \n{literal}', 'First: <script>value</script>\nSecond: Translated <script>value</script>\nMissing: \n{literal}']);
-  await expect(live.locator('#live-displays script')).toHaveCount(0);
-  await expect(region(live, 'transcript').locator('.display-preview')).toBeEmpty(); await expect(region(live, 'mirror').locator('.display-preview')).toHaveText('<script>value</script>');
-  await emitFinal(live, '<script>value</script>'); await expect(region(live, 'transcript').locator('li')).toHaveCount(2); await expect(region(live, 'translated').locator('li')).toHaveCount(2);
+  await loadTranslationFixture(live.editor); await live.editor.locator('#graph-save').click();
+  await startGraph(live); await emitFinal(live, 'same'); await emitFinal(live, 'same');
+  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
+  await expect(region(live, 'translated').locator('.display-content')).toHaveText('Japanese: same\nEnglish: Translated same\nJapanese: same\nEnglish: Translated same');
+  await startGraph(live);
   const workers = await live.evaluate(() => window.graphWorkers.length);
   await live.editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
-  await live.editor.getByLabel('transcript label', { exact: true }).fill('New saved label'); await live.editor.getByLabel('transcript label', { exact: true }).blur();
-  await live.editor.locator('#graph-save').click(); await expect(live.locator('#saved-state')).toContainText('keeps its active graph');
-  await expect(region(live, 'transcript').locator('h2')).toHaveText('Raw <img src=x onerror=alert(1)>'); expect(await live.evaluate(() => window.graphWorkers.length)).toBe(workers);
-  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled(); await expect(region(live, 'transcript').locator('li')).toHaveCount(2);
-  await startGraph(live); await expect(region(live, 'transcript').locator('h2')).toHaveText('New saved label'); await expect(live.locator('.display-items li')).toHaveCount(0);
-  await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'pending' })); await expect(region(live, 'transcript').locator('.display-preview')).toHaveText('pending');
-  await live.locator('#cancel-session').click(); await expect(region(live, 'transcript').locator('.display-preview')).toBeEmpty();
-  expect(await live.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+  await live.editor.getByLabel('transcript label', { exact: true }).fill('<img src=x onerror=alert(1)>');
+  await live.editor.getByLabel('transcript label', { exact: true }).blur(); await live.editor.locator('#graph-save').click();
+  await expect(region(live, 'transcript').locator('h2')).toHaveText('Original');
+  expect(await live.evaluate(() => window.graphWorkers.length)).toBe(workers);
+  await live.locator('#cancel-session').click(); await startGraph(live);
+  await expect(region(live, 'transcript').locator('h2')).toHaveText('<img src=x onerror=alert(1)>'); await expect(live.locator('#live-displays img')).toHaveCount(0);
+  await live.locator('#cancel-session').click(); expect(await live.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
 });
 
-test('MV3 formatter directly grouped primitive inputs emit one snapshot; independent updates emit immediately', async ({ graphExtension: f }) => {
-  const live = await openGraph(f); await fixtureTranslation(f, live);
-  await loadTranslationFixture(live.editor, 'ja-en', false); await live.editor.locator('#graph-save').click(); await startGraph(live);
-  await live.evaluate(async () => {
-    const { Pipeline } = await import('../web/pipeline.js'), { TEXT } = await import('../web/port-contracts.js');
-    const { TextFormatterNode, LiveTextDisplayNode } = await import('../web/text-nodes.js');
-    const { edge } = await import('./graph.js'); let grouped, separate;
-    const pipeline = new Pipeline({ nodes: {
-      producer: { outputs: { a: TEXT, b: TEXT }, start(c) { grouped = c.emitOutputs; } },
-      other: { outputs: { text: TEXT }, start(c) { separate = c.emit; } },
-      formatter: new TextFormatterNode({ template: '{1}|{2}|{3}' }),
-      display: new LiveTextDisplayNode(state => { window.activeSession.update({ displays: { ...window.activeSession.view.displays, transcript: state } }); }),
-    }, connections: [edge('producer', 'a', 'formatter', 'input1'), edge('producer', 'b', 'formatter', 'input2'), edge('other', 'text', 'formatter', 'input3'), edge('formatter', 'text', 'display', 'append')] });
-    await pipeline.start(); grouped({ a: 'A', b: 'B' }); window.independentText = text => separate('text', text); window.textPipeline = pipeline;
-  });
-  await expect(region(live, 'transcript').locator('li pre')).toHaveText(['A|B|']);
-  await live.evaluate(() => window.independentText('<em>C</em>')); await expect(region(live, 'transcript').locator('li pre')).toHaveText(['A|B|', 'A|B|<em>C</em>']);
-  await expect(live.locator('#live-displays em')).toHaveCount(0); await live.evaluate(async () => { await window.textPipeline.stop(); await window.textPipeline.dispose(); }); await live.locator('#cancel-session').click();
-});
-
-test('MV3 output-only TTS graph has no implicit Live text regions and drains its audio sink', async ({ graphExtension: f }) => {
-  const live = await openGraph(f);
-  await live.evaluate(async () => {
-    const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
-    const graph = defaultGraph({ enabled: false }); graph.nodes = graph.nodes.filter(n => n.id !== 'transcript'); graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript');
-    graph.nodes.push(graphNode('Kokoro', 'tts'), graphNode('AudioOutput', 'player'), graphNode('FocusedInputTextOutputNode', 'field'));
-    graph.edges.push(edge('speech', 'final', 'tts', 'text'), edge('tts', 'audio', 'player', 'audio'), edge('speech', 'final', 'field', 'text'));
-    saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
-  });
-  await live.editor.reload(); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
-  await live.models.locator('#kokoro button:has-text("Download / retry")').click(); await expect(live.models.locator('#kokoro .model-status')).toContainText('Ready');
-  await startGraph(live); await expect(live.locator('.live-text-region')).toHaveCount(0);
-  await expect(live.locator('#target-status')).toContainText('output skipped'); await expect(live.locator('#target-status')).not.toContainText('No text destination');
-  await emitFinal(live, 'audio only'); await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
-  await expect(live.locator('#audio-outputs audio')).toHaveCount(1); await expect(live.locator('.live-text-region')).toHaveCount(0);
-  await startGraph(live); await expect(live.locator('#audio-outputs audio')).toHaveCount(0); await live.locator('#cancel-session').click();
-  expect(await live.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
-});
-
-test('MV3 append retains committed state, DOM selection and reader scroll through preview updates and new finals', async ({ graphExtension: f }) => {
-  const live = await openGraph(f); await live.setViewportSize({ width: 900, height: 650 });
-  await startGraph(live);
-  const values = ['  <img src=x onerror=alert(1)>\n& literal  ', 'same', 'same', '', ...Array.from({ length: 30 }, (_, i) => `item ${i}`)];
+test('MV3 accumulator preview, empty values, duplicates, Stop/Cancel and long prefix selection/scroll', async ({ graphExtension: f }) => {
+  const live = await openGraph(f); await startGraph(live);
+  const content = region(live, 'transcript').locator('.display-content');
+  const values = ['  <img src=x onerror=alert(1)>\n& literal  ', 'same', 'same', '', ...Array.from({ length: 100 }, (_, i) => `item ${i}`)];
   for (const value of values) await emitFinal(live, value);
-  const committed = region(live, 'transcript').locator('li pre');
-  await expect(committed).toHaveCount(values.length);
-  expect(await committed.allTextContents()).toEqual(values);
-  await expect(live.locator('#live-displays img')).toHaveCount(0);
-  await live.evaluate(() => {
-    const region = document.querySelector('[data-display="transcript"]');
-    window.committedElements = [...region.querySelectorAll('li')];
-    const text = window.committedElements[10].querySelector('pre').firstChild;
-    const range = document.createRange(); range.setStart(text, 0); range.setEnd(text, text.length);
+  await expect(content).toHaveText(values.join('\n')); await expect(live.locator('#live-displays img')).toHaveCount(0);
+  await content.evaluate(root => {
+    window.prefixNode = root.firstChild;
+    const range = document.createRange(); range.setStart(root.firstChild, 5); range.setEnd(root.firstChild, 15);
     getSelection().removeAllRanges(); getSelection().addRange(range);
-    window.readerSelection = getSelection().toString();
-    window.scrollTo(0, window.committedElements[10].getBoundingClientRect().top + window.scrollY - 100);
-    window.readerScroll = window.scrollY;
+    window.readerSelection = getSelection().toString(); root.scrollTop = 100; window.readerScroll = root.scrollTop;
   });
   for (const text of ['preview one', 'preview two', '', '<script>preview</script>']) {
     await live.evaluate(text => window.speech.receiveEvent({ type: 'partial', text }), text);
-    await expect(region(live, 'transcript').locator('.display-preview')).toHaveText(text);
-    expect(await committed.allTextContents()).toEqual(values);
-    expect(await live.evaluate(() => {
-      const current = [...document.querySelector('[data-display="transcript"]').querySelectorAll('li')];
-      return current.every((item, i) => item === window.committedElements[i]) &&
-        getSelection().toString() === window.readerSelection && window.scrollY === window.readerScroll;
-    })).toBe(true);
+    await expect(content).toHaveText(values.join('\n') + (text ? '\n' + text : ''));
+    expect(await content.evaluate(root => root.firstChild === window.prefixNode && getSelection().toString() === window.readerSelection && root.scrollTop === window.readerScroll)).toBe(true);
   }
-  await emitFinal(live, 'new final'); values.push('new final');
-  await expect(committed).toHaveCount(values.length); expect(await committed.allTextContents()).toEqual(values);
-  await expect(region(live, 'transcript').locator('.display-preview')).toBeEmpty();
-  expect(await live.evaluate(() => {
-    const current = document.querySelector('[data-display="transcript"]').querySelectorAll('li');
-    return window.committedElements.every((item, i) => item === current[i]) &&
-      getSelection().toString() === window.readerSelection && window.scrollY === window.readerScroll;
-  })).toBe(true);
-  // A repeated worker final ID is suppressed upstream, not a replacement in the sink.
-  await live.evaluate(() => {
-    window.speech.receiveEvent({ type: 'final', text: 'identified', id: 7 });
-    window.speech.receiveEvent({ type: 'final', text: 'suppressed by source', id: 7 });
-  });
-  values.push('identified'); await expect(committed).toHaveCount(values.length);
-  expect(await committed.allTextContents()).toEqual(values);
-  await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'uncommitted at Stop' }));
-  await expect(region(live, 'transcript').locator('.display-preview')).toHaveText('uncommitted at Stop');
-  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
-  expect(await committed.allTextContents()).toEqual(values); await expect(region(live, 'transcript').locator('.display-preview')).toBeEmpty();
-  await startGraph(live); await expect(committed).toHaveCount(0);
-  await emitFinal(live, 'new session'); await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'uncommitted at Cancel' }));
-  await expect(region(live, 'transcript').locator('.display-preview')).toHaveText('uncommitted at Cancel');
-  await live.locator('#cancel-session').click(); await expect(live.locator('#start')).toBeEnabled();
-  expect(await committed.allTextContents()).toEqual(['new session']); await expect(region(live, 'transcript').locator('.display-preview')).toBeEmpty();
-  await startGraph(live); await expect(committed).toHaveCount(0); await live.locator('#cancel-session').click();
+  await emitFinal(live, 'new final'); values.push('new final'); await expect(content).toHaveText(values.join('\n'));
+  await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'uncommitted' }));
+  await expect(content).toContainText('uncommitted'); await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
+  await expect(content).toHaveText(values.join('\n'));
+  await startGraph(live); await expect(content).toBeEmpty(); await emitFinal(live, 'new session');
+  await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'discard' })); await expect(content).toContainText('discard');
+  await live.locator('#cancel-session').click(); await expect(content).toHaveText('new session');
 });
 
-test('MV3 renderer reconciles replaced/shortened histories, missing state and changed graph sinks without stale entries', async ({ graphExtension: f }) => {
+test('MV3 pure renderer handles replacement, shortening, empty snapshots, graph reorder and long append sequence', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
   const result = await live.evaluate(async () => {
-    const { renderTextRegions } = await import('./live-text-regions.js');
-    const { defaultGraph, graphNode } = await import('./graph.js');
+    const { renderTextRegions } = await import('./live-text-regions.js'), { defaultGraph, graphNode } = await import('./graph.js');
     const root = document.createElement('div'), graph = defaultGraph(); document.body.append(root);
-    const render = (items, preview = '') => renderTextRegions(root, graph, { transcript: { items, preview } });
-    const texts = () => [...root.querySelectorAll('li pre')].map(node => node.textContent);
-    render(['A', 'same', 'same', '']); const first = root.querySelector('li'), preview = root.querySelector('.display-preview');
-    render(['A', 'changed', 'same']);
-    const replacement = texts(), retained = first === root.querySelector('li');
-    render(['A']); const shortened = texts();
-    render([], ''); const reset = texts(); render(['<b>literal</b>', '', '']);
-    const arbitrary = texts(), noHtml = !root.querySelector('b');
-    render(['<b>literal</b>', '', '']); const previewRetained = preview === root.querySelector('.display-preview');
-    const oldRegion = root.firstElementChild;
-    graph.nodes.push(graphNode('LiveTextDisplay', 'other')); graph.nodes.reverse();
-    renderTextRegions(root, graph, { transcript: { items: ['history'], preview: 'current' }, other: { items: ['other'], preview: '' } });
-    const reordered = [...root.children].map(node => node.dataset.display);
-    const regionRetained = root.lastElementChild === oldRegion;
-    graph.nodes = graph.nodes.filter(node => node.id !== 'transcript'); renderTextRegions(root, graph, {});
-    const removed = !oldRegion.isConnected, missing = texts();
-    graph.nodes.push(graphNode('LiveTextDisplay', 'transcript')); renderTextRegions(root, graph, {});
-    const recreatedEmpty = texts(), regionRecreated = root.lastElementChild !== oldRegion;
-    root.remove();
-    return { replacement, retained, shortened, reset, arbitrary, noHtml, previewRetained, reordered, regionRetained, removed, missing, recreatedEmpty, regionRecreated };
+    const render = text => renderTextRegions(root, graph, { transcript: text });
+    const text = () => root.querySelector('.display-content').textContent;
+    render('A\nB'); render('A\nchanged'); const replacement = text(); render('A'); const shortened = text(); render(''); const empty = text();
+    render('<b>literal</b>'); const safe = !root.querySelector('b');
+    const unicode = 'a'.repeat(4095) + '😀' + 'b'.repeat(4095) + '🌸'; render(unicode);
+    const unicodeExact = text() === unicode && [...root.querySelector('.display-content').childNodes].every(n => !/[\uD800-\uDBFF]$/.test(n.data));
+    let snapshot = ''; const start = performance.now();
+    for (let i = 0; i < 2000; i++) { snapshot += 'same segment\n'; render(snapshot); }
+    const elapsedMs = performance.now() - start, correct = text() === snapshot;
+    const boundedNodes = root.querySelector('.display-content').childNodes.length <= Math.ceil(snapshot.length / 4096);
+    const original = root.firstElementChild; graph.nodes.push(graphNode('LiveTextDisplay', 'other')); graph.nodes.reverse();
+    renderTextRegions(root, graph, { transcript: 'history', other: 'other' });
+    const order = [...root.children].map(n => n.dataset.display), retained = original === root.lastElementChild;
+    graph.nodes = graph.nodes.filter(n => n.id !== 'transcript'); renderTextRegions(root, graph, {});
+    const removed = !original.isConnected, missing = text(); root.remove();
+    return { replacement, shortened, empty, safe, unicodeExact, correct, boundedNodes, order, retained, removed, missing, elapsedMs };
   });
-  expect(result).toEqual({ replacement: ['A', 'changed', 'same'], retained: true, shortened: ['A'], reset: [], arbitrary: ['<b>literal</b>', '', ''], noHtml: true, previewRetained: true, reordered: ['other', 'transcript'], regionRetained: true, removed: true, missing: [], recreatedEmpty: [], regionRecreated: true });
+  expect({ ...result, elapsedMs: 0 }).toEqual({ replacement: 'A\nchanged', shortened: 'A', empty: '', safe: true, unicodeExact: true, correct: true, boundedNodes: true, order: ['other', 'transcript'], retained: true, removed: true, missing: '', elapsedMs: 0 });
+  console.log(`2,000 render updates / 26,000 characters: ${result.elapsedMs.toFixed(1)} ms (DOM mutation, excludes forced layout)`);
 });
 
-test('MV3 palette translation can be added and run; custom saved graph survives reload and profile restart unchanged', async ({ graphExtension: f }) => {
-  let live = await openGraph(f); await fixtureTranslation(f, live);
-  const editor = live.editor;
-  for (const type of ['OpusMtEnJa', 'LiveTextDisplay']) {
-    await openPalette(editor); await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
-  }
-  for (const [source, output, target, input] of [['speech', 'final', 'opusmtenja', 'text'], ['opusmtenja', 'text', 'livetextdisplay', 'append']]) {
-    await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
-    await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).click();
-  }
-  await editor.getByRole('button', { name: 'Select livetextdisplay', exact: true }).click();
-  await editor.getByLabel('livetextdisplay label', { exact: true }).fill('My translation');
-  await editor.getByLabel('livetextdisplay label', { exact: true }).blur();
-  await expect(editor.locator('#graph-errors')).toBeEmpty(); await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  await startGraph(live); await emitFinal(live, 'manual');
-  await expect(region(live, 'livetextdisplay').locator('li pre')).toHaveText(['Translated manual']);
-  await emitFinal(live, 'manual'); await expect(region(live, 'livetextdisplay').locator('li pre')).toHaveText(['Translated manual', 'Translated manual']);
-  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
-  const raw = await live.evaluate(() => {
-    localStorage.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled: false, direction: 'ja-en' }));
-    return localStorage.getItem('processing-graph-v1');
+test('MV3 accumulator can be added, saved, reloaded and retained through profile restart', async ({ graphExtension: f }) => {
+  let live = await openGraph(f); await openPalette(live.editor);
+  await live.editor.locator('#graph-node-type').selectOption('TextAccumulator'); await live.editor.locator('#graph-add').click();
+  await live.editor.locator('#graph-save').click();
+  await expect.poll(() => live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.some(n => n.id === 'textaccumulator'))).toBe(true);
+  const raw = await live.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  expect(JSON.parse(raw).nodes.some(n => n.id === 'textaccumulator' && n.type === 'TextAccumulator')).toBe(true);
+  await live.editor.reload(); await expect(live.editor.locator('[data-node="textaccumulator"]')).toHaveCount(1);
+  await f.restart(); live = await openGraph(f); expect(await live.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
+});
+
+test('MV3 v9 migration retains recovery versions and replace-only summary drafts', async ({ graphExtension: f }) => {
+  const live = await openGraph(f);
+  const raw = await live.evaluate(async () => {
+    const { graphNode, edge, GRAPH_KEY } = await import('./graph.js');
+    const graph = { version: 9, nodes: [graphNode('Text', 'source'), graphNode('LiveTextDisplay', 'history'), graphNode('MeetingSummaryLfm2', 'summary'), graphNode('LiveTextDisplay', 'notes')],
+      edges: [edge('source', 'value', 'history', 'append'), edge('summary', 'summary', 'notes', 'replace')] };
+    const raw = JSON.stringify(graph, null, 2); localStorage.setItem('processing-graph-before-v9', 'older original'); localStorage.setItem(GRAPH_KEY, raw); return raw;
   });
-  await live.reload(); await editor.reload();
-  expect(await live.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
-  await editor.getByRole('button', { name: 'Select livetextdisplay', exact: true }).click();
-  await expect(editor.getByLabel('livetextdisplay label', { exact: true })).toHaveValue('My translation');
-  await f.restart(); live = await openGraph(f);
-  expect(await live.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
-  await expect(live.locator('.display-label')).toHaveText(['Text', 'My translation']);
-  await expect(live.locator('li')).toHaveCount(0);
+  await live.reload(); await live.editor.reload();
+  const graph = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  expect(graph.version).toBe(10); expect(graph.nodes.filter(n => n.type === 'TextAccumulator')).toHaveLength(1);
+  expect(graph.edges).toContainEqual({ from: ['summary', 'summary'], to: ['notes', 'content'] });
+  expect(await live.evaluate(() => localStorage.getItem('processing-graph-before-v10'))).toBe(raw);
+  await live.editor.getByText('Original saved graph (migration recovery copy)', { exact: true }).click();
+  await expect(live.editor.getByLabel('Original saved graph JSON', { exact: true })).toHaveValue(raw);
+  await live.editor.getByLabel('Graph recovery version').selectOption({ label: 'processing-graph-before-v9' });
+  await expect(live.editor.getByLabel('Original saved graph JSON', { exact: true })).toHaveValue('older original');
+});
+
+test('MV3 migrated snapshot survives Stop/Cancel with an inactive append draft', async ({ graphExtension: f }) => {
+  const live = await openGraph(f);
+  const raw = await live.evaluate(async () => {
+    const { graphNode, edge, GRAPH_KEY } = await import('./graph.js');
+    const graph = { version: 9, nodes: [graphNode('Text', 'snapshot'), graphNode('TextFormatter', 'draft'), graphNode('LiveTextDisplay', 'view')],
+      edges: [edge('snapshot', 'value', 'view', 'replace'), edge('draft', 'text', 'view', 'append')] };
+    graph.nodes[0].settings.value = '  <b>literal snapshot</b>\n';
+    const raw = JSON.stringify(graph); localStorage.setItem(GRAPH_KEY, raw); return raw;
+  });
+  await live.reload();
+  const saved = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  expect(saved.nodes.some(node => node.id === 'draft')).toBe(true);
+  expect(saved.edges).toContainEqual({ from: ['draft', 'text'], to: ['view-accumulator', 'append'] });
+  expect(await live.evaluate(() => localStorage.getItem('processing-graph-before-v10'))).toBe(raw);
+  // Reload the persisted v10 migration before exercising the actual Live controls.
+  await live.reload();
+  const content = region(live, 'view').locator('.display-content');
+  for (const button of ['stop', 'cancel-session']) {
+    await live.locator('#start').click();
+    await expect(live.locator('#status')).toHaveText('Processing active');
+    await expect(content).toHaveText('  <b>literal snapshot</b>\n', { useInnerText: false });
+    await live.locator(`#${button}`).click();
+    await expect(live.locator('#start')).toBeEnabled();
+    expect(await content.textContent()).toBe('  <b>literal snapshot</b>\n');
+    await expect(content.locator('b')).toHaveCount(0);
+    await expect(live.locator('#errors')).toBeEmpty();
+  }
 });

@@ -1,3 +1,4 @@
+import { accumulateDisplay } from './fixtures/text-accumulator.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, GRAPH_KEY, GRAPH_VERSION, NODE_TYPES, withTranslation } from '../extension/graph.js';
@@ -27,6 +28,7 @@ function fixture({ language, hold, failure } = {}) {
   graph.nodes.push(graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'formatted'));
   graph.nodes.at(-2).settings.template = 'Final: {1}';
   graph.edges.push(edge('speech', 'final', 'format', 'input1'), edge('format', 'text', 'formatted', 'append'));
+  accumulateDisplay(graph, 'formatted');
   const built = buildGraph(graph, {
     sourceFactory: () => ({ start() {}, stop() { built.audioSources.get('audio').context?.emit('audio', new Float32Array()); } }),
     whisperWorkerFactory: path => {
@@ -50,7 +52,7 @@ function fixture({ language, hold, failure } = {}) {
       }, terminate() { this.terminated = true; } };
       workers.push(worker); return worker;
     },
-    onDisplay: (id, state) => { if (id === 'transcript') { finals.splice(0, finals.length, ...state.items); previews.push(state.preview); } },
+    onDisplay: (id, state) => { if (id === 'transcript') { finals.splice(0, finals.length, ...(state ? state.split('\n') : [])); previews.push(''); } },
   });
   return { ...built, speech: built.speechNodes.get('speech'), workers, finals, previews, requests };
 }
@@ -60,7 +62,7 @@ test('Whisper schema and concrete runtime expose exactly final; ReazonSpeech ret
   assert.deepEqual(new SpeechToTextWhisperNode().outputs, { final: TEXT });
   assert.deepEqual(NODE_TYPES.SpeechToTextReazonSpeech.outputs, { provisional: TEXT, final: TEXT });
   assert.deepEqual(new SpeechToTextNode().outputs, { provisional: TEXT, final: TEXT });
-  assert.deepEqual(defaultGraph().edges.slice(1), [edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'final', 'transcript', 'append')]);
+  assert.deepEqual(defaultGraph().edges.slice(1), [edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript', 'content')]);
   const graph = whisperGraph();
   assert.deepEqual(validateGraph(graph), []);
   const built = buildGraph(graph, {});
@@ -73,16 +75,13 @@ test('Whisper schema and concrete runtime expose exactly final; ReazonSpeech ret
   assert.equal(storage.getItem(GRAPH_KEY), saved);
 });
 
-test('Whisper finals connect to replace, append, completed translation and other TEXT consumers; preset uses implemented outputs', () => {
-  for (const port of ['replace', 'append']) {
-    const graph = whisperGraph(); graph.edges.at(-1).to[1] = port;
-    assert.deepEqual(validateGraph(graph), []);
-    for (const direction of ['ja-en', 'en-ja']) {
-      const translated = withTranslation(graph, { enabled: true, direction });
-      assert.deepEqual(validateGraph(translated), []);
-      assert.deepEqual(translated.edges.filter(route => route.to[0] === 'translation'), [edge('speech', 'final', 'translation', 'text')]);
-      assert.deepEqual(withTranslation(translated, { enabled: false, direction }), { ...graph, translationDirection: direction });
-    }
+test('Whisper finals connect to content and through accumulation; preset uses implemented outputs', () => {
+  const graph = whisperGraph();
+  for (const direction of ['ja-en', 'en-ja']) {
+    const translated = withTranslation(graph, { enabled: true, direction });
+    assert.deepEqual(validateGraph(translated), []);
+    assert.deepEqual(translated.edges.filter(route => route.to[0] === 'translation'), [edge('speech', 'final', 'translation', 'text')]);
+    assert.deepEqual(withTranslation(translated, { enabled: false, direction }), { ...graph, translationDirection: direction });
   }
 });
 
@@ -108,7 +107,7 @@ test('v7 migration removes only dead Whisper edges, preserving all custom nodes,
 });
 
 test('v7 dead Whisper routes migrate to saveable incomplete drafts without redirecting ports', () => {
-  for (const [type, port] of [['LiveTextDisplay', 'replace'], ['FocusedInputTextOutputNode', 'text'], ['OpusMtEnJa', 'text']]) {
+  for (const [type, port] of [['LiveTextDisplay', 'content'], ['FocusedInputTextOutputNode', 'text'], ['OpusMtEnJa', 'text']]) {
     const graph = whisperGraph('ja'); graph.version = 7;
     graph.nodes.push(graphNode(type, 'affected', 555, 444));
     graph.edges.push(edge('speech', 'provisional', 'affected', port));
@@ -145,7 +144,7 @@ test('Text is generic, literal, empty-safe and round-trips; ordinary consumers r
   for (const value of ['', 'en', 'ja', '<script>&"\n😀 {1}']) {
     const graph = defaultGraph(); graph.nodes.push(graphNode('Text', 'literal'));
     graph.nodes.at(-1).settings.value = value;
-    graph.edges = graph.edges.filter(e => e.to[1] !== 'replace'); graph.edges.push(edge('literal', 'value', 'transcript', 'replace'));
+    graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); graph.edges.push(edge('literal', 'value', 'transcript', 'content'));
     const storage = store(); saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
     const received = []; const node = new TextNode(readGraph(storage).nodes.at(-1).settings);
     assert.equal(node.outputs.value, TEXT); node.start({ emit: (port, text) => received.push([port, text]) });
@@ -184,12 +183,12 @@ test('continuous Whisper queues bounded finals only, drains tail exactly once, p
   const pcm = Float32Array.from({ length: 210001 }, (_, i) => i / 210001);
   f.speech.receive('audio', pcm); await tick();
   assert.deepEqual(f.requests.map(r => r.audio.length), [96000, 96000]);
-  const formatted = f.pipeline.entries.get('formatted').node;
+  const formatted = f.pipeline.entries.get('formatted-accumulator').node;
   await Promise.all([f.pipeline.stop(), f.pipeline.stop()]);
   assert.deepEqual(f.requests.map(r => [r.id, r.final, r.audio.length]), [[1, true, 96000], [2, true, 96000], [3, true, 18001]]);
   assert.deepEqual(Float32Array.from(f.requests.flatMap(r => Array.from(r.audio))), pcm);
   assert.deepEqual(f.finals, ['same text', 'same text', 'same text']); assert.ok(f.previews.every(p => p === ''));
-  assert.deepEqual(formatted.items, ['Final: same text', 'Final: same text', 'Final: same text']);
+  assert.deepEqual(formatted.committed, ['Final: same text', 'Final: same text', 'Final: same text'].join('\n'));
   await f.pipeline.dispose(); assert.ok(f.workers.every(w => w.terminated));
 });
 

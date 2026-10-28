@@ -51,23 +51,23 @@ const audioGraph = (type, translated = false) => {
 
 test('fresh graph is minimal; only explicit legacy translation choices migrate; saved graphs take precedence', () => {
   const fresh = storage(), minimal = defaultGraph();
-  assert.deepEqual(minimal.nodes.map(n => n.type), ['ChromeTabAudio', 'SpeechToTextReazonSpeech', 'LiveTextDisplay']);
-  assert.deepEqual(minimal.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace'), edge('speech', 'final', 'transcript', 'append')]);
+  assert.deepEqual(minimal.nodes.map(n => n.type), ['ChromeTabAudio', 'SpeechToTextReazonSpeech', 'LiveTextDisplay', 'TextAccumulator']);
+  assert.deepEqual(minimal.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript', 'content')]);
   assert.deepEqual(minimal.nodes[2].settings, { label: 'Text', language: 'und' });
   assert.deepEqual(readGraph(fresh), minimal);
   for (const legacy of ['{broken', '{}', '{"direction":"en-ja"}', '{"enabled":"true"}']) {
     const store = storage(); store.setItem('opus-mt-translation-preferences', legacy);
-    assert.equal(readGraph(store).nodes.length, 3);
+    assert.equal(readGraph(store).nodes.length, 4);
   }
   for (const enabled of [false, true]) for (const direction of ['ja-en', 'en-ja']) {
     const store = storage(); store.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled, direction }));
-    const graph = readGraph(store); assert.equal(graph.translationDirection, direction); assert.equal(graph.nodes.length, enabled ? 6 : 3);
+    const graph = readGraph(store); assert.equal(graph.translationDirection, direction); assert.equal(graph.nodes.length, enabled ? 8 : 4);
     assert.equal(store.getItem('opus-mt-translation-preferences'), null);
     assert.deepEqual(readGraph(store), graph);
   }
   const store = storage(); store.setItem(GRAPH_KEY, '{broken'); assert.throws(() => readGraph(store));
-  saveGraph(store, defaultGraph({ enabled: false })); assert.equal(readGraph(store).nodes.length, 3);
-  store.setItem('opus-mt-translation-preferences', '{broken'); assert.equal(readGraph(store).nodes.length, 3);
+  saveGraph(store, defaultGraph({ enabled: false })); assert.equal(readGraph(store).nodes.length, 4);
+  store.setItem('opus-mt-translation-preferences', '{broken'); assert.equal(readGraph(store).nodes.length, 4);
   assert.throws(() => saveGraph({ setItem() { throw Error('Quota'); } }, defaultGraph({ enabled: true })), /Quota/);
 });
 
@@ -78,8 +78,8 @@ test('current custom and translation graphs reload byte-for-byte without prefere
     graph.nodes[0].position.x = 91;
     graph.nodes.push(graphNode('TextFormatter', 'custom'));
     graph.nodes.at(-1).settings.template = 'Final: {1}';
-    graph.edges = graph.edges.filter(e => !(e.to[0] === 'transcript' && e.to[1] === 'append'));
-    graph.edges.push(edge('speech', 'final', 'custom', 'input1'), edge('custom', 'text', 'transcript', 'append'));
+    graph.edges = graph.edges.filter(e => !(e.to[0] === 'transcript-accumulator' && e.to[1] === 'append'));
+    graph.edges.push(edge('speech', 'final', 'custom', 'input1'), edge('custom', 'text', 'transcript-accumulator', 'append'));
     const raw = JSON.stringify(graph, null, 2); store.setItem(GRAPH_KEY, raw);
     store.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled: !enabled, direction: 'ja-en' }));
     assert.deepEqual(readGraph(store), graph); assert.deepEqual(readGraph(store), graph);
@@ -136,7 +136,7 @@ test('versions 1–8 explicitly review paired migration, retain originals and pr
     const migrated = assertGraph(candidate); assert.equal(migrated.version, GRAPH_VERSION);
     assert.equal(migrated.nodes.some(n => n.type === 'PairedTextFormatter'), false);
     assert.deepEqual(migrated.nodes.find(n => n.id === 'literal'), graph.nodes.find(n => n.id === 'literal'));
-    assert.ok(migrated.edges.some(e => e.from[0] === 'literal' && e.to[0] === 'field'));
+    assert.ok(migrated.edges.some(e => e.from[0] === 'literal' && e.to[0] === 'field-accumulator'));
     assert.ok(migrated.edges.some(e => e.from[0] === 'translation' && e.from[1] === 'source' && e.to[1] === 'input1'));
     if (version > 5) assert.equal(migrated.nodes.find(n => n.id === 'custom-sink').settings.label, 'My translation');
     saveGraph(store, migrated); assert.equal(store.getItem(GRAPH_RECOVERY_KEY), raw); assert.deepEqual(readGraph(store), migrated);
@@ -147,14 +147,14 @@ test('versions 1–8 explicitly review paired migration, retain originals and pr
 });
 
 test('v8 plain consumers retain TEXT fan-out; unsupported diagnostic routes are visible in recovery and original backup', () => {
-  const graph = defaultGraph({ enabled: true }); graph.version = 8;
+  const graph = v9Default({ enabled: true }); graph.version = 8;
   graph.nodes = graph.nodes.filter(n => n.id !== 'translated-format');
   graph.edges = graph.edges.filter(e => e.from[0] !== 'translated-format' && e.to[0] !== 'translated-format');
   graph.nodes.push(graphNode('Number', 'duration'));
   graph.edges.push(edge('translation', 'text', 'translated', 'append'), edge('translation', 'finalIndex', 'speech', 'maxDuration'));
   const raw = structuredClone(graph), migrated = repair(graph);
   assert.deepEqual(graph, raw); assert.ok(migrated.edges.some(e => e.from[0] === 'translation' && e.from[1] === 'text'));
-  assert.ok(!migrated.edges.some(e => e.from[1] === 'finalIndex')); assert.equal(migrated.nodes.at(-1).id, 'duration');
+  assert.ok(!migrated.edges.some(e => e.from[1] === 'finalIndex')); assert.ok(migrated.nodes.some(n => n.id === 'duration'));
 });
 
 test('concrete supported descriptions instantiate actual Nodes with identical contract identities and the exact saved edges', () => {
@@ -181,7 +181,7 @@ test('direction and translation controls retain saved audio nodes; disabling tra
   assert.ok(enabled.nodes.some(n => n.type === 'Kokoro')); assert.ok(enabled.nodes.some(n => n.type === 'OpusMtEnJa'));
   const disabled = withTranslation(enabled, { enabled: false, direction: 'ja-en' });
   assert.ok(disabled.nodes.some(n => n.type === 'Kokoro'));
-  assert.equal(withTranslation(audioGraph('Kokoro', true), { enabled: false, direction: 'en-ja' }).nodes.length, 3);
+  assert.equal(withTranslation(audioGraph('Kokoro', true), { enabled: false, direction: 'en-ja' }).nodes.length, 4);
 });
 
 for (const type of ['OpusMtJaEn', 'TranslateGemmaEnJa']) test(`${type}: ASR final TEXT → actual formatter, field and Kokoro Nodes drains completed finals in order`, async () => {
@@ -209,7 +209,7 @@ for (const type of ['OpusMtJaEn', 'TranslateGemmaEnJa']) test(`${type}: ASR fina
     outputTarget: { tabId: 42, documentId: 'owned-document', label: 'Test field' },
     pageConnectionFactory: () => ({ request: async (type, value) => { if (type === 'append') fieldTexts.push(value.text); return { inserted: true }; }, close() {} }),
     workerFactory: factory(), translationWorkerFactory: factory(), ttsWorkerFactory: factory(),
-    prepareTranslation: async () => {}, prepareTranslateGemma: async () => {}, prepareTts: async () => {}, onDisplay: (id, state) => { if (id === 'transcript') rows.splice(0, rows.length, ...state.items); },
+    prepareTranslation: async () => {}, prepareTranslateGemma: async () => {}, prepareTts: async () => {}, onDisplay: (id, state) => { if (id === 'transcript') rows.splice(0, rows.length, ...state.split('\n')); },
     onTranslation() {}, onTranslationState() {}, onSynthesizedAudio: value => audio.push(value) });
   await built.pipeline.start();
   built.speechNodes.get('speech').receiveEvent({ type: 'partial', text: 'provisional', id: 0 });
@@ -256,21 +256,21 @@ test('v5 migration preserves independent language, maximum IDs and fan-out; larg
   while (legacy.nodes.length < 24) { const id = 'field-' + legacy.nodes.length; legacy.nodes.push(graphNode('FocusedInputTextOutputNode', id)); legacy.edges.push(edge('speech', 'final', id, 'text')); }
   const store = storage(), saved = JSON.stringify(legacy); store.setItem(GRAPH_KEY, saved);
   assert.throws(() => readGraph(store), /migration needs review/);
-  assert.equal(repair(legacy).nodes.length, 25);
+  assert.equal(repair(legacy).nodes.length, 27);
 });
 
 test('disabling translation retains a shared display and all unaffected routes', () => {
-  const graph = defaultGraph({ enabled: true }); graph.edges.find(e => e.to[0] === 'transcript' && e.to[1] === 'append').from = ['translation', 'text'];
+  const graph = defaultGraph({ enabled: true }); graph.edges.find(e => e.to[0] === 'transcript-accumulator' && e.to[1] === 'append').from = ['translation', 'text'];
   const disabled = withTranslation(graph, { enabled: false, direction: 'ja-en' });
   assert.ok(disabled.nodes.some(n => n.id === 'transcript'));
-  assert.deepEqual(disabled.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript', 'replace')]);
+  assert.deepEqual(disabled.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('transcript-accumulator', 'text', 'transcript', 'content')]);
 });
 
 test('multiple processing directions prepare independently of sink labels and graph preference', async () => {
   const graph = defaultGraph({ enabled: false }); graph.translationDirection = 'en-ja';
   for (const [type, id] of [['OpusMtJaEn', 'forward'], ['OpusMtEnJa', 'reverse']]) {
     graph.nodes.push(graphNode(type, id), graphNode('LiveTextDisplay', id + '-display'));
-    graph.nodes.at(-1).settings.label = 'Any arbitrary label'; graph.edges.push(edge('speech', 'final', id, 'text'), edge(id, 'text', id + '-display', 'append'));
+    graph.nodes.at(-1).settings.label = 'Any arbitrary label'; graph.edges.push(edge('speech', 'final', id, 'text'), edge(id, 'text', id + '-display', 'content'));
   }
   const directions = [], built = buildGraph(graph, { workerFactory: () => ({ postMessage() {}, terminate() {} }), sourceFactory: () => ({ start() {}, stop() {} }), prepareTranslation: async (signal, direction) => { directions.push(direction); throw Error('Fixture unavailable'); } });
   // Use the production scheduler start hook; ASR model setup is unrelated here.
@@ -281,7 +281,7 @@ test('multiple processing directions prepare independently of sink labels and gr
 
 
 test('v8 migration retains shared displays, formatter fan-out and independent formatter content; backup failure preserves original', () => {
-  const graph = defaultGraph({ enabled: true }); graph.version = 8;
+  const graph = v9Default({ enabled: true }); graph.version = 8;
   const formatter = graph.nodes.find(n => n.id === 'translated-format');
   formatter.type = 'PairedTextFormatter'; formatter.settings = { direction: 'ja-en' }; formatter.position = { x: 6000, y: 7000 };
   const display = graph.nodes.find(n => n.id === 'translated'); display.settings.label = 'User label';
@@ -298,9 +298,16 @@ test('v8 migration retains shared displays, formatter fan-out and independent fo
   assert.deepEqual(next.nodes.find(n => n.id === formatter.id).position, formatter.position);
   assert.equal(next.nodes.find(n => n.id === display.id).settings.label, 'User label');
   assert.deepEqual(next.nodes.find(n => n.id === 'independent').settings, { template: 'User template: {4}\n{{}}', inputCount: 4 });
-  for (const route of [edge(formatter.id, 'text', 'field', 'text'), edge(formatter.id, 'text', 'translated', 'replace'), edge('speech', 'final', 'translated', 'append'), edge('literal', 'value', 'independent', 'input4')]) assert.ok(next.edges.some(e => JSON.stringify(e) === JSON.stringify(route)));
+  for (const route of [edge(formatter.id, 'text', 'field', 'text'), edge(formatter.id, 'text', 'translated-accumulator', 'preview'), edge('speech', 'final', 'translated-accumulator', 'append'), edge('literal', 'value', 'independent', 'input4')]) assert.ok(next.edges.some(e => JSON.stringify(e) === JSON.stringify(route)));
   const store = storage(), raw = JSON.stringify(graph); store.setItem(GRAPH_KEY, raw);
   const failing = { ...store, setItem(key, value) { if (key === GRAPH_RECOVERY_KEY) throw Error('Quota'); store.setItem(key, value); } };
   assert.throws(() => saveGraph(failing, next), /Quota/); assert.equal(store.getItem(GRAPH_KEY), raw);
   saveGraph(store, next); saveGraph(store, defaultGraph()); assert.equal(store.getItem(GRAPH_RECOVERY_KEY), raw);
 });
+
+function v9Default(options) {
+  const graph = defaultGraph(options); graph.version = 9;
+  const accumulators = new Map(graph.nodes.filter(n => n.type === 'TextAccumulator').map(n => [n.id, graph.edges.find(e => e.from[0] === n.id).to[0]]));
+  graph.edges = graph.edges.filter(e => !accumulators.has(e.from[0])).map(e => accumulators.has(e.to[0]) ? { ...e, to: [accumulators.get(e.to[0]), e.to[1] === 'preview' ? 'replace' : 'append'] } : e);
+  graph.nodes = graph.nodes.filter(n => !accumulators.has(n.id)); return graph;
+}

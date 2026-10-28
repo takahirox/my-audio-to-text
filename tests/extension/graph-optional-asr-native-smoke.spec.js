@@ -57,9 +57,9 @@ test('real concurrent Parakeet v3 and Moonshine Medium: native tab capture, Live
       }
       const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
       const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextParakeetV3'; graph.edges = graph.edges.filter(e => e.from[1] !== 'provisional');
-      graph.nodes.push(graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'medium'), graphNode('FocusedInputTextOutputNode', 'field'));
+      graph.nodes.push(graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'medium'), graphNode('FocusedInputTextOutputNode', 'field'), graphNode('TextAccumulator', 'medium-accumulator'));
       graph.nodes.find(n => n.id === 'format').settings.template = 'Moonshine: {1}';
-      graph.edges.push(edge('audio', 'audio', 'moonshine', 'audio'), edge('moonshine', 'final', 'format', 'input1'), edge('format', 'text', 'medium', 'append'), edge('moonshine', 'provisional', 'medium', 'replace'), edge('speech', 'final', 'field', 'text'));
+      graph.edges.push(edge('audio', 'audio', 'moonshine', 'audio'), edge('moonshine', 'final', 'format', 'input1'), edge('format', 'text', 'medium-accumulator', 'append'), edge('medium-accumulator', 'text', 'medium', 'content'), edge('moonshine', 'provisional', 'medium-accumulator', 'preview'), edge('speech', 'final', 'field', 'text'));
       saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
       for (const [module, name] of [['parakeet-v3-node', 'SpeechToTextParakeetV3Node'], ['moonshine-medium-node', 'SpeechToTextMoonshineMediumEnNode']]) {
         const Node = (await import(`../web/${module}.js`))[name], receive = Node.prototype.receiveEvent;
@@ -87,8 +87,8 @@ test('real concurrent Parakeet v3 and Moonshine Medium: native tab capture, Live
       samples.push(await resources()); const stop = Date.now();
       await live.locator('#stop').click(); await expect(live.locator('#status')).toContainText('Stopped', { timeout: 120000 });
       samples.push(await resources()); await expect(live.locator('#errors')).toBeEmpty();
-      const parakeet = await live.locator('[data-display="transcript"] .display-items li pre').allTextContents();
-      const moonshine = await live.locator('[data-display="medium"] .display-items li pre').allTextContents();
+      const parakeet = (await live.locator('[data-display="transcript"] .display-content').textContent()).split('\n').filter(Boolean);
+      const moonshine = (await live.locator('[data-display="medium"] .display-content').textContent()).split('\n').filter(Boolean);
       expect(parakeet.join(' ')).toMatch(/yellow lamps/i); expect(moonshine.join(' ')).toMatch(/Moonshine:.*yellow lamps/i);
       await expect(website.locator('textarea')).toHaveValue('prefix' + parakeet.join(''));
       expect(await live.evaluate(() => window.workers.every(w => w.released))).toBe(true);

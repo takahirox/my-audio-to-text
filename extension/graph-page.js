@@ -17,8 +17,19 @@ const recoveryCopy = document.createElement('details');
 const recoveryTitle = document.createElement('summary'); recoveryTitle.textContent = 'Original saved graph (migration recovery copy)';
 const recoveryText = document.createElement('textarea'); recoveryText.readOnly = true;
 recoveryText.setAttribute('aria-label', 'Original saved graph JSON');
-recoveryText.value = (migrationError ? base : '') || localStorage.getItem(GRAPH_RECOVERY_KEY) || '';
-recoveryCopy.hidden = !recoveryText.value; recoveryCopy.append(recoveryTitle, recoveryText);
+const recoveryKeys = Object.keys(localStorage).filter(key => /^processing-graph-before-v\d+(?:-\d+)?$/.test(key)).sort();
+const recoverySelect = document.createElement('select'); recoverySelect.setAttribute('aria-label', 'Graph recovery version');
+const copies = [...(migrationError && base ? [['Unsaved original', base]] : []),
+  ...recoveryKeys.map(key => [key, localStorage.getItem(key)])];
+for (const [index, [label]] of copies.entries()) {
+  const option = document.createElement('option'); option.value = String(index); option.textContent = label; recoverySelect.append(option);
+}
+const preferred = Math.max(0, copies.findIndex(([key]) => key === GRAPH_RECOVERY_KEY));
+recoverySelect.value = String(migrationError ? 0 : preferred);
+const showRecovery = () => { recoveryText.value = copies[Number(recoverySelect.value)]?.[1] || ''; };
+recoverySelect.onchange = showRecovery; showRecovery();
+recoveryCopy.hidden = !copies.length; recoverySelect.hidden = copies.length < 2;
+recoveryCopy.append(recoveryTitle, recoverySelect, recoveryText);
 element('errors').after(recoveryCopy);
 async function persist(next) {
   const saved = await navigator.locks.request('processing-graph-save', async () => {

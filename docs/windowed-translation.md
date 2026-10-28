@@ -5,9 +5,9 @@ Stage 1 batches short committed ASR fragments. Stage 2 optionally retranslates
 only the current bounded, uncommitted source window. It does not provide
 conversation-wide context, conversation memory, or guaranteed translation
 accuracy improvements. Both processors are in Graph Editor's Processors palette.
-They require no model weights. Defaults, saved graph version **9**, migrations,
-primitive TEXT identity, generic Pipeline and existing display/formatter behavior
-remain unchanged.
+They require no model weights. Graph v10 uses explicit TextAccumulator state upstream
+of the pure LiveTextDisplay content sink. Primitive TEXT identity, the generic
+Pipeline and translator/formatter outputs remain unchanged.
 
 ## Stage 1: batching without retranslation
 
@@ -16,12 +16,13 @@ Connect these named ports:
 ```text
 ASR.final → TextWindow.text
 TextWindow.text → TranslateGemmaEnJa.text
-TranslateGemmaEnJa.text → LiveTextDisplay.append
+TranslateGemmaEnJa.text → TextAccumulator.append
+TextAccumulator.text → LiveTextDisplay.content
 ```
 
 Any existing translator accepts this output; there is no model-specific
 formatter or preset. Optional bilingual formatting still uses grouped
-translator source/text/error → TextFormatter inputs → Live.append. Other ASR
+translator source/text/error → TextFormatter inputs → TextAccumulator.append. Other ASR
 final consumers can continue independently, including an original transcript
 display. Do not connect ASR provisional recognition to TextWindow: its inputs
 are already committed source segments.
@@ -73,8 +74,9 @@ TextWindow.provisional ────→ Translator.provisional
 Translator.source ────────→ TranslationCommit.source
 Translator.text ──────────→ TranslationCommit.text
 Translator.error ─────────→ TranslationCommit.error
-TranslationCommit.provisional → LiveTextDisplay.replace
-TranslationCommit.final ──────→ LiveTextDisplay.append
+TranslationCommit.provisional → TextAccumulator.preview
+TranslationCommit.final ──────→ TextAccumulator.append
+TextAccumulator.text ────────→ LiveTextDisplay.content
 ```
 
 Translator means any of OpusMtEnJa, OpusMtJaEn, TranslateGemmaEnJa or
@@ -101,7 +103,7 @@ Stage 1 creates no preview inference.
 All translator results remain atomic primitive **source/text/error: TEXT**;
 failed groups omit text. When provisional is connected, translator text includes
 preview translations. Route through TranslationCommit before append-only
-destinations such as Live.append, focused fields or TTS. Direct formatter
+destinations such as TextAccumulator.append, focused fields or TTS. Direct formatter
 fan-out may observe previews; it must not be treated as committed history.
 
 | Event | Output and order |
@@ -113,7 +115,7 @@ fan-out may observe previews; it must not be treated as committed history.
 | Open translation fails | Emit provisional `''` and error, without a final item. Existing translator model failures remain terminal for that translator instance. |
 | Closed translation fails | Emit grouped provisional `''`, final `[Translation failed: MESSAGE]\nSOURCE`, error MESSAGE. This visibly retains source instead of inventing a translation; prior committed items remain immutable. |
 | Stop | TextWindow flushes tail; translator suppresses previews and drains closed work; commit verifies all boundaries resolved, then display discards preview. |
-| Cancel | Pipeline invalidates emissions first; buffers, pending work and Workers are disposed. Previously committed display items remain, while previews and late replies are discarded. |
+| Cancel | Pipeline invalidates emissions first; buffers, pending work and Workers are disposed. Previously committed accumulator text remains, while previews and late replies are discarded. |
 
 The scheduler does not emit previews ahead of queued closed results. A closed
 window is the sole commit rule; similarity between Japanese strings is never
@@ -185,3 +187,5 @@ translations demonstrate lifecycle and ordering only.
 Measured results and limitations are recorded in
 [`docs/evidence/translation-128.md`](evidence/translation-128.md). No required
 check introduced by this experiment depends on a post-merge deployment.
+
+Live displays accept only `content: TEXT` in Graph v10. For transcript history, route final segments to `TextAccumulator.append`, provisional tails to `TextAccumulator.preview`, and `TextAccumulator.text → LiveTextDisplay.content`. Complete summary/formatter snapshots may connect directly to content. Saved v9 display wiring migrates automatically with original recovery copies retained; see [migration and lifecycle](extension-graph.md#graph-v10-display-migration-and-recovery).

@@ -10,7 +10,7 @@ import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
-import { LiveTextDisplayNode, TextFormatterNode } from '../web/text-nodes.js';
+import { LiveTextDisplayNode, TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
 import { executableGraph, INPUT_TYPES, ASR_TYPES } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 import { TextNode } from '../web/text-constant-node.js';
@@ -151,7 +151,11 @@ export function buildGraph(graph, options) {
         node = new SpeechToTextWhisperNode({ workerFactory: options.whisperWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'SpeechToTextReazonSpeech':
         node = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
-      case 'LiveTextDisplay': node = new LiveTextDisplayNode(state => options.onDisplay?.(spec.id, state), { appendConnected: description.edges.some(edge => edge.to[0] === spec.id && edge.to[1] === 'append') }); break;
+      case 'LiveTextDisplay': node = new LiveTextDisplayNode(text => options.onDisplay?.(spec.id, text)); break;
+      case 'TextAccumulator': node = new TextAccumulatorNode({
+        retainPreviewOnEnd: spec.legacyDisplay === true &&
+          !description.edges.some(route => route.to[0] === spec.id && route.to[1] === 'append'),
+      }); break;
       case 'TextWindow': node = new TextWindowNode(spec.settings); break;
       case 'TranslationCommit': node = new TranslationCommitNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;

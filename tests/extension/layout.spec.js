@@ -41,7 +41,7 @@ test('MV3 live outputs precede compact controls; preview, current value and inde
     const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode('LiveTextDisplay', 'value'), graphNode('OpusMtJaEn', 'forward'), graphNode('OpusMtEnJa', 'reverse'), graphNode('LiveTextDisplay', 'forward-output'), graphNode('LiveTextDisplay', 'reverse-output'));
-    graph.edges.push(edge('speech', 'final', 'value', 'replace'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'append'), edge('reverse', 'text', 'reverse-output', 'append'));
+    graph.edges.push(edge('speech', 'final', 'value', 'content'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'content'), edge('reverse', 'text', 'reverse-output', 'content'));
     saveGraph(localStorage, graph);
   });
   await editor.reload();
@@ -50,12 +50,12 @@ test('MV3 live outputs precede compact controls; preview, current value and inde
   await expect(editor.locator('#graph-translation')).toHaveCount(0);
   await startGraph(live); await emitFinal(live, '<em>committed</em>');
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'pending' }));
-  await expect(live.locator('[data-display="transcript"]').getByLabel('Preview', { exact: true })).toHaveText('pending');
-  await expect(live.locator('[data-display="value"]').getByLabel('Current value', { exact: true })).toHaveText('<em>committed</em>');
+  await expect(live.locator('[data-display="transcript"]').getByLabel('Content', { exact: true })).toHaveText('<em>committed</em>\npending');
+  await expect(live.locator('[data-display="value"]').getByLabel('Content', { exact: true })).toHaveText('<em>committed</em>');
   await expect(live.locator('#live-displays em')).toHaveCount(0);
   expect(await live.locator('#live-displays').evaluate(root => !!(root.compareDocumentPosition(document.querySelector('.capture-panel')) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   await expect(live.locator('#targets')).not.toHaveAttribute('open', '');
   await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
   await live.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(live.locator('[data-display="transcript"] li pre')).toHaveText(['<em>committed</em>']);
+  await expect(live.locator('[data-display="transcript"] .display-content')).toHaveText('<em>committed</em>');
 });
