@@ -106,13 +106,14 @@ for (const operation of ['stop', 'cancel']) {
   });
 }
 
-test('session Cancel removes direct preview without publishing canceled snapshots to generic TEXT consumers', async () => {
+test('session Cancel publishes committed snapshots consistently through generic TEXT consumers', async () => {
   const graph = { version: 10, nodes: [graphNode('Text', 'source'), graphNode('TextAccumulator', 'acc'), graphNode('LiveTextDisplay', 'view'), graphNode('TextFormatter', 'formatter'), graphNode('LiveTextDisplay', 'formatted')],
     edges: [edge('source', 'value', 'acc', 'append'), edge('source', 'value', 'acc', 'preview'), edge('acc', 'text', 'view', 'content'), edge('acc', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'formatted', 'content')] };
   const session = new TabSession(() => {}, { graph }); await session.start(); await tick();
   const acc = session.session.pipeline.entries.get('acc'); acc.node.receive('append', 'keep', acc.context); acc.node.receive('preview', 'discard', acc.context); await tick();
   assert.equal(session.view.displays.view, '\nkeep\ndiscard');
-  session.cancel(); await tick(); assert.equal(session.view.displays.view, '\nkeep');
-  assert.equal(session.view.displays.formatted, '\nkeep\ndiscard', 'no cancellation event sent through processors');
+  const canceled = session.cancel(); assert.equal(session.cancel(), canceled);
+  await canceled; assert.equal(session.view.displays.view, '\nkeep');
+  assert.equal(session.view.displays.formatted, '\nkeep', 'ordinary formatter delivery clears the same preview');
   await session.start(); await tick(); assert.equal(session.view.displays.view, ''); session.cancel();
 });

@@ -6,7 +6,7 @@ including English. It is not an English-only `.en` model. This release exposes
 a deliberately limited language choice: `en` or `ja`, with **English (`en`)**
 when the input is unconnected. There is no automatic language detection in this
 configuration. Other codes, blank text, uppercase and whitespace are rejected
-before model loading with instructions to correct or disconnect the Text Node.
+before model loading with instructions to correct the value or disconnect the configuration input.
 
 ## Use in Graph Editor
 
@@ -26,11 +26,12 @@ language port. Its ja-en name does not imply controllable inference language.
 Text is a generic literal string source, including empty text, newlines, emoji
 and markup characters. The editor saves it as JSON and displays literal text.
 Ordinary TEXT consumers get one emission at session start, after they start.
-For Whisper configuration, the builder instead binds a direct Text.value edge
-from the validated graph snapshot **before model loading**, removing only that
-configuration edge from continuous delivery. The same constant can fan out to
-ordinary TEXT consumers. Dynamic language producers are rejected; saved changes
-affect the next session, including saves made while loading or recording.
+Any compatible TEXT producer can supply language through ordinary delivery.
+Whisper waits for its first value before model loading, validates `en`/`ja`, then
+freezes the value. Pending audio is bounded at 30 seconds. Missing configuration
+on Stop or overflow fails visibly; updates after loading begins are rejected.
+Incomplete graphs stay saveable. Saved edits affect the next session. See
+[startup configuration semantics](pipeline-runtime.md#executable-browser-tab-transcription-example).
 
 ## Saved graph migration
 

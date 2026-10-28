@@ -162,7 +162,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | TextWindow | text: TEXT | text: TEXT (closed batches); provisional: TEXT (optional open snapshots); length/deadline/sentence settings |
 | TranslationCommit | boundary/source/text/error: TEXT | provisional/final/error: TEXT; opt-in closed-window commits |
 | TextFormatter | input1…inputN: TEXT, instance-configured, individually optional | text: TEXT; at least one input must connect |
-| OpusMtJaEn / OpusMtEnJa / TranslateGemmaEnJa / TranslateGemmaJaEn | text: TEXT; provisional: TEXT (optional paired TextWindow snapshot) | source/text/error: TEXT, grouped results; no text on failure |
+| OpusMtJaEn / OpusMtEnJa / TranslateGemmaEnJa / TranslateGemmaJaEn | text: TEXT; provisional: TEXT (optional snapshot from any producer) | source/text/error: TEXT, grouped results; no text on failure |
 | Supertonic3 / Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; configured language/voice |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | native audio player / WAV |
 
@@ -170,7 +170,8 @@ Multiple audio sources, same-type or different ASRs, translators, processors and
 sinks can run independently. A source may fan out to several compatible ASRs;
 constant TEXT → translation/formatter/TTS paths need no audio or ASR. Unknown
 settings/ports/types, duplicate IDs/edges, incompatible contracts, multiple routes
-into one input, cycles and wrongly correlated metadata remain blocking errors.
+into one input and cycles remain blocking errors. Correlation is checked by the
+consumer when values arrive, rather than by inspecting producers.
 A missing required input, unconnected producer or absence of outputs is a draft
 warning, never a Save blocker. Positions accept finite nonnegative coordinates
 without the old 4000-pixel ceiling; Node and edge count caps are removed. The
@@ -187,9 +188,10 @@ optional inputs remain saved and inactive. No edge is redirected or merged.
 Inactive sources/models/processors create no Workers, downloads, permission
 requests or media capture. A draft with no executable path saves and reloads;
 Start explains that it needs a complete source-to-output path before any resources
-are allocated. Malformed settings/wiring remain errors even in parked Nodes. Consumer-specific
-startup value checks (Whisper language and ReazonSpeech duration) are warnings
-while their consumer is inactive and become blocking errors when it participates.
+are allocated. Malformed settings/wiring remain errors even in parked Nodes.
+Consumer-specific startup values are validated at delivery, before the consumer
+loads its model. A connected but inactive configuration producer leaves that
+consumer waiting with an explicit status, rather than silently using its default.
 
 For two independent transcript displays, connect:
 
@@ -198,7 +200,8 @@ For two independent transcript displays, connect:
 - `MicrophoneAudio.audio → SpeechToTextWhisper.audio`, with `final → local-accumulator.append → text → local.content`
   on another LiveTextDisplay labeled Local speaker. ReazonSpeech is another option.
 
-Every active ASR loads its own configured model before capture starts. Microphone
+Each active ASR loads its configured model before processing audio. An ASR waiting
+for a connected startup value buffers at most 30 seconds while capture runs. Microphone
 permission is requested directly by the explicit Live Start gesture only when an
 active path uses it. Toolbar invocation asks the user to press Start in that case.
 Multiple microphone Nodes share one permission grant with separately owned cloned
@@ -213,11 +216,10 @@ finalizes. Tab navigation/closure ends tab/media captures and detaches field sin
 while microphone paths continue. Stop drains every participating path in dependency
 order. Cancel invalidates queued emissions and releases all models/captures,
 including partial loading and late permission grants; repeat starts fresh. Capture
-signals and model progress/errors include Node IDs. Fatal capture/ASR errors retain
-the existing fail-session policy, release all resources and allow retry; translation,
-TTS, field-output and optional Parakeet/Moonshine ASR availability remain
-branch-local failures. A failed optional ASR clears its preview and reports its
-Node ID/recovery instructions while peer paths continue.
+signals and model progress/errors include Node IDs. Every Node failure is reported
+locally and leaves independent viable paths running, regardless of Node types or
+neighbors. Stop drains healthy Nodes and reports failures. Failed startup leaves
+peer paths usable; when no output path survives, Start releases the graph.
 
 Tab audio may already contain the local speaker, and microphones may pick up
 speaker playback. Independent displays do not promise speaker separation or echo
@@ -245,10 +247,9 @@ loading. ReazonSpeech has no language port. Whisper is multilingual, not `.en`.
 Text is a general constant with a free-form literal string, including empty
 text, markup characters, newlines and emoji. Ordinary TEXT consumers receive it
 once at their session start. It can supply formatter inputs or a display without
-ASR-specific behavior. Only a direct Text constant may configure Whisper's
-language: the builder delivers it from the validated session snapshot before
-loading Workers and removes that edge from the continuous delivery path. The
-same Text may also feed ordinary TEXT consumers. Saved edits apply next session.
+ASR-specific behavior. Any compatible TEXT producer may configure Whisper; the
+consumer waits for its first value before model loading. Invalid values fail on
+delivery and late updates fail visibly. Saved edits apply next session.
 
 Whisper produces **completed segments only**, without provisional recognition.
 Its only output is `final: TEXT`. You may deliberately connect final to
@@ -276,15 +277,15 @@ pre-roll within a segment; the upper bound preserves the existing model policy
 and 30-second pending-audio budget. Seconds round down to whole 16 kHz samples
 (at most one sample below the entered duration).
 
-The builder resolves this configuration edge from the validated saved graph,
-delivering the bare number to the ASR input **before any Node starts or captures
-audio**. It removes that edge from streaming routes: it never sends a number as
-PCM, and needs no startup scheduler. Other Number edges use normal NUMBER
-emission at source startup. Only `Number.value` is supported for this startup
-port; translator indices or other values arriving during processing cannot
-configure a session. Saving or editing while loading/running does not alter the
-session's snapshot. Version 6 graphs migrate only the saved ASR type name and
-graph version; older graph migrations still apply.
+Any NUMBER producer may supply this setting through ordinary port delivery. The
+ASR waits for its first value before loading; while waiting it buffers at most
+30 seconds of PCM. Missing configuration on Stop or overflow fails visibly;
+there is no default fallback. The value freezes once loading begins, and later
+updates fail rather than silently changing a session. A connected but inactive
+configuration source also waits instead of silently selecting the default.
+Consumer value constraints are checked at runtime, so finite constants and
+unfinished drafts remain saveable. Saving edits affects only the next session.
+
 
 VAD's usual trailing-silence endpoint or the sample cap, whichever comes first,
 finalizes a segment. The cap counts the **whole audio segment**, including
@@ -315,9 +316,9 @@ append + preview gives append precedence regardless of property order. Independe
 emissions preserve delivery order; a later preview starts a new tail. Every
 accepted delivery emits the entire current `text: TEXT` snapshot, usable by any
 TEXT consumer. Stop emits committed text when removing a nonempty preview.
-Cancel removes pending state without emitting into processors. The session restores
-immediately connected Live views to committed text; indirect consumers retain
-their last accepted snapshot. Fresh sessions start empty. No persistence or model
+Cancel aborts outstanding work, then the accumulator emits its committed snapshot
+through ordinary routes. Direct displays, formatters and independent sinks all
+observe the same cleanup; aborted model and side-effect Nodes cannot resume work. Fresh sessions start empty. No persistence or model
 assets are involved. Keep utterance consumers such as TTS, fields and translators
 connected to the original final outputs unless full snapshots are desired.
 

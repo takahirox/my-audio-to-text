@@ -56,11 +56,11 @@ export class TextAccumulatorNode {
   }
   get text() { return this.committed + (this.preview ? (this.count ? '\n' : '') + this.preview : ''); }
   start(context) {
-    this.committed = ''; this.count = 0; this.preview = '';
+    this.committed = ''; this.count = 0; this.preview = ''; this.canceled = false;
     context.emit('text', '');
   }
   receiveInputs(values, context) {
-    if (context.signal.aborted) return;
+    if (this.canceled || context.signal.aborted) return;
     for (const [port, value] of Object.entries(values)) {
       if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('TextAccumulator expects TEXT inputs.');
     }
@@ -79,11 +79,14 @@ export class TextAccumulatorNode {
     if (this.retainPreviewOnEnd) return;
     if (this.preview) { this.preview = ''; context.emit('text', this.committed); }
   }
-  // Cancel drops pending work without publishing to downstream processors.
-  // The session may use this value to restore an immediately connected view.
-  cancel() {
+  // Pipeline.cancel supplies a cleanup context: publish through ordinary ports.
+  // Bare dispose remains immediate and emits nothing.
+  cancel(context) {
+    this.canceled = true;
     if (this.retainPreviewOnEnd) return this.text;
-    this.preview = ''; return this.committed;
+    const changed = !!this.preview; this.preview = '';
+    if (changed) context?.emit('text', this.committed);
+    return this.committed;
   }
   dispose() { this.cancel(); }
 }

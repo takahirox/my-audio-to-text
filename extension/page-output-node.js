@@ -10,6 +10,8 @@ export class FocusedInputTextOutputNode {
   }
   async start(context) {
     this.context = context;
+    this.abort = () => this.dispose();
+    context.signal.addEventListener('abort', this.abort, { once: true });
     context.signal.throwIfAborted();
     if (!Number.isInteger(this.target?.tabId) || typeof this.target.documentId !== 'string' || !this.target.documentId) { this.skip('no authorized toolbar document'); return; }
     try {
@@ -46,5 +48,5 @@ export class FocusedInputTextOutputNode {
     } catch (error) { if (!context.signal.aborted) this.failure(error.message); }
   }
   stop() { this.dispose(); }
-  dispose() { this.disposed = true; this.connection?.close(); }
+  dispose() { this.context?.signal.removeEventListener('abort', this.abort); this.disposed = true; this.connection?.close(); }
 }

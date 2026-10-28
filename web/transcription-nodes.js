@@ -81,9 +81,10 @@ export class MicrophoneAudioNode extends BrowserAudioNode {
 export class SpeechToTextNode {
   inputs = { audio: MONO_16KHZ_PCM, maxDuration: NUMBER };
   outputs = { provisional: TEXT, final: TEXT };
-  constructor({ onEvent = () => {}, workerFactory, maxDuration = ASR_CONFIG.defaultMaxDurationSeconds } = {}) {
+  configurationPort = 'maxDuration';
+  constructor({ onEvent = () => {}, workerFactory, maxDuration = ASR_CONFIG.defaultMaxDurationSeconds, configurationConnected = false } = {}) {
     maxDurationSamples(maxDuration); this.maxDuration = maxDuration;
-    this.onEvent = onEvent;
+    this.onEvent = onEvent; this.configurationConnected = configurationConnected;
     // This node alone owns the existing isolated ASR and VAD workers.
     this.core = new LocalAsrCore(event => this.receiveEvent(event), { workerFactory });
   }
@@ -107,29 +108,60 @@ export class SpeechToTextNode {
     this.onEvent(event);
   }
   // Optional preloading lets the UI load models before the capture gesture.
-  load() {
+  load({ connectedInputs } = {}) {
+    if (connectedInputs) {
+      this.waitingConfiguration = this.configurationConnected || connectedInputs.includes(this.configurationPort);
+    }
     if (this.disposed || !this.core) return Promise.reject(new DOMException('Node disposed or transferred.', 'AbortError'));
+    if (this.waitingConfiguration) return Promise.resolve();
     if (!this.loading) {
       this.loading = deferred();
       try { this.core.load(); } catch (error) { this.loading.reject(error); }
     }
     return this.loading.promise;
   }
-  async start(context) {
-    this.context = context;
-    this.sessionMaxDuration = this.maxDuration;
-    await this.load();
+  start(context) {
     context.signal.throwIfAborted();
-    this.core.start({ maxDuration: this.sessionMaxDuration });
+    this.context = context;
+    this.abort = () => this.dispose();
+    context.signal.addEventListener('abort', this.abort, { once: true });
+    this.waitingConfiguration = this.configurationConnected || context.connectedInputs?.includes(this.configurationPort) === true;
+    this.pendingAudio = []; this.pendingSamples = 0;
+    if (this.waitingConfiguration) {
+      this.onEvent({ type: 'progress', message: `Waiting for startup ${this.configurationPort}. Model has not started.` });
+      return;
+    }
+    return this.begin();
+  }
+  begin() {
+    this.waitingConfiguration = false;
+    this.sessionMaxDuration = this.maxDuration;
+    const context = this.context;
+    return this.ready = this.load().then(() => {
+      context.signal.throwIfAborted();
+      this.core.start({ maxDuration: this.sessionMaxDuration });
+      for (const audio of this.pendingAudio) this.core.push(audio);
+      this.pendingAudio = []; this.pendingSamples = 0;
+    });
   }
   receive(port, value) {
     if (port === 'maxDuration') {
-      if (this.context) throw new Error('SpeechToText.maxDuration must be configured before session startup.');
+      if (this.loading || (this.context && !this.waitingConfiguration)) throw new Error('SpeechToText.maxDuration must be configured before session startup and model loading.');
       maxDurationSamples(value); this.maxDuration = value;
-    } else if (port === 'audio') this.core.push(value);
-    else throw new Error(`Unknown SpeechToText input: ${port}`);
+      if (this.context) return this.begin();
+    } else if (port === 'audio') {
+      if (this.disposed) return;
+      if (this.waitingConfiguration) {
+        if (!(value instanceof Float32Array)) throw TypeError('ASR input must be mono 16 kHz Float32Array PCM.');
+        if (!value.length) return;
+        if (this.pendingSamples + value.length > 480000) throw Error(`Startup ${this.configurationPort} unavailable before 30 seconds of audio. Supply a value before model startup.`);
+        this.pendingAudio.push(value.slice()); this.pendingSamples += value.length;
+      } else this.core.push(value);
+    } else throw new Error(`Unknown SpeechToText input: ${port}`);
   }
   stop() {
+    if (this.waitingConfiguration) throw Error(`Startup ${this.configurationPort} unavailable; model never started.`);
+    if (this.ready && this.core.state === 'loading') return this.ready.then(() => this.stop());
     if (!this.draining) {
       this.draining = deferred();
       this.core.stop();
@@ -149,7 +181,9 @@ export class SpeechToTextNode {
     return next;
   }
   dispose() {
-    this.disposed = true; this.context = null;
+    this.disposed = true;
+    this.context?.signal.removeEventListener('abort', this.abort);
+    this.context = null; this.pendingAudio = []; this.pendingSamples = 0;
     this.core?.release();
     const error = new DOMException('Node disposed.', 'AbortError');
     this.loading?.reject(error); this.draining?.reject(error);

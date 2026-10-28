@@ -54,13 +54,13 @@ function fixture({ holdLoad = false, holdSource = false, asyncFlush = false, sou
 }
 const drain = () => new Promise(resolve => setImmediate(resolve));
 
-test('Number duration is set before capture; saves during load/capture affect only the next session', async () => {
+test('Number duration is set before model start; saves during load/capture affect only the next session', async () => {
   const graph = defaultGraph(); graph.nodes.push(graphNode('Number', 'duration'));
   graph.nodes.at(-1).settings.value = 2.5;
   graph.edges.push(edge('duration', 'value', 'speech', 'maxDuration'));
   const f = fixture({ graph, holdLoad: true });
   const starting = f.session.start(42); await drain();
-  assert.equal(f.sources.length, 0);
+  assert.equal(f.sources.length, 1);
   assert.equal(f.session.session.speechNodes.get('speech').maxDuration, 2.5);
   graph.nodes.at(-1).settings.value = 3.75; f.session.setGraph(graph);
   f.workers.forEach(w => w.reply({ type: 'ready' })); await starting;
@@ -148,7 +148,7 @@ test('extension session emits provisional/final output, flushes once and clears 
   await drain();
   assert.equal(workers[3].messages.length, before);
   assert.equal(session.view.state, 'running'); assert.equal(session.view.error, '');
-  session.cancel(); assert.deepEqual(sources[1].stops, [false]);
+  await session.cancel(); assert.deepEqual(sources[1].stops, [false]);
   assert.ok(workers.every(w => w.terminated));
 });
 
@@ -158,11 +158,15 @@ for (const mode of ['source', 'stop', 'asr']) {
       stopError: mode === 'stop' ? 'flush failed' : undefined });
     await f.session.start(42);
     if (mode === 'stop') await f.session.stop();
-    if (mode === 'asr') f.workers[0].reply({ type: 'error', message: 'ASR failed' });
+    if (mode === 'asr') {
+      f.workers[0].reply({ type: 'error', message: 'ASR failed' }); await drain();
+      assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.error, /ASR failed/);
+      await f.session.stop();
+    }
     await drain();
     assert.equal(f.session.view.state, 'idle'); assert.match(f.session.view.error, /failed/);
     assert.ok(f.workers.every(w => w.terminated));
-    assert.equal(f.sources[0].stops.at(-1), false);
+    assert.equal(f.sources[0].stops.at(-1), mode === 'asr');
   });
 }
 
@@ -438,16 +442,18 @@ test('active microphone permission requires a gesture; Cancel releases a late gr
   } finally { if (original) Object.defineProperty(navigator,'mediaDevices',original); else delete navigator.mediaDevices; }
 });
 
-test('one concurrent model load failure cancels all models before capture and permits retry', async () => {
+test('one concurrent model load failure leaves an independent ready model running', async () => {
   const f = fixture({ graph: concurrentGraph(), holdLoad: true });
   const starting = f.session.start(42); await drain(); assert.equal(f.workers.length, 4);
-  f.workers[0].reply({ type: 'error', message: 'Model readiness failed' }); await starting; await drain();
-  assert.match(f.session.view.error, /speech.*Model readiness failed/);
-  assert.ok(f.workers.every(worker => worker.terminated)); assert.equal(f.sources.length, 0);
-  const retry = f.session.start(42); await drain();
-  f.workers.slice(4).forEach(worker => worker.reply({ type: 'ready' })); await retry;
-  assert.equal(f.session.view.state, 'running'); f.session.cancel(); await drain();
-  assert.ok(f.workers.every(worker => worker.terminated));
+  f.workers[0].reply({ type: 'error', message: 'Model readiness failed' });
+  f.workers.slice(2).forEach(worker => worker.reply({ type: 'ready' }));
+  await starting; await drain();
+  assert.match(f.session.view.error, /Model readiness failed/);
+  assert.equal(f.session.view.state, 'running');
+  assert.ok(f.workers.slice(0,2).every(worker => worker.terminated));
+  f.session.session.speechNodes.get('second-speech').receiveEvent({type:'final',text:'healthy',id:0});
+  await drain(); assert.equal(f.session.view.displays['second-display'], 'healthy');
+  await f.session.cancel(); assert.ok(f.workers.every(worker => worker.terminated));
 });
 
 test('source status preserves valid IDs that also name Object prototype properties', async () => {

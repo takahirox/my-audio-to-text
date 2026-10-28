@@ -274,8 +274,8 @@ separate user evaluation. No post-merge-only check is introduced by #124.
 
 [TextWindow and TranslationCommit](windowed-translation.md) provide bounded
 source batching and an opt-in preview/commit experiment in the extension graph.
-The four extension translators accept an optional provisional TEXT input only
-from the same TextWindow as their text input. Their primitive grouped
+The four extension translators accept optional provisional TEXT from any
+compatible producer, independently of the committed text source and edge order. Their primitive grouped
 source/text/error outputs remain unchanged. Existing text-only connections and
 standalone web translator Nodes retain their behavior. Use TranslationCommit
 for the experimental path; direct translator text now includes preview results

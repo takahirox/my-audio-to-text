@@ -3,9 +3,10 @@ export const portContract = name => Object.freeze({ name });
 
 /**
  * Nodes declare inputs/outputs as { portName: contract }. Optional async hooks:
- * start(context), receive(port, value, context), stop(context), dispose().
+ * start(context), receive(port, value, context), stop(context), cancel(context), dispose().
  * context provides emit(port, value), emitOutputs(values), fail(error), and an AbortSignal.
  * Optional receiveInputs(values, context) receives one emission mapped to input names.
+ * Delivery contexts include opaque delivery/cause identity; cancel hooks emit cleanup snapshots.
  */
 export class Pipeline {
   constructor({ nodes, connections = [], onError = () => {} }) {
@@ -57,6 +58,7 @@ export class Pipeline {
     for (const entry of this.order) {
       entry.context = Object.freeze({
         signal: entry.controller.signal,
+        connectedInputs: Object.freeze(connections.filter(route => route.to[0] === entry.id).map(route => route.to[1])),
         emit: (port, value) => this.emit(entry, port, value),
         emitOutputs: values => this.emitOutputs(entry, values),
         fail: error => this.fail(entry, error),
@@ -64,16 +66,16 @@ export class Pipeline {
     }
   }
   fail(entry, cause) {
-    if (entry.failed || entry.closed || this.state === 'disposed') return;
+    if (entry.failed || entry.closed || ['canceling', 'disposed'].includes(this.state)) return;
     const error = new Error(`Node ${entry.id}: ${cause?.message || cause}`, { cause });
     entry.failed = true; entry.controller.abort(error);
     this.errors.push(error);
     // Observer failures cannot break delivery to another branch.
     try { this.onError(error, entry.id); } catch { /* errors remain available */ }
   }
-  emit(entry, port, value) { this.emitOutputs(entry, { [port]: value }, false); }
-  emitOutputs(entry, values, grouped = true) {
-    if (!entry.active || entry.closed || entry.failed || this.state === 'disposed') return;
+  emit(entry, port, value, cause, cleanup = false) { this.emitOutputs(entry, { [port]: value }, false, cause, cleanup); }
+  emitOutputs(entry, values, grouped = true, cause, cleanup = false) {
+    if (!entry.active || entry.closed || entry.failed || this.state === 'disposed' || (this.state === 'canceling' && !cleanup)) return;
     if (!values || typeof values !== 'object' || Array.isArray(values)) {
       this.fail(entry, new TypeError('emitOutputs needs a named output map.')); return;
     }
@@ -89,21 +91,29 @@ export class Pipeline {
         Object.defineProperty(deliveries.get(target), input, { value, enumerable: true });
       }
     }
+    const delivery = Object.freeze({});
     for (const [target, inputs] of deliveries) {
       // Delivery-local provenance, never payload metadata or cross-branch matching.
       const groupInputs = grouped ? Object.freeze([...new Set([...entry.routes.values()].flat()
         .filter(route => route.entry === target).map(route => route.port))]) : undefined;
-      const context = grouped ? Object.freeze({ ...target.context, groupInputs }) : target.context;
+      // A forwarding emission gets a fresh identity with its incoming event as
+      // cause. Async processors retain this context with their accepted work.
+      // No Node types, output names or payload equality participate in identity.
+      const context = Object.freeze({ ...target.context, groupInputs, delivery, cause,
+        ...(cleanup ? { signal: this.cleanupController.signal } : {}),
+        emit: (port, value) => this.emit(target, port, value, delivery, cleanup),
+        emitOutputs: values => this.emitOutputs(target, values, true, delivery, cleanup),
+      });
       Object.freeze(inputs);
       // One queue item per target: no interleaving while an async hook runs.
       target.queue = target.queue.then(async () => {
-        const live = () => target.active && !target.closed && !target.failed && this.state !== 'disposed';
+        const live = () => target.active && !target.closed && !target.failed && this.state !== 'disposed' && (this.state !== 'canceling' || cleanup);
         if (!live()) return;
         if (typeof target.node.receiveInputs === 'function') {
           await target.node.receiveInputs(inputs, context);
         } else for (const [input, value] of Object.entries(inputs)) {
           if (!live()) return;
-          await target.node.receive(input, value, target.context);
+          await target.node.receive(input, value, context);
         }
       }).catch(error => this.fail(target, error));
     }
@@ -132,19 +142,31 @@ export class Pipeline {
     try {
       // Consumers are ready before producers can emit, including inside start.
       for (const entry of [...this.order].reverse()) {
-        if (this.state === 'disposed') throw new DOMException('Pipeline disposed.', 'AbortError');
+        if (['canceling', 'disposed'].includes(this.state)) throw new DOMException('Pipeline disposed.', 'AbortError');
+        const reachesOutput = current => !current.failed && (!Object.keys(current.outputs).length ||
+          [...current.routes.values()].flat().some(route => reachesOutput(route.entry)));
+        if (this.errors.length && !reachesOutput(entry)) continue;
         entry.active = true;
         try {
           await this.wait(entry, Promise.resolve().then(() => {
             entry.controller.signal.throwIfAborted();
             return entry.node.start?.(entry.context);
           }));
-        } catch (error) { this.fail(entry, error); throw error; }
+        } catch (error) { this.fail(entry, error); }
       }
-      if (this.state === 'disposed') throw new DOMException('Pipeline disposed.', 'AbortError');
+      if (['canceling', 'disposed'].includes(this.state)) throw new DOMException('Pipeline disposed.', 'AbortError');
+      // A failed startup Node cannot invalidate an independent complete path.
+      const viable = new Set();
+      for (const entry of this.order) {
+        const sources = [...this.entries.values()].filter(source => [...source.routes.values()].flat().some(route => route.entry === entry));
+        if (!entry.failed && (!sources.length || sources.some(source => viable.has(source.id)))) viable.add(entry.id);
+      }
+      if (this.errors.length && !this.order.some(entry => viable.has(entry.id) && !Object.keys(entry.outputs).length && this.order.some(source => [...source.routes.values()].flat().some(route => route.entry === entry)))) {
+        throw this.errors[0] || Error('No viable output path after startup.');
+      }
       this.state = 'running';
     } catch (error) {
-      if (this.state !== 'disposed') {
+      if (!['canceling', 'disposed'].includes(this.state)) {
         // Startup failure has no viable graph; release even partially started nodes.
         await this.dispose();
       }
@@ -159,10 +181,10 @@ export class Pipeline {
   }
   async stopNodes() {
     if (this.state === 'starting') await this.starting;
-    if (this.state === 'disposed') return;
+    if (['canceling', 'disposed'].includes(this.state)) return;
     this.state = 'stopping';
     await this.drain(this.order.map(entry => entry.id));
-    if (this.state === 'disposed') return;
+    if (['canceling', 'disposed'].includes(this.state)) return;
     this.state = 'stopped';
     if (this.errors.length) throw new AggregateError(this.errors, `Pipeline failed while draining: ${this.errors.map(error => error.message).join(' ')}`);
   }
@@ -171,7 +193,7 @@ export class Pipeline {
   async drain(nodeIds) {
     const ids = new Set(nodeIds);
     for (const entry of this.order.filter(entry => ids.has(entry.id) && !entry.closed)) {
-      if (this.state === 'disposed') return;
+      if (['canceling', 'disposed'].includes(this.state)) return;
       try {
         if (!entry.failed) {
           await this.wait(entry, entry.queue);
@@ -181,16 +203,38 @@ export class Pipeline {
           }));
         }
       } catch (error) {
-        if (this.state === 'disposed') return;
+        if (['canceling', 'disposed'].includes(this.state)) return;
         this.fail(entry, error);
       }
       // stop() promises must include all background output from this node.
       entry.closed = true;
     }
   }
+  // Abort pending work first. Node-owned cancellation snapshots then follow
+  // ordinary routes, including stateless transformations and independent sinks.
+  cancel() {
+    if (this.canceling) return this.canceling;
+    if (this.state === 'disposed') return this.dispose();
+    this.state = 'canceling';
+    this.cleanupController = new AbortController();
+    for (const entry of this.order) { entry.controller.abort(); entry.queue = Promise.resolve(); }
+    for (const entry of this.order) {
+      if (!entry.active || entry.closed || entry.failed) continue;
+      const context = Object.freeze({ ...entry.context, signal: this.cleanupController.signal,
+        emit: (port, value) => this.emit(entry, port, value, undefined, true),
+        emitOutputs: values => this.emitOutputs(entry, values, true, undefined, true),
+      });
+      try { entry.node.cancel?.(context); } catch (error) { this.fail(entry, error); }
+    }
+    return this.canceling = (async () => {
+      for (const entry of this.order) await entry.queue;
+      await this.dispose();
+    })();
+  }
   dispose() {
     if (this.disposing) return this.disposing;
     this.state = 'disposed';
+    this.cleanupController?.abort();
     // Invalidate every emitter and queued input before starting async cleanup.
     for (const entry of this.order) { entry.closed = true; entry.controller.abort(); }
     return this.disposing = Promise.allSettled(this.order.map(entry => {

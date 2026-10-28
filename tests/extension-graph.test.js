@@ -12,35 +12,36 @@ import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-
 
 const storage = () => { const values = new Map(); return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }; };
 
-test('optional Number configuration reloads and binds a snapshot before ASR or capture startup', async () => {
+test('Number startup configuration retains ordinary edges and saved snapshot isolation', async () => {
   const store = storage(), graph = defaultGraph();
-  const options = { workerFactory: () => ({ postMessage() {}, terminate() {} }), sourceFactory: () => ({ start() {}, stop() {} }) };
-  const unconnected = buildGraph(graph, options);
-  assert.equal(unconnected.speechNodes.get('speech').maxDuration, 6); await unconnected.pipeline.dispose();
-  graph.nodes.push(graphNode('Number', 'duration'));
-  graph.nodes.at(-1).settings.value = 1.234567;
+  const options = { workerFactory: () => ({ postMessage(data) { if (data.type === 'load') queueMicrotask(() => this.onmessage({data:{type:'ready'}})); }, terminate() {} }), sourceFactory: () => ({ start() {}, stop() {} }) };
+  graph.nodes.push(graphNode('Number', 'duration')); graph.nodes.at(-1).settings.value = 1.234567;
   graph.edges.push(edge('duration', 'value', 'speech', 'maxDuration'));
-  saveGraph(store, graph); assert.deepEqual(readGraph(store), graph);
-  const built = buildGraph(readGraph(store), options);
-  assert.equal(built.speechNodes.get('speech').maxDuration, 1.234567);
-  assert.equal(built.speechNodes.get('speech').core.state, 'released'); // No workers or audio processing yet.
+  saveGraph(store, graph); const built = buildGraph(readGraph(store), options);
+  assert.equal(built.speechNodes.get('speech').core.state, 'released');
   graph.nodes.at(-1).settings.value = 9.5; saveGraph(store, graph);
+  await built.pipeline.start(); await built.pipeline.entries.get('speech').queue;
   assert.equal(built.speechNodes.get('speech').maxDuration, 1.234567);
-  const next = buildGraph(readGraph(store), options);
+  const next = buildGraph(readGraph(store), options); await next.pipeline.start(); await next.pipeline.entries.get('speech').queue;
   assert.equal(next.speechNodes.get('speech').maxDuration, 9.5);
   assert.deepEqual(built.description.edges, graph.edges);
   await built.pipeline.dispose(); await next.pipeline.dispose();
 });
 
-test('connected invalid Number fails before Workers; runtime NUMBER outputs cannot configure startup', () => {
-  for (const value of [0, -1, 0.9, 12.01, NaN, Infinity, -Infinity, null, undefined, '2']) {
+test('consumer duration validation happens on delivery; finite constants and incomplete drafts stay saveable', async () => {
+  for (const value of [0, -1, 0.9, 12.01]) {
     const graph = defaultGraph(); graph.nodes.push(graphNode('Number', 'duration'));
     graph.nodes.at(-1).settings.value = value; graph.edges.push(edge('duration', 'value', 'speech', 'maxDuration'));
-    assert.throws(() => buildGraph(graph, { workerFactory() { assert.fail('Must not create Worker'); } }), /finite number|1 to 12 seconds/);
-    assert.throws(() => saveGraph(storage(), graph), /finite number|1 to 12 seconds/);
+    saveGraph(storage(), graph);
+    const built = buildGraph(graph, { workerFactory() { assert.fail('Invalid configuration must not create Workers'); }, sourceFactory: () => ({start(){},stop(){}}) });
+    await built.pipeline.start().catch(() => {}); await built.pipeline.entries.get('speech').queue;
+    assert.match(built.pipeline.errors.map(e => e.message).join(' '), /1 to 12 seconds/);
+    await built.pipeline.dispose();
   }
-  const graph = defaultGraph({ enabled: true }); graph.edges.push(edge('translation', 'finalIndex', 'speech', 'maxDuration'));
-  assert.match(validateGraph(graph).join('\n'), /Unknown port/);
+  for (const value of [NaN, Infinity, -Infinity, null, undefined, '2']) {
+    const graph = defaultGraph(); graph.nodes.push(graphNode('Number','duration')); graph.nodes.at(-1).settings.value = value;
+    assert.throws(() => saveGraph(storage(), graph), /finite number/);
+  }
 });
 const audioGraph = (type, translated = false) => {
   const graph = defaultGraph({ enabled: translated });
@@ -226,7 +227,7 @@ for (const type of ['OpusMtJaEn', 'TranslateGemmaEnJa']) test(`${type}: ASR fina
   assert.ok(workers.every(worker => worker.released));
 });
 
-test('TEXT routing is independent of producer; ASR previews cannot use the window-only translator input', () => {
+test('TEXT routing and optional translator previews are independent of producer', () => {
   const graph = defaultGraph({ enabled: true });
   graph.edges = graph.edges.filter(route => !(route.to[0] === 'transcript' && route.to[1] === 'replace') && route.to[1] !== 'provisional');
   // A translated stream can be the full transcript destination, independently
@@ -236,7 +237,7 @@ test('TEXT routing is independent of producer; ASR previews cannot use the windo
   assert.deepEqual(validateGraph(graph), []);
   assert.ok(buildGraph(graph, {}).pipeline);
   graph.edges.push(edge('speech', 'final', 'translation', 'provisional'));
-  assert.match(validateGraph(graph).join(' '), /same TextWindow/); graph.edges.pop();
+  assert.deepEqual(validateGraph(graph), []); graph.edges.pop();
   graph.edges.find(route => route.to[0] === 'translation' && route.to[1] === 'text').from = ['translation', 'text'];
   assert.match(validateGraph(graph).join('\n'), /acyclic/);
 });

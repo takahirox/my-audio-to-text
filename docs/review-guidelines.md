@@ -43,6 +43,10 @@ Also review:
 - documentation updates when behavior changes;
 - port/schema changes tested against saved versions, with visible recovery for
   behavior differences and no silent loss of unrelated routes or stored content;
+- [producer-independent composition](port-contracts.md): reject wiring checks or
+  hidden modes based on producer type/name, output name, neighbors or edge order;
+  test alternate producers, both edge orders, incomplete drafts, consumer-owned
+  startup/correlation constraints and independent failure/Cancel paths;
 - grouped delivery, independent streams, repeated values and cleanup validated
   without exposing internal job metadata as public ports;
 - security and privacy implications where relevant.

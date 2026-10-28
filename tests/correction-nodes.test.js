@@ -76,7 +76,9 @@ for (const phase of ['load', 'correct', 'drain']) {
     for (const onFailure of ['error','bypass']) {
       const f = fixture({onFailure}, m => m.type === phase ? {type:'error',message:'Model failed'} : {type:m.type==='load'?'ready':m.type==='drain'?'drained':'result',text:m.text});
       if (phase==='load' && onFailure==='error') {
-        await assert.rejects(f.pipeline.start(), /Model failed/); assert.equal(f.workers[0].terminated,1); continue;
+        await f.pipeline.start(); f.emit('peer survives'); await tick();
+        assert.deepEqual(f.original, ['peer survives']); assert.match(f.errors[0], /Model failed/);
+        assert.equal(f.workers[0].terminated,1); await f.pipeline.dispose(); continue;
       }
       await f.pipeline.start(); f.emit('original'); f.emit('next');
       if (onFailure==='error') await assert.rejects(f.pipeline.stop(), AggregateError);

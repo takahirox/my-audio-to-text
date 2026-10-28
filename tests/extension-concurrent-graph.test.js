@@ -45,16 +45,16 @@ test('constant text roots execute without audio or ASR, while drafts with no sin
   assert.throws(() => buildGraph(graph, {}), /No executable path/);
 });
 
-test('consumer-specific startup values in unfinished branches warn until the consumer participates', () => {
+test('consumer-specific startup values stay saveable and are validated by the executing Node', () => {
   for (const [constant, consumer, input, value] of [['Number','SpeechToTextReazonSpeech','maxDuration',0],['Text','SpeechToTextWhisper','language','fr']]) {
     const graph = defaultGraph();
     graph.nodes.push(graphNode(constant,'configuration'),graphNode(consumer,'unfinished'),graphNode('LiveTextDisplay','unfinished-display'));
     graph.nodes.at(-3).settings.value = value;
     graph.edges.push(edge('configuration','value','unfinished',input),edge('unfinished','final','unfinished-display','content'));
     const storage = store(); saveGraph(storage,graph); assert.deepEqual(readGraph(storage),graph);
-    assert.match(graphWarnings(graph).join(' '), /unfinished:.*inactive configuration/);
+    assert.match(graphWarnings(graph).join(' '), /Inactive Node: unfinished/);
     assert.deepEqual(executableGraph(graph).nodes.map(node=>node.id),['audio','speech','transcript','transcript-accumulator']);
     graph.edges.push(edge('audio','audio','unfinished','audio'));
-    assert.throws(()=>saveGraph(storage,graph), /unfinished:/);
+    saveGraph(storage,graph); assert.deepEqual(readGraph(storage),graph);
   }
 });

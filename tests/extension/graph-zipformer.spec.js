@@ -68,7 +68,9 @@ for (const duringStop of [false, true]) test(`MV3 Zipformer Cancel releases in-f
 test('MV3 online inference failure releases Worker and permits a fresh recording; missing runtime fails during readiness', async ({ graphExtension: f }) => {
   await runtime(f); const page = await openGraph(f); await selectZipformer(page);
   await startGraph(page); await page.evaluate(() => window.capture.emit('audio', new Float32Array(1600).fill(.5)));
-  await expect(page.locator('#errors')).toContainText('Fixture online decode failure'); await expect(page.locator('#start')).toBeEnabled();
+  await expect(page.locator('#errors')).toContainText('Fixture online decode failure');
+  await expect(page.locator('#status')).toHaveText('Transcription active');
+  await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
   await startGraph(page); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await writeFile(path.join(f.root, 'web/vendor/zipformer-en/sherpa-onnx-wasm-main-asr.js'), `throw Error('Missing pinned runtime');`);

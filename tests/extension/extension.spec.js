@@ -208,12 +208,16 @@ test('model preload progress and cancellation leave capture unrequested and retr
 });
 
 for (const phase of ['loading', 'running']) {
-  test(`worker failure during ${phase} disposes the pipeline and permits retry`, async ({ extension }) => {
+  test(`worker failure during ${phase} reports locally and permits retry`, async ({ extension }) => {
     const page = await setup(extension, { mode: phase === 'loading' ? 'loading' : 'audio' });
     await expect.poll(() => page.evaluate(() => window.workers.length)).toBe(2);
     if (phase === 'running') await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
     await page.evaluate(() => window.workers[0].postMessage({ type: 'fixture-error' }));
     await expect(page.locator('#errors')).toContainText('Controlled worker failure');
+    if (phase === 'running') {
+      await expect(page.locator('#status')).toHaveText('Transcription active');
+      await page.locator('#cancel-session').click();
+    }
     await expect(page.locator('#start')).toBeEnabled();
     expect(await page.evaluate(() => window.terminated)).toBe(2);
     if (phase === 'running') await released(page);

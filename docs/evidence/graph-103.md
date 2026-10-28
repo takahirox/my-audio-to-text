@@ -1,5 +1,7 @@
 # Issue #103: Number-configured speech segment duration
 
+Historical evidence; producer restrictions and cancellation/startup behavior are superseded by the [Issue #134 audit](composition-134.md).
+
 Validated in the assigned worktree on 2026-10-14. No push, PR, merge or Issue
 comment was performed. No post-merge verification is required by the Issue.
 

@@ -82,7 +82,7 @@ for (const result of [{ branch: 'yes', confidence: .5 }, { branch: 'both', confi
 }
 for (const type of ['load', 'decide', 'drain']) test(`${type} timeout terminates the Worker with a visible error`, async () => {
   const f = graph({ hold: data => data.type === type }, { loadTimeoutMs: 10, decisionTimeoutMs: 10 });
-  if (type === 'load') await assert.rejects(f.pipeline.start());
+  if (type === 'load') { await f.pipeline.start(); f.source.send('peer survives'); await tick(); assert.deepEqual(f.values, [['peer', 'peer survives']]); }
   else {
     await f.pipeline.start(); if (type === 'decide') f.source.send('pending');
     await assert.rejects(f.pipeline.stop());
