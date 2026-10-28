@@ -23,14 +23,14 @@ test('Gemma directions share a complete immutable q4 manifest, including both ex
 });
 
 for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGemmaJaEn', 'ja-en']]) {
-  test(`${type}: v9 save/reload preserves independent and parked Nodes; real builder routes grouped TEXT to formatter and direct sinks`, async () => {
-    const graph = { version: 9, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
+  test(`${type}: v10 save/reload preserves independent and parked Nodes; real builder routes grouped TEXT to formatter and direct sinks`, async () => {
+    const graph = { version: 10, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
       graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain'),
       graphNode('Text', 'independent'), graphNode('LiveTextDisplay', 'other'), graphNode(type, 'parked')], edges: [
       edge('input', 'value', 'translation', 'text'), edge('translation', 'source', 'format', 'input1'),
       edge('translation', 'text', 'format', 'input2'), edge('translation', 'error', 'format', 'input3'),
-      edge('format', 'text', 'paired', 'append'), edge('translation', 'text', 'plain', 'append'),
-      edge('independent', 'value', 'other', 'append'),
+      edge('format', 'text', 'paired', 'content'), edge('translation', 'text', 'plain', 'content'),
+      edge('independent', 'value', 'other', 'content'),
     ] };
     graph.nodes[0].settings.value = 'Original source'; graph.nodes[2].settings.template = '{1}|{2}|{3}';
     graph.nodes[5].settings.value = 'Other branch';
@@ -51,9 +51,9 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
           assert.ok(url.pathname.endsWith('/translategemma-worker.js')); workers.push(worker); return worker;
         } });
       await built.pipeline.start(); await built.pipeline.stop(); await built.pipeline.dispose();
-      assert.deepEqual(displays.other.items, ['Other branch']);
-      assert.deepEqual(displays.plain.items, fail ? [] : ['Translated']);
-      assert.deepEqual(displays.paired.items, [fail ? 'Original source||weights evicted' : 'Original source|Translated|']);
+      assert.deepEqual(displays.other, 'Other branch');
+      assert.deepEqual(displays.plain, fail ? '' : 'Translated');
+      assert.deepEqual(displays.paired, fail ? 'Original source||weights evicted' : 'Original source|Translated|');
       assert.equal(workers.length, fail ? 0 : 1);
       if (!fail) {
         assert.equal(workers[0].messages[0].direction, direction);

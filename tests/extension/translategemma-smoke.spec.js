@@ -107,22 +107,28 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
           terminate() { this.released = true; super.terminate(); }
         };
         const built = buildGraph(graph, { onDisplay: (id, state) => { displays[id] = state; }, onTranslationState: state => states.push(state) });
+        const translated = [], node = built.pipeline.entries.get('gemma').node, start = node.start.bind(node);
+        node.start = context => start({ ...context, emitOutputs(values) {
+          if (typeof values.text === 'string') translated.push(values.text);
+          context.emitOutputs(values);
+        } });
         try {
           await built.pipeline.start();
           // First input comes from the production Text Node. Further controlled
           // fixtures traverse that source's real TEXT routes and scheduler FIFO.
           for (const text of texts.slice(1)) built.pipeline.entries.get('input').context.emit('value', text);
           await built.pipeline.stop();
-          return { direction, displays, states, ms: performance.now() - started, errors: built.pipeline.errors.map(e => e.message) };
+          return { direction, displays, translated, states, ms: performance.now() - started, errors: built.pipeline.errors.map(e => e.message) };
         } finally { await built.pipeline.dispose(); if (workers.length !== 1 || !workers.every(w => w.released)) throw Error('Owned Worker was not released or parked Node executed'); }
       }, { direction, texts });
       run.offline = offline; runs.push(run); console.log(JSON.stringify(run));
       expect(run.errors).toEqual([]); expect(run.states).toContain('Local TranslateGemma 4B ready');
-      expect(run.displays.other.items).toEqual(['Independent branch']);
-      expect(run.displays.plain.items).toHaveLength(texts.length);
+      expect(run.displays.other).toBe('Independent branch');
+      expect(run.translated).toHaveLength(texts.length);
+      expect(run.displays.plain).toBe(run.translated.join('\n'));
+      expect(run.displays.paired).toBe(texts.map((text, i) => `${text}\n${run.translated[i]}`).join('\n'));
       for (let i = 0; i < texts.length; i++) {
-        const output = run.displays.plain.items[i];
-        expect(run.displays.paired.items[i]).toBe(`${texts[i]}\n${output}`);
+        const output = run.translated[i];
         expect(output.trim()).not.toBe(texts[i]);
         for (const meaning of direction === 'en-ja' ? fixtures[i].meanings : [/meeting/i, /Friday/i, /10|ten/i, /start|begin/i]) expect(output, `Meaning of ${texts[i]}: ${meaning}`).toMatch(meaning);
       }

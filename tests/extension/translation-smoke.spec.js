@@ -93,7 +93,7 @@ test(`real extension ${direction}: native tab audio → ASR.final → committed 
         };
       });
       await meeting.locator('#play').click();
-      await expect(recorder.locator('[data-display="transcript"] .display-preview')).toHaveText(reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/, { timeout: 60000 });
+      await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText(reverse ? /[A-Za-z]/ : /[\u3040-\u30ff\u4e00-\u9fff]/, { timeout: 60000 });
       await expect.poll(() => meeting.locator('#audio').evaluate(audio => audio.ended), { timeout: 60000 }).toBe(true);
       await recorder.locator('#stop').click(); await expect(recorder.locator('#start')).toBeEnabled({ timeout: 120000 });
       const finals = await recorder.evaluate(() => window.finalPairs);

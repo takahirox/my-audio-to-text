@@ -136,7 +136,7 @@ for (const type of MEETING_SUMMARY_TYPES) {
     assert.ok(f.worker.terminated); assert.deepEqual(f.node.fragments, []);
   });
 
-  test(`${type}: v9 graph Save/reload, independent branches and missing model isolation`, async () => {
+  test(`${type}: v10 graph Save/reload, independent branches and missing model isolation`, async () => {
     const g = meetingGraph(type), values = new Map(), storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), removeItem: k => values.delete(k) };
     assert.deepEqual(validateGraph(g), []); saveGraph(storage, g); assert.deepEqual(readGraph(storage), g);
     assert.deepEqual(assertGraph(defaultGraph()), defaultGraph());
@@ -144,8 +144,8 @@ for (const type of MEETING_SUMMARY_TYPES) {
       const f = fixture(type, { failLoad }), displays = {}, events = [];
       const built = buildGraph(g, { meetingSummaryWorkerFactory: () => f.worker, onDisplay: (id,state) => displays[id] = state, onMeetingSummaryEvent: event => events.push(event) });
       await built.pipeline.start(); await built.pipeline.stop();
-      assert.deepEqual(displays.transcript.items, [meetingBatches[0]]);
-      assert.equal(displays.notes.preview, failLoad ? '' : 'Note 1');
+      assert.deepEqual(displays.transcript, meetingBatches[0]);
+      assert.equal(displays.notes, failLoad ? '' : 'Note 1');
       assert.deepEqual(built.pipeline.errors, []);
       if (failLoad) assert.ok(events.some(e => e.type === 'error'));
       await built.pipeline.dispose();
@@ -189,7 +189,7 @@ test('concurrent processors own independent Workers, languages and notes while s
   const g = meetingGraph('MeetingSummaryLfm2'), second = graphNode('MeetingSummaryQwen35', 'second');
   second.settings.language = 'en';
   g.nodes.push(second, graphNode('LiveTextDisplay', 'english'));
-  g.edges.push({ from: ['input', 'value'], to: ['second', 'text'] }, { from: ['second', 'summary'], to: ['english', 'replace'] });
+  g.edges.push({ from: ['input', 'value'], to: ['second', 'text'] }, { from: ['second', 'summary'], to: ['english', 'content'] });
   const workers = [], displays = {};
   const built = buildGraph(g, { meetingSummaryWorkerFactory: () => {
     const f = fixture(workers.length ? 'MeetingSummaryQwen35' : 'MeetingSummaryLfm2'); workers.push(f); return f.worker;
@@ -197,7 +197,7 @@ test('concurrent processors own independent Workers, languages and notes while s
   await built.pipeline.start(); await built.pipeline.stop();
   assert.equal(workers.length, 2); assert.ok(workers.every(f => f.worker.terminated));
   assert.deepEqual(workers.map(f => [f.messages[0].processor, f.messages[1].language]).sort(), [['MeetingSummaryLfm2', 'ja'], ['MeetingSummaryQwen35', 'en']]);
-  assert.equal(displays.notes.preview, 'Note 1'); assert.equal(displays.english.preview, 'Note 1');
+  assert.equal(displays.notes, 'Note 1'); assert.equal(displays.english, 'Note 1');
   await built.pipeline.dispose();
 });
 test('excerpt renderer quotes evidence, escapes chat delimiters and requests local-language text', () => {

@@ -11,12 +11,12 @@ async function save(editor) {
 }
 const card = editor => editor.locator('#graph-models .model-card');
 
-test('palette, Save and reload preserve v9 connected graph and parked directions; shared verified preparation and recovery', async ({ graphExtension: f }) => {
+test('palette, Save and reload preserve v10 connected graph and parked directions; shared verified preparation and recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   for (const type of ['Text', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'LiveTextDisplay']) await add(editor, type);
   await expect(editor.locator('#graph-asset-notice')).toContainText('3.112 GB');
   await expect(editor.locator('#graph-asset-notice')).toContainText('Gemma Terms');
-  for (const [source, output, target, input] of [['text', 'value', 'translategemmaenja', 'text'], ['translategemmaenja', 'text', 'livetextdisplay', 'append']]) {
+  for (const [source, output, target, input] of [['text', 'value', 'translategemmaenja', 'text'], ['translategemmaenja', 'text', 'livetextdisplay', 'content']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
     await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).click();
   }
@@ -24,8 +24,8 @@ test('palette, Save and reload preserve v9 connected graph and parked directions
   await expect(card(editor)).toHaveCount(1); await expect(card(editor).locator('.model-status')).toContainText('Ready');
   expect(f.requests).toHaveLength(8); expect(f.requests.every(r => r.startsWith('/translategemma-assets.json/'))).toBe(true);
   const graph = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(graph.version).toBe(9); expect(graph.nodes.some(n => n.type === 'TranslateGemmaJaEn')).toBe(true);
-  expect(graph.edges).toContainEqual({ from: ['translategemmaenja', 'text'], to: ['livetextdisplay', 'append'] });
+  expect(graph.version).toBe(10); expect(graph.nodes.some(n => n.type === 'TranslateGemmaJaEn')).toBe(true);
+  expect(graph.edges).toContainEqual({ from: ['translategemmaenja', 'text'], to: ['livetextdisplay', 'content'] });
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   await save(editor); await expect(card(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(8);
   await editor.reload(); expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
@@ -89,12 +89,12 @@ for (const mode of ['normal', 'missing-gpu', 'no-adapter', 'inference-error', 'c
   }, mode);
   expect(f.requests).toHaveLength(before);
   for (const run of result) {
-    if (mode === 'normal') { expect(run.displays.plain.items).toEqual(['Japanese: Hello']); expect(run.displays.paired.items).toEqual(['Hello|Japanese: Hello|']); }
-    else if (mode === 'cancel') { expect(run.displays.plain.items).toEqual([]); expect(run.displays.paired.items).toEqual([]); }
+    if (mode === 'normal') { expect(run.displays.plain).toBe('Japanese: Hello'); expect(run.displays.paired).toBe('Hello|Japanese: Hello|'); }
+    else if (mode === 'cancel') { expect(run.displays.plain).toBe(''); expect(run.displays.paired).toBe(''); }
     else {
-      expect(run.displays.plain.items).toEqual([]);
-      expect(run.displays.paired.items).toHaveLength(1);
-      expect(run.displays.paired.items[0]).toMatch(mode === 'missing-gpu' ? /requires WebGPU/ : mode === 'no-adapter' ? /No WebGPU adapter/ : /GPU memory failure/);
+      expect(run.displays.plain).toBe('');
+      expect(run.displays.paired).not.toBe('');
+      expect(run.displays.paired).toMatch(mode === 'missing-gpu' ? /requires WebGPU/ : mode === 'no-adapter' ? /No WebGPU adapter/ : /GPU memory failure/);
     }
   }
   expect(await live.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);

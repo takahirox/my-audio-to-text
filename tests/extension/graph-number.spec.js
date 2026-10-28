@@ -53,7 +53,7 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   await editor.getByLabel('number value', { exact: true }).fill('1.25');
   await editor.getByRole('button', { name: 'number output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
-  await expect(editor.getByRole('button', { name: 'transcript input append', exact: true })).toBeDisabled();
+  await expect(editor.getByRole('button', { name: 'transcript-accumulator input append', exact: true })).toBeDisabled();
   await editor.getByRole('button', { name: 'speech input maxDuration', exact: true }).click();
   await expect(editor.locator('#graph-errors')).toBeEmpty(); await save(editor);
   await editor.reload(); await editor.getByRole('button', { name: 'Select number', exact: true }).click();
@@ -66,14 +66,14 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   await editor.getByLabel('number value', { exact: true }).fill('1.25'); await save(editor);
   await startGraph(page); expect(await page.evaluate(() => window.capBeforeCapture)).toBe(20000);
   await page.evaluate(() => { window.decodeRequests = []; });
-  await feed(page, 8000); await expect(page.locator('.display-preview')).toHaveText('segment 1: 8000');
+  await feed(page, 8000); await expect(page.locator('.display-content')).toHaveText('segment 1: 8000');
   await editor.getByLabel('number value', { exact: true }).fill('2.5'); await save(editor);
   await expect(editor.locator('#graph-state')).toContainText('earlier graph');
   await feed(page, 36000, .06);
-  await expect(page.locator('.display-items li pre')).toHaveText(['segment 1: 20000', 'segment 2: 20000']);
-  await expect(page.locator('.display-preview')).toBeEmpty();
+  await expect(page.locator('.display-content')).toHaveText(['segment 1: 20000', 'segment 2: 20000'].join('\n'));
+
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  await expect(page.locator('.display-items li pre')).toHaveText(['segment 1: 20000', 'segment 2: 20000', 'segment 3: 4037']);
+  await expect(page.locator('.display-content')).toHaveText(['segment 1: 20000', 'segment 2: 20000', 'segment 3: 4037'].join('\n'));
   const finals = await page.evaluate(() => window.decodeRequests.filter(m => m.final));
   expect(finals.map(m => m.id)).toEqual([1, 2, 3]);
   const samples = finals.flatMap(m => m.audio);
@@ -82,7 +82,7 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   }
   expect(samples.length).toBe(44037);
   await startGraph(page); expect(await page.evaluate(() => window.capBeforeCapture)).toBe(40000);
-  await feed(page, 40000); await expect(page.locator('.display-items li pre')).toHaveText(['segment 1: 40000']);
+  await feed(page, 40000); await expect(page.locator('.display-content')).toHaveText(['segment 1: 40000'].join('\n'));
   await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
   expect(f.requests).toEqual([]);
@@ -98,6 +98,6 @@ for (const stop of [false, true]) test(`packaged Cancel with a cap final pending
   await page.evaluate(() => { window.callbacks = window.graphWorkers.map(w => w.onmessage); });
   await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
   await page.evaluate(() => window.callbacks.forEach(callback => callback({ data: { type: 'final', id: 1, session: 1, text: 'late' } })));
-  await expect(page.locator('.display-items li')).toHaveCount(0); await expect(page.locator('.display-preview')).toBeEmpty();
+  await expect(page.locator('.display-content')).toBeEmpty();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
 });

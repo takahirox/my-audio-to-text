@@ -14,8 +14,9 @@ or `English`), then connect:
 
 ```text
 ChromeTabAudio.audio       → SpeechToTextZipformerEn.audio
-SpeechToTextZipformerEn.provisional → LiveTextDisplay.replace
-SpeechToTextZipformerEn.final       → LiveTextDisplay.append
+SpeechToTextZipformerEn.provisional → TextAccumulator.preview
+SpeechToTextZipformerEn.final       → TextAccumulator.append
+TextAccumulator.text               → LiveTextDisplay.content
 ```
 
 Save, then Start in Live. Selected media and microphone sources provide the same
@@ -23,8 +24,8 @@ PCM contract. There is no language or maxDuration input: this is English-only,
 with a fixed policy. Remove any now-unused Number/Text source and configuration
 wire from the old ASR. Multiple ASRs can coexist or share a compatible source. Finals can feed existing
 TEXT formatters, OPUS-MT, focused fields and TTS. All downstream contracts and
-sinks are unchanged. Default/reset remains the three-node ReazonSpeech graph.
-Zipformer adds no separate migration. Current version 9 graphs retain these ASR
+sinks are unchanged. Default/reset remains the ReazonSpeech → TextAccumulator → LiveTextDisplay graph.
+Zipformer adds no separate migration. Current version 10 graphs retain these ASR
 contracts; older graphs use the [translation/formatter migration and recovery
 rules](extension-graph.md), preserving unrelated ASR routes and settings.
 
@@ -165,3 +166,5 @@ snapshot** decoding and its Number-configured cap. Whisper still exposes
 **final only**, using Silero-completed segments. This Zipformer node retains
 online acoustic/decoder state between incoming blocks within each capped segment;
 its provisional output comes from that real incremental inference.
+
+Live displays accept only `content: TEXT` in Graph v10. For transcript history, route final segments to `TextAccumulator.append`, provisional tails to `TextAccumulator.preview`, and `TextAccumulator.text → LiveTextDisplay.content`. Complete summary/formatter snapshots may connect directly to content. Saved v9 display wiring migrates automatically with original recovery copies retained; see [migration and lifecycle](extension-graph.md#graph-v10-display-migration-and-recovery).

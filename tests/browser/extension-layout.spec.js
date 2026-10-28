@@ -119,67 +119,32 @@ for (const action of ['Close settings', 'Remove transcript']) {
   });
 }
 
-test('live regions preserve committed DOM and plain text; previews are distinct and graph-driven', async ({ page }) => {
+test('live regions render safe snapshots, retain prefix text and copy verbatim at narrow widths', async ({ page }) => {
   const html = await readFile('extension/recorder.html', 'utf8');
   await page.setContent(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''));
   await page.evaluate(async () => {
-    const { defaultGraph, graphNode, edge } = await import('/extension/graph.js');
+    const { defaultGraph, graphNode } = await import('/extension/graph.js');
     const { renderTextRegions } = await import('/extension/live-text-regions.js');
     const root = document.querySelector('#live-displays'), graph = defaultGraph();
-    graph.nodes.push(graphNode('LiveTextDisplay', 'value')); graph.edges.push(edge('speech', 'final', 'value', 'replace'));
-    window.renderLayout = (items, preview) => renderTextRegions(root, graph, { transcript: { items, preview }, value: { items: [], preview: 'A current value' } });
-    window.renderLayout(['<b>committed</b>'], 'provisional');
-    window.firstCommitted = root.querySelector('li');
+    graph.nodes.push(graphNode('LiveTextDisplay', 'value'));
+    window.renderLayout = text => renderTextRegions(root, graph, { transcript: text, value: 'A current value' });
+    window.renderLayout('<b>committed</b>'); window.firstText = root.querySelector('.display-content').firstChild;
     navigator.clipboard.writeText = async text => { window.copiedText = text; };
     window.clearRegions = () => renderTextRegions(root, { nodes: [], edges: [] }, {});
   });
   await expect(page.locator('.live-text-region')).toHaveCount(2);
   const transcript = page.locator('[data-display="transcript"]');
-  await expect(transcript.getByLabel('Preview', { exact: true })).toHaveText('provisional');
-  await expect(page.locator('[data-display="value"]').getByLabel('Current value', { exact: true })).toHaveText('A current value');
+  await expect(transcript.getByLabel('Content', { exact: true })).toHaveText('<b>committed</b>');
+  await expect(page.locator('[data-display="value"]').getByLabel('Content', { exact: true })).toHaveText('A current value');
   await expect(page.locator('#live-displays b')).toHaveCount(0);
-  expect(await transcript.locator('.display-preview').evaluate(pre => getComputedStyle(pre).borderLeftStyle)).toBe('dashed');
-  await page.evaluate(() => window.renderLayout(['<b>committed</b>', 'second'], 'new preview'));
-  expect(await page.evaluate(() => window.firstCommitted === document.querySelector('#live-displays li'))).toBe(true);
+  await page.evaluate(() => window.renderLayout('<b>committed</b>\nsecond\nnew preview'));
+  expect(await page.evaluate(() => window.firstText === document.querySelector('#live-displays .display-content').firstChild)).toBe(true);
   await transcript.getByRole('button', { name: 'Copy text' }).click();
   expect(await page.evaluate(() => window.copiedText)).toBe('<b>committed</b>\nsecond\nnew preview');
   const output = await page.locator('#live-displays').boundingBox(), controls = await page.locator('.capture-panel').boundingBox();
   expect(output.y).toBeLessThan(controls.y);
   for (const width of [390, 700]) {
-    await page.setViewportSize({ width, height: 844 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.setViewportSize({ width, height: 844 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.evaluate(() => window.clearRegions()); await expect(page.locator('.live-text-region')).toHaveCount(0);
-});
-
-
-test('v8 paired formatter migration is visibly reviewed, then saves a recoverable v9 graph', async ({ page }) => {
-  const original = await page.evaluate(async () => {
-    const { defaultGraph, edge, GRAPH_KEY } = await import('/extension/graph.js');
-    const graph = defaultGraph({ enabled: true, direction: 'en-ja' }); graph.version = 8;
-    const formatter = graph.nodes.find(n => n.id === 'translated-format');
-    formatter.type = 'PairedTextFormatter'; formatter.settings = { direction: 'en-ja' };
-    graph.nodes.find(n => n.id === 'translated').settings.label = 'Saved bilingual label';
-    graph.edges = graph.edges.filter(e => e.to[0] !== formatter.id);
-    for (const port of ['text', 'finalSource', 'finalStatus', 'finalIndex', 'finalError']) graph.edges.push(edge('translation', port, formatter.id, port));
-    graph.edges.find(e => e.from[0] === formatter.id).to[1] = 'replace';
-    const raw = JSON.stringify(graph); localStorage.setItem(GRAPH_KEY, raw); return raw;
-  });
-  await page.reload(); await expect(page.locator('#errors')).toContainText('migration needs review');
-  await expect(page.locator('#graph-state')).toContainText('Unsaved draft');
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
-  await page.getByText('Original saved graph (migration recovery copy)', { exact: true }).click();
-  await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(original);
-  await expect(page.locator('option[value=PairedTextFormatter]')).toHaveCount(0);
-  await expect(page.locator('[data-node=translation] [data-side=output]')).toHaveCount(3);
-  await expect(page.locator('[data-node=translated-format] [data-side=input]')).toHaveCount(3);
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-state')).toContainText('Saved graph');
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(saved.version).toBe(9);
-  expect(saved.nodes.find(n => n.id === 'translated').settings.label).toBe('Saved bilingual label');
-  expect(saved.edges).toContainEqual({ from: ['translated-format', 'text'], to: ['translated', 'append'] });
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v9'))).toBe(original);
-  await page.reload(); await expect(page.locator('#errors')).toBeEmpty();
-  await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(original);
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(saved);
 });

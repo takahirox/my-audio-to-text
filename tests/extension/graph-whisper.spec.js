@@ -39,17 +39,17 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   await expect(editor.getByLabel('language value', { exact: true })).toHaveValue('en');
   await startGraph(page);
   await page.evaluate(() => window.capture.emit('audio', new Float32Array(96000).fill(.1)));
-  await expect(page.locator('.display-items li pre')).toHaveText(['en: 96000']);
-  await expect(page.locator('.display-preview')).toBeEmpty();
+  await expect(page.locator('.display-content')).toHaveText(['en: 96000'].join('\n'));
+
   await editor.getByLabel('language value', { exact: true }).fill('ja'); await editor.locator('#graph-save').click();
   await expect(editor.locator('#graph-state')).toContainText('earlier graph');
   await page.evaluate(() => window.capture.emit('audio', new Float32Array(37).fill(.1)));
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  await expect(page.locator('.display-items li pre')).toHaveText(['en: 96000', 'en: 37']);
+  await expect(page.locator('.display-content')).toHaveText(['en: 96000', 'en: 37'].join('\n'));
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
   await startGraph(page); await page.evaluate(() => window.capture.emit('audio', new Float32Array(37).fill(.1)));
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  await expect(page.locator('.display-items li pre')).toHaveText(['ja: 37']);
+  await expect(page.locator('.display-content')).toHaveText(['ja: 37'].join('\n'));
   await editor.reload(); await editor.getByRole('button', { name: 'Select language', exact: true }).click();
   await expect(editor.getByLabel('language value', { exact: true })).toHaveValue('ja');
   for (const invalid of ['', 'fr', 'EN']) {
@@ -85,7 +85,7 @@ for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'k
     }
     localStorage.setItem(GRAPH_KEY, JSON.stringify(graph)); return graph;
   }, unsafe);
-  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = 9;
+  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = 10;
   expected.edges = expected.edges.filter(route => route.from[1] !== 'provisional');
   await editor.reload();
   await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(0);
@@ -106,7 +106,7 @@ test('MV3 Text literal and empty values round-trip and deliver once to an ordina
   await openPalette(editor); await editor.locator('#graph-node-type').selectOption('Text'); await editor.locator('#graph-add').click();
   await editor.getByRole('button', { name: 'text output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
-  await editor.getByRole('button', { name: 'transcript input replace', exact: true }).click();
+  await editor.getByRole('button', { name: 'transcript input content', exact: true }).click();
   for (const value of ['<img src=x onerror=alert(1)> & "\n😀 {1}', '']) {
     await editor.getByLabel('text value', { exact: true }).fill(value); await editor.locator('#graph-save').click();
     await expect(editor.locator('#graph-save')).toBeEnabled();
@@ -117,8 +117,10 @@ test('MV3 Text literal and empty values round-trip and deliver once to an ordina
     )).toBe(value);
     await editor.reload(); await editor.getByRole('button', { name: 'Select text', exact: true }).click();
     await expect(editor.getByLabel('text value', { exact: true })).toHaveValue(value);
-    await startGraph(page); await expect(page.locator('.display-preview')).toHaveText(value);
-    await expect(page.locator('.display-preview img')).toHaveCount(0);
+    await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+    await expect(page.locator('#status')).toHaveText('Processing active');
+    await expect(page.locator('.display-content')).toHaveText(value);
+    await expect(page.locator('.display-content img')).toHaveCount(0);
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   }
 });
@@ -138,7 +140,7 @@ for (const duringStop of [false, true]) test(`MV3 Whisper Cancel ignores an in-f
   await page.evaluate(() => { window.lateCallback=window.pendingWorker.onmessage; });
   await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
   await page.evaluate(() => window.lateCallback({ data: { type: 'final', session: window.pendingDecode.session, id: window.pendingDecode.id, text: 'late' } }));
-  await expect(page.locator('.display-items li')).toHaveCount(0);
+  await expect(page.locator('.display-content')).toBeEmpty();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
 });
 

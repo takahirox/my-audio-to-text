@@ -97,7 +97,7 @@ for (const [key, type, module, className, partials] of [
       expect(finals.length).toBeGreaterThan(0);
       expect(finals.map(e => e.text).join(' ')).toMatch(fixture === '0.wav' ? /yellow lamps.*light.*quarter/i : /direct consequence.*lovely child.*heaven/i);
       expect(new Set(finals.map(e => e.id)).size).toBe(finals.length);
-      expect(result.displays.out.preview).toBe('');
+      expect(result.displays.out).toBe(finals.map(e => e.text).join('\n'));
       expect(result.workersReleased).toBe(true);
       if (partials) {
         const firstFinal = result.events.findIndex(e => e.type === 'final');

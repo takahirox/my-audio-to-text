@@ -117,9 +117,9 @@ async function instrument(f) {
   });
 }
 
-const originalItems = page => page.locator('[data-display="transcript"] .display-items');
-const originalPreview = page => page.locator('[data-display="transcript"] .display-preview');
-const pairText = page => page.locator('[data-display="translated"] .display-items');
+const originalItems = page => page.locator('[data-display="transcript"] .display-content');
+const originalPreview = page => page.locator('[data-display="transcript"] .display-content');
+const pairText = page => page.locator('[data-display="translated"] .display-content');
 for (const direction of ['ja-en', 'en-ja']) {
   const target = direction === 'en-ja' ? 'Japanese' : 'English';
   const open = async f => { const page = await openRecorder(f); await setDirection(page, direction); return page; };
@@ -129,14 +129,14 @@ for (const direction of ['ja-en', 'en-ja']) {
       const { readGraph, saveGraph, edge, GRAPH_KEY } = await import('./graph.js'); const graph = readGraph(localStorage);
       if (!paired) { graph.nodes = graph.nodes.filter(n => !['translated', 'translated-format'].includes(n.id)); graph.edges = graph.edges.filter(e => !['translated', 'translated-format'].includes(e.to[0]) && e.from[0] !== 'translated-format'); }
       const display = graph.nodes.find(n => n.id === 'transcript'); display.settings.label = '<b>Arbitrary translation</b>'; display.settings.language = direction === 'ja-en' ? 'en' : 'ja';
-      graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); graph.edges.push(edge('translation', 'text', 'transcript', 'append'));
+      graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript-accumulator'); graph.edges.push(edge('translation', 'text', 'transcript-accumulator', 'append'));
       saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
     }, { direction, paired });
     await prepare(page); await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
     for (const id of [0, 1]) {
-      await emit(page, 'partial', 'hello', id); await expect(originalPreview(page)).toBeEmpty();
-      await emit(page, 'final', 'hello', id); await expect(originalPreview(page)).toBeEmpty();
-      await expect(originalItems(page).locator('pre')).toHaveText(Array(id + 1).fill(`${target}: hello`));
+      await emit(page, 'partial', 'hello', id); await expect(originalItems(page)).toHaveText(Array(id).fill(`${target}: hello`).join('\n'));
+      await emit(page, 'final', 'hello', id);
+      await expect(originalItems(page)).toHaveText(Array(id + 1).fill(`${target}: hello`).join('\n'));
     }
     await expect(page.locator('[data-display="transcript"] h2')).toHaveText('<b>Arbitrary translation</b>');
     await expect(page.locator('[data-display="transcript"] b')).toHaveCount(0);
@@ -147,14 +147,14 @@ for (const direction of ['ja-en', 'en-ja']) {
     await instrument(f); const page = await open(f); await prepare(page);
     await page.evaluate(async () => {
       const { readGraph, saveGraph, edge, GRAPH_KEY } = await import('./graph.js'); const graph = readGraph(localStorage);
-      graph.edges = graph.edges.filter(e => !(e.to[0] === 'transcript' && e.to[1] === 'append') && !(e.to[0] === 'translation' && e.to[1] === 'provisional'));
-      graph.edges.push(edge('translation', 'text', 'transcript', 'append')); saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+      graph.edges = graph.edges.filter(e => !(e.to[0] === 'transcript-accumulator' && e.to[1] === 'append') && !(e.to[0] === 'translation' && e.to[1] === 'provisional'));
+      graph.edges.push(edge('translation', 'text', 'transcript-accumulator', 'append')); saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
       const { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode } = await import('../web/translation-nodes.js');
       for (const Node of [OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode]) { const receive = Node.prototype.receive; Node.prototype.receive = async function(...args) { await new Promise(resolve => { window.finishTranslation = resolve; }); return receive.apply(this, args); }; }
     });
     await start(page); await emit(page, 'final', 'older'); await expect.poll(() => page.evaluate(() => !!window.finishTranslation)).toBe(true);
     await emit(page, 'partial', 'new independent preview', 1); await expect(originalPreview(page)).toHaveText('new independent preview');
-    await page.evaluate(() => window.finishTranslation()); await expect(originalItems(page)).toContainText(`${target}: older`); await expect(originalPreview(page)).toBeEmpty();
+    await page.evaluate(() => window.finishTranslation()); await expect(originalItems(page)).toContainText(`${target}: older`); await expect(originalItems(page)).toHaveText(`${target}: older`);
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   });
 
@@ -185,7 +185,7 @@ for (const direction of ['ja-en', 'en-ja']) {
     await page.close(); await f.restart(); await instrument(f); page = await open(f); await expect(model(page, '.model-status')).toContainText('Ready'); await f.context.setOffline(true); await start(page);
     await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready'); await emit(page, 'final', 'offline'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(7);
     await page.evaluate(async direction => { const { opusMtManifest } = await import('./opus-mt-manifest.js'); const { englishToJapaneseOpusMtManifest } = await import('./opus-mt-en-ja-manifest.js'); const manifest = await (direction === 'en-ja' ? englishToJapaneseOpusMtManifest() : opusMtManifest()); const cache = await caches.open('transformers-cache'); await cache.delete(manifest.files[0].url); }, direction);
-    await start(page); await expect(page.locator('#translation-status')).toContainText('assets missing'); await emit(page, 'final', 'still transcribes'); await expect(originalItems(page)).toHaveText('still transcribes\n'); await expect(pairText(page)).toContainText('assets missing');
+    await start(page); await expect(page.locator('#translation-status')).toContainText('assets missing'); await emit(page, 'final', 'still transcribes'); await expect(originalItems(page)).toHaveText('still transcribes'); await expect(pairText(page)).toContainText('assets missing');
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(7);
   });
 
@@ -195,7 +195,7 @@ for (const direction of ['ja-en', 'en-ja']) {
     f.mode('normal'); await page.models.evaluate(() => { const put = Cache.prototype.put; window.restorePut = () => { Cache.prototype.put = put; }; Cache.prototype.put = async function(key, response) { await response.body.cancel(); throw new DOMException('Full', 'QuotaExceededError'); }; });
     await model(page, 'button:has-text("Download / retry")').click(); await expect(model(page, '.model-error')).toContainText('quota exceeded'); await page.models.evaluate(() => window.restorePut()); await prepare(page);
     await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready'); await emit(page, 'final', 'fail'); await expect(page.locator('#translation-status')).toContainText('Controlled inference failure');
-    await emit(page, 'final', '原文', 1); await expect(originalItems(page)).toHaveText('fail\n原文\n'); await expect(page.locator('#errors')).toBeEmpty(); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
+    await emit(page, 'final', '原文', 1); await expect(originalItems(page)).toHaveText('fail\n原文'); await expect(page.locator('#errors')).toBeEmpty(); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   });
 
   for (const phase of ['loading', 'inference']) test(`${direction}: teardown during translation ${phase} rejects late output`, async ({ translationExtension: f }) => {
@@ -206,20 +206,20 @@ for (const direction of ['ja-en', 'en-ja']) {
 
   test(`${direction}: unavailable WebAssembly isolates translation failure`, async ({ translationExtension: f }) => {
     await f.disableWasm(direction); await instrument(f); const page = await open(f); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toContainText('requires WebAssembly');
-    await emit(page, 'final', '原文'); await expect(originalItems(page)).toHaveText('原文\n'); await expect(pairText(page)).toContainText('requires WebAssembly'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(await page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
+    await emit(page, 'final', '原文'); await expect(originalItems(page)).toHaveText('原文'); await expect(pairText(page)).toContainText('requires WebAssembly'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(await page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
   });
 
   test(`${direction}: Cancel during final drain preserves committed text and discards pending pairs`, async ({ translationExtension: f }) => {
     await instrument(f); const page = await open(f); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready'); await emit(page, 'final', 'slow'); await page.locator('#stop').click();
-    await expect(page.locator('#status')).toHaveText('Finalizing graph outputs…'); await page.locator('#cancel-session').click(); await expect(pairText(page)).toBeEmpty(); await expect(originalItems(page)).toHaveText('slow\n'); await expect.poll(() => page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
+    await expect(page.locator('#status')).toHaveText('Finalizing graph outputs…'); await page.locator('#cancel-session').click(); await expect(pairText(page)).toBeEmpty(); await expect(originalItems(page)).toHaveText('slow'); await expect.poll(() => page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
   });
 }
 
 test('saved processing direction applies next session; generic labels and existing history stay active; caches remain independent', async ({ translationExtension: f }) => {
   await instrument(f); const page = await openRecorder(f); await setDirection(page, 'en-ja'); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
-  await setDirection(page, 'ja-en'); await emit(page, 'final', 'Hello'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page).locator('pre')).toHaveText(['English: Hello\nJapanese: Japanese: Hello']);
-  await prepare(page); expect(f.requests).toHaveLength(14); await start(page); await expect(pairText(page)).toBeEmpty(); await emit(page, 'final', '日本語'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page).locator('pre')).toHaveText(['Japanese: 日本語\nEnglish: English: 日本語']);
-  await loadTranslationFixture(page.editor, 'ja-en', false); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await f.context.setOffline(true); await start(page); await expect(page.locator('#translation-status')).toHaveText('Translation off'); await expect(page.locator('.live-text-region')).toHaveCount(1); await emit(page, 'final', 'Original only'); await expect(originalItems(page)).toHaveText('Original only\n'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(14);
+  await setDirection(page, 'ja-en'); await emit(page, 'final', 'Hello'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('English: Hello\nJapanese: Japanese: Hello');
+  await prepare(page); expect(f.requests).toHaveLength(14); await start(page); await expect(pairText(page)).toBeEmpty(); await emit(page, 'final', '日本語'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('Japanese: 日本語\nEnglish: English: 日本語');
+  await loadTranslationFixture(page.editor, 'ja-en', false); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await f.context.setOffline(true); await start(page); await expect(page.locator('#translation-status')).toHaveText('Translation off'); await expect(page.locator('.live-text-region')).toHaveCount(1); await emit(page, 'final', 'Original only'); await expect(originalItems(page)).toHaveText('Original only'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(14);
 });
 
 function model(page, selector) { return page.models.locator(`#opus-${page.direction} ${selector}`); }

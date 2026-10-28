@@ -1,54 +1,51 @@
 import { test, expect } from '@playwright/test';
 
-test('shared TEXT formatter/display Nodes compose grouped and independent streams in the browser', async ({ page }) => {
+test('shared TEXT formatter, accumulator and pure sink compose grouped and independent streams', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
-    const { Pipeline } = await import('/pipeline.js');
-    const { TEXT } = await import('/port-contracts.js');
-    const { TextFormatterNode, LiveTextDisplayNode } = await import('/text-nodes.js');
-    let grouped, independent;
-    const current = new LiveTextDisplayNode(), history = new LiveTextDisplayNode(() => {}, { appendConnected: true });
+    const { Pipeline } = await import('/pipeline.js'), { TEXT } = await import('/port-contracts.js');
+    const { TextFormatterNode, TextAccumulatorNode, LiveTextDisplayNode } = await import('/text-nodes.js');
+    let grouped, independent, current, history;
     const pipeline = new Pipeline({ nodes: {
       grouped: { outputs: { a: TEXT, b: TEXT }, start(c) { grouped = c.emitOutputs; } },
       independent: { outputs: { text: TEXT }, start(c) { independent = c.emit; } },
-      formatter: new TextFormatterNode({ inputCount: 6, template: '{1}\n{5}\n{6}\n{{escaped}}' }), current, history,
+      formatter: new TextFormatterNode({ inputCount: 6, template: '{1}\n{5}\n{6}\n{{escaped}}' }),
+      accumulator: new TextAccumulatorNode(), current: new LiveTextDisplayNode(text => current = text), history: new LiveTextDisplayNode(text => history = text),
     }, connections: [
       { from: ['grouped', 'a'], to: ['formatter', 'input1'] }, { from: ['grouped', 'b'], to: ['formatter', 'input5'] },
       { from: ['independent', 'text'], to: ['formatter', 'input6'] },
-      { from: ['formatter', 'text'], to: ['current', 'replace'] }, { from: ['formatter', 'text'], to: ['history', 'append'] },
+      { from: ['formatter', 'text'], to: ['current', 'content'] }, { from: ['formatter', 'text'], to: ['accumulator', 'append'] },
+      { from: ['accumulator', 'text'], to: ['history', 'content'] },
     ] });
-    const flush = async () => { await pipeline.entries.get('formatter').queue; await pipeline.entries.get('current').queue; await pipeline.entries.get('history').queue; };
+    const flush = () => new Promise(resolve => setTimeout(resolve, 0));
     await pipeline.start(); grouped({ a: '<b>A</b>', b: '{1}' }); await flush();
     independent('text', 'C'); await flush(); independent('text', ''); await flush();
     await pipeline.stop(); await pipeline.dispose();
-    return { current: current.preview, history: history.items, preview: history.preview, errors: pipeline.errors.map(e => e.message) };
+    return { current, history, errors: pipeline.errors.map(e => e.message) };
   });
-  expect(result).toEqual({ current: '<b>A</b>\n{1}\n\n{escaped}', history: ['<b>A</b>\n{1}\n\n{escaped}', '<b>A</b>\n{1}\nC\n{escaped}', '<b>A</b>\n{1}\n\n{escaped}'], preview: '', errors: [] });
+  expect(result).toEqual({ current: '<b>A</b>\n{1}\n\n{escaped}', history: ['<b>A</b>\n{1}\n\n{escaped}', '<b>A</b>\n{1}\nC\n{escaped}', '<b>A</b>\n{1}\n\n{escaped}'].join('\n'), errors: [] });
 });
 
-test('shared display state keeps every final through provisional replacements, Stop/Cancel and a fresh session', async ({ page }) => {
+test('accumulator exact values, grouped ordering, Stop/Cancel and fresh session in browser engines', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
-    const { LiveTextDisplayNode } = await import('/text-nodes.js');
-    const c = { signal: new AbortController().signal }, states = [];
-    const display = new LiveTextDisplayNode(state => states.push(state), { appendConnected: true });
-    display.start();
-    const expected = [], invariants = [];
+    const { TextAccumulatorNode } = await import('/text-nodes.js');
+    const states = [], node = new TextAccumulatorNode(), c = { signal: new AbortController().signal, emit: (_, text) => states.push(text) };
+    node.start(c); const expected = [], invariants = [];
     for (const final of ['  <img src=x>\n&  ', 'same', 'same', '', '']) {
       for (const preview of ['first', 'replaced', '']) {
-        display.receive('replace', preview, c);
-        invariants.push(JSON.stringify(states.at(-1)) === JSON.stringify({ preview, items: expected }));
+        node.receive('preview', preview, c);
+        invariants.push(states.at(-1) === expected.join('\n') + (preview ? (expected.length ? '\n' : '') + preview : ''));
       }
-      display.receive('append', final, c); expected.push(final);
-      invariants.push(JSON.stringify(states.at(-1)) === JSON.stringify({ preview: '', items: expected }));
+      node.receiveInputs({ append: final, preview: 'discard' }, c); expected.push(final); invariants.push(states.at(-1) === expected.join('\n'));
     }
-    display.receive('replace', 'Stop preview', c); display.stop(); const stopped = states.at(-1);
-    display.receive('replace', 'Cancel preview', c); display.dispose(); const canceled = states.at(-1);
-    const fresh = new LiveTextDisplayNode(state => states.push(state)); fresh.start();
-    return { invariants, stopped, canceled, fresh: states.at(-1), first: states[0] };
+    node.receive('preview', 'Stop preview', c); node.stop(c); const stopped = states.at(-1);
+    node.receive('preview', 'Cancel preview', c); const count = states.length; const canceled = node.cancel(); node.dispose();
+    const noCancelPublication = states.length === count; node.start(c);
+    return { invariants, stopped, canceled, noCancelPublication, fresh: states.at(-1), first: states[0] };
   });
   expect(result.invariants.every(Boolean)).toBe(true);
-  const history = { preview: '', items: ['  <img src=x>\n&  ', 'same', 'same', '', ''] };
-  expect(result.stopped).toEqual(history); expect(result.canceled).toEqual(history);
-  expect(result.fresh).toEqual({ preview: '', items: [] }); expect(result.first).toEqual(result.fresh);
+  const history = ['  <img src=x>\n&  ', 'same', 'same', '', ''].join('\n');
+  expect(result.stopped).toBe(history); expect(result.canceled).toBe(history); expect(result.noCancelPublication).toBe(true);
+  expect(result.fresh).toBe(''); expect(result.first).toBe('');
 });

@@ -57,13 +57,14 @@ test('Number connects only to NUMBER; invalid duration edits and TEXT/PCM edges 
 test('Whisper editor connections reject the removed output and accept final for either display port', () => {
   const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextWhisper';
   graph.edges = graph.edges.filter(route => route.from[1] !== 'provisional');
+  graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript');
   const e = editor(graph), before = structuredClone(graph.edges);
   e.selected = { id: 'speech', port: 'provisional', contract: NODE_TYPES.SpeechToTextWhisper.outputs.final };
-  e.connect('transcript', 'replace', NODE_TYPES.LiveTextDisplay.inputs.replace);
-  assert.match(e.error, /Unknown port: speech.provisional → transcript.replace/);
+  e.connect('transcript', 'content', NODE_TYPES.LiveTextDisplay.inputs.content);
+  assert.match(e.error, /Unknown port: speech.provisional → transcript.content/);
   assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'transcript', 'replace');
-  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript', 'replace')]);
+  connect(e, 'speech', 'final', 'transcript', 'content');
+  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript', 'content')]);
 });
 
 
@@ -76,7 +77,7 @@ test('formatter Add/Remove changes only that instance and the removed last wire;
   assert.equal(Object.keys(nodeDefinition(a).inputs).length, 7);
   a.settings.template = '{7}\n{1}'; e.resizeFormatter(a, -1);
   assert.equal(a.settings.template, '{7}\n{1}'); assert.match(validateGraph(graph).join(' '), /Input \{7\} is not configured/);
-  assert.equal(graph.edges.length, 6, 'unaffected wires preserved');
+  assert.equal(graph.edges.length, 7, 'unaffected wires preserved');
   e.resizeFormatter(a, 1); assert.deepEqual(validateGraph(graph), []);
   for (let i = 0; i < 4; i++) e.resizeFormatter(a, -1);
   assert.equal(a.settings.inputCount, 3);

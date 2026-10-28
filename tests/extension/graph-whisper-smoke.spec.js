@@ -45,8 +45,8 @@ test('real packaged Whisper tiny: English/Japanese language selection, Silero, S
         }
       }, normalized);
       await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled({ timeout: 120000 });
-      await expect(page.locator('#errors')).toBeEmpty(); await expect(page.locator('.display-preview')).toBeEmpty();
-      const texts = await page.locator('.display-items li pre').allTextContents();
+      await expect(page.locator('#errors')).toBeEmpty();
+      const texts = (await page.locator('.display-content').textContent()).split('\n').filter(Boolean);
       expect(texts.join(' ')).toMatch(language === 'en' ? /transformer/i : /[\u3040-\u30ff\u4e00-\u9fff]/);
       expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
       runs.push({ language, audioSamples: normalized.length, fixtureSampleRate: sampleRate, texts, loadMs: loaded - start, totalMs: Date.now() - start });

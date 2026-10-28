@@ -202,7 +202,7 @@ until this verification is recorded. The unpacked extension has no deployment ga
 Graph version 9 adds `TranslateGemmaEnJa` (**TranslateGemma 4B English → Japanese**)
 and `TranslateGemmaJaEn` (**Japanese → English**). Defaults, existing OPUS-MT
 Nodes and migrations are unchanged. Add either processor; there is no translation
-preset. Connect `Text.value → TranslateGemmaEnJa.text → LiveTextDisplay.append`
+preset. Connect `Text.value → TranslateGemmaEnJa.text → TextAccumulator.append`
 (using the processor's `text` output), or
 `ChromeTabAudio.audio → SpeechToTextZipformerEn.audio`,
 `SpeechToTextZipformerEn.final → TranslateGemmaEnJa.text`. English Whisper,
@@ -280,3 +280,5 @@ source/text/error outputs remain unchanged. Existing text-only connections and
 standalone web translator Nodes retain their behavior. Use TranslationCommit
 for the experimental path; direct translator text now includes preview results
 when provisional is explicitly connected.
+
+Live displays accept only `content: TEXT` in Graph v10. For transcript history, route final segments to `TextAccumulator.append`, provisional tails to `TextAccumulator.preview`, and `TextAccumulator.text → LiveTextDisplay.content`. Complete summary/formatter snapshots may connect directly to content. Saved v9 display wiring migrates automatically with original recovery copies retained; see [migration and lifecycle](extension-graph.md#graph-v10-display-migration-and-recovery).

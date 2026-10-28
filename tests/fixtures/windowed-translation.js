@@ -1,3 +1,4 @@
+import { accumulateDisplay } from './text-accumulator.js';
 import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
 
 // Fixed English transcript: sentence splits, independent equal phrases,
@@ -30,5 +31,5 @@ export function windowGraph(mode = 'window', translator = 'TranslateGemmaEnJa') 
       ...['source', 'text', 'error'].map(port => edge('translator', port, 'commit', port)),
       edge('commit', 'provisional', 'display', 'replace'), edge('commit', 'final', 'display', 'append'));
   } else edges.push(edge('translator', 'text', 'display', 'append'));
-  return { version: GRAPH_VERSION, nodes, edges };
+  return accumulateDisplay({ version: GRAPH_VERSION, nodes, edges }, 'display');
 }

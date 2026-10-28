@@ -1,3 +1,4 @@
+import { accumulateDisplay } from './fixtures/text-accumulator.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -23,8 +24,12 @@ class Worker {
   send(event) { this.onmessage?.({ data: event }); }
   terminate() { this.released = true; }
 }
-const graph = () => ({ version: 9, nodes: [graphNode('ChromeTabAudio', 'audio'), ...types.flatMap(([type], i) => [graphNode(type, `asr${i}`), graphNode('LiveTextDisplay', `out${i}`)])],
-  edges: types.flatMap(([, , , , partial], i) => [edge('audio', 'audio', `asr${i}`, 'audio'), edge(`asr${i}`, 'final', `out${i}`, 'append'), ...(partial ? [edge(`asr${i}`, 'provisional', `out${i}`, 'replace')] : [])]) });
+const graph = () => {
+  const g = { version: 10, nodes: [graphNode('ChromeTabAudio', 'audio'), ...types.flatMap(([type], i) => [graphNode(type, `asr${i}`), graphNode('LiveTextDisplay', `out${i}`)])],
+    edges: types.flatMap(([, , , , partial], i) => [edge('audio', 'audio', `asr${i}`, 'audio'), edge(`asr${i}`, 'final', `out${i}`, 'append'), ...(partial ? [edge(`asr${i}`, 'provisional', `out${i}`, 'replace')] : [])]) };
+  for (let i = 0; i < types.length; i++) accumulateDisplay(g, `out${i}`);
+  return g;
+};
 
 for (const [type, Node, key, factoryKey, partial] of types) {
   test(`${type}: concrete ports, bounded owned PCM, ordered finals, Stop waits for every ack and tail; warm repeat is isolated`, async () => {
@@ -109,8 +114,8 @@ for (const [type, Node, key, factoryKey, partial] of types) {
   });
 }
 
-test('new independent paths retain Graph v9/default/migrations, save/reload exactly, bind production types and fan out plain TEXT', () => {
-  const original = defaultGraph(); assert.equal(original.version, 9); assert.deepEqual(graphModelRequirements(original), []);
+test('new independent paths retain Graph v10/default/migrations, save/reload exactly, bind production types and fan out plain TEXT', () => {
+  const original = defaultGraph(); assert.equal(original.version, 10); assert.deepEqual(graphModelRequirements(original), []);
   assert.equal(migrateGraph(original), original);
   const description = graph(); description.nodes.push(graphNode('TextFormatter', 'format'), graphNode('OpusMtEnJa', 'translate'), graphNode('FocusedInputTextOutputNode', 'field'));
   description.edges.push(edge('asr0', 'final', 'format', 'input1'), edge('asr1', 'final', 'translate', 'text'), edge('asr0', 'final', 'field', 'text'));
@@ -167,7 +172,7 @@ test('session keeps healthy independent optional ASR path alive after peer load 
   let audio, view;
   const session = new TabSession(value => { view = value; }, { graph: graph(), parakeetWorkerFactory: factory(true), moonshineWorkerFactory: factory(false), sourceFactory: (id, onAudio) => ({ start() { audio = onAudio; }, stop() {} }) });
   await session.start(42); assert.equal(view.state, 'running'); assert.match(view.error, /asr0.*assets missing/);
-  audio(new Float32Array(1600)); await tick(); assert.deepEqual(view.displays.out1.items, ['peer survived']);
+  audio(new Float32Array(1600)); await tick(); assert.deepEqual(view.displays.out1, 'peer survived');
   await session.stop(); assert.equal(view.state, 'idle'); assert.equal(workers.every(w => w.released), true);
 });
 

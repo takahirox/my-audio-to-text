@@ -17,7 +17,8 @@ Contracts are identities; receiving Nodes validate their payloads.
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
 | Extension TranslationScheduler (both directions) | `text: TEXT` input; `source`, `text`, `error`: TEXT outputs | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index/provisional ports |
-| LiveTextDisplay | replace/append: TEXT | Independent replace value and committed list; no processor identity |
+| LiveTextDisplay | content: TEXT | Render latest plain snapshot verbatim |
+| TextAccumulator | append/preview: TEXT → text: TEXT | Newline-separated committed segments plus optional uncommitted tail |
 | TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
 | TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
 | Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
@@ -57,7 +58,7 @@ utterance association. Referencing independent streams in one template displays
 latest values, not a correlated pair. Input strings are substituted once as data.
 
 Use `source → input1`, `text → input2`, optional `error → input3`, a multiline
-template and `TextFormatter.text → LiveTextDisplay.append`. Every result adds one
+template and `TextFormatter.text → TextAccumulator.append → text → LiveTextDisplay.content`. Every result adds one
 row; no pending row or history replacement causes duplicate appends. A formatter
 is stateless beyond latest inputs; history belongs to the display. Repeated equal
 utterances are distinct rows. Plain successful `text` still fans out directly to
@@ -90,3 +91,5 @@ saveable; Start selects only executable paths. Generic displays and formatters
 accept arbitrary TEXT producers and invent no alignment. See
 [runtime semantics](pipeline-runtime.md#correlated-primitive-outputs) and
 [graph wiring and migration](extension-graph.md).
+
+Graph v10 migrates each v9 append display through its own TextAccumulator; replace-only routes become content directly. Exact originals use `processing-graph-before-v10` (numbered copies on collisions); all earlier recovery copies remain accessible. See [display lifecycle and scaling](extension-graph.md#generic-text-displays).

@@ -11,10 +11,10 @@ before model loading with instructions to correct or disconnect the Text Node.
 ## Use in Graph Editor
 
 Remove ReazonSpeech, add Whisper, connect the audio source's `audio` to Whisper's
-`audio`, and connect `final → LiveTextDisplay.append` only. Multiple independent ASRs are
+`audio`, and connect `final → TextAccumulator.append` only. Multiple independent ASRs are
 allowed. Whisper's final text can also feed the existing TextFormatter, OPUS-MT, focused-field output or TTS
-ports directly. You can deliberately connect final to `LiveTextDisplay.replace`
-for preview-style replacement instead of committed history. No translator is
+ports directly. You can deliberately connect final to `LiveTextDisplay.content`
+for latest-value replacement instead of committed history. No translator is
 required. Remove any old maxDuration edge and unused Number Node when replacing ReazonSpeech; Whisper has a fixed 6-second
 cap. Defaults/reset still use ReazonSpeech.
 
@@ -39,7 +39,7 @@ Graph version 8 migrates version 7 by removing only outgoing
 positions, settings, final routes and unrelated routes are preserved. No edge
 is automatically redirected to final. Valid results are saved in the same
 storage key. For Whisper-only graphs without these edges, only the version changes.
-Current version 9 also applies the [translation/formatter migration and visible
+Current version 10 also applies the [translation/formatter migration and visible
 recovery rules](extension-graph.md) when those processors occur in an older graph.
 
 If removal leaves a missing input, the destination remains in the saved draft
@@ -146,3 +146,5 @@ and fixed segment boundaries can misrecognize or split sentences. Whisper is
 supported here in desktop Chrome MV3; WebKit cannot load this extension and has
 no Whisper support claim. Real fixtures and models must be prepared before the
 opt-in check; otherwise its explicit skip is not evidence of passing inference.
+
+Live displays accept only `content: TEXT` in Graph v10. For transcript history, route final segments to `TextAccumulator.append`, provisional tails to `TextAccumulator.preview`, and `TextAccumulator.text → LiveTextDisplay.content`. Complete summary/formatter snapshots may connect directly to content. Saved v9 display wiring migrates automatically with original recovery copies retained; see [migration and lifecycle](extension-graph.md#graph-v10-display-migration-and-recovery).

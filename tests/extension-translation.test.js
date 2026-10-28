@@ -141,43 +141,43 @@ function sessionFixture(translation = workerFixture()) {
   return { session, asr, views, translation };
 }
 
-const display = (f, id = 'transcript') => f.session.view.displays[id] || { items: [], preview: '' };
+const display = (f, id = 'transcript') => f.session.view.displays[id] || '';
 for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]) test(`${direction}: live committed formatting appends repeated phrases once, drains Stop and starts fresh (${original})`, async () => {
   const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
   if (!original) { graph.nodes = graph.nodes.filter(n => n.id !== 'transcript'); graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); }
   graph.edges.reverse(); f.session.setGraph(graph); await f.session.start(42);
   const speech = f.session.session.speechNodes.get('speech');
   speech.receiveEvent({ type: 'partial', text: 'uncommitted', id: 0 }); await tick();
-  assert.equal(f.translation.requests.length, 0); assert.deepEqual(display(f, 'translated'), { items: [], preview: '' });
+  assert.equal(f.translation.requests.length, 0); assert.deepEqual(display(f, 'translated'), '');
   speech.receiveEvent({ type: 'final', text: 'same', id: 0 }); speech.receiveEvent({ type: 'final', text: 'same', id: 1 }); await tick();
-  assert.deepEqual(display(f, 'translated').items, [], 'pending is represented by runtime status, not history rows');
+  assert.deepEqual(display(f, 'translated'), [].join('\n'), 'pending is represented by runtime status, not history rows');
   const stopping = f.session.stop(); await tick();
   f.translation.complete(0, 'first'); await tick(); f.translation.complete(1, 'second'); await stopping;
   const labels = direction === 'en-ja' ? ['English', 'Japanese'] : ['Japanese', 'English'];
-  assert.deepEqual(display(f, 'translated'), { preview: '', items: ['first', 'second'].map(t => `${labels[0]}: same\n${labels[1]}: ${t}`) });
-  assert.deepEqual(display(f).items, original ? ['same', 'same'] : []); assert.ok(f.translation.workers.every(w => w.terminated));
-  await f.session.start(42); assert.deepEqual(display(f, 'translated').items, []);
+  assert.deepEqual(display(f, 'translated'), ['first', 'second'].map(t => `${labels[0]}: same\n${labels[1]}: ${t}`).join('\n'));
+  assert.deepEqual(display(f), original ? 'same\nsame' : ''); assert.ok(f.translation.workers.every(w => w.terminated));
+  await f.session.start(42); assert.deepEqual(display(f, 'translated'), [].join('\n'));
   speech.receiveEvent({ type: 'final', text: 'old session', id: 5 }); f.translation.complete(1, 'late'); await tick();
-  assert.deepEqual(display(f, 'translated').items, []); f.session.cancel();
+  assert.deepEqual(display(f, 'translated'), [].join('\n')); f.session.cancel();
 });
 
-for (const direction of ['ja-en', 'en-ja']) for (const port of ['replace', 'append']) test(`${direction}: completed TEXT feeds a direct ${port} sink`, async () => {
+for (const direction of ['ja-en', 'en-ja']) for (const port of ['content']) test(`${direction}: completed TEXT feeds a direct ${port} sink`, async () => {
   const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
   graph.nodes = graph.nodes.filter(n => n.id !== 'translated-format'); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated-format' && e.from[0] !== 'translated-format');
-  graph.edges.push(edge('translation', 'text', 'translated', port)); f.session.setGraph(graph); await f.session.start(42);
+  graph.edges = graph.edges.filter(e => e.to[0] !== 'translated'); graph.edges.push(edge('translation', 'text', 'translated', port)); f.session.setGraph(graph); await f.session.start(42);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'source' }); await tick(); f.translation.complete(0, 'translated'); await tick();
-  assert.deepEqual(display(f, 'translated'), port === 'append' ? { preview: '', items: ['translated'] } : { preview: 'translated', items: [] });
-  await f.session.stop(); await f.session.start(42); assert.deepEqual(display(f, 'translated'), { preview: '', items: [] }); f.session.cancel();
+  assert.deepEqual(display(f, 'translated'), 'translated');
+  await f.session.stop(); await f.session.start(42); assert.deepEqual(display(f, 'translated'), ''); f.session.cancel();
 });
 
 test('Cancel adds no pending history; failed committed results remain readable and contain no stale translation', async () => {
   const f = sessionFixture(); f.session.setTranslation(true); await f.session.start(42);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'pending', id: 0 }); await tick();
-  f.session.cancel(); f.translation.complete(0, 'late'); await tick(); assert.deepEqual(display(f, 'translated').items, []);
+  f.session.cancel(); f.translation.complete(0, 'late'); await tick(); assert.deepEqual(display(f, 'translated'), [].join('\n'));
   f.session.prepareTranslation = async () => { throw Error('cache unavailable'); }; await f.session.start(42);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'failed', id: 0 }); await tick(); await f.session.stop();
-  assert.deepEqual(display(f, 'translated').items, ['Japanese: failed\nEnglish: cache unavailable']);
-  assert.deepEqual(display(f).items, ['failed']);
+  assert.deepEqual(display(f, 'translated'), ['Japanese: failed\nEnglish: cache unavailable'].join('\n'));
+  assert.deepEqual(display(f), ['failed'].join('\n'));
 });
 
 test('English → Japanese has a distinct pinned complete manifest and cache keys', () => {
@@ -214,15 +214,15 @@ test('scheduler accepts only TEXT and emits successful strings once to independe
 test('multiple translator runtime statuses retain each branch failure independently of Live labels', async () => {
   const f = sessionFixture(), graph = defaultGraph({ enabled: true });
   graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('LiveTextDisplay', 'reverse-display'));
-  graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'append'));
+  graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'content'));
   f.session.prepareTranslation = async (signal, direction) => { if (direction === 'ja-en') throw Error('Forward cache unavailable'); };
   f.session.setGraph(graph); await f.session.start(42); await tick();
   assert.match(f.session.view.translationStatus, /translation: Translation unavailable: Forward cache unavailable/);
   assert.match(f.session.view.translationStatus, /reverse: Local OPUS-MT ready/);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
   f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
-  assert.match(display(f, 'translated').items.join('\n'), /Forward cache unavailable/);
-  assert.deepEqual(display(f, 'reverse-display').items, ['こんにちは']);
+  assert.match(display(f, 'translated'), /Forward cache unavailable/);
+  assert.deepEqual(display(f, 'reverse-display'), ['こんにちは'].join('\n'));
 });
 
 
@@ -241,11 +241,11 @@ test('saved template/direction changes apply only to fresh Nodes and keep the ac
   assert.equal(f.session.view.activeGraph, active);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
   f.translation.complete(0, 'こんにちは'); await f.session.stop();
-  assert.deepEqual(display(f, 'translated').items, ['English: Hello\nJapanese: こんにちは']);
-  await f.session.start(42); assert.deepEqual(display(f, 'translated').items, []);
+  assert.deepEqual(display(f, 'translated'), ['English: Hello\nJapanese: こんにちは'].join('\n'));
+  await f.session.start(42); assert.deepEqual(display(f, 'translated'), [].join('\n'));
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: '日本語' }); await tick();
   f.translation.complete(1, 'Japanese'); await f.session.stop();
-  assert.deepEqual(display(f, 'translated').items, ['Japanese\nOriginal: 日本語']);
+  assert.deepEqual(display(f, 'translated'), ['Japanese\nOriginal: 日本語'].join('\n'));
 });
 
 

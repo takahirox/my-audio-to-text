@@ -164,7 +164,7 @@ test('toolbar automatically readies one TEXT sink; Live popup focus, input/searc
   await emit(t, 1, '今日は'); await emit(t, 1, 'duplicate'); await emit(t, 0, 'stale'); await emit(t, 2, 'いい天気ですね'); await emit(t, 3, 'いい天気ですね');
   await expect(t.website.locator('#focused')).toHaveValue('manual今日はいい天気ですねいい天気ですね');
   // The ASR producer deduplicates before fan-out to field output and Live.
-  await expect(t.page.locator('[data-display="transcript"] .display-items')).toHaveText('今日は\nいい天気ですね\nいい天気ですね\n');
+  await expect(t.page.locator('[data-display="transcript"] .display-content')).toHaveText('今日は\nいい天気ですね\nいい天気ですね');
   await t.website.bringToFront(); await t.website.locator('#search').click();
   await t.website.locator('#search').evaluate(e => e.setSelectionRange(0, 5));
   await t.page.bringToFront(); await emit(t, 4, 'search'); await expect(t.website.locator('#search')).toHaveValue('querysearch');
@@ -190,17 +190,17 @@ test('first toolbar-created Live popup prepares a pre-focused editor before wind
   await expect(live.locator('#status')).toHaveText('Transcription active');
   await expect(live.locator('#target-status')).toContainText('connected and authorized');
   await expect.poll(() => t.website.evaluate(() => document.hasFocus())).toBe(false);
-  await expect(live.locator('[data-display="transcript"] .display-preview')).toHaveText('pending fixture');
+  await expect(live.locator('[data-display="transcript"] .display-content')).toHaveText('pending fixture');
   await live.locator('#stop').click(); await expect(live.locator('#status')).toContainText('Stopped');
   await expect(t.website.locator('#chosen')).toHaveValue('existingconfirmed fixture');
-  await expect(live.locator('[data-display="transcript"] .display-items')).toHaveText('confirmed fixture\n');
+  await expect(live.locator('[data-display="transcript"] .display-content')).toHaveText('confirmed fixture');
 });
 
 test('no focus skips without guessing; dynamic YouTube-style comment activation and focus changes route later values', async ({ targets: t }) => {
   await t.graph({ outputs: [['out', 'FocusedInputTextOutputNode']] }); await t.invoke();
   await expect(t.page.locator('#status')).toHaveText('Transcription active');
   await emit(t, 1, 'no target'); await expect(t.page.locator('#target-status')).toContainText('Insertion skipped: Focus');
-  await expect(t.website.locator('#focused')).toHaveValue('manual'); await expect(t.page.locator('[data-display="transcript"] .display-items')).toContainText('no target');
+  await expect(t.website.locator('#focused')).toHaveValue('manual'); await expect(t.page.locator('[data-display="transcript"] .display-content')).toContainText('no target');
   await t.website.bringToFront(); await t.website.locator('#activate-comment').click();
   await t.page.bringToFront(); await emit(t, 2, '<b>plain</b>');
   await expect(t.website.locator('#comment')).toHaveText('<b>plain</b>'); expect(await t.website.locator('#comment b').count()).toBe(0);
@@ -224,7 +224,7 @@ test('window-blur editor retains valid prior focus; clicks elsewhere and disconn
   await t.website.bringToFront(); await t.website.locator('#chosen').click(); await t.page.bringToFront();
   await t.website.locator('#chosen').evaluate(e => { const replacement = e.cloneNode(true); replacement.value = 'replacement'; e.replaceWith(replacement); });
   await emit(t, 3, 'stale'); await expect(t.website.locator('#chosen')).toHaveValue('replacement');
-  await expect(t.page.locator('[data-display="transcript"] .display-items')).toContainText('stale'); await stop(t);
+  await expect(t.page.locator('[data-display="transcript"] .display-content')).toContainText('stale'); await stop(t);
 });
 
 for (const selector of ['#password', '#card', '#iban', '#readonly', '#security', 'iframe', '#shadow-field']) {
@@ -237,7 +237,7 @@ for (const selector of ['#password', '#card', '#iban', '#readonly', '#security',
     if (selector === '#shadow-field') await t.website.evaluate(() => window.addEventListener('blur', () => document.activeElement.blur()));
     await t.page.bringToFront(); await emit(t, 1, 'blocked');
     await expect(t.page.locator('#target-status')).toContainText('Insertion skipped'); await expect(t.website.locator('#focused')).toHaveValue('manual');
-    expect(await t.website.evaluate(() => window.edits)).toEqual([]); await expect(t.page.locator('[data-display="transcript"] .display-items')).toContainText('blocked'); await stop(t);
+    expect(await t.website.evaluate(() => window.edits)).toEqual([]); await expect(t.page.locator('[data-display="transcript"] .display-content')).toContainText('blocked'); await stop(t);
   });
 }
 
@@ -278,7 +278,7 @@ test('no cross-tab grants or output; toolbar retargets only after Stop; navigati
   await t.invoke(other); await other.locator('#focused').click(); await emit(t, 1, 'same tab');
   await expect(t.website.locator('#focused')).toHaveValue('manualsame tab'); await expect(other.locator('#focused')).toHaveValue('manual');
   await t.website.goto(`${t.webOrigin}/replacement`); await expect(t.page.locator('#target-status')).toContainText(/detached|disconnected|unavailable/);
-  await emit(t, 2, 'Live survives'); await expect(t.page.locator('[data-display="transcript"] .display-items')).toContainText('Live survives'); await expect(t.website.locator('#focused')).toHaveValue('manual');
+  await emit(t, 2, 'Live survives'); await expect(t.page.locator('[data-display="transcript"] .display-content')).toContainText('Live survives'); await expect(t.website.locator('#focused')).toHaveValue('manual');
   await stop(t); await t.invoke(other); await other.locator('#focused').click(); await t.page.locator('#start').click();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await emit(t, 1, 'new toolbar tab');
   await expect(other.locator('#focused')).toHaveValue('manualnew toolbar tab'); await expect(t.website.locator('#focused')).toHaveValue('manual'); await stop(t);
@@ -289,7 +289,7 @@ test('lost connection during start and running detaches focused output; Live con
   await t.page.evaluate(() => { window.originalConnect = chrome.tabs.connect.bind(chrome.tabs); chrome.tabs.connect = () => { throw Error('Controlled output permission loss'); }; });
   await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
   await expect(t.page.locator('#target-status')).toContainText('output skipped: target unavailable');
-  await emit(t, 1, 'Live only'); await expect(t.page.locator('[data-display="transcript"] .display-items')).toContainText('Live only');
+  await emit(t, 1, 'Live only'); await expect(t.page.locator('[data-display="transcript"] .display-content')).toContainText('Live only');
   await t.page.evaluate(() => { chrome.tabs.connect = window.originalConnect; }); await stop(t); await t.invoke();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await t.website.locator('#focused').click();
   await emit(t, 1, 'retry'); await expect(t.website.locator('#focused')).toHaveValue('manualretry');
@@ -304,9 +304,9 @@ test('completed translations flow directly to TEXT fan-out and paired Live; prov
   });
   await t.graph({ translation: true, outputs: [['out', 'FocusedInputTextOutputNode', true]] }); await t.website.locator('#focused').click(); await t.invoke();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect(t.page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
-  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('[data-display="translated"] .display-items')).toBeEmpty(); await expect(t.website.locator('#focused')).toHaveValue('manual');
+  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('[data-display="translated"] .display-content')).toBeEmpty(); await expect(t.website.locator('#focused')).toHaveValue('manual');
   await emit(t, 1, 'first'); await emit(t, 1, 'duplicate'); await emit(t, 2, 'second'); await stop(t);
-  await expect(t.website.locator('#focused')).toHaveValue('manualtranslated firsttranslated second'); await expect(t.page.locator('[data-display="translated"] .display-items')).toContainText('translated second');
+  await expect(t.website.locator('#focused')).toHaveValue('manualtranslated firsttranslated second'); await expect(t.page.locator('[data-display="translated"] .display-content')).toContainText('translated second');
   await expect(t.page.locator('#errors')).toBeEmpty();
 });
 
@@ -367,9 +367,9 @@ test('native tab capture and permitted microphone run together; tab navigation d
     const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextReazonSpeech','local-asr'),graphNode('LiveTextDisplay','local'),
-      graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextReazonSpeech','copy-asr'),graphNode('LiveTextDisplay','copy-display'));
-    graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local','append'),
-      edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-display','append'));
+      graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextReazonSpeech','copy-asr'),graphNode('LiveTextDisplay','copy-display'),graphNode('TextAccumulator','local-accumulator'),graphNode('TextAccumulator','copy-accumulator'));
+    graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local-accumulator','append'),edge('local-accumulator','text','local','content'),
+      edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-accumulator','append'),edge('copy-accumulator','text','copy-display','content'));
     saveGraph(localStorage,graph);window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));
     const NativeWorker=Worker;window.concurrentWorkers=[];
     window.Worker=class extends NativeWorker {
@@ -403,15 +403,15 @@ test('native tab capture and permitted microphone run together; tab navigation d
     expect(await t.page.evaluate(()=>window.concurrentWorkers.filter(worker=>!worker.released).length)).toBe(6);
     if(mode==='branch-end') {
       await t.website.goto(t.webOrigin+'/?ended');
-      await expect(t.page.locator('[data-display="transcript"] .display-items')).toContainText('confirmed fixture');
-      await expect(t.page.locator('[data-display="copy-display"] .display-items')).toContainText('confirmed fixture');
+      await expect(t.page.locator('[data-display="transcript"] .display-content')).toContainText('confirmed fixture');
+      await expect(t.page.locator('[data-display="copy-display"] .display-content')).toContainText('confirmed fixture');
       await expect(t.page.locator('#status')).toHaveText('Transcription active');
       await expect.poll(()=>t.page.evaluate(()=>window.concurrentWorkers.filter(worker=>!worker.released).length)).toBe(2);
       expect(await t.page.evaluate(()=>window.concurrentStreams.findLast(record=>record.kind==='mic').stream.getAudioTracks()[0].readyState)).toBe('live');
     }
     await t.page.locator(mode==='cancel'?'#cancel-session':'#stop').click();await expect(t.page.locator('#start')).toBeEnabled();
     await expect(t.page.locator('#errors')).toBeEmpty();
-    if(mode!=='cancel') await expect(t.page.locator('[data-display="local"] .display-items')).toContainText('confirmed fixture');
+    if(mode!=='cancel') await expect(t.page.locator('[data-display="local"] .display-content')).toContainText('confirmed fixture');
     if(mode!=='cancel') {
       const [original, copy] = await t.page.evaluate(() => window.sharedTabDeliveries.slice(-2));
       expect(original.length).toBeGreaterThan(0);

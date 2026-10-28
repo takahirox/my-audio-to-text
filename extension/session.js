@@ -198,7 +198,6 @@ export class TabSession {
         await session.branchDrain;
         await session.pipeline.stop();
         if (this.session !== session) return;
-        this.clearDisplayPreviews(session);
         await session.pipeline.dispose();
         if (this.session !== session) return;
         this.session = null;
@@ -209,24 +208,21 @@ export class TabSession {
   }
   cancel() {
     const session = this.session;
-    // The compatibility formatter retains completed source-bearing history and
-    // marks pending rows canceled before Pipeline invalidates all emissions.
+    // Restore direct views from committed processor state without emitting
+    // canceled snapshots into formatters, TTS, fields or other TEXT consumers.
     for (const entry of session?.pipeline?.entries.values() || []) {
       if (typeof entry.node.cancel !== 'function') continue;
       const text = entry.node.cancel();
-      for (const route of entry.routes.get('text') || []) if (route.port === 'replace' && typeof route.entry.node.publish === 'function') {
-        route.entry.node.receive('replace', text, route.entry.context);
+      if (typeof text !== 'string') continue;
+      for (const route of entry.routes.get('text') || []) if (route.port === 'content') {
+        route.entry.node.receive('content', text, route.entry.context);
       }
     }
-    this.clearDisplayPreviews(session);
     session?.markStarted?.();
     this.session = null;
     this.releaseMicrophones(session);
     void session?.pipeline?.dispose().catch(() => {});
     this.update({ state: 'idle', signal: '', translationStatus: session?.translations?.length ? 'Translation canceled' : this.view.translationStatus });
-  }
-  clearDisplayPreviews(session) {
-    for (const spec of session?.description?.nodes || []) if (spec.type === 'LiveTextDisplay') session.pipeline.entries.get(spec.id).node.finish();
   }
   fail(message) {
     this.cancel();

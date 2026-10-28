@@ -268,7 +268,7 @@ Completed display items remain until the next Start; transcripts are not persist
 
 For either direction, wire ASR.final → OPUS-MT.text. Connect its source/text/error
 directly to TextFormatter.input1/input2/input3, then formatter.text →
-LiveTextDisplay.append. For example, use `English: {1}` and `Japanese: {2}{3}`
+TextAccumulator.append. For example, use `English: {1}` and `Japanese: {2}{3}`
 on separate template lines. Every result appends once, including repeated phrases.
 A direct group clears omitted formatter inputs, so failure cannot reuse an older
 translation. Independent branches have no implied pairing. Plain successful text
@@ -358,8 +358,8 @@ unpacked extension; Web Store distribution is separate future work.
 
 Add **TranslateGemma 4B English → Japanese** in Graph Editor. Connect
 `ChromeTabAudio → English ASR.final → TranslateGemma.text`; connect its completed
-`text` to `LiveTextDisplay.append`, a focused field or Japanese TTS. For a
-controlled text test, connect `Text.value → TranslateGemma.text → Live.append`.
+`text` to `TextAccumulator.append`, a focused field or Japanese TTS. For a
+controlled text test, connect `Text.value → TranslateGemma.text → TextAccumulator.append`.
 For bilingual display, connect `source/text/error` directly to a `TextFormatter`
 and then Live. Japanese → English is a separate Node using the same weights.
 No preset or global language/model switch is added.
@@ -376,3 +376,5 @@ subject to Google's upstream terms. See [runtime, provenance, terms and real-tes
 commands](translation-nodes.md#translategemma-in-the-extension-124) and
 [#124 validation evidence](evidence/translation-124.md). No translation-quality
 superiority to OPUS-MT is assumed.
+
+Live displays accept only `content: TEXT` in Graph v10. For transcript history, route final segments to `TextAccumulator.append`, provisional tails to `TextAccumulator.preview`, and `TextAccumulator.text → LiveTextDisplay.content`. Complete summary/formatter snapshots may connect directly to content. Saved v9 display wiring migrates automatically with original recovery copies retained; see [migration and lifecycle](extension-graph.md#graph-v10-display-migration-and-recovery).
