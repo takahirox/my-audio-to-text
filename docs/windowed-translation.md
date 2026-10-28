@@ -24,7 +24,8 @@ Any existing translator accepts this output; there is no model-specific
 formatter or preset. Optional bilingual formatting still uses grouped
 translator source/text/error → TextFormatter inputs → TextAccumulator.append. Other ASR
 final consumers can continue independently, including an original transcript
-display. Do not connect ASR provisional recognition to TextWindow: its inputs
+display. TextWindow expects committed fragments; ASR provisional snapshots instead route
+to translator.provisional. This is a value-semantics distinction: TextWindow inputs
 are already committed source segments.
 
 Select TextWindow's heading to edit its three settings:
@@ -85,14 +86,26 @@ contract extension: ordinary text-only graphs are unchanged, and the shared
 standalone web translator Nodes are unchanged. A forward boundary edge lets the
 commit processor distinguish immutable closed windows from open snapshots
 without a feedback cycle, payload wrapper, public request IDs or status ports.
-Graph validation requires the same TextWindow.text on the translator and commit
-boundary, TextWindow.provisional from that same instance, and all three matching
-result ports directly from one translator. Independent equal source strings
-remain independent windows. Do not combine results from separate translators or
-put a formatter between the translator and commit processor.
+Graph validation accepts any compatible TEXT producer on any input, in either
+connection order, including direct ASR.provisional → Translator.provisional and
+ASR.final → Translator.text. TextWindow is one batching option. No source type
+or neighboring Node enables a feature mode.
 
-When explicitly enabled, a translator accepts one running inference, one latest
-pending provisional snapshot, and a bounded FIFO of closed windows. New
+TranslationCommit treats `boundary` as a declaration of a closed source event.
+Fan out that same event to a processor's text input and boundary; equal text from
+independent emissions is insufficient. The processor must return atomic grouped
+source/text/error using its received context (retain it with asynchronous work).
+The commit Node checks the result's causal delivery against the oldest boundary,
+as well as exact source text. It never joins split groups or unrelated equal
+strings. A mismatch fails visibly without appending. With no pending boundary,
+a causally derived grouped result is only a preview; no result commits itself.
+Unresolved boundaries fail on Stop. Arbitrary processors may satisfy these data
+semantics; an intermediary which emits a fresh result without preserving the
+immediate source delivery cannot fabricate correlation. No public metadata ports,
+producer registry, payload wrappers or graph pairing checks are added.
+
+Every translator accepts one running inference, one latest pending provisional
+snapshot, and a bounded FIFO of closed windows. New
 snapshots replace pending previews. Closed text invalidates prior previews and
 always takes priority over pending previews. A running obsolete inference may
 finish, but its result is suppressed. Closed work is never coalesced. Final
@@ -111,7 +124,7 @@ fan-out may observe previews; it must not be treated as committed history.
 | Source grows while open | Translate the latest snapshot when available; no final. The most recent successful preview remains until replaced or the source closes. Superseded in-flight results emit nothing. |
 | Latest open translation succeeds | Commit emits provisional equal to the translated text, replacing only Live's preview. |
 | Source closes by punctuation, cap, deadline or Stop | Boundary arrives before its async final result. Commit emits provisional `''` immediately to clear the obsolete preview and queues that source exactly once. |
-| Closed translation succeeds | Match the oldest boundary by source in FIFO order; emit grouped provisional `''`, final translation, error `''`. Live appends once and clears preview atomically. |
+| Closed translation succeeds | Match the oldest boundary by causal delivery and source text in FIFO order; emit grouped provisional `''`, final translation, error `''`. Live appends once and clears preview atomically. |
 | Open translation fails | Emit provisional `''` and error, without a final item. Existing translator model failures remain terminal for that translator instance. |
 | Closed translation fails | Emit grouped provisional `''`, final `[Translation failed: MESSAGE]\nSOURCE`, error MESSAGE. This visibly retains source instead of inventing a translation; prior committed items remain immutable. |
 | Stop | TextWindow flushes tail; translator suppresses previews and drains closed work; commit verifies all boundaries resolved, then display discards preview. |
@@ -124,7 +137,7 @@ included in subsequent translation requests.
 
 ## Bounds, errors and independent branches
 
-Each direct TextWindow → translator path, in either stage, enables a bounded
+Every translator, regardless of source and preview use, has a bounded
 closed-work FIFO: at most **32 waiting windows / 32,768 waiting code units** plus
 one active request. Stage 2 additionally has one pending preview of at most
 1000 units. TranslationCommit admits at most **32 unresolved boundaries /
@@ -135,10 +148,10 @@ a visible error and fails that path; stop and start again with a slower source.
 It does not silently skip or truncate text and pretend the transcript completed.
 Unfinished work on a failed path is not claimed as a successful transcript.
 Keep an independent original-ASR display when source retention across overload
-is needed. Generic Pipeline delivery behavior is unchanged.
+is needed. These bounds and failure decisions belong to the consumers.
 
-New buffer/commit failures and errors on a direct window-fed translator are
-reported in Live without canceling peer capture or outputs. Model failures
+Every Node failure is reported in Live without canceling independent capture
+or outputs; this policy does not depend on neighbors. Model failures
 still produce grouped source/error per closed request. Stop reports any failed
 drain; Cancel remains available. A missing or mismatched result fails visibly;
 it cannot commit an unrelated source. Each branch uses its own instances,

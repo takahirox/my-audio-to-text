@@ -54,7 +54,10 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   await expect(editor.getByLabel('language value', { exact: true })).toHaveValue('ja');
   for (const invalid of ['', 'fr', 'EN']) {
     await editor.getByLabel('language value', { exact: true }).fill(invalid); await editor.locator('#graph-save').click();
-    await expect(editor.locator('#graph-errors')).toContainText('Whisper.language must be en or ja');
+    await expect(editor.locator('#graph-save')).toBeEnabled();
+    await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+    await expect(page.locator('#errors')).toContainText('Whisper.language must be en or ja');
+    await expect(page.locator('#start')).toBeEnabled();
   }
   expect(f.requests).toEqual([]);
 });
@@ -147,7 +150,9 @@ for (const duringStop of [false, true]) test(`MV3 Whisper Cancel ignores an in-f
 test('MV3 Whisper decode and missing model errors release workers and permit retry', async ({ graphExtension: f }) => {
   await mockRuntime(f); const page = await openGraph(f); await selectWhisper(page);
   await startGraph(page); await page.evaluate(() => window.capture.emit('audio', new Float32Array(96000).fill(.5)));
-  await expect(page.locator('#errors')).toContainText('Fixture decode error'); await expect(page.locator('#start')).toBeEnabled();
+  await expect(page.locator('#errors')).toContainText('Fixture decode error');
+  await expect(page.locator('#status')).toHaveText('Transcription active');
+  await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
   await startGraph(page); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await writeFile(path.join(f.root, 'web/vendor/translation/transformers.js'), `export const env={backends:{onnx:{wasm:{}}}}; export async function pipeline(){throw Error('Missing packaged model');}`);

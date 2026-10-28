@@ -64,7 +64,7 @@ export class TabSession {
         session.microphoneStreams.set(microphones[0].id, stream);
         for (const node of microphones.slice(1)) session.microphoneStreams.set(node.id, stream.clone());
       }
-      Object.assign(session, buildGraph(graph, {
+      Object.assign(session, buildGraph(snapshot, {
         tabId, outputTarget: session.outputTarget, targets: session.targets, microphoneStreams: session.microphoneStreams, pageConnectionFactory: this.pageConnectionFactory,
         onTargetState: (id, state, active) => {
           if (this.session === session && state) {
@@ -102,10 +102,11 @@ export class TabSession {
             session.asrErrors ||= {}; session.asrErrors[id] = event.message;
             this.update({ error: Object.entries(session.asrErrors).map(([id, message]) => `${id}: ${message}`).join('\n') });
           } else if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: `${id}: ${event.message}` });
-          else if (event.type === 'error' && session.pipeline?.state === 'idle') this.fail(`${id}: ${event.message}`);
+          else if (['progress', 'ready'].includes(event.type) && this.view.state === 'running') this.update({ signal: this.sourceStatus(session) });
+          else if (event.type === 'error' && session.pipeline?.state === 'idle') this.update({ error: [this.view.error, `${id}: ${event.message}`].filter(Boolean).join('\n') });
         },
         onDisplay: (id, state) => {
-          if (this.session === session) this.update({ displays: { ...this.view.displays, [id]: state } });
+          if (this.session === session || (!this.session && this.canceling === session)) this.update({ displays: { ...this.view.displays, [id]: state } });
         },
         onCapturedAudio: (pcm, id) => {
           if (this.session !== session) return;
@@ -124,17 +125,11 @@ export class TabSession {
         },
         onError: (error, id) => {
           if (this.session !== session) return;
-          const spec = session.description?.nodes.find(node => node.id === id);
-          const windowPath = ['TextWindow', 'TranslationCommit'].includes(spec?.type) ||
-            session.description?.edges.some(e => e.to[0] === id && e.to[1] === 'text' && session.description.nodes.find(n => n.id === e.from[0])?.type === 'TextWindow');
-          // Experimental buffer/backlog failures belong to their path. Keep
-          // peer capture, displays and already committed items usable.
-          if (windowPath) this.update({ error: [this.view.error, error.message].filter(Boolean).join('\n') });
-          else this.fail(error.message);
+          this.update({ error: [this.view.error, error.message].filter(Boolean).join('\n'), signal: this.sourceStatus(session) });
         },
       }));
-      await Promise.all([...session.speechNodes].map(async ([id, node]) => {
-        try { await node.load(); } catch (error) { throw Error(`${id}: ${error.message || error}`); }
+      await Promise.allSettled([...session.speechNodes].map(async ([id, node]) => {
+        await node.load({ connectedInputs: graph.edges.filter(route => route.to[0] === id).map(route => route.to[1]) });
       }));
       if (this.session !== session) return;
       this.update({ state: 'starting', status: sources.length ? `Starting ${sources.length} audio source(s)…` : 'Starting processing paths…' });
@@ -152,10 +147,13 @@ export class TabSession {
     session?.microphoneStreams?.clear();
   }
   sourceStatus(session) {
-    return session.description.nodes.filter(node => INPUT_TYPES.includes(node.type)).map(node =>
+    const sources = session.description.nodes.filter(node => INPUT_TYPES.includes(node.type)).map(node =>
       `${node.id}: ${session.sourceStates[node.id] || (node.type === 'MicrophoneAudio'
         ? 'No audio signal yet. Check microphone permission, input volume and device selection.'
-        : node.type === 'ChromeTabAudio' ? 'No audio signal yet. Play audio or check whether the tab is muted.' : 'No audio signal yet. Play the selected media.')}`).join('\n');
+        : node.type === 'ChromeTabAudio' ? 'No audio signal yet. Play audio or check whether the tab is muted.' : 'No audio signal yet. Play the selected media.')}`);
+    const waiting = [...session.speechNodes].filter(([, node]) => node.waitingConfiguration && !node.disposed)
+      .map(([id, node]) => `${id}: Waiting for startup ${node.configurationPort}; model has not started.`);
+    return [...sources, ...waiting].join('\n');
   }
   sourceEnded(session, id) {
     if (session.endedSources.has(id) || session.stopping) return;
@@ -208,21 +206,18 @@ export class TabSession {
   }
   cancel() {
     const session = this.session;
-    // Restore direct views from committed processor state without emitting
-    // canceled snapshots into formatters, TTS, fields or other TEXT consumers.
-    for (const entry of session?.pipeline?.entries.values() || []) {
-      if (typeof entry.node.cancel !== 'function') continue;
-      const text = entry.node.cancel();
-      if (typeof text !== 'string') continue;
-      for (const route of entry.routes.get('text') || []) if (route.port === 'content') {
-        route.entry.node.receive('content', text, route.entry.context);
-      }
-    }
-    session?.markStarted?.();
+    if (!session) return this.canceling?.canceled;
+    session.markStarted?.();
     this.session = null;
+    this.canceling = session;
     this.releaseMicrophones(session);
-    void session?.pipeline?.dispose().catch(() => {});
-    this.update({ state: 'idle', signal: '', translationStatus: session?.translations?.length ? 'Translation canceled' : this.view.translationStatus });
+    const canceled = session?.pipeline?.cancel().catch(() => {}).finally(() => {
+      if (this.canceling === session) this.canceling = null;
+    });
+    session.canceled = canceled;
+    if (!canceled) this.canceling = null;
+    this.update({ state: 'idle', signal: '', translationStatus: session.translations?.length ? 'Translation canceled' : this.view.translationStatus });
+    return canceled;
   }
   fail(message) {
     this.cancel();

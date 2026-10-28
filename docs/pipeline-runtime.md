@@ -100,8 +100,9 @@ rather than asking consumers to compare source text.
 
 Correlation is supported between ports emitted together by **one producer and
 connected directly to one receiver**. Separate processor branches are not joined:
-the runtime does not carry hidden IDs across hops, merge groups, wait for missing
-ports, or synchronize independent consumers. A processor may explicitly publish
+the runtime does not merge groups, wait for missing ports, or synchronize
+independent consumers. A forwarding context retains only immediate delivery
+causality, which a consumer may validate without joining unrelated streams. A processor may explicitly publish
 a new group, but has to own its association. For an explicit `emitOutputs()` delivery, `context.groupInputs` is a frozen list
 of receiver inputs wired directly from that producer, including omitted siblings.
 It is delivery-local context, not a port payload or cross-hop correlation ID.
@@ -117,6 +118,14 @@ invalidates queued groups and late outputs immediately, and running hooks must
 observe their signal for external side effects. Graceful Stop drains whole queue
 items and includes groups emitted by upstream Stop hooks before closing consumers.
 These are local delivery guarantees, not transactions or distributed synchronization.
+
+A delivery context also carries opaque `delivery` identity and `cause` (the
+immediate incoming delivery of a forwarding emission). Values remain primitive.
+Using the supplied receive context to emit a result preserves its causal link;
+asynchronous processors retain that context with the job. These tokens contain
+no Node names, port names or public IDs, and are never joined by text equality.
+TranslationCommit uses them to verify that a grouped result derives from its
+next boundary event, while generic delivery infers no translation semantics.
 
 ## Lifecycle and errors
 
@@ -136,11 +145,17 @@ These are local delivery guarantees, not transactions or distributed synchroniza
   outputs are discarded even if that code ignores cancellation. Pending Start
   rejects with cancellation; pending Stop exits when disposal interrupts it.
   Dispose is idempotent and attempts every cleanup even if one fails.
+- `await pipeline.cancel()` aborts pending work and skips queued deliveries,
+  then invokes optional Node-owned `cancel(context)` hooks. Their cleanup snapshots
+  travel through ordinary routes with a cleanup signal, including formatters and
+  sinks; aborted model/side-effect Nodes discard pending work. It then disposes.
+  TextAccumulator uses this to clear previews consistently across fan-out. Bare
+  Dispose emits no cleanup snapshots.
 - Input or background failures (`context.fail`) disable the failing node and
   abort its signal. `onError(error, nodeId)` reports it once; independent nodes
   continue. `pipeline.errors` retains reported errors. Stop drains healthy nodes
-  and rejects with an `AggregateError` for failures. Startup failures reject
-  Start and dispose the whole graph. Disposal errors reject Dispose. Callers
+  and rejects with an `AggregateError` for failures. Startup failures disable the failed Node and preserve independent viable output
+  paths. Start rejects and disposes when no viable output path remains. Disposal errors reject Dispose. Callers
   should always dispose after completion or error to release resources.
 
 A pipeline/node graph is single-use: `idle → starting → running → stopping →
@@ -220,14 +235,16 @@ async callback `(port, text, signal)` and can serve as a UI, storage or test sin
 `SpeechToTextNode.maxDuration` is an optional shared `NUMBER` input in seconds
 (finite 1–12, decimals supported). Configure with `speech.receive('maxDuration',
 2.5)` before `pipeline.start()`, or pass `{ maxDuration: 2.5 }` to the constructor.
-After startup this port rejects updates; its session value is frozen. The
-extension builder resolves `Number.value → SpeechToText.maxDuration` from the
-saved snapshot before starting any Nodes and omits that configuration edge from
-streaming delivery. A normal constant emitted inside source `start()` would be
-too late because consumers start first. The generic Pipeline has no new
-configuration scheduling phase. `NumberNode` itself is a reusable finite numeric
-source whose `value: NUMBER` output uses ordinary startup emission for other
-consumers. See [configuration limits and audio ownership](extension-graph.md#maximum-speech-segment-duration).
+With a connected configuration input, the consumer waits for its first ordinary
+port delivery before loading its model. Any compatible producer can supply it;
+there is no constant extraction or special synchronous edge. While waiting, it
+owns a buffer of at most 30 seconds of PCM. Missing configuration on Stop or
+buffer overflow fails visibly, with no default fallback or model startup. Invalid
+values fail before loading. The first valid value freezes the configuration;
+updates arriving after loading begins fail visibly. Without a connection, the
+constructor/default value applies. Whisper.language follows the same policy with
+`en`/`ja` validation. Saving graph edits affects only fresh instances. No universal
+configuration scheduler is involved.
 
 After [preparing assets and serving the playground](asr-manual-testing.md#local-setup),
 open the Speech-to-Text test page from the Node Playground list and allow its

@@ -7,11 +7,10 @@ export const TRANSLATION_OUTPUTS = Object.freeze({ source: TEXT, text: TEXT, err
 export class TranslationSchedulerNode {
   inputs = { text: TEXT, provisional: TEXT };
   outputs = TRANSLATION_OUTPUTS;
-  constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, modelName = 'OPUS-MT', onState = () => {}, windowed = false } = {}) {
+  constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, modelName = 'OPUS-MT', onState = () => {} } = {}) {
     this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
     this.modelName = modelName;
     this.finals = [];
-    this.windowed = windowed;
     this.revision = 0; this.queuedChars = 0;
   }
   start(context) {
@@ -38,26 +37,31 @@ export class TranslationSchedulerNode {
   emit(job, text, error = '') {
     if (this.disposed || this.context.signal.aborted) return;
     if (job.provisional && job.revision !== this.revision) return;
-    this.context.emitOutputs({ source: job.source, error, ...(error ? {} : { text }) });
+    (job.context || this.context).emitOutputs({ source: job.source, error, ...(error ? {} : { text }) });
   }
-  receive(port, source) {
-    if ((port !== 'text' && !(this.windowed && port === 'provisional')) || typeof source !== 'string') throw new TypeError('Expected TEXT on text or an enabled provisional input.');
-    if (this.disposed) return;
-    if (this.windowed) {
-      if (port === 'provisional' && source.length > 1000) throw Error('Provisional translation accepts at most 1,000 characters.');
-      this.revision++;
-      // One replaceable pending preview, and at most one running inference.
-      // Closing a window invalidates every preview of that window.
-      this.preview = port === 'provisional' ? { source, provisional: true, revision: this.revision } : null;
-      if (port === 'provisional') {
-        this.pump(); return;
-      }
+  receiveInputs(values, context) {
+    for (const [port, value] of Object.entries(values)) {
+      if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('Expected TEXT on text or provisional.');
     }
+    // A single source emission may contain both channels. Its committed value
+    // supersedes its preview before any inference or empty result can run.
+    if (Object.hasOwn(values, 'text')) return this.receive('text', values.text, context);
+    if (Object.hasOwn(values, 'provisional')) return this.receive('provisional', values.provisional, context);
+  }
+  receive(port, source, context = this.context) {
+    if ((port !== 'text' && port !== 'provisional') || typeof source !== 'string') throw new TypeError('Expected TEXT on text or provisional.');
+    if (this.disposed) return;
+    if (port === 'provisional' && source.length > 1000) throw Error('Provisional translation accepts at most 1,000 characters.');
+    this.revision++;
+    // One replaceable pending preview, and at most one running inference.
+    // Committed input invalidates every older preview regardless of producer.
+    this.preview = port === 'provisional' ? { source, provisional: true, revision: this.revision, context } : null;
+    if (port === 'provisional') { this.pump(); return; }
     // Bound closed work too. Overflow is an explicit branch failure, never a
     // silently dropped utterance; the existing default FIFO remains unchanged.
-    if (this.windowed && (this.finals.length >= 32 || this.queuedChars + source.length > 32768)) throw Error('Windowed translation backlog limit exceeded (32 windows / 32,768 characters).');
+    if (this.finals.length >= 32 || this.queuedChars + source.length > 32768) throw Error('Translation backlog limit exceeded (32 windows / 32,768 characters).');
     // Empty utterances still have a position in the FIFO; they need no inference.
-    this.finals.push({ source });
+    this.finals.push({ source, context });
     this.queuedChars += source.length;
     this.pump();
   }

@@ -1,14 +1,19 @@
 # Primitive-first Node/Port contracts
 
-Issues #91, #95, #99 and #119 audit shared Nodes, the Node Playground, and the extension.
+Issues #91, #95, #99, #119 and #134 audit shared Nodes, the Node Playground, and the extension.
 Ordinary text uses shared `TEXT`; Number constants and speech duration use shared `NUMBER`
 from `web/port-contracts.js`. No BOOLEAN value is consumed, so none is introduced.
-Contracts are identities; receiving Nodes validate their payloads.
+Contracts are identities; receiving Nodes validate their payloads. A compatible
+edge never depends on producer type, output name, neighboring Nodes, or connection
+order. Graph validation checks structure, contracts and Node settings; incomplete
+drafts remain saveable. Consumers own value limits, startup timing, correlation,
+queues and failure reporting. Model selection, cache verification, permissions and
+migration of historical interfaces remain specialized. See the [#134 audit](evidence/composition-134.md).
 
 | Boundary | Public ports and values | Internal or observer bookkeeping |
 | --- | --- | --- |
 | Capture sources: microphone, browser tab, extension tab/selected media | `audio: MONO_16KHZ_PCM`, normalized mono 16 kHz Float32Array | Target, permission, resampler and diagnostics |
-| Text | `value: TEXT`, any literal string, including empty | One emission at session start; direct language edges bind before loading |
+| Text | `value: TEXT`, any literal string, including empty | One ordinary emission at session start |
 | SpeechToTextWhisper | `audio: PCM`, optional startup `language: TEXT` (en/ja; default en); `final: TEXT` only | Multilingual tiny q8, Silero, fixed 6 s segments; Stop drains / Cancel releases |
 | SpeechToTextParakeetV3 | `audio: PCM → final: TEXT` only | Exact v3 ONNX; GPU encoder/CPU decoder; quiet/12 s chunks; Stop drains / Cancel releases |
 | SpeechToTextMoonshineMediumEn | `audio: PCM → provisional: TEXT, final: TEXT` | Exact 245M English Medium Streaming; native incremental lines; 30 s stream renewal; Stop drains / Cancel releases |
@@ -16,7 +21,7 @@ Contracts are identities; receiving Nodes validate their payloads.
 | SpeechToTextReazonSpeech / TranscriptOutput / speech Playground | `audio: PCM`, optional startup `maxDuration: NUMBER` in seconds; `provisional: TEXT`, `final: TEXT`, plain strings | Frozen session cap (default 6 s, supported 1–12 s), core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
-| Extension TranslationScheduler (both directions) | `text: TEXT` input; `source`, `text`, `error`: TEXT outputs | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index/provisional ports |
+| Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source`, `text`, `error`: TEXT outputs | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
 | LiveTextDisplay | content: TEXT | Render latest plain snapshot verbatim |
 | TextAccumulator | append/preview: TEXT → text: TEXT | Newline-separated committed segments plus optional uncommitted tail |
 | TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
@@ -35,7 +40,7 @@ internal interfaces, not Node-to-Node port contracts.
 
 ## Correlated translation primitives
 
-The extension scheduler accepts committed `text` only. Each successful utterance
+The extension scheduler accepts committed `text` and optional `provisional` TEXT. Each successful utterance
 emits `{ source, text, error: '' }` atomically with `context.emitOutputs()`.
 Empty/whitespace input preserves the original source and emits empty translated
 text without inference, in FIFO order. Failure emits `{ source, error }` with no
@@ -45,7 +50,11 @@ failure reports every queued/future utterance in order and keeps upstream ASR al
 Pending work emits no ports. Runtime readiness/failure is visible separately.
 Stop drains every committed job, including repeated phrases and the ASR tail;
 Cancel discards pending jobs, terminates the Worker and suppresses late replies.
-A new session uses fresh Nodes. No provisional translation path remains.
+A new session uses fresh Nodes. Provisional inputs coalesce to one pending
+preview; newer inputs suppress stale preview results. Committed input wins if
+both arrive in one group. Finals retain FIFO order. The same bounded queue
+policy applies to every producer. Route preview-enabled results through
+TranslationCommit before append-only consumers; see [correlation semantics](windowed-translation.md#stage-2-bounded-retranslation-with-immutable-commits).
 
 Direct `TextFormatter` inputs consume one coherent group. An explicit group is a
 snapshot of that producer's connected formatter inputs; omitted siblings clear.
@@ -60,7 +69,7 @@ latest values, not a correlated pair. Input strings are substituted once as data
 Use `source → input1`, `text → input2`, optional `error → input3`, a multiline
 template and `TextFormatter.text → TextAccumulator.append → text → LiveTextDisplay.content`. Every result adds one
 row; no pending row or history replacement causes duplicate appends. A formatter
-is stateless beyond latest inputs; history belongs to the display. Repeated equal
+is stateless beyond latest inputs; history belongs to TextAccumulator. Repeated equal
 utterances are distinct rows. Plain successful `text` still fans out directly to
 compatible sinks. TTS splits long text only inside its branch.
 

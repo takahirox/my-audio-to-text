@@ -1,5 +1,7 @@
 # Windowed and revisable translation — Issue #128
 
+Historical evidence; producer restrictions and cancellation/startup behavior are superseded by the [Issue #134 audit](composition-134.md).
+
 Validated locally on 2026-10-20. Implementation and evidence are in the assigned
 worktree; no push, PR, merge or Issue comment was performed.
 

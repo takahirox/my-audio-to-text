@@ -1,5 +1,7 @@
 # Pure Live snapshots and reusable TextAccumulator (#132)
 
+Historical evidence; producer restrictions and cancellation/startup behavior are superseded by the [Issue #134 audit](composition-134.md).
+
 LiveTextDisplay now accepts only `content: TEXT`. TextAccumulator owns newline-
 separated committed segments and the optional preview tail; every accepted update
 emits a whole TEXT snapshot. Direct Text/formatter/summary snapshots need no stateful

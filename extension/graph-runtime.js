@@ -122,8 +122,6 @@ export function buildGraph(graph, options) {
     () => pipeline.state === 'stopping' || tabSources.every(spec => nodes[spec.id].endRequested));
   for (const spec of description.nodes) {
     let node;
-    const windowed = description.edges.some(e => e.to[0] === spec.id && e.to[1] === 'text' &&
-      description.nodes.find(n => n.id === e.from[0])?.type === 'TextWindow');
     switch (spec.type) {
       case 'Text': node = new TextNode(spec.settings); break;
       case 'MeetingSummaryLfm2': case 'MeetingSummaryQwen35':
@@ -148,9 +146,9 @@ export function buildGraph(graph, options) {
       case 'SpeechToTextZipformerEn':
         node = new SpeechToTextZipformerEnNode({ workerFactory: options.zipformerWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'SpeechToTextWhisper':
-        node = new SpeechToTextWhisperNode({ workerFactory: options.whisperWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
+        node = new SpeechToTextWhisperNode({ configurationConnected: graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'language'), workerFactory: options.whisperWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'SpeechToTextReazonSpeech':
-        node = new SpeechToTextNode({ workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
+        node = new SpeechToTextNode({ configurationConnected: graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'maxDuration'), workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'LiveTextDisplay': node = new LiveTextDisplayNode(text => options.onDisplay?.(spec.id, text)); break;
       case 'TextAccumulator': node = new TextAccumulatorNode({
         retainPreviewOnEnd: spec.legacyDisplay === true &&
@@ -160,12 +158,12 @@ export function buildGraph(graph, options) {
       case 'TranslationCommit': node = new TranslationCommitNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
       case 'TranslateGemmaEnJa': case 'TranslateGemmaJaEn':
-        node = new TranslationSchedulerNode({ windowed, prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
+        node = new TranslationSchedulerNode({ prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
           TranslationNode: spec.type === 'TranslateGemmaEnJa' ? EnglishToJapaneseTranslateGemmaTranslationNode : TranslateGemmaTranslationNode,
           modelName: 'TranslateGemma 4B', workerFactory: options.translationWorkerFactory,
           onState: state => options.onTranslationState?.(state, spec.id) }); resources.translations.push(node); break;
       case 'OpusMtJaEn': case 'OpusMtEnJa':
-        node = new TranslationSchedulerNode({ windowed, prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
+        node = new TranslationSchedulerNode({ prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
           TranslationNode: spec.type === 'OpusMtEnJa' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
           workerFactory: options.translationWorkerFactory, onState: state => options.onTranslationState?.(state, spec.id) }); resources.translations.push(node); break;
       case 'Supertonic3': case 'Kokoro': {
@@ -181,18 +179,6 @@ export function buildGraph(graph, options) {
     if (INPUT_TYPES.includes(spec.type)) resources.audioSources.set(spec.id, node);
     if (ASR_TYPES.includes(spec.type)) resources.speechNodes.set(spec.id, node);
   }
-  // Resolve constant configuration edges synchronously from this validated
-  // snapshot. Pipeline starts consumers before producers; a normal start-time
-  // emission would arrive too late. Only model configuration ports use startup binding,
-  // never the audio queue. Other constant edges use ordinary typed delivery.
-  const connections = description.edges.filter(edge => {
-    const target = nodes[edge.to[0]];
-    if ((target instanceof SpeechToTextNode && edge.to[1] === 'maxDuration') || (target instanceof SpeechToTextWhisperNode && edge.to[1] === 'language')) {
-      target.receive(edge.to[1], nodes[edge.from[0]].value);
-      return false;
-    }
-    return true;
-  });
-  pipeline = new Pipeline({ nodes, connections, onError: options.onError });
+  pipeline = new Pipeline({ nodes, connections: description.edges, onError: options.onError });
   return { ...resources, description, pipeline };
 }

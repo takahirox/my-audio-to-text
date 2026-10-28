@@ -238,7 +238,7 @@ test('Live session reports a new buffer failure without canceling peer branches 
   session.cancel(); await tick(); assert.ok(f.owned.every(w => w.terminated));
 });
 
-test('graph saves/reloads with no version migration, no new weights, and rejects mixed correlation routes', () => {
+test('graph saves/reloads with no version migration, no new weights, and permits generic correlation routes for runtime validation', () => {
   const values = new Map(), storage = { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: k => values.delete(k) };
   for (const mode of ['window', 'revisable']) {
     const g = windowGraph(mode); assert.deepEqual(validateGraph(g), []); saveGraph(storage, g); assert.deepEqual(readGraph(storage), g);
@@ -246,17 +246,17 @@ test('graph saves/reloads with no version migration, no new weights, and rejects
   }
   const g = windowGraph('revisable'); g.nodes.push(graphNode('TextWindow', 'other'));
   g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'boundary').from[0] = 'other';
-  assert.match(validateGraph(g).join(' '), /same TextWindow/);
+  assert.deepEqual(validateGraph(g), []);
   g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'source').from = ['input', 'value'];
-  assert.match(validateGraph(g).join(' '), /direct translator|matching grouped/);
+  assert.deepEqual(validateGraph(g), []);
   assert.deepEqual(graphModelRequirements({ nodes: [graphNode('TextWindow', 'w'), graphNode('TranslationCommit', 'c')] }), []);
   assert.equal(defaultGraph().version, 10);
 });
 
 test('TranslationCommit rejects independent/malformed results and detects an undrained boundary', () => {
   const node = new TranslationCommitNode(), c = { signal: new AbortController().signal, emit() {}, emitOutputs() {} };
-  node.start(c); assert.throws(() => node.receiveInputs({ source: 'x', text: 'y', error: '' }, c), /grouped/);
-  node.receiveInputs({ boundary: 'x' }, c);
-  assert.throws(() => node.receiveInputs({ source: 'other', text: 'y', error: '' }, { ...c, groupInputs: ['source', 'text', 'error'] }), /does not match/);
+  node.start(c); assert.throws(() => node.receiveInputs({ source: 'x', text: 'y', error: '' }, c), /causal|grouped/);
+  node.receiveInputs({ boundary: 'x' }, { ...c, delivery: {} });
+  assert.throws(() => node.receiveInputs({ source: 'other', text: 'y', error: '' }, { ...c, cause: {}, groupInputs: ['source', 'text', 'error'] }), /does not match/);
   assert.throws(() => node.stop(), /untranslated/);
 });

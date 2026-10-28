@@ -7,6 +7,7 @@ import { whisperLanguage } from './whisper-config.js';
 export class SpeechToTextWhisperNode extends SpeechToTextNode {
   inputs = { audio: MONO_16KHZ_PCM, language: TEXT };
   outputs = { final: TEXT };
+  configurationPort = 'language';
   constructor({ language = 'en', workerFactory, ...options } = {}) {
     super({ ...options, maxDuration: 6 });
     this.language = whisperLanguage(language);
@@ -16,11 +17,12 @@ export class SpeechToTextWhisperNode extends SpeechToTextNode {
         path.endsWith('whisper-worker.js') ? { type: 'module' } : {})),
     });
   }
-  load() { if (this.core) this.core.language = this.language; return super.load(); }
+  load(options) { if (this.core) this.core.language = this.language; return super.load(options); }
   receive(port, value) {
     if (port === 'language') {
-      if (this.context || this.loading) throw new Error('Whisper.language must be configured before model loading and session startup.');
+      if (this.loading || (this.context && !this.waitingConfiguration)) throw new Error('Whisper.language must be configured before model loading and session startup.');
       this.language = whisperLanguage(value);
+      if (this.context) return this.begin();
     } else if (port === 'audio') super.receive(port, value);
     else throw new Error(`Unknown Whisper input: ${port}`);
   }

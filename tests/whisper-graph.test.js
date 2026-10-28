@@ -155,26 +155,30 @@ test('Text is generic, literal, empty-safe and round-trips; ordinary consumers r
   assert.throws(() => new TextNode({ value: 2 }), /string/);
 });
 
-test('model ports support independent ASRs; Whisper language is a validated startup constant', async () => {
+test('model ports support independent ASRs; Whisper language is validated during ordinary startup delivery', async () => {
   assert.equal(NODE_TYPES.SpeechToTextReazonSpeech.inputs.language, undefined);
   assert.equal(NODE_TYPES.SpeechToTextWhisper.inputs.maxDuration, undefined);
   for (const language of [undefined, 'en', 'ja']) {
     const f = fixture({ language });
+    await f.pipeline.start(); await f.pipeline.entries.get('speech').queue;
     assert.equal(f.speech.language, language ?? 'en');
-    await f.pipeline.start();
     assert.equal(f.workers[0].messages[0].language, language ?? 'en');
     assert.equal(f.workers[0].path, './whisper-worker.js');
     assert.throws(() => f.speech.receive('language', 'ja'), /before model loading/);
     await f.pipeline.stop(); await f.pipeline.dispose();
   }
-  for (const language of ['', 'EN', ' en', 'fr', null, 1]) assert.throws(() => buildGraph(whisperGraph(language), {}), /Whisper.language|Invalid setting/);
+  for (const language of ['', 'EN', ' en', 'fr']) {
+    const f = fixture({ language }); await f.pipeline.start().catch(() => {}); await f.pipeline.entries.get('speech').queue;
+    assert.match(f.pipeline.errors.map(e => e.message).join(' '), /Whisper.language/); assert.equal(f.workers.length, 0); await f.pipeline.dispose();
+  }
+  for (const language of [null, 1]) assert.throws(() => buildGraph(whisperGraph(language), {}), /Invalid setting/);
   const graph = whisperGraph(); graph.nodes.push(graphNode('SpeechToTextReazonSpeech', 'other'));
   assert.deepEqual(validateGraph(graph), []);
   const dynamic = whisperGraph(); dynamic.edges.push(edge('speech', 'final', 'speech', 'language'));
-  assert.match(validateGraph(dynamic).join('\n'), /requires Text.value.*startup/);
+  assert.match(validateGraph(dynamic).join('\n'), /acyclic/);
   const storage = store(), snapshot = whisperGraph('en'); saveGraph(storage, snapshot);
   const built = buildGraph(readGraph(storage), {}); snapshot.nodes.at(-1).settings.value = 'ja'; saveGraph(storage, snapshot);
-  assert.equal(built.speechNodes.get('speech').language, 'en'); assert.equal(buildGraph(readGraph(storage), {}).speechNodes.get('speech').language, 'ja');
+  assert.equal(built.description.nodes.find(n => n.id === 'language').settings.value, 'en'); assert.equal(buildGraph(readGraph(storage), {}).description.nodes.find(n => n.id === 'language').settings.value, 'ja');
   await built.pipeline.dispose();
 });
 
