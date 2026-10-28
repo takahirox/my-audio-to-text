@@ -403,7 +403,9 @@ function migrateDisplayGraph(next) {
     const routes = next.edges.filter(route => route?.to?.[0] === display.id);
     if (routes.some(route => route.to[1] === 'append')) {
       const id = unusedId(ids, `${display.id}-accumulator`);
-      next.nodes.push(graphNode('TextAccumulator', id, Math.max(0, display.position.x - 250), display.position.y + 120));
+      // Saved append routes may belong to inactive drafts. Retain the old
+      // replace-only lifecycle until an append route actually participates.
+      next.nodes.push({ ...graphNode('TextAccumulator', id, Math.max(0, display.position.x - 250), display.position.y + 120), legacyDisplay: true });
       for (const route of routes) if (['append', 'replace'].includes(route.to[1])) {
         route.to = [id, route.to[1] === 'replace' ? 'preview' : 'append'];
       }

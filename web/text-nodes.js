@@ -48,7 +48,12 @@ export class TextFormatterNode {
 export class TextAccumulatorNode {
   inputs = { append: TEXT, preview: TEXT };
   outputs = { text: TEXT };
-  constructor() { this.committed = ''; this.count = 0; this.preview = ''; }
+  // Migration compatibility only: an old display with no executable append
+  // input retained its latest replacement across Stop and Cancel.
+  constructor({ retainPreviewOnEnd = false } = {}) {
+    this.retainPreviewOnEnd = retainPreviewOnEnd;
+    this.committed = ''; this.count = 0; this.preview = '';
+  }
   get text() { return this.committed + (this.preview ? (this.count ? '\n' : '') + this.preview : ''); }
   start(context) {
     this.committed = ''; this.count = 0; this.preview = '';
@@ -71,11 +76,15 @@ export class TextAccumulatorNode {
   receive(port, value, context) { this.receiveInputs({ [port]: value }, context); }
   stop(context) {
     if (context.signal.aborted) return;
+    if (this.retainPreviewOnEnd) return;
     if (this.preview) { this.preview = ''; context.emit('text', this.committed); }
   }
   // Cancel drops pending work without publishing to downstream processors.
   // The session may use this value to restore an immediately connected view.
-  cancel() { this.preview = ''; return this.committed; }
+  cancel() {
+    if (this.retainPreviewOnEnd) return this.text;
+    this.preview = ''; return this.committed;
+  }
   dispose() { this.cancel(); }
 }
 

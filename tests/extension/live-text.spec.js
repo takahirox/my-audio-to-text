@@ -157,3 +157,32 @@ test('MV3 v9 migration retains recovery versions and replace-only summary drafts
   await live.editor.getByLabel('Graph recovery version').selectOption({ label: 'processing-graph-before-v9' });
   await expect(live.editor.getByLabel('Original saved graph JSON', { exact: true })).toHaveValue('older original');
 });
+
+test('MV3 migrated snapshot survives Stop/Cancel with an inactive append draft', async ({ graphExtension: f }) => {
+  const live = await openGraph(f);
+  const raw = await live.evaluate(async () => {
+    const { graphNode, edge, GRAPH_KEY } = await import('./graph.js');
+    const graph = { version: 9, nodes: [graphNode('Text', 'snapshot'), graphNode('TextFormatter', 'draft'), graphNode('LiveTextDisplay', 'view')],
+      edges: [edge('snapshot', 'value', 'view', 'replace'), edge('draft', 'text', 'view', 'append')] };
+    graph.nodes[0].settings.value = '  <b>literal snapshot</b>\n';
+    const raw = JSON.stringify(graph); localStorage.setItem(GRAPH_KEY, raw); return raw;
+  });
+  await live.reload();
+  const saved = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  expect(saved.nodes.some(node => node.id === 'draft')).toBe(true);
+  expect(saved.edges).toContainEqual({ from: ['draft', 'text'], to: ['view-accumulator', 'append'] });
+  expect(await live.evaluate(() => localStorage.getItem('processing-graph-before-v10'))).toBe(raw);
+  // Reload the persisted v10 migration before exercising the actual Live controls.
+  await live.reload();
+  const content = region(live, 'view').locator('.display-content');
+  for (const button of ['stop', 'cancel-session']) {
+    await live.locator('#start').click();
+    await expect(live.locator('#status')).toHaveText('Processing active');
+    await expect(content).toHaveText('  <b>literal snapshot</b>\n', { useInnerText: false });
+    await live.locator(`#${button}`).click();
+    await expect(live.locator('#start')).toBeEnabled();
+    expect(await content.textContent()).toBe('  <b>literal snapshot</b>\n');
+    await expect(content.locator('b')).toHaveCount(0);
+    await expect(live.locator('#errors')).toBeEmpty();
+  }
+});

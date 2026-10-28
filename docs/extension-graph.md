@@ -678,6 +678,13 @@ including meeting summaries, connect directly to content; no accumulator is adde
 Existing formatter fan-out continues to emit individual results to other consumers.
 Versions 1–8 first follow their existing migration/review rules, then this migration.
 
+Migrated accumulators carry `legacyDisplay: true` metadata. If all saved append
+sources are inactive drafts, the executable graph has only preview input, so that
+accumulator retains its latest snapshot on Stop/Cancel, matching the old
+replace-only display. The draft routes remain saved. Completing an append branch
+restores normal committed/preview lifecycle behavior on the next session. Newly
+added accumulators always clear uncommitted previews on Stop/Cancel.
+
 Before writing v10, the exact original JSON is retained at
 `processing-graph-before-v10`. Earlier `processing-graph-before-v9` data is retained.
 If a v10 recovery key already holds different data, additional copies use suffixes

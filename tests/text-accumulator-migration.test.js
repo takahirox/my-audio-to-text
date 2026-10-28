@@ -64,6 +64,48 @@ test('migrated mixed sources preserve independent delivery, duplicates and Stop;
   await built.pipeline.dispose();
 });
 
+for (const operation of ['stop', 'cancel']) {
+  test(`migrated inactive append draft retains the latest snapshot on ${operation}, including after reload`, async () => {
+    const graph = { version: 9, nodes: [graphNode('Text', 'snapshot'), graphNode('TextFormatter', 'draft'), graphNode('LiveTextDisplay', 'view')],
+      edges: [edge('snapshot', 'value', 'view', 'replace'), edge('draft', 'text', 'view', 'append')] };
+    graph.nodes[0].settings.value = 'literal snapshot';
+    const storage = store(), original = JSON.stringify(graph);
+    storage.setItem(GRAPH_KEY, original);
+    readGraph(storage);
+    const migrated = readGraph(storage);
+    assert.equal(storage.getItem(GRAPH_RECOVERY_KEY), original);
+    assert.ok(migrated.nodes.some(node => node.id === 'draft'));
+    assert.ok(migrated.edges.some(route => JSON.stringify(route) === JSON.stringify(edge('draft', 'text', 'view-accumulator', 'append'))));
+    const session = new TabSession(() => {}, { graph: migrated });
+    await session.start(); await tick();
+    assert.equal(session.session.description.nodes.some(node => node.id === 'draft'), false);
+    assert.equal(session.view.displays.view, 'literal snapshot');
+    const source = session.session.pipeline.entries.get('snapshot');
+    source.context.emit('value', 'latest snapshot'); await tick();
+    assert.equal(session.view.displays.view, 'latest snapshot');
+    await session[operation](); await tick();
+    assert.equal(session.view.displays.view, 'latest snapshot');
+    // Completing the draft activates append semantics in the next session.
+    migrated.edges.push(edge('snapshot', 'value', 'draft', 'input1'));
+    const active = new TabSession(() => {}, { graph: migrated });
+    await active.start(); await tick();
+    const acc = active.session.pipeline.entries.get('view-accumulator');
+    assert.equal(acc.node.committed, 'literal snapshot');
+    acc.node.receive('preview', 'uncommitted', acc.context); await tick();
+    assert.equal(active.view.displays.view, 'literal snapshot\nuncommitted');
+    await active[operation](); await tick();
+    assert.equal(active.view.displays.view, 'literal snapshot');
+    // Ordinary v10 preview-only accumulators still clear their tail.
+    delete migrated.nodes.find(node => node.id === 'view-accumulator').legacyDisplay;
+    migrated.edges.pop();
+    const preview = new TabSession(() => {}, { graph: migrated });
+    await preview.start(); await tick();
+    assert.equal(preview.view.displays.view, 'literal snapshot');
+    await preview[operation](); await tick();
+    assert.equal(preview.view.displays.view, '');
+  });
+}
+
 test('session Cancel removes direct preview without publishing canceled snapshots to generic TEXT consumers', async () => {
   const graph = { version: 10, nodes: [graphNode('Text', 'source'), graphNode('TextAccumulator', 'acc'), graphNode('LiveTextDisplay', 'view'), graphNode('TextFormatter', 'formatter'), graphNode('LiveTextDisplay', 'formatted')],
     edges: [edge('source', 'value', 'acc', 'append'), edge('source', 'value', 'acc', 'preview'), edge('acc', 'text', 'view', 'content'), edge('acc', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'formatted', 'content')] };
