@@ -1,12 +1,20 @@
 import { TargetControls } from './target-controls.js';
 import { TabSession } from './session.js';
 import { renderTextRegions } from './live-text-regions.js';
-import { readGraph, defaultGraph, GRAPH_KEY, INPUT_TYPES, executableGraph } from './graph.js';
+import { readGraph, defaultGraph, GRAPH_KEY, INPUT_TYPES, FIELD_TYPES, executableGraph } from './graph.js';
 import { audioToWav } from '../web/synthesized-audio.js';
 
 const element = id => document.getElementById(id);
 const stateChannel = new BroadcastChannel('live-graph-state');
-let targetControls;
+let targetControls, targetRequired = false;
+function renderNotices(view) {
+  // Collapse known routine messages only; unfamiliar diagnostics stay visible.
+  const routine = /^(?:[^:\n]+: )?(?:Translation (?:off|enabled for the next session|canceled)|Preparing local translation…|Local .+ ready|Audio signal detected\.|Loading .+…|.+ ready · (?:ja|en) · local)$/;
+  for (const [id, text] of [['signal', view.signal], ['translation-status', view.translationStatus], ['summary-status', view.summaryStatus], ['condition-status', view.conditionStatus]]) {
+    element(id).textContent = text;
+    element(id).hidden = !text || (!element('diagnostics').open && text.split('\n').every(line => routine.test(line)));
+  }
+}
 let graphError = '', graph, publishedState, closed = false;
 try { graph = readGraph(localStorage); }
 catch (error) { graphError = `Saved graph unavailable: ${error.message}${error.recoveryGraph ? ' Open Graph Editor to review and Save the migration draft.' : '. Reset and Save in Graph Editor to recover.'}`; graph = defaultGraph(); }
@@ -18,28 +26,29 @@ function clearAudio() {
 }
 function graphState(view) { return { graph: view.activeSavedGraph, state: view.state, tabId: view.tabId }; }
 const session = new TabSession(view => {
-  for (const id of ['status', 'signal']) element(id).textContent = view[id];
+  element('status').textContent = view.status;
   element('errors').textContent = graphError || view.error;
   const inputs = (view.state !== 'idle' ? view.activeGraph : view.savedGraph)?.nodes.filter(node => INPUT_TYPES.includes(node.type)) || [];
   element('tab-status').textContent = inputs.length ? inputs.map(node => `${node.id} · ${node.type === 'MicrophoneAudio' ? 'microphone' : `${node.type === 'SelectedPageMediaAudio' ? 'selected media in' : 'whole'} tab ${view.tabId ?? '(invoke toolbar)'}`}`).join('\n') : 'No active audio sources.';
   element('tts-status').textContent = view.ttsStatus;
-  element('summary-status').textContent = view.summaryStatus;
-  element('summary-status').hidden = !view.summaryStatus;
-  element('condition-status').textContent = view.conditionStatus;
-  element('condition-status').hidden = !view.conditionStatus;
+  renderNotices(view);
   element('target-status').textContent = view.targetStatus;
   targetControls?.render();
+  const current = view.state !== 'idle' ? view.activeGraph : view.savedGraph;
+  const nextGraph = executableGraph(view.savedGraph);
+  element('targets').hidden = !current.nodes.some(node => INPUT_TYPES.includes(node.type) || FIELD_TYPES.includes(node.type));
+  const required = view.state === 'idle' && nextGraph.nodes.some(node => node.type === 'SelectedPageMediaAudio' && !targetControls?.session.targets[node.id]);
+  if (required && !targetRequired) element('targets').open = true;
+  targetRequired = required;
   const running = view.state !== 'idle';
   const pending = running && JSON.stringify(view.activeSavedGraph) !== JSON.stringify(view.savedGraph);
   element('saved-state').textContent = pending ? 'Saved graph changed. This session keeps its active graph; changes apply on Start.' : '';
-  element('translation-status').hidden = !view.translationStatus || view.translationStatus === 'Translation off';
   renderTextRegions(element('live-displays'), view.activeGraph || view.savedGraph, view.displays);
-  element('translation-status').textContent = view.translationStatus;
   element('no-live-displays').hidden = !!element('live-displays').children.length;
   element('tts-output').hidden = !view.ttsStatus && !audioURLs.size;
   element('model-recovery').hidden = !/missing|evict|retry|unavailable/i.test(`${view.translationStatus} ${view.ttsStatus} ${view.conditionStatus} ${view.summaryStatus}`);
   element('cancel-session').disabled = !running;
-  const needsTab = executableGraph(view.savedGraph).nodes.some(node => ['ChromeTabAudio', 'SelectedPageMediaAudio'].includes(node.type));
+  const needsTab = nextGraph.nodes.some(node => ['ChromeTabAudio', 'SelectedPageMediaAudio'].includes(node.type));
   element('start').disabled = !!graphError || running || !!targetControls?.busy || (needsTab && !Number.isInteger(view.tabId));
   element('stop').disabled = !['loading', 'starting', 'running'].includes(view.state);
   const nextState = JSON.stringify(graphState(view));
@@ -53,6 +62,8 @@ const session = new TabSession(view => {
   row.append(player, link); element('audio-outputs').append(row); session.update({ ttsStatus: 'Audio ready. Press Play to listen or download WAV.' });
 } });
 targetControls = new TargetControls(element('target-controls'), session);
+element('diagnostics').ontoggle = () => renderNotices(session.view);
+session.update();
 function refreshSaved() {
   try { const next = readGraph(localStorage); graphError = ''; session.setGraph(next); return true; }
   catch (error) { graphError = `Saved graph unavailable: ${error.message}${error.recoveryGraph ? ' Open Graph Editor to review and Save the migration draft.' : '. Reset and Save in Graph Editor to recover.'}`; session.update(); return false; }

@@ -30,20 +30,20 @@ class ModelCard {
     this.definition = definition; this.ticket = 0; this.caches = new Map();
     const root = el('section'); root.className = 'panel model-card'; root.id = definition.id;
     root.setAttribute('aria-label', definition.title); this.root = root;
-    root.append(el('h3', definition.title), el('p', `${definition.size}, plus cache overhead. Runtime is packaged.`));
+    root.append(el('h3', definition.title), el('p', definition.size));
     if (definition.voices) {
       const label = el('label', 'Voice '); this.voice = el('select'); this.voice.setAttribute('aria-label', `${definition.title} voice`);
       for (const voice of definition.voices) { const option = el('option', voice === 'jf_alpha' ? 'jf_alpha · Japanese' : voice === 'af_heart' ? 'af_heart · English' : voice); option.value = voice; this.voice.append(option); }
       this.voice.value = savedNodes.find(node => node.type === definition.type)?.settings.voice || definition.voices[0];
       label.append(this.voice); root.append(label);
       this.voice.onchange = () => { void this.inspect(); };
-      root.append(el('p', definition.type === 'Supertonic3' ? 'F1 / M1 voices support Japanese and English. Select language in Graph Editor.' : 'Match the connected text language to the selected voice in Graph Editor.'));
+      root.append(el('p', 'Configure voice and language in Graph Node settings.'));
     }
     this.status = el('p', 'Checking cached assets…'); this.status.className = 'model-status'; this.status.setAttribute('role', 'status');
     this.error = el('p'); this.error.className = 'model-error'; this.error.setAttribute('role', 'alert');
     this.progress = el('progress'); this.progress.max = 1; this.progress.value = 0; this.progress.setAttribute('aria-label', `${definition.title} download progress`);
     this.bytes = el('p'); this.bytes.className = 'muted';
-    this.files = el('ul'); const details = el('details'); details.append(el('summary', 'Verified files'), this.files);
+    this.files = el('ul'); const details = el('details'); details.append(el('summary', 'Verified files and size'), this.bytes, this.files);
     const controls = el('div'); controls.className = 'actions';
     const button = (text, action) => { const control = el('button', text); control.type = 'button'; control.onclick = action; controls.append(control); return control; };
     this.prepare = button('Download / retry', () => { void this.run('prepare'); });
@@ -51,7 +51,7 @@ class ModelCard {
     this.check = button('Check cache', () => { void this.inspect(); });
     this.remove = button('Delete cached assets', () => { void this.run('remove'); });
     const terms = el('a', definition.terms); terms.href = definition.url;
-    root.append(this.status, this.error, this.progress, this.bytes, controls, details, terms);
+    root.append(this.status, this.error, this.progress, controls, details, terms);
     document.getElementById('models').append(root); this.buttons(); void this.inspect();
   }
   settings() { return { language: 'ja', voice: this.voice?.value }; }
@@ -62,13 +62,16 @@ class ModelCard {
   }
   buttons() {
     for (const control of [this.prepare, this.check, this.remove, this.voice].filter(Boolean)) control.disabled = !!this.busy;
+    if (!this.controller && document.activeElement === this.cancel) this.prepare.focus({ preventScroll: true });
     this.cancel.disabled = !this.controller;
+    this.cancel.hidden = !this.controller;
   }
   render(view) {
     if (closed) return;
     this.status.textContent = view.state === 'Ready' ? 'Ready · Cached and verified' : view.state;
     this.root.dataset.state = view.state; this.error.textContent = view.error;
     this.progress.max = view.totalBytes; this.progress.value = view.downloadedBytes;
+    this.progress.hidden = !['Downloading', 'Checking'].includes(view.state);
     this.bytes.textContent = `${view.downloadedBytes.toLocaleString()} / ${view.totalBytes.toLocaleString()} bytes · ${view.cachedBytes.toLocaleString()} bytes verified cached`;
     this.files.replaceChildren(...view.files.map(file => el('li', `${file.path}: ${file.cached ? 'Cached' : 'Missing'}`)));
   }

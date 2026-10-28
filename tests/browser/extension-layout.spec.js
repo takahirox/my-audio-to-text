@@ -142,7 +142,7 @@ test('live regions render safe snapshots, retain prefix text and copy verbatim a
   await transcript.getByRole('button', { name: 'Copy text' }).click();
   expect(await page.evaluate(() => window.copiedText)).toBe('<b>committed</b>\nsecond\nnew preview');
   const output = await page.locator('#live-displays').boundingBox(), controls = await page.locator('.capture-panel').boundingBox();
-  expect(output.y).toBeLessThan(controls.y);
+  expect(controls.y).toBeLessThan(output.y);
   for (const width of [390, 700]) {
     await page.setViewportSize({ width, height: 844 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }

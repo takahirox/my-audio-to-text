@@ -11,7 +11,19 @@ outputs preserve the original input string; only the selected branch emits.
 Its pinned local model is prepared through Save graph, and errors stop only that
 instance with a visible status. It does not change version 10 or Pipeline routing.
 
-Open **Graph Editor** from Live or Models. It opens a separate full-size
+The **Simple / Graph** switch connects Live's minimal recording window and the
+full-size Graph Editor tab. **Models** is a secondary link for asset preparation
+and recovery. Opening these pages preserves capture and the active graph.
+Simple shows Start / Stop / Cancel, actionable status and the configured
+LiveTextDisplay panels. Panels keep their graph order and labels, arrange into
+columns when space permits, and provide keyboard-focusable scrolling for long
+text. Zero displays and audio-only graphs remain supported. **Session details**
+reveals capture metadata and routine model/signal status; unknown diagnostics,
+errors and saved changes for the next session remain visible. Target selection
+is collapsed until expanded or required for selected-media capture. Configuration
+belongs to Graph; Simple adds no model, language or summary selectors.
+
+Open **Graph** from Live or Models. It opens a separate full-size
 extension tab. **Add Node** opens a searchable palette with source/input,
 processor, constant/utility and output categories. Choose a result and use
 **Add selected node** or Enter. Escape closes the palette and returns focus to
@@ -53,7 +65,7 @@ needs Save. The status distinguishes unsaved draft, saved next-session graph
 and immutable active-session graph, queried from Live. Saving during capture
 never changes Nodes, Workers, languages or routes in that session. Stop/finalize
 or Cancel, then Start to use the saved graph. Opening or closing the editor
-or Models does not start, stop or retarget capture. **Live window** focuses the
+or Models does not start, stop or retarget capture. **Simple** focuses the
 existing recorder; without one, it explains how to invoke the toolbar.
 
 Saved edits refresh other open pages. If another editor saves while this page
@@ -84,9 +96,13 @@ parked/unconnected Nodes. Duplicate equivalent Nodes share one preparation;
 Supertonic language settings share weights, while each distinct TTS voice is prepared.
 Existing packaged ASR assets need no runtime preparation. Optional Parakeet v3
 and Moonshine Medium Streaming weights follow saved-node preparation, including
-parked Nodes; [download/memory guidance](optional-asr-nodes.md) appears before Save. Per-model status and byte progress
-appear below the graph, with **Cancel preparation**, **Retry preparation** and
+parked Nodes; [download/memory guidance](optional-asr-nodes.md) is available in
+**Model requirements and terms** before Save. Per-model status and byte progress
+appear in **Saved graph model weights** below the graph, with **Cancel preparation**, **Retry preparation** and
 **Check cache**. **Ready · Cached and verified** requires the complete pinned set.
+Preparation opens on Save or a new failure and can be collapsed. Models keeps
+file/size diagnostics and storage management in disclosures; download/retry,
+errors and model license links remain directly available.
 Graph storage finishes first; download errors do not undo Save. Validation or
 storage failure starts no preparation. Editing or loading a graph alone does not
 download weights. A newer Save cancels the previous preparation and uses its saved
@@ -692,3 +708,63 @@ If a v10 recovery key already holds different data, additional copies use suffix
 `-2`, `-3`, etc.; identical originals reuse their backup. Backup failure leaves the
 saved original untouched. Recovery copies are available in Graph Editor. No
 post-merge-only verification is required for this change.
+
+## Simple / Graph UI verification (#136)
+
+Packaged MV3 layout fixtures exercise 0, 1, 2 and 4 graph-generated displays at
+390px and 1440px, long-text keyboard scrolling, audio-only playback/download
+controls, explicit microphone consent, required media selection, unknown
+diagnostics, model recovery and saved-versus-active output labels. Existing
+regressions cover native capture, navigation without session interruption,
+contextual settings, keyboard/touch graph editing, cross-tab draft conflicts,
+migration copies and independent processing paths. The graph schema, port
+contracts, model preparation lifecycle and extension permissions are unchanged.
+
+Inspected screenshots: Simple with [zero](evidence/ui-136-simple-0-390.png),
+[one](evidence/ui-136-simple-1-390.png),
+[four narrow](evidence/ui-136-simple-4-390.png) and
+[four wide](evidence/ui-136-simple-4-1440.png) displays;
+[audio-only](evidence/ui-136-audio-390.png);
+[narrow Graph](evidence/ui-136-graph-390.png),
+[wide Graph](evidence/ui-136-graph-1440.png) and
+[Models](evidence/ui-136-models-390.png).
+These contain deterministic fixture text/audio and asset responses, not user
+recordings or evidence of production inference accuracy. Regenerate them with:
+
+```sh
+UPDATE_UI_SCREENSHOTS=1 npm run test:extension -- tests/extension/simple-layout.spec.js
+```
+
+`npm ci`, all asset preparation scripts in `setup:extension`, and
+`npm run build:extension` passed. `npm test` passed all 540 tests without skips.
+The Chromium/WebKit layout suite passed all 12 tests:
+
+```sh
+npm run test:browser -- tests/browser/extension-layout.spec.js --workers=1
+```
+
+The host's port 8000 was occupied, so this run served the same local `web/`
+directory on port 8136 with `ASR_BASE_URL=http://127.0.0.1:8136`. An initial
+WebKit launch attempt preceded completion of the browser installation; all
+12 checks passed once both pinned browser runtimes were installed.
+
+The complete packaged MV3 run (`npm run test:extension`) recorded 183 passes,
+16 opt-in skips and one outdated navigation-label test failure. That test still
+looked for “Graph Editor” after the link became “Graph”; its selector was fixed.
+After the final Models card cleanup and build, all 39 affected checks passed:
+
+```sh
+UPDATE_UI_SCREENSHOTS=1 npm run test:extension -- tests/extension/simple-layout.spec.js tests/extension/translation.spec.js
+# 27 passed, including cancel-download focus restoration and final screenshots
+npm run test:extension -- tests/extension/graph.spec.js
+# 12 passed, including the corrected navigation-label test
+```
+
+The 16 skips are opt-in real-model inference/resource smokes (ASR, translation,
+TTS, meeting summary, IfCondition and real-ASR focused output). They were not
+run for this layout change. Native tab capture, fake-device microphone consent,
+real bundled ReazonSpeech/Silero initialization and fixture inference/lifecycle
+checks did run. No model accuracy or external-site compatibility claim is made.
+`git diff --check` passed.
+
+No post-merge-only verification is required.

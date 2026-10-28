@@ -230,8 +230,8 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.editor.setViewportSize({ width: 440, height: 800 });
   expect(await live.editor.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await live.emulateMedia({ reducedMotion: 'reduce' });
-  await live.getByRole('link', { name: 'Graph Editor', exact: true }).focus();
-  expect(await live.getByRole('link', { name: 'Graph Editor', exact: true }).evaluate(link => getComputedStyle(link).outlineStyle)).toBe('solid');
+  await live.getByRole('link', { name: 'Graph', exact: true }).focus();
+  expect(await live.getByRole('link', { name: 'Graph', exact: true }).evaluate(link => getComputedStyle(link).outlineStyle)).toBe('solid');
   expect(f.requests).toEqual([]);
   await live.locator('#cancel-session').click(); await expect(live.editor.locator('#graph-state')).toContainText('No active recording');
 });
