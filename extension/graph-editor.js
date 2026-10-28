@@ -54,11 +54,11 @@ export class GraphEditor {
     this.actions.append(commands);
     this.help = el('dialog', undefined, 'graph-help'); this.help.setAttribute('aria-label', 'Graph Editor help');
     this.help.append(el('h2', 'Graph Editor help'),
-      el('p', 'Park disconnected or incomplete Nodes and Save a structurally valid draft. Start runs only complete paths to outputs. Use Graph actions → Validate draft or Show optional warnings for diagnostics. Saved edits apply to the next session; the active session keeps its graph. Reset replaces the draft; Load saved discards draft changes after confirmation.'),
+      el('p', 'Save applies to the next session. Start runs complete paths to outputs; incomplete Nodes remain in the draft. Graph actions provides validation, Load saved and Reset.'),
       el('p', 'Add nodes using search and categories. Select a node heading for settings and optional node help. Drag a heading or use arrow keys to move it.'),
       el('p', 'Connect by clicking an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Select a wire, then use its nearby Disconnect button. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape or blank canvas clears selection.'),
       el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire to reveal Disconnect.'),
-      el('p', 'Live displays are graph outputs. Content renders a complete plain text snapshot. TextAccumulator commits segments and manages an optional preview. Add independent displays as needed. Language belongs to each model or display; add OPUS-MT or TranslateGemma 4B Nodes for translation. Save graph prepares required optional model weights, with progress, cancellation and retry below the graph. Models offers cache diagnostics and recovery.'),
+      el('p', 'LiveTextDisplay shows plain text. TextAccumulator keeps history and preview. Configure languages in Node settings. Save prepares required model weights; Models provides asset recovery.'),
       el('p', 'TextWindow batches committed ASR fragments before any translator. Connect text → translator.text → TextAccumulator.append. For opt-in retranslation, also connect provisional → translator.provisional; connect TextWindow.text → TranslationCommit.boundary and translator.source/text/error directly to TranslationCommit.source/text/error. TranslationCommit.provisional → TextAccumulator.preview; final → TextAccumulator.append. Only bounded closed windows commit; this does not retain conversation-wide context.'),
       el('p', 'TranslateGemma 4B English → Japanese: connect English ASR.final or Text.value → text, then text → TextAccumulator.append, or source/text/error → TextFormatter inputs. Both directions share a 3.112 GB download; allow 7 GB free storage and several GB free RAM/GPU memory. Requires Worker WebGPU; no fallback. Saving a graph containing either direction prepares these weights, including parked Nodes. Google Gemma Terms of Use and Prohibited Use Policy apply to use of this public ONNX conversion.'),
       (() => { const link = el('a', 'TranslateGemma terms, prohibited-use policy and attribution'); link.href = '../web/licenses/gemma-notices.txt'; return link; })(),
@@ -67,7 +67,8 @@ export class GraphEditor {
     this.helpButton = button('Help', 'graph-help', () => this.help.showModal());
     this.help.onclose = () => this.helpButton.focus();
     toolbar.append(this.saveButton, this.summary, this.paletteButton, this.actions, this.helpButton);
-    this.assetNotice = el('p'); this.assetNotice.id = 'graph-asset-notice'; this.assetNotice.hidden = true;
+    this.assetNotice = el('details'); this.assetNotice.id = 'graph-asset-notice'; this.assetNotice.hidden = true;
+    this.assetRequirements = el('p'); this.assetNotice.append(el('summary', 'Model requirements and terms'), this.assetRequirements);
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
     this.workspace = el('div', undefined, 'graph-workspace');
     this.palette = el('aside', undefined, 'graph-palette'); this.palette.id = 'graph-palette'; this.palette.hidden = true; this.palette.setAttribute('aria-label', 'Node palette');
@@ -186,7 +187,7 @@ export class GraphEditor {
   updateSummary() {
     const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(this.saved);
     const notices = [...new Set(this.draft.nodes.map(node => NODE_TYPES[node.type]?.preparationNotice).filter(Boolean))];
-    this.assetNotice.hidden = !notices.length; this.assetNotice.textContent = notices.join(' ') + ' Each active model Node owns its Worker and needs additional memory; directions share stored weights only. Device needs vary.';
+    this.assetNotice.hidden = !notices.length; this.assetRequirements.textContent = notices.join(' ');
     this.summary.textContent = `${this.isDirty() ? 'Unsaved draft' : 'Saved graph'} · ${running ? `Active${Number.isInteger(this.tabId) ? ` · tab ${this.tabId}` : ''}${pending ? ' · earlier graph; saved edits apply next session' : ''}` : 'No active recording'}`;
     if (this.externalChange) this.summary.textContent += ' · Saved graph changed elsewhere; draft kept. Load saved before saving.';
     this.summary.classList.toggle('graph-conflict', !!this.externalChange);

@@ -192,6 +192,7 @@ for (const direction of ['ja-en', 'en-ja']) {
   test(`${direction}: network, quota and preparation cancellation retry; inference failure leaves ASR active`, async ({ translationExtension: f }) => {
     await instrument(f); const page = await open(f); f.mode('error'); await model(page, 'button:has-text("Download / retry")').click(); await expect(model(page, '.model-status')).toContainText('Error');
     f.mode('hold'); await model(page, 'button:has-text("Download / retry")').click(); await expect.poll(() => model(page, 'progress').evaluate(p => p.value)).toBeGreaterThan(0); await model(page, 'button:has-text("Cancel download")').click(); await expect(model(page, '.model-status')).toContainText('Error');
+    await expect(model(page, 'button:has-text("Download / retry")')).toBeFocused();
     f.mode('normal'); await page.models.evaluate(() => { const put = Cache.prototype.put; window.restorePut = () => { Cache.prototype.put = put; }; Cache.prototype.put = async function(key, response) { await response.body.cancel(); throw new DOMException('Full', 'QuotaExceededError'); }; });
     await model(page, 'button:has-text("Download / retry")').click(); await expect(model(page, '.model-error')).toContainText('quota exceeded'); await page.models.evaluate(() => window.restorePut()); await prepare(page);
     await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready'); await emit(page, 'final', 'fail'); await expect(page.locator('#translation-status')).toContainText('Controlled inference failure');

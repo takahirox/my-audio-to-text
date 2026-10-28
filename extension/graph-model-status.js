@@ -4,9 +4,14 @@ const el = (tag, text) => { const element = document.createElement(tag); if (tex
 
 export function graphModelStatus(root) {
   const channel = new BroadcastChannel('model-cache-updates'), cards = new Map();
+  let previousErrors = '';
   const preparation = new GraphModelPreparation({ onChange: render, onComplete: id => channel.postMessage({ id }) });
   function render(entries) {
     root.hidden = !entries.length;
+    const errors = entries.map(entry => entry.view.error || '').join('\n');
+    // New preparation and new failures are actionable even if previously folded.
+    if (entries.some(entry => entry.view.state === 'Queued') || (errors.trim() && errors !== previousErrors)) root.open = true;
+    previousErrors = errors;
     for (const [key, card] of cards) if (!entries.some(entry => entry.key === key)) { card.root.remove(); cards.delete(key); }
     for (const entry of entries) {
       let card = cards.get(entry.key);

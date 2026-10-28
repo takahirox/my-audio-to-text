@@ -35,7 +35,7 @@ test('MV3 palette search/categories, contextual settings, keyboard help and draf
   await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Draft valid');
 });
 
-test('MV3 live outputs precede compact controls; preview, current value and independent translation Nodes reflect the graph', async ({ graphExtension: f }) => {
+test('MV3 compact controls precede live outputs; preview, current value and independent translation Nodes reflect the graph', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   await live.evaluate(async () => {
     const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
@@ -53,7 +53,7 @@ test('MV3 live outputs precede compact controls; preview, current value and inde
   await expect(live.locator('[data-display="transcript"]').getByLabel('Content', { exact: true })).toHaveText('<em>committed</em>\npending');
   await expect(live.locator('[data-display="value"]').getByLabel('Content', { exact: true })).toHaveText('<em>committed</em>');
   await expect(live.locator('#live-displays em')).toHaveCount(0);
-  expect(await live.locator('#live-displays').evaluate(root => !!(root.compareDocumentPosition(document.querySelector('.capture-panel')) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+  expect(await live.locator('#live-displays').evaluate(root => !!(document.querySelector('.capture-panel').compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   await expect(live.locator('#targets')).not.toHaveAttribute('open', '');
   await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
   await live.getByRole('button', { name: 'Cancel', exact: true }).click();

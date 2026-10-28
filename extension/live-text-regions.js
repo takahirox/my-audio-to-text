@@ -9,7 +9,7 @@ export function renderTextRegions(root, graph, displays) {
       region = document.createElement('section'); region.className = 'panel live-text-region'; region.dataset.display = spec.id;
       const heading = document.createElement('h2'), copy = document.createElement('button'), notice = document.createElement('p'), content = document.createElement('pre');
       heading.className = 'display-label'; content.className = 'display-content';
-      content.setAttribute('aria-live', 'polite'); content.setAttribute('aria-label', 'Content'); notice.setAttribute('role', 'status');
+      content.tabIndex = 0; content.setAttribute('aria-live', 'polite'); content.setAttribute('aria-label', 'Content'); notice.setAttribute('role', 'status');
       copy.textContent = 'Copy text';
       copy.onclick = async () => {
         try { await navigator.clipboard.writeText(region.displayText); notice.textContent = 'Text copied.'; }
