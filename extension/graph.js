@@ -76,6 +76,8 @@ export function graphNode(type, id, x = 20, y = 20) {
 }
 // Translation is an explicit configuration, never part of a new/reset default.
 // Its direct paired DOM route shows only the latest result; history is opt-in.
+// enabled is used by legacy preference import: retain the separate original
+// history/preview alongside that latest pair (see docs/extension-graph.md).
 export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
   direction = direction === 'en-ja' ? 'en-ja' : 'ja-en';
   const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToTextReazonSpeech', 'speech', 270, 30), graphNode('LiveTextDisplay', 'transcript', 1450, 30)];

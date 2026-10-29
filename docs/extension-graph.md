@@ -77,16 +77,60 @@ Load saved. Recreated windows and Chrome restarts in the same profile retain the
 saved graph. Drafts remain page-local. Transcripts/audio are never persisted.
 Closing/reloading Live releases capture/Workers and revokes audio URLs.
 
-Fresh installs and **Reset draft to default** use exactly four Nodes:
+Fresh installs and **Reset draft to default** use exactly five Nodes:
 `ChromeTabAudio`, `SpeechToTextReazonSpeech`, `TextAccumulator`, `TextToDOM`, and one generic `LiveTextDisplay` labeled Text
-(language unspecified). The three named-port edges are `ChromeTabAudio.audio →
-SpeechToTextReazonSpeech.audio`, `SpeechToTextReazonSpeech.provisional → TextAccumulator.preview`, and
+(language unspecified). The named-port edges are `ChromeTabAudio.audio →
+SpeechToTextReazonSpeech.audio`, `SpeechToTextReazonSpeech.provisional → TextAccumulator.preview`,
 `SpeechToTextReazonSpeech.final → TextAccumulator.append`, and `TextAccumulator.text → TextToDOM.text → dom → LiveTextDisplay.dom`. No translation is
 included. Reset changes only the draft until Save; upgrades never replace a
 saved graph with the new default. Existing explicit boolean translation
 preferences migrate once when no graph is saved: only `enabled: true` adds the
 translation branch. Missing/corrupt preferences use the minimal default; saved
 graphs always take precedence, preserving custom settings and routes.
+
+### Optional translation layout review (#152)
+
+The only production caller of `defaultGraph({ enabled: true })` is `readGraph`'s
+one-time import of `opus-mt-translation-preferences` when no graph is stored.
+Fresh setup, Reset and error fallback use translation-disabled defaults. The
+Graph Editor exposes concrete Nodes, with no translation preset control;
+tests also call the helper to construct explicit translation graphs. Saved graph
+migration uses the stored description rather than regenerating this default.
+
+Retain the imported layout. **Original** shows all committed ASR text plus its
+current preview through `TextAccumulator → TextToDOM`. **Translation** shows one
+completed original/translation pair through a direct `PairedTextToDOM` route.
+Although the latest source appears in both panels, the standalone original also
+keeps earlier utterances and remains current while translation waits or fails.
+Removing it would lose that reading surface for users importing an existing
+translation choice. Preserve those distinct reading surfaces during import.
+Its panel names remain Original and Translation; each paired cell has
+an accessible Original/Translation name including its text.
+
+For a user-composed single comparison display, connect the translator's grouped
+`source/text/error → PairedTextToDOM → LiveTextDisplay` directly. Keep transcript
+data accessible from ASR and, where desired, an explicit `TextAccumulator`;
+comparison history requires an explicit `DOMAccumulator`. No automatic output
+removal, graph rewiring or change to formatter/accumulator/combiner contracts is
+needed. Saved and explicitly connected standalone displays remain intact.
+
+`tests/browser/translation-preset.spec.js` exercises both directions using the
+production graph runtime, DOM processors, Live HTML/CSS and renderer in Chromium
+and WebKit, with controlled capture/model RPCs and recorder/navigation startup
+disabled. It verifies history versus latest-pair behavior, previews, pending and
+failed translation, accessible labels, Stop and Save/reload. Screenshots show
+the [Japanese → English](evidence/translation-152-ja-en.png) and
+[English → Japanese](evidence/translation-152-en-ja.png) layouts with fixture
+translations; this is layout validation, not real-model inference validation.
+`tests/extension-graph.test.js` covers fresh defaults, legacy preference import,
+reviewed saved-version migration and recovery, saved-graph precedence and
+explicit multi-output Save/reload preservation in both directions.
+Validation for #152: `npm test` passed all 608 tests;
+`npx playwright test tests/browser/translation-preset.spec.js tests/browser/dom-display.spec.js --workers=1`
+passed all 10 Chromium/WebKit checks (using `ASR_BASE_URL` with an isolated local
+server because the default port was occupied). No post-merge verification is required.
+
+### Explicit translation composition
 
 Add concrete OPUS-MT Nodes and wire each branch directly; directions are independent.
 Save never switches translator types, rewrites routes or removes parked Nodes.
