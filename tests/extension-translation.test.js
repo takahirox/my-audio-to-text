@@ -58,24 +58,25 @@ async function schedulerGraph(options = {}) {
 }
 
 for (const mode of ['success', 'empty', 'failure']) test(`paired consumer rejects actual scheduler ${mode} previews while committed fan-out continues`, async () => {
-  const f = workerFixture(), pairs = new PairedTextToDOMNode(), plain = []; let source;
+  const f = workerFixture(), pairs = new PairedTextToDOMNode(), plain = [], snapshots = []; let source;
   const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory });
   const pipeline = new Pipeline({ nodes: {
     source: { outputs: { closed: TEXT, draft: TEXT }, start(c) { source = c; } }, scheduler, pairs,
+    snapshots: {inputs: {dom: pairs.outputs.dom}, receive(_,dom) {snapshots.push(dom);}},
     plain: new TextOutputNode(value => plain.push(value)),
   }, connections: [edge('source','closed','scheduler','text'),edge('source','draft','scheduler','provisional'),
-    ...Object.keys(TRANSLATION_OUTPUTS).map(port => edge('scheduler',port,'pairs',port)),edge('scheduler','text','plain','text')] });
+    ...Object.keys(TRANSLATION_OUTPUTS).map(port => edge('scheduler',port,'pairs',port)),edge('scheduler','text','plain','text'),edge('pairs','dom','snapshots','dom')] });
   await pipeline.start(); source.emit('closed','same'); await tick(); f.complete(0,'committed'); await tick();
   source.emit('draft',mode === 'empty' ? '' : 'same'); await tick();
   if (mode === 'success') f.complete(1,'preview');
   if (mode === 'failure') f.requests[1].worker.reply({ id: f.requests[1].id, type: 'error', message: 'preview failed' });
   await tick();
-  assert.deepEqual(pairs.rows,[{source:'same',text:'committed',error:''}]);
+  assert.deepEqual(snapshots.map(dom=>[...dom.querySelectorAll('td')].map(cell=>cell.textContent)),[['same','committed']]);
   assert.equal(pipeline.errors.length,1); assert.match(pipeline.errors[0].message,/provisional/);
   source.emit('closed',mode === 'failure' ? '' : 'later'); await tick();
   if (mode !== 'failure') { f.complete(mode === 'empty' ? 1 : 2,'later committed'); await tick(); }
   assert.equal(plain.at(-1),mode === 'failure' ? '' : 'later committed');
-  await pipeline.cancel(); assert.equal(pairs.rows.length,1); assert.ok(f.workers.every(worker => worker.terminated));
+  await pipeline.cancel(); assert.equal(snapshots.length,1); assert.ok(f.workers.every(worker => worker.terminated));
 });
 
 test('production pinned manifest includes all seven runtime files and reviewed bounded hashes', () => {
@@ -166,7 +167,7 @@ function sessionFixture(translation = workerFixture()) {
 }
 
 const display = (f, id = 'transcript') => domText(f.session.view.displays[id]) || '';
-for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]) test(`${direction}: live committed formatting appends repeated phrases once, drains Stop and starts fresh (${original})`, async () => {
+for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]) test(`${direction}: direct live formatting replaces repeated pairs, drains Stop and starts fresh (${original})`, async () => {
   const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
   if (!original) { graph.nodes = graph.nodes.filter(n => n.id !== 'transcript'); graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); }
   graph.edges.reverse(); f.session.setGraph(addDOMFormatters(graph)); await f.session.start(42);
@@ -177,8 +178,7 @@ for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]
   assert.deepEqual(display(f, 'translated'), [].join('\n'), 'pending is represented by runtime status, not history rows');
   const stopping = f.session.stop(); await tick();
   f.translation.complete(0, 'first'); await tick(); f.translation.complete(1, 'second'); await stopping;
-  const labels = direction === 'en-ja' ? ['English', 'Japanese'] : ['Japanese', 'English'];
-  assert.deepEqual(display(f, 'translated'), ['first', 'second'].map(t => `same\n${t}`).join('\n'));
+  assert.deepEqual(display(f, 'translated'), 'same\nsecond');
   assert.deepEqual(display(f), original ? 'same\nsame' : ''); assert.ok(f.translation.workers.every(w => w.terminated));
   await f.session.start(42); assert.deepEqual(display(f, 'translated'), [].join('\n'));
   speech.receiveEvent({ type: 'final', text: 'old session', id: 5 }); f.translation.complete(1, 'late'); await tick();

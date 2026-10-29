@@ -61,13 +61,13 @@ test('MV3 literal snapshot content, accessible controls and errors', async ({ gr
   await expect(region(live, 'transcript').locator('.display-content')).toHaveText('Visible result');
 });
 
-test('MV3 translation history, repeated inputs, safe labels and saved graph apply next session', async ({ graphExtension: f }) => {
+test('MV3 latest translation pair, repeated inputs, safe labels and saved graph apply next session', async ({ graphExtension: f }) => {
   const live = await openGraph(f); await fixtureTranslation(f, live);
   await loadTranslationFixture(live.editor); await live.editor.locator('#graph-save').click();
   await startGraph(live); await emitFinal(live, 'same'); await emitFinal(live, 'same');
   await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
-  await expect(region(live, 'translated').locator('tbody tr')).toHaveCount(2);
-  expect(await region(live, 'translated').locator('tbody td').allTextContents()).toEqual(['same','Translated same','same','Translated same']);
+  await expect(region(live, 'translated').locator('tbody tr')).toHaveCount(1);
+  expect(await region(live, 'translated').locator('tbody td').allTextContents()).toEqual(['same','Translated same']);
   await startGraph(live);
   const workers = await live.evaluate(() => window.graphWorkers.length);
   await live.editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
@@ -189,33 +189,53 @@ test('MV3 migrated snapshot survives Stop/Cancel with an inactive append draft',
   }
 });
 
-test('MV3 committed translation pairs align, hover/focus together, retain errors and reject canceled results', async ({ graphExtension: f }) => {
+for (const history of [false, true]) test(`MV3 translation pairs align, highlight, handle errors and lifecycle (history=${history})`, async ({ graphExtension: f }) => {
   const live = await openGraph(f); await fixtureTranslation(f,live);
   for (const worker of ['opus-mt-worker.js','opus-mt-en-ja-worker.js']) await writeFile(path.join(f.root,'web',worker), `self.onmessage=({data})=>{
     if(data.type==='load')postMessage({type:'ready',id:data.id});
     if(data.type==='translate')setTimeout(()=>postMessage(data.text==='fail'?{type:'error',id:data.id,message:'<b>offline</b>'}:{type:'result',id:data.id,texts:[data.text==='same'?'long translation\\n'.repeat(8):'Translated '+data.text]}),data.text==='slow'?1500:20);
     if(data.type==='drain')postMessage({type:'drained',id:data.id});
   };`);
-  await loadTranslationFixture(live.editor); await startGraph(live);
-  await emitFinal(live,'same'); await emitFinal(live,'same'); await emitFinal(live,'fail');
-  await live.evaluate(()=>window.activeSession.session.pipeline.entries.get('speech').context.emit('final',''));
-  const rows = region(live,'translated').locator('tbody tr'); await expect(rows).toHaveCount(4);
-  expect(await rows.nth(2).locator('td').allTextContents()).toEqual(['fail','Translation failed: <b>offline</b>']);
-  expect(await rows.nth(3).locator('td').allTextContents()).toEqual(['','']);
-  await expect(region(live,'translated').locator('b')).toHaveCount(0);
+  await loadTranslationFixture(live.editor);
+  if (history) {
+    await live.editor.evaluate(async()=>{
+      const {readGraph,saveGraph,graphNode,edge}=await import('./graph.js'); const graph=readGraph(localStorage);
+      graph.nodes.push(graphNode('DOMAccumulator','pair-history'));
+      graph.edges=graph.edges.filter(route=>route.from[0]!=='translated-format');
+      graph.edges.push(edge('translated-format','dom','pair-history','append'),edge('pair-history','dom','translated','dom'));
+      saveGraph(localStorage,graph);
+    });
+    await live.editor.reload();
+  }
+  await startGraph(live);
+  const rows = region(live,'translated').locator('tbody tr');
+  await emitFinal(live,'same'); await expect(rows).toHaveCount(1);
+  await emitFinal(live,'same'); await expect(rows).toHaveCount(history ? 2 : 1);
+  // Both graphs retain exact values and layout; only the explicit graph keeps earlier pairs.
+  expect(await rows.nth(0).locator('td').allTextContents()).toEqual(['same','long translation\n'.repeat(8)]);
+  await expect(region(live,'translated').locator('thead')).toHaveCount(0);
   const aligned = await rows.nth(0).locator('td').evaluateAll(cells=>cells.map(cell=>{const r=cell.getBoundingClientRect();return {top:r.top,height:r.height};}));
   expect(aligned[0]).toEqual(aligned[1]); expect(aligned[0].height).toBeGreaterThan(100);
   for (const method of ['hover','focus']) for (const side of [0,1]) {
     await live.mouse.move(0,0); await rows.nth(0).locator('td').nth(side)[method]();
     const colors = await rows.evaluateAll(rows=>rows.map(row=>[...row.children].map(cell=>getComputedStyle(cell).backgroundColor)));
     expect(colors[0][0]).toBe(colors[0][1]); expect(colors[0][0]).not.toBe('rgba(0, 0, 0, 0)');
-    expect(colors[1]).toEqual(['rgba(0, 0, 0, 0)','rgba(0, 0, 0, 0)']);
+    if (history) expect(colors[1]).toEqual(['rgba(0, 0, 0, 0)','rgba(0, 0, 0, 0)']);
   }
+  await emitFinal(live,'fail'); await expect(rows.last().locator('td').last()).toHaveText('Translation failed: <b>offline</b>');
+  expect(await rows.last().locator('td').allTextContents()).toEqual(['fail','Translation failed: <b>offline</b>']);
+  await live.evaluate(()=>window.activeSession.session.pipeline.entries.get('speech').context.emit('final',''));
+  await expect(rows.last().locator('td').first()).toHaveText('');
+  await expect(rows).toHaveCount(history ? 4 : 1);
+  expect(await rows.last().locator('td').allTextContents()).toEqual(['','']);
+  await expect(region(live,'translated').locator('b')).toHaveCount(0);
   if (process.env.UPDATE_DOM_SCREENSHOT) await live.screenshot({path:'docs/evidence/graph-138-paired.png',fullPage:true});
   await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
   await startGraph(live); await emitFinal(live,'committed'); await expect(rows).toHaveCount(1);
   await emitFinal(live,'slow'); await live.locator('#cancel-session').click(); await expect(live.locator('#start')).toBeEnabled();
+  await live.waitForTimeout(1700);
   await expect(rows).toHaveCount(1); expect(await live.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
+  expect(await rows.locator('td').allTextContents()).toEqual(['committed','Translated committed']);
   await startGraph(live); await expect(rows).toHaveCount(0); await emitFinal(live,'fresh');
   await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
   expect(await rows.locator('td').allTextContents()).toEqual(['fresh','Translated fresh']);
@@ -244,21 +264,26 @@ test('MV3 v10 TEXT display is blocked until reviewed Save; original JSON and old
   await expect(region(live,'notes').locator('script')).toHaveCount(0);await live.locator('#stop').click();
 });
 
-test('MV3 editor adds both DOM processors, saves/reloads them and rejects direct TEXT to the DOM sink', async ({ graphExtension: f }) => {
+test('MV3 editor adds DOM processors and accumulator, connects and reloads them with type validation', async ({ graphExtension: f }) => {
   const live=await openGraph(f), editor=live.editor;
-  for (const type of ['TextToDOM','PairedTextToDOM']) {
+  for (const type of ['TextToDOM','PairedTextToDOM','DOMAccumulator']) {
     await openPalette(editor);await editor.locator('#graph-node-type').selectOption(type);await editor.locator('#graph-add').click();
   }
   await editor.getByRole('button',{name:'speech output final',exact:true}).click();
   await expect(editor.getByRole('button',{name:'transcript input dom',exact:true})).toBeDisabled();
+  await expect(editor.getByRole('button',{name:'domaccumulator input append',exact:true})).toBeDisabled();
   await expect(editor.getByRole('button',{name:'transcript input content',exact:true})).toHaveCount(0);
   await editor.getByRole('button',{name:'texttodom input text',exact:true}).click();
   await editor.getByRole('button',{name:'texttodom output dom',exact:true}).click();
+  await editor.getByRole('button',{name:'domaccumulator input append',exact:true}).click();
+  await editor.getByRole('button',{name:'domaccumulator output dom',exact:true}).click();
   await editor.getByRole('button',{name:'transcript input dom',exact:true}).click();
   await expect(editor.locator('#graph-errors')).toBeEmpty();await editor.locator('#graph-save').click();await expect(editor.locator('#graph-save')).toBeEnabled();
   await editor.reload();await expect(editor.locator('[data-node="pairedtexttodom"]')).toHaveCount(1);
   const graph=await editor.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(graph.edges).toContainEqual({from:['texttodom','dom'],to:['transcript','dom']});
+  expect(graph.nodes.some(node=>node.type==='DOMAccumulator')).toBe(true);
+  expect(graph.edges).toContainEqual({from:['texttodom','dom'],to:['domaccumulator','append']});
+  expect(graph.edges).toContainEqual({from:['domaccumulator','dom'],to:['transcript','dom']});
 });
 
 test('MV3 summary TEXT snapshots render literally through TextToDOM, retain committed output on Cancel and drain Stop', async ({ graphExtension: f }) => {

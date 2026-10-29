@@ -175,7 +175,8 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | dom: DOM | clone and mount each complete inert DOM snapshot |
 | TextToDOM | text: TEXT | dom: DOM; literal text snapshot with visible whitespace |
-| PairedTextToDOM | source/text: TEXT; error: TEXT optional | dom: DOM; committed grouped comparison history |
+| PairedTextToDOM | source/text: TEXT; error: TEXT optional | dom: DOM; one completed grouped comparison pair |
+| DOMAccumulator | append: DOM | dom: DOM; ordered accumulated snapshots |
 | TextAccumulator | append / preview: TEXT, individually optional; text: TEXT output | full committed transcript plus ephemeral tail |
 | TextWindow | text: TEXT | text: TEXT (closed batches); provisional: TEXT (optional open snapshots); length/deadline/sentence settings |
 | TranslationCommit | boundary/source/text/error: TEXT | provisional/final/error: TEXT; opt-in closed-window commits |
@@ -718,16 +719,42 @@ OpusMtJaEn.error  → PairedTextToDOM.error   (optional)
 PairedTextToDOM.dom → LiveTextDisplay.dom
 ```
 
-PairedTextToDOM consumes each atomic result as a new row, preserving exact source
-and translation strings, arrival order, repeats and empty results. It never caches
-independent inputs for later matching. Error rows retain source and error without
-an earlier successful translation. Without an error wire, an omitted text sibling
-produces a generic failure on that source row. One table row contains both cells, so unequal
-text heights stay aligned. Formatter-owned CSS highlights both cells of just the
-hovered/focused row; both cells are keyboard focusable. Every accepted update
-emits a fresh complete DOM snapshot. Stop drains results; Cancel freezes committed
-rows and rejects stale work; fresh Start clears the history. History is local to
-the session, uncapped and not persisted.
+PairedTextToDOM formats each completed atomic result into a fresh DOM snapshot
+containing **only that pair**. A direct formatter → display connection shows the
+latest pair, replacing the previous one. The formatter keeps no history and never
+caches independent inputs for later matching. Exact source and translation strings,
+including whitespace and empty results, stay literal. Errors retain source and
+error without an earlier successful translation. Without an error wire, an omitted
+text sibling produces a generic failure on that source row. One headerless table
+row contains both cells, so unequal text heights stay aligned. Cells have accessible
+Original/Translation labels; formatter-owned CSS highlights both cells of just the
+hovered/focused pair, and both cells are keyboard focusable.
+
+For a growing comparison transcript, explicitly insert DOMAccumulator:
+
+```text
+Translation.source/text/error → PairedTextToDOM.source/text/error
+PairedTextToDOM.dom → DOMAccumulator.append
+DOMAccumulator.dom → LiveTextDisplay.dom
+```
+
+DOMAccumulator is a generic processor with only `append: DOM` and `dom: DOM`.
+Each delivery appends a validated deep clone and emits an independent complete
+snapshot, preserving order and duplicates. It does not interpret translations,
+merge tables or add headings. Paired snapshots retain their side-by-side layout
+and separate hover/focus highlights without repeated headers. Inputs, retained
+history and fan-out consumers own separate trees. Start emits empty history; Stop
+drains accepted work and retains committed history; Cancel freezes history and
+rejects stale deliveries. History is session-local, uncapped and not persisted;
+growing snapshots consume memory and rendering time. LiveTextDisplay continues
+to replace its content for every delivery in either graph.
+
+Existing **v11 graphs wired directly** from PairedTextToDOM to LiveTextDisplay
+intentionally change from implicit history to latest-pair behavior (#140).
+Their saved wiring is preserved exactly; no schema bump, migration or automatic
+DOMAccumulator insertion occurs. The optional translation example produced by
+`defaultGraph({ enabled: true })` also uses latest-pair behavior. Add the explicit
+accumulator in Graph Editor only when history is wanted.
 
 Compatible TEXT wiring remains saveable, including incomplete drafts and alternate
 producers with different output names. At runtime the paired consumer requires
@@ -735,7 +762,7 @@ source/text and any connected error input to belong to the same direct producer'
 explicit group. Independent emissions or mismatched producers fail the consumer
 without joining values by equality or timing. The scheduler marks actual preview
 results using internal `emitOutputs(values, { provisional: true })` provenance;
-PairedTextToDOM rejects those deliveries before adding a row. Merely connecting an
+PairedTextToDOM rejects those deliveries before formatting a pair. Merely connecting an
 optional provisional branch does not invalidate the graph; inactive branches are
 excluded from execution. For bounded retranslation use TranslationCommit →
 TextAccumulator → TextToDOM. Plain TextFormatter remains available for independent

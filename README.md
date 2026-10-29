@@ -187,5 +187,8 @@ one display: provisional text replaces only the preview, and each final appends
 a committed item. Translation remains an explicit graph addition. Configurable
 `TextFormatter` Nodes compose primitive TEXT with editable multiline templates.
 Older paired views open a reviewed migration draft and keep a recovery copy;
-committed rows replace their former indexed pending/history behavior.
+`PairedTextToDOM` formats one completed pair and direct display connections show
+only the latest pair, including existing v11 graphs. For optional comparison
+history, explicitly connect `PairedTextToDOM.dom → DOMAccumulator.append → dom →
+LiveTextDisplay.dom`. Formatting, accumulation and display remain separate processors.
 See [Live display and migration semantics](docs/extension-graph.md).
