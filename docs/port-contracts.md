@@ -26,7 +26,7 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source`, `text`, `error`: TEXT outputs | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
 | LiveTextDisplay | dom: DOM | Clone and mount the complete inert DOM snapshot |
 | TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
-| PairedTextToDOM | grouped source/text/error: TEXT → dom: DOM | One pair only per completed atomic result; no history; hover/focus CSS |
+| PairedTextToDOM | grouped input1/input2: TEXT → dom: DOM | One pair only per completed atomic result; no history; hover/focus CSS |
 | DOMAccumulator | append: DOM → dom: DOM | Ordered session history of validated, cloned snapshots; Start clears, Stop/Cancel retain |
 | TextAccumulator | append/preview: TEXT → text: TEXT | Newline-separated committed segments plus optional uncommitted tail |
 | TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
@@ -110,5 +110,9 @@ rejects provisional deliveries; LiveTextDisplay accepts DOM only. See
 Graph v10 migrates each v9 append display through its own TextAccumulator; replace-only routes become content directly. Exact originals use `processing-graph-before-v10` (numbered copies on collisions); all earlier recovery copies remain accessible. See [display lifecycle and scaling](extension-graph.md#generic-text-displays).
 
 Graph v11 removes the TEXT display port. Reviewed drafts insert TextToDOM while
-keeping unrelated graph data and exact originals under processing-graph-before-v11.
+keeping unrelated graph data. Current saves retain exact originals under
+`processing-graph-before-v12`; older v11 recovery keys remain available.
+Graph v12 reviews PairedTextToDOM source/text → input1/input2 and explicitly
+removes former formatter error routes only in the draft, retaining unrelated error
+fan-out. Missing input2 renders blank; the formatter owns no translation error UI.
 See [DOM ownership, paired formatting and recovery](extension-graph.md#dom-formatters-and-display-ownership).

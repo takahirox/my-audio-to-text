@@ -24,7 +24,7 @@ test('TextToDOM className is optional presentation data and never parsed as HTML
   assert.throws(() => new TextToDOMNode({ className: null }), /className/);
 });
 
-test('existing v11 TextToDOM settings stay valid without migration; className saves and validates', () => {
+test('current TextToDOM settings stay valid without migration; className saves and validates', () => {
   const graph = defaultGraph();
   const formatter = graph.nodes.find(node => node.type === 'TextToDOM');
   formatter.settings = {};
@@ -77,26 +77,27 @@ test('DOM accepts fragments and text nodes, clones before mounting, and rejects 
   assert.throws(() => sink.receive('content','old TEXT',c),/dom: DOM/);
 });
 
-test('paired formatter emits only one exact pair per atomic result and never retains history', () => {
-  const snapshots = [], node = new PairedTextToDOMNode(), c = { ...ctx((_,dom) => snapshots.push(dom)), groupInputs: ['source','text','error'] };
+test('paired formatter emits one literal neutral pair, with omissions and no retained history', () => {
+  const snapshots = [], node = new PairedTextToDOMNode(), c = { ...ctx((_,dom) => snapshots.push(dom)), groupInputs: ['input1','input2'] };
+  assert.deepEqual(node.inputs, {input1: TEXT, input2: TEXT}); assert.deepEqual(node.outputs, {dom: DOM});
   node.start(c); assert.equal(snapshots.length, 0);
-  const values = [{ source:' same\n',text:' first ' },{ source:' same\n',text:'second',error:'' },{ source:'',text:'' },{ source:'failure',text:'stale',error:'<b>offline</b>' }];
-  for (const value of values) node.receiveInputs(value,c);
+  for (const value of [{input1:' same\n',input2:' first '}, {input1:' same\n',input2:' first '}, {input1:'',input2:''}, {input1:'<b>literal</b>'}]) node.receiveInputs(value,c);
   assert.deepEqual(snapshots.map(dom => [...dom.querySelectorAll('td')].map(cell => cell.textContent)),
-    [[' same\n',' first '],[' same\n','second'],['',''],['failure','Translation failed: <b>offline</b>']]);
-  assert.equal(Object.hasOwn(node,'rows'), false);
+    [[' same\n',' first '],[' same\n',' first '],['',''],['<b>literal</b>','']]);
   for (const snapshot of snapshots) {
     assert.equal(snapshot.querySelectorAll('tbody tr').length, 1);
     assert.equal(snapshot.querySelectorAll('td[tabindex="0"]').length, 2);
     assert.equal(snapshot.querySelector('thead,b'), null);
-    for (const [index,cell] of [...snapshot.querySelectorAll('td')].entries()) assert.equal(cell.getAttribute('aria-label'),`${index ? 'Translation' : 'Original'}: ${cell.textContent}`);
+    assert.equal(snapshot.querySelector('table').getAttribute('aria-label'), 'Paired texts');
+    assert.doesNotMatch(snapshot.querySelector('table').outerHTML, /Original|Translation|failed/);
+    for (const [index,cell] of [...snapshot.querySelectorAll('td')].entries()) assert.equal(cell.getAttribute('aria-label'),`${index ? 'Second' : 'First'} text: ${cell.textContent}`);
   }
-  for (const value of [{source:'independent'},{text:'independent'},{error:'independent'}]) assert.throws(() => node.receiveInputs(value,ctx()),/grouped/);
-  node.receiveInputs({source:'late',text:'late'},{...c,signal:AbortSignal.abort()}); assert.equal(snapshots.length,4);
-  node.receiveInputs({source:'no error wire'},{...c,groupInputs:['source','text']});
-  assert.equal(domText(snapshots.at(-1)),'no error wire\nTranslation failed: No translation returned.');
-  node.stop(); node.receiveInputs({source:'late',text:'late'},c); assert.equal(snapshots.length,5);
-  node.cancel(); node.start(c); assert.equal(snapshots.length,5);
+  node.receiveInputs({input2:'alone'},c); assert.equal(snapshots.length,4);
+  for (const value of [{input1:'independent'},{input2:'independent'}]) assert.throws(() => node.receiveInputs(value,ctx()),/grouped/);
+  for (const port of ['source','text','error']) assert.throws(()=>node.receiveInputs({[port]:'old'},c),/TEXT inputs/);
+  node.receiveInputs({input1:'late',input2:'late'},{...c,signal:AbortSignal.abort()}); assert.equal(snapshots.length,4);
+  node.stop(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,4);
+  node.cancel(); node.start(c); assert.equal(snapshots.length,4);
 });
 
 test('DOMAccumulator owns inert generic snapshots and emits independent ordered history including duplicates', () => {
@@ -136,7 +137,7 @@ test('one formatter fans out to latest and accumulated displays with independent
     formatted: {inputs: {dom: DOM}, receive(_,dom) {formatted.push(dom);}},
     history: {inputs: {dom: DOM}, receive(_,dom) {history.push(dom);}},
   }, connections: [
-    ...['source','text','error'].map(port=>edge('source',port,'pairs',port)),
+    edge('source','source','pairs','input1'), edge('source','text','pairs','input2'),
     edge('pairs','dom','acc','append'), edge('pairs','dom','latest','dom'), edge('pairs','dom','formatted','dom'),
     edge('acc','dom','a','dom'), edge('acc','dom','b','dom'), edge('acc','dom','history','dom'),
   ] });
@@ -145,7 +146,7 @@ test('one formatter fans out to latest and accumulated displays with independent
   const expected = [];
   for (const value of values) {
     source.emitOutputs(value); await tick();
-    expected.push([value.source,value.error ? `Translation failed: ${value.error}` : value.text]);
+    expected.push([value.source,value.text ?? '']);
     assert.deepEqual([...latest.at(-1).querySelectorAll('td')].map(cell=>cell.textContent),expected.at(-1));
     for (const list of [a,b]) {
       assert.deepEqual([...list.at(-1).querySelectorAll('td')].map(cell=>cell.textContent),expected.flat());
@@ -165,7 +166,7 @@ test('one formatter fans out to latest and accumulated displays with independent
   assert.equal(b.at(-1),retained);
 });
 
-test('typed graphs save explicit DOM history without rewriting direct v11 wiring and reject incompatible types', () => {
+test('typed graphs save explicit DOM history without rewriting direct wiring and reject incompatible types', () => {
   const g = defaultGraph({enabled:true}); assert.deepEqual(validateGraph(g),[]);
   assert.equal(g.nodes.some(node => node.type === 'DOMAccumulator'),false);
   const direct = JSON.stringify(g), values = new Map([[GRAPH_KEY,direct]]);
@@ -185,9 +186,9 @@ test('typed graphs save explicit DOM history without rewriting direct v11 wiring
 
 for (const reverse of [false, true]) test(`paired compatible drafts save with alternate producers, independent ports and either edge order (${reverse})`, () => {
   const graph = { version: defaultGraph().version, nodes: [graphNode('Text','literal'), graphNode('TextFormatter','alternate'),
-    graphNode('PairedTextToDOM','pairs'), graphNode('LiveTextDisplay','display')], edges: [edge('literal','value','pairs','source')] };
+    graphNode('PairedTextToDOM','pairs'), graphNode('LiveTextDisplay','display')], edges: [edge('literal','value','pairs','input1')] };
   const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key,value) => values.set(key,value), removeItem: key => values.delete(key) };
-  for (const routes of [[], [edge('alternate','text','pairs','text'),edge('pairs','dom','display','dom')]]) {
+  for (const routes of [[], [edge('alternate','text','pairs','input2'),edge('pairs','dom','display','dom')]]) {
     graph.edges.push(...routes); if (reverse) graph.edges.reverse();
     assert.deepEqual(validateGraph(graph), []); saveGraph(storage,graph); assert.deepEqual(readGraph(storage),assertGraph(graph));
   }
@@ -195,7 +196,7 @@ for (const reverse of [false, true]) test(`paired compatible drafts save with al
 
 for (const reverse of [false, true]) test(`paired consumer accepts alternate grouped producers and arbitrary output names (${reverse})`, async () => {
   let c; const pairs = new PairedTextToDOMNode(), snapshots = [];
-  const connections = [edge('pairs','dom','snapshots','dom'),edge('alternate','original','pairs','source'),edge('alternate','translated','pairs','text'),edge('alternate','failure','pairs','error')];
+  const connections = [edge('pairs','dom','snapshots','dom'),edge('alternate','original','pairs','input1'),edge('alternate','translated','pairs','input2')];
   const pipeline = new Pipeline({ nodes: { alternate: { outputs: { original: TEXT, translated: TEXT, failure: TEXT }, start(context) { c = context; } }, pairs,
     snapshots: { inputs: {dom: DOM}, receive(_,dom) { snapshots.push(dom); } } },
     connections: reverse ? connections.reverse() : connections });
@@ -205,15 +206,14 @@ for (const reverse of [false, true]) test(`paired consumer accepts alternate gro
   }
   c.emitOutputs({ original: 'failed', failure: 'offline' });
   await pipeline.stop();
-  assert.deepEqual(snapshots.map(domText), ['same\none','same\ntwo','same\n','failed\nTranslation failed: offline']);
+  assert.deepEqual(snapshots.map(domText), ['same\none','same\ntwo','same\n','failed\n']);
   assert.deepEqual(pipeline.errors,[]); await pipeline.dispose();
 });
 
-for (const reverse of [false, true]) for (const mode of ['separate emissions','mixed producers','independent error','provisional']) {
+for (const reverse of [false, true]) for (const mode of ['separate emissions','mixed producers','provisional']) {
   test(`paired consumer rejects ${mode} without affecting ordinary fan-out (${reverse})`, async () => {
     let a, b; const pairs = new PairedTextToDOMNode(), plain = [], snapshots = [];
-    const connections = [edge('pairs','dom','snapshots','dom'),edge('a','s','pairs','source'),edge(mode === 'mixed producers' ? 'b' : 'a','t','pairs','text'),
-      edge(mode === 'independent error' ? 'b' : 'a','e','pairs','error'),edge('a','t','plain','text')];
+    const connections = [edge('pairs','dom','snapshots','dom'),edge('a','s','pairs','input1'),edge(mode === 'mixed producers' ? 'b' : 'a','t','pairs','input2'),edge('a','t','plain','text')];
     const pipeline = new Pipeline({ nodes: {
       a: { outputs: { s: TEXT, t: TEXT, e: TEXT }, start(c) { a = c; } },
       b: { outputs: { t: TEXT, e: TEXT }, start(c) { b = c; } }, pairs,
@@ -235,8 +235,8 @@ for (const reverse of [false, true]) for (const mode of ['separate emissions','m
   });
 }
 
-for (const history of [false, true]) for (const reverse of [false, true]) test(`real scheduler pairs FIFO results, drains Stop, freezes Cancel and resets Start (history=${history}, reversed=${reverse})`, async () => {
-  const graph = defaultGraph({enabled:true}), workers = []; graph.nodes[0] = graphNode('Text','input');
+for (const direction of ['en-ja','ja-en']) for (const history of [false, true]) for (const reverse of [false, true]) test(`${direction}: real scheduler pairs FIFO results, drains Stop, freezes Cancel and resets Start (history=${history}, reversed=${reverse})`, async () => {
+  const graph = defaultGraph({enabled:true,direction}), workers = []; graph.nodes[0] = graphNode('Text','input');
   graph.nodes = graph.nodes.filter(node=>['input','translation','translated-format','translated'].includes(node.id));
   graph.edges = [edge('input','value','translation','text'), ...graph.edges.filter(route=>['translation','translated-format'].includes(route.from[0]))];
   if (history) {
@@ -284,4 +284,62 @@ test('resetting a graph with legacy TEXT routes mislabeled as current version re
   const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
   assert.throws(()=>readGraph(storage),/Unknown port/);saveGraph(storage,defaultGraph());
   assert.equal(storage.getItem(GRAPH_RECOVERY_KEY),original);
+});
+
+for (const includeError of [false, true]) test(`v11 paired ports require review with exact recovery and unrelated error fan-out (error=${includeError})`, () => {
+  const old = defaultGraph({enabled: true, direction: 'en-ja'}); old.version = 11;
+  for (const route of old.edges) if (route.to[0] === 'translated-format') route.to[1] = route.to[1] === 'input1' ? 'source' : 'text';
+  old.nodes.push(graphNode('TextFormatter','diagnostics'),graphNode('Text','parked'));
+  old.nodes.find(node=>node.id==='translated').settings.label = 'My comparison';
+  old.edges.push(edge('translation','error','diagnostics','input3'));
+  if (includeError) old.edges.push(edge('translation','error','translated-format','error'));
+  const raw = JSON.stringify(old,null,2), values = new Map([[GRAPH_KEY,raw],[GRAPH_RECOVERY_KEY,'older v12 recovery'],['processing-graph-before-v11','older v11 recovery']]);
+  const storage = {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
+  let draft;
+  assert.throws(()=>readGraph(storage),error=>{
+    draft=error.recoveryGraph;
+    assert.match(error.message,/v12 requires review/);
+    if (includeError) assert.match(error.message,/Removed formatter error routes in draft: translation.error → translated-format.error/);
+    return !!draft;
+  });
+  assert.throws(()=>buildGraph(old,{}),/requires review/);
+  assert.equal(storage.getItem(GRAPH_KEY),raw);
+  assert.deepEqual(draft.nodes,old.nodes); assert.equal(draft.translationDirection,old.translationDirection);
+  const expected = structuredClone(old); expected.version=12;
+  expected.edges=expected.edges.filter(route=>route.to[0]!=='translated-format'||route.to[1]!=='error');
+  for (const route of expected.edges) if (route.to[0]==='translated-format') route.to[1]=route.to[1]==='source'?'input1':'input2';
+  assert.deepEqual(draft,expected);
+  saveGraph(storage,draft); assert.deepEqual(readGraph(storage),expected);
+  assert.equal(storage.getItem(`${GRAPH_RECOVERY_KEY}-2`),raw);
+  assert.equal(storage.getItem(GRAPH_RECOVERY_KEY),'older v12 recovery');
+  assert.equal(storage.getItem('processing-graph-before-v11'),'older v11 recovery');
+});
+
+test('v11 without paired formatters upgrades without changing nodes or routes; failed backup never overwrites original', () => {
+  const old=defaultGraph(); old.version=11; const raw=JSON.stringify(old);
+  const values=new Map([[GRAPH_KEY,raw]]);
+  const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>{if(key===GRAPH_RECOVERY_KEY) throw Error('storage full');values.set(key,value);},removeItem:key=>values.delete(key)};
+  assert.throws(()=>readGraph(storage),/storage full/); assert.equal(storage.getItem(GRAPH_KEY),raw);
+  storage.setItem=(key,value)=>values.set(key,value);
+  const next=readGraph(storage); assert.equal(next.version,12); assert.deepEqual(next.nodes,old.nodes); assert.deepEqual(next.edges,old.edges);
+  assert.equal(storage.getItem(GRAPH_RECOVERY_KEY),raw);
+});
+
+test('invalid legacy paired conversions offer recovery instructions instead of dropping unknown routes', () => {
+  const old=defaultGraph({enabled:true});old.version=11;
+  old.edges.push(edge('translation','error','translated-format','unknown'));
+  assert.throws(()=>assertGraph(old),error=>!error.recoveryGraph && /Conversion needs repair:.*Unknown port/.test(error.message));
+  old.version=12;old.edges.at(-1).to[1]='error';
+  assert.throws(()=>assertGraph(old),/Unknown port/);
+});
+
+for (const reverse of [false,true]) test(`atomic second-only groups emit nothing and cannot contaminate later omitted/empty pairs (${reverse})`, async () => {
+  let source; const snapshots=[];
+  const connections=[edge('source','left','pairs','input1'),edge('source','right','pairs','input2'),edge('pairs','dom','sink','dom')];
+  const pipeline=new Pipeline({nodes:{source:{outputs:{left:TEXT,right:TEXT},start(c){source=c;}},pairs:new PairedTextToDOMNode(),sink:{inputs:{dom:DOM},receive(_,dom){snapshots.push(dom);}}},connections:reverse?connections.reverse():connections});
+  await pipeline.start();
+  for(const values of [{right:'orphan'},{left:'same',right:'same'},{left:'same',right:'same'},{right:'stale'},{left:'same'},{left:''},{left:'',right:''}]) source.emitOutputs(values);
+  await pipeline.stop();
+  assert.deepEqual(snapshots.map(domText),['same\nsame','same\nsame','same\n','\n','\n']);
+  assert.deepEqual(pipeline.errors,[]);
 });

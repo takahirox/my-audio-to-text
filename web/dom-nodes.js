@@ -50,7 +50,7 @@ const pairedCSS = `
 `;
 
 export class PairedTextToDOMNode {
-  inputs = { source: TEXT, text: TEXT, error: TEXT };
+  inputs = { input1: TEXT, input2: TEXT };
   outputs = { dom: DOM };
   start() { this.closed = false; }
   receiveInputs(values, context) {
@@ -59,26 +59,23 @@ export class PairedTextToDOMNode {
       if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('PairedTextToDOM expects TEXT inputs.');
     }
     // One atomic delivery, never a cache of independently arriving strings.
-    const required = new Set(['source', 'text', ...(context.connectedInputs || [])]);
-    if (![...required].every(port => context.groupInputs?.includes(port)) ||
-        !Object.hasOwn(values, 'source')) {
-      throw Error('PairedTextToDOM requires a completed grouped source/text/error result from one producer.');
+    const required = new Set(['input1', 'input2', ...(context.connectedInputs || [])]);
+    if (![...required].every(port => context.groupInputs?.includes(port))) {
+      throw Error('PairedTextToDOM requires a completed grouped input1/input2 delivery from one producer.');
     }
     if (context.provisional) throw Error('PairedTextToDOM requires completed results; provisional deliveries cannot be committed.');
-    // An omitted successful-text sibling signals failure even if error is not
-    // connected. Never reuse an earlier translation or drop the source row.
-    const error = values.error || (!Object.hasOwn(values, 'text') ? 'No translation returned.' : '');
-    this.render({ source: values.source, text: values.text, error }, context);
+    if (!Object.hasOwn(values, 'input1')) return;
+    this.render({ input1: values.input1, input2: values.input2 ?? '' }, context);
   }
   render(pair, context) {
     const snapshot = document.createDocumentFragment(), style = document.createElement('style');
     style.textContent = pairedCSS;
     const table = document.createElement('table'); table.className = 'paired-text-dom';
-    table.setAttribute('aria-label', 'Original and translation comparison');
+    table.setAttribute('aria-label', 'Paired texts');
     // Each snapshot is a complete, headerless pair. A generic accumulator can
     // stack snapshots without duplicating column headings or joining tables.
     const body = document.createElement('tbody'), row = document.createElement('tr');
-    for (const [label, text] of [['Original', pair.source], ['Translation', pair.error ? `Translation failed: ${pair.error}` : pair.text]]) {
+    for (const [label, text] of [['First text', pair.input1], ['Second text', pair.input2]]) {
       const cell = document.createElement('td'); cell.tabIndex = 0;
       cell.setAttribute('aria-label', `${label}: ${text}`); cell.textContent = text; row.append(cell);
     }

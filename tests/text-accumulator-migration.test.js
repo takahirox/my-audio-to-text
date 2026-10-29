@@ -21,7 +21,7 @@ function legacy() {
 
 test('v9 migration retains independent sources, drafts, fan-out, positions/settings and minimal collision-safe accumulation', () => {
   const graph = legacy(), original = structuredClone(graph), next = reviewGraph(graph);
-  assert.equal(next.version, 11); assert.deepEqual(graph, original);
+  assert.equal(next.version, 12); assert.deepEqual(graph, original);
   for (const node of original.nodes) assert.deepEqual(next.nodes.find(n => n.id === node.id), node);
   assert.equal(next.nodes.length, original.nodes.length + 6);
   assert.ok(next.edges.some(e => JSON.stringify(e) === JSON.stringify(edge('a', 'value', 'mixed-accumulator-2', 'append'))));
@@ -34,7 +34,7 @@ test('v9 migration retains independent sources, drafts, fan-out, positions/setti
 test('v9 read retains exact original and all older recovery copies; repeated imports never overwrite backups', () => {
   const storage = store(), raw = JSON.stringify(legacy(), null, 2);
   storage.setItem('processing-graph-before-v9', 'older recovery'); storage.setItem(GRAPH_RECOVERY_KEY, 'earlier v9 recovery'); storage.setItem(GRAPH_KEY, raw);
-  const graph = reviewSavedGraph(storage); assert.equal(graph.version, 11);
+  const graph = reviewSavedGraph(storage); assert.equal(graph.version, 12);
   assert.equal(storage.getItem('processing-graph-before-v9'), 'older recovery'); assert.equal(storage.getItem(GRAPH_RECOVERY_KEY), 'earlier v9 recovery');
   assert.equal(storage.getItem(`${GRAPH_RECOVERY_KEY}-2`), raw);
   storage.setItem(GRAPH_KEY, raw); reviewSavedGraph(storage); assert.equal(storage.getItem(`${GRAPH_RECOVERY_KEY}-3`), null);
@@ -109,7 +109,7 @@ for (const operation of ['stop', 'cancel']) {
 }
 
 test('session Cancel publishes committed snapshots consistently through generic TEXT consumers', async () => {
-  const graph = { version: 11, nodes: [graphNode('Text', 'source'), graphNode('TextAccumulator', 'acc'), graphNode('LiveTextDisplay', 'view'), graphNode('TextFormatter', 'formatter'), graphNode('LiveTextDisplay', 'formatted')],
+  const graph = { version: 12, nodes: [graphNode('Text', 'source'), graphNode('TextAccumulator', 'acc'), graphNode('LiveTextDisplay', 'view'), graphNode('TextFormatter', 'formatter'), graphNode('LiveTextDisplay', 'formatted')],
     edges: [edge('source', 'value', 'acc', 'append'), edge('source', 'value', 'acc', 'preview'), edge('acc', 'text', 'view', 'content'), edge('acc', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'formatted', 'content')] };
   const session = new TabSession(() => {}, { graph: addDOMFormatters(graph) }); await session.start(); await tick();
   const acc = session.session.pipeline.entries.get('acc'); acc.node.receive('append', 'keep', acc.context); acc.node.receive('preview', 'discard', acc.context); await tick();

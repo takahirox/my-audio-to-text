@@ -8,7 +8,7 @@ import { TEXT, TextOutputNode, EnglishToJapaneseOpusMtTranslationNode, Translate
 import { OPUS_MT, OPUS_MT_EN_JA } from '../web/translation-models.js';
 import { TranslationSchedulerNode, TRANSLATION_OUTPUTS } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
-import { defaultGraph, graphNode, edge, NODE_TYPES, translationViewEdges } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, NODE_TYPES, translationViewEdges, pairedTextEdges } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
 import { TextFormatterNode } from '../web/text-nodes.js';
 import { PairedTextToDOMNode } from '../web/dom-nodes.js';
@@ -65,7 +65,7 @@ for (const mode of ['success', 'empty', 'failure']) test(`paired consumer reject
     snapshots: {inputs: {dom: pairs.outputs.dom}, receive(_,dom) {snapshots.push(dom);}},
     plain: new TextOutputNode(value => plain.push(value)),
   }, connections: [edge('source','closed','scheduler','text'),edge('source','draft','scheduler','provisional'),
-    ...Object.keys(TRANSLATION_OUTPUTS).map(port => edge('scheduler',port,'pairs',port)),edge('scheduler','text','plain','text'),edge('pairs','dom','snapshots','dom')] });
+    ...pairedTextEdges('scheduler','pairs'),edge('scheduler','text','plain','text'),edge('pairs','dom','snapshots','dom')] });
   await pipeline.start(); source.emit('closed','same'); await tick(); f.complete(0,'committed'); await tick();
   source.emit('draft',mode === 'empty' ? '' : 'same'); await tick();
   if (mode === 'success') f.complete(1,'preview');
@@ -129,6 +129,7 @@ for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
     assert.equal(f.pipeline.errors.length, 0);
     assert.deepEqual(f.outputs.map(v => v.source), ['one', 'two', 'three']);
     assert.ok(f.outputs.every(v => v.error && !Object.hasOwn(v, 'text'))); assert.deepEqual(f.plain, []);
+    assert.ok(f.states.some(state => state.includes('Translation unavailable:') && state.includes(f.outputs[0].error)), 'specific failure reaches diagnostics without a formatter error wire');
     assert.ok(f.workers.every(w => w.terminated)); await f.pipeline.dispose();
   });
   test(`${direction}: a recoverable per-utterance error clears stale translation and preserves later successful routing`, async () => {
@@ -136,6 +137,7 @@ for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
     f.complete(0, 'translated first'); await tick();
     assert.match(f.formatted[1], /\|\|(?:OPUS-MT|TranslateGemma 4B) accepts/);
     assert.doesNotMatch(f.formatted[1], /translated first/);
+    assert.ok(f.states.some(state => /Translation unavailable: .*accepts at most 1,000/.test(state)));
     f.complete(1, 'translated last'); await f.pipeline.stop();
     assert.deepEqual(f.plain, ['translated first', 'translated last']);
     assert.equal(f.formatted[2], 'last|translated last|'); await f.pipeline.dispose();
@@ -200,7 +202,7 @@ test('Cancel adds no pending history; failed committed results remain readable a
   f.session.cancel(); f.translation.complete(0, 'late'); await tick(); assert.deepEqual(display(f, 'translated'), [].join('\n'));
   f.session.prepareTranslation = async () => { throw Error('cache unavailable'); }; await f.session.start(42);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'failed', id: 0 }); await tick(); await f.session.stop();
-  assert.deepEqual(display(f, 'translated'), ['failed\nTranslation failed: cache unavailable'].join('\n'));
+  assert.deepEqual(display(f, 'translated'), ['failed\n'].join('\n'));
   assert.deepEqual(display(f), ['failed'].join('\n'));
 });
 
@@ -245,7 +247,8 @@ test('multiple translator runtime statuses retain each branch failure independen
   assert.match(f.session.view.translationStatus, /reverse: Local OPUS-MT ready/);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
   f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
-  assert.match(display(f, 'translated'), /Forward cache unavailable/);
+  assert.equal(display(f, 'translated'), 'Hello\n');
+  assert.match(f.session.view.translationStatus, /Forward cache unavailable/);
   assert.deepEqual(display(f, 'reverse-display'), ['こんにちは'].join('\n'));
 });
 

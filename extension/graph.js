@@ -8,12 +8,12 @@ import { validateCondition, MAX_CONDITION_CHARS } from '../web/if-condition-poli
 import { finiteNumber } from '../web/number-node.js';
 import { windowSettings } from '../web/text-window-node.js';
 
-export const GRAPH_VERSION = 11;
+export const GRAPH_VERSION = 12;
 export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn', 'SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'];
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
-export const GRAPH_RECOVERY_KEY = 'processing-graph-before-v11';
+export const GRAPH_RECOVERY_KEY = 'processing-graph-before-v12';
 // Migration-only contracts; none are supported palette/runtime ports.
 const LEGACY_TRANSLATION_OUTPUTS = { provisional: TEXT, text: TEXT, provisionalSource: TEXT, provisionalStatus: TEXT, provisionalError: TEXT, finalSource: TEXT, finalStatus: TEXT, finalIndex: NUMBER, finalError: TEXT };
 const paired = contract => ({ provisional: contract, final: contract });
@@ -43,7 +43,7 @@ export const NODE_TYPES = Object.freeze({
     help: 'Japanese → English with the same pinned q4 model as English → Japanese. Optional provisional accepts any TEXT source. Plain TEXT in; grouped source/text/error out. Stop drains; Cancel emits nothing. Save prepares 3.112 GB; allow 7 GB storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback. Google Gemma Terms and Prohibited Use Policy apply; see Help / Models before use.' },
   LiveTextDisplay: { label: 'Live text display', inputs: { dom: DOM }, outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Mount each complete inert DOM snapshot, cloned for safe fan-out. Use TextToDOM for plain text or PairedTextToDOM for the latest comparison pair. Connect DOMAccumulator explicitly for DOM history. Start begins empty; Stop/Cancel retain the latest snapshot. Formatting stays in processors on the page main thread.' },
   TextToDOM: { label: 'Text to DOM', inputs: { text: TEXT }, outputs: { dom: DOM }, textSettings: { className: { default: '', optional: true } }, help: 'Convert each complete TEXT snapshot to literal visible text, including whitespace, newlines and empty strings. Optional className selects code-authored presentation CSS. No HTML parsing, accumulation or source matching. Main thread only.' },
-  PairedTextToDOM: { label: 'Paired text to DOM', inputs: { source: TEXT, text: TEXT, error: TEXT }, optionalInputs: ['error'], outputs: { dom: DOM }, help: 'Supply source/text and optional error together from one producer. The consumer requires grouped results and rejects provisional deliveries at runtime. Each completed result emits only its exact original/translation pair, including empty results and errors. No history; connect DOMAccumulator explicitly to keep earlier pairs. Hover or focus either cell to highlight its pair. Stop drains; Cancel rejects stale results. Main thread only.' },
+  PairedTextToDOM: { label: 'Paired text to DOM', inputs: { input1: TEXT, input2: TEXT }, outputs: { dom: DOM }, help: 'Supply input1/input2 together from one producer in a completed atomic group. Input1 is left; input2 is right. Omitted input2 leaves an empty cell; input2 alone emits nothing. Ungrouped, mismatched and provisional deliveries are rejected at runtime. Literal text, neutral accessibility labels and linked hover/focus highlighting. No history; connect DOMAccumulator explicitly. Main thread only.' },
   DOMAccumulator: { label: 'DOM accumulator', inputs: { append: DOM }, outputs: { dom: DOM }, help: 'Append each inert DOM snapshot in order, preserving duplicates. Validate and clone inputs and emit the complete accumulated DOM. Start clears history; Stop/Cancel retain committed content and reject stale deliveries. No persistence; growing snapshots consume memory and rendering time. Main thread only.' },
   DOMCombiner: { label: 'DOM combiner', inputs: { first: DOM, second: DOM }, outputs: { dom: DOM }, help: 'Combine the latest first and second inert DOM snapshots in that order. Each update replaces only its input; empty snapshots clear it. Inputs and outputs are validated deep clones. Start clears both; Stop/Cancel retain the latest output and reject stale deliveries. Main thread only.' },
   TextAccumulator: { label: 'Text accumulator', inputs: { append: TEXT, preview: TEXT }, optionalInputs: ['append', 'preview'], outputs: { text: TEXT }, help: 'Reusable transcript state: append commits one exact segment separated by a newline, including repeated/empty values, and clears preview. Preview replaces only the uncommitted tail; empty clears it. Grouped append wins. Every change emits the whole TEXT snapshot. Stop removes preview; Cancel discards pending work; Start begins empty. No truncation or persistence; growing snapshots consume memory and rendering time.' },
@@ -97,7 +97,7 @@ export function translationTemplate(direction) {
   return direction === 'en-ja' ? 'English: {1}\nJapanese: {2}{3}' : 'Japanese: {1}\nEnglish: {2}{3}';
 }
 export function pairedTextEdges(source, target) {
-  return ['source', 'text', 'error'].map(port => edge(source, port, target, port));
+  return [edge(source, 'source', target, 'input1'), edge(source, 'text', target, 'input2')];
 }
 export function translationViewEdges(source, target) {
   return ['source', 'text', 'error'].map((port, index) => edge(source, port, target, `input${index + 1}`));
@@ -362,7 +362,7 @@ function migrateTranslationGraph(next) {
   });
   next = migrateDisplayGraph(next);
   if (changes.length) {
-    const error = new Error(`Translation graph migration needs review. ${changes.join('; ')}. No pending rows or provisional translations are emitted. Failures emit source/error only. Review the repair draft and Save; the original saved graph is kept for recovery.`);
+    const error = new Error(`Translation graph migration needs review. ${changes.join('; ')}. No pending rows or provisional translations are emitted. Failures emit source/error only. PairedTextToDOM source/text become input1/input2; former formatter error routes are removed in the draft, with specific errors in translation diagnostics. Review the repair draft and Save; the original saved graph is kept for recovery.`);
     const candidate = convertDOMGraph(next), errors = validateGraph(candidate);
     if (!errors.length) error.recoveryGraph = candidate;
     else error.message += ` The converted graph is invalid: ${errors.join(' ')} Export the original recovery copy and repair these routes/settings before import.`;
@@ -402,14 +402,37 @@ function convertDOMGraph(graph) {
     for (const route of routes) route.to = [id, 'text'];
     next.edges.push(edge(id, 'dom', display.id, 'dom'));
   }
+  return convertPairedDOMGraph(next);
+}
+// Only the reviewed draft loses the obsolete formatter error route. The saved
+// original and all other error fan-out remain available for recovery.
+function convertPairedDOMGraph(graph) {
+  const next = structuredClone(graph);
+  const ids = new Set(next.nodes.filter(node => node.type === 'PairedTextToDOM').map(node => node.id));
+  next.edges = next.edges.filter(route => !ids.has(route?.to?.[0]) || route.to[1] !== 'error');
+  for (const route of next.edges) if (ids.has(route?.to?.[0])) {
+    if (route.to[1] === 'source') route.to[1] = 'input1';
+    else if (route.to[1] === 'text') route.to[1] = 'input2';
+  }
   next.version = GRAPH_VERSION;
   return next;
 }
 export function migrateGraph(graph) {
   const next = migrateLegacyGraph(graph);
-  if (next?.version !== 10 || !Array.isArray(next.nodes) || !Array.isArray(next.edges)) return next;
+  if (![10, 11].includes(next?.version) || !Array.isArray(next.nodes) || !Array.isArray(next.edges)) return next;
+  if (next.version === 11) {
+    const pairedIds = new Set(next.nodes.filter(node => node.type === 'PairedTextToDOM').map(node => node.id));
+    const converted = convertPairedDOMGraph(next), errors = validateGraph(converted);
+    if (!pairedIds.size) return converted;
+    const removed = next.edges.filter(route => pairedIds.has(route?.to?.[0]) && route.to[1] === 'error')
+      .map(route => `${route.from?.join('.')} → ${route.to.join('.')}`);
+    const error = new Error(`Paired DOM graph v12 requires review. PairedTextToDOM source/text become input1/input2, with neutral labels and an empty right cell for omitted input2. ${removed.length ? `Removed formatter error routes in draft: ${removed.join('; ')}. ` : ''}Specific translation errors remain in translation diagnostics; other error routes are preserved. Review the draft and Save; the original saved graph is kept for recovery.`);
+    if (!errors.length) error.recoveryGraph = converted;
+    else error.message += ` Conversion needs repair: ${errors.join(' ')}`;
+    throw error;
+  }
   const converted = convertDOMGraph(next), errors = validateGraph(converted);
-  const error = new Error('DOM display graph v11 requires review. LiveTextDisplay now accepts only dom: DOM. Review the TextToDOM conversion draft and Save; the original saved graph is kept for recovery.');
+  const error = new Error('DOM display graph v11 requires review. LiveTextDisplay now accepts only dom: DOM. PairedTextToDOM source/text become input1/input2; former formatter error routes are removed in the draft, with specific errors in translation diagnostics. Review the TextToDOM conversion draft and Save; the original saved graph is kept for recovery.');
   if (!errors.length) error.recoveryGraph = converted;
   else error.message += ` Conversion needs repair: ${errors.join(' ')}`;
   throw error;

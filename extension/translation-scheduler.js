@@ -37,6 +37,9 @@ export class TranslationSchedulerNode {
   emit(job, text, error = '') {
     if (this.disposed || this.context.signal.aborted) return;
     if (job.provisional && job.revision !== this.revision) return;
+    // Per-utterance validation errors must reach diagnostics even when the
+    // generic formatter (or any other consumer) leaves error disconnected.
+    if (error && !this.error) this.onState(`Translation unavailable: ${error}`);
     (job.context || this.context).emitOutputs({ source: job.source, error, ...(error ? {} : { text }) }, { provisional: job.provisional === true });
   }
   receiveInputs(values, context) {

@@ -68,7 +68,7 @@ for (const [key, type, module, className, partials] of [
         constructor(...args) { super(...args); window.workers.push(this); }
         terminate() { this.released = true; super.terminate(); }
       };
-      const graph = assertGraph({ version: 11, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode(type, 'speech'), graphNode('TextAccumulator','acc'), graphNode('TextToDOM','dom'), graphNode('LiveTextDisplay', 'out')],
+      const graph = assertGraph({ version: 12, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode(type, 'speech'), graphNode('TextAccumulator','acc'), graphNode('TextToDOM','dom'), graphNode('LiveTextDisplay', 'out')],
         edges: [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'acc', 'append'),edge('acc','text','dom','text'),edge('dom','dom','out','dom'),
           ...(type.includes('Moonshine') ? [edge('speech', 'provisional', 'acc', 'preview')] : [])] });
       window.session = new TabSession(view => { window.view = view; }, { graph,

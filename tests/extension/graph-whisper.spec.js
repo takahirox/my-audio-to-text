@@ -88,7 +88,7 @@ for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'k
     }
     localStorage.setItem(GRAPH_KEY, JSON.stringify(graph)); return graph;
   }, unsafe);
-  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = 11;
+  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = 12;
   expected.edges = expected.edges.filter(route => route.from[1] !== 'provisional');
   await editor.reload();
   await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(0);

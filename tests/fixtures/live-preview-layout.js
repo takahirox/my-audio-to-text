@@ -9,7 +9,7 @@ export async function checkLivePreviewLayout(page, content, expect) {
   await expect(content.locator('img, script')).toHaveCount(0);
   await expect(tail).toHaveCSS('font-style', 'italic');
   await expect(content).toHaveAttribute('aria-label', 'Content');
-  await expect(content.locator('table').first()).toHaveAttribute('aria-label', 'Original and translation comparison');
+  await expect(content.locator('table').first()).toHaveAttribute('aria-label', 'Paired texts');
   const geometry = await content.evaluate(root => {
     const box = element => {
       const r = element.getBoundingClientRect();

@@ -156,14 +156,16 @@ TEXT producer can connect to `TextToDOM.text → dom → LiveTextDisplay.dom`; a
 `TextFormatter` is optional. Live renders sink labels/output by active graph Node
 order, not ASR/translation identity. Translation exposes only grouped source/text/error
 primitives. Configurable TextFormatter composes latest values; TextAccumulator owns committed history. No status/index ports or model-specific formatter are needed.
-See [version 11 migration and exact display/formatting semantics](extension-graph.md).
+See [graph migration and exact display/formatting semantics](extension-graph.md).
 Independent streams update latest formatter values; only directly grouped
 `emitOutputs`/`receiveInputs` updates preserve one producer's association.
 
 Live displays accept only `dom: DOM` in Graph v11. Route complete TEXT snapshots
 through `TextToDOM.text → dom → LiveTextDisplay.dom`. For text history, explicitly
 use TextAccumulator's append/preview inputs upstream of TextToDOM. PairedTextToDOM
-accepts a completed grouped source/text/error result from any compatible producer;
+accepts completed grouped input1/input2 TEXT from any compatible producer;
+translator.source explicitly connects to input1 and translator.text to input2.
+Missing input2 leaves the right cell blank; specific errors stay in translation diagnostics;
 its consumer-owned correlation validation does not depend on producer identity.
 
 These implemented compositions differ only through explicit wiring (node names
@@ -178,6 +180,7 @@ DOM history + latest provisional DOM → DOMCombiner → LiveTextDisplay
 DOMCombiner uses `first` and `second` for the latest snapshots in that order;
 it adds no history or preview-specific policy. LiveTextDisplay replaces its
 supplied snapshot in every case; scroll-follow remains on the rendering surface.
-Existing v11 direct connections are not rewritten or given an accumulator.
+The v12 migration renames old paired inputs under review and preserves direct
+DOM display routes; it never inserts an accumulator.
 Saved TEXT display graphs require review and Save of a conversion draft; exact
 originals remain recoverable. See [DOM contracts, exact wiring and recovery](extension-graph.md#dom-formatters-and-display-ownership).

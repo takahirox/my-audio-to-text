@@ -26,7 +26,7 @@ test('Gemma directions share a complete immutable q4 manifest, including both ex
 
 for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGemmaJaEn', 'ja-en']]) {
   test(`${type}: v11 save/reload preserves independent and parked Nodes; real builder routes grouped TEXT to formatter and direct sinks`, async () => {
-    const graph = { version: 11, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
+    const graph = { version: 12, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
       graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain'),
       graphNode('Text', 'independent'), graphNode('LiveTextDisplay', 'other'), graphNode(type, 'parked')], edges: [
       edge('input', 'value', 'translation', 'text'), edge('translation', 'source', 'format', 'input1'),
