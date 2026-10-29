@@ -17,7 +17,7 @@ test('direct palette/canvas/help use ordinary Text formatter; Graph actions has 
   await openPalette(editor);
   await expect(editor.locator('option[value=PairedTextFormatter]')).toHaveCount(0);
   await add(editor, 'TextFormatter');
-  await expect(editor.locator('[data-node=textformatter] .graph-heading')).toHaveText('Text formatter (textformatter)');
+  await expect(editor.locator('[data-node=textformatter] .graph-heading')).toHaveText('Text formatter');
   await editor.getByText('Node help and ports', { exact: true }).click();
   await expect(editor.locator('.graph-inspector')).not.toContainText('compatibility');
   await editor.locator('.graph-actions > summary').click();

@@ -16,6 +16,54 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/extension/graph-editor.html');
 });
 
+for (const width of [390, 1440]) {
+  test(`canvas headings hide IDs while duplicate nodes remain identifiable at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const labels = await page.evaluate(async () => {
+      const { defaultGraph, graphNode, nodeDefinition, saveGraph } = await import('/extension/graph.js');
+      const graph = defaultGraph();
+      graph.nodes.push(graphNode('SpeechToTextReazonSpeech', 'speech-second', 270, 330));
+      saveGraph(localStorage, graph);
+      return graph.nodes.map(node => nodeDefinition(node).label);
+    });
+    await page.reload();
+    const original = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+    await expect(page.locator('.graph-heading')).toHaveText(labels);
+    const first = page.getByRole('button', { name: 'Select speech', exact: true });
+    const second = page.getByRole('button', { name: 'Select speech-second', exact: true });
+    await expect(second).toHaveText(await first.textContent());
+    await expect(first).toHaveAccessibleName('Select speech');
+    await expect(second).toHaveAccessibleName('Select speech-second');
+    await first.click();
+    const inspector = page.getByRole('complementary', { name: 'Node settings inspector' });
+    await expect(inspector.getByText('Node: speech', { exact: true })).toBeVisible();
+    await second.press('Enter');
+    await expect(second).toBeFocused();
+    await expect(second).toHaveAttribute('aria-pressed', 'true');
+    await expect(first).toHaveAttribute('aria-pressed', 'false');
+    await expect(inspector.getByText('Node: speech-second', { exact: true })).toBeVisible();
+    await first.press('Space');
+    await expect(inspector.getByText('Node: speech', { exact: true })).toBeVisible();
+    await second.press('Space');
+    await page.locator('#graph-zoom').selectOption('0.25');
+    await page.getByRole('button', { name: 'Edit at 100%', exact: true }).press('Enter');
+    await expect(second).toBeFocused();
+    await expectInsideCanvas(second);
+    await expect(inspector.getByText('Node: speech-second', { exact: true })).toBeVisible();
+    await expect(page.locator('#graph-errors')).toBeEmpty();
+    await expect(page.locator('#graph-state')).toContainText('Saved graph');
+    await page.locator('#graph-save').click();
+    await expect(page.locator('#graph-save')).toBeEnabled();
+    expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
+    await page.reload();
+    await expect(page.locator('.graph-heading')).toHaveText(labels);
+    await second.click();
+    await expect(inspector.getByText('Node: speech-second', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
 for (const width of [390, 1440]) for (const size of ['default', 'large']) {
   test(`zoom overview returns to the editing port: ${size} graph at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 });

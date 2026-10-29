@@ -317,7 +317,7 @@ export class GraphEditor {
       const definition = nodeDefinition(node), card = el('section', undefined, 'graph-node'); card.dataset.node = node.id;
       card.classList.toggle('selected-node', this.selectedNode === node.id);
       card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`;
-      const heading = el('button', `${definition.label} (${node.id})`, 'graph-heading'); heading.type = 'button';
+      const heading = el('button', definition.label, 'graph-heading'); heading.type = 'button';
       heading.setAttribute('aria-label', `Select ${node.id}`); heading.setAttribute('aria-pressed', String(this.selectedNode === node.id));
       heading.title = 'Select to inspect settings. Drag to move; arrow keys move by 10 pixels.';
       heading.onclick = () => { this.selectedEdge = null; this.drawWires(); this.selectedNode = node.id; this.drawInspector(); for (const c of this.canvas.querySelectorAll('.graph-node')) { const selected = c.dataset.node === node.id; c.classList.toggle('selected-node', selected); c.querySelector('.graph-heading').setAttribute('aria-pressed', String(selected)); } };

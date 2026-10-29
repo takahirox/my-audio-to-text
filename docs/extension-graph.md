@@ -50,7 +50,9 @@ a focused wire also removes it. Escape or clicking blank canvas clears selection
 and hides Disconnect. After removal, focus returns to the scrollable canvas.
 **Remove Node** in the selected node’s inspector deletes it and its edges. Select a heading to
 edit display labels, templates, language/voice in the contextual **Settings**
-inspector (below the canvas in narrow windows). Close settings or click blank
+inspector (below the canvas in narrow windows). Canvas headings show only the
+node type label; Settings shows the selected node's ID, including for multiple
+nodes of the same type. Close settings or click blank
 canvas to reclaim space. **Node help and ports** reveals contracts and detailed
 usage only when needed. OPUS-MT directions are
 separate executable Node types.
