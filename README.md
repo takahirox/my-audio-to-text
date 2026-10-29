@@ -7,7 +7,7 @@ a small browser-local classifier. Save prepares its verified 14 MB model.
 The extension also has independent [LFM2.5 1.2B JP and Qwen3.5 2B meeting-summary
 draft processors](docs/meeting-summary-nodes.md). They incrementally update a
 Japanese or English note from committed TEXT, using Save-prepared local WebGPU
-models. Connect `summary → LiveTextDisplay.replace`. Read the recorded accuracy
+models. Connect `summary → TextToDOM.text → dom → LiveTextDisplay.dom`. Read the recorded accuracy
 limitations before relying on generated decisions, owners or task status.
 
 A local-first composable processing system that connects reusable input and processing capabilities into pipelines for useful derived information.
@@ -82,11 +82,11 @@ The extension Graph Editor exposes **ReazonSpeech ja-en ASR**, **Whisper tiny
 (multilingual) ASR**, **Streaming Zipformer English ASR**, and a reusable **Text**
 constant. Whisper defaults to English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
 Japanese. Whisper exposes only `final: TEXT`; connect it to
-`LiveTextDisplay.append` for completed segments. The default stays
-ChromeTabAudio → ReazonSpeech → one LiveTextDisplay. See [Whisper pins, setup,
+`TextAccumulator.append → text → TextToDOM.text → dom → LiveTextDisplay.dom` for completed segments. The default stays
+ChromeTabAudio → ReazonSpeech → TextAccumulator → TextToDOM → LiveTextDisplay. See [Whisper pins, setup,
 usage and real-model validation](docs/whisper-node.md). For real incremental English
 previews, opt into [English online Zipformer](docs/zipformer-node.md): connect
-`provisional → LiveTextDisplay.replace` and `final → LiveTextDisplay.append`.
+`provisional → TextAccumulator.preview` and `final → TextAccumulator.append`, then `text → TextToDOM.text → dom → LiveTextDisplay.dom`.
 
 The extension also offers independent **Parakeet TDT 0.6B v3** (WebGPU, final
 TEXT only) and **Moonshine Medium Streaming English 245M** (CPU WASM, real

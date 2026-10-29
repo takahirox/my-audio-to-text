@@ -296,3 +296,21 @@ test('explicit groups carry only direct producer input names; independent emits 
     { values: { second: 'ordinary' }, group: undefined },
   ]);
 });
+
+test('provisional provenance follows async forwarding without changing payloads or independent deliveries', async () => {
+  let source; const received = [], held = gate();
+  const pipeline = new Pipeline({ nodes: {
+    source: { outputs: { value: text }, start(c) { source = c; } },
+    forward: { inputs: { value: text }, outputs: { single: text, grouped: text }, async receive(_,value,c) {
+      await held.promise; c.emit('single',value); c.emitOutputs({grouped:value}, {provisional:false});
+    } },
+    sink: { inputs: { single: text, grouped: text }, receiveInputs(values,c) { received.push([values,c.provisional]); assert.ok(Object.isFrozen(c)); } },
+  }, connections: [
+    { from: ['source','value'], to: ['forward','value'] },
+    { from: ['forward','single'], to: ['sink','single'] },{ from: ['forward','grouped'], to: ['sink','grouped'] },
+  ] });
+  await pipeline.start(); source.emitOutputs({value:'same'}, {provisional:true}); source.emit('value','same');
+  held.resolve(); await pipeline.stop();
+  assert.deepEqual(received,[[{single:'same'},true],[{grouped:'same'},true],[{single:'same'},false],[{grouped:'same'},false]]);
+  await pipeline.dispose();
+});

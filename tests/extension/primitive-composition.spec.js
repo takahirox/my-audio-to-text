@@ -8,7 +8,7 @@ for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa'
   const live=await openGraph(f), editor=live.editor;
   for(const source of ['speech','window']) for(const ports of [['provisional','text'],['text','provisional']]) {
     const graph=defaultGraph(); graph.nodes.push(graphNode(translator,'translator',600,400),graphNode('TextWindow','window',300,400));
-    await editor.evaluate(async graph=>{const {saveGraph}=await import('./graph.js');saveGraph(localStorage,graph);},graph);await editor.reload();
+    await editor.evaluate(async graph=>{const {saveGraph}=await import('./graph.js');saveGraph(localStorage, window.addDOMFormatters(graph));},graph);await editor.reload();
     for(const input of ports){
       const output=source==='speech'&&input==='text'?'final':input;
       await editor.getByRole('button',{name:`${source} output ${output}`,exact:true}).press('Enter');
@@ -35,7 +35,7 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
     ...['source','text','error'].map(p=>edge('translator',p,'commit',p)),edge('commit','final','acc','append'),edge('commit','provisional','acc','preview'),edge('acc','text','translated','content'));
   const result=await live.evaluate(async graph=>{
     const {buildGraph}=await import('./graph-runtime.js');const displays={},events=[];
-    const built=buildGraph(graph,{tabId:42,prepareTranslateGemma(){},onDisplay(id,text){displays[id]=text;events.push({id,text});}});
+    const built=buildGraph(window.addDOMFormatters(graph),{tabId:42,prepareTranslateGemma(){},onDisplay(id,dom){const text=dom.textContent;displays[id]=text;events.push({id,text});}});
     const wait=async predicate=>{const deadline=Date.now()+5000;while(!predicate()){if(Date.now()>deadline)throw Error('Timed out waiting for packaged translation');await new Promise(r=>setTimeout(r,5));}};
     try{
       await built.pipeline.start();await built.translations[0].ready;const speech=built.speechNodes.get('speech');
@@ -56,7 +56,7 @@ test('MV3 formatter startup configuration is delivered before Whisper loads, and
   graph.edges.push(edge('language','value','format','input1'),edge('format','text','speech','language'),edge('language','value','peer','content'));
   const result=await live.evaluate(async graph=>{
     const {buildGraph}=await import('./graph-runtime.js');const displays={};
-    const built=buildGraph(graph,{tabId:42,onDisplay:(id,t)=>{displays[id]=t;}});
+    const built=buildGraph(window.addDOMFormatters(graph),{tabId:42,onDisplay:(id,t)=>{displays[id]=t.textContent;}});
     try{
       await built.pipeline.start();await built.pipeline.entries.get('format').queue;await built.pipeline.entries.get('speech').queue;
       const language=window.graphWorkers.find(w=>w.url.includes('whisper-worker')).messages.find(m=>m.type==='load').language;
@@ -71,10 +71,11 @@ test('MV3 Cancel sends the same committed snapshot through direct and formatted 
   const live=await openGraph(f);
   const result=await live.evaluate(async()=>{
     const {Pipeline}=await import('../web/pipeline.js');const {TEXT}=await import('../web/port-contracts.js');
+    const {TextToDOMNode}=await import('../web/dom-nodes.js');
     const {TextAccumulatorNode,TextFormatterNode,LiveTextDisplayNode}=await import('../web/text-nodes.js');let source;const states={};
     const acc=new TextAccumulatorNode(),pipeline=new Pipeline({nodes:{source:{outputs:{text:TEXT},start(c){source=c;}},acc,format:new TextFormatterNode({template:'[{1}]'}),
-      direct:new LiveTextDisplayNode(t=>{states.direct=t;}),indirect:new LiveTextDisplayNode(t=>{states.indirect=t;})},connections:[
-      {from:['source','text'],to:['acc','append']},{from:['acc','text'],to:['direct','content']},{from:['acc','text'],to:['format','input1']},{from:['format','text'],to:['indirect','content']}]});
+      directDOM:new TextToDOMNode(),indirectDOM:new TextToDOMNode(),direct:new LiveTextDisplayNode(t=>{states.direct=t.textContent;}),indirect:new LiveTextDisplayNode(t=>{states.indirect=t.textContent;})},connections:[
+      {from:['source','text'],to:['acc','append']},{from:['acc','text'],to:['directDOM','text']},{from:['directDOM','dom'],to:['direct','dom']},{from:['acc','text'],to:['format','input1']},{from:['format','text'],to:['indirectDOM','text']},{from:['indirectDOM','dom'],to:['indirect','dom']}]});
     await pipeline.start();source.emit('text','keep');await pipeline.entries.get('acc').queue;
     acc.receive('preview','discard',pipeline.entries.get('acc').context);await pipeline.entries.get('format').queue;
     source.emit('text','queued');await pipeline.cancel();source.emit('text','late');return states;

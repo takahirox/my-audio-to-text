@@ -40,7 +40,7 @@ export async function seedConditionGraph(editor) {
     const g=defaultGraph();g.nodes.push(graphNode('IfCondition','condition',500,300),graphNode('LiveTextDisplay','yes',850,300),graphNode('LiveTextDisplay','no',850,600),graphNode('TextAccumulator','yes-acc'),graphNode('TextAccumulator','no-acc'));
     g.nodes.find(n=>n.id==='yes').settings.label='Yes';g.nodes.find(n=>n.id==='no').settings.label='No';
     g.edges.push(edge('speech','final','condition','text'),edge('condition','yes','yes-acc','append'),edge('condition','no','no-acc','append'),edge('yes-acc','text','yes','content'),edge('no-acc','text','no','content'));
-    saveGraph(localStorage,g);
+    saveGraph(localStorage, window.addDOMFormatters(g));
   });
   await editor.reload();
 }

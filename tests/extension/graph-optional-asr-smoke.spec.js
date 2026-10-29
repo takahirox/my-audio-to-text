@@ -68,9 +68,9 @@ for (const [key, type, module, className, partials] of [
         constructor(...args) { super(...args); window.workers.push(this); }
         terminate() { this.released = true; super.terminate(); }
       };
-      const graph = assertGraph({ version: 9, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode(type, 'speech'), graphNode('LiveTextDisplay', 'out')],
-        edges: [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'out', 'append'),
-          ...(type.includes('Moonshine') ? [edge('speech', 'provisional', 'out', 'replace')] : [])] });
+      const graph = assertGraph({ version: 11, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode(type, 'speech'), graphNode('TextAccumulator','acc'), graphNode('TextToDOM','dom'), graphNode('LiveTextDisplay', 'out')],
+        edges: [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'acc', 'append'),edge('acc','text','dom','text'),edge('dom','dom','out','dom'),
+          ...(type.includes('Moonshine') ? [edge('speech', 'provisional', 'acc', 'preview')] : [])] });
       window.session = new TabSession(view => { window.view = view; }, { graph,
         sourceFactory: (tabId, onAudio) => ({ start() { window.feed = onAudio; }, stop() {} }) });
       window.events = [];
@@ -90,7 +90,7 @@ for (const [key, type, module, className, partials] of [
       }, { pcm, paced: partials });
       const stopAt = await page.evaluate(() => performance.now());
       await page.evaluate(async () => { await window.session.stop(); if (window.view.error) throw Error(window.view.error); });
-      const result = await page.evaluate(() => ({ events: window.events, displays: window.view.displays, workersReleased: window.workers.every(w => w.released), end: performance.now() }));
+      const result = await page.evaluate(() => ({ events: window.events, displays: Object.fromEntries(Object.entries(window.view.displays).map(([id,dom])=>[id,dom.textContent])), workersReleased: window.workers.every(w => w.released), end: performance.now() }));
       const finals = result.events.filter(e => e.type === 'final');
       runs.push({ fixture, loadMs, feedAt, stopAt, ...result });
       console.log(key, fixture, JSON.stringify({ loadMs, finals, partials: result.events.filter(e => e.type === 'partial').length, drainMs: result.end - stopAt }));

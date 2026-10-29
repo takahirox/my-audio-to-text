@@ -2,14 +2,14 @@
 
 [Meeting summary processors](meeting-summary-nodes.md) independently support
 LFM2.5 1.2B JP and Qwen3.5 2B with committed `text: TEXT` input and complete
-`summary: TEXT` snapshots for `LiveTextDisplay.content`. Save prepares their
+`summary: TEXT` snapshots for `TextToDOM.text → dom → LiveTextDisplay.dom`. Save prepares their
 pinned assets; each owns a local WebGPU Worker and bounded incremental context.
 
 [IfCondition](if-condition-node.md) is an ordinary reusable TEXT processor with
 `text` input, an editable English condition and `yes` / `no` TEXT outputs. Both
 outputs preserve the original input string; only the selected branch emits.
 Its pinned local model is prepared through Save graph, and errors stop only that
-instance with a visible status. It does not change version 10 or Pipeline routing.
+instance with a visible status. It uses version 11 or Pipeline routing.
 
 The **Simple / Graph** switch connects Live's minimal recording window and the
 full-size Graph Editor tab. **Models** is a secondary link for asset preparation
@@ -78,10 +78,10 @@ saved graph. Drafts remain page-local. Transcripts/audio are never persisted.
 Closing/reloading Live releases capture/Workers and revokes audio URLs.
 
 Fresh installs and **Reset draft to default** use exactly four Nodes:
-`ChromeTabAudio`, `SpeechToTextReazonSpeech`, `TextAccumulator`, and one generic `LiveTextDisplay` labeled Text
+`ChromeTabAudio`, `SpeechToTextReazonSpeech`, `TextAccumulator`, `TextToDOM`, and one generic `LiveTextDisplay` labeled Text
 (language unspecified). The three named-port edges are `ChromeTabAudio.audio →
 SpeechToTextReazonSpeech.audio`, `SpeechToTextReazonSpeech.provisional → TextAccumulator.preview`, and
-`SpeechToTextReazonSpeech.final → TextAccumulator.append`, and `TextAccumulator.text → LiveTextDisplay.content`. No translation or formatter is
+`SpeechToTextReazonSpeech.final → TextAccumulator.append`, and `TextAccumulator.text → TextToDOM.text → dom → LiveTextDisplay.dom`. No translation is
 included. Reset changes only the draft until Save; upgrades never replace a
 saved graph with the new default. Existing explicit boolean translation
 preferences migrate once when no graph is saved: only `enabled: true` adds the
@@ -134,7 +134,7 @@ untouched and cannot run; Graph Editor opens a converted **unsaved repair draft*
 Review the report and reconnect unsupported routes deliberately, then Save.
 Before and after Save, expand **Original saved graph (migration recovery copy)**
 to copy the complete original JSON, including removed routes/configurations.
-Before v10 this used `processing-graph-before-v9`; new saves use `processing-graph-before-v10`; this backup remains
+Before v10 this used `processing-graph-before-v9`; new saves use `processing-graph-before-v11`; this backup remains
 across page reloads and later ordinary saves. To reattempt recovery, export this
 copy and import it in a compatible version or restore it to the graph storage key.
 Reset changes only the draft and still requires Save. Transcripts/history were
@@ -173,7 +173,9 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | SpeechToTextWhisper | audio: PCM; language: TEXT (optional startup en/ja, defaults to en) | final: TEXT only |
 | Number | — | value: NUMBER; editable finite constant |
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
-| LiveTextDisplay | content: TEXT | render each complete snapshot verbatim |
+| LiveTextDisplay | dom: DOM | clone and mount each complete inert DOM snapshot |
+| TextToDOM | text: TEXT | dom: DOM; literal text snapshot with visible whitespace |
+| PairedTextToDOM | source/text: TEXT; error: TEXT optional | dom: DOM; committed grouped comparison history |
 | TextAccumulator | append / preview: TEXT, individually optional; text: TEXT output | full committed transcript plus ephemeral tail |
 | TextWindow | text: TEXT | text: TEXT (closed batches); provisional: TEXT (optional open snapshots); length/deadline/sentence settings |
 | TranslationCommit | boundary/source/text/error: TEXT | provisional/final/error: TEXT; opt-in closed-window commits |
@@ -212,8 +214,8 @@ consumer waiting with an explicit status, rather than silently using its default
 For two independent transcript displays, connect:
 
 - `ChromeTabAudio.audio → SpeechToTextZipformerEn.audio`, with `final → remote-accumulator.append`
-  and optional `provisional → remote-accumulator.preview`, then `text → remote.content` on a LiveTextDisplay labeled Remote speaker.
-- `MicrophoneAudio.audio → SpeechToTextWhisper.audio`, with `final → local-accumulator.append → text → local.content`
+  and optional `provisional → remote-accumulator.preview`, then `text → TextToDOM.text → dom → remote.dom` on a LiveTextDisplay labeled Remote speaker.
+- `MicrophoneAudio.audio → SpeechToTextWhisper.audio`, with `final → local-accumulator.append → text → TextToDOM.text → dom → local.dom`
   on another LiveTextDisplay labeled Local speaker. ReazonSpeech is another option.
 
 Each active ASR loads its configured model before processing audio. An ASR waiting
@@ -269,7 +271,7 @@ delivery and late updates fail visibly. Saved edits apply next session.
 
 Whisper produces **completed segments only**, without provisional recognition.
 Its only output is `final: TEXT`. You may deliberately connect final to
-`LiveTextDisplay.content` for replacement behavior. Segments end on Silero's trailing
+`TextToDOM.text → dom → LiveTextDisplay.dom` for replacement behavior. Segments end on Silero's trailing
 silence or a fixed 6-second audio cap; continuous speech splits at the next
 sample without repeating pre-roll. Stop drains queued finals and active speech;
 Cancel discards pending results and terminates Workers. Pending audio is bounded
@@ -316,12 +318,16 @@ stitching is introduced.
 
 ### Generic text displays
 
-[The reusable TEXT Nodes](../web/text-nodes.js) are shared, Chrome-independent
-Pipeline implementations. `LiveTextDisplay` has only `content: TEXT`; each
-snapshot replaces its content verbatim, including `''`. Stop/Cancel retain the
-latest value; Start clears it. It never infers producer identity or accumulates.
-MeetingSummary.summary, Text.value and complete TextFormatter.text snapshots can
-connect directly to this same port.
+`LiveTextDisplay` accepts only `dom: DOM`. Each input replaces the complete
+rendered document, including empty fragments. Start clears the surface; Stop and
+Cancel retain the last committed snapshot (upstream cancellation snapshots still
+flow through TextToDOM). The sink never accumulates or interprets producer,
+translation, pairing, layout or hover behavior.
+
+`TextToDOM.text: TEXT → dom: DOM` constructs a new literal-text snapshot for every
+input, including empty strings. It uses textContent and pre-wrap whitespace;
+HTML-looking user data stays text. It owns no transcript history or settings.
+Summary and generic TextFormatter snapshots pass through this processor.
 
 `TextAccumulator` constructs reusable transcripts upstream. `append` accepts each
 exact string once, including empty strings, whitespace and equal consecutive
@@ -345,10 +351,10 @@ costs O(total text); consuming every growing snapshot can cost O(n²) over a ses
 There is no truncation or transcript cap. Available memory, JS string limits and
 browser layout time are real limits; this is not disk-backed storage. A Node test
 checks 20,000 repeated 100-character commits (2,019,999 UTF-16 units) and reports
-construction time separately from rendering. Live keeps bounded 4,096-code-unit
-text nodes, edits only the changed suffix and uses a scrollable region, avoiding
-item-array reconciliation and whole-DOM reconstruction. Prefix comparison and
-browser text layout still scale with transcript size.
+construction time separately from rendering. DOM formatters emit whole snapshots;
+the sink clones and replaces the document on accepted updates. This deliberately
+rebuilds the rendered snapshot, so selection inside replaced content may reset.
+Long-session formatting/cloning/layout costs grow with retained history.
 
 Live places configured outputs above its compact recording panel. Start, Stop
 (finalize pending work) and Cancel (discard pending work) retain their existing
@@ -358,12 +364,10 @@ translation-off and unchanged-saved-graph notices do not take space.
 
 Live renders one region per configured sink, ordered by Node array order, with
 its user-supplied label (1–120 characters) and optional language. Labels and all
-values use literal DOM text, never HTML. Unchanged text prefixes stay attached;
-ordinary tail updates preserve selection in that prefix and reader scroll.
-Arbitrary replacements and shorter snapshots remove stale suffixes. Copy text
-copies exactly the latest snapshot. Old row borders and the separate dashed
-Preview block are replaced by a single plain text surface with newline boundaries;
-preview is now content constructed by the upstream accumulator. Runtime/model,
+values use literal DOM text, never user-supplied HTML. Unchanged snapshot identities
+stay mounted during unrelated UI status updates. New snapshots replace old content.
+Copy text copies rendered text with formatter style elements excluded. Labels,
+aria-live output, keyboard scrolling, and clipboard status remain generic. Runtime/model,
 capture, target and error status remain
 outside display content. The active graph
 owns labels/routes throughout a session; saving a draft applies only on the next
@@ -401,12 +405,12 @@ into an active graph and reset latest-value state on fresh Start.
 
 For committed bilingual display, wire ASR.final → OpusMtEnJa.text (or OpusMtJaEn),
 then source/text → input1/input2 and optionally error → input3. Set the template
-freely and connect formatter.text → TextAccumulator.append → text → display.content. Pending translation emits
+freely and connect formatter.text → TextAccumulator.append → text → TextToDOM.text → dom → display.dom. Pending translation emits
 nothing; failure emits source/error with no successful text and clears the old
 translation in the directly connected formatter. Every completion/failure appends
 one readable result; repeated utterances stay distinct. Stop drains finals,
 Cancel adds no pending/canceled rows, and both retain committed accumulator text.
-Use display.content directly instead when only the latest value is desired. Generic
+Use TextToDOM without an accumulator instead when only the latest value is desired. Generic
 formatting owns no history and has no model/language-specific rules.
 `PairedTextFormatter` is migration-only terminology, absent from palette/runtime.
 
@@ -635,12 +639,12 @@ translation checks with optional real-model limits.
 processor with only `audio: MONO_16KHZ_PCM` input and real online
 `provisional: TEXT` / `final: TEXT` outputs. Search for Zipformer or English in
 Add Node. Replace the ASR, reconnect the audio source, then connect provisional
-to `TextAccumulator.preview` and final to `TextAccumulator.append`, then text to `LiveTextDisplay.content`. Remove an
+to `TextAccumulator.preview` and final to `TextAccumulator.append`, then text to `TextToDOM.text → dom → LiveTextDisplay.dom`. Remove an
 unused Number/Text configuration source when replacing the old ASR, or leave it
 parked. ReazonSpeech, Whisper and Zipformer can coexist with independent settings. Existing TEXT sinks and
 translation Nodes use the same contracts.
 
-Adding Zipformer needs no extra migration beyond the current version 10 graph.
+Adding Zipformer needs no extra migration beyond the current version 11 graph.
 Unrelated ASR nodes, IDs, settings, routes and positions stay intact; earlier
 versions use the migration rules above. The minimal ReazonSpeech default remains. See [model pins, fixed 12-second segments,
 Stop/drain, setup and limitations](zipformer-node.md).
@@ -650,7 +654,7 @@ Stop/drain, setup and limitations](zipformer-node.md).
 Search Add Node for Parakeet or Moonshine. These independent concrete Nodes use
 the same normalized audio sources and final TEXT fan-out as existing ASRs.
 Parakeet exposes final only; Moonshine exposes demonstrated native provisional
-and final. Both can coexist without changing Graph v10 or the default graph.
+and final. Both can coexist without changing Graph v11 or the default graph.
 Save prepares the saved Nodes' checksum-pinned optional weights, including parked
 Nodes. See [model-specific setup, GPU/memory limits, endpointing and lifecycle](optional-asr-nodes.md)
 and [real packaged/concurrent/native validation](evidence/optional-asr-121.md).
@@ -680,34 +684,83 @@ and [#124 validation](evidence/translation-124.md).
 ## Windowed and revisable translation (#128)
 
 The model-independent **TextWindow** and opt-in **TranslationCommit** processors
-use ordinary TEXT ports, require no weights, and retain graph version 10. See
+use ordinary TEXT ports, require no weights, and use graph version 11. See
 [connections, limits, lifecycle and measured comparison](windowed-translation.md).
 Defaults and existing per-segment translator paths remain unchanged.
 
-### Graph v10 display migration and recovery
+### DOM formatters and display ownership
 
-Saved v9 graphs (including earlier migrations) retain all original Node IDs,
-positions, labels, language settings, disconnected drafts and non-display routes.
-Each display with an append connection gets one collision-safe TextAccumulator;
-append routes go to append and replace routes go to preview, even when they come
-from different producers. Its text output goes to content. Replace-only displays,
-including meeting summaries, connect directly to content; no accumulator is added.
-Existing formatter fan-out continues to emit individual results to other consumers.
-Versions 1–8 first follow their existing migration/review rules, then this migration.
+The shared `DOM` identity lives alongside TEXT/NUMBER in `web/port-contracts.js`.
+Its value is an actual HTML Node, text node or DocumentFragment, constructed on
+the extension page’s main thread. Snapshots are immutable after emission; the sink
+validates and deep-clones each delivery, preserving the producer’s nodes and safe
+fan-out to multiple displays. The Live renderer clones again before mounting so
+stored session snapshots remain independent of a mounted document.
 
-Migrated accumulators carry `legacyDisplay: true` metadata. If all saved append
-sources are inactive drafts, the executable graph has only preview input, so that
-accumulator retains its latest snapshot on Stop/Cancel, matching the old
-replace-only display. The draft routes remain saved. Completing an append branch
-restores normal committed/preview lifecycle behavior on the next session. Newly
-added accumulators always clear uncommitted previews on Stop/Cancel.
+This is a small inert formatting contract, not an arbitrary HTML interface.
+`cloneDOM` permits standard formatting/table elements and code-authored style
+nodes, with a bounded set of presentation/accessibility attributes. It rejects
+scripts, embedded documents, custom elements, resource elements, event/URL
+attributes and resource-loading CSS. Producers use createElement/textContent;
+user strings never enter HTML or CSS parsers. CSS belongs to trusted formatter
+code. No HTML-string port, generic component system or Worker DOM serialization
+is supported. Inference remains in existing Workers using TEXT RPCs.
 
-Before writing v10, the exact original JSON is retained at
-`processing-graph-before-v10`. Earlier `processing-graph-before-v9` data is retained.
-If a v10 recovery key already holds different data, additional copies use suffixes
-`-2`, `-3`, etc.; identical originals reuse their backup. Backup failure leaves the
-saved original untouched. Recovery copies are available in Graph Editor. No
-post-merge-only verification is required for this change.
+```text
+ASR.final → TextAccumulator.append
+ASR.provisional → TextAccumulator.preview
+TextAccumulator.text → TextToDOM.text → dom → LiveTextDisplay.dom
+MeetingSummary.summary → TextToDOM.text → dom → LiveTextDisplay.dom
+
+OpusMtJaEn.source → PairedTextToDOM.source
+OpusMtJaEn.text   → PairedTextToDOM.text
+OpusMtJaEn.error  → PairedTextToDOM.error   (optional)
+PairedTextToDOM.dom → LiveTextDisplay.dom
+```
+
+PairedTextToDOM consumes each atomic result as a new row, preserving exact source
+and translation strings, arrival order, repeats and empty results. It never caches
+independent inputs for later matching. Error rows retain source and error without
+an earlier successful translation. Without an error wire, an omitted text sibling
+produces a generic failure on that source row. One table row contains both cells, so unequal
+text heights stay aligned. Formatter-owned CSS highlights both cells of just the
+hovered/focused row; both cells are keyboard focusable. Every accepted update
+emits a fresh complete DOM snapshot. Stop drains results; Cancel freezes committed
+rows and rejects stale work; fresh Start clears the history. History is local to
+the session, uncapped and not persisted.
+
+Compatible TEXT wiring remains saveable, including incomplete drafts and alternate
+producers with different output names. At runtime the paired consumer requires
+source/text and any connected error input to belong to the same direct producer's
+explicit group. Independent emissions or mismatched producers fail the consumer
+without joining values by equality or timing. The scheduler marks actual preview
+results using internal `emitOutputs(values, { provisional: true })` provenance;
+PairedTextToDOM rejects those deliveries before adding a row. Merely connecting an
+optional provisional branch does not invalidate the graph; inactive branches are
+excluded from execution. For bounded retranslation use TranslationCommit →
+TextAccumulator → TextToDOM. Plain TextFormatter remains available for independent
+latest values; it does not claim correlation.
+
+### Graph v11 display migration and recovery
+
+Version 11 intentionally removes content: TEXT. Old saved graphs cannot run until
+reviewed and saved. Valid v10 TEXT display routes open an unsaved conversion draft
+with one collision-safe TextToDOM per connected display. Original Node IDs,
+settings, positions, unrelated branches and text fan-out remain intact. There is
+no alternate TEXT display mode. Disconnected displays remain drafts. Invalid or
+ambiguous conversions require explicit repair/reset; storage stays untouched.
+
+Versions 1–9 first follow their earlier migrations, including v9 append/preview
+accumulator insertion, and then the same reviewed DOM conversion. Migrated
+`legacyDisplay` accumulators retain snapshot-only behavior when all append sources
+are inactive, matching the earlier migration. New accumulators keep their normal
+Stop/Cancel preview cleanup.
+
+On reviewed Save or Reset-and-Save, the exact original JSON is backed up under
+`processing-graph-before-v11`. Older backups remain available. Conflicting copies
+get suffixes -2, -3, etc.; identical originals reuse their copy. Backup failures
+leave the original saved graph untouched. Graph Editor exposes original JSON both
+before and after Save for recovery/export.
 
 ## Simple / Graph UI verification (#136)
 

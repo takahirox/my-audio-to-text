@@ -88,18 +88,21 @@ for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'k
     }
     localStorage.setItem(GRAPH_KEY, JSON.stringify(graph)); return graph;
   }, unsafe);
-  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = 10;
+  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = 11;
   expected.edges = expected.edges.filter(route => route.from[1] !== 'provisional');
   await editor.reload();
   await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(0);
   const saved = () => editor.evaluate(() => localStorage.getItem('processing-graph-v1'));
   if (unsafe) {
-    await expect(editor.locator('#errors')).toBeEmpty();
+    await expect(editor.locator('#errors')).toContainText('requires review');
     await expect(editor.locator('#graph-errors')).toBeEmpty();
     await expect(editor.getByRole('button', { name: 'Select affected', exact: true })).toHaveCount(1);
     await expect(editor.locator('[data-node="speech"]')).toHaveCSS('left', '333px');
   }
-  await expect.poll(saved).toBe(JSON.stringify(expected));
+  await expect(editor.locator('#errors')).toContainText('requires review');
+  expect(await saved()).toBe(raw);
+  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  expect(JSON.parse(await saved())).toEqual(expected);
   await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
   expect(await saved()).toBe(JSON.stringify(expected));
 });
@@ -109,7 +112,7 @@ test('MV3 Text literal and empty values round-trip and deliver once to an ordina
   await openPalette(editor); await editor.locator('#graph-node-type').selectOption('Text'); await editor.locator('#graph-add').click();
   await editor.getByRole('button', { name: 'text output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
-  await editor.getByRole('button', { name: 'transcript input content', exact: true }).click();
+  await editor.getByRole('button', { name: 'transcript-dom input text', exact: true }).click();
   for (const value of ['<img src=x onerror=alert(1)> & "\n😀 {1}', '']) {
     await editor.getByLabel('text value', { exact: true }).fill(value); await editor.locator('#graph-save').click();
     await expect(editor.locator('#graph-save')).toBeEnabled();

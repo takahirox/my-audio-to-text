@@ -60,7 +60,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
             if (m.type === 'load') queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } }));
             if (m.type === 'vad-stop') queueMicrotask(() => this.onmessage?.({ data: { type: 'vad-stopped', session: m.session } }));
           }, terminate() {} }),
-          onDisplay: (_, s) => { display = s; displayEvents.push({ ms: now(), text: s }); } });
+          onDisplay: (_, s) => { display = s.textContent; displayEvents.push({ ms: now(), text: s.textContent }); } });
         const accumulator = built.pipeline.entries.get('display-accumulator').node;
         const scheduler = built.translations[0], emit = scheduler.emit.bind(scheduler);
         scheduler.emit = (job, text, error) => {

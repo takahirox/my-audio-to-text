@@ -1,3 +1,5 @@
+import { addDOMFormatters } from './fixtures/dom-graph.js';
+import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, withTranslation, GRAPH_KEY, GRAPH_RECOVERY_KEY, GRAPH_VERSION, NODE_TYPES, nodeDefinition } from '../extension/graph.js';
@@ -52,23 +54,23 @@ const audioGraph = (type, translated = false) => {
 
 test('fresh graph is minimal; only explicit legacy translation choices migrate; saved graphs take precedence', () => {
   const fresh = storage(), minimal = defaultGraph();
-  assert.deepEqual(minimal.nodes.map(n => n.type), ['ChromeTabAudio', 'SpeechToTextReazonSpeech', 'LiveTextDisplay', 'TextAccumulator']);
-  assert.deepEqual(minimal.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript', 'content')]);
+  assert.deepEqual(minimal.nodes.map(n => n.type), ['ChromeTabAudio', 'SpeechToTextReazonSpeech', 'LiveTextDisplay', 'TextAccumulator', 'TextToDOM']);
+  assert.deepEqual(minimal.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript', 'dom')]);
   assert.deepEqual(minimal.nodes[2].settings, { label: 'Text', language: 'und' });
   assert.deepEqual(readGraph(fresh), minimal);
   for (const legacy of ['{broken', '{}', '{"direction":"en-ja"}', '{"enabled":"true"}']) {
     const store = storage(); store.setItem('opus-mt-translation-preferences', legacy);
-    assert.equal(readGraph(store).nodes.length, 4);
+    assert.equal(readGraph(store).nodes.length, 5);
   }
   for (const enabled of [false, true]) for (const direction of ['ja-en', 'en-ja']) {
     const store = storage(); store.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled, direction }));
-    const graph = readGraph(store); assert.equal(graph.translationDirection, direction); assert.equal(graph.nodes.length, enabled ? 8 : 4);
+    const graph = readGraph(store); assert.equal(graph.translationDirection, direction); assert.equal(graph.nodes.length, enabled ? 8 : 5);
     assert.equal(store.getItem('opus-mt-translation-preferences'), null);
     assert.deepEqual(readGraph(store), graph);
   }
   const store = storage(); store.setItem(GRAPH_KEY, '{broken'); assert.throws(() => readGraph(store));
-  saveGraph(store, defaultGraph({ enabled: false })); assert.equal(readGraph(store).nodes.length, 4);
-  store.setItem('opus-mt-translation-preferences', '{broken'); assert.equal(readGraph(store).nodes.length, 4);
+  saveGraph(store, defaultGraph({ enabled: false })); assert.equal(readGraph(store).nodes.length, 5);
+  store.setItem('opus-mt-translation-preferences', '{broken'); assert.equal(readGraph(store).nodes.length, 5);
   assert.throws(() => saveGraph({ setItem() { throw Error('Quota'); } }, defaultGraph({ enabled: true })), /Quota/);
 });
 
@@ -182,7 +184,7 @@ test('direction and translation controls retain saved audio nodes; disabling tra
   assert.ok(enabled.nodes.some(n => n.type === 'Kokoro')); assert.ok(enabled.nodes.some(n => n.type === 'OpusMtEnJa'));
   const disabled = withTranslation(enabled, { enabled: false, direction: 'ja-en' });
   assert.ok(disabled.nodes.some(n => n.type === 'Kokoro'));
-  assert.equal(withTranslation(audioGraph('Kokoro', true), { enabled: false, direction: 'en-ja' }).nodes.length, 4);
+  assert.equal(withTranslation(audioGraph('Kokoro', true), { enabled: false, direction: 'en-ja' }).nodes.length, 5);
 });
 
 for (const type of ['OpusMtJaEn', 'TranslateGemmaEnJa']) test(`${type}: ASR final TEXT → actual formatter, field and Kokoro Nodes drains completed finals in order`, async () => {
@@ -210,7 +212,7 @@ for (const type of ['OpusMtJaEn', 'TranslateGemmaEnJa']) test(`${type}: ASR fina
     outputTarget: { tabId: 42, documentId: 'owned-document', label: 'Test field' },
     pageConnectionFactory: () => ({ request: async (type, value) => { if (type === 'append') fieldTexts.push(value.text); return { inserted: true }; }, close() {} }),
     workerFactory: factory(), translationWorkerFactory: factory(), ttsWorkerFactory: factory(),
-    prepareTranslation: async () => {}, prepareTranslateGemma: async () => {}, prepareTts: async () => {}, onDisplay: (id, state) => { if (id === 'transcript') rows.splice(0, rows.length, ...state.split('\n')); },
+    prepareTranslation: async () => {}, prepareTranslateGemma: async () => {}, prepareTts: async () => {}, onDisplay: (id, state) => { state = domText(state); if (id === 'transcript') rows.splice(0, rows.length, ...state.split('\n')); },
     onTranslation() {}, onTranslationState() {}, onSynthesizedAudio: value => audio.push(value) });
   await built.pipeline.start();
   built.speechNodes.get('speech').receiveEvent({ type: 'partial', text: 'provisional', id: 0 });
@@ -232,12 +234,12 @@ test('TEXT routing and optional translator previews are independent of producer'
   graph.edges = graph.edges.filter(route => !(route.to[0] === 'transcript' && route.to[1] === 'replace') && route.to[1] !== 'provisional');
   // A translated stream can be the full transcript destination, independently
   // of the scheduler's paired diagnostic view. No producer identity is required.
-  graph.edges.find(route => route.to[0] === 'transcript').from = ['translation', 'text'];
+  graph.edges.find(route => route.to[0] === 'transcript-dom').from = ['translation', 'text'];
   graph.nodes.find(node => node.id === 'transcript').settings.label = 'Any text';
   assert.deepEqual(validateGraph(graph), []);
   assert.ok(buildGraph(graph, {}).pipeline);
   graph.edges.push(edge('speech', 'final', 'translation', 'provisional'));
-  assert.deepEqual(validateGraph(graph), []); graph.edges.pop();
+  assert.deepEqual(validateGraph(graph), []); assert.ok(buildGraph(graph, {}).pipeline); graph.edges.pop();
   graph.edges.find(route => route.to[0] === 'translation' && route.to[1] === 'text').from = ['translation', 'text'];
   assert.match(validateGraph(graph).join('\n'), /acyclic/);
 });
@@ -257,14 +259,14 @@ test('v5 migration preserves independent language, maximum IDs and fan-out; larg
   while (legacy.nodes.length < 24) { const id = 'field-' + legacy.nodes.length; legacy.nodes.push(graphNode('FocusedInputTextOutputNode', id)); legacy.edges.push(edge('speech', 'final', id, 'text')); }
   const store = storage(), saved = JSON.stringify(legacy); store.setItem(GRAPH_KEY, saved);
   assert.throws(() => readGraph(store), /migration needs review/);
-  assert.equal(repair(legacy).nodes.length, 27);
+  assert.equal(repair(legacy).nodes.length, 29);
 });
 
 test('disabling translation retains a shared display and all unaffected routes', () => {
   const graph = defaultGraph({ enabled: true }); graph.edges.find(e => e.to[0] === 'transcript-accumulator' && e.to[1] === 'append').from = ['translation', 'text'];
   const disabled = withTranslation(graph, { enabled: false, direction: 'ja-en' });
   assert.ok(disabled.nodes.some(n => n.id === 'transcript'));
-  assert.deepEqual(disabled.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('transcript-accumulator', 'text', 'transcript', 'content')]);
+  assert.deepEqual(disabled.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript', 'dom')]);
 });
 
 test('multiple processing directions prepare independently of sink labels and graph preference', async () => {
@@ -273,7 +275,7 @@ test('multiple processing directions prepare independently of sink labels and gr
     graph.nodes.push(graphNode(type, id), graphNode('LiveTextDisplay', id + '-display'));
     graph.nodes.at(-1).settings.label = 'Any arbitrary label'; graph.edges.push(edge('speech', 'final', id, 'text'), edge(id, 'text', id + '-display', 'content'));
   }
-  const directions = [], built = buildGraph(graph, { workerFactory: () => ({ postMessage() {}, terminate() {} }), sourceFactory: () => ({ start() {}, stop() {} }), prepareTranslation: async (signal, direction) => { directions.push(direction); throw Error('Fixture unavailable'); } });
+  const directions = [], built = buildGraph(addDOMFormatters(graph), { workerFactory: () => ({ postMessage() {}, terminate() {} }), sourceFactory: () => ({ start() {}, stop() {} }), prepareTranslation: async (signal, direction) => { directions.push(direction); throw Error('Fixture unavailable'); } });
   // Use the production scheduler start hook; ASR model setup is unrelated here.
   for (const id of ['forward', 'reverse']) { const entry = built.pipeline.entries.get(id); entry.node.start(entry.context); }
   await Promise.all(built.translations.map(n => n.ready)); assert.deepEqual(directions.sort(), ['en-ja', 'ja-en']);
@@ -306,9 +308,14 @@ test('v8 migration retains shared displays, formatter fan-out and independent fo
   saveGraph(store, next); saveGraph(store, defaultGraph()); assert.equal(store.getItem(GRAPH_RECOVERY_KEY), raw);
 });
 
-function v9Default(options) {
-  const graph = defaultGraph(options); graph.version = 9;
-  const accumulators = new Map(graph.nodes.filter(n => n.type === 'TextAccumulator').map(n => [n.id, graph.edges.find(e => e.from[0] === n.id).to[0]]));
-  graph.edges = graph.edges.filter(e => !accumulators.has(e.from[0])).map(e => accumulators.has(e.to[0]) ? { ...e, to: [accumulators.get(e.to[0]), e.to[1] === 'preview' ? 'replace' : 'append'] } : e);
-  graph.nodes = graph.nodes.filter(n => !accumulators.has(n.id)); return graph;
+
+function v9Default({ enabled = false, direction = 'ja-en' } = {}) {
+  const nodes = [graphNode('ChromeTabAudio','audio'),graphNode('SpeechToTextReazonSpeech','speech'),graphNode('LiveTextDisplay','transcript')];
+  const edges = [edge('audio','audio','speech','audio'),edge('speech','provisional','transcript','replace'),edge('speech','final','transcript','append')];
+  if (enabled) {
+    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa':'OpusMtJaEn','translation'),graphNode('LiveTextDisplay','translated'),graphNode('TextFormatter','translated-format'));
+    nodes[5].settings = {inputCount:3,template:direction === 'en-ja'?'English: {1}\nJapanese: {2}{3}':'Japanese: {1}\nEnglish: {2}{3}'};
+    edges.push(edge('speech','final','translation','text'),...['source','text','error'].map((port,index)=>edge('translation',port,'translated-format',`input${index+1}`)),edge('translated-format','text','translated','append'));
+  }
+  return {version:9,translationDirection:direction,nodes,edges};
 }

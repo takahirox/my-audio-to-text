@@ -127,6 +127,19 @@ no Node names, port names or public IDs, and are never joined by text equality.
 TranslationCommit uses them to verify that a grouped result derives from its
 next boundary event, while generic delivery infers no translation semantics.
 
+Producers can mark unfinished results with
+`context.emitOutputs(values, { provisional: true })`. The receiver sees immutable
+`context.provisional` provenance, separate from primitive payloads and port names.
+Ordinary emissions default to false. Forwarding through the receive context
+retains true across async work, including `emit()` and grouped emissions; passing
+false cannot clear inherited provisional provenance. Independent source emissions
+do not inherit it. The translation scheduler marks preview jobs this way, and
+PairedTextToDOM rejects provisional results before committing a row. That consumer
+also checks that all connected inputs, including optional error, occur in the
+same producer's `groupInputs`. Correlation constraints belong to the consumer;
+the graph editor allows compatible drafts without inspecting producer types,
+output names or optional upstream wiring.
+
 ## Lifecycle and errors
 
 - `await pipeline.start()` starts consumers before producers. Outputs emitted
@@ -344,7 +357,7 @@ only final TEXT, while ReazonSpeech retains both outputs. Legacy views become
 generic TEXT displays. Version 9 replaces paired formatters with ordinary configurable
 TextFormatter Nodes through a visible, non-destructive migration review. Removed
 status/index/provisional routes stay recoverable in the original JSON backup. Shared `LiveTextDisplayNode`
-and `TextFormatterNode` own text presentation state and bounded formatting.
+mounts DOM only. TextAccumulator owns text history; TextFormatter owns bounded formatting; TextToDOM and PairedTextToDOM construct DOM on the page main thread. Native DOM snapshots never cross Worker messages.
 Independent formatter inputs update latest values immediately; only directly
 grouped inputs update together. No editor, model selection, storage or inference
 policy is added to the generic Pipeline runtime.

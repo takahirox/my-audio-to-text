@@ -48,7 +48,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
    const {readGraph,saveGraph,graphNode,edge}=await import('./graph.js');const g=readGraph(localStorage);
    g.nodes.push(graphNode('IfCondition','animal',500,650),graphNode('LiveTextDisplay','animal-yes',1200,300),graphNode('LiveTextDisplay','animal-no',1200,600),graphNode('TextAccumulator','animal-yes-acc'),graphNode('TextAccumulator','animal-no-acc'));
    g.nodes.find(n=>n.id==='animal').settings.condition='Does this text mention an animal?';
-   g.edges.push(edge('speech','final','animal','text'),edge('animal','yes','animal-yes-acc','append'),edge('animal','no','animal-no-acc','append'),edge('animal-yes-acc','text','animal-yes','content'),edge('animal-no-acc','text','animal-no','content'));saveGraph(localStorage,g);
+   g.edges.push(edge('speech','final','animal','text'),edge('animal','yes','animal-yes-acc','append'),edge('animal','no','animal-no-acc','append'),edge('animal-yes-acc','text','animal-yes','content'),edge('animal-no-acc','text','animal-no','content'));saveGraph(localStorage, window.addDOMFormatters(g));
   });
   await page.editor.reload();await page.editor.locator('#graph-save').click();await expect(page.editor.locator('#graph-save')).toBeEnabled();
   const parallelStart=Date.now();await startGraph(page,120000);

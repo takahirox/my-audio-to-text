@@ -16,7 +16,7 @@ or `English`), then connect:
 ChromeTabAudio.audio       → SpeechToTextZipformerEn.audio
 SpeechToTextZipformerEn.provisional → TextAccumulator.preview
 SpeechToTextZipformerEn.final       → TextAccumulator.append
-TextAccumulator.text               → LiveTextDisplay.content
+TextAccumulator.text               → TextToDOM.text → dom → LiveTextDisplay.dom
 ```
 
 Save, then Start in Live. Selected media and microphone sources provide the same
@@ -167,4 +167,4 @@ snapshot** decoding and its Number-configured cap. Whisper still exposes
 online acoustic/decoder state between incoming blocks within each capped segment;
 its provisional output comes from that real incremental inference.
 
-Live displays accept only `content: TEXT` in Graph v10. For transcript history, route final segments to `TextAccumulator.append`, provisional tails to `TextAccumulator.preview`, and `TextAccumulator.text → LiveTextDisplay.content`. Complete summary/formatter snapshots may connect directly to content. Saved v9 display wiring migrates automatically with original recovery copies retained; see [migration and lifecycle](extension-graph.md#graph-v10-display-migration-and-recovery).
+Live displays accept only `dom: DOM` in Graph v11. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final/preview text upstream with TextAccumulator. For paired translation, wire one committed-only translator’s grouped source/text/error to PairedTextToDOM, then dom to the display. Saved TEXT display graphs require review and Save of a conversion draft; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).

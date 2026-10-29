@@ -1,4 +1,5 @@
-import { TEXT } from './port-contracts.js';
+import { cloneDOM } from './dom-nodes.js';
+import { DOM, TEXT } from './port-contracts.js';
 
 export function formatInputs(inputCount = 4) {
   if (!Number.isSafeInteger(inputCount) || inputCount < 1) throw Error('Input count must be a positive whole number.');
@@ -92,13 +93,13 @@ export class TextAccumulatorNode {
 }
 
 export class LiveTextDisplayNode {
-  inputs = { content: TEXT };
+  inputs = { dom: DOM };
   outputs = {};
   constructor(onDisplay = () => {}) { this.onDisplay = onDisplay; }
-  start() { this.onDisplay(''); }
+  start() { this.onDisplay(document.createDocumentFragment()); }
   receive(port, value, context) {
     if (context.signal.aborted) return;
-    if (port !== 'content' || typeof value !== 'string') throw TypeError('LiveTextDisplay expects content: TEXT.');
-    this.onDisplay(value);
+    if (port !== 'dom') throw TypeError('LiveTextDisplay expects dom: DOM.');
+    this.onDisplay(cloneDOM(value));
   }
 }

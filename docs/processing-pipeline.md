@@ -103,7 +103,7 @@ Transcript/history → Topic extraction/analysis → Visualization
 Capture and transcription are executable today, and final text can connect
 directly to the independent translation, correction, TTS and text-output nodes.
 Committed TEXT can also feed the extension's meeting-summary Nodes directly;
-their complete summary snapshots feed LiveTextDisplay.content directly. History
+their complete summary snapshots feed TextToDOM.text → dom → LiveTextDisplay.dom. History
 storage, article inputs and broader analysis connections remain future examples.
 In particular,
 `.provisional` is the SpeechToTextNode port for the existing core's `partial`
@@ -149,12 +149,12 @@ orchestration only when real implementations demonstrate a need.
 ## Graph-driven Live text (#99)
 
 The extension separates producer, formatting and display responsibilities. Any
-TEXT producer can connect to `LiveTextDisplay.content`; a bounded
+TEXT producer can connect to `TextToDOM.text → dom → LiveTextDisplay.dom`; a bounded
 `TextFormatter` is optional. Live renders sink labels/output by active graph Node
 order, not ASR/translation identity. Translation exposes only grouped source/text/error
 primitives. Configurable TextFormatter composes latest values; TextAccumulator owns committed history. No status/index ports or model-specific formatter are needed.
-See [version 10 migration and exact display/formatting semantics](extension-graph.md).
+See [version 11 migration and exact display/formatting semantics](extension-graph.md).
 Independent streams update latest formatter values; only directly grouped
 `emitOutputs`/`receiveInputs` updates preserve one producer's association.
 
-Live displays accept only `content: TEXT` in Graph v10. For transcript history, route final segments to `TextAccumulator.append`, provisional tails to `TextAccumulator.preview`, and `TextAccumulator.text → LiveTextDisplay.content`. Complete summary/formatter snapshots may connect directly to content. Saved v9 display wiring migrates automatically with original recovery copies retained; see [migration and lifecycle](extension-graph.md#graph-v10-display-migration-and-recovery).
+Live displays accept only `dom: DOM` in Graph v11. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final/preview text upstream with TextAccumulator. For paired translation, wire one committed-only translator’s grouped source/text/error to PairedTextToDOM, then dom to the display. Saved TEXT display graphs require review and Save of a conversion draft; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).

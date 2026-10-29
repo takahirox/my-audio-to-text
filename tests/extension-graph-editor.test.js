@@ -29,7 +29,7 @@ test('type mismatch, self-connection, unknown ports, cycles preserve the prior e
   const e = editor(), before = structuredClone(e.draft.edges);
   connect(e, 'audio', 'audio', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'translation', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'translated-format', 'text'); assert.deepEqual(e.draft.edges, before);
+  connect(e, 'speech', 'final', 'translated', 'dom'); assert.deepEqual(e.draft.edges, before);
   e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToTextReazonSpeech.outputs.final };
   e.connect('translation', 'text', NODE_TYPES.OpusMtJaEn.inputs.text); assert.deepEqual(e.draft.edges, before);
   assert.match(e.error, /Unknown port/);
@@ -38,6 +38,17 @@ test('type mismatch, self-connection, unknown ports, cycles preserve the prior e
   const withSecond = structuredClone(e.draft.edges);
   connect(e, 'second', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, withSecond);
   assert.match(e.error, /acyclic/);
+});
+
+for (const ports of [['source','text'],['text','source']]) test(`paired editor accepts compatible alternate producers in ${ports.join('/')} order`, () => {
+  const graph = defaultGraph(); graph.nodes.push(graphNode('Text','literal'),graphNode('TextFormatter','alternate'),graphNode('PairedTextToDOM','pair'));
+  const e = editor(graph);
+  for (const port of ports) {
+    const [id,output] = port === 'source' ? ['literal','value'] : ['alternate','text'];
+    connect(e,id,output,'pair',port);
+    assert.ok(e.draft.edges.some(route => JSON.stringify(route) === JSON.stringify(edge(id,output,'pair',port))));
+    assert.deepEqual(validateGraph(e.draft),[]);
+  }
 });
 
 test('Number connects only to NUMBER; consumer value limits do not restrict edge construction', () => {
@@ -54,17 +65,18 @@ test('Number connects only to NUMBER; consumer value limits do not restrict edge
   assert.deepEqual(e.draft.edges.at(-1), edge('duration', 'value', 'speech', 'maxDuration'));
 });
 
-test('Whisper editor connections reject the removed output and accept final for either display port', () => {
+test('Whisper editor connections reject the removed output and accept final through TextToDOM; direct TEXT to DOM is rejected', () => {
   const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextWhisper';
   graph.edges = graph.edges.filter(route => route.from[1] !== 'provisional');
   graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript');
+  graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript-dom');
   const e = editor(graph), before = structuredClone(graph.edges);
   e.selected = { id: 'speech', port: 'provisional', contract: NODE_TYPES.SpeechToTextWhisper.outputs.final };
-  e.connect('transcript', 'content', NODE_TYPES.LiveTextDisplay.inputs.content);
-  assert.match(e.error, /Unknown port: speech.provisional → transcript.content/);
+  e.connect('transcript-dom', 'text', NODE_TYPES.TextToDOM.inputs.text);
+  assert.match(e.error, /Unknown port: speech.provisional → transcript-dom.text/);
   assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'transcript', 'content');
-  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript', 'content')]);
+  connect(e, 'speech', 'final', 'transcript-dom', 'text');
+  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript-dom', 'text')]);
 });
 
 
@@ -77,7 +89,7 @@ test('formatter Add/Remove changes only that instance and the removed last wire;
   assert.equal(Object.keys(nodeDefinition(a).inputs).length, 7);
   a.settings.template = '{7}\n{1}'; e.resizeFormatter(a, -1);
   assert.equal(a.settings.template, '{7}\n{1}'); assert.match(validateGraph(graph).join(' '), /Input \{7\} is not configured/);
-  assert.equal(graph.edges.length, 7, 'unaffected wires preserved');
+  assert.equal(graph.edges.length, 8, 'unaffected wires preserved');
   e.resizeFormatter(a, 1); assert.deepEqual(validateGraph(graph), []);
   for (let i = 0; i < 4; i++) e.resizeFormatter(a, -1);
   assert.equal(a.settings.inputCount, 3);

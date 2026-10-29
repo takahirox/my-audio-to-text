@@ -4,18 +4,19 @@ test('shared TEXT formatter, accumulator and pure sink compose grouped and indep
   await page.goto('/');
   const result = await page.evaluate(async () => {
     const { Pipeline } = await import('/pipeline.js'), { TEXT } = await import('/port-contracts.js');
+    const { TextToDOMNode } = await import('/dom-nodes.js');
     const { TextFormatterNode, TextAccumulatorNode, LiveTextDisplayNode } = await import('/text-nodes.js');
     let grouped, independent, current, history;
     const pipeline = new Pipeline({ nodes: {
       grouped: { outputs: { a: TEXT, b: TEXT }, start(c) { grouped = c.emitOutputs; } },
       independent: { outputs: { text: TEXT }, start(c) { independent = c.emit; } },
       formatter: new TextFormatterNode({ inputCount: 6, template: '{1}\n{5}\n{6}\n{{escaped}}' }),
-      accumulator: new TextAccumulatorNode(), current: new LiveTextDisplayNode(text => current = text), history: new LiveTextDisplayNode(text => history = text),
+      currentDOM: new TextToDOMNode(), historyDOM: new TextToDOMNode(), accumulator: new TextAccumulatorNode(), current: new LiveTextDisplayNode(text => current = text.textContent), history: new LiveTextDisplayNode(text => history = text.textContent),
     }, connections: [
       { from: ['grouped', 'a'], to: ['formatter', 'input1'] }, { from: ['grouped', 'b'], to: ['formatter', 'input5'] },
       { from: ['independent', 'text'], to: ['formatter', 'input6'] },
-      { from: ['formatter', 'text'], to: ['current', 'content'] }, { from: ['formatter', 'text'], to: ['accumulator', 'append'] },
-      { from: ['accumulator', 'text'], to: ['history', 'content'] },
+      { from: ['formatter', 'text'], to: ['currentDOM', 'text'] }, { from: ['currentDOM', 'dom'], to: ['current', 'dom'] }, { from: ['formatter', 'text'], to: ['accumulator', 'append'] },
+      { from: ['accumulator', 'text'], to: ['historyDOM', 'text'] }, { from: ['historyDOM', 'dom'], to: ['history', 'dom'] },
     ] });
     const flush = () => new Promise(resolve => setTimeout(resolve, 0));
     await pipeline.start(); grouped({ a: '<b>A</b>', b: '{1}' }); await flush();

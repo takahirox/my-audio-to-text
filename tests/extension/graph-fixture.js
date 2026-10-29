@@ -1,3 +1,4 @@
+import { addDOMFormatters } from '../fixtures/dom-graph.js';
 import { openPalette, loadTranslationFixture } from './ui-controls.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
@@ -122,6 +123,7 @@ export const test = base.extend({
   },
 });
 export async function openGraph(f) {
+  await f.context.addInitScript(`window.addDOMFormatters = ${addDOMFormatters.toString()};`);
   await f.context.addInitScript(() => {
     const add = chrome.runtime.onMessage.addListener.bind(chrome.runtime.onMessage);
     chrome.runtime.onMessage.addListener = listener => { window.graphInvoke = listener; add(listener); };

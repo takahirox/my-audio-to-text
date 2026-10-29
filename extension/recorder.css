@@ -101,7 +101,7 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .live-text-region h2 { margin: 0; font-size: 1rem; color: var(--muted); }
 .live-text-region .section-heading { margin-bottom: 1rem; flex-wrap: nowrap; }
 .live-text-region .section-heading button { flex-shrink: 0; }
-.live-text-region pre { font-size: 1.1rem; line-height: 1.75; }
+.live-text-region .display-content { font-size: 1.1rem; line-height: 1.75; }
 .capture-panel { margin-top: 0; margin-bottom: 1rem; padding: .75rem 1rem; }
 .recording-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .25rem 1rem; }
 .recording-heading p { margin: .25rem 0; }

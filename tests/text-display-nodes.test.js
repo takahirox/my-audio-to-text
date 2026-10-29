@@ -2,20 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT } from '../web/port-contracts.js';
-import { LiveTextDisplayNode, TextAccumulatorNode, TextFormatterNode, parseTemplate } from '../web/text-nodes.js';
+import { TextAccumulatorNode, TextFormatterNode, parseTemplate } from '../web/text-nodes.js';
 import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph } from '../extension/graph.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const context = () => ({ signal: new AbortController().signal });
-
-test('Live is a literal snapshot sink: empty, whitespace, repeated and HTML-looking content', () => {
-  const states = [], node = new LiveTextDisplayNode(text => states.push(text)), c = context(); node.start();
-  assert.deepEqual(node.inputs, { content: TEXT }); assert.deepEqual(node.outputs, {});
-  for (const text of ['first', 'first', '  <b>literal</b>\n', '']) node.receive('content', text, c);
-  assert.deepEqual(states, ['', 'first', 'first', '  <b>literal</b>\n', '']);
-  for (const port of ['append', 'replace', 'other']) assert.throws(() => node.receive(port, 'bad', c), /content: TEXT/);
-  assert.throws(() => node.receive('content', null, c), /TEXT/);
-  node.receive('content', 'late', { signal: AbortSignal.abort() }); assert.equal(states.at(-1), '');
-});
 
 test('accumulator preserves every segment, exact whitespace and duplicates; grouped append wins', () => {
   const states = [], node = new TextAccumulatorNode(), c = { ...context(), emit: (port, text) => { assert.equal(port, 'text'); states.push(text); } };
@@ -48,7 +38,7 @@ test('Pipeline grouped/separate delivery, generic formatter fan-out, Stop and Ca
   const accumulator = new TextAccumulatorNode();
   const pipeline = new Pipeline({ nodes: {
     source: { outputs: { final: TEXT, provisional: TEXT }, start(c) { emit = c.emit; group = c.emitOutputs; } }, accumulator,
-    live: new LiveTextDisplayNode(text => display.push(text)), formatter: new TextFormatterNode({ template: 'Transcript: {1}' }),
+    live: new TextSink(text => display.push(text)), formatter: new TextFormatterNode({ template: 'Transcript: {1}' }),
     consumer: { inputs: { text: TEXT }, receive(_, value) { snapshots.push(value); } },
   }, connections: [edge('source', 'final', 'accumulator', 'append'), edge('source', 'provisional', 'accumulator', 'preview'),
     edge('accumulator', 'text', 'live', 'content'), edge('accumulator', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'consumer', 'text')] });
@@ -93,7 +83,7 @@ test('direct grouped formatter update emits once; separate branches emit latest 
   const pipeline = new Pipeline({ nodes: {
     a: { outputs: { one: TEXT, two: TEXT }, start(c) { a = c.emitOutputs; } },
     b: { outputs: { text: TEXT }, start(c) { b = c.emit; } }, formatter,
-    sink: new LiveTextDisplayNode(state => { result.push(state); }),
+    sink: new TextSink(state => { result.push(state); }),
   }, connections: [edge('a', 'one', 'formatter', 'input1'), edge('a', 'two', 'formatter', 'input3'), edge('b', 'text', 'formatter', 'input2'), edge('formatter', 'text', 'sink', 'content')] });
   await pipeline.start(); a({ one: 'A', two: 'grouped' }); await tick(); assert.deepEqual(result, ['', 'A||grouped']);
   b('text', 'B'); await tick(); assert.deepEqual(result, ['', 'A||grouped', 'A|B|grouped']);
@@ -112,3 +102,10 @@ test('formatter instances have independent counts above four, safe multi-digit r
   assert.throws(() => a.receive('input13', 'bad', c), /TEXT/);
   assert.throws(() => parseTemplate('{01}', 12), /literal braces/);
 });
+
+class TextSink {
+  inputs = { content: TEXT }; outputs = {};
+  constructor(callback) { this.callback = callback; }
+  start() { this.callback(''); }
+  receive(_, text, context) { if (!context.signal.aborted) this.callback(text); }
+}

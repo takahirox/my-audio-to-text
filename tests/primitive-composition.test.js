@@ -1,3 +1,5 @@
+import { addDOMFormatters } from './fixtures/dom-graph.js';
+import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
@@ -5,7 +7,7 @@ import { TEXT, NUMBER } from '../web/port-contracts.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
 import { TranslationCommitNode } from '../web/translation-commit-node.js';
-import { TextAccumulatorNode, TextFormatterNode, LiveTextDisplayNode } from '../web/text-nodes.js';
+import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { NODE_TYPES, GRAPH_VERSION, graphNode, edge, validateGraph, saveGraph, readGraph, defaultGraph } from '../extension/graph.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -21,8 +23,8 @@ for (const translator of translators) test(`${translator}: every TEXT producer c
       const graph = { version: GRAPH_VERSION, nodes: [graphNode(type, 'producer'), graphNode(translator, 'consumer')], edges: [] };
       for (const input of ports) {
         graph.edges.push(edge('producer', port, 'consumer', input));
-        assert.deepEqual(validateGraph(graph), [], `${type}.${port} → ${translator}.${input}`);
-        const storage = store(); saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
+        assert.deepEqual(validateGraph(addDOMFormatters(graph)), [], `${type}.${port} → ${translator}.${input}`);
+        const storage = store(); saveGraph(storage, addDOMFormatters(graph)); assert.deepEqual(readGraph(storage), graph);
       }
     }
   }
@@ -33,7 +35,7 @@ test('TranslationCommit and startup settings accept every contract-compatible ed
     for (const [target, inputs] of [['TranslationCommit', ['boundary', 'source', 'text', 'error']], ['SpeechToTextWhisper', ['language']], ['SpeechToTextReazonSpeech', ['maxDuration']]]) {
       for (const input of inputs) if (NODE_TYPES[target].inputs[input] === contract) {
         const graph = { version: GRAPH_VERSION, nodes: [graphNode(type,'producer'),graphNode(target,'consumer')], edges:[edge('producer',port,'consumer',input)] };
-        assert.deepEqual(validateGraph(graph), [], `${type}.${port} → ${target}.${input}`);
+        assert.deepEqual(validateGraph(addDOMFormatters(graph)), [], `${type}.${port} → ${target}.${input}`);
       }
     }
   }
@@ -58,7 +60,7 @@ for (const translator of translators) test(`${translator}: direct ASR previews c
   const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TranslationCommit','commit'), graphNode('TextAccumulator','acc'),graphNode('LiveTextDisplay','translated'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),edge('speech','final','commit','boundary'),
     ...['source','text','error'].map(p => edge('translator',p,'commit',p)),edge('commit','provisional','acc','preview'),edge('commit','final','acc','append'),edge('acc','text','translated','content'));
-  const built = buildGraph(graph, { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{displays[id]=s;} });
+  const built = buildGraph(addDOMFormatters(graph), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
   try {
     await built.pipeline.start(); await built.translations[0].ready;
     const speech = built.speechNodes.get('speech');
@@ -120,7 +122,7 @@ test('an inactive configured producer never silently selects an ASR default', as
   const graph=defaultGraph(); graph.nodes.push(graphNode('TextFormatter','unready'),graphNode('SpeechToTextWhisper','unready-asr'));
   graph.nodes[1].type='SpeechToTextWhisper'; graph.edges=graph.edges.filter(e=>e.from[1]!=='provisional');
   graph.edges.push(edge('unready-asr','final','unready','input1'),edge('unready','text','speech','language'));
-  const f=workers(), built=buildGraph(graph,{whisperWorkerFactory:f.factory,sourceFactory:()=>({start(){},stop(){}})});
+  const f=workers(), built=buildGraph(addDOMFormatters(graph),{whisperWorkerFactory:f.factory,sourceFactory:()=>({start(){},stop(){}})});
   await built.pipeline.start(); assert.equal(f.owned.length,0);
   await assert.rejects(built.pipeline.stop(),/unavailable/); await built.pipeline.dispose();
 });
@@ -129,7 +131,7 @@ test('Cancel clears previews through formatters and fan-out while rejecting queu
   const seen={}; let source; const acc=new TextAccumulatorNode();
   const pipeline=new Pipeline({nodes:{
     source:{outputs:{value:TEXT},start(c){source=c;}},acc,formatter:new TextFormatterNode({template:'[{1}]'}),
-    direct:new LiveTextDisplayNode(t=>{seen.direct=t;}),indirect:new LiveTextDisplayNode(t=>{seen.indirect=t;}),
+    direct:new TextSink(t=>{seen.direct=t;}),indirect:new TextSink(t=>{seen.indirect=t;}),
     ordinary:{inputs:{value:TEXT},receive(_,v){seen.ordinary=v;}},
   },connections:[edge('source','value','acc','append'),edge('acc','text','direct','content'),edge('acc','text','formatter','input1'),edge('formatter','text','indirect','content'),edge('acc','text','ordinary','value')]});
   await pipeline.start();source.emit('value','committed');await tick();acc.receive('preview','discard',pipeline.entries.get('acc').context);await tick();
@@ -163,7 +165,7 @@ test('Text literals and formatter/accumulator snapshots execute as independent t
       edges:[edge('final','value','translator','text'),edge('translator','text','view','content')]};
     if(type!=='Text')graph.edges.push(edge('seed','value','alternate',type==='TextFormatter'?'input1':'preview'));
     graph.edges.push(edge('alternate',type==='Text'?'value':'text','translator','provisional'));
-    let display;const built=buildGraph(graph,{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(_,v)=>{display=v;}});
+    let display;const built=buildGraph(addDOMFormatters(graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(_,v)=>{ v = domText(v);display=v;}});
     await built.pipeline.start();await tick();
     built.pipeline.entries.get(type==='Text'?'alternate':'seed').context.emit('value','preview');await tick();f.complete(0);await tick();
     assert.equal(display,'translated:preview',type);
@@ -176,7 +178,7 @@ test('TranslationCommit final is an ordinary TEXT producer for another translato
   const {windowGraph}=await import('./fixtures/windowed-translation.js');const f=workers(),graph=windowGraph('revisable');
   graph.nodes.push(graphNode('Text','independent'),graphNode('TranslateGemmaEnJa','second'),graphNode('LiveTextDisplay','second-view'));
   graph.edges.push(edge('independent','value','second','text'),edge('commit','final','second','provisional'),edge('second','text','second-view','content'));
-  let display;const built=buildGraph(graph,{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{if(id==='second-view')display=v;}});
+  let display;const built=buildGraph(addDOMFormatters(graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='second-view')display=v;}});
   await built.pipeline.start();await tick();built.pipeline.entries.get('input').context.emit('value','First.');await tick();f.complete(0);await tick();
   assert.equal(f.requests[1].text,'translated:First.');f.complete(1);await tick();assert.equal(display,'translated:translated:First.');
   await built.pipeline.stop();assert.deepEqual(built.pipeline.errors,[]);await built.pipeline.dispose();
@@ -191,3 +193,10 @@ test('session retains inactive configuration intent, shows waiting and loads no 
   await session.start(42);assert.equal(f.owned.length,0);assert.match(session.view.signal,/speech: Waiting for startup language/);
   await session.stop();assert.match(session.view.error,/language unavailable/);await session.cancel();
 });
+
+class TextSink {
+  inputs = { content: TEXT }; outputs = {};
+  constructor(callback) { this.callback = callback; }
+  start() { this.callback(''); }
+  receive(_, text, context) { if (!context.signal.aborted) this.callback(text); }
+}

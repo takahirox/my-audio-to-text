@@ -1,3 +1,4 @@
+import { addDOMFormatters } from './dom-graph.js';
 import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
 
 // Evidence deliberately includes proposals, a correction, repetition, a changed
@@ -13,7 +14,7 @@ export function meetingGraph(type) {
   const nodes = [graphNode('Text', 'input'), graphNode(type, 'summary'), graphNode('LiveTextDisplay', 'notes'), graphNode('LiveTextDisplay', 'transcript')];
   nodes[0].settings.value = meetingBatches[0];
   nodes[2].settings = { label: 'Meeting notes', language: 'ja' };
-  return { version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'content'), edge('input', 'value', 'transcript', 'content')] };
+  return addDOMFormatters({ version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'content'), edge('input', 'value', 'transcript', 'content')] });
 }
 
 // Objective regression checks for the recorded #130 failures, not a quality

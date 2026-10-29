@@ -2,10 +2,12 @@
 
 Issues #91, #95, #99, #119 and #134 audit shared Nodes, the Node Playground, and the extension.
 Ordinary text uses shared `TEXT`; Number constants and speech duration use shared `NUMBER`
-from `web/port-contracts.js`. No BOOLEAN value is consumed, so none is introduced.
+from `web/port-contracts.js`; page-local rendered snapshots use shared `DOM`. No BOOLEAN value is consumed, so none is introduced.
 Contracts are identities; receiving Nodes validate their payloads. A compatible
-edge never depends on producer type, output name, neighboring Nodes, or connection
-order. Graph validation checks structure, contracts and Node settings; incomplete
+ordinary edge’s type compatibility never depends on producer type, output name,
+neighboring Nodes, or connection order. Correlated consumers validate delivery-local
+grouping and provenance at runtime; PairedTextToDOM accepts completed atomic results
+from any producer. Graph validation checks structure, contracts and Node settings; incomplete
 drafts remain saveable. Consumers own value limits, startup timing, correlation,
 queues and failure reporting. Model selection, cache verification, permissions and
 migration of historical interfaces remain specialized. See the [#134 audit](evidence/composition-134.md).
@@ -22,14 +24,16 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
 | Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source`, `text`, `error`: TEXT outputs | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
-| LiveTextDisplay | content: TEXT | Render latest plain snapshot verbatim |
+| LiveTextDisplay | dom: DOM | Clone and mount the complete inert DOM snapshot |
+| TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
+| PairedTextToDOM | grouped source/text/error: TEXT → dom: DOM | One committed comparison row per atomic result; session history, hover/focus CSS |
 | TextAccumulator | append/preview: TEXT → text: TEXT | Newline-separated committed segments plus optional uncommitted tail |
 | TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
 | TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
 | Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
 | AudioOutput / playback and WAV adapter | `audio: SYNTHESIZED_AUDIO`, `{ samples: Float32Array, sampleRate: positive integer, channels: 1 }` | Playback URLs and cleanup |
 
-The only structured public value retained is **synthesized audio**. Samples,
+The portable structured public value is **synthesized audio**. DOM snapshots are native page objects, never Worker payloads. Samples,
 rate and channel layout are intrinsically coupled: interpreting samples without
 their format changes duration/pitch or produces invalid playback/WAV. Models
 produce different native rates. Captured audio instead has a fixed, agreed mono
@@ -67,7 +71,7 @@ utterance association. Referencing independent streams in one template displays
 latest values, not a correlated pair. Input strings are substituted once as data.
 
 Use `source → input1`, `text → input2`, optional `error → input3`, a multiline
-template and `TextFormatter.text → TextAccumulator.append → text → LiveTextDisplay.content`. Every result adds one
+template and `TextFormatter.text → TextAccumulator.append → text → TextToDOM.text → dom → LiveTextDisplay.dom`. Every result adds one
 row; no pending row or history replacement causes duplicate appends. A formatter
 is stateless beyond latest inputs; history belongs to TextAccumulator. Repeated equal
 utterances are distinct rows. Plain successful `text` still fans out directly to
@@ -96,9 +100,14 @@ Malformed/ambiguous older graphs fail visibly without overwriting storage.
 
 The editor validates per-instance ports, template references, primitive types,
 one incoming edge per input, settings and acyclicity. Incomplete branches remain
-saveable; Start selects only executable paths. Generic displays and formatters
-accept arbitrary TEXT producers and invent no alignment. See
+saveable; Start selects only executable paths. TextToDOM accepts arbitrary TEXT producers.
+PairedTextToDOM checks that all connected inputs belong to one producer's group and
+rejects provisional deliveries; LiveTextDisplay accepts DOM only. See
 [runtime semantics](pipeline-runtime.md#correlated-primitive-outputs) and
 [graph wiring and migration](extension-graph.md).
 
 Graph v10 migrates each v9 append display through its own TextAccumulator; replace-only routes become content directly. Exact originals use `processing-graph-before-v10` (numbered copies on collisions); all earlier recovery copies remain accessible. See [display lifecycle and scaling](extension-graph.md#generic-text-displays).
+
+Graph v11 removes the TEXT display port. Reviewed drafts insert TextToDOM while
+keeping unrelated graph data and exact originals under processing-graph-before-v11.
+See [DOM ownership, paired formatting and recovery](extension-graph.md#dom-formatters-and-display-ownership).
