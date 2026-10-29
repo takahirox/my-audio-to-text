@@ -73,7 +73,7 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .graph-workspace { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; }
 .graph-workspace.has-selection { grid-template-columns: minmax(0, 1fr) 280px; }
 .graph-viewport { min-width: 0; }
-.graph-viewport-actions { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; margin-bottom: .5rem; }
+.graph-viewport-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; margin-bottom: .5rem; }
 .graph-scroll { height: calc(100dvh - 210px); min-height: 400px; overscroll-behavior: contain; }
 .graph-palette { position: absolute; z-index: 3; top: 0; left: 0; width: min(320px, 100%); box-shadow: 0 12px 36px #0008; display: grid; gap: .5rem; }
 .graph-palette input, .graph-palette select { width: 100%; min-width: 0; }

@@ -32,7 +32,10 @@ arrow keys) to move a Node. Click an output then a compatible named input, or
 drag between ports, to connect. Ports show their contract types; incompatible
 inputs are disabled during connection. Escape cancels a selected port. Use the
 canvas scrollbars, touch scrolling, **Canvas zoom** and **Fit graph** to navigate
-a large graph. **Help** opens the detailed editing instructions on demand. Connecting to
+a large graph. Zoomed-out views provide an overview. **Edit at 100%** appears
+beside Zoom and Fit while below 100%; it returns to the last focused Node/port
+or selected wire for editing. Increasing Canvas zoom also reveals that control.
+**Help** opens the detailed editing instructions on demand. Connecting to
 an occupied input replaces only its incoming wire; other inputs and source
 fan-out stay intact. Repeating the same connection changes nothing. Invalid
 connections keep the previous wire. Click a wire directly on the canvas (or
