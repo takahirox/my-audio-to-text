@@ -1,4 +1,4 @@
-import { TextToDOMNode, PairedTextToDOMNode, DOMAccumulatorNode } from '../web/dom-nodes.js';
+import { TextToDOMNode, PairedTextToDOMNode, DOMAccumulatorNode, DOMCombinerNode } from '../web/dom-nodes.js';
 import { MeetingSummaryNode } from '../web/meeting-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
@@ -154,6 +154,7 @@ export function buildGraph(graph, options) {
       case 'TextToDOM': node = new TextToDOMNode(); break;
       case 'PairedTextToDOM': node = new PairedTextToDOMNode(); break;
       case 'DOMAccumulator': node = new DOMAccumulatorNode(); break;
+      case 'DOMCombiner': node = new DOMCombinerNode(); break;
       case 'TextAccumulator': node = new TextAccumulatorNode({
         retainPreviewOnEnd: spec.legacyDisplay === true &&
           !description.edges.some(route => route.to[0] === spec.id && route.to[1] === 'append'),

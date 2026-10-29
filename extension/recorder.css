@@ -133,3 +133,4 @@ button, summary, nav a { min-height: 44px; }
 
 #audio-outputs { padding: 0; list-style: none; }
 .display-content { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch; max-height: 52dvh; overflow: auto; overflow-anchor: none; scrollbar-gutter: stable; }
+.display-flow { display: flow-root; }

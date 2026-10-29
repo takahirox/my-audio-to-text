@@ -104,3 +104,26 @@ export class DOMAccumulatorNode {
   cancel() { this.closed = true; }
   dispose() { this.closed = true; }
 }
+
+// Two replacement snapshots, with no knowledge of their producers or content.
+export class DOMCombinerNode {
+  inputs = { first: DOM, second: DOM };
+  outputs = { dom: DOM };
+  start(context) {
+    this.snapshots = {}; this.closed = false;
+    context.emit('dom', document.createDocumentFragment());
+  }
+  receive(port, value, context) {
+    if (this.closed || context.signal.aborted) return;
+    if (!Object.hasOwn(this.inputs, port)) throw TypeError('DOMCombiner expects first/second: DOM.');
+    this.snapshots[port] = cloneDOM(value);
+    const combined = document.createDocumentFragment();
+    for (const input of ['first', 'second']) {
+      if (this.snapshots[input]) combined.append(cloneDOM(this.snapshots[input]));
+    }
+    context.emit('dom', combined);
+  }
+  stop() { this.closed = true; }
+  cancel() { this.closed = true; }
+  dispose() { this.closed = true; this.snapshots = {}; }
+}

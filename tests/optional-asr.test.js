@@ -40,7 +40,7 @@ for (const [type, Node, key, factoryKey, partial] of types) {
     assert.deepEqual(node.inputs, { audio: MONO_16KHZ_PCM });
     assert.deepEqual(node.outputs, partial ? { provisional: TEXT, final: TEXT } : { final: TEXT });
     const ready = node.load(); worker.send({ type: 'ready' }); await ready;
-    const controller = new AbortController(), context = { signal: controller.signal, emit: (...value) => output.push(value), fail: error => { throw error; } };
+    const controller = new AbortController(), context = { signal: controller.signal, emit: (...value) => output.push(value), emitOutputs: values => output.push(...Object.entries(values)), fail: error => { throw error; } };
     await node.start(context);
     const pcm = new Float32Array(3201).fill(0.2); node.receive('audio', pcm);
     assert.equal(worker.messages.filter(m => m.type === 'audio').length, 1);
