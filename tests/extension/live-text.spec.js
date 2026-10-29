@@ -1,5 +1,5 @@
 import { livePreviewGraph } from '../fixtures/live-preview-graph.js';
-import { installLiveScrollFixture, checkLiveScrolling } from '../fixtures/live-scroll.js';
+import { installLiveScrollFixture, checkLiveScrolling, checkLiveTextFlowScrolling } from '../fixtures/live-scroll.js';
 import { openPalette, loadTranslationFixture } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -114,7 +114,7 @@ test('MV3 pure renderer handles replacement, shortening, empty snapshots, graph 
     render('A\nB'); render('A\nchanged'); const replacement = text(); render('A'); const shortened = text(); render(''); const empty = text();
     render('<b>literal</b>'); const safe = !root.querySelector('b');
     const unicode = 'a'.repeat(4095) + '😀' + 'b'.repeat(4095) + '🌸'; render(unicode);
-    const unicodeExact = text() === unicode && [...root.querySelector('.display-content').firstChild.childNodes].every(n => !/[\uD800-\uDBFF]$/.test(n.data));
+    const unicodeExact = text() === unicode && [...root.querySelector('.display-flow').firstChild.childNodes].every(n => !/[\uD800-\uDBFF]$/.test(n.data));
     let snapshot = ''; const start = performance.now();
     for (let i = 0; i < 2000; i++) { snapshot += 'same segment\n'; render(snapshot); }
     const elapsedMs = performance.now() - start, correct = text() === snapshot;
@@ -351,20 +351,20 @@ test('MV3 combined history and ASR preview clear before delayed translation, ret
   await partial('<script>preview</script>'); await expect(content).toHaveText('<script>preview</script>'); await expect(content.locator('script')).toHaveCount(0);
   await final(0); await expect(content).toBeEmpty();
   await partial('newer speech'); await expect(content).toHaveText('newer speech');
-  await expect(rows).toHaveCount(1); await expect(content.locator(':scope > div')).toHaveText('newer speech');
+  await expect(rows).toHaveCount(1); await expect(content.locator('.display-flow > div')).toHaveText('newer speech');
   expect(await rows.locator('td').allTextContents()).toEqual(['same','日本語 same']);
-  await final(0); await expect(content.locator(':scope > div')).toHaveText('newer speech');
-  await final(1); await expect(content.locator(':scope > div')).toBeEmpty();
+  await final(0); await expect(content.locator('.display-flow > div')).toHaveText('newer speech');
+  await final(1); await expect(content.locator('.display-flow > div')).toBeEmpty();
   await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
   expect(await rows.locator('td').allTextContents()).toEqual(['same','日本語 same','same','日本語 same']);
   await startGraph(live); await expect(content).toBeEmpty();
   await emitFinal(live,'fail'); await partial('speech after failure');
   await expect(rows.locator('td').last()).toHaveText('Translation failed: offline');
-  await expect(content.locator(':scope > div')).toHaveText('speech after failure');
+  await expect(content.locator('.display-flow > div')).toHaveText('speech after failure');
   await live.locator('#cancel-session').click(); await expect(live.locator('#start')).toBeEnabled();
   await startGraph(live); await expect(content).toBeEmpty();
   await emitFinal(live,'kept'); await expect(rows).toHaveCount(1);
-  await partial('discard'); await emitFinal(live,'pending'); await expect(content.locator(':scope > div')).toBeEmpty();
+  await partial('discard'); await emitFinal(live,'pending'); await expect(content.locator('.display-flow > div')).toBeEmpty();
   await live.locator('#cancel-session').click(); await expect(live.locator('#start')).toBeEnabled();
   await live.waitForTimeout(850); await expect(rows).toHaveCount(1);
   expect(await rows.locator('td').allTextContents()).toEqual(['kept','日本語 kept']);
@@ -377,3 +377,11 @@ test('MV3 shared renderer keeps independent bottom-aware scroll positions with a
   await installLiveScrollFixture(live, true);
   await checkLiveScrolling(live, expect);
 });
+
+for (const rootType of ['inline', 'text', 'fragment']) {
+  test(`MV3 Live layout following observes ${rootType} snapshots and preserves a scrolled-up region`, async ({ graphExtension: f }) => {
+    const live = await openGraph(f);
+    await installLiveScrollFixture(live, true);
+    await checkLiveTextFlowScrolling(live, expect, rootType);
+  });
+}

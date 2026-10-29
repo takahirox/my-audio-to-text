@@ -20,6 +20,7 @@ export async function installLiveScrollFixture(page, packaged = false) {
       preview(id, text) { new TextToDOMNode().receive('text', text, previews[id]); },
       resize(width) { root.style.width = `${width}px`; },
       clear(id) { histories[id].start(contexts[id].history); this.preview(id, ''); },
+      snapshot(id, dom) { displays[id] = dom; this.render(); },
       render() { renderTextRegions(root, graph, displays); },
     };
     for (const id of ['a', 'b']) {
@@ -32,6 +33,52 @@ export async function installLiveScrollFixture(page, packaged = false) {
       for (let i = 0; i < 20; i++) scrollFixture.pair(id, `original ${i} ` + 'words '.repeat(8), `translation ${i} ` + '日本語 '.repeat(8));
     }
   }, packaged);
+}
+
+export async function checkLiveTextFlowScrolling(page, expect, rootType) {
+  const content = id => page.locator(`#scroll-fixture [data-display="${id}"] .display-content`);
+  const bottomGap = id => content(id).evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop);
+  await page.evaluate(rootType => {
+    scrollFixture.resize(320);
+    for (const id of ['a', 'b']) {
+      const text = Array.from({ length: 80 }, (_, i) => `Line ${i}`).join('\n');
+      const snapshot = rootType === 'text' ? document.createTextNode(text)
+        : rootType === 'inline' ? document.createElement('span') : document.createDocumentFragment();
+      if (rootType === 'inline') snapshot.textContent = text;
+      if (rootType === 'fragment') {
+        const span = document.createElement('span'); span.textContent = text.slice(0, text.indexOf('\n') + 1);
+        snapshot.append(span, document.createTextNode(text.slice(text.indexOf('\n') + 1)));
+      }
+      scrollFixture.snapshot(id, snapshot);
+    }
+  }, rootType);
+  for (const id of ['a', 'b']) {
+    expect(await content(id).evaluate(el => el.scrollHeight > el.clientHeight + 300)).toBe(true);
+    await expect.poll(() => bottomGap(id)).toBeLessThanOrEqual(1);
+  }
+  // Settle initial observer notifications before establishing independent intent.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await content('a').evaluate(el => { el.scrollTop = 123; el.dispatchEvent(new Event('scroll')); });
+  const initialHeight = await content('b').evaluate(el => el.scrollHeight);
+  // Only layout changes: no replacement snapshot can rescue missing observations
+  // of inline roots, bare text, or a fragment's mixed inline/text children.
+  for (const fontSize of [32, 24, 40]) {
+    await page.evaluate(fontSize => {
+      for (const el of document.querySelectorAll('#scroll-fixture .display-content')) el.style.fontSize = `${fontSize}px`;
+    }, fontSize);
+    // Let each layout paint, including the browser's clamping on shrink, before
+    // issuing another font change. A clamped bottom alone can precede observers.
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect.poll(() => content('b').evaluate(el => el.scrollHeight)).toBeGreaterThan(initialHeight);
+    await expect.poll(() => bottomGap('b')).toBeLessThanOrEqual(1);
+    await expect.poll(() => content('a').evaluate(el => el.scrollTop)).toBeCloseTo(123, 0);
+  }
+  // Returning manually to the bottom resumes following subsequent font changes.
+  await content('a').evaluate(el => { el.scrollTop = el.scrollHeight; el.dispatchEvent(new Event('scroll')); });
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll('#scroll-fixture .display-content')) el.style.fontSize = '48px';
+  });
+  for (const id of ['a', 'b']) await expect.poll(() => bottomGap(id)).toBeLessThanOrEqual(1);
 }
 
 export async function checkLiveScrolling(page, expect) {

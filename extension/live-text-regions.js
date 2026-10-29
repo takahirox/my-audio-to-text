@@ -19,7 +19,7 @@ function scrollState(content) {
   if (!scrollStates.has(content)) {
     const state = { following: true, top: content.scrollTop };
     content.addEventListener('scroll', () => updateScrollIntent(content, state));
-    // Observe the viewport and snapshot roots: wrapping, font/layout changes,
+    // Observe the viewport and the snapshot's flow box: wrapping, font changes,
     // and a resized Live window can change the bottom after the initial mount.
     if (typeof ResizeObserver !== 'undefined') state.observer = new ResizeObserver(() => {
       if (state.following) content.scrollTop = content.scrollHeight;
@@ -63,13 +63,18 @@ export function renderTextRegions(root, graph, displays) {
       // Also catch user scrolling whose event has not yet been delivered.
       updateScrollIntent(content, state);
       state.observer?.disconnect();
-      content.replaceChildren(...(snapshot === null ? [] : [cloneDOM(snapshot)]));
+      // Inline roots and bare text nodes have no observable box of their own.
+      // A block flow box measures their rendered height even when the scrolling
+      // viewport is already capped and its own dimensions no longer change.
+      const flow = document.createElement('div'); flow.className = 'display-flow';
+      if (snapshot !== null) flow.append(cloneDOM(snapshot));
+      content.replaceChildren(...(snapshot === null ? [] : [flow]));
       // Explicitly restore after replaceChildren and synchronous layout; browser
       // anchoring is disabled in CSS. Shorter content naturally clamps the offset.
       content.scrollTop = state.following ? content.scrollHeight : top;
       state.top = content.scrollTop;
       state.observer?.observe(content);
-      for (const child of content.children) state.observer?.observe(child);
+      if (snapshot !== null) state.observer?.observe(flow);
       region.displayDOM = snapshot;
       // Styles are presentation, not part of the copyable document text.
       const copy = content.cloneNode(true);
