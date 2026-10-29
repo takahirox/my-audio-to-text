@@ -1,7 +1,7 @@
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
 
-test('both optional ASRs are searchable independent Graph v10 Nodes; Save prepares parked weights, retry survives failure and reload retains exact paths', async ({ graphExtension: f }) => {
+test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepares parked weights, retry survives failure and reload retains exact paths', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
   for (const [type, search, key] of [['SpeechToTextParakeetV3', 'Parakeet', 'parakeet-v3'], ['SpeechToTextMoonshineMediumEn', 'Moonshine', 'moonshine-medium-en']]) {
     const before = f.requests.length;
@@ -18,7 +18,7 @@ test('both optional ASRs are searchable independent Graph v10 Nodes; Save prepar
     expect(f.requests.some(url => url.includes(key))).toBe(true);
   }
   const nodes = await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage));
-  expect(nodes.version).toBe(10); expect(nodes.nodes.filter(n => n.type.includes('Parakeet') || n.type.includes('Moonshine'))).toHaveLength(2);
+  expect(nodes.version).toBe(11); expect(nodes.nodes.filter(n => n.type.includes('Parakeet') || n.type.includes('Moonshine'))).toHaveLength(2);
   await editor.reload();
   expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(nodes);
   await expect(editor.getByRole('button', { name: 'speechtotextparakeetv3 output provisional', exact: true })).toHaveCount(0);
@@ -29,9 +29,11 @@ test('both optional ASRs are searchable independent Graph v10 Nodes; Save prepar
 test('parallel production Nodes fan out finals, preserve repeats, clear failed preview, drain/release and Start fresh', async ({ graphExtension: f }) => {
   const page = await openGraph(f);
   await page.evaluate(async () => {
-    const { graphNode, edge, saveGraph } = await import('./graph.js');
-    saveGraph(localStorage, { version: 9, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextParakeetV3', 'parakeet'), graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('LiveTextDisplay', 'p'), graphNode('LiveTextDisplay', 'm'), graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'formatted')],
-      edges: [edge('audio', 'audio', 'parakeet', 'audio'), edge('audio', 'audio', 'moonshine', 'audio'), edge('parakeet', 'final', 'p', 'append'), edge('moonshine', 'final', 'm', 'append'), edge('moonshine', 'provisional', 'm', 'replace'), edge('parakeet', 'final', 'format', 'input1'), edge('format', 'text', 'formatted', 'append')] });
+    const { graphNode, edge, saveGraph, assertGraph } = await import('./graph.js');
+    const legacy = { version: 9, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextParakeetV3', 'parakeet'), graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('LiveTextDisplay', 'p'), graphNode('LiveTextDisplay', 'm'), graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'formatted')],
+      edges: [edge('audio', 'audio', 'parakeet', 'audio'), edge('audio', 'audio', 'moonshine', 'audio'), edge('parakeet', 'final', 'p', 'append'), edge('moonshine', 'final', 'm', 'append'), edge('moonshine', 'provisional', 'm', 'replace'), edge('parakeet', 'final', 'format', 'input1'), edge('format', 'text', 'formatted', 'append')] };
+    let reviewed; try { reviewed = assertGraph(legacy); } catch (error) { if (!error.recoveryGraph) throw error; reviewed = error.recoveryGraph; }
+    saveGraph(localStorage, reviewed);
   });
   for (let repeat = 0; repeat < 2; repeat++) {
     await startGraph(page);

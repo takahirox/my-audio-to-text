@@ -1,3 +1,4 @@
+import { addDOMFormatters } from '../fixtures/dom-graph.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -43,6 +44,7 @@ const test = base.extend({
       for (const name of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(root, 'web', name), `self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready',id:data.id});if(data.type==='translate')postMessage({type:'result',id:data.id,texts:['translated '+data.text]});if(data.type==='drain')postMessage({type:'drained',id:data.id});};`);
       context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: false,
         ignoreDefaultArgs: ['--disable-extensions', '--mute-audio'], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream'] });
+      await context.addInitScript(`window.addDOMFormatters = ${addDOMFormatters.toString()};`);
       const cdp = await context.browser().newBrowserCDPSession(), { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
       const page = await context.newPage(); await page.goto(`chrome-extension://${id}/extension/recorder.html`);
       await page.evaluate(async () => {
@@ -79,7 +81,7 @@ const test = base.extend({
             graph.nodes.push(graphNode(type, id));
             graph.edges.push(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', id, 'text'));
           }
-          saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+          saveGraph(localStorage, window.addDOMFormatters(graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
         }, { source, outputs, translation, live });
       };
       await page.locator('#targets').evaluate(element => { element.open = true; });
@@ -304,9 +306,9 @@ test('completed translations flow directly to TEXT fan-out and paired Live; prov
   });
   await t.graph({ translation: true, outputs: [['out', 'FocusedInputTextOutputNode', true]] }); await t.website.locator('#focused').click(); await t.invoke();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect(t.page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
-  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('[data-display="translated"] .display-content')).toBeEmpty(); await expect(t.website.locator('#focused')).toHaveValue('manual');
+  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('[data-display="translated"] tbody')).toBeEmpty(); await expect(t.website.locator('#focused')).toHaveValue('manual');
   await emit(t, 1, 'first'); await emit(t, 1, 'duplicate'); await emit(t, 2, 'second'); await stop(t);
-  await expect(t.website.locator('#focused')).toHaveValue('manualtranslated firsttranslated second'); await expect(t.page.locator('[data-display="translated"] .display-content')).toContainText('translated second');
+  await expect(t.website.locator('#focused')).toHaveValue('manualtranslated firsttranslated second'); await expect(t.page.locator('[data-display="translated"] tbody')).toContainText('translated second');
   await expect(t.page.locator('#errors')).toBeEmpty();
 });
 
@@ -370,7 +372,7 @@ test('native tab capture and permitted microphone run together; tab navigation d
       graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextReazonSpeech','copy-asr'),graphNode('LiveTextDisplay','copy-display'),graphNode('TextAccumulator','local-accumulator'),graphNode('TextAccumulator','copy-accumulator'));
     graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local-accumulator','append'),edge('local-accumulator','text','local','content'),
       edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-accumulator','append'),edge('copy-accumulator','text','copy-display','content'));
-    saveGraph(localStorage,graph);window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));
+    saveGraph(localStorage, window.addDOMFormatters(graph));window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));
     const NativeWorker=Worker;window.concurrentWorkers=[];
     window.Worker=class extends NativeWorker {
       constructor(...args){super(...args);window.concurrentWorkers.push(this);}

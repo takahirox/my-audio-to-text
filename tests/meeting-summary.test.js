@@ -1,3 +1,5 @@
+import { addDOMFormatters } from './fixtures/dom-graph.js';
+import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MeetingSummaryNode } from '../web/meeting-summary-node.js';
@@ -136,13 +138,13 @@ for (const type of MEETING_SUMMARY_TYPES) {
     assert.ok(f.worker.terminated); assert.deepEqual(f.node.fragments, []);
   });
 
-  test(`${type}: v10 graph Save/reload, independent branches and missing model isolation`, async () => {
+  test(`${type}: v11 graph Save/reload, independent branches and missing model isolation`, async () => {
     const g = meetingGraph(type), values = new Map(), storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), removeItem: k => values.delete(k) };
-    assert.deepEqual(validateGraph(g), []); saveGraph(storage, g); assert.deepEqual(readGraph(storage), g);
+    assert.deepEqual(validateGraph(addDOMFormatters(g)), []); saveGraph(storage, addDOMFormatters(g)); assert.deepEqual(readGraph(storage), g);
     assert.deepEqual(assertGraph(defaultGraph()), defaultGraph());
     for (const failLoad of [false, true]) {
       const f = fixture(type, { failLoad }), displays = {}, events = [];
-      const built = buildGraph(g, { meetingSummaryWorkerFactory: () => f.worker, onDisplay: (id,state) => displays[id] = state, onMeetingSummaryEvent: event => events.push(event) });
+      const built = buildGraph(addDOMFormatters(g), { meetingSummaryWorkerFactory: () => f.worker, onDisplay: (id,state) => displays[id] = domText(state), onMeetingSummaryEvent: event => events.push(event) });
       await built.pipeline.start(); await built.pipeline.stop();
       assert.deepEqual(displays.transcript, meetingBatches[0]);
       assert.equal(displays.notes, failLoad ? '' : 'Note 1');
@@ -150,7 +152,7 @@ for (const type of MEETING_SUMMARY_TYPES) {
       if (failLoad) assert.ok(events.some(e => e.type === 'error'));
       await built.pipeline.dispose();
     }
-    g.nodes[1].settings.language = 'unknown'; assert.match(validateGraph(g).join(' '), /language/);
+    g.nodes[1].settings.language = 'unknown'; assert.match(validateGraph(addDOMFormatters(g)).join(' '), /language/);
   });
 
   test(`${type}: immutable manifests include tokenizer/template and each external file; no executable model data`, async () => {
@@ -191,9 +193,9 @@ test('concurrent processors own independent Workers, languages and notes while s
   g.nodes.push(second, graphNode('LiveTextDisplay', 'english'));
   g.edges.push({ from: ['input', 'value'], to: ['second', 'text'] }, { from: ['second', 'summary'], to: ['english', 'content'] });
   const workers = [], displays = {};
-  const built = buildGraph(g, { meetingSummaryWorkerFactory: () => {
+  const built = buildGraph(addDOMFormatters(g), { meetingSummaryWorkerFactory: () => {
     const f = fixture(workers.length ? 'MeetingSummaryQwen35' : 'MeetingSummaryLfm2'); workers.push(f); return f.worker;
-  }, onDisplay: (id, state) => displays[id] = state });
+  }, onDisplay: (id, state) => displays[id] = domText(state) });
   await built.pipeline.start(); await built.pipeline.stop();
   assert.equal(workers.length, 2); assert.ok(workers.every(f => f.worker.terminated));
   assert.deepEqual(workers.map(f => [f.messages[0].processor, f.messages[1].language]).sort(), [['MeetingSummaryLfm2', 'ja'], ['MeetingSummaryQwen35', 'en']]);

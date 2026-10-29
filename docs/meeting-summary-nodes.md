@@ -7,7 +7,7 @@ Both use real local inference with bounded, extractive note reconciliation.
 See the [current factual smoke and its boundaries](evidence/meeting-summary-130.md)
 before relying on model output.
 Connect `ASR.final`, `TextWindow.text` or `Text.value` to `text`, then `summary`
-directly to `LiveTextDisplay.content`. Stop/Cancel retain the last successful note;
+directly to `TextToDOM.text → dom → LiveTextDisplay.dom`. Stop/Cancel retain the last successful note;
 no accumulator is needed for complete summary snapshots. Other TEXT
 consumers are compatible. Translation, ASR and transcript displays can fan out
 independently. There is no global model selection or preferred model.

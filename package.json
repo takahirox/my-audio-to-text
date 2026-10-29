@@ -29,7 +29,8 @@
     "test:meeting-summary-real": "MEETING_SUMMARY_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-meeting-summary-smoke.spec.js"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "linkedom": "^0.18.14"
   },
   "dependencies": {
     "@moonshine-ai/moonshine-wasm": "0.1.5",

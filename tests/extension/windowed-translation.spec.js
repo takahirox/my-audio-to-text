@@ -16,7 +16,7 @@ test('palette settings, text-only Save without weights and version 10 reload', a
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   expect(f.requests).toEqual([]);
   const graph = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(graph.version).toBe(10); expect(graph.nodes.find(n => n.type === 'TextWindow').settings).toEqual({ maxChars: 120, maxWaitMs: 250, sentenceBoundary: 'off' });
+  expect(graph.version).toBe(11); expect(graph.nodes.find(n => n.type === 'TextWindow').settings).toEqual({ maxChars: 120, maxWaitMs: 250, sentenceBoundary: 'off' });
   await editor.reload();
   expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
   await editor.getByRole('button', { name: 'Select textwindow', exact: true }).click();
@@ -47,7 +47,7 @@ for (const mode of ['baseline', 'window', 'revisable']) test(`packaged ${mode}: 
     const runs = [];
     for (let run = 0; run < 2; run++) {
       let display; const events = [];
-      const built = buildGraph(graph, { tabId: 42, prepareTranslation() {}, onDisplay: (_, s) => { display = s; events.push(s); } });
+      const built = buildGraph(window.addDOMFormatters(graph), { tabId: 42, prepareTranslation() {}, onDisplay: (_, s) => { display = s.textContent; events.push(s.textContent); } });
       try {
         await built.pipeline.start(); await built.translations[0].ready;
         for (const text of texts) built.speechNodes.get('input').receiveEvent({ type: 'final', text });

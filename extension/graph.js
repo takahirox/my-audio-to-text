@@ -3,17 +3,17 @@ import { TEXT } from '../web/translation-nodes.js';
 import { TRANSLATION_OUTPUTS } from './translation-scheduler.js';
 import { FORMAT_INPUTS, formatInputs, parseTemplate } from '../web/text-nodes.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
-import { NUMBER } from '../web/port-contracts.js';
+import { DOM, NUMBER } from '../web/port-contracts.js';
 import { validateCondition, MAX_CONDITION_CHARS } from '../web/if-condition-policy.js';
 import { finiteNumber } from '../web/number-node.js';
 import { windowSettings } from '../web/text-window-node.js';
 
-export const GRAPH_VERSION = 10;
+export const GRAPH_VERSION = 11;
 export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn', 'SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'];
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
-export const GRAPH_RECOVERY_KEY = 'processing-graph-before-v10';
+export const GRAPH_RECOVERY_KEY = 'processing-graph-before-v11';
 // Migration-only contracts; none are supported palette/runtime ports.
 const LEGACY_TRANSLATION_OUTPUTS = { provisional: TEXT, text: TEXT, provisionalSource: TEXT, provisionalStatus: TEXT, provisionalError: TEXT, finalSource: TEXT, finalStatus: TEXT, finalIndex: NUMBER, finalError: TEXT };
 const paired = contract => ({ provisional: contract, final: contract });
@@ -32,8 +32,8 @@ export const NODE_TYPES = Object.freeze({
   SpeechToTextMoonshineMediumEn: { label: 'Moonshine Medium Streaming English ASR', preparationNotice: 'Moonshine Medium English Streaming: Save prepares 305 MB. Allow 700 MB storage and 2 GB free RAM; CPU WASM.', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT), help: 'Optional 245M English Medium Streaming, CPU WASM. Save prepares 305 MB of weights; allow at least 2 GB free RAM and 700 MB free storage. Native provisional → TextAccumulator.preview; committed final → TextAccumulator.append. Updates from 0.5 seconds, native endpointing; history renews every 30 seconds after drain. Hard boundaries can split words. 30-second backlog limit. Local inference; no recording-time downloads.' },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { text: TEXT, provisional: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS, help: 'Committed text by default. Optional provisional accepts any TEXT source; route results through TranslationCommit for previews. Direct source/text/error outputs form one atomic result. Pending and Cancel emit nothing; Stop drains queued text. Failures emit source/error without successful text.' },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { text: TEXT, provisional: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS, help: 'Committed text by default. Optional provisional accepts any TEXT source; route results through TranslationCommit for previews. Direct source/text/error outputs form one atomic result. Pending and Cancel emit nothing; Stop drains queued text. Failures emit source/error without successful text.' },
-  MeetingSummaryLfm2: { label: 'Meeting Summary · LFM2.5 1.2B JP', inputs: { text: TEXT }, outputs: { summary: TEXT }, settings: { language: ['ja', 'en'] }, preparationNotice: 'LFM2.5 JP: Save prepares 749 MB. Allow 2 GB storage and 4 GB free RAM/GPU memory per Node (planning estimate). WebGPU shader-f16. LFM 1.0 commercial-use conditions apply; see Models.', help: 'Batch committed text for 30 seconds or 2,000 characters, then update the previous note with new evidence only. Complete summary → LiveTextDisplay.content. Stop drains accepted text; Cancel discards pending work. 32,768-character backlog limit; overflow rejects the new fragment visibly and drains accepted text. Summaries are lossy and can omit or distort history. Saved language applies next session. Local WebGPU shader-f16 required; no CPU/cloud fallback or recording-time downloads.' },
-  MeetingSummaryQwen35: { label: 'Meeting Summary · Qwen3.5 2B', inputs: { text: TEXT }, outputs: { summary: TEXT }, settings: { language: ['ja', 'en'] }, preparationNotice: 'Qwen3.5 2B: Save prepares 1.403 GB. Allow 3 GB storage and 6 GB free RAM/GPU memory per Node (planning estimate). WebGPU shader-f16. Apache 2.0 source; see Models for conversion provenance.', help: 'Batch committed text for 30 seconds or 2,000 characters, then update the previous note with new evidence only. Complete summary → LiveTextDisplay.content. Stop drains accepted text; Cancel discards pending work. 32,768-character backlog limit; overflow rejects the new fragment visibly and drains accepted text. Summaries are lossy and can omit or distort history. Saved language applies next session. Local WebGPU shader-f16 required; no CPU/cloud fallback or recording-time downloads.' },
+  MeetingSummaryLfm2: { label: 'Meeting Summary · LFM2.5 1.2B JP', inputs: { text: TEXT }, outputs: { summary: TEXT }, settings: { language: ['ja', 'en'] }, preparationNotice: 'LFM2.5 JP: Save prepares 749 MB. Allow 2 GB storage and 4 GB free RAM/GPU memory per Node (planning estimate). WebGPU shader-f16. LFM 1.0 commercial-use conditions apply; see Models.', help: 'Batch committed text for 30 seconds or 2,000 characters, then update the previous note with new evidence only. Complete summary → TextToDOM.text → LiveTextDisplay.dom. Stop drains accepted text; Cancel discards pending work. 32,768-character backlog limit; overflow rejects the new fragment visibly and drains accepted text. Summaries are lossy and can omit or distort history. Saved language applies next session. Local WebGPU shader-f16 required; no CPU/cloud fallback or recording-time downloads.' },
+  MeetingSummaryQwen35: { label: 'Meeting Summary · Qwen3.5 2B', inputs: { text: TEXT }, outputs: { summary: TEXT }, settings: { language: ['ja', 'en'] }, preparationNotice: 'Qwen3.5 2B: Save prepares 1.403 GB. Allow 3 GB storage and 6 GB free RAM/GPU memory per Node (planning estimate). WebGPU shader-f16. Apache 2.0 source; see Models for conversion provenance.', help: 'Batch committed text for 30 seconds or 2,000 characters, then update the previous note with new evidence only. Complete summary → TextToDOM.text → LiveTextDisplay.dom. Stop drains accepted text; Cancel discards pending work. 32,768-character backlog limit; overflow rejects the new fragment visibly and drains accepted text. Summaries are lossy and can omit or distort history. Saved language applies next session. Local WebGPU shader-f16 required; no CPU/cloud fallback or recording-time downloads.' },
   IfCondition: { label: 'IfCondition · local AI', inputs: { text: TEXT }, outputs: { yes: TEXT, no: TEXT }, textSettings: { condition: { default: 'Is this a question?', maxLength: MAX_CONDITION_CHARS, multiline: true } }, help: 'Evaluate an English natural-language condition locally. Yes/No carries the original text unchanged to exactly one branch. Empty/whitespace text takes No. Save prepares model assets; Start loads an owned CPU WASM Worker. Ambiguous decisions, errors or overflow stop this Node visibly; other paths continue. Stop drains; Cancel discards pending text. Conditions apply next session.' },
   TranslateGemmaEnJa: { label: 'TranslateGemma 4B English → Japanese', inputs: { text: TEXT, provisional: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS,
     preparationNotice: 'TranslateGemma 4B: Save prepares 3.112 GB shared by both directions. Allow 7 GB free storage and several GB free RAM/GPU memory; Worker WebGPU required. Use is subject to Google Gemma Terms of Use and Prohibited Use Policy (see Help / Models).',
@@ -41,7 +41,9 @@ export const NODE_TYPES = Object.freeze({
   TranslateGemmaJaEn: { label: 'TranslateGemma 4B Japanese → English', inputs: { text: TEXT, provisional: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS,
     preparationNotice: 'TranslateGemma 4B: Save prepares 3.112 GB shared by both directions. Allow 7 GB free storage and several GB free RAM/GPU memory; Worker WebGPU required. Use is subject to Google Gemma Terms of Use and Prohibited Use Policy (see Help / Models).',
     help: 'Japanese → English with the same pinned q4 model as English → Japanese. Optional provisional accepts any TEXT source. Plain TEXT in; grouped source/text/error out. Stop drains; Cancel emits nothing. Save prepares 3.112 GB; allow 7 GB storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback. Google Gemma Terms and Prohibited Use Policy apply; see Help / Models before use.' },
-  LiveTextDisplay: { label: 'Live text display', inputs: { content: TEXT }, outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Render each complete plain TEXT snapshot verbatim, including empty strings. Use TextAccumulator for committed segments and previews; complete summary/formatter snapshots can connect directly. Start begins empty. Multiple displays are independent and ordered by graph Node order.' },
+  LiveTextDisplay: { label: 'Live text display', inputs: { dom: DOM }, outputs: {}, textSettings: { label: { default: 'Text', maxLength: 120 } }, settings: { language: ['und', 'ja', 'en'] }, help: 'Mount each complete inert DOM snapshot, cloned for safe fan-out. Use TextToDOM for plain text or PairedTextToDOM for comparison rows. Start begins empty; Stop/Cancel retain the latest snapshot. Formatting stays in processors on the page main thread.' },
+  TextToDOM: { label: 'Text to DOM', inputs: { text: TEXT }, outputs: { dom: DOM }, help: 'Convert each complete TEXT snapshot to literal visible text, including whitespace, newlines and empty strings. No HTML parsing, accumulation or source matching. Main thread only.' },
+  PairedTextToDOM: { label: 'Paired text to DOM', inputs: { source: TEXT, text: TEXT, error: TEXT }, optionalInputs: ['error'], outputs: { dom: DOM }, help: 'Connect matching source/text/error directly from one translator with committed text input only (no provisional input). Each atomic result adds an exact original/translation row, including duplicates, empty results and errors. Hover or focus either cell to highlight its pair. Stop drains; Cancel retains committed rows; fresh Start clears history. Main thread only.' },
   TextAccumulator: { label: 'Text accumulator', inputs: { append: TEXT, preview: TEXT }, optionalInputs: ['append', 'preview'], outputs: { text: TEXT }, help: 'Reusable transcript state: append commits one exact segment separated by a newline, including repeated/empty values, and clears preview. Preview replaces only the uncommitted tail; empty clears it. Grouped append wins. Every change emits the whole TEXT snapshot. Stop removes preview; Cancel discards pending work; Start begins empty. No truncation or persistence; growing snapshots consume memory and rendering time.' },
   TextWindow: { label: 'Text window', inputs: { text: TEXT }, outputs: { text: TEXT, provisional: TEXT }, numberSettings: { maxChars: { default: 600 }, maxWaitMs: { default: 1500 } }, settings: { sentenceBoundary: ['on', 'off'] }, help: 'Model-independent committed speech batching. 2–1000 characters, 1–30000 ms from first pending text; sentenceBoundary closes conservative punctuation boundaries. Empty strings are ignored; equal utterances and whitespace are retained. Stop flushes once, Cancel discards. text → any translator.text. Optional provisional → the same translator.provisional for bounded retranslation; see TranslationCommit.' },
   TranslationCommit: { label: 'Translation commit (experiment)', inputs: { boundary: TEXT, source: TEXT, text: TEXT, error: TEXT }, outputs: { provisional: TEXT, final: TEXT, error: TEXT }, help: 'Opt-in bounded retranslation: Fan out each committed source event to boundary and translator.text. Results must be one grouped source/text/error emission causally linked to that event; unclosed results are previews. Any TEXT producer can supply boundaries. provisional → TextAccumulator.preview; final → TextAccumulator.append. Only correlated closed source events commit, exactly once; equal text alone never matches. Failures retain source with an error in the committed item. 32-window backlog cap; no new weights or conversation-wide memory.' },
@@ -73,22 +75,24 @@ export function graphNode(type, id, x = 20, y = 20) {
 // Translation is an explicit configuration, never part of a new/reset default.
 export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
   direction = direction === 'en-ja' ? 'en-ja' : 'ja-en';
-  const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToTextReazonSpeech', 'speech', 270, 30), graphNode('LiveTextDisplay', 'transcript', 1060, 30)];
-  const edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript', 'content')];
+  const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToTextReazonSpeech', 'speech', 270, 30), graphNode('LiveTextDisplay', 'transcript', 1450, 30)];
+  const edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript', 'dom')];
   if (enabled) {
     nodes[2].settings = { label: 'Original', language: direction === 'en-ja' ? 'en' : 'ja' };
-    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 330), graphNode('LiveTextDisplay', 'translated', 1060, 330), graphNode('TextFormatter', 'translated-format', 530, 330));
-    nodes[4].settings.label = 'Translation'; nodes[5].settings = { inputCount: 3, template: translationTemplate(direction) };
+    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 330), graphNode('LiveTextDisplay', 'translated', 1450, 330), graphNode('PairedTextToDOM', 'translated-format', 790, 330));
+    nodes[4].settings.label = 'Translation';
     edges.push(edge('speech', 'final', 'translation', 'text'));
-    edges.push(...translationViewEdges('translation', 'translated-format'), edge('translated-format', 'text', 'translated-accumulator', 'append'), edge('translated-accumulator', 'text', 'translated', 'content'));
+    edges.push(...pairedTextEdges('translation', 'translated-format'), edge('translated-format', 'dom', 'translated', 'dom'));
   }
-  nodes.push(graphNode('TextAccumulator', 'transcript-accumulator', 790, 30));
-  if (enabled) nodes.push(graphNode('TextAccumulator', 'translated-accumulator', 790, 330));
+  nodes.push(graphNode('TextAccumulator', 'transcript-accumulator', 790, 30), graphNode('TextToDOM', 'transcript-dom', 1120, 30));
   return { version: GRAPH_VERSION, translationDirection: direction, nodes, edges };
 }
 export const edge = (source, output, target, input) => ({ from: [source, output], to: [target, input] });
 export function translationTemplate(direction) {
   return direction === 'en-ja' ? 'English: {1}\nJapanese: {2}{3}' : 'Japanese: {1}\nEnglish: {2}{3}';
+}
+export function pairedTextEdges(source, target) {
+  return ['source', 'text', 'error'].map(port => edge(source, port, target, port));
 }
 export function translationViewEdges(source, target) {
   return ['source', 'text', 'error'].map((port, index) => edge(source, port, target, `input${index + 1}`));
@@ -155,8 +159,18 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
   for (const node of nodes.values()) {
     const definition = legacy ? definitionOf(node.type) : nodeDefinition(node);
     if (!definition) continue;
-    if (['LiveTextDisplay', 'TextFormatter', 'TextAccumulator'].includes(node.type)) {
+    if (['TextFormatter', 'TextAccumulator'].includes(node.type)) {
       if (!Object.keys(definition.inputs).some(port => incoming.has(JSON.stringify([node.id, port])))) warnings.push(`Required connection missing: ${node.id} needs at least one TEXT input`);
+    }
+    if (!legacy && node.type === 'PairedTextToDOM') {
+      const routes = ['source', 'text', 'error'].map(port => incoming.get(JSON.stringify([node.id, port])));
+      const producer = routes.find(Boolean)?.[0];
+      const allowed = [...translators, 'TranslateGemmaEnJa', 'TranslateGemmaJaEn'];
+      for (const [index, route] of routes.entries()) if (route &&
+          (!allowed.includes(nodes.get(producer)?.type) || route[0] !== producer || route[1] !== ['source', 'text', 'error'][index])) {
+        errors.push(`PairedTextToDOM ${node.id} requires matching direct source/text/error outputs from one translator.`);
+      }
+      if (producer && incoming.has(JSON.stringify([producer, 'provisional']))) errors.push(`PairedTextToDOM ${node.id} requires committed translation only; disconnect ${producer}.provisional or use TranslationCommit with TextToDOM.`);
     }
     if (legacy && node.type === 'TranslationView') {
       const connected = port => incoming.has(JSON.stringify([node.id, port]));
@@ -221,7 +235,7 @@ export function graphWarnings(graph) {
   return warnings;
 }
 // Rewrite every legacy route explicitly; malformed or ambiguous routes require visible recovery.
-export function migrateGraph(graph) {
+function migrateLegacyGraph(graph) {
   if (!record(graph) || ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(graph.version)) return graph;
   if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return graph;
   const next = structuredClone(graph);
@@ -234,11 +248,11 @@ export function migrateGraph(graph) {
       Array.isArray(route.to) && route.to.length === 2 && route.to.every(value => typeof value === 'string'));
     next.edges = next.edges.filter(route => !dead.includes(route));
     next.version = 8;
-    return migrateGraph(next);
+    return migrateLegacyGraph(next);
   }
   const renameAsr = () => {
     for (const node of next.nodes) if (node?.type === 'SpeechToText') node.type = 'SpeechToTextReazonSpeech';
-    next.version = 7; return migrateGraph(next);
+    next.version = 7; return migrateLegacyGraph(next);
   };
   if (graph.version === 6) return renameAsr();
   const recovery = (kind, id) => { throw Error(`Cannot migrate ${kind} ${id}: ambiguous or invalid route. Reset and Save in Graph Editor, then reconnect the desired TEXT routes.`); };
@@ -351,8 +365,8 @@ function migrateTranslationGraph(next) {
   next = migrateDisplayGraph(next);
   if (changes.length) {
     const error = new Error(`Translation graph migration needs review. ${changes.join('; ')}. No pending rows or provisional translations are emitted. Failures emit source/error only. Review the repair draft and Save; the original saved graph is kept for recovery.`);
-    const errors = validateGraph(next);
-    if (!errors.length) error.recoveryGraph = next;
+    const candidate = convertDOMGraph(next), errors = validateGraph(candidate);
+    if (!errors.length) error.recoveryGraph = candidate;
     else error.message += ` The converted graph is invalid: ${errors.join(' ')} Export the original recovery copy and repair these routes/settings before import.`;
     throw error;
   }
@@ -376,8 +390,31 @@ function migrateDisplayGraph(next) {
       next.edges.push(edge(id, 'text', display.id, 'content'));
     } else for (const route of routes) if (route.to[1] === 'replace') route.to[1] = 'content';
   }
+  next.version = 10;
+  return next;
+}
+// Reviewed v11 conversion. Never run a saved TEXT sink graph implicitly.
+function convertDOMGraph(graph) {
+  const next = structuredClone(graph), ids = new Set(next.nodes.map(node => node.id));
+  for (const display of next.nodes.filter(node => node.type === 'LiveTextDisplay')) {
+    const routes = next.edges.filter(route => route?.to?.[0] === display.id && route.to[1] === 'content');
+    if (!routes.length) continue;
+    const id = unusedId(ids, `${display.id}-dom`);
+    next.nodes.push(graphNode('TextToDOM', id, Math.max(0, display.position.x - 250), display.position.y + 120));
+    for (const route of routes) route.to = [id, 'text'];
+    next.edges.push(edge(id, 'dom', display.id, 'dom'));
+  }
   next.version = GRAPH_VERSION;
   return next;
+}
+export function migrateGraph(graph) {
+  const next = migrateLegacyGraph(graph);
+  if (next?.version !== 10 || !Array.isArray(next.nodes) || !Array.isArray(next.edges)) return next;
+  const converted = convertDOMGraph(next), errors = validateGraph(converted);
+  const error = new Error('DOM display graph v11 requires review. LiveTextDisplay now accepts only dom: DOM. Review the TextToDOM conversion draft and Save; the original saved graph is kept for recovery.');
+  if (!errors.length) error.recoveryGraph = converted;
+  else error.message += ` Conversion needs repair: ${errors.join(' ')}`;
+  throw error;
 }
 export function assertGraph(graph) {
   const migrated = migrateGraph(graph), errors = validateGraph(migrated);
@@ -402,10 +439,9 @@ export function withTranslation(graph, { enabled, direction }) {
     const unused = base => unusedId(ids, base);
     const id = unused('translation'), sink = unused('translated'), formatter = unused('translated-format'), speech = next.nodes.find(n => ASR_TYPES.includes(n.type));
     if (!speech) throw Error('Add an ASR Node before applying the translation preset, or connect translator Nodes individually.');
-    const accumulator = unused(`${sink}-accumulator`);
-    next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink }, { ...branch.nodes[5], id: formatter }, graphNode('TextAccumulator', accumulator, 550, 400));
+    next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink }, { ...branch.nodes[5], id: formatter });
     next.edges.push(edge(speech.id, 'final', id, 'text'));
-    next.edges.push(...translationViewEdges(id, formatter), edge(formatter, 'text', accumulator, 'append'), edge(accumulator, 'text', sink, 'content'));
+    next.edges.push(...pairedTextEdges(id, formatter), edge(formatter, 'dom', sink, 'dom'));
   } else {
     const removed = new Set(next.nodes.filter(n => translators.includes(n.type) || n.type === 'TranslationView').map(n => n.id));
     // Remove downstream audio branch too when its only source is translation.
@@ -444,9 +480,9 @@ export function saveGraph(storage, graph) {
   const validated = assertGraph(graph);
   const original = storage.getItem?.(GRAPH_KEY);
   if (original !== null && original !== undefined) {
-    let version;
-    try { version = JSON.parse(original).version; } catch { /* Keep malformed originals too. */ }
-    if (version !== GRAPH_VERSION) {
+    let validOriginal = false;
+    try { validOriginal = !validateGraph(JSON.parse(original)).length; } catch { /* Keep malformed originals too. */ }
+    if (!validOriginal) {
       // Never replace an earlier recovery copy, even after another import.
       let key = GRAPH_RECOVERY_KEY, index = 2;
       while (storage.getItem?.(key) !== null && storage.getItem?.(key) !== undefined && storage.getItem(key) !== original) key = `${GRAPH_RECOVERY_KEY}-${index++}`;

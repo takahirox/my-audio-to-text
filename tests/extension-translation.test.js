@@ -1,3 +1,5 @@
+import { addDOMFormatters } from './fixtures/dom-graph.js';
+import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -141,11 +143,11 @@ function sessionFixture(translation = workerFixture()) {
   return { session, asr, views, translation };
 }
 
-const display = (f, id = 'transcript') => f.session.view.displays[id] || '';
+const display = (f, id = 'transcript') => domText(f.session.view.displays[id]) || '';
 for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]) test(`${direction}: live committed formatting appends repeated phrases once, drains Stop and starts fresh (${original})`, async () => {
   const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
   if (!original) { graph.nodes = graph.nodes.filter(n => n.id !== 'transcript'); graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); }
-  graph.edges.reverse(); f.session.setGraph(graph); await f.session.start(42);
+  graph.edges.reverse(); f.session.setGraph(addDOMFormatters(graph)); await f.session.start(42);
   const speech = f.session.session.speechNodes.get('speech');
   speech.receiveEvent({ type: 'partial', text: 'uncommitted', id: 0 }); await tick();
   assert.equal(f.translation.requests.length, 0); assert.deepEqual(display(f, 'translated'), '');
@@ -154,7 +156,7 @@ for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]
   const stopping = f.session.stop(); await tick();
   f.translation.complete(0, 'first'); await tick(); f.translation.complete(1, 'second'); await stopping;
   const labels = direction === 'en-ja' ? ['English', 'Japanese'] : ['Japanese', 'English'];
-  assert.deepEqual(display(f, 'translated'), ['first', 'second'].map(t => `${labels[0]}: same\n${labels[1]}: ${t}`).join('\n'));
+  assert.deepEqual(display(f, 'translated'), ['first', 'second'].map(t => `same\n${t}`).join('\n'));
   assert.deepEqual(display(f), original ? 'same\nsame' : ''); assert.ok(f.translation.workers.every(w => w.terminated));
   await f.session.start(42); assert.deepEqual(display(f, 'translated'), [].join('\n'));
   speech.receiveEvent({ type: 'final', text: 'old session', id: 5 }); f.translation.complete(1, 'late'); await tick();
@@ -164,7 +166,7 @@ for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]
 for (const direction of ['ja-en', 'en-ja']) for (const port of ['content']) test(`${direction}: completed TEXT feeds a direct ${port} sink`, async () => {
   const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
   graph.nodes = graph.nodes.filter(n => n.id !== 'translated-format'); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated-format' && e.from[0] !== 'translated-format');
-  graph.edges = graph.edges.filter(e => e.to[0] !== 'translated'); graph.edges.push(edge('translation', 'text', 'translated', port)); f.session.setGraph(graph); await f.session.start(42);
+  graph.edges = graph.edges.filter(e => e.to[0] !== 'translated'); graph.edges.push(edge('translation', 'text', 'translated', port)); f.session.setGraph(addDOMFormatters(graph)); await f.session.start(42);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'source' }); await tick(); f.translation.complete(0, 'translated'); await tick();
   assert.deepEqual(display(f, 'translated'), 'translated');
   await f.session.stop(); await f.session.start(42); assert.deepEqual(display(f, 'translated'), ''); f.session.cancel();
@@ -176,7 +178,7 @@ test('Cancel adds no pending history; failed committed results remain readable a
   f.session.cancel(); f.translation.complete(0, 'late'); await tick(); assert.deepEqual(display(f, 'translated'), [].join('\n'));
   f.session.prepareTranslation = async () => { throw Error('cache unavailable'); }; await f.session.start(42);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'failed', id: 0 }); await tick(); await f.session.stop();
-  assert.deepEqual(display(f, 'translated'), ['Japanese: failed\nEnglish: cache unavailable'].join('\n'));
+  assert.deepEqual(display(f, 'translated'), ['failed\nTranslation failed: cache unavailable'].join('\n'));
   assert.deepEqual(display(f), ['failed'].join('\n'));
 });
 
@@ -216,7 +218,7 @@ test('multiple translator runtime statuses retain each branch failure independen
   graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('LiveTextDisplay', 'reverse-display'));
   graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'content'));
   f.session.prepareTranslation = async (signal, direction) => { if (direction === 'ja-en') throw Error('Forward cache unavailable'); };
-  f.session.setGraph(graph); await f.session.start(42); await tick();
+  f.session.setGraph(addDOMFormatters(graph)); await f.session.start(42); await tick();
   assert.match(f.session.view.translationStatus, /translation: Translation unavailable: Forward cache unavailable/);
   assert.match(f.session.view.translationStatus, /reverse: Local OPUS-MT ready/);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
@@ -233,19 +235,19 @@ test('empty committed input is a successful empty value even when model preparat
   assert.equal(f.workers.length, 0); await f.pipeline.dispose();
 });
 
-test('saved template/direction changes apply only to fresh Nodes and keep the active graph immutable', async () => {
+test('saved label/direction changes apply only to fresh Nodes and keep the active graph immutable', async () => {
   const f = sessionFixture(); f.session.setGraph(defaultGraph({ enabled: true, direction: 'en-ja' })); await f.session.start(42);
   const active = f.session.view.activeGraph;
   const next = defaultGraph({ enabled: true, direction: 'ja-en' });
-  next.nodes.find(n => n.id === 'translated-format').settings.template = '{2}\nOriginal: {1}'; f.session.setGraph(next);
+  next.nodes.find(n => n.id === 'translated').settings.label = 'New comparison'; f.session.setGraph(next);
   assert.equal(f.session.view.activeGraph, active);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
   f.translation.complete(0, 'こんにちは'); await f.session.stop();
-  assert.deepEqual(display(f, 'translated'), ['English: Hello\nJapanese: こんにちは'].join('\n'));
+  assert.deepEqual(display(f, 'translated'), ['Hello\nこんにちは'].join('\n'));
   await f.session.start(42); assert.deepEqual(display(f, 'translated'), [].join('\n'));
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: '日本語' }); await tick();
   f.translation.complete(1, 'Japanese'); await f.session.stop();
-  assert.deepEqual(display(f, 'translated'), ['Japanese\nOriginal: 日本語'].join('\n'));
+  assert.deepEqual(display(f, 'translated'), ['日本語\nJapanese'].join('\n'));
 });
 
 

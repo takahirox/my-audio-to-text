@@ -5,8 +5,8 @@ Stage 1 batches short committed ASR fragments. Stage 2 optionally retranslates
 only the current bounded, uncommitted source window. It does not provide
 conversation-wide context, conversation memory, or guaranteed translation
 accuracy improvements. Both processors are in Graph Editor's Processors palette.
-They require no model weights. Graph v10 uses explicit TextAccumulator state upstream
-of the pure LiveTextDisplay content sink. Primitive TEXT identity, the generic
+They require no model weights. Graph v11 uses explicit TextAccumulator state and TextToDOM upstream
+of the DOM-only LiveTextDisplay sink. Primitive TEXT identity, the generic
 Pipeline and translator/formatter outputs remain unchanged.
 
 ## Stage 1: batching without retranslation
@@ -17,7 +17,7 @@ Connect these named ports:
 ASR.final → TextWindow.text
 TextWindow.text → TranslateGemmaEnJa.text
 TranslateGemmaEnJa.text → TextAccumulator.append
-TextAccumulator.text → LiveTextDisplay.content
+TextAccumulator.text → TextToDOM.text → dom → LiveTextDisplay.dom
 ```
 
 Any existing translator accepts this output; there is no model-specific
@@ -77,7 +77,7 @@ Translator.text ──────────→ TranslationCommit.text
 Translator.error ─────────→ TranslationCommit.error
 TranslationCommit.provisional → TextAccumulator.preview
 TranslationCommit.final ──────→ TextAccumulator.append
-TextAccumulator.text ────────→ LiveTextDisplay.content
+TextAccumulator.text ────────→ TextToDOM.text → dom → LiveTextDisplay.dom
 ```
 
 Translator means any of OpusMtEnJa, OpusMtJaEn, TranslateGemmaEnJa or
@@ -201,4 +201,4 @@ Measured results and limitations are recorded in
 [`docs/evidence/translation-128.md`](evidence/translation-128.md). No required
 check introduced by this experiment depends on a post-merge deployment.
 
-Live displays accept only `content: TEXT` in Graph v10. For transcript history, route final segments to `TextAccumulator.append`, provisional tails to `TextAccumulator.preview`, and `TextAccumulator.text → LiveTextDisplay.content`. Complete summary/formatter snapshots may connect directly to content. Saved v9 display wiring migrates automatically with original recovery copies retained; see [migration and lifecycle](extension-graph.md#graph-v10-display-migration-and-recovery).
+Live displays accept only `dom: DOM` in Graph v11. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final/preview text upstream with TextAccumulator. For paired translation, wire one committed-only translator’s grouped source/text/error to PairedTextToDOM, then dom to the display. Saved TEXT display graphs require review and Save of a conversion draft; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).

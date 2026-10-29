@@ -344,7 +344,7 @@ only final TEXT, while ReazonSpeech retains both outputs. Legacy views become
 generic TEXT displays. Version 9 replaces paired formatters with ordinary configurable
 TextFormatter Nodes through a visible, non-destructive migration review. Removed
 status/index/provisional routes stay recoverable in the original JSON backup. Shared `LiveTextDisplayNode`
-and `TextFormatterNode` own text presentation state and bounded formatting.
+mounts DOM only. TextAccumulator owns text history; TextFormatter owns bounded formatting; TextToDOM and PairedTextToDOM construct DOM on the page main thread. Native DOM snapshots never cross Worker messages.
 Independent formatter inputs update latest values immediately; only directly
 grouped inputs update together. No editor, model selection, storage or inference
 policy is added to the generic Pipeline runtime.

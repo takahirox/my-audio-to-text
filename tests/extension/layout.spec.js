@@ -42,7 +42,7 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
     const graph = defaultGraph();
     graph.nodes.push(graphNode('LiveTextDisplay', 'value'), graphNode('OpusMtJaEn', 'forward'), graphNode('OpusMtEnJa', 'reverse'), graphNode('LiveTextDisplay', 'forward-output'), graphNode('LiveTextDisplay', 'reverse-output'));
     graph.edges.push(edge('speech', 'final', 'value', 'content'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'content'), edge('reverse', 'text', 'reverse-output', 'content'));
-    saveGraph(localStorage, graph);
+    saveGraph(localStorage, window.addDOMFormatters(graph));
   });
   await editor.reload();
   await expect(editor.locator('[data-node=forward]')).toContainText('OPUS-MT Japanese → English');

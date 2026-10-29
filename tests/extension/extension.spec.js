@@ -130,7 +130,7 @@ for (const fallback of [false, true]) {
     const page = await setup(extension, { fallback });
     await expect(page.locator('#status')).toHaveText('Transcription active');
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-    expect(await graphTypes(page)).toEqual(['ExtensionTabAudioNode', 'SpeechToTextNode', 'LiveTextDisplayNode', 'TextAccumulatorNode']);
+    expect(await graphTypes(page)).toEqual(['ExtensionTabAudioNode', 'SpeechToTextNode', 'LiveTextDisplayNode', 'TextAccumulatorNode', 'TextToDOMNode']);
     expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);
     expect(await page.evaluate(() => window.mediaOptions.audio.mandatory)).toEqual({ chromeMediaSource: 'tab', chromeMediaSourceId: 'fixture-id' });
     expect(await page.evaluate(() => window.mediaOptions.video)).toBe(false);

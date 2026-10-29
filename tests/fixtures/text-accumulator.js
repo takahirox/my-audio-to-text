@@ -8,6 +8,7 @@ export function accumulateDisplay(graph, display) {
   for (const route of graph.edges) if (route.to[0] === display && ['append', 'replace'].includes(route.to[1])) {
     route.to = [id, route.to[1] === 'append' ? 'append' : 'preview'];
   }
-  graph.edges.push(edge(id, 'text', display, 'content'));
+  graph.nodes.push(graphNode('TextToDOM', `${display}-dom`));
+  graph.edges.push(edge(id, 'text', `${display}-dom`, 'text'), edge(`${display}-dom`, 'dom', display, 'dom'));
   return graph;
 }

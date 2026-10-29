@@ -12,7 +12,7 @@ async function saveConcurrent(page) {
     graph.nodes.find(node => node.id === 'transcript').settings.label = 'Remote speaker';
     graph.nodes.find(node => node.id === 'local-display').settings.label = 'Local speaker';
     graph.edges.push(edge('mic', 'audio', 'local', 'audio'), edge('local', 'final', 'local-display', 'content'));
-    saveGraph(localStorage, graph); return graph;
+    saveGraph(localStorage, window.addDOMFormatters(graph)); return graph;
   });
 }
 
@@ -24,7 +24,7 @@ test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauth
     graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'parked-output'),
       graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'unfinished-output'));
     graph.edges.push(edge('unfinished', 'final', 'unfinished-output', 'text'));
-    saveGraph(localStorage, graph);
+    saveGraph(localStorage, window.addDOMFormatters(graph));
     window.pageAllocations = [];
     chrome.scripting.executeScript = async () => { window.pageAllocations.push('script'); throw Error('Inactive output requested authorization'); };
     chrome.tabs.connect = () => { window.pageAllocations.push('connection'); throw Error('Inactive output opened a connection'); };
@@ -117,7 +117,7 @@ test('MV3 drafts save/reload, optional warnings default off and persist, empty e
   await page.evaluate(async () => {
     const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
     const graph = defaultGraph(); graph.nodes.push(graphNode('MicrophoneAudio','parked'),graphNode('SpeechToTextWhisper','unfinished'));
-    graph.edges=[]; saveGraph(localStorage,graph);
+    graph.edges=[]; saveGraph(localStorage, window.addDOMFormatters(graph));
   });
   await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
   await editor.locator('.graph-actions > summary').click();
@@ -140,7 +140,7 @@ test('MV3 TEXT-only path starts without a toolbar tab or microphone permission',
   await page.evaluate(async () => {
     const { graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
     const text = graphNode('Text', 'text'); text.settings.value = 'Independent text path';
-    saveGraph(localStorage, { version: 9, nodes: [text, graphNode('LiveTextDisplay', 'display')], edges: [edge('text', 'value', 'display', 'append')] });
+    saveGraph(localStorage, window.addDOMFormatters({ version: 11, nodes: [text, graphNode('LiveTextDisplay', 'display')], edges: [edge('text', 'value', 'display', 'content')] }));
     window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
     navigator.mediaDevices.getUserMedia = () => { throw Error('No microphone permission should be requested'); };
   });

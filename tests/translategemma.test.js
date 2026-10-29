@@ -1,3 +1,5 @@
+import { addDOMFormatters } from './fixtures/dom-graph.js';
+import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -23,8 +25,8 @@ test('Gemma directions share a complete immutable q4 manifest, including both ex
 });
 
 for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGemmaJaEn', 'ja-en']]) {
-  test(`${type}: v10 save/reload preserves independent and parked Nodes; real builder routes grouped TEXT to formatter and direct sinks`, async () => {
-    const graph = { version: 10, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
+  test(`${type}: v11 save/reload preserves independent and parked Nodes; real builder routes grouped TEXT to formatter and direct sinks`, async () => {
+    const graph = { version: 11, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
       graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain'),
       graphNode('Text', 'independent'), graphNode('LiveTextDisplay', 'other'), graphNode(type, 'parked')], edges: [
       edge('input', 'value', 'translation', 'text'), edge('translation', 'source', 'format', 'input1'),
@@ -35,13 +37,13 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
     graph.nodes[0].settings.value = 'Original source'; graph.nodes[2].settings.template = '{1}|{2}|{3}';
     graph.nodes[5].settings.value = 'Other branch';
     const entries = new Map(), storage = { getItem: key => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value), removeItem: key => entries.delete(key) };
-    saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
+    saveGraph(storage, addDOMFormatters(graph)); assert.deepEqual(readGraph(storage), graph);
     assert.deepEqual(graphPreferences(graph), { enabled: true, direction });
-    assert.equal(executableGraph(graph).nodes.some(n => n.id === 'parked'), false);
+    assert.equal(executableGraph(addDOMFormatters(graph)).nodes.some(n => n.id === 'parked'), false);
     for (const fail of [false, true]) {
       const workers = [], displays = {}, states = [];
-      const built = buildGraph(graph, { prepareTranslateGemma: async () => { if (fail) throw Error('weights evicted'); },
-        onDisplay: (id, state) => { displays[id] = state; }, onTranslationState: state => states.push(state),
+      const built = buildGraph(addDOMFormatters(graph), { prepareTranslateGemma: async () => { if (fail) throw Error('weights evicted'); },
+        onDisplay: (id, state) => { state = domText(state); displays[id] = state; }, onTranslationState: state => states.push(state),
         translationWorkerFactory: url => {
           const worker = { messages: [], postMessage(message) {
             this.messages.push(message);

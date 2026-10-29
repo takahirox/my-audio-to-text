@@ -1,3 +1,5 @@
+import { addDOMFormatters } from './fixtures/dom-graph.js';
+import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TextWindowNode, windowSettings } from '../web/text-window-node.js';
@@ -70,8 +72,8 @@ function workers() {
 async function graph(mode = 'revisable', settings) {
   const f = workers(), displays = [], description = windowGraph(mode);
   if (settings) Object.assign(description.nodes.find(n => n.id === 'window').settings, settings);
-  const built = buildGraph(description, { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory,
-    onDisplay: (_, state) => displays.push(state) });
+  const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory,
+    onDisplay: (_, state) => displays.push(domText(state)) });
   await built.pipeline.start(); await built.translations[0].ready;
   return { ...f, ...built, displays, send: text => built.pipeline.entries.get('input').context.emit('value', text), display: () => displays.at(-1), accumulator: built.pipeline.entries.get('display-accumulator').node };
 }
@@ -192,10 +194,10 @@ for (const reverse of [false, true]) test(`independent concurrent windows surviv
     g.edges.forEach(e => { e.from[0] += suffix; e.to[0] += suffix; });
     return g;
   });
-  const description = { version: 10, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
+  const description = { version: 11, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
   if (reverse) description.nodes.reverse();
   const f = workers(), displays = {};
-  const built = buildGraph(description, { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => { displays[id] = s; } });
+  const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => { s = domText(s); displays[id] = s; } });
   await built.pipeline.start(); await Promise.all(built.translations.map(n => n.ready));
   const send = (suffix, s) => built.pipeline.entries.get(`input${suffix}`).context.emit('value', s);
   send('a', 'same'); await tick(); send('b', 'same'); await tick();
@@ -212,7 +214,7 @@ test('32-window overload is explicit, bounded and leaves an independent TEXT bra
   const description = windowGraph('revisable');
   description.nodes.push(graphNode('LiveTextDisplay', 'independent')); description.edges.push(edge('input', 'value', 'independent', 'content'));
   const f = workers(), displays = {};
-  const built = buildGraph(description, { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => { displays[id] = s; } });
+  const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => { s = domText(s); displays[id] = s; } });
   await built.pipeline.start(); await built.translations[0].ready;
   for (let i = 0; i < 50; i++) built.pipeline.entries.get('input').context.emit('value', 'Wait.');
   await tick(); assert.equal(displays.independent, 'Wait.'); // Independent snapshots replace directly.
@@ -226,31 +228,31 @@ test('Live session reports a new buffer failure without canceling peer branches 
   const description = windowGraph('revisable');
   description.nodes.push(graphNode('LiveTextDisplay', 'peer')); description.edges.push(edge('input', 'value', 'peer', 'content'));
   const f = workers();
-  const session = new TabSession(() => {}, { graph: description, prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory });
+  const session = new TabSession(() => {}, { graph: addDOMFormatters(description), prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory });
   await session.start(); await session.session.translations[0].ready;
   const send = text => session.session.pipeline.entries.get('input').context.emit('value', text);
   send('First.'); await tick(); f.complete(0); await tick();
   send('x'.repeat(32769)); await tick();
   assert.equal(session.view.state, 'running'); assert.match(session.view.error, /32,768/);
   send('peer continues'); await tick();
-  assert.deepEqual(session.view.displays.display, (['訳:First.']).join('\n'));
-  assert.equal(session.view.displays.peer, 'peer continues');
+  assert.deepEqual(domText(session.view.displays.display), (['訳:First.']).join('\n'));
+  assert.equal(domText(session.view.displays.peer), 'peer continues');
   session.cancel(); await tick(); assert.ok(f.owned.every(w => w.terminated));
 });
 
 test('graph saves/reloads with no version migration, no new weights, and permits generic correlation routes for runtime validation', () => {
   const values = new Map(), storage = { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: k => values.delete(k) };
   for (const mode of ['window', 'revisable']) {
-    const g = windowGraph(mode); assert.deepEqual(validateGraph(g), []); saveGraph(storage, g); assert.deepEqual(readGraph(storage), g);
+    const g = windowGraph(mode); assert.deepEqual(validateGraph(addDOMFormatters(g)), []); saveGraph(storage, addDOMFormatters(g)); assert.deepEqual(readGraph(storage), g);
     assert.deepEqual(graphModelRequirements(g).map(r => r.id), ['translategemma']);
   }
   const g = windowGraph('revisable'); g.nodes.push(graphNode('TextWindow', 'other'));
   g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'boundary').from[0] = 'other';
-  assert.deepEqual(validateGraph(g), []);
+  assert.deepEqual(validateGraph(addDOMFormatters(g)), []);
   g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'source').from = ['input', 'value'];
-  assert.deepEqual(validateGraph(g), []);
+  assert.deepEqual(validateGraph(addDOMFormatters(g)), []);
   assert.deepEqual(graphModelRequirements({ nodes: [graphNode('TextWindow', 'w'), graphNode('TranslationCommit', 'c')] }), []);
-  assert.equal(defaultGraph().version, 10);
+  assert.equal(defaultGraph().version, 11);
 });
 
 test('TranslationCommit rejects independent/malformed results and detects an undrained boundary', () => {

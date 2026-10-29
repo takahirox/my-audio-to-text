@@ -119,7 +119,7 @@ async function instrument(f) {
 
 const originalItems = page => page.locator('[data-display="transcript"] .display-content');
 const originalPreview = page => page.locator('[data-display="transcript"] .display-content');
-const pairText = page => page.locator('[data-display="translated"] .display-content');
+const pairText = page => page.locator('[data-display="translated"] tbody');
 for (const direction of ['ja-en', 'en-ja']) {
   const target = direction === 'en-ja' ? 'Japanese' : 'English';
   const open = async f => { const page = await openRecorder(f); await setDirection(page, direction); return page; };
@@ -165,10 +165,10 @@ for (const direction of ['ja-en', 'en-ja']) {
     await emit(page, 'partial', 'preview'); await expect(pairText(page)).toBeEmpty();
     await emit(page, 'final', 'same', 0); await emit(page, 'final', 'same', 1); await emit(page, 'final', 'fail', 2);
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-    await expect(pairText(page)).toContainText(`${target}: ${target}: same`); expect((await pairText(page).textContent()).match(new RegExp(`${target}: ${target}: same`, 'g'))).toHaveLength(2);
+    await expect(pairText(page)).toContainText(`${target}: same`); expect((await pairText(page).textContent()).match(new RegExp(`${target}: same`, 'g'))).toHaveLength(2);
     await expect(pairText(page)).toContainText('Controlled inference failure'); await expect(pairText(page)).not.toContainText('preview');
     await start(page); await emit(page, 'final', 'slow'); await expect(pairText(page)).toBeEmpty(); await page.locator('#cancel-session').click();
-    await expect(pairText(page)).toBeEmpty(); await expect(pairText(page)).not.toContainText(`${target}: ${target}: slow`);
+    await expect(pairText(page)).toBeEmpty(); await expect(pairText(page)).not.toContainText(`${target}: slow`);
     expect(await page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
   });
 
@@ -202,7 +202,7 @@ for (const direction of ['ja-en', 'en-ja']) {
   for (const phase of ['loading', 'inference']) test(`${direction}: teardown during translation ${phase} rejects late output`, async ({ translationExtension: f }) => {
     await instrument(f); const page = await open(f); await prepare(page); await start(page); if (phase === 'inference') await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
     await emit(page, 'final', 'slow'); await expect(pairText(page)).toBeEmpty(); await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
-    await expect(pairText(page)).toBeEmpty(); await expect.poll(() => page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true); await page.waitForTimeout(350); await expect(pairText(page)).not.toContainText(`${target}: ${target}:`); await expect(page.locator('#errors')).toBeEmpty();
+    await expect(pairText(page)).toBeEmpty(); await expect.poll(() => page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true); await page.waitForTimeout(350); await expect(pairText(page)).not.toContainText(`${target}:`); await expect(page.locator('#errors')).toBeEmpty();
   });
 
   test(`${direction}: unavailable WebAssembly isolates translation failure`, async ({ translationExtension: f }) => {
@@ -218,8 +218,8 @@ for (const direction of ['ja-en', 'en-ja']) {
 
 test('saved processing direction applies next session; generic labels and existing history stay active; caches remain independent', async ({ translationExtension: f }) => {
   await instrument(f); const page = await openRecorder(f); await setDirection(page, 'en-ja'); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
-  await setDirection(page, 'ja-en'); await emit(page, 'final', 'Hello'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('English: Hello\nJapanese: Japanese: Hello');
-  await prepare(page); expect(f.requests).toHaveLength(14); await start(page); await expect(pairText(page)).toBeEmpty(); await emit(page, 'final', '日本語'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('Japanese: 日本語\nEnglish: English: 日本語');
+  await setDirection(page, 'ja-en'); await emit(page, 'final', 'Hello'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('HelloJapanese: Hello');
+  await prepare(page); expect(f.requests).toHaveLength(14); await start(page); await expect(pairText(page)).toBeEmpty(); await emit(page, 'final', '日本語'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('日本語English: 日本語');
   await loadTranslationFixture(page.editor, 'ja-en', false); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await f.context.setOffline(true); await start(page); await expect(page.locator('#translation-status')).toHaveText('Translation off'); await expect(page.locator('.live-text-region')).toHaveCount(1); await emit(page, 'final', 'Original only'); await expect(originalItems(page)).toHaveText('Original only'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(14);
 });
 

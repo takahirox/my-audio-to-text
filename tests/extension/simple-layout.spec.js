@@ -9,7 +9,7 @@ test('Simple lays out 0, 1, 2 and 4 saved displays at narrow and wide sizes with
       const displays = Array.from({ length: count }, (_, i) => {
         const node = graphNode('LiveTextDisplay', `display-${i}`); node.settings.label = `Output ${i + 1}`; return node;
       });
-      saveGraph(localStorage, { version: 10, nodes: [source, ...displays], edges: displays.map(node => edge('source', 'value', node.id, 'content')) });
+      saveGraph(localStorage, window.addDOMFormatters({ version: 11, nodes: [source, ...displays], edges: displays.map(node => edge('source', 'value', node.id, 'content')) }));
     }, count);
     // A stopped session retains its output snapshot until the next Start/reload.
     await live.reload();
@@ -78,13 +78,13 @@ test('Simple exposes required media selection and retains permission and graph r
   await expect(live.locator('#start')).toBeDisabled(); // No toolbar capture tab.
   await live.editor.evaluate(async () => {
     const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
-    const graph = defaultGraph(); graph.nodes[0] = graphNode('SelectedPageMediaAudio', 'audio'); saveGraph(localStorage, graph);
+    const graph = defaultGraph(); graph.nodes[0] = graphNode('SelectedPageMediaAudio', 'audio'); saveGraph(localStorage, window.addDOMFormatters(graph));
   });
   await expect(live.locator('#targets')).toHaveAttribute('open', '');
   await expect(live.getByRole('button', { name: 'Discover media in capture tab' })).toBeVisible();
   await live.editor.evaluate(async () => {
     const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
-    const graph = defaultGraph(); graph.nodes[0] = graphNode('MicrophoneAudio', 'audio'); saveGraph(localStorage, graph);
+    const graph = defaultGraph(); graph.nodes[0] = graphNode('MicrophoneAudio', 'audio'); saveGraph(localStorage, window.addDOMFormatters(graph));
   });
   await live.evaluate(() => { window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }); });
   await expect(live.locator('#status')).toContainText('Press Start to request browser permission');
@@ -102,7 +102,7 @@ test('audio-only output keeps its player and download usable at narrow and wide 
     const { readGraph, saveGraph } = await import('./graph.js');
     const graph = readGraph(localStorage), displays = graph.nodes.filter(node => node.type === 'LiveTextDisplay').map(node => node.id);
     graph.nodes = graph.nodes.filter(node => !displays.includes(node.id));
-    graph.edges = graph.edges.filter(route => !displays.includes(route.to[0])); saveGraph(localStorage, graph);
+    graph.edges = graph.edges.filter(route => !displays.includes(route.to[0])); saveGraph(localStorage, window.addDOMFormatters(graph));
   });
   await startGraph(live); await emitFinal(live, 'Spoken output');
   await expect(live.locator('.live-text-region')).toHaveCount(0);
