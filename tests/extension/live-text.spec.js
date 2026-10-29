@@ -1,4 +1,5 @@
 import { livePreviewGraph } from '../fixtures/live-preview-graph.js';
+import { livePreviewText, checkLivePreviewLayout, checkLivePreviewCopy } from '../fixtures/live-preview-layout.js';
 import { installLiveScrollFixture, checkLiveScrolling, checkLiveTextFlowScrolling } from '../fixtures/live-scroll.js';
 import { openPalette, loadTranslationFixture } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
@@ -325,6 +326,56 @@ test('MV3 summary TEXT snapshots render literally through TextToDOM, retain comm
   await live.locator('#stop').click();await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText(literal);
 });
 
+
+test('MV3 combined graph persists explicit tail styling, aligns both widths, highlights and copies literal text', async ({ graphExtension: f }, testInfo) => {
+  const live = await openGraph(f); await fixtureTranslation(f, live);
+  await writeFile(path.join(f.root, 'web/zipformer-worker.js'), `let session;
+    self.onmessage=({data})=>{
+      if(data.type==='load')postMessage({type:'ready'});
+      if(data.type==='start')session=data.session;
+      if(data.type==='stop')postMessage({type:'stopped',session});
+    };`);
+  await writeFile(path.join(f.root, 'web/opus-mt-en-ja-worker.js'), `self.onmessage=({data})=>{
+    if(data.type==='load')postMessage({type:'ready',id:data.id});
+    if(data.type==='translate')postMessage({type:'result',id:data.id,texts:['朝の電車は3番ホームに到着します。\\n'.repeat(3)]});
+    if(data.type==='drain')postMessage({type:'drained',id:data.id});
+  };`);
+  const graph = livePreviewGraph();
+  graph.nodes.forEach((node, index) => { node.position = { x: 20 + (index % 4) * 300, y: 20 + Math.floor(index / 4) * 350 }; });
+  await live.evaluate(async graph => { const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph); }, graph);
+  await live.editor.reload();
+  await live.editor.locator('[data-node="preview"] .graph-heading').click();
+  const className = live.editor.getByLabel('preview className', { exact: true });
+  await expect(className).toHaveValue('paired-text-tail');
+  await className.fill(''); await className.blur();
+  await className.fill('paired-text-tail'); await className.blur();
+  await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
+  await live.editor.reload();
+  await live.editor.locator('[data-node="preview"] .graph-heading').click();
+  await expect(live.editor.getByLabel('preview className', { exact: true })).toHaveValue('paired-text-tail');
+  await startGraph(live);
+  const content = region(live, 'live').locator('.display-content');
+  for (const id of [0, 1]) {
+    await live.evaluate(id => window.speech.receiveEvent({ type: 'final', id, text: 'The morning train arrives at platform three.' }), id);
+    await expect(content.locator('tr')).toHaveCount(id + 1);
+  }
+  await live.evaluate(text => window.speech.receiveEvent({ type: 'partial', text }), livePreviewText);
+  for (const width of [1440, 390]) {
+    await live.setViewportSize({ width, height: 1400 });
+    const geometry = await checkLivePreviewLayout(live, content, expect);
+    await testInfo.attach(`geometry-${width}`, { body: JSON.stringify(geometry, null, 2), contentType: 'application/json' });
+    if (process.env.UPDATE_LIVE_SCREENSHOT) await region(live, 'live').screenshot({ path: `docs/evidence/live-150-extension-${width}.png` });
+  }
+  await checkLivePreviewCopy(live, content, expect);
+  await content.focus();
+  await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'replaced' }));
+  await expect(content).toBeFocused(); await expect(content.locator('.paired-text-tail')).toHaveText('replaced');
+  await live.evaluate(() => window.speech.receiveEvent({ type: 'final', id: 2, text: 'completed' }));
+  await expect(content.locator('.paired-text-tail')).toBeHidden();
+  await expect(content.locator('tr')).toHaveCount(3);
+  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
+  await expect(live.locator('#errors')).toBeEmpty();
+});
 
 test('MV3 combined history and ASR preview clear before delayed translation, retain newer speech, drain and cancel', async ({ graphExtension: f }) => {
   const live = await openGraph(f); await fixtureTranslation(f, live);

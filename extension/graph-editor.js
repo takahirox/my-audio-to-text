@@ -245,7 +245,7 @@ export class GraphEditor {
     }
     for (const [key, spec] of Object.entries(definition.textSettings || {})) {
       const label = el('label', key + ' '), control = el(spec.multiline ? 'textarea' : 'input');
-      control.setAttribute('aria-label', `${node.id} ${key}`); if (spec.maxLength !== undefined) control.maxLength = spec.maxLength; control.value = node.settings[key];
+      control.setAttribute('aria-label', `${node.id} ${key}`); if (spec.maxLength !== undefined) control.maxLength = spec.maxLength; control.value = node.settings[key] ?? spec.default;
       control.onchange = () => this.updateSetting(node, key, control.value);
       label.append(control); this.inspector.append(label);
     }

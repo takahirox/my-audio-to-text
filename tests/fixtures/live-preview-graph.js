@@ -1,10 +1,12 @@
 import { defaultGraph, graphNode, edge } from '../../extension/graph.js';
 
 export function livePreviewGraph(audioType = 'ChromeTabAudio') {
+  const preview = graphNode('TextToDOM', 'preview');
+  preview.settings.className = 'paired-text-tail';
   return { version: defaultGraph().version, nodes: [
     graphNode(audioType, 'audio'), graphNode('SpeechToTextZipformerEn', 'speech'),
     graphNode('OpusMtEnJa', 'translation'), graphNode('PairedTextToDOM', 'pairs'),
-    graphNode('DOMAccumulator', 'history'), graphNode('TextToDOM', 'preview'),
+    graphNode('DOMAccumulator', 'history'), preview,
     graphNode('DOMCombiner', 'combined'), graphNode('LiveTextDisplay', 'live'),
   ], edges: [
     edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'translation', 'text'),

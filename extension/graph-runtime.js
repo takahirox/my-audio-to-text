@@ -141,7 +141,7 @@ export function buildGraph(graph, options) {
       case 'SpeechToTextReazonSpeech':
         node = new SpeechToTextNode({ configurationConnected: graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'maxDuration'), workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'LiveTextDisplay': node = new LiveTextDisplayNode(dom => options.onDisplay?.(spec.id, dom)); break;
-      case 'TextToDOM': node = new TextToDOMNode(); break;
+      case 'TextToDOM': node = new TextToDOMNode(spec.settings); break;
       case 'PairedTextToDOM': node = new PairedTextToDOMNode(); break;
       case 'DOMAccumulator': node = new DOMAccumulatorNode(); break;
       case 'DOMCombiner': node = new DOMCombinerNode(); break;
