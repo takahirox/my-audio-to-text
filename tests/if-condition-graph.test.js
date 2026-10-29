@@ -42,11 +42,13 @@ test('graph runtime loads only selected conditional instances and branch errors 
   for (const fail of [false,true]) {
     const g=graph(), f=factory({fail}), displays={}, events=[];
     const built=buildGraph(addDOMFormatters(g),{ifConditionWorkerFactory:f.workerFactory,onDisplay:(id,state)=>displays[id]=domText(state),onIfConditionEvent:(event,id)=>events.push([id,event])});
-    await built.pipeline.start(); await built.pipeline.stop();
+    await built.pipeline.start();
+    if (fail) await assert.rejects(built.pipeline.stop(), AggregateError);
+    else await built.pipeline.stop();
     assert.deepEqual(displays.peer, '  Same?\n');
     assert.deepEqual(displays.yes,fail?'':'  Same?\n'); assert.deepEqual(displays.no, '');
     if(fail) assert.ok(events.some(([id,e])=>id==='condition'&&e.type==='error'&&/missing/.test(e.message)));
-    assert.ok(f.workers.every(w=>w.released)); assert.deepEqual(built.pipeline.errors,[]); await built.pipeline.dispose();
+    assert.ok(f.workers.every(w=>w.released)); assert.equal(built.pipeline.errors.length,fail?1:0); assert.equal(built.pipeline.entries.get('condition').failed,fail); await built.pipeline.dispose();
   }
 });
 

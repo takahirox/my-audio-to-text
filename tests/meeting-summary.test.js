@@ -145,10 +145,13 @@ for (const type of MEETING_SUMMARY_TYPES) {
     for (const failLoad of [false, true]) {
       const f = fixture(type, { failLoad }), displays = {}, events = [];
       const built = buildGraph(addDOMFormatters(g), { meetingSummaryWorkerFactory: () => f.worker, onDisplay: (id,state) => displays[id] = domText(state), onMeetingSummaryEvent: event => events.push(event) });
-      await built.pipeline.start(); await built.pipeline.stop();
+      await built.pipeline.start();
+      if (failLoad) await assert.rejects(built.pipeline.stop(), AggregateError);
+      else await built.pipeline.stop();
       assert.deepEqual(displays.transcript, meetingBatches[0]);
       assert.equal(displays.notes, failLoad ? '' : 'Note 1');
-      assert.deepEqual(built.pipeline.errors, []);
+      assert.equal(built.pipeline.errors.length, failLoad ? 1 : 0);
+      assert.equal(built.pipeline.entries.get('summary').failed, failLoad);
       if (failLoad) assert.ok(events.some(e => e.type === 'error'));
       await built.pipeline.dispose();
     }

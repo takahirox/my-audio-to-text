@@ -156,6 +156,19 @@ Page/media handles are never saved with a graph.
 Version 10 is JSON with `version`, `nodes`, `edges`, and an optional
 `translationDirection` legacy preference, preserved for stored-graph compatibility.
 Processor types and settings choose the actual models; this field never schedules weights.
+The Issue #146 call-site audit found no current UI/runtime callers of
+`TabSession.setTranslation()` or `setTranslationDirection()`; the obsolete
+`withTranslation()` bulk mutation helper was called only by those dead setters
+and tests. Those APIs and the unused standalone preference reader/writer were
+removed. Graph Editor saves explicit Node edits through `setGraph()`.
+`graphPreferences()` remains a read-only hint for session status and historical
+migration. Its first-translator direction is not authoritative for graphs with
+multiple or opposite-direction processors. The stored `translationDirection`
+field, first-run import of `opus-mt-translation-preferences` in `readGraph()`,
+graph versions and migration/recovery copies remain unchanged. Existing saved
+graphs take precedence over old preferences; no preference rewrites their Nodes
+or downstream routes.
+
 Each Node has `id`, concrete `type`, `settings`, and `position: { x, y }`.
 Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 [Schema/defaults](../extension/graph.js), editor, storage and the
@@ -240,6 +253,18 @@ signals and model progress/errors include Node IDs. Every Node failure is report
 locally and leaves independent viable paths running, regardless of Node types or
 neighbors. Stop drains healthy Nodes and reports failures. Failed startup leaves
 peer paths usable; when no output path survives, Start releases the graph.
+
+MeetingSummary and IfCondition use their production Nodes directly, including
+`context.fail()`: model-load and asynchronous inference failures mark the shared
+Pipeline entry failed, abort its signal and release its Worker. Their actionable
+diagnostics appear once in the corresponding Live status. The Pipeline retains
+the error and rejects Stop with its recorded `AggregateError` after draining
+healthy paths. The session then disposes normally and retains committed output;
+it does not turn that already reported error into a new whole-session failure.
+Cancel interrupts loading, inference or Stop, and a restart creates fresh Nodes.
+The summary backlog diagnostic is intentionally nonfatal: it rejects the
+overflowing fragment, drains accepted evidence, publishes its final summary and
+releases the Worker without marking that successful drain as a processor failure.
 
 Tab audio may already contain the local speaker, and microphones may pick up
 speaker playback. Independent displays do not promise speaker separation or echo
@@ -890,3 +915,30 @@ checks did run. No model accuracy or external-site compatibility claim is made.
 `git diff --check` passed.
 
 No post-merge-only verification is required.
+
+## Issue #146 validation
+
+`npm test` passes all 606 tests. The new
+[`graph-model-failures.test.js`](../tests/graph-model-failures.test.js) exercises
+both summary processors and IfCondition through the actual graph Pipeline and
+session: load, inference and Stop failures; recorded failure/abort state; Worker
+cleanup; retained commits; independent field/display/opposite-direction
+translation paths; Cancel during load/inference/Stop and restart; no viable
+startup path; and the intentionally nonfatal summary overflow diagnostic.
+
+Chromium MV3 checks passed 65 distinct tests (72 executions, including a rerun
+of the seven updated IfCondition checks):
+
+```sh
+npm run test:extension -- tests/extension/graph-model-failures.spec.js tests/extension/graph-if-condition.spec.js tests/extension/graph-meeting-summary.spec.js tests/extension/graph.spec.js
+# 26 passed
+npm run test:extension -- tests/extension/graph-if-condition.spec.js tests/extension/graph-concurrent.spec.js tests/extension/primitive-composition.spec.js tests/extension/windowed-translation.spec.js tests/extension/translation.spec.js
+# 46 passed
+```
+
+These checks used a source-only fixture package: the extension directory,
+manifest and `build-extension.py`'s shared source list, with the tests' existing
+deterministic model/runtime fixtures. `npm run build:extension` was blocked by
+missing local model assets (`Missing local models. Run npm run prepare:assets
+first.`). A complete production asset build and real-model smokes were not run;
+fixture results do not establish model accuracy. `git diff --check` passed.

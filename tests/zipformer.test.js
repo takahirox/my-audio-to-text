@@ -4,7 +4,7 @@ import { ZipformerSegments } from '../web/zipformer-segments.js';
 import { ZIPFORMER as C } from '../web/zipformer-config.js';
 import { SpeechToTextZipformerEnNode } from '../web/zipformer-node.js';
 import { MONO_16KHZ_PCM, TEXT } from '../web/transcription-nodes.js';
-import { defaultGraph, graphNode, edge, validateGraph, migrateGraph, readGraph, GRAPH_KEY, ASR_TYPES, NODE_TYPES, withTranslation } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, validateGraph, migrateGraph, readGraph, GRAPH_KEY, ASR_TYPES, NODE_TYPES } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { Pipeline } from '../web/pipeline.js';
 
@@ -71,7 +71,10 @@ test('typed graph, opt-in definition and runtime assembly preserve v8 defaults, 
   graph.nodes.push(graphNode('TextFormatter', 'format'), graphNode('FocusedInputTextOutputNode', 'field'));
   graph.edges.push(edge('speech', 'final', 'format', 'input1'), edge('format', 'text', 'field', 'text'));
   assert.deepEqual(validateGraph(graph), []);
-  assert.deepEqual(validateGraph(withTranslation(graph, { enabled: true, direction: 'en-ja' })), []);
+  for (const direction of ['ja-en', 'en-ja']) {
+    const translated = defaultGraph({ enabled: true, direction }); translated.nodes[1].type = 'SpeechToTextZipformerEn';
+    assert.deepEqual(validateGraph(translated), []);
+  }
   const built = buildGraph(graph, {}); assert.ok(built.speechNodes.get('speech') instanceof SpeechToTextZipformerEnNode); await built.pipeline.dispose();
   for (const type of ASR_TYPES) {
     const saved = defaultGraph(); saved.nodes[1].type = type;
