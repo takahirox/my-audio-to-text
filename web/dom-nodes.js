@@ -55,10 +55,12 @@ export class PairedTextToDOMNode {
       if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('PairedTextToDOM expects TEXT inputs.');
     }
     // One atomic delivery, never a cache of independently arriving strings.
-    if (!['source', 'text'].every(port => context.groupInputs?.includes(port)) ||
+    const required = new Set(['source', 'text', ...(context.connectedInputs || [])]);
+    if (![...required].every(port => context.groupInputs?.includes(port)) ||
         !Object.hasOwn(values, 'source')) {
       throw Error('PairedTextToDOM requires a completed grouped source/text/error result from one producer.');
     }
+    if (context.provisional) throw Error('PairedTextToDOM requires completed results; provisional deliveries cannot be committed.');
     // An omitted successful-text sibling signals failure even if error is not
     // connected. Never reuse an earlier translation or drop the source row.
     const error = values.error || (!Object.hasOwn(values, 'text') ? 'No translation returned.' : '');

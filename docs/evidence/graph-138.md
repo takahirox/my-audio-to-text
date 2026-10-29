@@ -12,13 +12,16 @@ unrelated Nodes/settings/routes, and retains exact original JSON under
 backups. Invalid current-version originals are also backed up before replacement.
 No legacy TEXT display port or new output type exists.
 
-Paired formatting requires matching source/text and optional error routes from
-one translator without provisional input wiring. This topology check prevents
-preview results from appearing as committed pairs. Retranslation remains available
-through TranslationCommit → TextAccumulator → TextToDOM. Errors with an omitted
-error wire still create a generic failure row, with no stale successful text.
+Paired formatting validates grouped delivery at the consumer, accepting any
+producer's completed atomic source/text and optional error values. The scheduler
+marks actual preview results with internal provisional provenance; the consumer
+rejects those deliveries before committing a pair. Compatible incomplete drafts
+remain saveable, and inactive optional branches do not block execution.
+Retranslation remains available through TranslationCommit → TextAccumulator →
+TextToDOM. Errors with an omitted error wire still create a generic failure row,
+with no stale successful text.
 
-Validation performed in this worktree:
+Initial implementation validation (before the review correction below):
 
 - `npm test`: 546 unit tests passed, including actual DOM cloning/ownership with
   LinkeDOM, typed validation, grouped delivery, production scheduler integration,
@@ -75,3 +78,28 @@ heavyweight Workers or inference backends and use tiny integrity-checked model
 fixtures. This exercises packaged code/CSP/interaction without representing a
 successful production asset build. Run the normal production build with prepared
 assets for a distributable extension.
+
+## Review correction: producer-independent pairing
+
+Removed producer allowlists, fixed upstream output names and provisional-wiring
+inspection from current graph validation. The paired consumer checks all connected
+inputs against delivery-local group provenance, including optional error inputs,
+and rejects actual provisional deliveries. Provisional provenance follows the
+receive context through async forwarding; primitive TEXT payloads are unchanged.
+
+Validation after this correction:
+
+- `npm test`: all 565 tests passed. Added coverage for alternate producers and
+  output names, both edge orders, saveable incomplete drafts, editor connections,
+  inactive optional branches, mismatched producers (including a separate error
+  producer), separate emissions, success/empty/failure previews, independent
+  fan-out, async provenance, Stop and Cancel.
+- Chromium and WebKit: all 10 selected browser tests passed:
+  `ASR_BASE_URL=http://127.0.0.1:64387 npx playwright test tests/browser/dom-display.spec.js tests/browser/text-display.spec.js tests/browser/text-contracts.spec.js --workers=2`,
+  using a dedicated local server because the default port was occupied.
+- Both focused source-fixture MV3 tests passed:
+  `npx playwright test --config playwright.extension.config.js tests/extension/live-text.spec.js --grep 'committed translation pairs|editor adds both DOM processors'`.
+  The ignored fixture package was staged from current source as described above;
+  it is not a production asset build.
+- `git diff --check` passed. `npm run build:extension` remains blocked by missing
+  local models. Real-model and opt-in hardware checks were not run.

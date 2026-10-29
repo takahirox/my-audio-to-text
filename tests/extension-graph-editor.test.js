@@ -29,7 +29,7 @@ test('type mismatch, self-connection, unknown ports, cycles preserve the prior e
   const e = editor(), before = structuredClone(e.draft.edges);
   connect(e, 'audio', 'audio', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'translation', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'translated-format', 'text'); assert.deepEqual(e.draft.edges, before);
+  connect(e, 'speech', 'final', 'translated', 'dom'); assert.deepEqual(e.draft.edges, before);
   e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToTextReazonSpeech.outputs.final };
   e.connect('translation', 'text', NODE_TYPES.OpusMtJaEn.inputs.text); assert.deepEqual(e.draft.edges, before);
   assert.match(e.error, /Unknown port/);
@@ -38,6 +38,17 @@ test('type mismatch, self-connection, unknown ports, cycles preserve the prior e
   const withSecond = structuredClone(e.draft.edges);
   connect(e, 'second', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, withSecond);
   assert.match(e.error, /acyclic/);
+});
+
+for (const ports of [['source','text'],['text','source']]) test(`paired editor accepts compatible alternate producers in ${ports.join('/')} order`, () => {
+  const graph = defaultGraph(); graph.nodes.push(graphNode('Text','literal'),graphNode('TextFormatter','alternate'),graphNode('PairedTextToDOM','pair'));
+  const e = editor(graph);
+  for (const port of ports) {
+    const [id,output] = port === 'source' ? ['literal','value'] : ['alternate','text'];
+    connect(e,id,output,'pair',port);
+    assert.ok(e.draft.edges.some(route => JSON.stringify(route) === JSON.stringify(edge(id,output,'pair',port))));
+    assert.deepEqual(validateGraph(e.draft),[]);
+  }
 });
 
 test('Number connects only to NUMBER; consumer value limits do not restrict edge construction', () => {

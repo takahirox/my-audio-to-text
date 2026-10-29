@@ -66,27 +66,79 @@ test('paired formatter commits only atomic groups, preserves duplicates/order/ex
   node.cancel(); assert.equal(node.rows.length,5); node.start(c); assert.equal(node.rows.length,0);
 });
 
-test('typed graphs accept both DOM processors, reject TEXT and legacy display inputs, mixed producers and provisional pairing', () => {
+test('typed graphs accept both DOM processors and reject TEXT and legacy display inputs', () => {
   const g = defaultGraph({enabled:true}); assert.deepEqual(validateGraph(g),[]);
   assert.ok(g.nodes.some(node => node.type === 'TextToDOM')); assert.ok(g.nodes.some(node => node.type === 'PairedTextToDOM'));
   for (const port of ['dom','content']) {
     const invalid = structuredClone(g); invalid.edges = invalid.edges.filter(route => route.to[0] !== 'transcript');
     invalid.edges.push(edge('speech','final','transcript',port)); assert.match(validateGraph(invalid).join(' '),port === 'dom' ? /Incompatible/ : /Unknown port/);
   }
-  const mixed = structuredClone(g); mixed.edges.find(route=>route.to[0]==='translated-format' && route.to[1]==='source').from=['speech','final'];
-  assert.match(validateGraph(mixed).join(' '),/one translator/);
-  g.edges.push(edge('speech','provisional','translation','provisional')); assert.match(validateGraph(g).join(' '),/committed translation only/);
 });
 
-test('real production scheduler graph pairs FIFO results, drains Stop, keeps committed rows on Cancel and rejects stale workers', async () => {
+for (const reverse of [false, true]) test(`paired compatible drafts save with alternate producers, independent ports and either edge order (${reverse})`, () => {
+  const graph = { version: defaultGraph().version, nodes: [graphNode('Text','literal'), graphNode('TextFormatter','alternate'),
+    graphNode('PairedTextToDOM','pairs'), graphNode('LiveTextDisplay','display')], edges: [edge('literal','value','pairs','source')] };
+  const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key,value) => values.set(key,value), removeItem: key => values.delete(key) };
+  for (const routes of [[], [edge('alternate','text','pairs','text'),edge('pairs','dom','display','dom')]]) {
+    graph.edges.push(...routes); if (reverse) graph.edges.reverse();
+    assert.deepEqual(validateGraph(graph), []); saveGraph(storage,graph); assert.deepEqual(readGraph(storage),assertGraph(graph));
+  }
+});
+
+for (const reverse of [false, true]) test(`paired consumer accepts alternate grouped producers and arbitrary output names (${reverse})`, async () => {
+  let c; const pairs = new PairedTextToDOMNode();
+  const connections = [edge('alternate','original','pairs','source'),edge('alternate','translated','pairs','text'),edge('alternate','failure','pairs','error')];
+  const pipeline = new Pipeline({ nodes: { alternate: { outputs: { original: TEXT, translated: TEXT, failure: TEXT }, start(context) { c = context; } }, pairs },
+    connections: reverse ? connections.reverse() : connections });
+  await pipeline.start();
+  for (const translated of ['one','two','']) {
+    c.emitOutputs(reverse ? { translated, original: 'same', failure: '' } : { original: 'same', translated, failure: '' });
+  }
+  c.emitOutputs({ original: 'failed', failure: 'offline' });
+  await pipeline.stop();
+  assert.deepEqual(pairs.rows, ['one','two',''].map(text => ({ source: 'same', text, error: '' })).concat({ source: 'failed', text: '', error: 'offline' }));
+  assert.deepEqual(pipeline.errors,[]); await pipeline.dispose();
+});
+
+for (const reverse of [false, true]) for (const mode of ['separate emissions','mixed producers','independent error','provisional']) {
+  test(`paired consumer rejects ${mode} without affecting ordinary fan-out (${reverse})`, async () => {
+    let a, b; const pairs = new PairedTextToDOMNode(), plain = [];
+    const connections = [edge('a','s','pairs','source'),edge(mode === 'mixed producers' ? 'b' : 'a','t','pairs','text'),
+      edge(mode === 'independent error' ? 'b' : 'a','e','pairs','error'),edge('a','t','plain','text')];
+    const pipeline = new Pipeline({ nodes: {
+      a: { outputs: { s: TEXT, t: TEXT, e: TEXT }, start(c) { a = c; } },
+      b: { outputs: { t: TEXT, e: TEXT }, start(c) { b = c; } }, pairs,
+      plain: { inputs: { text: TEXT }, receive(_,value) { plain.push(value); } },
+    }, connections: reverse ? connections.reverse() : connections });
+    await pipeline.start();
+    if (mode === 'separate emissions') { a.emit('s','same'); a.emit('t','same'); }
+    else {
+      if (reverse) b.emitOutputs({t:'same',e:''});
+      a.emitOutputs({s:'same',t:'same',e:''}, {provisional: mode === 'provisional'});
+      if (!reverse) b.emitOutputs({t:'same',e:''});
+    }
+    await tick();
+    assert.deepEqual(pairs.rows,[]); assert.equal(pipeline.errors.length,1);
+    assert.match(pipeline.errors[0].message,mode === 'provisional' ? /provisional/ : /grouped/);
+    a.emit('t','healthy'); await tick(); assert.deepEqual(plain,['same','healthy']);
+    await pipeline.cancel(); assert.deepEqual(pairs.rows,[]);
+  });
+}
+
+for (const reverse of [false, true]) test(`real scheduler pairs FIFO results with an inactive optional branch, drains Stop and retains rows on Cancel (${reverse})`, async () => {
   const graph = defaultGraph({enabled:true}), workers = []; graph.nodes[0] = graphNode('Text','input');
   graph.nodes = graph.nodes.filter(node=>['input','translation','translated-format','translated'].includes(node.id));
   graph.edges = [edge('input','value','translation','text'), ...graph.edges.filter(route=>['translation','translated-format'].includes(route.from[0]))];
+  graph.nodes.push(graphNode('TextFormatter','inactive'));
+  graph.edges.push(edge('inactive','text','translation','provisional'));
+  if (reverse) graph.edges.reverse();
+  assert.deepEqual(validateGraph(graph),[]);
   graph.nodes[0].settings.value = 'same'; const states = [];
   const build = () => buildGraph(graph,{onDisplay:(_,dom)=>states.push(dom), translationWorkerFactory() {
     const worker={postMessage(data) { if(data.type==='translate') { this.request=data; return; } queueMicrotask(()=>this.onmessage?.({data:{id:data.id,type:data.type==='load'?'ready':'drained'}})); },terminate(){this.closed=true;},reply(text){this.onmessage?.({data:{id:this.request.id,type:'result',texts:[text]}});}}; workers.push(worker); return worker;
   }});
-  const built=build(); await built.pipeline.start(); await tick(); workers[0].reply('one'); await tick();
+  const built=build(); assert.equal(built.pipeline.entries.has('inactive'),false);
+  await built.pipeline.start(); await tick(); workers[0].reply('one'); await tick();
   built.pipeline.entries.get('input').context.emit('value','same'); await tick();
   const stop=built.pipeline.stop(); await tick(); workers[0].reply('two'); await stop;
   assert.equal(domText(states.at(-1)),'same\none\nsame\ntwo'); await built.pipeline.dispose();

@@ -31,7 +31,9 @@ test('saveable incomplete paths do not contaminate a complete sibling, including
   assert.deepEqual([...built.speechNodes.keys()], ['speech']);
   assert.deepEqual([...built.audioSources.keys()], ['audio']); await built.pipeline.dispose();
   graph.edges.find(route => route.to[0] === 'translated-format' && route.to[1] === 'error').from = ['speech', 'final'];
-  assert.match(validateGraph(graph).join(' '), /one translator/);
+  assert.deepEqual(validateGraph(graph), []);
+  saveGraph(storage,graph); assert.deepEqual(readGraph(storage),graph);
+  assert.deepEqual(executableGraph(graph),active,'independent optional wiring does not activate an incomplete pair');
 });
 
 test('constant text roots execute without audio or ASR, while drafts with no sink stay saveable', async () => {

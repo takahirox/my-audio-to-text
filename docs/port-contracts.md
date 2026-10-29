@@ -5,8 +5,9 @@ Ordinary text uses shared `TEXT`; Number constants and speech duration use share
 from `web/port-contracts.js`; page-local rendered snapshots use shared `DOM`. No BOOLEAN value is consumed, so none is introduced.
 Contracts are identities; receiving Nodes validate their payloads. A compatible
 ordinary edge’s type compatibility never depends on producer type, output name,
-neighboring Nodes, or connection order. Correlated processors additionally validate
-their grouping topology; PairedTextToDOM requires one committed-only translator. Graph validation checks structure, contracts and Node settings; incomplete
+neighboring Nodes, or connection order. Correlated consumers validate delivery-local
+grouping and provenance at runtime; PairedTextToDOM accepts completed atomic results
+from any producer. Graph validation checks structure, contracts and Node settings; incomplete
 drafts remain saveable. Consumers own value limits, startup timing, correlation,
 queues and failure reporting. Model selection, cache verification, permissions and
 migration of historical interfaces remain specialized. See the [#134 audit](evidence/composition-134.md).
@@ -99,7 +100,9 @@ Malformed/ambiguous older graphs fail visibly without overwriting storage.
 
 The editor validates per-instance ports, template references, primitive types,
 one incoming edge per input, settings and acyclicity. Incomplete branches remain
-saveable; Start selects only executable paths. TextToDOM accepts arbitrary TEXT producers. PairedTextToDOM requires matching grouped outputs from one committed-only translator; LiveTextDisplay accepts DOM only. See
+saveable; Start selects only executable paths. TextToDOM accepts arbitrary TEXT producers.
+PairedTextToDOM checks that all connected inputs belong to one producer's group and
+rejects provisional deliveries; LiveTextDisplay accepts DOM only. See
 [runtime semantics](pipeline-runtime.md#correlated-primitive-outputs) and
 [graph wiring and migration](extension-graph.md).
 

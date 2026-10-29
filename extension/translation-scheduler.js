@@ -37,7 +37,7 @@ export class TranslationSchedulerNode {
   emit(job, text, error = '') {
     if (this.disposed || this.context.signal.aborted) return;
     if (job.provisional && job.revision !== this.revision) return;
-    (job.context || this.context).emitOutputs({ source: job.source, error, ...(error ? {} : { text }) });
+    (job.context || this.context).emitOutputs({ source: job.source, error, ...(error ? {} : { text }) }, { provisional: job.provisional === true });
   }
   receiveInputs(values, context) {
     for (const [port, value] of Object.entries(values)) {

@@ -729,12 +729,17 @@ emits a fresh complete DOM snapshot. Stop drains results; Cancel freezes committ
 rows and rejects stale work; fresh Start clears the history. History is local to
 the session, uncapped and not persisted.
 
-Graph validation requires source/text and any error wire directly from matching
-outputs of one translator. Connecting translator.provisional to a paired branch
-is rejected: these primitive grouped outputs do not distinguish completed previews
-from finals. For bounded retranslation use TranslationCommit → TextAccumulator →
-TextToDOM instead. Plain TextFormatter remains available for independent latest
-values; it does not claim correlation.
+Compatible TEXT wiring remains saveable, including incomplete drafts and alternate
+producers with different output names. At runtime the paired consumer requires
+source/text and any connected error input to belong to the same direct producer's
+explicit group. Independent emissions or mismatched producers fail the consumer
+without joining values by equality or timing. The scheduler marks actual preview
+results using internal `emitOutputs(values, { provisional: true })` provenance;
+PairedTextToDOM rejects those deliveries before adding a row. Merely connecting an
+optional provisional branch does not invalidate the graph; inactive branches are
+excluded from execution. For bounded retranslation use TranslationCommit →
+TextAccumulator → TextToDOM. Plain TextFormatter remains available for independent
+latest values; it does not claim correlation.
 
 ### Graph v11 display migration and recovery
 

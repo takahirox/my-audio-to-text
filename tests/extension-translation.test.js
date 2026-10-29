@@ -11,6 +11,7 @@ import { TabSession } from '../extension/session.js';
 import { defaultGraph, graphNode, edge, NODE_TYPES, translationViewEdges } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
 import { TextFormatterNode } from '../web/text-nodes.js';
+import { PairedTextToDOMNode } from '../web/dom-nodes.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function workerFixture({ holdLoad = false, failLoad = false, failTranslate = false, empty = false } = {}) {
@@ -55,6 +56,27 @@ async function schedulerGraph(options = {}) {
   await pipeline.start();
   return { ...f, pipeline, scheduler, outputs, states, plain, formatted, send: text => emit('text', text) };
 }
+
+for (const mode of ['success', 'empty', 'failure']) test(`paired consumer rejects actual scheduler ${mode} previews while committed fan-out continues`, async () => {
+  const f = workerFixture(), pairs = new PairedTextToDOMNode(), plain = []; let source;
+  const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory });
+  const pipeline = new Pipeline({ nodes: {
+    source: { outputs: { closed: TEXT, draft: TEXT }, start(c) { source = c; } }, scheduler, pairs,
+    plain: new TextOutputNode(value => plain.push(value)),
+  }, connections: [edge('source','closed','scheduler','text'),edge('source','draft','scheduler','provisional'),
+    ...Object.keys(TRANSLATION_OUTPUTS).map(port => edge('scheduler',port,'pairs',port)),edge('scheduler','text','plain','text')] });
+  await pipeline.start(); source.emit('closed','same'); await tick(); f.complete(0,'committed'); await tick();
+  source.emit('draft',mode === 'empty' ? '' : 'same'); await tick();
+  if (mode === 'success') f.complete(1,'preview');
+  if (mode === 'failure') f.requests[1].worker.reply({ id: f.requests[1].id, type: 'error', message: 'preview failed' });
+  await tick();
+  assert.deepEqual(pairs.rows,[{source:'same',text:'committed',error:''}]);
+  assert.equal(pipeline.errors.length,1); assert.match(pipeline.errors[0].message,/provisional/);
+  source.emit('closed',mode === 'failure' ? '' : 'later'); await tick();
+  if (mode !== 'failure') { f.complete(mode === 'empty' ? 1 : 2,'later committed'); await tick(); }
+  assert.equal(plain.at(-1),mode === 'failure' ? '' : 'later committed');
+  await pipeline.cancel(); assert.equal(pairs.rows.length,1); assert.ok(f.workers.every(worker => worker.terminated));
+});
 
 test('production pinned manifest includes all seven runtime files and reviewed bounded hashes', () => {
   const files = JSON.parse(readFileSync('extension/opus-mt-assets.json'));

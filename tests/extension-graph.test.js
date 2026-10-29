@@ -239,7 +239,7 @@ test('TEXT routing and optional translator previews are independent of producer'
   assert.deepEqual(validateGraph(graph), []);
   assert.ok(buildGraph(graph, {}).pipeline);
   graph.edges.push(edge('speech', 'final', 'translation', 'provisional'));
-  assert.match(validateGraph(graph).join(' '), /committed translation only/); graph.edges.pop();
+  assert.deepEqual(validateGraph(graph), []); assert.ok(buildGraph(graph, {}).pipeline); graph.edges.pop();
   graph.edges.find(route => route.to[0] === 'translation' && route.to[1] === 'text').from = ['translation', 'text'];
   assert.match(validateGraph(graph).join('\n'), /acyclic/);
 });

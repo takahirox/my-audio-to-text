@@ -4,7 +4,7 @@ export const portContract = name => Object.freeze({ name });
 /**
  * Nodes declare inputs/outputs as { portName: contract }. Optional async hooks:
  * start(context), receive(port, value, context), stop(context), cancel(context), dispose().
- * context provides emit(port, value), emitOutputs(values), fail(error), and an AbortSignal.
+ * context provides emit(port, value), emitOutputs(values, { provisional }), fail(error), and an AbortSignal.
  * Optional receiveInputs(values, context) receives one emission mapped to input names.
  * Delivery contexts include opaque delivery/cause identity; cancel hooks emit cleanup snapshots.
  */
@@ -60,7 +60,7 @@ export class Pipeline {
         signal: entry.controller.signal,
         connectedInputs: Object.freeze(connections.filter(route => route.to[0] === entry.id).map(route => route.to[1])),
         emit: (port, value) => this.emit(entry, port, value),
-        emitOutputs: values => this.emitOutputs(entry, values),
+        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, false, options?.provisional === true),
         fail: error => this.fail(entry, error),
       });
     }
@@ -73,8 +73,8 @@ export class Pipeline {
     // Observer failures cannot break delivery to another branch.
     try { this.onError(error, entry.id); } catch { /* errors remain available */ }
   }
-  emit(entry, port, value, cause, cleanup = false) { this.emitOutputs(entry, { [port]: value }, false, cause, cleanup); }
-  emitOutputs(entry, values, grouped = true, cause, cleanup = false) {
+  emit(entry, port, value, cause, cleanup = false, provisional = false) { this.emitOutputs(entry, { [port]: value }, false, cause, cleanup, provisional); }
+  emitOutputs(entry, values, grouped = true, cause, cleanup = false, provisional = false) {
     if (!entry.active || entry.closed || entry.failed || this.state === 'disposed' || (this.state === 'canceling' && !cleanup)) return;
     if (!values || typeof values !== 'object' || Array.isArray(values)) {
       this.fail(entry, new TypeError('emitOutputs needs a named output map.')); return;
@@ -99,10 +99,12 @@ export class Pipeline {
       // A forwarding emission gets a fresh identity with its incoming event as
       // cause. Async processors retain this context with their accepted work.
       // No Node types, output names or payload equality participate in identity.
-      const context = Object.freeze({ ...target.context, groupInputs, delivery, cause,
+      // Producers can mark unfinished results without changing primitive ports.
+      // Retaining a receive context also retains this flag across async forwarding.
+      const context = Object.freeze({ ...target.context, groupInputs, delivery, cause, provisional,
         ...(cleanup ? { signal: this.cleanupController.signal } : {}),
-        emit: (port, value) => this.emit(target, port, value, delivery, cleanup),
-        emitOutputs: values => this.emitOutputs(target, values, true, delivery, cleanup),
+        emit: (port, value) => this.emit(target, port, value, delivery, cleanup, provisional),
+        emitOutputs: (values, options) => this.emitOutputs(target, values, true, delivery, cleanup, provisional || options?.provisional === true),
       });
       Object.freeze(inputs);
       // One queue item per target: no interleaving while an async hook runs.
@@ -222,7 +224,7 @@ export class Pipeline {
       if (!entry.active || entry.closed || entry.failed) continue;
       const context = Object.freeze({ ...entry.context, signal: this.cleanupController.signal,
         emit: (port, value) => this.emit(entry, port, value, undefined, true),
-        emitOutputs: values => this.emitOutputs(entry, values, true, undefined, true),
+        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, true, options?.provisional === true),
       });
       try { entry.node.cancel?.(context); } catch (error) { this.fail(entry, error); }
     }
