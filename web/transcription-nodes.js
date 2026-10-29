@@ -103,7 +103,12 @@ export class SpeechToTextNode {
         if (event.id <= (this.lastFinalId ?? -1)) return;
         this.lastFinalId = event.id;
       }
-      this.context?.emit(event.type === 'partial' ? 'provisional' : 'final', event.text);
+      // One atomic finalization: accumulators/translators let final win over the
+      // cleared preview, preserving causal identity and avoiding an empty preview
+      // translation. Clear here, never on completion of delayed downstream work.
+      if (event.type === 'final' && this.outputs.provisional) {
+        this.context?.emitOutputs({ provisional: '', final: event.text });
+      } else this.context?.emit(event.type === 'partial' ? 'provisional' : 'final', event.text);
     }
     this.onEvent(event);
   }

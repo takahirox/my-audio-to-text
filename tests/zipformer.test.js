@@ -93,7 +93,7 @@ test('owned bounded PCM, provisional before final, ordered repeated finals, Stop
   // Repeated callback for a committed ID is suppressed before fan-out.
   f.speech.receiveEvent({ type: 'final', id: 2, text: 'duplicate' }); await tick(); assert.equal(f.finals.length, 3);
   const next = f.speech.nextSession(); assert.equal(f.speech.core, null); await f.pipeline.dispose();
-  const received = []; await next.start({ signal: new AbortController().signal, emit: (p, t) => received.push([p, t]), fail: e => { throw e; } });
+  const received = []; await next.start({ signal: new AbortController().signal, emit: (p, t) => received.push([p, t]), emitOutputs: values => received.push(...Object.entries(values)), fail: e => { throw e; } });
   next.receive('audio', new Float32Array(1).fill(.3)); await next.stop();
   assert.equal(received.filter(([p]) => p === 'final').length, 1); assert.equal(f.workers.length, 1);
   next.dispose(); assert.ok(f.workers.every(w => w.terminated));

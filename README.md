@@ -190,5 +190,11 @@ Older paired views open a reviewed migration draft and keep a recovery copy;
 `PairedTextToDOM` formats one completed pair and direct display connections show
 only the latest pair, including existing v11 graphs. For optional comparison
 history, explicitly connect `PairedTextToDOM.dom → DOMAccumulator.append → dom →
-LiveTextDisplay.dom`. Formatting, accumulation and display remain separate processors.
+LiveTextDisplay.dom`. To include live ASR beneath that history in one display,
+connect history to `DOMCombiner.first`, ASR provisional → `TextToDOM` to
+`DOMCombiner.second`, and `DOMCombiner.dom` to the display. Final ASR clears its
+preview immediately; final English awaiting translation has no pending row.
+Each Live region follows incoming DOM while you are reading near the bottom;
+scrolling up keeps your position until you return to the bottom.
+Formatting, accumulation, combination and display remain separate processors.
 See [Live display and migration semantics](docs/extension-graph.md).

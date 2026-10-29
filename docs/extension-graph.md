@@ -177,6 +177,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | TextToDOM | text: TEXT | dom: DOM; literal text snapshot with visible whitespace |
 | PairedTextToDOM | source/text: TEXT; error: TEXT optional | dom: DOM; one completed grouped comparison pair |
 | DOMAccumulator | append: DOM | dom: DOM; ordered accumulated snapshots |
+| DOMCombiner | first / second: DOM | dom: DOM; latest first snapshot followed by latest second snapshot |
 | TextAccumulator | append / preview: TEXT, individually optional; text: TEXT output | full committed transcript plus ephemeral tail |
 | TextWindow | text: TEXT | text: TEXT (closed batches); provisional: TEXT (optional open snapshots); length/deadline/sentence settings |
 | TranslationCommit | boundary/source/text/error: TEXT | provisional/final/error: TEXT; opt-in closed-window commits |
@@ -748,6 +749,47 @@ drains accepted work and retains committed history; Cancel freezes history and
 rejects stale deliveries. History is session-local, uncapped and not persisted;
 growing snapshots consume memory and rendering time. LiveTextDisplay continues
 to replace its content for every delivery in either graph.
+
+To show live English ASR below committed bilingual history in **one** Live region,
+add DOMCombiner and TextToDOM in Graph Editor:
+
+```text
+MicrophoneAudio.audio → SpeechToTextZipformerEn.audio
+SpeechToTextZipformerEn.final → OpusMtEnJa.text
+OpusMtEnJa.source/text/error → PairedTextToDOM.source/text/error
+PairedTextToDOM.dom → DOMAccumulator.append
+DOMAccumulator.dom → DOMCombiner.first
+SpeechToTextZipformerEn.provisional → TextToDOM.text
+TextToDOM.dom → DOMCombiner.second
+DOMCombiner.dom → LiveTextDisplay.dom
+```
+
+DOMCombiner retains only the latest snapshot on each input and emits a complete
+snapshot in fixed first → second order whenever either input changes. An empty
+fragment clears only that input. It validates and deep-clones incoming and
+outgoing trees, including inert CSS; it has no source IDs, history, translation
+rules or modes. Start emits an empty snapshot and clears both inputs. Stop drains
+accepted input; Stop/Cancel retain the latest display and reject late deliveries.
+DOM processors run on the page main thread; native DOM never crosses Workers.
+Existing saved graphs keep their wiring and version; no automatic insertion or
+migration is needed.
+
+ASRs with provisional/final outputs finalize atomically: empty provisional TEXT
+and final TEXT belong to the same emission, with preview clearing before final
+consumers run. TextAccumulator appends the final once; translators schedule only
+the committed input when both channels connect. Duplicate worker finals do not
+clear a newer preview. Delayed translation completion cannot clear later speech.
+The provisional branch renders literal English only and never appends to history.
+While final English awaits translation, it intentionally has no separate pending
+row. There is no pending-row tracking or speculative translation in this recipe.
+Final-only ASRs keep their existing output contracts.
+
+Every DOM-based Live region follows new content only when its own scroll container
+is within 24 px of the bottom before replacement. Scrolling up keeps the current
+offset (clamped if content becomes shorter); manually returning to the bottom
+resumes following. Layout and wrapping changes also follow while reading the
+bottom. Regions behave independently. Browser scroll anchoring is disabled;
+updates use immediate scrolling without moving focus or starting animations.
 
 Existing **v11 graphs wired directly** from PairedTextToDOM to LiveTextDisplay
 intentionally change from implicit history to latest-pair behavior (#140).

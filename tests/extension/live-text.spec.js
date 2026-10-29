@@ -1,3 +1,5 @@
+import { livePreviewGraph } from '../fixtures/live-preview-graph.js';
+import { installLiveScrollFixture, checkLiveScrolling } from '../fixtures/live-scroll.js';
 import { openPalette, loadTranslationFixture } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -125,7 +127,7 @@ test('MV3 pure renderer handles replacement, shortening, empty snapshots, graph 
     return { replacement, shortened, empty, safe, unicodeExact, correct, boundedNodes, order, retained, removed, missing, elapsedMs };
   });
   expect({ ...result, elapsedMs: 0 }).toEqual({ replacement: 'A\nchanged', shortened: 'A', empty: '', safe: true, unicodeExact: true, correct: true, boundedNodes: true, order: ['other', 'transcript'], retained: true, removed: true, missing: '', elapsedMs: 0 });
-  console.log(`2,000 render updates / 26,000 characters: ${result.elapsedMs.toFixed(1)} ms (DOM mutation, excludes forced layout)`);
+  console.log(`2,000 render updates / 26,000 characters: ${result.elapsedMs.toFixed(1)} ms (DOM replacement and scroll layout)`);
 });
 
 test('MV3 accumulator can be added, saved, reloaded and retained through profile restart', async ({ graphExtension: f }) => {
@@ -266,24 +268,32 @@ test('MV3 v10 TEXT display is blocked until reviewed Save; original JSON and old
 
 test('MV3 editor adds DOM processors and accumulator, connects and reloads them with type validation', async ({ graphExtension: f }) => {
   const live=await openGraph(f), editor=live.editor;
-  for (const type of ['TextToDOM','PairedTextToDOM','DOMAccumulator']) {
+  for (const type of ['TextToDOM','PairedTextToDOM','DOMAccumulator','DOMCombiner']) {
     await openPalette(editor);await editor.locator('#graph-node-type').selectOption(type);await editor.locator('#graph-add').click();
   }
   await editor.getByRole('button',{name:'speech output final',exact:true}).click();
   await expect(editor.getByRole('button',{name:'transcript input dom',exact:true})).toBeDisabled();
   await expect(editor.getByRole('button',{name:'domaccumulator input append',exact:true})).toBeDisabled();
+  for (const port of ['first','second']) await expect(editor.getByRole('button',{name:`domcombiner input ${port}`,exact:true})).toBeDisabled();
   await expect(editor.getByRole('button',{name:'transcript input content',exact:true})).toHaveCount(0);
   await editor.getByRole('button',{name:'texttodom input text',exact:true}).click();
   await editor.getByRole('button',{name:'texttodom output dom',exact:true}).click();
   await editor.getByRole('button',{name:'domaccumulator input append',exact:true}).click();
   await editor.getByRole('button',{name:'domaccumulator output dom',exact:true}).click();
+  await editor.getByRole('button',{name:'domcombiner input first',exact:true}).click();
+  await editor.getByRole('button',{name:'texttodom output dom',exact:true}).click();
+  await editor.getByRole('button',{name:'domcombiner input second',exact:true}).click();
+  await editor.getByRole('button',{name:'domcombiner output dom',exact:true}).click();
   await editor.getByRole('button',{name:'transcript input dom',exact:true}).click();
   await expect(editor.locator('#graph-errors')).toBeEmpty();await editor.locator('#graph-save').click();await expect(editor.locator('#graph-save')).toBeEnabled();
   await editor.reload();await expect(editor.locator('[data-node="pairedtexttodom"]')).toHaveCount(1);
   const graph=await editor.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')));
   expect(graph.nodes.some(node=>node.type==='DOMAccumulator')).toBe(true);
   expect(graph.edges).toContainEqual({from:['texttodom','dom'],to:['domaccumulator','append']});
-  expect(graph.edges).toContainEqual({from:['domaccumulator','dom'],to:['transcript','dom']});
+  expect(graph.nodes.some(node=>node.type==='DOMCombiner')).toBe(true);
+  expect(graph.edges).toContainEqual({from:['domaccumulator','dom'],to:['domcombiner','first']});
+  expect(graph.edges).toContainEqual({from:['texttodom','dom'],to:['domcombiner','second']});
+  expect(graph.edges).toContainEqual({from:['domcombiner','dom'],to:['transcript','dom']});
 });
 
 test('MV3 summary TEXT snapshots render literally through TextToDOM, retain committed output on Cancel and drain Stop', async ({ graphExtension: f }) => {
@@ -313,4 +323,57 @@ test('MV3 summary TEXT snapshots render literally through TextToDOM, retain comm
   expect(await live.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
   await live.locator('#start').click();await expect(live.locator('#status')).toHaveText('Processing active');await expect(content).toBeEmpty();
   await live.locator('#stop').click();await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText(literal);
+});
+
+
+test('MV3 combined history and ASR preview clear before delayed translation, retain newer speech, drain and cancel', async ({ graphExtension: f }) => {
+  const live = await openGraph(f); await fixtureTranslation(f, live);
+  await writeFile(path.join(f.root, 'web/zipformer-worker.js'), `let session;
+    self.onmessage=({data})=>{
+      if(data.type==='load')postMessage({type:'ready'});
+      if(data.type==='start')session=data.session;
+      if(data.type==='stop')postMessage({type:'stopped',session});
+    };`);
+  await writeFile(path.join(f.root, 'web/opus-mt-en-ja-worker.js'), `self.onmessage=({data})=>{
+    if(data.type==='load')postMessage({type:'ready',id:data.id});
+    if(data.type==='translate')setTimeout(()=>postMessage(data.text==='fail'?{type:'error',id:data.id,message:'offline'}:{type:'result',id:data.id,texts:['日本語 '+data.text]}),700);
+    if(data.type==='drain')postMessage({type:'drained',id:data.id});
+  };`);
+  await live.evaluate(async graph => {
+    const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph);
+    window.dispatchEvent(new StorageEvent('storage', { key:'processing-graph-v1' }));
+  }, livePreviewGraph());
+  await startGraph(live);
+  const content = region(live, 'live').locator('.display-content'), rows = content.locator('tr');
+  await expect(live.locator('.live-text-region')).toHaveCount(1);
+  const partial = text => live.evaluate(text => window.speech.receiveEvent({type:'partial',text}), text);
+  const final = id => live.evaluate(id => window.speech.receiveEvent({type:'final',id,text:'same'}), id);
+  await partial('<script>preview</script>'); await expect(content).toHaveText('<script>preview</script>'); await expect(content.locator('script')).toHaveCount(0);
+  await final(0); await expect(content).toBeEmpty();
+  await partial('newer speech'); await expect(content).toHaveText('newer speech');
+  await expect(rows).toHaveCount(1); await expect(content.locator(':scope > div')).toHaveText('newer speech');
+  expect(await rows.locator('td').allTextContents()).toEqual(['same','日本語 same']);
+  await final(0); await expect(content.locator(':scope > div')).toHaveText('newer speech');
+  await final(1); await expect(content.locator(':scope > div')).toBeEmpty();
+  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
+  expect(await rows.locator('td').allTextContents()).toEqual(['same','日本語 same','same','日本語 same']);
+  await startGraph(live); await expect(content).toBeEmpty();
+  await emitFinal(live,'fail'); await partial('speech after failure');
+  await expect(rows.locator('td').last()).toHaveText('Translation failed: offline');
+  await expect(content.locator(':scope > div')).toHaveText('speech after failure');
+  await live.locator('#cancel-session').click(); await expect(live.locator('#start')).toBeEnabled();
+  await startGraph(live); await expect(content).toBeEmpty();
+  await emitFinal(live,'kept'); await expect(rows).toHaveCount(1);
+  await partial('discard'); await emitFinal(live,'pending'); await expect(content.locator(':scope > div')).toBeEmpty();
+  await live.locator('#cancel-session').click(); await expect(live.locator('#start')).toBeEnabled();
+  await live.waitForTimeout(850); await expect(rows).toHaveCount(1);
+  expect(await rows.locator('td').allTextContents()).toEqual(['kept','日本語 kept']);
+  await expect(live.locator('#errors')).toBeEmpty();
+  await startGraph(live); await expect(content).toBeEmpty(); await live.locator('#cancel-session').click();
+});
+
+test('MV3 shared renderer keeps independent bottom-aware scroll positions with actual overflowing DOM', async ({ graphExtension: f }) => {
+  const live = await openGraph(f);
+  await installLiveScrollFixture(live, true);
+  await checkLiveScrolling(live, expect);
 });
