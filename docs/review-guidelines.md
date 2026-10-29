@@ -55,6 +55,11 @@ it does not require a node for every implementation detail. These prompts add
 no mandatory workflow stage. Detailed producer-independence and transport checks
 remain in [port contracts](port-contracts.md) and the ordinary quality checks below.
 
+## UI/UX
+
+Review UI changes against the [UI/UX design principles](../README.md#uiux),
+including their requirement to preserve essential labels and accessibility information.
+
 ## Ordinary quality
 
 Also review:

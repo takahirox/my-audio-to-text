@@ -172,6 +172,15 @@ A graphical node editor, plugin marketplace and general workflow framework are n
 See [Live text composition examples](docs/processing-pipeline.md#graph-driven-live-text-99)
 and the [architecture review prompts](docs/review-guidelines.md#node-architecture).
 
+### UI/UX
+
+1. **Keep it simple.** Show only necessary information and actions; avoid unnecessary UI elements.
+2. **Show, don't tell.** Prefer layout, spacing and visual hierarchy over explanatory labels or prose to communicate structure.
+3. **Intuitive and predictable.** Keep appearance and behavior consistent with user expectations; don't interrupt the user's work.
+
+“Show, don't tell” must not remove necessary control labels, accessible names,
+error messages or other information needed to use the interface.
+
 ## Follow-up work
 
 Separate issues should define and implement:
