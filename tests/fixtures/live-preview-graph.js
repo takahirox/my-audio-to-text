@@ -1,4 +1,4 @@
-import { defaultGraph, graphNode, edge } from '../../extension/graph.js';
+import { defaultGraph, graphNode, edge, pairedTextEdges } from '../../extension/graph.js';
 
 export function livePreviewGraph(audioType = 'ChromeTabAudio') {
   const preview = graphNode('TextToDOM', 'preview');
@@ -10,7 +10,7 @@ export function livePreviewGraph(audioType = 'ChromeTabAudio') {
     graphNode('DOMCombiner', 'combined'), graphNode('LiveTextDisplay', 'live'),
   ], edges: [
     edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'translation', 'text'),
-    ...['source', 'text', 'error'].map(port => edge('translation', port, 'pairs', port)),
+    ...pairedTextEdges('translation', 'pairs'),
     edge('pairs', 'dom', 'history', 'append'), edge('history', 'dom', 'combined', 'first'),
     edge('speech', 'provisional', 'preview', 'text'), edge('preview', 'dom', 'combined', 'second'),
     edge('combined', 'dom', 'live', 'dom'),

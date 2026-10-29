@@ -29,7 +29,7 @@ for (const direction of ['ja-en', 'en-ja']) {
       localStorage.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled: true, direction }));
       const graph = readGraph(localStorage), displays = {};
       window.savedPreset = localStorage.getItem('processing-graph-v1');
-      window.translationLoads = [];
+      window.translationLoads = []; window.translationStates = [];
       window.pendingTranslations = [];
       const workerFactory = url => ({
         postMessage(data) {
@@ -49,6 +49,7 @@ for (const direction of ['ja-en', 'en-ja']) {
       });
       const render = () => renderTextRegions(document.getElementById('live-displays'), graph, displays);
       window.built = buildGraph(graph, {
+        onTranslationState: state => translationStates.push(state),
         tabId: 42, sourceFactory: () => ({ start() {}, stop() {} }),
         workerFactory, translationWorkerFactory: workerFactory, prepareTranslation: async () => {},
         onDisplay(id, dom) { displays[id] = dom; render(); },
@@ -74,8 +75,8 @@ for (const direction of ['ja-en', 'en-ja']) {
       await page.evaluate(() => pendingTranslations.shift()());
       await expect(rows).toHaveCount(1);
       await expect(rows.locator('td')).toHaveText([text, translation]);
-      await expect(rows.locator('td').nth(0)).toHaveAttribute('aria-label', 'Original: ' + text);
-      await expect(rows.locator('td').nth(1)).toHaveAttribute('aria-label', 'Translation: ' + translation);
+      await expect(rows.locator('td').nth(0)).toHaveAttribute('aria-label', 'First text: ' + text);
+      await expect(rows.locator('td').nth(1)).toHaveAttribute('aria-label', 'Second text: ' + translation);
     }
     expect(await page.evaluate(() => translationLoads)).toEqual([direction]);
     await page.evaluate(() => emitSpeech('partial', 'Next live preview'));
@@ -85,7 +86,8 @@ for (const direction of ['ja-en', 'en-ja']) {
     await page.evaluate(() => emitSpeech('final', 'Failed original'));
     await expect.poll(() => page.evaluate(() => pendingTranslations.length)).toBe(1);
     await page.evaluate(() => pendingTranslations.shift()());
-    await expect(rows.locator('td')).toHaveText(['Failed original', 'Translation failed: Fixture translation unavailable']);
+    await expect(rows.locator('td')).toHaveText(['Failed original', '']);
+    expect(await page.evaluate(() => translationStates)).toContain('Translation unavailable: Fixture translation unavailable');
     await expect(transcript).toHaveText(history + '\nFailed original');
     await page.evaluate(() => emitSpeech('partial', 'Discard at Stop'));
     await expect(transcript).toHaveText(history + '\nFailed original\nDiscard at Stop');

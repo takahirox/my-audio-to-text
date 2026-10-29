@@ -9,7 +9,7 @@ pinned assets; each owns a local WebGPU Worker and bounded incremental context.
 `text` input, an editable English condition and `yes` / `no` TEXT outputs. Both
 outputs preserve the original input string; only the selected branch emits.
 Its pinned local model is prepared through Save graph, and errors stop only that
-instance with a visible status. It uses version 11 or Pipeline routing.
+instance with a visible status. It uses version 12 or Pipeline routing.
 
 The **Simple / Graph** switch connects Live's minimal recording window and the
 full-size Graph Editor tab. **Models** is a secondary link for asset preparation
@@ -110,10 +110,10 @@ keeps earlier utterances and remains current while translation waits or fails.
 Removing it would lose that reading surface for users importing an existing
 translation choice. Preserve those distinct reading surfaces during import.
 Its panel names remain Original and Translation; each paired cell has
-an accessible Original/Translation name including its text.
+neutral First text/Second text accessible names including the cell text.
 
 For a user-composed single comparison display, connect the translator's grouped
-`source/text/error → PairedTextToDOM → LiveTextDisplay` directly. Keep transcript
+`source → input1, text → input2 → PairedTextToDOM.dom → LiveTextDisplay.dom` directly. Keep transcript
 data accessible from ASR and, where desired, an explicit `TextAccumulator`;
 comparison history requires an explicit `DOMAccumulator`. No automatic output
 removal, graph rewiring or change to formatter/accumulator/combiner contracts is
@@ -183,7 +183,7 @@ untouched and cannot run; Graph Editor opens a converted **unsaved repair draft*
 Review the report and reconnect unsupported routes deliberately, then Save.
 Before and after Save, expand **Original saved graph (migration recovery copy)**
 to copy the complete original JSON, including removed routes/configurations.
-Before v10 this used `processing-graph-before-v9`; new saves use `processing-graph-before-v11`; this backup remains
+Before v10 this used `processing-graph-before-v9`; new saves use `processing-graph-before-v12`; this backup remains
 across page reloads and later ordinary saves. To reattempt recovery, export this
 copy and import it in a compatible version or restore it to the graph storage key.
 Reset changes only the draft and still requires Save. Transcripts/history were
@@ -237,7 +237,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | dom: DOM | clone and mount each complete inert DOM snapshot |
 | TextToDOM | text: TEXT | dom: DOM; literal text snapshot with visible whitespace |
-| PairedTextToDOM | source/text: TEXT; error: TEXT optional | dom: DOM; one completed grouped comparison pair |
+| PairedTextToDOM | input1/input2: TEXT | dom: DOM; one completed grouped pair of texts |
 | DOMAccumulator | append: DOM | dom: DOM; ordered accumulated snapshots |
 | DOMCombiner | first / second: DOM | dom: DOM; latest first snapshot followed by latest second snapshot |
 | TextAccumulator | append / preview: TEXT, individually optional; text: TEXT output | full committed transcript plus ephemeral tail |
@@ -722,7 +722,7 @@ unused Number/Text configuration source when replacing the old ASR, or leave it
 parked. ReazonSpeech, Whisper and Zipformer can coexist with independent settings. Existing TEXT sinks and
 translation Nodes use the same contracts.
 
-Adding Zipformer needs no extra migration beyond the current version 11 graph.
+Adding Zipformer needs no extra migration beyond the current version 12 graph.
 Unrelated ASR nodes, IDs, settings, routes and positions stay intact; earlier
 versions use the migration rules above. The minimal ReazonSpeech default remains. See [model pins, fixed 12-second segments,
 Stop/drain, setup and limitations](zipformer-node.md).
@@ -732,7 +732,7 @@ Stop/drain, setup and limitations](zipformer-node.md).
 Search Add Node for Parakeet or Moonshine. These independent concrete Nodes use
 the same normalized audio sources and final TEXT fan-out as existing ASRs.
 Parakeet exposes final only; Moonshine exposes demonstrated native provisional
-and final. Both can coexist without changing Graph v11 or the default graph.
+and final. Both can coexist without changing the default graph.
 Save prepares the saved Nodes' checksum-pinned optional weights, including parked
 Nodes. See [model-specific setup, GPU/memory limits, endpointing and lifecycle](optional-asr-nodes.md)
 and [real packaged/concurrent/native validation](evidence/optional-asr-121.md).
@@ -762,7 +762,7 @@ and [#124 validation](evidence/translation-124.md).
 ## Windowed and revisable translation (#128)
 
 The model-independent **TextWindow** and opt-in **TranslationCommit** processors
-use ordinary TEXT ports, require no weights, and use graph version 11. See
+use ordinary TEXT ports, require no weights, and use graph version 12. See
 [connections, limits, lifecycle and measured comparison](windowed-translation.md).
 Defaults and existing per-segment translator paths remain unchanged.
 
@@ -790,27 +790,30 @@ ASR.provisional → TextAccumulator.preview
 TextAccumulator.text → TextToDOM.text → dom → LiveTextDisplay.dom
 MeetingSummary.summary → TextToDOM.text → dom → LiveTextDisplay.dom
 
-OpusMtJaEn.source → PairedTextToDOM.source
-OpusMtJaEn.text   → PairedTextToDOM.text
-OpusMtJaEn.error  → PairedTextToDOM.error   (optional)
+OpusMtJaEn.source → PairedTextToDOM.input1
+OpusMtJaEn.text   → PairedTextToDOM.input2
 PairedTextToDOM.dom → LiveTextDisplay.dom
 ```
 
 PairedTextToDOM formats each completed atomic result into a fresh DOM snapshot
 containing **only that pair**. A direct formatter → display connection shows the
 latest pair, replacing the previous one. The formatter keeps no history and never
-caches independent inputs for later matching. Exact source and translation strings,
-including whitespace and empty results, stay literal. Errors retain source and
-error without an earlier successful translation. Without an error wire, an omitted
-text sibling produces a generic failure on that source row. One headerless table
-row contains both cells, so unequal text heights stay aligned. Cells have accessible
-Original/Translation labels; formatter-owned CSS highlights both cells of just the
+caches independent inputs for later matching. Exact input strings, including
+whitespace, duplicates and empty results, stay literal. Input1 renders on the left and input2 on the right. A completed group
+with input1 but no input2 leaves the right cell empty, without reusing a previous
+value. Input2 alone emits nothing. The formatter has no error port or error UI.
+Translation failures retain the source in the left cell; specific errors remain
+visible in the existing translation status/observer diagnostics (preparation,
+load, inference, malformed/empty output, Worker communication and utterance limits).
+One headerless table row contains both cells, so unequal text heights stay aligned. Cells have accessible
+First text/Second text labels; formatter-owned CSS highlights both cells of just the
 hovered/focused pair, and both cells are keyboard focusable.
 
 For a growing comparison transcript, explicitly insert DOMAccumulator:
 
 ```text
-Translation.source/text/error → PairedTextToDOM.source/text/error
+Translation.source → PairedTextToDOM.input1
+Translation.text → PairedTextToDOM.input2
 PairedTextToDOM.dom → DOMAccumulator.append
 DOMAccumulator.dom → LiveTextDisplay.dom
 ```
@@ -833,7 +836,8 @@ to `paired-text-tail` in its Node settings:
 ```text
 MicrophoneAudio.audio → SpeechToTextZipformerEn.audio
 SpeechToTextZipformerEn.final → OpusMtEnJa.text
-OpusMtEnJa.source/text/error → PairedTextToDOM.source/text/error
+OpusMtEnJa.source → PairedTextToDOM.input1
+OpusMtEnJa.text → PairedTextToDOM.input2
 PairedTextToDOM.dom → DOMAccumulator.append
 DOMAccumulator.dom → DOMCombiner.first
 SpeechToTextZipformerEn.provisional → TextToDOM.text
@@ -842,7 +846,7 @@ DOMCombiner.dom → LiveTextDisplay.dom
 ```
 
 The Live stylesheet places `paired-text-tail` in the left half with the same
-inset as a paired Original cell and italic text to distinguish the changing tail.
+inset as a paired left cell and italic text to distinguish the changing tail.
 The right half stays empty, and an empty tail occupies no space. No label or
 status panel is added. The class is an explicit presentation choice for this
 composition: standalone TextToDOM snapshots remain full-width plain text.
@@ -855,8 +859,8 @@ outgoing trees, including inert CSS; it has no source IDs, history, translation
 rules or modes. Start emits an empty snapshot and clears both inputs. Stop drains
 accepted input; Stop/Cancel retain the latest display and reject late deliveries.
 DOM processors run on the page main thread; native DOM never crosses Workers.
-Existing saved graphs keep their wiring and version; no automatic insertion or
-migration is needed.
+DOMCombiner needs no migration or automatic insertion; the paired input rename
+follows the reviewed v12 conversion below.
 
 ASRs with provisional/final outputs finalize atomically: empty provisional TEXT
 and final TEXT belong to the same emission, with preview clearing before final
@@ -875,17 +879,16 @@ resumes following. Layout and wrapping changes also follow while reading the
 bottom. Regions behave independently. Browser scroll anchoring is disabled;
 updates use immediate scrolling without moving focus or starting animations.
 
-Existing **v11 graphs wired directly** from PairedTextToDOM to LiveTextDisplay
-intentionally change from implicit history to latest-pair behavior (#140).
-Their saved wiring is preserved exactly; no schema bump, migration or automatic
-DOMAccumulator insertion occurs. The optional translation example produced by
+Direct PairedTextToDOM → LiveTextDisplay graphs show only the latest pair (#140).
+The v12 port migration preserves this direct DOM route and never inserts an
+accumulator automatically. The optional translation example produced by
 `defaultGraph({ enabled: true })` also uses latest-pair behavior. Add the explicit
 accumulator in Graph Editor only when history is wanted.
 
 Compatible TEXT wiring remains saveable, including incomplete drafts and alternate
 producers with different output names. At runtime the paired consumer requires
-source/text and any connected error input to belong to the same direct producer's
-explicit group. Independent emissions or mismatched producers fail the consumer
+both input1/input2 routes to belong to the same direct producer's explicit group,
+even when a particular emission omits input2. Independent emissions or mismatched producers fail the consumer
 without joining values by equality or timing. The scheduler marks actual preview
 results using internal `emitOutputs(values, { provisional: true })` provenance;
 PairedTextToDOM rejects those deliveries before formatting a pair. Merely connecting an
@@ -910,10 +913,35 @@ are inactive, matching the earlier migration. New accumulators keep their normal
 Stop/Cancel preview cleanup.
 
 On reviewed Save or Reset-and-Save, the exact original JSON is backed up under
-`processing-graph-before-v11`. Older backups remain available. Conflicting copies
+`processing-graph-before-v12` for current saves (v11 used
+`processing-graph-before-v11`). Older backups remain available. Conflicting copies
 get suffixes -2, -3, etc.; identical originals reuse their copy. Backup failures
 leave the original saved graph untouched. Graph Editor exposes original JSON both
 before and after Save for recovery/export.
+
+### Graph v12 paired input migration and recovery
+
+Version 12 changes only PairedTextToDOM's named inputs and presentation. Saved
+v11 graphs containing this formatter cannot run until the Graph Editor review
+draft is saved. The draft renames incoming source → input1 and text → input2.
+Any former edge into its error input is explicitly listed as removed in the
+review message; that removal happens only in the draft. Translator error outputs
+and unrelated error fan-out remain intact. Use existing translation diagnostics
+for failures. No new error UI or replacement error port is inserted.
+
+Nodes, IDs, settings, positions, unrelated routes, DOM history and preview wiring
+stay unchanged. V11 graphs without paired formatters upgrade without a review;
+earlier versions still follow their existing reviewed conversions and receive
+the same paired-port repair where applicable. Invalid conversions have no runnable
+draft: export the original and repair it, or Reset and Save. A current-version
+graph with obsolete ports is rejected rather than silently repaired.
+
+Reading a paired graph never overwrites it. Reviewed Save or Reset-and-Save keeps
+the exact original JSON under `processing-graph-before-v12`, with numbered copies
+on collisions; older recovery keys remain accessible in the editor. A failed
+backup write leaves the saved original untouched. Export that recovery copy to
+restore old error routes in a compatible version or deliberately reconnect them
+to an existing appropriate TEXT consumer.
 
 ## Simple / Graph UI verification (#136)
 

@@ -82,7 +82,7 @@ for (const reverse of [false, true]) test(`saved full ASR/translation graph clea
   const fresh = build(); await fresh.pipeline.start(); await fresh.translations[0].ready; assert.equal(text(states.at(-1)), '');
   const next = fresh.speechNodes.get('speech'); next.receiveEvent({ type: 'final', id: 0, text: 'fail' }); await tick();
   next.receiveEvent({ type: 'partial', text: 'new after failure' }); reply(2, true); await tick();
-  assert.match(text(states.at(-1)), /failTranslation failed: .*offlinenew after failure/);
+  assert.equal(text(states.at(-1)), 'failnew after failure');
   await fresh.pipeline.cancel(); assert.deepEqual(fresh.pipeline.errors, []);
   const canceled = build(); await canceled.pipeline.start(); await canceled.translations[0].ready;
   canceled.speechNodes.get('speech').receiveEvent({ type: 'partial', text: 'discard' });

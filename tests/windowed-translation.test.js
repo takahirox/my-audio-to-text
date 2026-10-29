@@ -194,7 +194,7 @@ for (const reverse of [false, true]) test(`independent concurrent windows surviv
     g.edges.forEach(e => { e.from[0] += suffix; e.to[0] += suffix; });
     return g;
   });
-  const description = { version: 11, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
+  const description = { version: 12, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
   if (reverse) description.nodes.reverse();
   const f = workers(), displays = {};
   const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => { s = domText(s); displays[id] = s; } });
@@ -252,7 +252,7 @@ test('graph saves/reloads with no version migration, no new weights, and permits
   g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'source').from = ['input', 'value'];
   assert.deepEqual(validateGraph(addDOMFormatters(g)), []);
   assert.deepEqual(graphModelRequirements({ nodes: [graphNode('TextWindow', 'w'), graphNode('TranslationCommit', 'c')] }), []);
-  assert.equal(defaultGraph().version, 11);
+  assert.equal(defaultGraph().version, 12);
 });
 
 test('TranslationCommit rejects independent/malformed results and detects an undrained boundary', () => {

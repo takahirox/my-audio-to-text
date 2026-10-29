@@ -202,7 +202,11 @@ a committed item. Translation remains an explicit graph addition. Configurable
 `TextFormatter` Nodes compose primitive TEXT with editable multiline templates.
 Older paired views open a reviewed migration draft and keep a recovery copy;
 `PairedTextToDOM` formats one completed pair and direct display connections show
-only the latest pair, including existing v11 graphs. For optional comparison
+only the latest pair. Its generic TEXT inputs are `input1` (left) and `input2`
+(right); connect translator.source/text explicitly to those ports. Missing input2
+leaves a blank cell, while specific errors remain in translation diagnostics.
+Saved paired source/text/error wiring requires a v12 review draft and Save,
+with exact original JSON retained for recovery. For optional comparison
 history, explicitly connect `PairedTextToDOM.dom → DOMAccumulator.append → dom →
 LiveTextDisplay.dom`. To include live ASR beneath that history in one display,
 connect history to `DOMCombiner.first`, ASR provisional → `TextToDOM` to

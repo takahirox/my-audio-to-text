@@ -40,11 +40,11 @@ test('type mismatch, self-connection, unknown ports, cycles preserve the prior e
   assert.match(e.error, /acyclic/);
 });
 
-for (const ports of [['source','text'],['text','source']]) test(`paired editor accepts compatible alternate producers in ${ports.join('/')} order`, () => {
+for (const ports of [['input1','input2'],['input2','input1']]) test(`paired editor accepts compatible alternate producers in ${ports.join('/')} order`, () => {
   const graph = defaultGraph(); graph.nodes.push(graphNode('Text','literal'),graphNode('TextFormatter','alternate'),graphNode('PairedTextToDOM','pair'));
   const e = editor(graph);
   for (const port of ports) {
-    const [id,output] = port === 'source' ? ['literal','value'] : ['alternate','text'];
+    const [id,output] = port === 'input1' ? ['literal','value'] : ['alternate','text'];
     connect(e,id,output,'pair',port);
     assert.ok(e.draft.edges.some(route => JSON.stringify(route) === JSON.stringify(edge(id,output,'pair',port))));
     assert.deepEqual(validateGraph(e.draft),[]);

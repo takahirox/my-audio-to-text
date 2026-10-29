@@ -167,7 +167,7 @@ for (const direction of ['ja-en', 'en-ja']) {
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
     await expect(page.locator('[data-display="translated"] .display-content')).not.toContainText(`${target}: same`);
     await expect(page.locator('[data-display="translated"] tbody tr')).toHaveCount(1);
-    await expect(pairText(page)).toContainText('Controlled inference failure'); await expect(page.locator('[data-display="translated"] .display-content')).not.toContainText('preview');
+    await expect(pairText(page).locator('td')).toHaveText(['fail','']); await expect(page.locator('#translation-status')).toContainText('Controlled inference failure'); await expect(page.locator('[data-display="translated"] .display-content')).not.toContainText('preview');
     await start(page); await emit(page, 'final', 'slow'); await expect(pairText(page)).toHaveCount(0); await page.locator('#cancel-session').click();
     await expect(pairText(page)).toHaveCount(0); await expect(page.locator('[data-display="translated"] .display-content')).not.toContainText(`${target}: slow`);
     expect(await page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
@@ -176,7 +176,7 @@ for (const direction of ['ja-en', 'en-ja']) {
   test(`${direction}: preparation, ignored provisional input, ordered drain, offline profile reuse and eviction`, async ({ translationExtension: f }) => {
     test.setTimeout(60000); await instrument(f); let page = await open(f);
     await expect(model(page, '.model-status')).toHaveText('Not downloaded'); expect(f.requests).toEqual([]); await start(page);
-    await expect(page.locator('#translation-status')).toContainText('assets missing'); await emit(page, 'final', '原文'); await expect(pairText(page)).toContainText('assets missing');
+    await expect(page.locator('#translation-status')).toContainText('assets missing'); await emit(page, 'final', '原文'); await expect(pairText(page).locator('td')).toHaveText(['原文','']);
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toEqual([]); await prepare(page); expect(f.requests).toHaveLength(7);
     await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
     await emit(page, 'partial', 'old'); await expect(pairText(page)).toHaveCount(0); await emit(page, 'partial', 'slow'); await expect(pairText(page)).toHaveCount(0);
@@ -186,7 +186,7 @@ for (const direction of ['ja-en', 'en-ja']) {
     await page.close(); await f.restart(); await instrument(f); page = await open(f); await expect(model(page, '.model-status')).toContainText('Ready'); await f.context.setOffline(true); await start(page);
     await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready'); await emit(page, 'final', 'offline'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(7);
     await page.evaluate(async direction => { const { opusMtManifest } = await import('./opus-mt-manifest.js'); const { englishToJapaneseOpusMtManifest } = await import('./opus-mt-en-ja-manifest.js'); const manifest = await (direction === 'en-ja' ? englishToJapaneseOpusMtManifest() : opusMtManifest()); const cache = await caches.open('transformers-cache'); await cache.delete(manifest.files[0].url); }, direction);
-    await start(page); await expect(page.locator('#translation-status')).toContainText('assets missing'); await emit(page, 'final', 'still transcribes'); await expect(originalItems(page)).toHaveText('still transcribes'); await expect(pairText(page)).toContainText('assets missing');
+    await start(page); await expect(page.locator('#translation-status')).toContainText('assets missing'); await emit(page, 'final', 'still transcribes'); await expect(originalItems(page)).toHaveText('still transcribes'); await expect(pairText(page).locator('td')).toHaveText(['still transcribes','']);
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(7);
   });
 
@@ -208,7 +208,19 @@ for (const direction of ['ja-en', 'en-ja']) {
 
   test(`${direction}: unavailable WebAssembly isolates translation failure`, async ({ translationExtension: f }) => {
     await f.disableWasm(direction); await instrument(f); const page = await open(f); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toContainText('requires WebAssembly');
-    await emit(page, 'final', '原文'); await expect(originalItems(page)).toHaveText('原文'); await expect(pairText(page)).toContainText('requires WebAssembly'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(await page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
+    await emit(page, 'final', '原文'); await expect(originalItems(page)).toHaveText('原文'); await expect(pairText(page).locator('td')).toHaveText(['原文','']); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(await page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
+  });
+
+  test(`${direction}: utterance limit errors remain in diagnostics and later pairs still succeed without an error wire`, async ({translationExtension:f}) => {
+    await instrument(f);const page=await open(f);await prepare(page);await start(page);
+    await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
+    const source='x'.repeat(1001);await emit(page,'final',source,0);
+    await expect(pairText(page).locator('td')).toHaveText([source,'']);
+    await expect(page.locator('#translation-status')).toContainText('accepts at most 1,000 characters');
+    await emit(page,'final','recovered',1);
+    await expect(pairText(page).locator('td')).toHaveText(['recovered',`${target}: recovered`]);
+    await page.locator('#stop').click();await expect(page.locator('#start')).toBeEnabled();
+    await expect(page.locator('#errors')).toBeEmpty();
   });
 
   test(`${direction}: Cancel during final drain preserves committed text and discards pending pairs`, async ({ translationExtension: f }) => {
