@@ -353,7 +353,9 @@ translation, pairing, layout or hover behavior.
 
 `TextToDOM.text: TEXT → dom: DOM` constructs a new literal-text snapshot for every
 input, including empty strings. It uses textContent and pre-wrap whitespace;
-HTML-looking user data stays text. It owns no transcript history or settings.
+HTML-looking user data stays text. Its optional `className` setting adds CSS
+classes to the snapshot for code-authored presentation; it defaults to empty,
+including in existing v11 graphs. It owns no transcript history or source matching.
 Summary and generic TextFormatter snapshots pass through this processor.
 
 `TextAccumulator` constructs reusable transcripts upstream. `append` accepts each
@@ -776,7 +778,8 @@ growing snapshots consume memory and rendering time. LiveTextDisplay continues
 to replace its content for every delivery in either graph.
 
 To show live English ASR below committed bilingual history in **one** Live region,
-add DOMCombiner and TextToDOM in Graph Editor:
+add DOMCombiner and TextToDOM in Graph Editor. Set this TextToDOM's `className`
+to `paired-text-tail` in its Node settings:
 
 ```text
 MicrophoneAudio.audio → SpeechToTextZipformerEn.audio
@@ -788,6 +791,13 @@ SpeechToTextZipformerEn.provisional → TextToDOM.text
 TextToDOM.dom → DOMCombiner.second
 DOMCombiner.dom → LiveTextDisplay.dom
 ```
+
+The Live stylesheet places `paired-text-tail` in the left half with the same
+inset as a paired Original cell and italic text to distinguish the changing tail.
+The right half stays empty, and an empty tail occupies no space. No label or
+status panel is added. The class is an explicit presentation choice for this
+composition: standalone TextToDOM snapshots remain full-width plain text.
+DOMCombiner, DOMAccumulator and LiveTextDisplay do not interpret the class.
 
 DOMCombiner retains only the latest snapshot on each input and emits a complete
 snapshot in fixed first → second order whenever either input changes. An empty

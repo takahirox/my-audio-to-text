@@ -10,6 +10,33 @@ import { buildGraph } from '../extension/graph-runtime.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const ctx = (emit = () => {}) => ({ signal: new AbortController().signal, emit });
 
+test('TextToDOM className is optional presentation data and never parsed as HTML', () => {
+  const text = '  <script>literal</script>\n\t&  ', snapshots = [];
+  const className = 'custom-column " onmouseover="bad';
+  const node = new TextToDOMNode({ className });
+  for (const value of [text, 'replacement', '']) node.receive('text', value, ctx((_, dom) => snapshots.push(cloneDOM(dom))));
+  assert.deepEqual(snapshots.map(dom => dom.textContent), [text, 'replacement', '']);
+  for (const dom of snapshots) {
+    assert.equal(dom.className, className);
+    assert.equal(dom.querySelector('script'), null);
+    assert.equal(dom.getAttribute('onmouseover'), null);
+  }
+  assert.throws(() => new TextToDOMNode({ className: null }), /className/);
+});
+
+test('existing v11 TextToDOM settings stay valid without migration; className saves and validates', () => {
+  const graph = defaultGraph();
+  const formatter = graph.nodes.find(node => node.type === 'TextToDOM');
+  formatter.settings = {};
+  const raw = JSON.stringify(graph), values = new Map([[GRAPH_KEY, raw]]);
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  assert.deepEqual(readGraph(storage), graph);
+  assert.equal(storage.getItem(GRAPH_KEY), raw);
+  formatter.settings.className = 'custom-column'; saveGraph(storage, graph);
+  assert.deepEqual(readGraph(storage), graph);
+  formatter.settings.className = null; assert.match(validateGraph(graph).join(' '), /Invalid setting.*className/);
+});
+
 test('TEXT → DOM snapshots preserve exact literal values, including empty updates; sink ownership and fan-out', async () => {
   let emit; const a = [], b = [], emitted = [];
   const formatter = new TextToDOMNode();

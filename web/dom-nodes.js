@@ -26,10 +26,15 @@ export function cloneDOM(value) {
 export class TextToDOMNode {
   inputs = { text: TEXT };
   outputs = { dom: DOM };
+  constructor({ className = '' } = {}) {
+    if (typeof className !== 'string') throw TypeError('TextToDOM className must be a string.');
+    this.className = className;
+  }
   receive(port, value, context) {
     if (context.signal.aborted) return;
     if (port !== 'text' || typeof value !== 'string') throw TypeError('TextToDOM expects text: TEXT.');
     const snapshot = document.createElement('div');
+    if (this.className) snapshot.className = this.className;
     snapshot.style.whiteSpace = 'pre-wrap'; snapshot.style.overflowWrap = 'anywhere';
     snapshot.textContent = value;
     context.emit('dom', snapshot);

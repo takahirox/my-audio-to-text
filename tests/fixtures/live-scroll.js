@@ -17,7 +17,7 @@ export async function installLiveScrollFixture(page, packaged = false) {
     const signal = new AbortController().signal;
     window.scrollFixture = {
       pair(id, source = 'original', translated = 'translation') { const pair = new PairedTextToDOMNode(); pair.start(); pair.receiveInputs({ source, text: translated }, { signal, groupInputs: ['source', 'text'], emit: (_, dom) => histories[id].receive('append', dom, contexts[id].history) }); },
-      preview(id, text) { new TextToDOMNode().receive('text', text, previews[id]); },
+      preview(id, text) { new TextToDOMNode({ className: 'paired-text-tail' }).receive('text', text, previews[id]); },
       resize(width) { root.style.width = `${width}px`; },
       clear(id) { histories[id].start(contexts[id].history); this.preview(id, ''); },
       snapshot(id, dom) { displays[id] = dom; this.render(); },
