@@ -3,6 +3,15 @@ import { openPalette } from './ui-controls.js';
 const items=(page,id)=>page.locator(`[data-display="${id}"] .display-content`);
 const card=editor=>editor.locator('#graph-models .model-card').filter({hasText:'IfCondition'});
 const save=async editor=>{await editor.locator('#graph-save').click();await expect(editor.locator('#graph-save')).toBeEnabled();};
+const trackPipeline=page=>page.evaluate(async()=>{
+ const {Pipeline}=await import('../web/pipeline.js'),start=Pipeline.prototype.start;
+ Pipeline.prototype.start=function(){if(this.entries.has('condition'))window.conditionPipeline=this;return start.call(this);};
+});
+const expectFailure=async page=>{
+ expect(await page.evaluate(()=>({failed:window.conditionPipeline.entries.get('condition').failed,errors:window.conditionPipeline.errors.length,state:window.conditionPipeline.state}))).toEqual({failed:true,errors:1,state:'running'});
+ await expect(page.locator('#errors')).toBeEmpty();
+ expect(await page.evaluate(()=>window.graphWorkers.filter(w=>w.url.includes('if-condition-worker')).every(w=>w.released))).toBe(true);
+};
 
 test('IfCondition palette/settings/wires persist; preparation verifies, cancels, retries and reuses cache without inference',async({graphExtension:f})=>{
  await conditionAssets(f);const page=await openGraph(f),editor=page.editor;
@@ -32,15 +41,19 @@ test('production Worker with fixture logits routes once, preserves text/repeats/
 });
 
 for(const text of ['uncertain-fixture','error-fixture','long-token-fixture'])test(`${text} stops only the condition branch and leaves the transcript usable`,async({graphExtension:f})=>{
- await conditionAssets(f);const page=await openGraph(f);await seedConditionGraph(page.editor);await save(page.editor);await expect(card(page.editor)).toHaveAttribute('data-state','Ready');await startGraph(page);
+ await conditionAssets(f);const page=await openGraph(f);await trackPipeline(page);await seedConditionGraph(page.editor);await save(page.editor);await expect(card(page.editor)).toHaveAttribute('data-state','Ready');await startGraph(page);
  await emitFinal(page,text);await expect(page.locator('#condition-status')).toContainText('unavailable');await expect(items(page,'yes')).toBeEmpty();await expect(items(page,'no')).toBeEmpty();
+ await expectFailure(page);
  await emitFinal(page,'peer still alive');await expect(items(page,'transcript')).toHaveText([text,'peer still alive'].join('\n'));await expect(page.locator('#status')).toHaveText('Transcription active');
- await page.locator('#cancel-session').click();expect(await page.evaluate(()=>window.graphWorkers.every(w=>w.released))).toBe(true);
+ await page.locator(text==='error-fixture'?'#stop':'#cancel-session').click();await expect(page.locator('#start')).toBeEnabled();
+ if(text==='error-fixture')await expect(page.locator('#status')).toHaveText('Stopped. Outputs are ready.');
+ expect(await page.evaluate(()=>window.graphWorkers.every(w=>w.released))).toBe(true);
 });
 
 test('missing cache never downloads at Start; Cancel during Stop/restart has no stale output',async({graphExtension:f})=>{
- await conditionAssets(f);const page=await openGraph(f);await seedConditionGraph(page.editor);
+ await conditionAssets(f);const page=await openGraph(f);await trackPipeline(page);await seedConditionGraph(page.editor);
  const count=f.requests.length;await startGraph(page);await expect(page.locator('#condition-status')).toContainText('missing');await emitFinal(page,'peer');await expect(items(page,'transcript')).toHaveText(['peer'].join('\n'));expect(f.requests.length).toBe(count);
+ await expectFailure(page);
  await page.locator('#cancel-session').click();await save(page.editor);await expect(card(page.editor)).toHaveAttribute('data-state','Ready');
  await startGraph(page);await emitFinal(page,'slow-fixture yes-fixture');await page.locator('#stop').click();await expect(page.locator('#status')).toContainText('Finalizing');
  await page.locator('#cancel-session').click();await expect(page.locator('#start')).toBeEnabled();await startGraph(page);await emitFinal(page,'yes-fixture');

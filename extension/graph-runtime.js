@@ -62,16 +62,6 @@ class PreparedTtsNode {
   dispose() { return this.node.dispose(); }
 }
 
-// Keep optional language-model failures local, just as optional ASR/TTS errors.
-// Each production Node reports its error and terminates its owned Worker.
-class GraphMeetingSummaryNode extends MeetingSummaryNode {
-  start(context) { return super.start({ ...context, fail() {} }); }
-}
-
-class GraphIfConditionNode extends IfConditionNode {
-  start(context) { return super.start({ ...context, fail() {} }); }
-}
-
 // Chrome permits one capture of a tab. Repeated tab Source Nodes subscribe to
 // the same normalized capture; ending one subscriber must not end its peers.
 function sharedTabCapture(factory, stopping) {
@@ -126,10 +116,10 @@ export function buildGraph(graph, options) {
     switch (spec.type) {
       case 'Text': node = new TextNode(spec.settings); break;
       case 'MeetingSummaryLfm2': case 'MeetingSummaryQwen35':
-        node = new GraphMeetingSummaryNode({ ...spec.settings, type: spec.type, workerFactory: options.meetingSummaryWorkerFactory,
+        node = new MeetingSummaryNode({ ...spec.settings, type: spec.type, workerFactory: options.meetingSummaryWorkerFactory,
           onEvent: event => options.onMeetingSummaryEvent?.(event, spec.id) }); break;
       case 'IfCondition':
-        node = new GraphIfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,
+        node = new IfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,
           onEvent: event => options.onIfConditionEvent?.(event, spec.id) }); break;
       case 'Number': node = new NumberNode(spec.settings); break;
       case 'ChromeTabAudio':

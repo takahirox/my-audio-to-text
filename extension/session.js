@@ -1,7 +1,6 @@
 import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
-import { translationDirection } from './translation-preferences.js';
-import { assertGraph, executableGraph, defaultGraph, graphPreferences, withTranslation, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
+import { assertGraph, executableGraph, defaultGraph, graphPreferences, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
 
 // Owns tab targeting and the window's UI. Nodes own capture and recognition.
@@ -125,6 +124,11 @@ export class TabSession {
         },
         onError: (error, id) => {
           if (this.session !== session) return;
+          // These processors report actionable errors in their own Live status
+          // before disposing and calling fail(). Keep the Pipeline record, but
+          // do not repeat that same failure in the general error area.
+          const node = session.pipeline.entries.get(id).node;
+          if (node.disposed && ['MeetingSummaryLfm2', 'MeetingSummaryQwen35', 'IfCondition'].includes(graph.nodes.find(spec => spec.id === id)?.type)) return;
           this.update({ error: [this.view.error, error.message].filter(Boolean).join('\n'), signal: this.sourceStatus(session) });
         },
       }));
@@ -194,7 +198,14 @@ export class TabSession {
       try {
         if (starting) for (const node of session.audioSources.values()) node.end();
         await session.branchDrain;
-        await session.pipeline.stop();
+        try { await session.pipeline.stop(); }
+        catch (error) {
+          // stop() drains every surviving path before reporting recorded Node
+          // failures. They were already shown in Live; finish ordinary Stop
+          // cleanup instead of canceling committed output as a new failure.
+          if (session.pipeline.state !== 'stopped' || !(error instanceof AggregateError) ||
+            !error.errors.every(cause => session.pipeline.errors.includes(cause))) throw error;
+        }
         if (this.session !== session) return;
         await session.pipeline.dispose();
         if (this.session !== session) return;
@@ -228,13 +239,6 @@ export class TabSession {
     const preferences = graphPreferences(this.graph);
     this.update({ savedGraph: this.graph, translationEnabled: preferences.enabled, translationDirection: preferences.direction,
       ...(this.session ? {} : { translationStatus: preferences.enabled ? 'Translation enabled for the next session' : 'Translation off' }) });
-  }
-  setTranslation(enabled) {
-    if (this.session) return;
-    this.setGraph(withTranslation(this.graph, { ...graphPreferences(this.graph), enabled: !!enabled }));
-  }
-  setTranslationDirection(direction) {
-    this.setGraph(withTranslation(this.graph, { ...graphPreferences(this.graph), direction: translationDirection(direction) }));
   }
   setTarget(id, target) {
     if (this.session) throw Error('Stop before selecting or clearing targets.');

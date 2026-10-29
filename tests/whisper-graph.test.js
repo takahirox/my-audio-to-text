@@ -3,7 +3,7 @@ import { domText } from './fixtures/dom.js';
 import { accumulateDisplay } from './fixtures/text-accumulator.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, GRAPH_KEY, GRAPH_VERSION, NODE_TYPES, withTranslation } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, GRAPH_KEY, GRAPH_VERSION, NODE_TYPES } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { TextNode } from '../web/text-constant-node.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
@@ -15,8 +15,8 @@ function store() {
   const values = new Map();
   return { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: k => values.delete(k) };
 }
-function whisperGraph(language) {
-  const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextWhisper';
+function whisperGraph(language, preferences) {
+  const graph = defaultGraph(preferences); graph.nodes[1].type = 'SpeechToTextWhisper';
   graph.edges = graph.edges.filter(route => route.from[1] !== 'provisional');
   if (language !== undefined) {
     graph.nodes.push(graphNode('Text', 'language')); graph.nodes.at(-1).settings.value = language;
@@ -77,19 +77,17 @@ test('Whisper schema and concrete runtime expose exactly final; ReazonSpeech ret
   assert.equal(storage.getItem(GRAPH_KEY), saved);
 });
 
-test('Whisper finals connect to content and through accumulation; preset uses implemented outputs', () => {
-  const graph = whisperGraph();
+test('explicit Whisper translation paths in both directions use implemented outputs', () => {
   for (const direction of ['ja-en', 'en-ja']) {
-    const translated = withTranslation(graph, { enabled: true, direction });
-    assert.deepEqual(validateGraph(translated), []);
-    assert.deepEqual(translated.edges.filter(route => route.to[0] === 'translation'), [edge('speech', 'final', 'translation', 'text')]);
-    assert.deepEqual(withTranslation(translated, { enabled: false, direction }), { ...graph, translationDirection: direction });
+    const graph = whisperGraph(undefined, { enabled: true, direction });
+    assert.deepEqual(validateGraph(graph), []);
+    assert.deepEqual(graph.edges.filter(route => route.to[0] === 'translation'), [edge('speech', 'final', 'translation', 'text')]);
   }
 });
 
 test('v7 migration removes only dead Whisper edges, preserving all custom nodes, routes, settings and positions', () => {
   for (const dead of [false, true]) for (const whisper of [false, true]) for (const enabled of [false, true]) {
-    const graph = withTranslation(whisper ? whisperGraph('ja') : defaultGraph(), { enabled, direction: 'en-ja' });
+    const graph = whisper ? whisperGraph('ja', { enabled, direction: 'en-ja' }) : defaultGraph({ enabled, direction: 'en-ja' });
     graph.version = 7;
     graph.nodes[1].position = { x: 42, y: 777 };
     graph.nodes[2].settings = { label: 'Custom display', language: 'ja' };

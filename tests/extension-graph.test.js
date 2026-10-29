@@ -2,7 +2,7 @@ import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, withTranslation, GRAPH_KEY, GRAPH_RECOVERY_KEY, GRAPH_VERSION, NODE_TYPES, nodeDefinition } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, GRAPH_KEY, GRAPH_RECOVERY_KEY, GRAPH_VERSION, NODE_TYPES, nodeDefinition } from '../extension/graph.js';
 import { legacyGraph } from './fixtures/legacy-graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { LiveTextDisplayNode } from '../web/text-nodes.js';
@@ -178,15 +178,6 @@ test('concrete supported descriptions instantiate actual Nodes with identical co
   }
 });
 
-test('direction and translation controls retain saved audio nodes; disabling translation removes dependent audio only', () => {
-  const original = audioGraph('Kokoro');
-  const enabled = withTranslation(original, { enabled: true, direction: 'en-ja' });
-  assert.ok(enabled.nodes.some(n => n.type === 'Kokoro')); assert.ok(enabled.nodes.some(n => n.type === 'OpusMtEnJa'));
-  const disabled = withTranslation(enabled, { enabled: false, direction: 'ja-en' });
-  assert.ok(disabled.nodes.some(n => n.type === 'Kokoro'));
-  assert.equal(withTranslation(audioGraph('Kokoro', true), { enabled: false, direction: 'en-ja' }).nodes.length, 5);
-});
-
 for (const type of ['OpusMtJaEn', 'TranslateGemmaEnJa']) test(`${type}: ASR final TEXT → actual formatter, field and Kokoro Nodes drains completed finals in order`, async () => {
   const graph = audioGraph('Kokoro', true); graph.edges.reverse();
   graph.nodes.find(node => node.id === 'translation').type = type;
@@ -262,13 +253,6 @@ test('v5 migration preserves independent language, maximum IDs and fan-out; larg
   assert.equal(repair(legacy).nodes.length, 29);
 });
 
-test('disabling translation retains a shared display and all unaffected routes', () => {
-  const graph = defaultGraph({ enabled: true }); graph.edges.find(e => e.to[0] === 'transcript-accumulator' && e.to[1] === 'append').from = ['translation', 'text'];
-  const disabled = withTranslation(graph, { enabled: false, direction: 'ja-en' });
-  assert.ok(disabled.nodes.some(n => n.id === 'transcript'));
-  assert.deepEqual(disabled.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript', 'dom')]);
-});
-
 test('multiple processing directions prepare independently of sink labels and graph preference', async () => {
   const graph = defaultGraph({ enabled: false }); graph.translationDirection = 'en-ja';
   for (const [type, id] of [['OpusMtJaEn', 'forward'], ['OpusMtEnJa', 'reverse']]) {
@@ -319,3 +303,34 @@ function v9Default({ enabled = false, direction = 'ja-en' } = {}) {
   }
   return {version:9,translationDirection:direction,nodes,edges};
 }
+
+test('saved multi-direction graphs and explicit edits preserve shared sinks, independent paths and incomplete drafts', async () => {
+  const { TabSession } = await import('../extension/session.js');
+  const { graphPreferences } = await import('../extension/graph.js');
+  const graph = defaultGraph({ enabled: true, direction: 'ja-en' });
+  graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('OpusMtJaEn', 'another'),
+    graphNode('TextFormatter', 'shared'), graphNode('TextToDOM', 'shared-dom'), graphNode('LiveTextDisplay', 'shared-view'),
+    graphNode('FocusedInputTextOutputNode', 'field'), graphNode('OpusMtEnJa', 'parked'));
+  graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('speech', 'final', 'another', 'text'),
+    edge('translation', 'text', 'shared', 'input1'), edge('reverse', 'text', 'shared', 'input2'), edge('another', 'text', 'shared', 'input3'),
+    edge('shared', 'text', 'shared-dom', 'text'), edge('shared-dom', 'dom', 'shared-view', 'dom'), edge('reverse', 'text', 'field', 'text'));
+  graph.translationDirection = 'en-ja';
+  const original = structuredClone(graph), store = storage();
+  saveGraph(store, graph);
+  const saved = store.getItem(GRAPH_KEY);
+  // Obsolete stored choices cannot control an existing explicit graph.
+  for (const enabled of [false, true]) for (const direction of ['ja-en', 'en-ja']) {
+    store.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled, direction }));
+    assert.deepEqual(readGraph(store), original);
+    assert.deepEqual(graphPreferences(graph), { enabled: true, direction: 'ja-en' });
+    assert.equal(store.getItem(GRAPH_KEY), saved);
+  }
+  const session = new TabSession(() => {}, { graph });
+  const edited = structuredClone(graph); edited.nodes.find(n => n.id === 'reverse').position.x += 50;
+  edited.nodes.find(n => n.id === 'reverse').type = 'OpusMtJaEn';
+  session.setGraph(edited); saveGraph(store, session.graph);
+  assert.deepEqual(readGraph(store), edited);
+  assert.deepEqual(readGraph(store).edges, original.edges);
+  assert.deepEqual(graph, original);
+  assert.equal(store.getItem(GRAPH_RECOVERY_KEY), null);
+});

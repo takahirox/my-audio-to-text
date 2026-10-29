@@ -195,7 +195,7 @@ for (const direction of ['ja-en', 'en-ja']) for (const port of ['content']) test
 });
 
 test('Cancel adds no pending history; failed committed results remain readable and contain no stale translation', async () => {
-  const f = sessionFixture(); f.session.setTranslation(true); await f.session.start(42);
+  const f = sessionFixture(); f.session.setGraph(defaultGraph({ enabled: true })); await f.session.start(42);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'pending', id: 0 }); await tick();
   f.session.cancel(); f.translation.complete(0, 'late'); await tick(); assert.deepEqual(display(f, 'translated'), [].join('\n'));
   f.session.prepareTranslation = async () => { throw Error('cache unavailable'); }; await f.session.start(42);

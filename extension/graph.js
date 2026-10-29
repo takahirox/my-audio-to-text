@@ -414,41 +414,13 @@ export function assertGraph(graph) {
   if (errors.length) throw new Error(errors.join('\n'));
   return structuredClone(migrated);
 }
+// Read-only legacy/status hint. The first translator does not represent every
+// direction in an arbitrary graph and must never control processor settings.
 export function graphPreferences(graph) {
   const translation = graph.nodes.find(node => [...translators, 'TranslateGemmaEnJa', 'TranslateGemmaJaEn'].includes(node.type));
   return { enabled: !!translation, direction: translation
     ? (['OpusMtEnJa', 'TranslateGemmaEnJa'].includes(translation.type) ? 'en-ja' : 'ja-en')
     : graph.translationDirection || graph.nodes.find(node => node.type === 'TranscriptView')?.settings.direction || 'ja-en' };
-}
-export function withTranslation(graph, { enabled, direction }) {
-  const next = assertGraph(graph);
-  const current = next.nodes.find(n => translators.includes(n.type));
-  next.translationDirection = direction;
-  if (enabled && current) for (const node of next.nodes.filter(n => translators.includes(n.type))) node.type = direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn';
-  else if (enabled) {
-    const branch = defaultGraph({ enabled: true, direction });
-    // Choose unused IDs when the user's graph uses the default names elsewhere.
-    const ids = new Set(next.nodes.map(n => n.id));
-    const unused = base => unusedId(ids, base);
-    const id = unused('translation'), sink = unused('translated'), formatter = unused('translated-format'), speech = next.nodes.find(n => ASR_TYPES.includes(n.type));
-    if (!speech) throw Error('Add an ASR Node before applying the translation preset, or connect translator Nodes individually.');
-    next.nodes.push({ ...branch.nodes[3], id }, { ...branch.nodes[4], id: sink }, { ...branch.nodes[5], id: formatter });
-    next.edges.push(edge(speech.id, 'final', id, 'text'));
-    next.edges.push(...pairedTextEdges(id, formatter), edge(formatter, 'dom', sink, 'dom'));
-  } else {
-    const removed = new Set(next.nodes.filter(n => translators.includes(n.type) || n.type === 'TranslationView').map(n => n.id));
-    // Remove downstream audio branch too when its only source is translation.
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const node of next.nodes) {
-        const inputs = next.edges.filter(e => e.to[0] === node.id);
-        if (!removed.has(node.id) && inputs.length && inputs.every(e => removed.has(e.from[0]))) { removed.add(node.id); changed = true; }
-      }
-    }
-    next.nodes = next.nodes.filter(n => !removed.has(n.id)); next.edges = next.edges.filter(e => !removed.has(e.from[0]) && !removed.has(e.to[0]));
-  }
-  return assertGraph(next);
 }
 export function readGraph(storage) {
   const saved = storage.getItem(GRAPH_KEY);
