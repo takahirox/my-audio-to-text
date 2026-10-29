@@ -90,6 +90,42 @@ test('current custom and translation graphs reload byte-for-byte without prefere
   }
 });
 
+test('enabled legacy preferences never replace a corrupt saved graph; explicit recovery retains its original', () => {
+  for (const direction of ['ja-en', 'en-ja']) {
+    const store = storage(), preferences = JSON.stringify({ enabled: true, direction });
+    store.setItem(GRAPH_KEY, '{broken');
+    store.setItem('opus-mt-translation-preferences', preferences);
+    assert.throws(() => readGraph(store), /Invalid saved graph/);
+    assert.equal(store.getItem(GRAPH_KEY), '{broken');
+    assert.equal(store.getItem('opus-mt-translation-preferences'), preferences);
+    assert.equal(store.getItem(GRAPH_RECOVERY_KEY), null);
+    const recovered = defaultGraph(); // Graph Editor's explicit Reset + Save.
+    saveGraph(store, recovered);
+    assert.deepEqual(readGraph(store), recovered);
+    assert.equal(store.getItem(GRAPH_RECOVERY_KEY), '{broken');
+    assert.equal(store.getItem('opus-mt-translation-preferences'), null);
+  }
+});
+
+test('explicit multi-output bilingual graphs retain original and unrelated routes through Save/reload', () => {
+  for (const direction of ['ja-en', 'en-ja']) {
+    const store = storage(), graph = defaultGraph({ enabled: true, direction });
+    graph.nodes.find(n => n.id === 'transcript').settings.label = 'My full transcript';
+    graph.nodes.push(graphNode('LiveTextDisplay', 'another-original'), graphNode('FocusedInputTextOutputNode', 'field'));
+    graph.edges.push(edge('transcript-dom', 'dom', 'another-original', 'dom'), edge('translation', 'text', 'field', 'text'));
+    const expected = structuredClone(graph);
+    saveGraph(store, graph);
+    store.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled: false, direction: direction === 'ja-en' ? 'en-ja' : 'ja-en' }));
+    const raw = store.getItem(GRAPH_KEY), loaded = readGraph(store);
+    assert.deepEqual(loaded, expected);
+    assert.equal(store.getItem(GRAPH_KEY), raw);
+    saveGraph(store, loaded);
+    assert.deepEqual(readGraph(store), expected);
+    assert.equal(store.getItem(GRAPH_KEY), raw);
+    assert.equal(store.getItem('opus-mt-translation-preferences'), null);
+  }
+});
+
 for (const [name, edit, pattern] of [
   ['version', g => g.version = 99, /version/],
   ['unknown type', g => g.nodes[0].type = 'toString', /Unknown Node/],
