@@ -23,13 +23,16 @@ test('DOM snapshots clone safely for fan-out and preserve literal multiline/empt
   }
 });
 
-test('paired rows align unequal heights and highlight exactly one pair from either hover or keyboard focus', async ({ page }) => {
+test('explicit DOM history rows align unequal heights and highlight exactly one pair from either hover or keyboard focus', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { PairedTextToDOMNode } = await import('/dom-nodes.js'), { LiveTextDisplayNode } = await import('/text-nodes.js');
+    const { PairedTextToDOMNode, DOMAccumulatorNode } = await import('/dom-nodes.js'), { LiveTextDisplayNode } = await import('/text-nodes.js');
     const root = document.createElement('div'); root.id='comparison'; root.style.width='600px'; document.body.append(root);
     const sink = new LiveTextDisplayNode(dom=>root.replaceChildren(dom));
-    const c = {signal:new AbortController().signal,groupInputs:['source','text','error'],emit(_,dom){sink.receive('dom',dom,c);}};
+    const out = {signal:new AbortController().signal,emit(_,dom){sink.receive('dom',dom,out);}};
+    window.historyDOM = new DOMAccumulatorNode(); historyDOM.start(out);
+    const c = {...out,groupInputs:['source','text','error'],emit(_,dom){historyDOM.receive('append',dom,out);}};
+    window.historyContext=out;
     window.paired = new PairedTextToDOMNode(); paired.start(c);
     paired.receiveInputs({source:'same',text:'a long translation\n'.repeat(8),error:''},c);
     paired.receiveInputs({source:'same',text:'second',error:''},c);
@@ -37,6 +40,7 @@ test('paired rows align unequal heights and highlight exactly one pair from eith
     window.pairedContext=c;
   });
   const rows = page.locator('#comparison tbody tr'); await expect(rows).toHaveCount(3);
+  await expect(page.locator('#comparison thead')).toHaveCount(0);
   expect(await rows.nth(0).locator('td').allTextContents()).toEqual(['same','a long translation\n'.repeat(8)]);
   await expect(page.locator('#comparison script, #comparison img')).toHaveCount(0);
   const boxes = await rows.nth(0).locator('td').evaluateAll(cells=>cells.map(cell=>{const r=cell.getBoundingClientRect();return {top:r.top,height:r.height};}));
@@ -55,5 +59,38 @@ test('paired rows align unequal heights and highlight exactly one pair from eith
     expect(colors[1-row]).toEqual(['rgba(0, 0, 0, 0)','rgba(0, 0, 0, 0)']);
   }
   await page.evaluate(()=>{paired.cancel();paired.receiveInputs({source:'stale',text:'stale'},pairedContext);}); await expect(rows).toHaveCount(3);
-  await page.evaluate(()=>paired.start(pairedContext)); await expect(rows).toHaveCount(0);
+  await page.evaluate(()=>{paired.start(pairedContext);historyDOM.start(historyContext);}); await expect(rows).toHaveCount(0);
+});
+
+
+test('direct paired formatter replaces the previous pair with literal success, error and empty results', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { PairedTextToDOMNode } = await import('/dom-nodes.js'), { LiveTextDisplayNode } = await import('/text-nodes.js');
+    const root = document.createElement('div'); root.id='latest-pair'; root.style.width='600px'; document.body.append(root);
+    const sink = new LiveTextDisplayNode(dom=>root.replaceChildren(dom));
+    const c = {signal:new AbortController().signal,groupInputs:['source','text','error'],emit(_,dom){sink.receive('dom',dom,c);}};
+    const paired = new PairedTextToDOMNode(); paired.start(c);
+    window.renderPair = values => paired.receiveInputs(values,c);
+    renderPair({source:'original',text:'long translation\n'.repeat(8)});
+  });
+  const rows = page.locator('#latest-pair tbody tr'), cells = rows.locator('td');
+  await expect(rows).toHaveCount(1);
+  const boxes = await cells.evaluateAll(cells=>cells.map(cell=>{const r=cell.getBoundingClientRect();return {top:r.top,height:r.height};}));
+  expect(boxes[0]).toEqual(boxes[1]); expect(boxes[0].height).toBeGreaterThan(100);
+  for (const method of ['hover','focus']) for (const side of [0,1]) {
+    await page.mouse.move(0,0); await cells.nth(side)[method]();
+    const colors = await cells.evaluateAll(cells=>cells.map(cell=>getComputedStyle(cell).backgroundColor));
+    expect(colors[0]).toBe(colors[1]); expect(colors[0]).not.toBe('rgba(0, 0, 0, 0)');
+  }
+  for (const [value, expected] of [
+    [{source:'same',text:'日本語'},['same','日本語']],
+    [{source:'same',text:'日本語'},['same','日本語']],
+    [{source:'<script>source</script>',text:'stale',error:'<img src=x>'},['<script>source</script>','Translation failed: <img src=x>']],
+    [{source:'',text:''},['','']],
+  ]) {
+    await page.evaluate(value=>renderPair(value),value);
+    await expect(rows).toHaveCount(1); expect(await cells.allTextContents()).toEqual(expected);
+    await expect(page.locator('#latest-pair script, #latest-pair img')).toHaveCount(0);
+  }
 });

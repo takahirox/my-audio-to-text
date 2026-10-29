@@ -306,7 +306,7 @@ test('completed translations flow directly to TEXT fan-out and paired Live; prov
   });
   await t.graph({ translation: true, outputs: [['out', 'FocusedInputTextOutputNode', true]] }); await t.website.locator('#focused').click(); await t.invoke();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect(t.page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
-  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('[data-display="translated"] tbody')).toBeEmpty(); await expect(t.website.locator('#focused')).toHaveValue('manual');
+  await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('[data-display="translated"] tbody tr')).toHaveCount(0); await expect(t.website.locator('#focused')).toHaveValue('manual');
   await emit(t, 1, 'first'); await emit(t, 1, 'duplicate'); await emit(t, 2, 'second'); await stop(t);
   await expect(t.website.locator('#focused')).toHaveValue('manualtranslated firsttranslated second'); await expect(t.page.locator('[data-display="translated"] tbody')).toContainText('translated second');
   await expect(t.page.locator('#errors')).toBeEmpty();

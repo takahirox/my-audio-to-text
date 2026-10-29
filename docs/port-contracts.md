@@ -26,7 +26,8 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source`, `text`, `error`: TEXT outputs | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
 | LiveTextDisplay | dom: DOM | Clone and mount the complete inert DOM snapshot |
 | TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
-| PairedTextToDOM | grouped source/text/error: TEXT → dom: DOM | One committed comparison row per atomic result; session history, hover/focus CSS |
+| PairedTextToDOM | grouped source/text/error: TEXT → dom: DOM | One pair only per completed atomic result; no history; hover/focus CSS |
+| DOMAccumulator | append: DOM → dom: DOM | Ordered session history of validated, cloned snapshots; Start clears, Stop/Cancel retain |
 | TextAccumulator | append/preview: TEXT → text: TEXT | Newline-separated committed segments plus optional uncommitted tail |
 | TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
 | TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
