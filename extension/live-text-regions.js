@@ -2,16 +2,17 @@ import { cloneDOM } from '../web/dom-nodes.js';
 
 const scrollStates = new WeakMap();
 const nearBottom = content => content.scrollHeight - content.clientHeight - content.scrollTop <= 24;
+function updateScrollIntent(content, state) {
+  // Layout can change the bottom before ResizeObserver runs. Preserve intent
+  // unless the offset changed beyond layout clamping, or reached the bottom.
+  const clamped = Math.min(state.top, Math.max(0, content.scrollHeight - content.clientHeight));
+  if (Math.abs(content.scrollTop - clamped) > 1 || nearBottom(content)) state.following = nearBottom(content);
+  state.top = content.scrollTop;
+}
 function scrollState(content) {
   if (!scrollStates.has(content)) {
     const state = { following: true, top: content.scrollTop };
-    content.addEventListener('scroll', () => {
-      // Resizing/clamping can queue a scroll event before ResizeObserver runs.
-      // Only a changed offset (beyond the layout clamp) changes reading intent.
-      const clamped = Math.min(state.top, Math.max(0, content.scrollHeight - content.clientHeight));
-      if (Math.abs(content.scrollTop - clamped) > 1 || nearBottom(content)) state.following = nearBottom(content);
-      state.top = content.scrollTop;
-    });
+    content.addEventListener('scroll', () => updateScrollIntent(content, state));
     // Observe the viewport and snapshot roots: wrapping, font/layout changes,
     // and a resized Live window can change the bottom after the initial mount.
     if (typeof ResizeObserver !== 'undefined') state.observer = new ResizeObserver(() => {
@@ -53,7 +54,8 @@ export function renderTextRegions(root, graph, displays) {
     if (region.displayDOM !== snapshot) {
       const content = region.querySelector('.display-content');
       const state = scrollState(content), top = content.scrollTop;
-      state.following = nearBottom(content);
+      // Also catch user scrolling whose event has not yet been delivered.
+      updateScrollIntent(content, state);
       state.observer?.disconnect();
       content.replaceChildren(...(snapshot === null ? [] : [cloneDOM(snapshot)]));
       // Explicitly restore after replaceChildren and synchronous layout; browser

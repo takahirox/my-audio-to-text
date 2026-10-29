@@ -55,10 +55,25 @@ export async function checkLiveScrolling(page, expect) {
     await expect.poll(() => content('a').evaluate(el => el.scrollTop)).toBeCloseTo(123, 0);
     await expect.poll(() => bottomGap('b')).toBeLessThanOrEqual(1);
   }
-  // Layout changes without another snapshot still follow B; A retains its offset.
-  await page.evaluate(() => scrollFixture.resize(360));
+  // A snapshot can arrive before ResizeObserver handles a wrapping change.
+  // Keep B's established follow intent while A continues reading older content.
+  await page.evaluate(() => {
+    scrollFixture.resize(360);
+    for (const id of ['a', 'b']) scrollFixture.preview(id, 'first update');
+  });
   await expect.poll(() => bottomGap('b')).toBeLessThanOrEqual(1);
   await expect.poll(() => content('a').evaluate(el => el.scrollTop)).toBeCloseTo(123, 0);
+  await page.evaluate(() => scrollFixture.preview('b', 'subsequent update\n'.repeat(10)));
+  await expect.poll(() => bottomGap('b')).toBeLessThanOrEqual(1);
+  // Layout changes without another snapshot still follow B; A retains its offset.
+  await page.evaluate(() => scrollFixture.resize(300));
+  await expect.poll(() => bottomGap('b')).toBeLessThanOrEqual(1);
+  await expect.poll(() => content('a').evaluate(el => el.scrollTop)).toBeCloseTo(123, 0);
+  // Honor an offset change even when its native scroll event is still queued.
+  await content('b').evaluate(el => { el.scrollTop = 211; scrollFixture.preview('b', 'reading older content'); });
+  await expect.poll(() => content('b').evaluate(el => el.scrollTop)).toBeCloseTo(211, 0);
+  await content('b').evaluate(el => { el.scrollTop = el.scrollHeight; scrollFixture.preview('b', 'back at bottom\n'.repeat(10)); });
+  await expect.poll(() => bottomGap('b')).toBeLessThanOrEqual(1);
   // Manual return to bottom resumes following. No focus is moved by rendering.
   await content('a').evaluate(el => { el.focus(); el.scrollTop = el.scrollHeight; el.dispatchEvent(new Event('scroll')); });
   await page.evaluate(() => { scrollFixture.pair('a'); scrollFixture.preview('a', 'new tail\n'.repeat(20)); });
