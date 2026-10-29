@@ -41,6 +41,21 @@ export async function checkLiveScrolling(page, expect) {
     expect(await content(id).evaluate(el => el.scrollHeight > el.clientHeight + 300)).toBe(true);
     await expect.poll(() => bottomGap(id)).toBeLessThanOrEqual(1);
   }
+  // Separate one-pixel wheel movements must accumulate beyond the bottom
+  // tolerance, even though each event fits within the layout-rounding tolerance.
+  await content('a').hover();
+  const initialTop = await content('a').evaluate(el => el.scrollTop);
+  for (let i = 1; i <= 50; i++) {
+    await page.mouse.wheel(0, -1);
+    await expect.poll(() => content('a').evaluate(el => el.scrollTop)).toBeCloseTo(initialTop - i, 0);
+  }
+  expect(await bottomGap('a')).toBeGreaterThan(24);
+  const readingTop = await content('a').evaluate(el => el.scrollTop);
+  await page.evaluate(() => {
+    for (const id of ['a', 'b']) scrollFixture.preview(id, 'preview after small wheel movements\n'.repeat(10));
+  });
+  await expect.poll(() => content('a').evaluate(el => el.scrollTop)).toBeCloseTo(readingTop, 0);
+  await expect.poll(() => bottomGap('b')).toBeLessThanOrEqual(1);
   // A user reads older content in A, while B stays within the bottom tolerance.
   await content('a').evaluate(el => { el.scrollTop = 123; el.dispatchEvent(new Event('scroll')); });
   await content('b').evaluate(el => { el.scrollTop = el.scrollHeight - el.clientHeight - 20; el.dispatchEvent(new Event('scroll')); });

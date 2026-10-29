@@ -6,8 +6,14 @@ function updateScrollIntent(content, state) {
   // Layout can change the bottom before ResizeObserver runs. Preserve intent
   // unless the offset changed beyond layout clamping, or reached the bottom.
   const clamped = Math.min(state.top, Math.max(0, content.scrollHeight - content.clientHeight));
-  if (Math.abs(content.scrollTop - clamped) > 1 || nearBottom(content)) state.following = nearBottom(content);
-  state.top = content.scrollTop;
+  if (Math.abs(content.scrollTop - clamped) > 1 || nearBottom(content)) {
+    state.following = nearBottom(content);
+    state.top = content.scrollTop;
+  } else {
+    // Preserve the baseline for small movements so they accumulate across
+    // events, while still accounting for offsets clamped by shorter layouts.
+    state.top = clamped;
+  }
 }
 function scrollState(content) {
   if (!scrollStates.has(content)) {
