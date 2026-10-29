@@ -1,17 +1,148 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { checkZoomRecovery, expectInsideCanvas, exposedWirePoint, loadZoomGraph } from '../fixtures/graph-zoom.js';
 
 // Exercise the real extension HTML/modules in both browser engines without
 // Chrome capture APIs or model inference. Packaged MV3 tests cover those paths.
+async function serveExtension(route) {
+  const pathname = new URL(route.request().url()).pathname;
+  if (!/^\/(extension|web)\/[\w.-]+\.(js|html|css)$/.test(pathname)) return route.continue();
+  const contentType = pathname.endsWith('.js') ? 'text/javascript' : pathname.endsWith('.css') ? 'text/css' : 'text/html';
+  await route.fulfill({ body: await readFile(path.resolve(pathname.slice(1))), contentType });
+}
 test.beforeEach(async ({ page }) => {
-  await page.route('**/*', async route => {
-    const pathname = new URL(route.request().url()).pathname;
-    if (!/^\/(extension|web)\/[\w.-]+\.(js|html|css)$/.test(pathname)) return route.continue();
-    const contentType = pathname.endsWith('.js') ? 'text/javascript' : pathname.endsWith('.css') ? 'text/css' : 'text/html';
-    await route.fulfill({ body: await readFile(path.resolve(pathname.slice(1))), contentType });
-  });
+  await page.route('**/*', serveExtension);
   await page.goto('/extension/graph-editor.html');
+});
+
+for (const width of [390, 1440]) for (const size of ['default', 'large']) {
+  test(`zoom overview returns to the editing port: ${size} graph at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    await checkZoomRecovery(page, size, info);
+  });
+}
+
+test('returning from Fit retains the selected wire and its keyboard Disconnect action', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await loadZoomGraph(page);
+  await page.getByRole('button', { name: 'literal-29 output value', exact: true }).press('Space');
+  await page.locator('#graph-fit').press('Enter');
+  const wire = page.getByRole('button', { name: 'Select connection speech.final to transcript-accumulator.append', exact: true });
+  await wire.press('Enter');
+  await page.locator('#graph-edit-scale').press('Enter');
+  await expect(wire).toBeFocused(); await expect(wire).toHaveAttribute('aria-pressed', 'true');
+  await wire.press('Tab');
+  await expect(page.locator('#graph-disconnect')).toBeFocused();
+  await expectInsideCanvas(page.locator('#graph-disconnect'));
+  await page.locator('#graph-disconnect').press('Enter'); await expect(wire).toHaveCount(0);
+});
+
+for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
+  test(`keyboard connections, movement and disconnect preserve semantics at ${zoom}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await loadZoomGraph(page);
+    if (zoom === 'fit') await page.locator('#graph-fit').press('Enter');
+    else await page.locator('#graph-zoom').selectOption(zoom);
+    const original = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+    const wire = page.getByRole('button', { name: 'Select connection audio.audio to speech.audio', exact: true });
+    await wire.press('Enter'); await wire.press('Tab');
+    const disconnect = page.locator('#graph-disconnect');
+    await expect(disconnect).toBeFocused(); await expectInsideCanvas(disconnect);
+    expect((await disconnect.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await disconnect.press('Shift+Tab'); await expect(wire).toBeFocused();
+    await wire.press('Tab'); await disconnect.press('Space'); await expect(wire).toHaveCount(0);
+    await expect(page.locator('.graph-scroll')).toBeFocused();
+    await page.getByRole('button', { name: 'speech output final', exact: true }).press('Space');
+    await expect(page.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'audio output audio', exact: true }).press('Enter');
+    await page.getByRole('button', { name: 'speech input audio', exact: true }).press('Space');
+    await expect(wire).toHaveCount(1);
+    const heading = page.getByRole('button', { name: 'Select speech', exact: true });
+    await heading.press('ArrowRight'); await expect(heading).toBeFocused();
+    await expect(page.locator('[data-node="speech"]')).toHaveCSS('left', '280px');
+    await page.locator('#graph-edit-scale').press('Enter');
+    await expect(heading).toBeFocused(); await expectInsideCanvas(heading);
+    await heading.press('Enter');
+    await expect(page.locator('.graph-inspector')).toBeVisible();
+    await expectInsideCanvas(heading);
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await page.locator('#graph-save').click();
+    await expect(page.locator('#graph-state')).toContainText('Saved graph');
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+    expect(saved.edges).toEqual([...original.edges.slice(1), original.edges[0]]);
+    expect(saved.nodes).toEqual(original.nodes.map(node => node.id === 'speech' ? { ...node, position: { ...node.position, x: 280 } } : node));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
+for (const zoom of ['0.25', 'fit', '1.5']) {
+  test(`pointer connections, disconnect and scaled movement work at ${zoom}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await loadZoomGraph(page);
+    if (zoom === 'fit') await page.locator('#graph-fit').click(); else await page.locator('#graph-zoom').selectOption(zoom);
+    await page.getByRole('button', { name: 'speech output final', exact: true }).click();
+    await page.getByRole('button', { name: 'transcript-accumulator input preview', exact: true }).click();
+    const wire = page.getByRole('button', { name: 'Select connection speech.final to transcript-accumulator.preview', exact: true });
+    await expect(wire).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Select connection speech.provisional to transcript-accumulator.preview', exact: true })).toHaveCount(0);
+    const point = await exposedWirePoint(wire); await page.mouse.click(point.x, point.y);
+    await expect(page.locator('#graph-disconnect')).toBeVisible();
+    await expectInsideCanvas(page.locator('#graph-disconnect'));
+    await page.locator('#graph-disconnect').click(); await expect(wire).toHaveCount(0);
+    const heading = page.getByRole('button', { name: 'Select speech', exact: true });
+    await heading.scrollIntoViewIfNeeded(); const box = await heading.boundingBox();
+    const scale = Number(await page.locator('#graph-zoom').inputValue());
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 80 * scale, box.y + box.height / 2 + 40 * scale, { steps: 5 }); await page.mouse.up();
+    const position = await page.locator('[data-node="speech"]').evaluate(card => ({ x: parseFloat(card.style.left), y: parseFloat(card.style.top) }));
+    // Native pointer coordinates round to screen pixels, amplified at tiny Fit.
+    expect(Math.abs(position.x - 350) * scale).toBeLessThanOrEqual(1);
+    expect(Math.abs(position.y - 70) * scale).toBeLessThanOrEqual(1);
+    await expect(page.locator('#graph-errors')).toBeEmpty();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
+test('touch returns from an overview to connect typed ports, move a node and disconnect', async ({ browser }) => {
+  const context = await browser.newContext({ hasTouch: true, viewport: { width: 390, height: 900 } });
+  const page = await context.newPage();
+  await page.route('**/*', serveExtension);
+  await page.goto('/extension/graph-editor.html');
+  await loadZoomGraph(page);
+  const wire = page.getByRole('button', { name: 'Select connection speech.provisional to transcript-accumulator.preview', exact: true });
+  for (const zoom of ['0.25', 'fit']) {
+    if (zoom === 'fit') await page.locator('#graph-fit').tap(); else await page.locator('#graph-zoom').selectOption(zoom);
+    // Overview targets may be just 4px tall. The full-size action is the touch
+    // route back to editing; edge semantics remain covered at low zoom above.
+    await page.getByRole('button', { name: 'Edit at 100%', exact: true }).tap();
+    await page.getByRole('button', { name: 'audio output audio', exact: true }).tap();
+    await expect(page.getByRole('button', { name: 'transcript-accumulator input preview', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'audio output audio', exact: true }).tap();
+    const point = await exposedWirePoint(wire);
+    await page.touchscreen.tap(point.x, point.y);
+    const disconnect = page.locator('#graph-disconnect');
+    await expect(disconnect).toBeVisible(); await expectInsideCanvas(disconnect);
+    expect((await disconnect.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await disconnect.tap(); await expect(wire).toHaveCount(0);
+    await page.getByRole('button', { name: 'speech output provisional', exact: true }).tap();
+    await page.getByRole('button', { name: 'transcript-accumulator input preview', exact: true }).tap();
+    await expect(wire).toHaveCount(1);
+    await page.locator('#graph-zoom').selectOption('0.25');
+    await page.getByRole('button', { name: 'Edit at 100%', exact: true }).tap();
+    const input = page.getByRole('button', { name: 'transcript-accumulator input preview', exact: true });
+    await expect(input).toBeFocused(); await expectInsideCanvas(input);
+  }
+  const heading = page.getByRole('button', { name: 'Select speech', exact: true });
+  await heading.scrollIntoViewIfNeeded();
+  const box = await heading.boundingBox();
+  await page.mouse.move(box.x + 20, box.y + 20); await page.mouse.down();
+  await page.mouse.move(box.x + 40, box.y + 40, { steps: 5 }); await page.mouse.up();
+  await expect(page.locator('[data-node="speech"]')).toHaveCSS('left', '290px');
+  await page.locator('#graph-save').tap(); await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await context.close();
 });
 
 test('canvas-first editor: search, categories, keyboard add/settings/help, fit and safe draft commands', async ({ page }) => {

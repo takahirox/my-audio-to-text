@@ -1,5 +1,12 @@
 import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.js';
 import { clickGraphAction } from './ui-controls.js';
+import { checkZoomRecovery } from '../fixtures/graph-zoom.js';
+
+test('MV3 Fit and low zoom retain a reachable editing port in a narrow window', async ({ graphExtension: f }, info) => {
+  const live = await openGraph(f);
+  await live.editor.setViewportSize({ width: 390, height: 900 });
+  await checkZoomRecovery(live.editor, 'large', info);
+});
 
 test('MV3 palette search/categories, contextual settings, keyboard help and draft discard work in a narrow window', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;

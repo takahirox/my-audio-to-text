@@ -84,6 +84,9 @@ export class GraphEditor {
     this.palette.append(paletteHeading, this.search, this.category, this.types, this.paletteStatus, this.addButton); this.filterPalette();
     this.scroll = el('div', undefined, 'graph-scroll'); this.scroll.tabIndex = 0; this.scroll.setAttribute('aria-label', 'Scrollable graph canvas');
     this.extent = el('div', undefined, 'graph-extent'); this.canvas = el('div', undefined, 'graph-canvas'); this.canvas.id = 'graph-canvas';
+    this.canvas.addEventListener('focusin', event => {
+      if (event.target.closest('.graph-node')) this.editingTarget = event.target.getAttribute('aria-label');
+    });
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); this.svg.classList.add('graph-wires'); this.svg.setAttribute('aria-label', 'Graph connections');
     this.disconnectButton = button('Disconnect', 'graph-disconnect', () => {
       if (this.selectedEdge) this.disconnect(this.selectedEdge);
@@ -107,8 +110,9 @@ export class GraphEditor {
     const viewportActions = el('div', undefined, 'graph-viewport-actions');
     const zoomLabel = el('label', 'Canvas zoom '); this.zoomControl = el('select'); this.zoomControl.id = 'graph-zoom';
     for (const value of [0.25, 0.5, 0.75, 1, 1.25, 1.5]) { const option = el('option', `${value * 100}%`); option.value = value; this.zoomControl.append(option); }
-    this.zoomControl.value = '1'; this.zoomControl.onchange = () => { this.zoom = Number(this.zoomControl.value); this.draw(); };
-    zoomLabel.append(this.zoomControl); viewportActions.append(zoomLabel, button('Fit graph', 'graph-fit', () => this.fit()));
+    this.zoomControl.value = '1'; this.zoomControl.onchange = () => this.setZoom(Number(this.zoomControl.value));
+    this.editScaleButton = button('Edit at 100%', 'graph-edit-scale', () => this.setZoom(1, true));
+    zoomLabel.append(this.zoomControl); viewportActions.append(zoomLabel, button('Fit graph', 'graph-fit', () => this.fit()), this.editScaleButton);
     viewport.append(viewportActions, this.scroll); this.workspace.append(viewport, this.inspector, this.palette);
     root.replaceChildren(toolbar, this.assetNotice, this.errors, this.workspace, this.help);
     root.addEventListener('keydown', event => {
@@ -163,6 +167,22 @@ export class GraphEditor {
     this.zoomControl.querySelector('[data-fit]')?.remove();
     const option = el('option', `${Math.round(this.zoom * 100)}% (fit)`); option.value = this.zoom; option.dataset.fit = ''; this.zoomControl.append(option); this.zoomControl.value = String(this.zoom);
     this.draw(); this.scroll.scrollTo(0, 0);
+  }
+  setZoom(zoom, focus = false) {
+    const previous = this.zoom;
+    const center = { x: (this.scroll.scrollLeft + this.scroll.clientWidth / 2) / previous, y: (this.scroll.scrollTop + this.scroll.clientHeight / 2) / previous };
+    this.zoom = zoom; this.zoomControl.value = String(zoom); this.draw();
+    this.scroll.scrollTo(center.x * zoom - this.scroll.clientWidth / 2, center.y * zoom - this.scroll.clientHeight / 2);
+    // Returning from an overview should reveal the control the user was editing.
+    const target = this.svg.querySelector('.selected-wire')
+      || [...this.canvas.querySelectorAll('.graph-node [aria-label]')].find(control => control.getAttribute('aria-label') === this.editingTarget)
+      || this.canvas.querySelector('.selected-node .graph-heading');
+    if (target && zoom > previous) target.scrollIntoView({ block: 'center', inline: 'center' });
+    if (focus) {
+      (target || this.scroll).focus({ preventScroll: true });
+      (target || this.scroll).scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+    this.positionDisconnect();
   }
   addNode(type) {
     let id = type.toLowerCase(), suffix = 1;
@@ -286,6 +306,7 @@ export class GraphEditor {
   }
   draw() {
     if (!this.draft.edges.includes(this.selectedEdge)) this.selectedEdge = null;
+    this.editScaleButton.hidden = this.zoom >= 1;
     this.canvas.replaceChildren(this.svg); this.svg.replaceChildren();
     this.errors.textContent = this.error || this.diagnostics(); this.error = '';
     this.updateSummary(); this.drawInspector();
