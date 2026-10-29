@@ -28,7 +28,7 @@ several such paths concurrently. The
 same runtime and speech node with its own tab source and UI. OPUS-MT and
 TranslateGemma provide separate local Japanese → English text nodes and test
 pages. The extension implements ASR-to-translation graph integration with generic
-Live TEXT sinks and optional bounded formatting. The extension also implements
+DOM-only Live sinks and optional bounded text formatting. The extension also implements
 two [bounded incremental meeting-summary draft processors](meeting-summary-nodes.md)
 with recorded accuracy limitations. Topic processing, persistent history and
 personalized ASR remain future capabilities.
@@ -148,6 +148,9 @@ orchestration only when real implementations demonstrate a need.
 
 ## Graph-driven Live text (#99)
 
+Apply the [design principles](../README.md#design-principles): formatting,
+history, composition and rendering have explicit contracts and graph connections.
+
 The extension separates producer, formatting and display responsibilities. Any
 TEXT producer can connect to `TextToDOM.text → dom → LiveTextDisplay.dom`; a bounded
 `TextFormatter` is optional. Live renders sink labels/output by active graph Node
@@ -157,4 +160,24 @@ See [version 11 migration and exact display/formatting semantics](extension-grap
 Independent streams update latest formatter values; only directly grouped
 `emitOutputs`/`receiveInputs` updates preserve one producer's association.
 
-Live displays accept only `dom: DOM` in Graph v11. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final/preview text upstream with TextAccumulator. For paired translation, wire one committed-only translator’s grouped source/text/error to PairedTextToDOM, then dom to the display for the latest pair only. Explicitly connect PairedTextToDOM.dom → DOMAccumulator.append → dom → LiveTextDisplay.dom for comparison history; existing v11 direct connections are not rewritten. Saved TEXT display graphs require review and Save of a conversion draft; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Live displays accept only `dom: DOM` in Graph v11. Route complete TEXT snapshots
+through `TextToDOM.text → dom → LiveTextDisplay.dom`. For text history, explicitly
+use TextAccumulator's append/preview inputs upstream of TextToDOM. PairedTextToDOM
+accepts a completed grouped source/text/error result from any compatible producer;
+its consumer-owned correlation validation does not depend on producer identity.
+
+These implemented compositions differ only through explicit wiring (node names
+abbreviate their compatible ports):
+
+```text
+Grouped TEXT → PairedTextToDOM → LiveTextDisplay                   # latest pair only
+Grouped TEXT → PairedTextToDOM → DOMAccumulator → LiveTextDisplay  # explicit history
+DOM history + latest provisional DOM → DOMCombiner → LiveTextDisplay
+```
+
+DOMCombiner uses `first` and `second` for the latest snapshots in that order;
+it adds no history or preview-specific policy. LiveTextDisplay replaces its
+supplied snapshot in every case; scroll-follow remains on the rendering surface.
+Existing v11 direct connections are not rewritten or given an accumulator.
+Saved TEXT display graphs require review and Save of a conversion draft; exact
+originals remain recoverable. See [DOM contracts, exact wiring and recovery](extension-graph.md#dom-formatters-and-display-ownership).

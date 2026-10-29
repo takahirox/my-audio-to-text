@@ -159,13 +159,18 @@ A graphical node editor, plugin marketplace and general workflow framework are n
 ## Design principles
 
 - Prefer execution and storage on the user's device where practical, without requiring a central processing server.
-- Choose node boundaries around independently executable, configurable and replaceable processing units. Provisional/realtime and final output do not inherently require separate nodes.
-- Compose through small typed input/output contracts; a node may expose multiple ports.
-- Allow streaming updates, committed events and accumulated/long-form processing to coexist. Each processor decides how to consume its inputs.
+- Give each node one coherent responsibility: format current inputs, intentionally accumulate history, combine latest inputs, or render supplied output. Choose independently executable, configurable and replaceable boundaries; multiple ports, legitimate state and internal implementation details do not require separate nodes.
+- Make behavior explicit in ports, node contracts and graph wiring. A direct formatter → display connection replaces the current snapshot; history requires an explicit accumulator and combining streams requires an explicit composition step. Do not silently insert behavior for a convenient sample workflow.
+- Compose through small typed contracts independently of upstream/downstream node type, model identity, display destination or incidental edge order. Keep intrinsic validation, such as grouped-input correlation, local to the consumer; see [port contracts](docs/port-contracts.md).
+- Separate processing, state, formatting and presentation. Scroll-follow belongs to the rendering surface; input data and derived markup belong upstream. Keep implicit history and translation/preview-specific state out of unrelated nodes, and avoid translation-specific modes or presentation-specific output-node types in generic sinks.
+- Allow streaming updates, committed events and accumulated/long-form processing to coexist. Each processor's public contract defines how it consumes its inputs; provisional/realtime and final outputs do not inherently require separate nodes.
 - Keep models, implementations and runtimes replaceable across Web, browser extensions, desktop and mobile. Share useful contracts and behavior without requiring identical runtimes.
 - Preserve source data and original transcripts separately from derived or corrected output; derived output should not silently overwrite its source. Persistent source/history storage remains future work.
 - Measure accuracy, latency, memory, CPU/GPU usage, battery impact, long-session behavior and personalization improvement where relevant.
-- Extract small abstractions from working pipelines before adding generic infrastructure.
+- Prefer the smallest transparent composition that meets the Issue. Reuse existing nodes/contracts; add a minimal independently useful unit only when needed. Avoid speculative configuration, frameworks and future-proofing.
+
+See [Live text composition examples](docs/processing-pipeline.md#graph-driven-live-text-99)
+and the [architecture review prompts](docs/review-guidelines.md#node-architecture).
 
 ## Follow-up work
 

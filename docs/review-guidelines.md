@@ -33,6 +33,28 @@ Avoid over-engineering. Check for:
 
 Each change should have a clear reason tied to the Issue. Additional complexity is not automatically beneficial.
 
+## Node architecture
+
+Use the existing [design principles](../README.md#design-principles) and
+[composition examples](processing-pipeline.md#graph-driven-live-text-99) as review
+prompts for reviewers and AI agents, within the existing review:
+
+1. Does each modified node do only what its public contract promises?
+2. Did any node silently acquire history, grouping, rendering or producer-specific
+   behavior? Catch implicit history in a formatter, display-specific logic in a
+   generic sink, and translation/preview-specific state in unrelated nodes.
+3. Could explicit composition of existing processors meet the need instead of
+   expanding an output node or introducing an unnecessary framework?
+4. Where relevant, are direct/latest-result and explicit-accumulation behaviors
+   independently tested?
+5. Are new abstractions, ports, modes or configuration directly required by the
+   source Issue?
+
+One responsibility permits multiple ports and intentional stateful processors;
+it does not require a node for every implementation detail. These prompts add
+no mandatory workflow stage. Detailed producer-independence and transport checks
+remain in [port contracts](port-contracts.md) and the ordinary quality checks below.
+
 ## Ordinary quality
 
 Also review:
