@@ -1,3 +1,4 @@
+import { checkRecovery, checkInputReconnect, checkStableInspector, checkInputDetach } from '../fixtures/graph-inspector.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -35,7 +36,7 @@ for (const width of [390, 1440]) {
     await expect(first).toHaveAccessibleName('Select speech');
     await expect(second).toHaveAccessibleName('Select speech-second');
     await first.click();
-    const inspector = page.getByRole('complementary', { name: 'Node settings inspector' });
+    const inspector = page.getByRole('complementary', { name: 'Graph details inspector' });
     await expect(inspector.getByText('Node: speech', { exact: true })).toBeVisible();
     await second.press('Enter');
     await expect(second).toBeFocused();
@@ -82,7 +83,7 @@ test('returning from Fit retains the selected wire and its keyboard Disconnect a
   await expect(wire).toBeFocused(); await expect(wire).toHaveAttribute('aria-pressed', 'true');
   await wire.press('Tab');
   await expect(page.locator('#graph-disconnect')).toBeFocused();
-  await expectInsideCanvas(page.locator('#graph-disconnect'));
+  await expect(page.locator('.graph-inspector #graph-disconnect')).toBeInViewport({ ratio: 1 });
   await page.locator('#graph-disconnect').press('Enter'); await expect(wire).toHaveCount(0);
 });
 
@@ -96,7 +97,7 @@ for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
     const wire = page.getByRole('button', { name: 'Select connection audio.audio to speech.audio', exact: true });
     await wire.press('Enter'); await wire.press('Tab');
     const disconnect = page.locator('#graph-disconnect');
-    await expect(disconnect).toBeFocused(); await expectInsideCanvas(disconnect);
+    await expect(disconnect).toBeFocused(); await expect(disconnect).toBeInViewport({ ratio: 1 });
     expect((await disconnect.boundingBox()).height).toBeGreaterThanOrEqual(44);
     await disconnect.press('Shift+Tab'); await expect(wire).toBeFocused();
     await wire.press('Tab'); await disconnect.press('Space'); await expect(wire).toHaveCount(0);
@@ -115,7 +116,7 @@ for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
     await heading.press('Enter');
     await expect(page.locator('.graph-inspector')).toBeVisible();
     await expectInsideCanvas(heading);
-    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Clear selection', exact: true }).click();
     await page.locator('#graph-save').click();
     await expect(page.locator('#graph-state')).toContainText('Saved graph');
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
@@ -137,7 +138,8 @@ for (const zoom of ['0.25', 'fit', '1.5']) {
     await expect(page.getByRole('button', { name: 'Select connection speech.provisional to transcript-accumulator.preview', exact: true })).toHaveCount(0);
     const point = await exposedWirePoint(wire); await page.mouse.click(point.x, point.y);
     await expect(page.locator('#graph-disconnect')).toBeVisible();
-    await expectInsideCanvas(page.locator('#graph-disconnect'));
+    await page.locator('#graph-disconnect').scrollIntoViewIfNeeded();
+    await expect(page.locator('.graph-inspector #graph-disconnect')).toBeInViewport({ ratio: 1 });
     await page.locator('#graph-disconnect').click(); await expect(wire).toHaveCount(0);
     const heading = page.getByRole('button', { name: 'Select speech', exact: true });
     await heading.scrollIntoViewIfNeeded(); const box = await heading.boundingBox();
@@ -171,7 +173,7 @@ test('touch returns from an overview to connect typed ports, move a node and dis
     const point = await exposedWirePoint(wire);
     await page.touchscreen.tap(point.x, point.y);
     const disconnect = page.locator('#graph-disconnect');
-    await expect(disconnect).toBeVisible(); await expectInsideCanvas(disconnect);
+    await expect(disconnect).toBeVisible(); await disconnect.scrollIntoViewIfNeeded(); await expect(disconnect).toBeInViewport({ ratio: 1 });
     expect((await disconnect.boundingBox()).height).toBeGreaterThanOrEqual(44);
     await disconnect.tap(); await expect(wire).toHaveCount(0);
     await page.getByRole('button', { name: 'speech output provisional', exact: true }).tap();
@@ -194,13 +196,13 @@ test('touch returns from an overview to connect typed ports, move a node and dis
 });
 
 test('canvas-first editor: search, categories, keyboard add/settings/help, fit and safe draft commands', async ({ page }) => {
-  await expect(page.locator('.graph-inspector')).toBeHidden();
+  await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('#translation-enabled')).toBeHidden();
   await expect(page.locator('footer')).toHaveCount(0);
   await expect(page.locator('#graph-state')).toHaveText('Saved graph · No active recording');
   const canvas = await page.locator('.graph-scroll').boundingBox();
-  expect(canvas.width).toBeGreaterThan(1000);
+  expect(canvas.width).toBeGreaterThan(600);
   await page.locator('#graph-palette-toggle').press('Enter');
   await expect(page.getByLabel('Search nodes', { exact: true })).toBeFocused();
   await page.getByLabel('Node category', { exact: true }).selectOption('Processors');
@@ -222,8 +224,8 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
   await expect(page.locator('#graph-palette-toggle')).toBeFocused();
   await page.locator('#graph-fit').click();
   expect(await page.locator('#graph-zoom').inputValue().then(Number)).toBeLessThanOrEqual(1.5);
-  await page.getByRole('button', { name: 'Close settings', exact: true }).click();
-  await expect(page.locator('.graph-inspector')).toBeHidden();
+  await page.getByRole('button', { name: 'Clear selection', exact: true }).click();
+  await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await expect(page.locator('.graph-scroll')).toBeFocused();
   await page.locator('#graph-help').click(); await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog')).toContainText('Reconnecting replaces');
@@ -262,7 +264,7 @@ for (const width of [390, 700]) {
   });
 }
 
-for (const action of ['Close settings', 'Remove transcript']) {
+for (const action of ['Clear selection', 'Remove transcript']) {
   test(`inspector text edits commit before a single ${action} click`, async ({ page }) => {
     const before = await page.evaluate(async () => {
       const { readGraph } = await import('/extension/graph.js');
@@ -273,12 +275,12 @@ for (const action of ['Close settings', 'Remove transcript']) {
     // Keep the field focused: the native click must commit its change on blur
     // without replacing the command between pointerdown and click.
     await page.getByRole('button', { name: action, exact: true }).click();
-    await expect(page.locator('.graph-inspector')).toBeHidden();
+    await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
     await expect(page.locator('.graph-scroll')).toBeFocused();
     await expect(page.locator('#graph-state')).toContainText('Unsaved draft');
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before.stored);
     const expected = structuredClone(before.graph);
-    if (action === 'Close settings') {
+    if (action === 'Clear selection') {
       expected.nodes.find(node => node.id === 'transcript').settings.label = 'Edited output';
       await page.getByRole('button', { name: 'Select transcript', exact: true }).click();
       await expect(page.getByLabel('transcript label', { exact: true })).toHaveValue('Edited output');
@@ -326,4 +328,20 @@ test('live regions render safe snapshots, retain prefix text and copy verbatim a
     await page.setViewportSize({ width, height: 844 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.evaluate(() => window.clearRegions()); await expect(page.locator('.live-text-region')).toHaveCount(0);
+});
+
+for (const width of [390, 1440]) {
+  test(`selection keeps inspector and canvas geometry stable at ${width}px`, async ({ page }) => {
+    await checkStableInspector(page, width);
+  });
+  test(`connected input drag detaches only its wire at ${width}px`, async ({ page }) => {
+    await checkInputDetach(page, width);
+  });
+}
+
+test('input-end dragging reconnects transactionally and cancellation preserves the wire', async ({ page }) => {
+  await checkInputReconnect(page);
+});
+for (const kind of ['current', 'paired', 'invalid']) test(`Graph actions recovery preserves exact ${kind} originals and numbered backups`, async ({ page }) => {
+  await checkRecovery(page, kind);
 });

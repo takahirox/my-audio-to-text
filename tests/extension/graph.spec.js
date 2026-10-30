@@ -169,7 +169,7 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await openPalette(editor); await expect(editor.getByRole('complementary', { name: 'Node palette' })).toBeVisible();
   await editor.locator('#graph-palette-toggle').click();
   await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
-  await expect(editor.getByRole('complementary', { name: 'Node settings inspector' })).toContainText('Live text display');
+  await expect(editor.getByRole('complementary', { name: 'Graph details inspector' })).toContainText('Live text display');
   await expect(editor.getByLabel('transcript label', { exact: true })).toBeVisible();
   await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toContainText('text');
   await disconnectWire(editor, 'audio.audio to speech.audio');

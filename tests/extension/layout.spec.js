@@ -11,7 +11,7 @@ test('MV3 Fit and low zoom retain a reachable editing port in a narrow window', 
 test('MV3 palette search/categories, contextual settings, keyboard help and draft discard work in a narrow window', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   await editor.setViewportSize({ width: 390, height: 844 });
-  await expect(editor.locator('.graph-inspector')).toBeHidden();
+  await expect(editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await expect(editor.locator('#graph-translation')).toHaveCount(0);
   await editor.getByRole('button', { name: 'Add Node', exact: true }).press('Enter');
   await expect(editor.getByLabel('Search nodes', { exact: true })).toBeFocused();
@@ -28,8 +28,8 @@ test('MV3 palette search/categories, contextual settings, keyboard help and draf
   await editor.locator('#graph-fit').click();
   const fit = await editor.locator('#graph-zoom').inputValue().then(Number); expect(fit).toBeLessThan(.5);
   await expect(editor.locator('[data-node="number"]')).toBeInViewport();
-  await editor.getByRole('button', { name: 'Close settings', exact: true }).click();
-  await expect(editor.locator('.graph-inspector')).toBeHidden();
+  await editor.getByRole('button', { name: 'Clear selection', exact: true }).click();
+  await expect(editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await editor.locator('#graph-help').click(); await expect(editor.getByRole('dialog')).toBeVisible();
   await editor.keyboard.press('Escape'); await expect(editor.locator('#graph-help')).toBeFocused();
   await clickGraphAction(editor, 'graph-reset', { discard: false });

@@ -56,8 +56,8 @@ export class GraphEditor {
     this.help.append(el('h2', 'Graph Editor help'),
       el('p', 'Save applies to the next session. Start runs complete paths to outputs; incomplete Nodes remain in the draft. Graph actions provides validation, Load saved and Reset.'),
       el('p', 'Add nodes using search and categories. Select a node heading for settings and optional node help. Drag a heading or use arrow keys to move it.'),
-      el('p', 'Connect by clicking an output then a matching input, or drag between ports. Reconnecting replaces only that input’s wire. Select a wire, then use its nearby Disconnect button. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape or blank canvas clears selection.'),
-      el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire to reveal Disconnect.'),
+      el('p', 'Connect by clicking an output then a matching input, or drag from an output to an input. Reconnecting replaces only that input’s wire. Drag a connected input into blank canvas to detach its wire, or to a matching input to move it. Select a wire for connection details and Disconnect in the inspector. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape, Clear selection or blank canvas clears selection.'),
+      el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
       el('p', 'LiveTextDisplay mounts DOM and follows the bottom while you are reading there. TextToDOM formats plain text; PairedTextToDOM formats two texts from one completed group: input1 on the left, input2 on the right. DOMAccumulator keeps DOM history; DOMCombiner combines the latest first and second snapshots, such as history above an ASR preview. TextAccumulator keeps text history and preview. Configure languages in Node settings. Save prepares required model weights; Models provides asset recovery.'),
       el('p', 'TextWindow batches committed ASR fragments before any translator. Connect text → translator.text → TextAccumulator.append. For opt-in retranslation, also connect provisional → translator.provisional; connect TextWindow.text → TranslationCommit.boundary and translator.source/text/error directly to TranslationCommit.source/text/error. TranslationCommit.provisional → TextAccumulator.preview; final → TextAccumulator.append. Only bounded closed windows commit; this does not retain conversation-wide context.'),
       el('p', 'TranslateGemma 4B English → Japanese: connect English ASR.final or Text.value → text, then text → TextAccumulator.append, or source/text/error → TextFormatter inputs. Both directions share a 3.112 GB download; allow 7 GB free storage and several GB free RAM/GPU memory. Requires Worker WebGPU; no fallback. Saving a graph containing either direction prepares these weights, including parked Nodes. Google Gemma Terms of Use and Prohibited Use Policy apply to use of this public ONNX conversion.'),
@@ -101,11 +101,9 @@ export class GraphEditor {
     this.extent.append(this.canvas); this.scroll.append(this.extent);
     this.scroll.onclick = event => {
       if (![this.scroll, this.extent, this.canvas, this.svg].includes(event.target)) return;
-      this.selected = null; this.selectedEdge = null; this.selectedNode = null; this.draw(); this.scroll.focus({ preventScroll: true });
+      this.selectDetails(); this.scroll.focus({ preventScroll: true });
     };
-    this.scroll.addEventListener('scroll', () => this.positionDisconnect());
-    new ResizeObserver(() => this.positionDisconnect()).observe(this.scroll);
-    this.inspector = el('aside', undefined, 'graph-inspector'); this.inspector.setAttribute('aria-label', 'Node settings inspector');
+    this.inspector = el('aside', undefined, 'graph-inspector'); this.inspector.setAttribute('aria-label', 'Graph details inspector');
     const viewport = el('div', undefined, 'graph-viewport');
     const viewportActions = el('div', undefined, 'graph-viewport-actions');
     const zoomLabel = el('label', 'Canvas zoom '); this.zoomControl = el('select'); this.zoomControl.id = 'graph-zoom';
@@ -119,10 +117,11 @@ export class GraphEditor {
       const wire = event.target.closest('.graph-wire');
       if (event.key === 'Escape') {
         if (event.target.closest('dialog')) return;
+        this.cancelDetach?.();
         if (!this.palette.hidden) { event.preventDefault(); this.togglePalette(false); return; }
         if (this.actions.open) { event.preventDefault(); this.actions.open = false; this.actions.querySelector('summary').focus(); return; }
         event.preventDefault(); const restoreFocus = wire || event.target === this.disconnectButton || this.inspector.contains(event.target);
-        this.selected = null; this.selectedEdge = null; this.selectedNode = null; this.draw();
+        this.selectDetails();
         if (restoreFocus) this.scroll.focus({ preventScroll: true });
       }
       if (['Delete', 'Backspace'].includes(event.key) && wire) {
@@ -182,13 +181,12 @@ export class GraphEditor {
       (target || this.scroll).focus({ preventScroll: true });
       (target || this.scroll).scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
-    this.positionDisconnect();
   }
   addNode(type) {
     let id = type.toLowerCase(), suffix = 1;
     while (this.draft.nodes.some(node => node.id === id)) id = `${type.toLowerCase()}-${suffix++}`;
     this.draft.nodes.push(graphNode(type, id, 30 + (this.draft.nodes.length % 4) * 285, 520 + Math.floor(this.draft.nodes.length / 4) * 60));
-    this.selectedNode = id; this.draw();
+    this.selectedEdge = null; this.selectedNode = id; this.draw();
     const card = this.canvas.querySelector(`[data-node="${id}"]`); card?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     const setting = this.inspector.querySelector('input, select, textarea') || this.inspector.querySelector('button');
     setting?.focus({ preventScroll: true });
@@ -212,12 +210,12 @@ export class GraphEditor {
     if (this.externalChange) this.summary.textContent += ' · Saved graph changed elsewhere; draft kept. Load saved before saving.';
     this.summary.classList.toggle('graph-conflict', !!this.externalChange);
   }
-  connect(id, port, contract) {
+  connect(id, port, contract, movingConnection = null) {
     if (this.selected && this.selected.contract === contract && this.selected.id !== id) {
       const proposed = edge(this.selected.id, this.selected.port, id, port);
       const identical = this.draft.edges.some(e => JSON.stringify(e) === JSON.stringify(proposed));
       if (!identical) {
-        const candidate = { ...this.draft, edges: this.draft.edges.filter(e => e.to[0] !== id || e.to[1] !== port).concat(proposed) };
+        const candidate = { ...this.draft, edges: this.draft.edges.filter(e => e !== movingConnection && (e.to[0] !== id || e.to[1] !== port)).concat(proposed) };
         // Drafts can be incomplete. Reject newly introduced structural errors.
         const previous = new Set(validateGraph(this.draft));
         const errors = validateGraph(candidate).filter(message => !previous.has(message));
@@ -226,6 +224,7 @@ export class GraphEditor {
       }
       this.selected = null;
     }
+    if (movingConnection) this.selected = null;
     this.draw();
     this.canvas.querySelector(`[data-node="${id}"] [data-side="input"][data-port="${port}"]`)?.focus();
   }
@@ -249,13 +248,39 @@ export class GraphEditor {
     this.errors.textContent = this.diagnostics(); this.updateSummary();
     this.onDraft(structuredClone(this.draft));
   }
+  selectDetails(node = null, connection = null) {
+    this.selected = null; this.selectedNode = node; this.selectedEdge = connection;
+    for (const card of this.canvas.querySelectorAll('.graph-node')) {
+      const selected = card.dataset.node === node;
+      card.classList.toggle('selected-node', selected);
+      card.querySelector('.graph-heading').setAttribute('aria-pressed', String(selected));
+    }
+    for (const port of this.canvas.querySelectorAll('.graph-ports button')) {
+      port.classList.remove('selected-port'); port.disabled = false;
+      if (port.dataset.side === 'output') port.setAttribute('aria-pressed', 'false');
+    }
+    for (const wire of this.svg.querySelectorAll('.graph-wire')) {
+      const selected = this.draft.edges[Number(wire.dataset.edge)] === connection;
+      wire.classList.toggle('selected-wire', selected); wire.setAttribute('aria-pressed', String(selected));
+    }
+    this.drawInspector();
+  }
   drawInspector() {
     const focused = this.inspector.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
-    this.inspector.replaceChildren(el('h2', 'Settings'));
     const node = this.draft.nodes.find(node => node.id === this.selectedNode);
-    this.inspector.hidden = !node; this.workspace.classList.toggle('has-selection', !!node);
-    if (!node) return;
-    const close = button('Close settings', null, () => { this.selectedNode = null; this.draw(); this.scroll.focus({ preventScroll: true }); }); this.inspector.append(close);
+    this.inspector.replaceChildren(el('h2', node ? 'Settings' : 'Details'));
+    this.disconnectButton.hidden = !this.selectedEdge;
+    if (!node && !this.selectedEdge) { this.inspector.append(el('p', 'Select a node or connection.', 'muted')); return; }
+    const clear = button('Clear selection', null, () => { this.selectDetails(); this.scroll.focus({ preventScroll: true }); });
+    clear.setAttribute('aria-label', 'Clear selection');
+    if (this.selectedEdge) {
+      const { from, to } = this.selectedEdge;
+      this.disconnectButton.setAttribute('aria-label', `Disconnect ${from.join('.')} to ${to.join('.')}`);
+      this.inspector.append(el('h3', 'Connection'), el('p', `${from.join('.')} → ${to.join('.')}`), this.disconnectButton, clear);
+      if (focused === this.disconnectButton.getAttribute('aria-label')) this.disconnectButton.focus({ preventScroll: true });
+      return;
+    }
+    this.inspector.append(clear);
     const definition = nodeDefinition(node); this.inspector.append(el('h3', definition.label), el('p', `Node: ${node.id}`));
     for (const [key, values] of Object.entries(definition.settings || {})) {
       const label = el('label', key + ' '), select = el('select'); select.setAttribute('aria-label', `${node.id} ${key}`);
@@ -320,15 +345,15 @@ export class GraphEditor {
       const heading = el('button', definition.label, 'graph-heading'); heading.type = 'button';
       heading.setAttribute('aria-label', `Select ${node.id}`); heading.setAttribute('aria-pressed', String(this.selectedNode === node.id));
       heading.title = 'Select to inspect settings. Drag to move; arrow keys move by 10 pixels.';
-      heading.onclick = () => { this.selectedEdge = null; this.drawWires(); this.selectedNode = node.id; this.drawInspector(); for (const c of this.canvas.querySelectorAll('.graph-node')) { const selected = c.dataset.node === node.id; c.classList.toggle('selected-node', selected); c.querySelector('.graph-heading').setAttribute('aria-pressed', String(selected)); } };
+      heading.onclick = () => this.selectDetails(node.id);
       heading.onkeydown = event => {
         const delta = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[event.key];
-        if (!delta) return; event.preventDefault(); this.selectedNode = node.id;
+        if (!delta) return; event.preventDefault(); this.selectedEdge = null; this.selectedNode = node.id;
         node.position.x = Math.max(0, node.position.x + delta[0]); node.position.y = Math.max(0, node.position.y + delta[1]); this.draw();
         this.canvas.querySelector(`[data-node="${node.id}"] .graph-heading`).focus();
       };
       heading.onpointerdown = event => {
-        if (event.button !== 0) return; heading.setPointerCapture(event.pointerId); this.selectedEdge = null; this.drawWires(); this.selectedNode = node.id; this.drawInspector();
+        if (event.button !== 0) return; heading.setPointerCapture(event.pointerId); this.selectDetails(node.id);
         const x = event.clientX, y = event.clientY, origin = { ...node.position }; let moved = false;
         heading.onpointermove = move => {
           if (Math.abs(move.clientX - x) + Math.abs(move.clientY - y) < 3) return;
@@ -345,7 +370,9 @@ export class GraphEditor {
         const column = el('div');
         for (const [port, contract] of Object.entries(declarations)) {
           const portLabel = port.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+          let suppressClick = false;
           const control = button(`${side === 'input' ? '←' : '→'} ${portLabel}`, null, () => {
+            if (suppressClick) return;
             this.selectedEdge = null;
             if (side === 'output') this.selected = this.selected?.id === node.id && this.selected.port === port ? null : { id: node.id, port, contract };
             else return this.connect(node.id, port, contract);
@@ -370,6 +397,46 @@ export class GraphEditor {
           } else {
             control.ondragover = event => { if (this.selected?.contract === contract && this.selected.id !== node.id) event.preventDefault(); };
             control.ondrop = event => { event.preventDefault(); this.connect(node.id, port, contract); };
+            const connection = this.draft.edges.find(e => e.to[0] === node.id && e.to[1] === port);
+            if (connection) {
+              control.classList.add('connected-input');
+              control.title += '. Drag to blank canvas to detach, or to a matching input to reconnect.';
+              control.onpointerdown = event => {
+                if (event.button !== 0 || this.selected) return;
+                const x = event.clientX, y = event.clientY; let moved = false;
+                control.setPointerCapture(event.pointerId);
+                control.onpointermove = move => {
+                  if (!moved && Math.hypot(move.clientX - x, move.clientY - y) < 6) return;
+                  if (!moved) this.selectDetails(null, connection);
+                  moved = true;
+                  this.detaching = { connection, x: move.clientX, y: move.clientY };
+                  this.canvas.classList.add('detaching'); this.drawWires();
+                };
+                const done = up => {
+                  control.onpointermove = control.onpointerup = control.onpointercancel = control.onlostpointercapture = null;
+                  this.cancelDetach = null;
+                  const target = document.elementFromPoint(up.clientX, up.clientY);
+                  if (control.hasPointerCapture(event.pointerId)) control.releasePointerCapture(event.pointerId);
+                  this.detaching = null; this.canvas.classList.remove('detaching');
+                  if (!moved || up.type !== 'pointerup') { this.drawWires(); return; }
+                  // Captured pointerup/click still targets the original input.
+                  suppressClick = true; setTimeout(() => { suppressClick = false; }, 0);
+                  if ([this.scroll, this.extent, this.canvas, this.svg].includes(target)) {
+                    this.disconnect(connection); this.scroll.focus({ preventScroll: true });
+                  } else {
+                    const input = target?.closest('[data-side="input"]');
+                    if (input && this.canvas.contains(input)) {
+                      const id = input.closest('[data-node]').dataset.node;
+                      const source = this.draft.nodes.find(n => n.id === connection.from[0]);
+                      this.selected = { id: source.id, port: connection.from[1], contract: nodeDefinition(source).outputs[connection.from[1]] };
+                      this.connect(id, input.dataset.port, nodeDefinition(this.draft.nodes.find(n => n.id === id)).inputs[input.dataset.port], connection);
+                    } else this.drawWires();
+                  }
+                };
+                this.cancelDetach = () => done({ type: 'pointercancel', clientX: x, clientY: y });
+                control.onpointerup = control.onpointercancel = control.onlostpointercapture = done;
+              };
+            }
           }
           control.classList.toggle('selected-port', side === 'output' && this.selected?.id === node.id && this.selected.port === port);
           column.append(control);
@@ -382,7 +449,6 @@ export class GraphEditor {
     const renderedHeight = Math.max(height, ...Array.from(this.canvas.querySelectorAll('.graph-node'), card => card.offsetTop + card.offsetHeight + 20));
     this.canvas.style.height = `${renderedHeight}px`;
     this.extent.style.height = `${renderedHeight * this.zoom}px`;
-    this.canvas.append(this.disconnectButton);
     this.drawWires(); this.onDraft(structuredClone(this.draft));
   }
   drawWires() {
@@ -392,7 +458,8 @@ export class GraphEditor {
       const port = (pair, side) => this.canvas.querySelector(`[data-node="${pair[0]}"] [data-side="${side}"][data-port="${pair[1]}"]`);
       const a = port(from, 'output')?.getBoundingClientRect(), b = port(to, 'input')?.getBoundingClientRect();
       if (!a || !b) continue;
-      const x1 = (a.right - origin.left) / this.zoom, y1 = (a.top + a.height / 2 - origin.top) / this.zoom, x2 = (b.left - origin.left) / this.zoom, y2 = (b.top + b.height / 2 - origin.top) / this.zoom;
+      const end = this.detaching?.connection === connection ? this.detaching : { x: b.left, y: b.top + b.height / 2 };
+      const x1 = (a.right - origin.left) / this.zoom, y1 = (a.top + a.height / 2 - origin.top) / this.zoom, x2 = (end.x - origin.left) / this.zoom, y2 = (end.y - origin.top) / this.zoom;
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', `M${x1},${y1} C${x1 + 60},${y1} ${x2 - 60},${y2} ${x2},${y2}`);
       path.classList.add('wire-line');
@@ -404,74 +471,19 @@ export class GraphEditor {
       wire.setAttribute('aria-pressed', String(this.selectedEdge === connection));
       wire.classList.toggle('selected-wire', this.selectedEdge === connection);
       const select = event => {
-        event.preventDefault(); event.stopPropagation(); this.selectedEdge = connection; this.selected = null; this.selectedNode = null;
-        const position = this.canvas.getBoundingClientRect();
-        this.selectedPoint = event.type === 'click' && event.detail ? { x: (event.clientX - position.left) / this.zoom, y: (event.clientY - position.top) / this.zoom } : null;
-        this.draw(); this.svg.querySelector(`[data-edge="${index}"]`).focus({ preventScroll: true });
+        event.preventDefault(); event.stopPropagation(); this.selectDetails(null, connection);
+        wire.focus({ preventScroll: true });
       };
       wire.onclick = select;
       wire.onpointerdown = event => event.stopPropagation();
       wire.onkeydown = event => {
         if (['Enter', ' '].includes(event.key)) select(event);
         if (event.key === 'Tab' && !event.shiftKey && this.selectedEdge === connection && !this.disconnectButton.hidden) {
-          event.preventDefault(); this.disconnectButton.focus({ preventScroll: true });
+          event.preventDefault(); this.disconnectButton.focus();
         }
       };
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${from.join('.')} → ${to.join('.')}. Select, then use Disconnect or Delete/Backspace.`;
       wire.append(title, path, hit); this.svg.append(wire);
     }
-    this.positionDisconnect();
-  }
-  positionDisconnect() {
-    const path = this.selectedEdge && this.svg.querySelector('.selected-wire .wire-line');
-    this.disconnectButton.hidden = !path;
-    if (!path) return;
-    this.disconnectButton.setAttribute('aria-label', `Disconnect ${this.selectedEdge.from.join('.')} to ${this.selectedEdge.to.join('.')}`);
-    // Cancel the canvas scale so the native button stays a 44px touch target.
-    this.disconnectButton.style.transform = `scale(${1 / this.zoom})`;
-    const origin = this.canvas.getBoundingClientRect(), viewport = this.scroll.getBoundingClientRect();
-    const left = Math.max(0, viewport.left + 8 - origin.left), top = Math.max(0, viewport.top + 8 - origin.top);
-    const right = Math.min(origin.width, viewport.right - origin.left - 8), bottom = Math.min(origin.height, viewport.bottom - origin.top - 8);
-    const width = this.disconnectButton.offsetWidth, height = this.disconnectButton.offsetHeight;
-    const sample = line => {
-      const length = line.getTotalLength();
-      return Array.from({ length: 21 }, (_, i) => {
-        const p = line.getPointAtLength(length * i / 20);
-        return { x: p.x * this.zoom, y: p.y * this.zoom };
-      });
-    };
-    const points = sample(path).filter(p => p.x >= left && p.x <= right && p.y >= top && p.y <= bottom);
-    // A short visible segment of a long wire may fall between samples. Keep
-    // the actual pointer/touch selection point available as an anchor too.
-    const anchor = this.selectedPoint && { x: this.selectedPoint.x * this.zoom, y: this.selectedPoint.y * this.zoom };
-    if (anchor && anchor.x >= left - 8 && anchor.x <= right + 8 && anchor.y >= top - 8 && anchor.y <= bottom + 8) points.push(anchor);
-    this.disconnectButton.hidden = !points.length;
-    if (!points.length) return;
-    const bounds = node => {
-      const rect = node.getBoundingClientRect();
-      return { left: rect.left - origin.left, top: rect.top - origin.top, right: rect.right - origin.left, bottom: rect.bottom - origin.top };
-    };
-    const nodes = Array.from(this.canvas.querySelectorAll('.graph-node'), bounds);
-    const ports = Array.from(this.canvas.querySelectorAll('.graph-ports button'), bounds);
-    const wires = Array.from(this.svg.querySelectorAll('.wire-line'), sample).flat();
-    let best;
-    // Prefer the middle of the visible segment, then nearby free space. Penalize
-    // covering cards/ports first, and wires second; clamp to the visible canvas.
-    for (const [index, p] of points.entries()) {
-      const candidates = [[p.x - width / 2, p.y - height - 12], [p.x - width / 2, p.y + 12], [p.x + 12, p.y - height / 2], [p.x - width - 12, p.y - height / 2]];
-      // Tight gaps between cards cannot fit a labeled touch target. Also try
-      // just outside their boundaries, instead of covering a neighboring port.
-      for (const n of [...nodes, ...ports]) candidates.push([n.left - width - 12, p.y - height / 2], [n.right + 12, p.y - height / 2], [p.x - width / 2, n.top - height - 12], [p.x - width / 2, n.bottom + 12]);
-      for (const [cx, cy] of candidates) {
-        const x = Math.max(left, Math.min(right - width, cx)), y = Math.max(top, Math.min(bottom - height, cy));
-        const overlaps = boxes => boxes.filter(n => x < n.right + 6 && x + width > n.left - 6 && y < n.bottom + 6 && y + height > n.top - 6).length;
-        const covered = wires.filter(w => w.x >= x - 6 && w.x <= x + width + 6 && w.y >= y - 6 && w.y <= y + height + 6).length;
-        const distance = Math.hypot(x + width / 2 - p.x, y + height / 2 - p.y);
-        const score = overlaps(ports) * 1000000 + overlaps(nodes) * 10000 + covered * 100 + distance / 10 + Math.abs(index - (points.length - 1) / 2);
-        if (!best || score < best.score) best = { x, y, score };
-      }
-    }
-    this.disconnectButton.style.left = `${best.x / this.zoom}px`;
-    this.disconnectButton.style.top = `${best.y / this.zoom}px`;
   }
 }
