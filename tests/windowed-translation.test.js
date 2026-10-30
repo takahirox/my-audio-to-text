@@ -74,12 +74,12 @@ function workers() {
   return { requests, owned, workerFactory, complete };
 }
 async function graph(mode = 'revisable', settings) {
-  const f = workers(), displays = [], description = windowGraph(mode);
+  const f = workers(), displays = [], previews = [], description = windowGraph(mode);
   if (settings) Object.assign(description.nodes.find(n => n.id === 'window').settings, settings);
   const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory,
-    onDisplay: (_, state) => displays.push(domText(state)) });
+    onDisplay: (id, state) => { if (id === 'display') displays.push(domText(state)); else previews.push(domText(state)); } });
   await built.pipeline.start(); await built.translations[0].ready;
-  return { ...f, ...built, displays, send: text => built.pipeline.entries.get('input').context.emit('value', text), display: () => displays.at(-1), preview: () => built.pipeline.entries.get('display-combined')?.node.snapshots.second?.textContent ?? '', accumulator: built.pipeline.entries.get('display-accumulator').node };
+  return { ...f, ...built, displays, previews, preview: () => previews.at(-1) ?? '', send: text => built.pipeline.entries.get('input').context.emit('value', text), display: () => displays.at(-1), accumulator: built.pipeline.entries.get('display-accumulator').node };
 }
 async function drain(f) {
   let done = false, failure;
@@ -129,12 +129,12 @@ for (const when of ['running', 'stopping']) test(`Cancel while ${when} invalidat
   assert.ok(f.owned.every(w => w.terminated)); assert.equal(f.pipeline.entries.get('window').node.timer, null);
 });
 
-test('Cancel clears a completed visible preview without committing it', async () => {
+test('bare dispose retains the last preview display without committing it', async () => {
   const f = await graph(); f.send('open'); await tick(); f.complete(0); await tick();
   assert.equal(f.preview(), '訳:open'); assert.equal(f.accumulator.committed, '');
   await f.pipeline.dispose(); f.complete(0);
   assert.equal(f.accumulator.text, ''); // Dispose publishes no canceled snapshot.
-  assert.equal(f.display(), '訳:open');
+  assert.equal(f.previews.at(-1), '訳:open');
 });
 
 for (const operation of ['stop', 'cancel']) {
@@ -142,14 +142,14 @@ for (const operation of ['stop', 'cancel']) {
     const results = [], displays = {}, accumulator = new TextAccumulatorNode();
     const pipeline = new Pipeline({ nodes: {
       input: { outputs: { boundary: TEXT, provisional: TEXT } },
-      translator: { inputs: { text: TEXT, provisional: TEXT }, outputs: { source: TEXT, text: TEXT, error: TEXT },
-        receive(port, source, context) { results.push(() => context.emitOutputs({ source, text: `訳:${source}`, error: '' })); } },
+      translator: { inputs: { text: TEXT, provisional: TEXT }, outputs: { source: TEXT, text: TEXT, error: TEXT, provisionalText: TEXT },
+        receive(port, source, context) { results.push(() => context.emitOutputs(port === 'provisional' ? { provisionalText: `訳:${source}` } : { source, text: `訳:${source}`, error: '' })); } },
       commit: new TranslationCommitNode(), accumulator, history: new TextToDOMNode(), preview: new TextToDOMNode(), combined: new DOMCombinerNode(),
       one: new LiveTextDisplayNode(dom => displays.one = domText(dom)), two: new LiveTextDisplayNode(dom => displays.two = domText(dom)),
     }, connections: [
       edge('input', 'boundary', 'commit', 'boundary'), edge('input', 'boundary', 'translator', 'text'), edge('input', 'provisional', 'translator', 'provisional'),
       ...['source', 'text', 'error'].map(port => edge('translator', port, 'commit', port)),
-      edge('commit', 'final', 'accumulator', 'append'), edge('accumulator', 'text', 'history', 'text'), edge('commit', 'provisional', 'preview', 'text'),
+      edge('commit', 'final', 'accumulator', 'append'), edge('accumulator', 'text', 'history', 'text'), edge('commit', 'provisional', 'preview', 'text'), edge('translator', 'provisionalText', 'preview', 'text'),
       edge('history', 'dom', 'combined', 'first'), edge('preview', 'dom', 'combined', 'second'),
       edge('combined', 'dom', 'one', 'dom'), edge('combined', 'dom', 'two', 'dom'),
     ] });
@@ -235,7 +235,7 @@ for (const reverse of [false, true]) test(`independent concurrent windows surviv
     g.edges.forEach(e => { e.from[0] += suffix; e.to[0] += suffix; });
     return g;
   });
-  const description = { version: 13, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
+  const description = { version: 14, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
   if (reverse) description.nodes.reverse();
   const f = workers(), displays = {};
   const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => { s = domText(s); displays[id] = s; } });
@@ -245,7 +245,7 @@ for (const reverse of [false, true]) test(`independent concurrent windows surviv
   const aDone = built.pipeline.drain(descriptions[0].nodes.map(n => n.id)); await tick();
   f.complete(0); f.complete(1); await tick(); f.complete(2); await aDone;
   assert.deepEqual(displays.displaya, '訳:same');
-  assert.deepEqual(displays.displayb, '訳:same');
+  assert.deepEqual(displays['preview-displayb'], '訳:same');
   send('b', 'tail.'); await tick(); f.complete(3); await built.pipeline.stop();
   assert.deepEqual(displays.displaya, (['訳:same']).join('\n')); assert.deepEqual(displays.displayb, (['訳:same tail.']).join('\n'));
   await built.pipeline.dispose(); assert.ok(f.owned.every(w => w.terminated));
@@ -293,7 +293,7 @@ test('graph saves/reloads with no version migration, no new weights, and permits
   g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'source').from = ['input', 'value'];
   assert.deepEqual(validateGraph(addDOMFormatters(g)), []);
   assert.deepEqual(graphModelRequirements({ nodes: [graphNode('TextWindow', 'w'), graphNode('TranslationCommit', 'c')] }), []);
-  assert.equal(defaultGraph().version, 13);
+  assert.equal(defaultGraph().version, 14);
 });
 
 test('TranslationCommit rejects independent/malformed results and detects an undrained boundary', () => {

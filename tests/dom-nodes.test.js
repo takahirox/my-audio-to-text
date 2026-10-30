@@ -305,7 +305,7 @@ for (const includeError of [false, true]) test(`v11 paired ports require review 
   assert.throws(()=>buildGraph(old,{}),/requires review/);
   assert.equal(storage.getItem(GRAPH_KEY),raw);
   assert.deepEqual(draft.nodes,old.nodes); assert.equal(draft.translationDirection,old.translationDirection);
-  const expected = structuredClone(old); expected.version=13;
+  const expected = structuredClone(old); expected.version=14;
   expected.edges=expected.edges.filter(route=>route.to[0]!=='translated-format'||route.to[1]!=='error');
   for (const route of expected.edges) if (route.to[0]==='translated-format') route.to[1]=route.to[1]==='source'?'input1':'input2';
   assert.deepEqual(draft,expected);
@@ -329,7 +329,7 @@ test('invalid legacy paired conversions offer recovery instructions instead of d
   const old=defaultGraph({enabled:true});old.version=11;
   old.edges.push(edge('translation','error','translated-format','unknown'));
   assert.throws(()=>assertGraph(old),error=>!error.recoveryGraph && /Conversion needs repair:.*Unknown port/.test(error.message));
-  old.version=13;old.edges.at(-1).to[1]='error';
+  old.version=14;old.edges.at(-1).to[1]='error';
   assert.throws(()=>assertGraph(old),/Unknown port/);
 });
 

@@ -16,7 +16,7 @@ test('palette settings, text-only Save without weights and current graph reload'
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   expect(f.requests).toEqual([]);
   const graph = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(graph.version).toBe(13); expect(graph.nodes.find(n => n.type === 'TextWindow').settings).toEqual({ maxChars: 120, maxWaitMs: 250, sentenceBoundary: 'off' });
+  expect(graph.version).toBe(14); expect(graph.nodes.find(n => n.type === 'TextWindow').settings).toEqual({ maxChars: 120, maxWaitMs: 250, sentenceBoundary: 'off' });
   await editor.reload();
   expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
   await editor.getByRole('button', { name: 'Select textwindow', exact: true }).click();

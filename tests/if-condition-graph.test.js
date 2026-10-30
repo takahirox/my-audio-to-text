@@ -10,7 +10,7 @@ import { GraphEditor } from '../extension/graph-editor.js';
 function graph() {
   const nodes = ['Text','IfCondition','LiveTextDisplay','LiveTextDisplay','LiveTextDisplay'].map((t,i) => graphNode(t,['source','condition','yes','no','peer'][i]));
   nodes[0].settings.value = '  Same?\n';
-  return { version: 13, nodes, edges: [edge('source','value','condition','text'),edge('condition','yes','yes','content'),edge('condition','no','no','content'),edge('source','value','peer','content')] };
+  return { version: 14, nodes, edges: [edge('source','value','condition','text'),edge('condition','yes','yes','content'),edge('condition','no','no','content'),edge('source','value','peer','content')] };
 }
 function factory({ fail = false } = {}) {
   const workers = [];

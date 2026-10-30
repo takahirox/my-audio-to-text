@@ -31,23 +31,22 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
       if(m.type==='translate')setTimeout(()=>postMessage({id:m.id,type:'result',texts:['translated:'+m.text]}),20);
     };`);
   const live=await openGraph(f);
-  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TranslationCommit','commit'),graphNode('LiveTextDisplay','translated'));
+  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TranslationCommit','commit'),graphNode('TextAccumulator','acc'),graphNode('LiveTextDisplay','translated'),graphNode('LiveTextDisplay','preview'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),edge('speech','final','commit','boundary'),
-    ...['source','text','error'].map(p=>edge('translator',p,'commit',p)),edge('commit','final','translated','append'),edge('commit','provisional','translated','replace'));
-  accumulateDisplay(graph, 'translated');
+    ...['source','text','error'].map(p=>edge('translator',p,'commit',p)),edge('commit','final','acc','append'),edge('translator','provisionalText','preview','content'),edge('acc','text','translated','content'));
   const result=await live.evaluate(async graph=>{
     const {buildGraph}=await import('./graph-runtime.js');const displays={},events=[];
     const built=buildGraph(window.addDOMFormatters(graph),{tabId:42,prepareTranslateGemma(){},onDisplay(id,dom){const text=dom.textContent;displays[id]=text;events.push({id,text});}});
     const wait=async predicate=>{const deadline=Date.now()+5000;while(!predicate()){if(Date.now()>deadline)throw Error('Timed out waiting for packaged translation');await new Promise(r=>setTimeout(r,5));}};
     try{
       await built.pipeline.start();await built.translations[0].ready;const speech=built.speechNodes.get('speech');
-      speech.receiveEvent({type:'partial',text:'preview'});await wait(()=>displays.translated==='translated:preview');
+      speech.receiveEvent({type:'partial',text:'preview'});await wait(()=>displays.preview==='translated:preview');
       speech.receiveEvent({type:'final',text:'same',id:1});speech.receiveEvent({type:'final',text:'same',id:2});await built.pipeline.stop();
       return {displays,events,errors:built.pipeline.errors.map(e=>e.message)};
     }finally{await built.pipeline.dispose();}
   },graph);
   expect(result.errors).toEqual([]);expect(result.displays.translated).toBe('translated:same\ntranslated:same');
-  expect(result.events).toContainEqual({id:'translated',text:'translated:preview'});
+  expect(result.events).toContainEqual({id:'preview',text:'translated:preview'});
   expect(await live.evaluate(()=>window.graphWorkers.every(w=>w.released))).toBe(true);
 });
 
