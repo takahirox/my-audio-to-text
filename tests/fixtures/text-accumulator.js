@@ -1,14 +1,17 @@
 import { graphNode, edge } from '../../extension/graph.js';
 
-// Compose a transcript fixture explicitly; non-display fan-out stays on the
-// original producer. Call once after declaring this display's segment routes.
+// Explicit committed history plus an independent replacement snapshot.
 export function accumulateDisplay(graph, display) {
-  const id = `${display}-accumulator`;
-  graph.nodes.push(graphNode('TextAccumulator', id));
-  for (const route of graph.edges) if (route.to[0] === display && ['append', 'replace'].includes(route.to[1])) {
-    route.to = [id, route.to[1] === 'append' ? 'append' : 'preview'];
-  }
-  graph.nodes.push(graphNode('TextToDOM', `${display}-dom`));
-  graph.edges.push(edge(id, 'text', `${display}-dom`, 'text'), edge(`${display}-dom`, 'dom', display, 'dom'));
+  const id = `${display}-accumulator`, dom = `${display}-dom`;
+  const previews = graph.edges.filter(route => route.to[0] === display && route.to[1] === 'replace');
+  graph.nodes.push(graphNode('TextAccumulator', id), graphNode('TextToDOM', dom));
+  for (const route of graph.edges) if (route.to[0] === display && route.to[1] === 'append') route.to = [id, 'append'];
+  graph.edges.push(edge(id, 'text', dom, 'text'));
+  if (previews.length) {
+    const preview = `${display}-preview`, combined = `${display}-combined`;
+    graph.nodes.push(graphNode('TextToDOM', preview), graphNode('DOMCombiner', combined));
+    for (const route of previews) route.to = [preview, 'text'];
+    graph.edges.push(edge(dom, 'dom', combined, 'first'), edge(preview, 'dom', combined, 'second'), edge(combined, 'dom', display, 'dom'));
+  } else graph.edges.push(edge(dom, 'dom', display, 'dom'));
   return graph;
 }

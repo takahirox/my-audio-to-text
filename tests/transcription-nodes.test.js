@@ -58,7 +58,7 @@ test('real ASR adapter exposes provisional/final through one core and drains the
   f.workers[1].reply({ type: 'vad-stopped', session: stop.session });
   assert.equal(f.decodes()[1].audio.length, 8037);
   f.finish(1, ' '); await stopping;
-  assert.deepEqual(f.values.at(-1), ['final', 'provisional']);
+  assert.deepEqual(f.values.filter(([port]) => port === 'final').at(-1), ['final', 'provisional']);
   assert.equal(f.pipeline.state, 'stopped'); assert.equal(f.workers.length, 2);
   await f.pipeline.dispose(); assert.ok(f.workers.every(w => w.terminated));
 });
@@ -132,7 +132,7 @@ test('a drained speech node hands warm workers to a fresh graph with isolated po
   f.workers[0].reply({ type: 'final', session: 1, id: 1, text: 'stale' });
   source.source.audio(new Float32Array(8000).fill(0.05)); await tick(); f.classify(); f.finish(2, 'second'); await tick();
   assert.deepEqual(values, [['provisional', 'second']]);
-  assert.deepEqual(f.values.at(-1), ['final', 'first final']);
+  assert.deepEqual(f.values.filter(([port]) => port === 'final').at(-1), ['final', 'first final']);
   await pipeline.dispose(); assert.ok(f.workers.every(w => w.terminated));
   assert.throws(() => speech.nextSession(), /successfully drained/);
 });

@@ -1,3 +1,4 @@
+import { accumulateDisplay } from './fixtures/text-accumulator.js';
 import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
@@ -57,10 +58,10 @@ function workers() {
 
 for (const translator of translators) test(`${translator}: direct ASR previews coalesce, finals stay FIFO and boundary matching survives equal text`, async () => {
   const f = workers(), displays = {};
-  const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TranslationCommit','commit'), graphNode('TextAccumulator','acc'),graphNode('LiveTextDisplay','translated'));
+  const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TranslationCommit','commit'),graphNode('LiveTextDisplay','translated'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),edge('speech','final','commit','boundary'),
-    ...['source','text','error'].map(p => edge('translator',p,'commit',p)),edge('commit','provisional','acc','preview'),edge('commit','final','acc','append'),edge('acc','text','translated','content'));
-  const built = buildGraph(addDOMFormatters(graph), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
+    ...['source','text','error'].map(p => edge('translator',p,'commit',p)),edge('commit','provisional','translated','replace'),edge('commit','final','translated','append'));
+  const built = buildGraph(accumulateDisplay(graph, 'translated'), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
   try {
     await built.pipeline.start(); await built.translations[0].ready;
     const speech = built.speechNodes.get('speech');
@@ -127,14 +128,14 @@ test('an inactive configured producer never silently selects an ASR default', as
   await assert.rejects(built.pipeline.stop(),/unavailable/); await built.pipeline.dispose();
 });
 
-test('Cancel clears previews through formatters and fan-out while rejecting queued and late results', async () => {
+test('Cancel retains committed formatter/fan-out snapshots while rejecting queued and late results', async () => {
   const seen={}; let source; const acc=new TextAccumulatorNode();
   const pipeline=new Pipeline({nodes:{
     source:{outputs:{value:TEXT},start(c){source=c;}},acc,formatter:new TextFormatterNode({template:'[{1}]'}),
     direct:new TextSink(t=>{seen.direct=t;}),indirect:new TextSink(t=>{seen.indirect=t;}),
     ordinary:{inputs:{value:TEXT},receive(_,v){seen.ordinary=v;}},
   },connections:[edge('source','value','acc','append'),edge('acc','text','direct','content'),edge('acc','text','formatter','input1'),edge('formatter','text','indirect','content'),edge('acc','text','ordinary','value')]});
-  await pipeline.start();source.emit('value','committed');await tick();acc.receive('preview','discard',pipeline.entries.get('acc').context);await tick();
+  await pipeline.start();source.emit('value','committed');await tick();
   source.emit('value','queued before Cancel');const cancel=pipeline.cancel();source.emit('value','late');await cancel;
   assert.deepEqual(seen,{direct:'committed',indirect:'[committed]',ordinary:'committed'});assert.equal(acc.committed,'committed');
 });
@@ -150,12 +151,12 @@ for (const order of ['preview-first','final-first']) test(`grouped translator in
   f.complete(0);await pipeline.stop();assert.deepEqual(results,['translated:final']);await pipeline.dispose();
 });
 
-test('Cancel closes field side effects before accumulator cleanup follows ordinary ports', async () => {
+test('Cancel closes field side effects while retaining committed accumulator text', async () => {
   const {FocusedInputTextOutputNode}=await import('../extension/page-output-node.js');
   const edits=[];let source;
   const acc=new TextAccumulatorNode(),field=new FocusedInputTextOutputNode({target:{tabId:42,documentId:'fixture'},connectionFactory:()=>({async request(action,data){if(action==='append')edits.push(data.text);return {inserted:true};},close(){}})});
   const pipeline=new Pipeline({nodes:{source:{outputs:{text:TEXT},start(c){source=c;}},acc,field},connections:[edge('source','text','acc','append'),edge('acc','text','field','text')]});
-  await pipeline.start();source.emit('text','keep');await tick();acc.receive('preview','discard',pipeline.entries.get('acc').context);await tick();const accepted=edits.slice();
+  await pipeline.start();source.emit('text','keep');await tick();const accepted=edits.slice();
   await pipeline.cancel();assert.deepEqual(edits,accepted);assert.equal(field.disposed,true);assert.equal(acc.committed,'keep');
 });
 
@@ -163,12 +164,12 @@ test('Text literals and formatter/accumulator snapshots execute as independent t
   for (const type of ['Text','TextFormatter','TextAccumulator']) {
     const f=workers(),graph={version:GRAPH_VERSION,nodes:[graphNode('Text','final'),graphNode('Text','seed'),graphNode(type,'alternate'),graphNode('TranslateGemmaEnJa','translator'),graphNode('LiveTextDisplay','view')],
       edges:[edge('final','value','translator','text'),edge('translator','text','view','content')]};
-    if(type!=='Text')graph.edges.push(edge('seed','value','alternate',type==='TextFormatter'?'input1':'preview'));
+    if(type!=='Text')graph.edges.push(edge('seed','value','alternate',type==='TextFormatter'?'input1':'append'));
     graph.edges.push(edge('alternate',type==='Text'?'value':'text','translator','provisional'));
     let display;const built=buildGraph(addDOMFormatters(graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(_,v)=>{ v = domText(v);display=v;}});
     await built.pipeline.start();await tick();
     built.pipeline.entries.get(type==='Text'?'alternate':'seed').context.emit('value','preview');await tick();f.complete(0);await tick();
-    assert.equal(display,'translated:preview',type);
+    assert.equal(display,type === 'TextAccumulator' ? 'translated:\npreview' : 'translated:preview',type);
     built.pipeline.entries.get('final').context.emit('value','committed');await tick();f.complete(1);await tick();
     assert.equal(display,'translated:committed',type);await built.pipeline.stop();assert.deepEqual(built.pipeline.errors,[]);await built.pipeline.dispose();
   }

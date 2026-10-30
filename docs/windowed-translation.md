@@ -75,9 +75,9 @@ TextWindow.provisional ────→ Translator.provisional
 Translator.source ────────→ TranslationCommit.source
 Translator.text ──────────→ TranslationCommit.text
 Translator.error ─────────→ TranslationCommit.error
-TranslationCommit.provisional → TextAccumulator.preview
-TranslationCommit.final ──────→ TextAccumulator.append
-TextAccumulator.text ────────→ TextToDOM.text → dom → LiveTextDisplay.dom
+TranslationCommit.final → TextAccumulator.append → TextToDOM.text → DOMCombiner.first
+TranslationCommit.provisional → TextToDOM.text → DOMCombiner.second
+DOMCombiner.dom → LiveTextDisplay.dom
 ```
 
 Translator means any of OpusMtEnJa, OpusMtJaEn, TranslateGemmaEnJa or
@@ -124,10 +124,10 @@ fan-out may observe previews; it must not be treated as committed history.
 | Source grows while open | Translate the latest snapshot when available; no final. The most recent successful preview remains until replaced or the source closes. Superseded in-flight results emit nothing. |
 | Latest open translation succeeds | Commit emits provisional equal to the translated text, replacing only Live's preview. |
 | Source closes by punctuation, cap, deadline or Stop | Boundary arrives before its async final result. Commit emits provisional `''` immediately to clear the obsolete preview and queues that source exactly once. |
-| Closed translation succeeds | Match the oldest boundary by causal delivery and source text in FIFO order; emit grouped provisional `''`, final translation, error `''`. Live appends once and clears preview atomically. |
+| Closed translation succeeds | Match the oldest boundary by causal delivery and source text in FIFO order; emit grouped provisional `''`, final translation, error `''`. History appends once; the separate provisional branch clears from the same producer group. |
 | Open translation fails | Emit provisional `''` and error, without a final item. Existing translator model failures remain terminal for that translator instance. |
 | Closed translation fails | Emit grouped provisional `''`, final `[Translation failed: MESSAGE]\nSOURCE`, error MESSAGE. This visibly retains source instead of inventing a translation; prior committed items remain immutable. |
-| Stop | TextWindow flushes tail; translator suppresses previews and drains closed work; commit verifies all boundaries resolved, then display discards preview. |
+| Stop | TextWindow flushes tail; translator suppresses previews and drains closed work; commit verifies all boundaries resolved, then commit emits an empty provisional snapshot. |
 | Cancel | Pipeline invalidates emissions first; buffers, pending work and Workers are disposed. Previously committed accumulator text remains, while previews and late replies are discarded. |
 
 The scheduler does not emit previews ahead of queued closed results. A closed
@@ -201,4 +201,4 @@ Measured results and limitations are recorded in
 [`docs/evidence/translation-128.md`](evidence/translation-128.md). No required
 check introduced by this experiment depends on a post-merge deployment.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final/preview text upstream with TextAccumulator. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An omitted second value leaves a blank right cell; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final TEXT with TextAccumulator and compose provisional TEXT through a separate TextToDOM and DOMCombiner branch. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An omitted second value leaves a blank right cell; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).

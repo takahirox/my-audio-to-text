@@ -26,7 +26,7 @@ test('saveable incomplete paths do not contaminate a complete sibling, including
   assert.deepEqual(validateGraph(addDOMFormatters(graph)), []);
   assert.match(graphWarnings(graph).join(' '), /translation.text/);
   const active = executableGraph(addDOMFormatters(graph));
-  assert.deepEqual(active.nodes.map(node => node.id), ['audio', 'speech', 'transcript', 'transcript-accumulator', 'transcript-dom']);
+  assert.deepEqual(active.nodes.map(node => node.id), ['audio', 'speech', 'transcript', 'transcript-accumulator', 'transcript-dom', 'transcript-preview', 'transcript-combined']);
   const built = buildGraph(addDOMFormatters(graph), {});
   assert.deepEqual([...built.speechNodes.keys()], ['speech']);
   assert.deepEqual([...built.audioSources.keys()], ['audio']); await built.pipeline.dispose();
@@ -57,7 +57,7 @@ test('consumer-specific startup values stay saveable and are validated by the ex
     graph.edges.push(edge('configuration','value','unfinished',input),edge('unfinished','final','unfinished-display','content'));
     const storage = store(); saveGraph(storage, addDOMFormatters(graph)); assert.deepEqual(readGraph(storage),graph);
     assert.match(graphWarnings(graph).join(' '), /Inactive Node: unfinished/);
-    assert.deepEqual(executableGraph(addDOMFormatters(graph)).nodes.map(node=>node.id),['audio','speech','transcript','transcript-accumulator', 'transcript-dom']);
+    assert.deepEqual(executableGraph(addDOMFormatters(graph)).nodes.map(node=>node.id),['audio','speech','transcript','transcript-accumulator', 'transcript-dom', 'transcript-preview', 'transcript-combined']);
     graph.edges.push(edge('audio','audio','unfinished','audio'));
     saveGraph(storage, addDOMFormatters(graph)); assert.deepEqual(readGraph(storage),graph);
   }

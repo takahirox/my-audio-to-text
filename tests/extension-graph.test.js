@@ -54,23 +54,23 @@ const audioGraph = (type, translated = false) => {
 
 test('fresh graph is minimal; only explicit legacy translation choices migrate; saved graphs take precedence', () => {
   const fresh = storage(), minimal = defaultGraph();
-  assert.deepEqual(minimal.nodes.map(n => n.type), ['ChromeTabAudio', 'SpeechToTextReazonSpeech', 'LiveTextDisplay', 'TextAccumulator', 'TextToDOM']);
-  assert.deepEqual(minimal.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript', 'dom')]);
+  assert.deepEqual(minimal.nodes.map(n => n.type), ['ChromeTabAudio', 'SpeechToTextReazonSpeech', 'LiveTextDisplay', 'TextAccumulator', 'TextToDOM', 'TextToDOM', 'DOMCombiner']);
+  assert.deepEqual(minimal.edges, [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-preview', 'text'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript-combined', 'first'), edge('transcript-preview', 'dom', 'transcript-combined', 'second'), edge('transcript-combined', 'dom', 'transcript', 'dom')]);
   assert.deepEqual(minimal.nodes[2].settings, { label: 'Text', language: 'und' });
   assert.deepEqual(readGraph(fresh), minimal);
   for (const legacy of ['{broken', '{}', '{"direction":"en-ja"}', '{"enabled":"true"}']) {
     const store = storage(); store.setItem('opus-mt-translation-preferences', legacy);
-    assert.equal(readGraph(store).nodes.length, 5);
+    assert.equal(readGraph(store).nodes.length, 7);
   }
   for (const enabled of [false, true]) for (const direction of ['ja-en', 'en-ja']) {
     const store = storage(); store.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled, direction }));
-    const graph = readGraph(store); assert.equal(graph.translationDirection, direction); assert.equal(graph.nodes.length, enabled ? 8 : 5);
+    const graph = readGraph(store); assert.equal(graph.translationDirection, direction); assert.equal(graph.nodes.length, enabled ? 10 : 7);
     assert.equal(store.getItem('opus-mt-translation-preferences'), null);
     assert.deepEqual(readGraph(store), graph);
   }
   const store = storage(); store.setItem(GRAPH_KEY, '{broken'); assert.throws(() => readGraph(store));
-  saveGraph(store, defaultGraph({ enabled: false })); assert.equal(readGraph(store).nodes.length, 5);
-  store.setItem('opus-mt-translation-preferences', '{broken'); assert.equal(readGraph(store).nodes.length, 5);
+  saveGraph(store, defaultGraph({ enabled: false })); assert.equal(readGraph(store).nodes.length, 7);
+  store.setItem('opus-mt-translation-preferences', '{broken'); assert.equal(readGraph(store).nodes.length, 7);
   assert.throws(() => saveGraph({ setItem() { throw Error('Quota'); } }, defaultGraph({ enabled: true })), /Quota/);
 });
 
@@ -286,7 +286,7 @@ test('v5 migration preserves independent language, maximum IDs and fan-out; larg
   while (legacy.nodes.length < 24) { const id = 'field-' + legacy.nodes.length; legacy.nodes.push(graphNode('FocusedInputTextOutputNode', id)); legacy.edges.push(edge('speech', 'final', id, 'text')); }
   const store = storage(), saved = JSON.stringify(legacy); store.setItem(GRAPH_KEY, saved);
   assert.throws(() => readGraph(store), /migration needs review/);
-  assert.equal(repair(legacy).nodes.length, 29);
+  assert.equal(repair(legacy).nodes.length, 31);
 });
 
 test('multiple processing directions prepare independently of sink labels and graph preference', async () => {
@@ -321,7 +321,7 @@ test('v8 migration retains shared displays, formatter fan-out and independent fo
   assert.deepEqual(next.nodes.find(n => n.id === formatter.id).position, formatter.position);
   assert.equal(next.nodes.find(n => n.id === display.id).settings.label, 'User label');
   assert.deepEqual(next.nodes.find(n => n.id === 'independent').settings, { template: 'User template: {4}\n{{}}', inputCount: 4 });
-  for (const route of [edge(formatter.id, 'text', 'field', 'text'), edge(formatter.id, 'text', 'translated-accumulator', 'preview'), edge('speech', 'final', 'translated-accumulator', 'append'), edge('literal', 'value', 'independent', 'input4')]) assert.ok(next.edges.some(e => JSON.stringify(e) === JSON.stringify(route)));
+  for (const route of [edge(formatter.id, 'text', 'field', 'text'), edge(formatter.id, 'text', 'translated-dom-preview', 'text'), edge('speech', 'final', 'translated-accumulator', 'append'), edge('literal', 'value', 'independent', 'input4')]) assert.ok(next.edges.some(e => JSON.stringify(e) === JSON.stringify(route)));
   const store = storage(), raw = JSON.stringify(graph); store.setItem(GRAPH_KEY, raw);
   const failing = { ...store, setItem(key, value) { if (key === GRAPH_RECOVERY_KEY) throw Error('Quota'); store.setItem(key, value); } };
   assert.throws(() => saveGraph(failing, next), /Quota/); assert.equal(store.getItem(GRAPH_KEY), raw);

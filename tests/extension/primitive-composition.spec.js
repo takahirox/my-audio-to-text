@@ -1,3 +1,4 @@
+import { accumulateDisplay } from '../fixtures/text-accumulator.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { graphNode, edge, defaultGraph } from '../../extension/graph.js';
 import { writeFile } from 'node:fs/promises';
@@ -30,9 +31,10 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
       if(m.type==='translate')setTimeout(()=>postMessage({id:m.id,type:'result',texts:['translated:'+m.text]}),20);
     };`);
   const live=await openGraph(f);
-  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TranslationCommit','commit'),graphNode('TextAccumulator','acc'),graphNode('LiveTextDisplay','translated'));
+  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TranslationCommit','commit'),graphNode('LiveTextDisplay','translated'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),edge('speech','final','commit','boundary'),
-    ...['source','text','error'].map(p=>edge('translator',p,'commit',p)),edge('commit','final','acc','append'),edge('commit','provisional','acc','preview'),edge('acc','text','translated','content'));
+    ...['source','text','error'].map(p=>edge('translator',p,'commit',p)),edge('commit','final','translated','append'),edge('commit','provisional','translated','replace'));
+  accumulateDisplay(graph, 'translated');
   const result=await live.evaluate(async graph=>{
     const {buildGraph}=await import('./graph-runtime.js');const displays={},events=[];
     const built=buildGraph(window.addDOMFormatters(graph),{tabId:42,prepareTranslateGemma(){},onDisplay(id,dom){const text=dom.textContent;displays[id]=text;events.push({id,text});}});
@@ -67,7 +69,7 @@ test('MV3 formatter startup configuration is delivered before Whisper loads, and
   expect(result.language).toBe('ja');expect(result.errors.join(' ')).toContain('before model loading');expect(result.state).toBe('running');expect(result.displays.peer).toBe('en');
 });
 
-test('MV3 Cancel sends the same committed snapshot through direct and formatted paths',async({graphExtension:f})=>{
+test('MV3 Cancel retains committed snapshots on direct and formatted paths',async({graphExtension:f})=>{
   const live=await openGraph(f);
   const result=await live.evaluate(async()=>{
     const {Pipeline}=await import('../web/pipeline.js');const {TEXT}=await import('../web/port-contracts.js');
@@ -77,7 +79,7 @@ test('MV3 Cancel sends the same committed snapshot through direct and formatted 
       directDOM:new TextToDOMNode(),indirectDOM:new TextToDOMNode(),direct:new LiveTextDisplayNode(t=>{states.direct=t.textContent;}),indirect:new LiveTextDisplayNode(t=>{states.indirect=t.textContent;})},connections:[
       {from:['source','text'],to:['acc','append']},{from:['acc','text'],to:['directDOM','text']},{from:['directDOM','dom'],to:['direct','dom']},{from:['acc','text'],to:['format','input1']},{from:['format','text'],to:['indirectDOM','text']},{from:['indirectDOM','dom'],to:['indirect','dom']}]});
     await pipeline.start();source.emit('text','keep');await pipeline.entries.get('acc').queue;
-    acc.receive('preview','discard',pipeline.entries.get('acc').context);await pipeline.entries.get('format').queue;
+    await pipeline.entries.get('format').queue;
     source.emit('text','queued');await pipeline.cancel();source.emit('text','late');return states;
   });
   expect(result).toEqual({direct:'keep',indirect:'[keep]'});

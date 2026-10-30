@@ -129,10 +129,10 @@ test('extension session emits provisional/final output, flushes once and clears 
   const graph = session.session.pipeline;
   assert.ok(graph instanceof Pipeline);
   assert.deepEqual(graph.order.map(entry => entry.node.constructor.name),
-    ['ExtensionTabAudioNode', 'SpeechToTextNode', 'TextAccumulatorNode', 'TextToDOMNode', 'LiveTextDisplayNode']);
+    ['ExtensionTabAudioNode', 'SpeechToTextNode', 'TextToDOMNode', 'TextAccumulatorNode', 'TextToDOMNode', 'DOMCombinerNode', 'LiveTextDisplayNode']);
   assert.equal(graph.entries.get('audio').outputs.audio, MONO_16KHZ_PCM);
   assert.equal(graph.entries.get('speech').inputs.audio, MONO_16KHZ_PCM);
-  assert.equal(graph.entries.get('transcript-accumulator').inputs.preview, TEXT);
+  assert.equal(graph.entries.get('transcript-preview').inputs.text, TEXT);
   assert.equal(graph.entries.get('transcript').inputs.dom, DOM);
   sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
   assert.equal((domText(session.view.displays.transcript) || ''), 'provisional text');
@@ -411,7 +411,7 @@ test('parked and incomplete nodes do not load models, request microphone permiss
   graph.edges.push(edge('parked-model', 'final', 'unfinished', 'input1'), edge('unfinished', 'text', 'parked-output', 'content'));
   const f = fixture({ graph }); await f.session.start(42);
   assert.equal(f.session.view.state, 'running'); assert.equal(f.workers.length, 2); assert.equal(f.sources.length, 1);
-  assert.deepEqual([...f.session.session.pipeline.entries.keys()], ['audio', 'speech', 'transcript', 'transcript-accumulator', 'transcript-dom']);
+  assert.deepEqual([...f.session.session.pipeline.entries.keys()], ['audio', 'speech', 'transcript', 'transcript-accumulator', 'transcript-dom', 'transcript-preview', 'transcript-combined']);
   assert.deepEqual(f.session.graph, graph); await f.session.stop();
   const draft = { version: GRAPH_VERSION, nodes: graph.nodes.slice(3), edges: [] };
   f.session.setGraph(draft); await f.session.start(42, { microphoneGesture: true });

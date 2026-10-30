@@ -89,21 +89,23 @@ export class SpeechToTextNode {
     this.core = new LocalAsrCore(event => this.receiveEvent(event), { workerFactory });
   }
   receiveEvent(event) {
-    if (this.disposed || !this.core) return;
+    if (this.disposed || this.stopped || !this.core) return;
     if (event.type === 'ready') this.loading?.resolve();
     else if (event.type === 'stopped') this.draining?.resolve();
     else if (event.type === 'error') {
       const error = new Error(event.message);
+      // Failure aborts this producer; Stop/Cancel skip its cleanup hooks.
+      if (this.outputs.provisional) this.context?.emit('provisional', '');
       this.loading?.reject(error); this.draining?.reject(error);
       this.context?.fail(error);
     } else if (event.type === 'partial' || event.type === 'final') {
       // Deduplicate worker finals here, before fan-out. Identical strings with
       // different utterance IDs remain distinct values; IDs stay core-local.
-      if (event.type === 'final' && Number.isSafeInteger(event.id) && event.id >= 0) {
+      if (Number.isSafeInteger(event.id) && event.id >= 0) {
         if (event.id <= (this.lastFinalId ?? -1)) return;
-        this.lastFinalId = event.id;
+        if (event.type === 'final') this.lastFinalId = event.id;
       }
-      // One atomic finalization: accumulators/translators let final win over the
+      // One atomic finalization: translators let final win over the
       // cleared preview, preserving causal identity and avoiding an empty preview
       // translation. Clear here, never on completion of delayed downstream work.
       if (event.type === 'final' && this.outputs.provisional) {
@@ -171,7 +173,13 @@ export class SpeechToTextNode {
       this.draining = deferred();
       this.core.stop();
     }
-    return this.draining.promise.then(() => { this.stopped = true; });
+    return this.draining.promise.then(() => {
+      this.stopped = true;
+      if (this.outputs.provisional) this.context?.emit('provisional', '');
+    });
+  }
+  cancel(context) {
+    if (this.outputs.provisional) context.emit('provisional', '');
   }
   // A graph is single-use. After its graceful drain, move sole ownership of
   // the warm core to a fresh node without reloading models or sharing workers.

@@ -98,25 +98,25 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
     await editor.keyboard.press('Escape');
     await expect(control).toBeHidden(); await expect(editor.locator('.selected-wire')).toHaveCount(0);
     await expect(editor.locator('.graph-scroll')).toBeFocused();
-    await pointerSelect(editor, 'speech.provisional to transcript-accumulator.preview');
+    await pointerSelect(editor, 'speech.provisional to transcript-preview.text');
     await editor.locator('#graph-canvas').click({ position: { x: 3, y: 3 } });
     await expect(control).toBeHidden(); await expect(editor.locator('.selected-wire')).toHaveCount(0);
-    await pointerSelect(editor, 'speech.provisional to transcript-accumulator.preview');
+    await pointerSelect(editor, 'speech.provisional to transcript-preview.text');
     await expect(control).toBeVisible(); await expect(control).toHaveText('Disconnect');
     await expect(editor.locator('.graph-inspector #graph-disconnect')).toBeVisible();
     await expect(editor.locator('#graph-canvas #graph-disconnect')).toHaveCount(0);
     // A native pointer click acts on the selected edge, without any key press.
     await control.click();
-    await expect(wireFor(editor, 'speech.provisional to transcript-accumulator.preview')).toHaveCount(0);
+    await expect(wireFor(editor, 'speech.provisional to transcript-preview.text')).toHaveCount(0);
     await expect(control).toBeHidden(); await expect(editor.locator('.graph-scroll')).toBeFocused();
     await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length - 1);
     await expect(editor.locator('.graph-node')).toHaveCount(before.nodes.length);
     await expect(editor.locator('#graph-errors')).toBeEmpty();
-    await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Draft valid');
+    await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Required connection missing: transcript-preview.text');
     await save(editor);
     const after = await saved(live);
     expect(after.nodes).toEqual(before.nodes);
-    expect(after.edges).toEqual(before.edges.filter(e => !(e.to[0] === 'transcript-accumulator' && e.to[1] === 'preview')));
+    expect(after.edges).toEqual(before.edges.filter(e => !(e.to[0] === 'transcript-preview' && e.to[1] === 'text')));
     await editor.reload(); await expect(editor.locator('.graph-wire')).toHaveCount(after.edges.length);
     expect(await saved(live)).toEqual(after); await expect(control).toBeHidden();
   });
@@ -183,9 +183,9 @@ for (const key of ['Delete', 'Backspace']) test(`focused wire ${key} and keyboar
   expect(await saved(live)).toEqual({ ...before, edges: before.edges.filter(route => route.to[1] !== 'audio') }); // Incomplete drafts are saveable.
   await port(editor, 'audio', 'output', 'audio').click(); await port(editor, 'speech', 'input', 'audio').click();
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  const optional = wireFor(editor, 'speech.provisional to transcript-accumulator.preview');
+  const optional = wireFor(editor, 'speech.provisional to transcript-preview.text');
   await optional.focus(); await optional.press('Space'); await optional.press('Tab');
-  const action = editor.getByRole('button', { name: 'Disconnect speech.provisional to transcript-accumulator.preview', exact: true });
+  const action = editor.getByRole('button', { name: 'Disconnect speech.provisional to transcript-preview.text', exact: true });
   await expect(action).toBeFocused();
   await action.press('Shift+Tab'); await expect(optional).toBeFocused();
   await optional.press('Tab'); await action.press('Escape');
@@ -194,7 +194,7 @@ for (const key of ['Delete', 'Backspace']) test(`focused wire ${key} and keyboar
   await action.press(key === 'Delete' ? 'Enter' : 'Space');
   await expect(optional).toHaveCount(0); await expect(editor.locator('.graph-scroll')).toBeFocused();
   await save(editor);
-  expect((await saved(live)).edges).toEqual([...before.edges.filter(e => !(e.to[0] === 'transcript-accumulator' && e.to[1] === 'preview') && e.from[0] !== 'audio'), before.edges[0]]);
+  expect((await saved(live)).edges).toEqual([...before.edges.filter(e => !(e.to[0] === 'transcript-preview' && e.to[1] === 'text') && e.from[0] !== 'audio'), before.edges[0]]);
 });
 
 test('native touch selects and disconnects without hover; saved removal applies only to the next session', async ({ graphExtension: f }) => {
@@ -203,8 +203,8 @@ test('native touch selects and disconnects without hover; saved removal applies 
   await startGraph(live); const before = await saved(live);
   const workers = await live.evaluate(() => window.graphWorkers.length);
   await editor.locator('#graph-zoom').selectOption('0.5');
-  await touch(editor, await wirePoint(editor, 'speech.provisional to transcript-accumulator.preview'));
-  const wire = wireFor(editor, 'speech.provisional to transcript-accumulator.preview'), control = editor.locator('#graph-disconnect');
+  await touch(editor, await wirePoint(editor, 'speech.provisional to transcript-preview.text'));
+  const wire = wireFor(editor, 'speech.provisional to transcript-preview.text'), control = editor.locator('#graph-disconnect');
   await expect(wire).toHaveAttribute('aria-pressed', 'true'); await expect(wire).toHaveClass(/selected-wire/);
   await expect(control).toBeVisible();
   expect(await saved(live)).toEqual(before); await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length);
@@ -220,7 +220,7 @@ test('native touch selects and disconnects without hover; saved removal applies 
 
   await emitFinal(live, 'next final'); await expect(live.locator('[data-display="transcript"] .display-content')).toHaveText('next final');
   await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
-  expect((await saved(live)).edges).toEqual(before.edges.filter(e => !(e.to[0] === 'transcript-accumulator' && e.to[1] === 'preview')));
+  expect((await saved(live)).edges).toEqual(before.edges.filter(e => !(e.to[0] === 'transcript-preview' && e.to[1] === 'text')));
 });
 
 test('click and drag reconnect a populated input, preserving fan-out; identical and invalid attempts keep old edge', async ({ graphExtension: f }) => {
@@ -278,7 +278,7 @@ for (const version of [4, 5]) for (const direction of ['ja-en', 'en-ja']) for (c
     await expect(live.editor.getByLabel('Original saved graph JSON')).toHaveValue(JSON.stringify(legacy));
     await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
     const graph = await saved(live);
-    expect(graph.version).toBe(12); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
+    expect(graph.version).toBe(13); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
     await fixtureTranslation(f, live); await startGraph(live);
     const text = live.locator('[data-display="translated"] .display-content');
     await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));

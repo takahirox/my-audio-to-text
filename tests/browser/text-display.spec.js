@@ -27,21 +27,17 @@ test('shared TEXT formatter, accumulator and pure sink compose grouped and indep
   expect(result).toEqual({ current: '<b>A</b>\n{1}\n\n{escaped}', history: ['<b>A</b>\n{1}\n\n{escaped}', '<b>A</b>\n{1}\nC\n{escaped}', '<b>A</b>\n{1}\n\n{escaped}'].join('\n'), errors: [] });
 });
 
-test('accumulator exact values, grouped ordering, Stop/Cancel and fresh session in browser engines', async ({ page }) => {
+test('accumulator exact values, Stop/Cancel and fresh session in browser engines', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
     const { TextAccumulatorNode } = await import('/text-nodes.js');
     const states = [], node = new TextAccumulatorNode(), c = { signal: new AbortController().signal, emit: (_, text) => states.push(text) };
     node.start(c); const expected = [], invariants = [];
     for (const final of ['  <img src=x>\n&  ', 'same', 'same', '', '']) {
-      for (const preview of ['first', 'replaced', '']) {
-        node.receive('preview', preview, c);
-        invariants.push(states.at(-1) === expected.join('\n') + (preview ? (expected.length ? '\n' : '') + preview : ''));
-      }
-      node.receiveInputs({ append: final, preview: 'discard' }, c); expected.push(final); invariants.push(states.at(-1) === expected.join('\n'));
+      node.receiveInputs({ append: final }, c); expected.push(final); invariants.push(states.at(-1) === expected.join('\n'));
     }
-    node.receive('preview', 'Stop preview', c); node.stop(c); const stopped = states.at(-1);
-    node.receive('preview', 'Cancel preview', c); const count = states.length; const canceled = node.cancel(); node.dispose();
+    node.stop(c); const stopped = states.at(-1);
+    const count = states.length; const canceled = node.cancel(); node.dispose();
     const noCancelPublication = states.length === count; node.start(c);
     return { invariants, stopped, canceled, noCancelPublication, fresh: states.at(-1), first: states[0] };
   });
@@ -49,4 +45,33 @@ test('accumulator exact values, grouped ordering, Stop/Cancel and fresh session 
   const history = ['  <img src=x>\n&  ', 'same', 'same', '', ''].join('\n');
   expect(result.stopped).toBe(history); expect(result.canceled).toBe(history); expect(result.noCancelPublication).toBe(true);
   expect(result.fresh).toBe(''); expect(result.first).toBe('');
+});
+
+for (const operation of ['stop', 'cancel']) test(`explicit ASR history/tail DOM branches clear finalized and canceled previews (${operation})`, async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async operation => {
+    const { Pipeline } = await import('/pipeline.js');
+    const { SpeechToTextZipformerEnNode } = await import('/zipformer-node.js');
+    const { TextAccumulatorNode, LiveTextDisplayNode } = await import('/text-nodes.js');
+    const { TextToDOMNode, DOMCombinerNode } = await import('/dom-nodes.js');
+    const speech = new SpeechToTextZipformerEnNode(), acc = new TextAccumulatorNode(), snapshots = {};
+    speech.core = { state: 'ready', load() { speech.receiveEvent({ type: 'ready' }); }, start() {}, stop() { speech.receiveEvent({ type: 'stopped' }); }, release() {} };
+    const edge = (source, output, target, input) => ({ from: [source, output], to: [target, input] });
+    const pipeline = new Pipeline({ nodes: { speech, acc, history: new TextToDOMNode(), preview: new TextToDOMNode(), combined: new DOMCombinerNode(),
+      a: new LiveTextDisplayNode(dom => snapshots.a = dom.textContent), b: new LiveTextDisplayNode(dom => snapshots.b = dom.textContent) }, connections: [
+      edge('speech', 'final', 'acc', 'append'), edge('acc', 'text', 'history', 'text'), edge('speech', 'provisional', 'preview', 'text'),
+      edge('history', 'dom', 'combined', 'first'), edge('preview', 'dom', 'combined', 'second'), edge('combined', 'dom', 'a', 'dom'), edge('combined', 'dom', 'b', 'dom'),
+    ] });
+    const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+    await pipeline.start();
+    const event = (type, id, text) => speech.receiveEvent({ type, id, text });
+    event('partial', 0, 'old'); event('partial', 0, 'replaced'); await tick(); const preview = snapshots.a;
+    event('final', 0, 'same'); event('partial', 0, 'stale'); await tick(); const first = snapshots.a;
+    event('partial', 1, 'new'); event('final', 0, 'duplicate'); await tick(); const newer = snapshots.a;
+    event('final', 1, 'same'); event('final', 2, ''); event('partial', 2, 'late'); await tick(); const finalized = snapshots.a;
+    event('partial', 3, 'discard'); await tick(); await pipeline[operation]();
+    event('partial', 3, 'late'); await tick();
+    return { preview, first, newer, finalized, snapshots, committed: acc.committed, count: acc.count, errors: pipeline.errors.map(e => e.message) };
+  }, operation);
+  expect(result).toEqual({ preview: 'replaced', first: 'same', newer: 'samenew', finalized: 'same\nsame\n', snapshots: { a: 'same\nsame\n', b: 'same\nsame\n' }, committed: 'same\nsame\n', count: 3, errors: [] });
 });

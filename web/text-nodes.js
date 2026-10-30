@@ -47,48 +47,27 @@ export class TextFormatterNode {
 // Immutable strings can share their existing prefix in JS engines. Keep one
 // growing committed string instead of copying an item array on every event.
 export class TextAccumulatorNode {
-  inputs = { append: TEXT, preview: TEXT };
+  inputs = { append: TEXT };
   outputs = { text: TEXT };
-  // Migration compatibility only: an old display with no executable append
-  // input retained its latest replacement across Stop and Cancel.
-  constructor({ retainPreviewOnEnd = false } = {}) {
-    this.retainPreviewOnEnd = retainPreviewOnEnd;
-    this.committed = ''; this.count = 0; this.preview = '';
-  }
-  get text() { return this.committed + (this.preview ? (this.count ? '\n' : '') + this.preview : ''); }
+  constructor() { this.committed = ''; this.count = 0; }
+  get text() { return this.committed; }
   start(context) {
-    this.committed = ''; this.count = 0; this.preview = ''; this.canceled = false;
+    this.committed = ''; this.count = 0; this.canceled = false;
     context.emit('text', '');
   }
   receiveInputs(values, context) {
     if (this.canceled || context.signal.aborted) return;
     for (const [port, value] of Object.entries(values)) {
-      if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('TextAccumulator expects TEXT inputs.');
+      if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('TextAccumulator expects append: TEXT.');
     }
-    // A grouped append wins regardless of key order. Independent deliveries
-    // retain queue order; a later preview starts a new uncommitted tail.
-    if (Object.hasOwn(values, 'preview')) this.preview = values.preview;
-    if (Object.hasOwn(values, 'append')) {
-      this.committed += (this.count ? '\n' : '') + values.append;
-      this.count++; this.preview = '';
-    }
-    context.emit('text', this.text);
+    if (!Object.hasOwn(values, 'append')) return;
+    this.committed += (this.count ? '\n' : '') + values.append;
+    this.count++;
+    context.emit('text', this.committed);
   }
   receive(port, value, context) { this.receiveInputs({ [port]: value }, context); }
-  stop(context) {
-    if (context.signal.aborted) return;
-    if (this.retainPreviewOnEnd) return;
-    if (this.preview) { this.preview = ''; context.emit('text', this.committed); }
-  }
-  // Pipeline.cancel supplies a cleanup context: publish through ordinary ports.
-  // Bare dispose remains immediate and emits nothing.
-  cancel(context) {
-    this.canceled = true;
-    if (this.retainPreviewOnEnd) return this.text;
-    const changed = !!this.preview; this.preview = '';
-    if (changed) context?.emit('text', this.committed);
-    return this.committed;
-  }
+  stop() {}
+  cancel() { this.canceled = true; return this.committed; }
   dispose() { this.cancel(); }
 }
 
