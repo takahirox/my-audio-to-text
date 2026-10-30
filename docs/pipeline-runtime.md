@@ -138,10 +138,10 @@ Producers can mark unfinished results with
 Ordinary emissions default to false. Forwarding through the receive context
 retains true across async work, including `emit()` and grouped emissions; passing
 false cannot clear inherited provisional provenance. Independent source emissions
-do not inherit it. The translation scheduler marks preview jobs this way, and
-PairedTextToDOM rejects provisional results before formatting a pair. That consumer
-also checks that both input1/input2 routes occur in the same producer's `groupInputs`.
-Each completed group with input1 renders once; omitted input2 is blank and an
+do not inherit it. The translation scheduler marks preview jobs this way.
+PairedTextToDOM formats provisional and committed deliveries identically and checks
+that both input1/input2 routes occur in the same producer's `groupInputs`.
+Each atomic group with input1 renders once; omitted input2 is blank and an
 input2-only group emits nothing. No independent values are cached or matched.
 Correlation constraints belong to the consumer;
 the graph editor allows compatible drafts without inspecting producer types,

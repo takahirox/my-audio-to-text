@@ -4,7 +4,7 @@ import path from 'node:path';
 import { checkTranslationPorts, checkTranslationPortRecovery, translationPortWorker } from '../fixtures/translation-ports.js';
 
 for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'OpusMtEnJa', 'OpusMtJaEn'])
-  test(`${type}: packaged direct ports isolate history and clear previews with one owned Worker`, async ({ graphExtension: f }) => {
+  test(`${type}: packaged direct ports isolate history and paired previews with one owned Worker`, async ({ graphExtension: f }) => {
     for (const file of ['translategemma-worker.js', 'opus-mt-worker.js', 'opus-mt-en-ja-worker.js'])
       await writeFile(path.join(f.root, 'web', file), translationPortWorker);
     const live = await openGraph(f);

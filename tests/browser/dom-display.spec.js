@@ -71,7 +71,7 @@ test('direct paired formatter replaces the previous pair with literal pairs, omi
     const sink = new LiveTextDisplayNode(dom=>root.replaceChildren(dom));
     const c = {signal:new AbortController().signal,groupInputs:['input1','input2'],emit(_,dom){sink.receive('dom',dom,c);}};
     const paired = new PairedTextToDOMNode(); paired.start(c);
-    window.renderPair = values => paired.receiveInputs(values,c);
+    window.renderPair = (values, provisional = false) => paired.receiveInputs(values,{...c,provisional});
     renderPair({input1:'original',input2:'long translation\n'.repeat(8)});
   });
   const rows = page.locator('#latest-pair tbody tr'), cells = rows.locator('td');
@@ -89,9 +89,14 @@ test('direct paired formatter replaces the previous pair with literal pairs, omi
     [{input1:'<script>source</script>'},['<script>source</script>','']],
     [{input1:'',input2:''},['','']],
   ]) {
-    await page.evaluate(value=>renderPair(value),value);
-    await expect(rows).toHaveCount(1); expect(await cells.allTextContents()).toEqual(expected);
-    await expect(page.locator('#latest-pair script, #latest-pair img')).toHaveCount(0);
+    let committed;
+    for (const provisional of [false,true]) {
+      await page.evaluate(({value,provisional})=>renderPair(value,provisional),{value,provisional});
+      await expect(rows).toHaveCount(1); expect(await cells.allTextContents()).toEqual(expected);
+      await expect(page.locator('#latest-pair script, #latest-pair img')).toHaveCount(0);
+      const markup = await page.locator('#latest-pair').innerHTML();
+      if (provisional) expect(markup).toBe(committed); else committed = markup;
+    }
   }
 });
 
@@ -110,8 +115,8 @@ test('Pipeline groups arbitrary producer outputs exactly once without matching i
         plain:{inputs:{text:TEXT},receive(_,text){plain.push(text);}},
       },connections:reverse?connections.reverse():connections});
       await pipeline.start();
-      if(mode==='grouped') {
-        for(const group of [{right:'orphan'},{left:'same',right:'same'},{left:'same',right:'same'},{left:'same'},{left:'',right:''}]) a.emitOutputs(group);
+      if(mode==='grouped'||mode==='provisional') {
+        for(const group of [{right:'orphan'},{left:'same',right:'same'},{left:'same',right:'same'},{left:'same'},{left:'',right:''}]) a.emitOutputs(group,{provisional:mode==='provisional'});
       } else if(mode==='independent') {a.emit('left','same');a.emit('right','same');}
       else {a.emitOutputs({left:'same',right:'same'},{provisional:mode==='provisional'});b.emitOutputs({right:'same'});}
       await pipeline.entries.get('pairs').queue;await pipeline.entries.get('sink').queue;await pipeline.entries.get('plain').queue;
@@ -121,12 +126,12 @@ test('Pipeline groups arbitrary producer outputs exactly once without matching i
     return outcomes;
   });
   for(const {mode,snapshots,plain,errors} of result) {
-    if(mode==='grouped') {
+    if(mode==='grouped'||mode==='provisional') {
       expect(snapshots).toEqual([['same','same'],['same','same'],['same',''],['','']]);
       expect(plain).toEqual(['same','same','same','']);expect(errors).toEqual([]);
     } else {
       expect(snapshots).toEqual([]);expect(plain).toEqual(['same']);expect(errors).toHaveLength(1);
-      expect(errors[0]).toContain(mode==='provisional'?'provisional':'grouped');
+      expect(errors[0]).toContain('grouped');
     }
   }
 });

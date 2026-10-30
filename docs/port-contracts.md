@@ -6,8 +6,8 @@ from `web/port-contracts.js`; page-local rendered snapshots use shared `DOM`. No
 Contracts are identities; receiving Nodes validate their payloads. A compatible
 ordinary edge’s type compatibility never depends on producer type, output name,
 neighboring Nodes, or connection order. Correlated consumers validate delivery-local
-grouping and provenance at runtime; PairedTextToDOM accepts completed atomic results
-from any producer. Graph validation checks structure, contracts and Node settings; incomplete
+grouping and provenance at runtime; PairedTextToDOM accepts provisional and committed
+atomic results from any producer. Graph validation checks structure, contracts and Node settings; incomplete
 drafts remain saveable. Consumers own value limits, startup timing, correlation,
 queues and failure reporting. Model selection, cache verification, permissions and
 migration of historical interfaces remain specialized. See the [#134 audit](evidence/composition-134.md).
@@ -26,7 +26,7 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source/text/error` and `provisionalSource/provisionalText/provisionalError`: two atomic TEXT output families | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
 | LiveTextDisplay | dom: DOM | Clone and mount the complete inert DOM snapshot |
 | TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
-| PairedTextToDOM | grouped input1/input2: TEXT → dom: DOM | One pair only per completed atomic result; no history; hover/focus CSS |
+| PairedTextToDOM | grouped input1/input2: TEXT → dom: DOM | One pair per atomic result, provisional or committed; no history; hover/focus CSS |
 | DOMAccumulator | append: DOM → dom: DOM | Ordered session history of validated, cloned snapshots; Start clears, Stop/Cancel retain |
 | TextAccumulator | append: TEXT → text: TEXT | Exact newline-separated committed segments |
 | TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
@@ -104,7 +104,7 @@ The editor validates per-instance ports, template references, primitive types,
 one incoming edge per input, settings and acyclicity. Incomplete branches remain
 saveable; Start selects only executable paths. TextToDOM accepts arbitrary TEXT producers.
 PairedTextToDOM checks that all connected inputs belong to one producer's group and
-rejects provisional deliveries; LiveTextDisplay accepts DOM only. See
+formats provisional and committed deliveries identically; LiveTextDisplay accepts DOM only. See
 [runtime semantics](pipeline-runtime.md#correlated-primitive-outputs) and
 [graph wiring and migration](extension-graph.md).
 

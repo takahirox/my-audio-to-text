@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'OpusMtEnJa', 'OpusMtJaEn'])
-  test(`${type}: direct committed history, separate preview clearing, Cancel and restart`, async ({ page }) => {
+  test(`${type}: committed history, separate paired previews, clearing, Cancel and restart`, async ({ page }) => {
     await checkTranslationPorts(page, type, '/extension/');
   });
 

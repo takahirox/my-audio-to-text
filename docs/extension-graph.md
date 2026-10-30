@@ -244,7 +244,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | dom: DOM | clone and mount each complete inert DOM snapshot |
 | TextToDOM | text: TEXT | dom: DOM; literal text snapshot with visible whitespace |
-| PairedTextToDOM | input1/input2: TEXT | dom: DOM; one completed grouped pair of texts |
+| PairedTextToDOM | input1/input2: TEXT | dom: DOM; one atomic grouped pair, provisional or committed |
 | DOMAccumulator | append: DOM | dom: DOM; ordered accumulated snapshots |
 | DOMCombiner | first / second: DOM | dom: DOM; latest first snapshot followed by latest second snapshot |
 | TextAccumulator | append: TEXT; text: TEXT output | exact committed transcript snapshots |
@@ -865,11 +865,11 @@ OpusMtJaEn.text   → PairedTextToDOM.input2
 PairedTextToDOM.dom → LiveTextDisplay.dom
 ```
 
-PairedTextToDOM formats each completed atomic result into a fresh DOM snapshot
-containing **only that pair**. A direct formatter → display connection shows the
+PairedTextToDOM formats each atomic result, provisional or committed, into a fresh
+DOM snapshot containing **only that pair**. A direct formatter → display connection shows the
 latest pair, replacing the previous one. The formatter keeps no history and never
 caches independent inputs for later matching. Exact input strings, including
-whitespace, duplicates and empty results, stay literal. Input1 renders on the left and input2 on the right. A completed group
+whitespace, duplicates and empty results, stay literal. Input1 renders on the left and input2 on the right. An atomic group
 with input1 but no input2 leaves the right cell empty, without reusing a previous
 value. Input2 alone emits nothing. The formatter has no error port or error UI.
 Translation failures retain the source in the left cell; specific errors remain
@@ -961,10 +961,13 @@ both input1/input2 routes to belong to the same direct producer's explicit group
 even when a particular emission omits input2. Independent emissions or mismatched producers fail the consumer
 without joining values by equality or timing. The scheduler marks actual preview
 results using internal `emitOutputs(values, { provisional: true })` provenance;
-PairedTextToDOM rejects those deliveries before formatting a pair. Merely connecting an
-optional provisional branch does not invalidate the graph; inactive branches are
-excluded from execution. For bounded retranslation, route translator.provisionalText to a separate
-TextToDOM preview branch; optional TranslationCommit → TextAccumulator → TextToDOM
+PairedTextToDOM formats those deliveries identically to committed pairs. For paired
+previews, wire provisionalSource → input1 and provisionalText → input2 on a separate
+PairedTextToDOM → LiveTextDisplay replacement branch. Empty cleanup groups render
+blank cells; the producer owns cleanup timing. Keep committed source/text on their
+own formatter branch and add DOMAccumulator there only when history is desired.
+Inactive branches are excluded from execution. For bounded retranslation, a plain
+translator.provisionalText → TextToDOM preview branch also works; optional TranslationCommit → TextAccumulator → TextToDOM
 keeps causal window checks on committed results. Plain TextFormatter remains available for independent
 latest values; it does not claim correlation.
 
@@ -1138,9 +1141,10 @@ cleanup family before disposal. Direct text-to-history/field/TTS is committed-on
 Wire provisionalText → a separate TextToDOM.text → LiveTextDisplay.dom. Its empty values
 clear that branch. Use a separate TextFormatter if preview formatting is needed; never
 append its output to history. Generic display/composition Nodes have no
-translator-specific rules. PairedTextToDOM retains its generic completed-group
-requirement. DOMCombiner can combine committed DOM history with a replacement preview
-branch. TranslationCommit checks causal closed-window results only and rejects unclosed
+translator-specific rules. PairedTextToDOM accepts both families on separate
+branches and requires an atomic group from one producer for each pair. DOMCombiner
+can combine committed DOM history with a replacement preview branch.
+TranslationCommit checks causal closed-window results only and rejects unclosed
 results; preview routing bypasses it. Its existing provisional output supplies only
 empty boundary/final clears for compatibility.
 
