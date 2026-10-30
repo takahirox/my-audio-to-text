@@ -20,12 +20,15 @@ export async function checkTranslationPorts(page, type, base = './') {
     const nodes = [graphNode('Text', 'final'), graphNode('Text', 'draft'), graphNode(type, 'translator'),
       graphNode('TextAccumulator', 'history'), graphNode('TextToDOM', 'history-dom'), graphNode('LiveTextDisplay', 'committed'),
       graphNode('TextToDOM', 'preview-dom'), graphNode('LiveTextDisplay', 'preview'),
+      graphNode('DOMCombiner', 'combined-dom'), graphNode('LiveTextDisplay', 'combined'),
       graphNode('PairedTextToDOM', 'pair'), graphNode('LiveTextDisplay', 'comparison')];
     nodes[0].settings.value = 'seed';
     const graph = { version: GRAPH_VERSION, nodes, edges: [
       edge('final', 'value', 'translator', 'text'), edge('draft', 'value', 'translator', 'provisional'),
       edge('translator', 'text', 'history', 'append'), edge('history', 'text', 'history-dom', 'text'), edge('history-dom', 'dom', 'committed', 'dom'),
       edge('translator', 'provisionalText', 'preview-dom', 'text'), edge('preview-dom', 'dom', 'preview', 'dom'),
+      edge('history-dom', 'dom', 'combined-dom', 'first'), edge('preview-dom', 'dom', 'combined-dom', 'second'),
+      edge('combined-dom', 'dom', 'combined', 'dom'),
       edge('translator', 'source', 'pair', 'input1'), edge('translator', 'text', 'pair', 'input2'), edge('pair', 'dom', 'comparison', 'dom'),
     ] };
     saveGraph(localStorage, graph);
@@ -58,6 +61,7 @@ export async function checkTranslationPorts(page, type, base = './') {
         complete(3, 'closed translation'); await wait(() => displays.committed === 'seed translation\nclosed translation');
         send('draft', 'cancel preview'); await wait(() => requests.length === 5);
         complete(4, 'cancel translation'); await wait(() => displays.preview === 'cancel translation');
+        await wait(() => displays.combined === 'seed translation\nclosed translationcancel translation');
         await built.pipeline.cancel(); complete(4, 'late after cancel');
         runs.push({ previewState, clearBeforeCompletion, displays, events, errors: built.pipeline.errors.map(e => e.message),
           workerCount: workers.length, released: workers.every(w => w.released), count: built.pipeline.entries.get('history').node.count,
@@ -67,9 +71,10 @@ export async function checkTranslationPorts(page, type, base = './') {
     return runs;
   }, { type, base });
   for (const run of runs) {
-    expect(run.previewState).toEqual({ committed: 'seed translation', preview: 'preview translation', comparison: 'seedseed translation' });
+    expect(run.previewState).toEqual({ committed: 'seed translation', preview: 'preview translation', comparison: 'seedseed translation', combined: 'seed translationpreview translation' });
     expect(run.clearBeforeCompletion.preview).toBe(''); expect(run.clearBeforeCompletion.committed).toBe('seed translation');
-    expect(run.displays).toEqual({ committed: 'seed translation\nclosed translation', preview: '', comparison: 'closedclosed translation' });
+    expect(run.clearBeforeCompletion.combined).toBe('seed translation');
+    expect(run.displays).toEqual({ committed: 'seed translation\nclosed translation', preview: '', comparison: 'closedclosed translation', combined: 'seed translation\nclosed translation' });
     expect(run.events.some(e => e.text.includes('late'))).toBe(false);
     expect(run.count).toBe(2); expect(run.workerCount).toBe(1); expect(run.released).toBe(true); expect(run.saved).toBe(true);
     expect(run.errors).toEqual([]);
