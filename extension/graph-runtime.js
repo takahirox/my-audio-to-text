@@ -145,10 +145,7 @@ export function buildGraph(graph, options) {
       case 'PairedTextToDOM': node = new PairedTextToDOMNode(); break;
       case 'DOMAccumulator': node = new DOMAccumulatorNode(); break;
       case 'DOMCombiner': node = new DOMCombinerNode(); break;
-      case 'TextAccumulator': node = new TextAccumulatorNode({
-        retainPreviewOnEnd: spec.legacyDisplay === true &&
-          !description.edges.some(route => route.to[0] === spec.id && route.to[1] === 'append'),
-      }); break;
+      case 'TextAccumulator': node = new TextAccumulatorNode(); break;
       case 'TextWindow': node = new TextWindowNode(spec.settings); break;
       case 'TranslationCommit': node = new TranslationCommitNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;

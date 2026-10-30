@@ -26,7 +26,7 @@ test('MV3 searchable palette, typed audio/TEXT routes and help; production onlin
   await expect(editor.locator('[data-node="speech"] [data-side="input"]')).toHaveCount(1);
   await expect(editor.locator('[data-node="speech"] [data-side="output"]')).toHaveCount(2);
   // Exercise the editor's real connection gesture for all three public routes.
-  for (const [source, output, target, input] of [['audio', 'audio', 'speech', 'audio'], ['speech', 'provisional', 'transcript-accumulator', 'preview'], ['speech', 'final', 'transcript-accumulator', 'append']]) {
+  for (const [source, output, target, input] of [['audio', 'audio', 'speech', 'audio'], ['speech', 'provisional', 'transcript-preview', 'text'], ['speech', 'final', 'transcript-accumulator', 'append']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
     await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).click();
   }

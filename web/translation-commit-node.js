@@ -39,9 +39,11 @@ export class TranslationCommitNode {
       context.emitOutputs({ provisional: values.error ? '' : values.text, error: values.error });
     }
   }
-  stop() {
+  stop(context) {
     this.stopped = true;
+    (context || this.context)?.emit('provisional', '');
     if (this.boundaries.length) throw Error(`TranslationCommit stopped with ${this.boundaries.length} untranslated source windows.`);
   }
+  cancel(context) { context.emit('provisional', ''); }
   dispose() { this.context?.signal.removeEventListener('abort', this.abort); this.stopped = true; this.boundaries = []; this.chars = 0; }
 }

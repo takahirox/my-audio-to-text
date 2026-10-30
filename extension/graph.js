@@ -8,12 +8,12 @@ import { validateCondition, MAX_CONDITION_CHARS } from '../web/if-condition-poli
 import { finiteNumber } from '../web/number-node.js';
 import { windowSettings } from '../web/text-window-node.js';
 
-export const GRAPH_VERSION = 12;
+export const GRAPH_VERSION = 13;
 export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn', 'SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'];
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
-export const GRAPH_RECOVERY_KEY = 'processing-graph-before-v12';
+export const GRAPH_RECOVERY_KEY = 'processing-graph-before-v13';
 // Migration-only contracts; none are supported palette/runtime ports.
 const LEGACY_TRANSLATION_OUTPUTS = { provisional: TEXT, text: TEXT, provisionalSource: TEXT, provisionalStatus: TEXT, provisionalError: TEXT, finalSource: TEXT, finalStatus: TEXT, finalIndex: NUMBER, finalError: TEXT };
 const paired = contract => ({ provisional: contract, final: contract });
@@ -27,9 +27,9 @@ export const NODE_TYPES = Object.freeze({
   SpeechToTextReazonSpeech: { label: 'ReazonSpeech ja-en ASR', inputs: { audio: MONO_16KHZ_PCM, maxDuration: NUMBER }, optionalInputs: ['maxDuration'], outputs: paired(TEXT), help: 'Optional maxDuration: connect any NUMBER source for a 1–12 second audio segment cap (default 6 seconds). Includes pre-roll; decimals round down to whole 16 kHz samples. Frozen before model loading; waiting audio is bounded at 30 seconds; saved edits apply next session. VAD can end sooner. Mid-sentence splits may reduce recognition quality. Inference and final display can take longer than the cap.' },
   Text: { label: 'Text', inputs: {}, outputs: { value: TEXT }, textSettings: { value: { default: '', multiline: true } }, help: 'Reusable literal text constant, including empty text. Delivered once at session start to ordinary TEXT consumers. Whisper.language consumes its first TEXT value before model loading; saves apply next session.' },
   SpeechToTextWhisper: { label: 'Whisper tiny (multilingual) ASR', inputs: { audio: MONO_16KHZ_PCM, language: TEXT }, optionalInputs: ['language'], outputs: { final: TEXT }, help: 'Packaged local multilingual Whisper tiny (q8, CPU WASM). Defaults to English (en); connect any TEXT source supplying en or ja. Only final: TEXT is available; connect final to TextAccumulator.append for committed segments. Silero ends speech at silence or a 6-second cap; Stop drains every segment. No downloads while recording.' },
-  SpeechToTextZipformerEn: { label: 'Streaming Zipformer English ASR', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT), help: 'Packaged English-only 20M Zipformer, real online CPU WASM recognition. Incremental provisional → TextAccumulator.preview; final → TextAccumulator.append. Fixed 12-second segments, Stop flushes the tail. No Silero gating or silence endpoint; silence counts toward the cap. Up to 30 seconds of backlog; overflow fails visibly. No downloads while recording.' },
+  SpeechToTextZipformerEn: { label: 'Streaming Zipformer English ASR', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT), help: 'Packaged English-only 20M Zipformer, real online CPU WASM recognition. Incremental provisional → TextToDOM → DOMCombiner.second; final → TextAccumulator.append → TextToDOM → DOMCombiner.first. Fixed 12-second segments, Stop flushes the tail. No Silero gating or silence endpoint; silence counts toward the cap. Up to 30 seconds of backlog; overflow fails visibly. No downloads while recording.' },
   SpeechToTextParakeetV3: { label: 'Parakeet TDT 0.6B v3 ASR', preparationNotice: 'Parakeet v3: Save prepares 1.26 GB. Allow 3 GB storage and 6 GB free RAM/GPU memory; WebGPU shader-f16 required.', inputs: { audio: MONO_16KHZ_PCM }, outputs: { final: TEXT }, help: 'Optional NVIDIA v3 ONNX conversion. Save prepares 1.26 GB of weights; allow at least 6 GB free RAM/GPU memory and 3 GB free storage. Requires WebGPU with shader-f16; no CPU fallback. Final only → TextAccumulator.append. 800ms quiet or 12-second chunk cap; Stop drains tails. Hard caps can split words. 30-second backlog limit. Local inference; no recording-time downloads.' },
-  SpeechToTextMoonshineMediumEn: { label: 'Moonshine Medium Streaming English ASR', preparationNotice: 'Moonshine Medium English Streaming: Save prepares 305 MB. Allow 700 MB storage and 2 GB free RAM; CPU WASM.', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT), help: 'Optional 245M English Medium Streaming, CPU WASM. Save prepares 305 MB of weights; allow at least 2 GB free RAM and 700 MB free storage. Native provisional → TextAccumulator.preview; committed final → TextAccumulator.append. Updates from 0.5 seconds, native endpointing; history renews every 30 seconds after drain. Hard boundaries can split words. 30-second backlog limit. Local inference; no recording-time downloads.' },
+  SpeechToTextMoonshineMediumEn: { label: 'Moonshine Medium Streaming English ASR', preparationNotice: 'Moonshine Medium English Streaming: Save prepares 305 MB. Allow 700 MB storage and 2 GB free RAM; CPU WASM.', inputs: { audio: MONO_16KHZ_PCM }, outputs: paired(TEXT), help: 'Optional 245M English Medium Streaming, CPU WASM. Save prepares 305 MB of weights; allow at least 2 GB free RAM and 700 MB free storage. Native provisional → TextToDOM → DOMCombiner.second; committed final → TextAccumulator.append → TextToDOM → DOMCombiner.first. Updates from 0.5 seconds, native endpointing; history renews every 30 seconds after drain. Hard boundaries can split words. 30-second backlog limit. Local inference; no recording-time downloads.' },
   OpusMtJaEn: { label: 'OPUS-MT Japanese → English', inputs: { text: TEXT, provisional: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS, help: 'Committed text by default. Optional provisional accepts any TEXT source; route results through TranslationCommit for previews. Direct source/text/error outputs form one atomic result. Pending and Cancel emit nothing; Stop drains queued text. Failures emit source/error without successful text.' },
   OpusMtEnJa: { label: 'OPUS-MT English → Japanese', inputs: { text: TEXT, provisional: TEXT }, optionalInputs: ['provisional'], outputs: TRANSLATION_OUTPUTS, help: 'Committed text by default. Optional provisional accepts any TEXT source; route results through TranslationCommit for previews. Direct source/text/error outputs form one atomic result. Pending and Cancel emit nothing; Stop drains queued text. Failures emit source/error without successful text.' },
   MeetingSummaryLfm2: { label: 'Meeting Summary · LFM2.5 1.2B JP', inputs: { text: TEXT }, outputs: { summary: TEXT }, settings: { language: ['ja', 'en'] }, preparationNotice: 'LFM2.5 JP: Save prepares 749 MB. Allow 2 GB storage and 4 GB free RAM/GPU memory per Node (planning estimate). WebGPU shader-f16. LFM 1.0 commercial-use conditions apply; see Models.', help: 'Batch committed text for 30 seconds or 2,000 characters, then update the previous note with new evidence only. Complete summary → TextToDOM.text → LiveTextDisplay.dom. Stop drains accepted text; Cancel discards pending work. 32,768-character backlog limit; overflow rejects the new fragment visibly and drains accepted text. Summaries are lossy and can omit or distort history. Saved language applies next session. Local WebGPU shader-f16 required; no CPU/cloud fallback or recording-time downloads.' },
@@ -45,10 +45,10 @@ export const NODE_TYPES = Object.freeze({
   TextToDOM: { label: 'Text to DOM', inputs: { text: TEXT }, outputs: { dom: DOM }, textSettings: { className: { default: '', optional: true } }, help: 'Convert each complete TEXT snapshot to literal visible text, including whitespace, newlines and empty strings. Optional className selects code-authored presentation CSS. No HTML parsing, accumulation or source matching. Main thread only.' },
   PairedTextToDOM: { label: 'Paired text to DOM', inputs: { input1: TEXT, input2: TEXT }, outputs: { dom: DOM }, help: 'Supply input1/input2 together from one producer in a completed atomic group. Input1 is left; input2 is right. Omitted input2 leaves an empty cell; input2 alone emits nothing. Ungrouped, mismatched and provisional deliveries are rejected at runtime. Literal text, neutral accessibility labels and linked hover/focus highlighting. No history; connect DOMAccumulator explicitly. Main thread only.' },
   DOMAccumulator: { label: 'DOM accumulator', inputs: { append: DOM }, outputs: { dom: DOM }, help: 'Append each inert DOM snapshot in order, preserving duplicates. Validate and clone inputs and emit the complete accumulated DOM. Start clears history; Stop/Cancel retain committed content and reject stale deliveries. No persistence; growing snapshots consume memory and rendering time. Main thread only.' },
-  DOMCombiner: { label: 'DOM combiner', inputs: { first: DOM, second: DOM }, outputs: { dom: DOM }, help: 'Combine the latest first and second inert DOM snapshots in that order. Each update replaces only its input; empty snapshots clear it. Inputs and outputs are validated deep clones. Start clears both; Stop/Cancel retain the latest output and reject stale deliveries. Main thread only.' },
-  TextAccumulator: { label: 'Text accumulator', inputs: { append: TEXT, preview: TEXT }, optionalInputs: ['append', 'preview'], outputs: { text: TEXT }, help: 'Reusable transcript state: append commits one exact segment separated by a newline, including repeated/empty values, and clears preview. Preview replaces only the uncommitted tail; empty clears it. Grouped append wins. Every change emits the whole TEXT snapshot. Stop removes preview; Cancel discards pending work; Start begins empty. No truncation or persistence; growing snapshots consume memory and rendering time.' },
+  DOMCombiner: { label: 'DOM combiner', inputs: { first: DOM, second: DOM }, optionalInputs: ['first', 'second'], outputs: { dom: DOM }, help: 'Combine the latest first and second inert DOM snapshots in that order. Each update replaces only its input; empty snapshots clear it. Inputs and outputs are validated deep clones. Start clears both; Stop/Cancel retain the latest output and reject stale deliveries. Main thread only.' },
+  TextAccumulator: { label: 'Text accumulator', inputs: { append: TEXT }, outputs: { text: TEXT }, help: 'Append each exact TEXT segment separated by a newline, including repeated and empty values. Every append emits the complete accumulated snapshot. Start clears history and emits empty text; Stop/Cancel retain committed text. Compose provisional display separately with TextToDOM and DOMCombiner. No truncation or persistence; growing snapshots consume memory and rendering time.' },
   TextWindow: { label: 'Text window', inputs: { text: TEXT }, outputs: { text: TEXT, provisional: TEXT }, numberSettings: { maxChars: { default: 600 }, maxWaitMs: { default: 1500 } }, settings: { sentenceBoundary: ['on', 'off'] }, help: 'Model-independent committed speech batching. 2–1000 characters, 1–30000 ms from first pending text; sentenceBoundary closes conservative punctuation boundaries. Empty strings are ignored; equal utterances and whitespace are retained. Stop flushes once, Cancel discards. text → any translator.text. Optional provisional → the same translator.provisional for bounded retranslation; see TranslationCommit.' },
-  TranslationCommit: { label: 'Translation commit (experiment)', inputs: { boundary: TEXT, source: TEXT, text: TEXT, error: TEXT }, outputs: { provisional: TEXT, final: TEXT, error: TEXT }, help: 'Opt-in bounded retranslation: Fan out each committed source event to boundary and translator.text. Results must be one grouped source/text/error emission causally linked to that event; unclosed results are previews. Any TEXT producer can supply boundaries. provisional → TextAccumulator.preview; final → TextAccumulator.append. Only correlated closed source events commit, exactly once; equal text alone never matches. Failures retain source with an error in the committed item. 32-window backlog cap; no new weights or conversation-wide memory.' },
+  TranslationCommit: { label: 'Translation commit (experiment)', inputs: { boundary: TEXT, source: TEXT, text: TEXT, error: TEXT }, outputs: { provisional: TEXT, final: TEXT, error: TEXT }, help: 'Opt-in bounded retranslation: Fan out each committed source event to boundary and translator.text. Results must be one grouped source/text/error emission causally linked to that event; unclosed results are previews. Any TEXT producer can supply boundaries. provisional → TextToDOM → DOMCombiner.second; final → TextAccumulator.append → TextToDOM → DOMCombiner.first. Only correlated closed source events commit, exactly once; equal text alone never matches. Failures retain source with an error in the committed item. 32-window backlog cap; no new weights or conversation-wide memory.' },
   TextFormatter: { label: 'Text formatter', inputs: FORMAT_INPUTS, optionalInputs: Object.keys(FORMAT_INPUTS), outputs: { text: TEXT }, numberSettings: { inputCount: { default: 4 } }, textSettings: { template: { default: '{1}', maxLength: 2048, multiline: true } }, help: 'Add/remove numbered inputs in Settings. Use {1}, {2}, etc., labels and literal newlines. Escape braces as {{ and }}. Missing inputs are empty. Each emission formats the latest input values; directly grouped emissions replace this producer’s connected inputs together (omitted inputs clear). Independent branches are not correlated.' },
   Supertonic3: { label: 'Supertonic 3 TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { language: ['ja', 'en'], voice: ['F1', 'M1'] } },
   Kokoro: { label: 'Kokoro TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { voice: ['jf_alpha', 'af_heart'] } },
@@ -80,16 +80,16 @@ export function graphNode(type, id, x = 20, y = 20) {
 // history/preview alongside that latest pair (see docs/extension-graph.md).
 export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
   direction = direction === 'en-ja' ? 'en-ja' : 'ja-en';
-  const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToTextReazonSpeech', 'speech', 270, 30), graphNode('LiveTextDisplay', 'transcript', 1450, 30)];
-  const edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript', 'dom')];
+  const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30), graphNode('SpeechToTextReazonSpeech', 'speech', 270, 30), graphNode('LiveTextDisplay', 'transcript', 1780, 30)];
+  const edges = [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'provisional', 'transcript-preview', 'text'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript-combined', 'first'), edge('transcript-preview', 'dom', 'transcript-combined', 'second'), edge('transcript-combined', 'dom', 'transcript', 'dom')];
   if (enabled) {
     nodes[2].settings = { label: 'Original', language: direction === 'en-ja' ? 'en' : 'ja' };
-    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 330), graphNode('LiveTextDisplay', 'translated', 1450, 330), graphNode('PairedTextToDOM', 'translated-format', 790, 330));
+    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 270, 630), graphNode('LiveTextDisplay', 'translated', 1780, 630), graphNode('PairedTextToDOM', 'translated-format', 1120, 630));
     nodes[4].settings.label = 'Translation';
     edges.push(edge('speech', 'final', 'translation', 'text'));
     edges.push(...pairedTextEdges('translation', 'translated-format'), edge('translated-format', 'dom', 'translated', 'dom'));
   }
-  nodes.push(graphNode('TextAccumulator', 'transcript-accumulator', 790, 30), graphNode('TextToDOM', 'transcript-dom', 1120, 30));
+  nodes.push(graphNode('TextAccumulator', 'transcript-accumulator', 790, 30), graphNode('TextToDOM', 'transcript-dom', 1120, 30), graphNode('TextToDOM', 'transcript-preview', 1120, 240), graphNode('DOMCombiner', 'transcript-combined', 1450, 30));
   return { version: GRAPH_VERSION, translationDirection: direction, nodes, edges };
 }
 export const edge = (source, output, target, input) => ({ from: [source, output], to: [target, input] });
@@ -363,7 +363,7 @@ function migrateTranslationGraph(next) {
   next = migrateDisplayGraph(next);
   if (changes.length) {
     const error = new Error(`Translation graph migration needs review. ${changes.join('; ')}. No pending rows or provisional translations are emitted. Failures emit source/error only. PairedTextToDOM source/text become input1/input2; former formatter error routes are removed in the draft, with specific errors in translation diagnostics. Review the repair draft and Save; the original saved graph is kept for recovery.`);
-    const candidate = convertDOMGraph(next), errors = validateGraph(candidate);
+    const candidate = convertAccumulatorGraph(convertDOMGraph(next)), errors = validateGraph(candidate);
     if (!errors.length) error.recoveryGraph = candidate;
     else error.message += ` The converted graph is invalid: ${errors.join(' ')} Export the original recovery copy and repair these routes/settings before import.`;
     throw error;
@@ -379,9 +379,7 @@ function migrateDisplayGraph(next) {
     const routes = next.edges.filter(route => route?.to?.[0] === display.id);
     if (routes.some(route => route.to[1] === 'append')) {
       const id = unusedId(ids, `${display.id}-accumulator`);
-      // Saved append routes may belong to inactive drafts. Retain the old
-      // replace-only lifecycle until an append route actually participates.
-      next.nodes.push({ ...graphNode('TextAccumulator', id, Math.max(0, display.position.x - 250), display.position.y + 120), legacyDisplay: true });
+      next.nodes.push(graphNode('TextAccumulator', id, Math.max(0, display.position.x - 250), display.position.y + 120));
       for (const route of routes) if (['append', 'replace'].includes(route.to[1])) {
         route.to = [id, route.to[1] === 'replace' ? 'preview' : 'append'];
       }
@@ -414,16 +412,16 @@ function convertPairedDOMGraph(graph) {
     if (route.to[1] === 'source') route.to[1] = 'input1';
     else if (route.to[1] === 'text') route.to[1] = 'input2';
   }
-  next.version = GRAPH_VERSION;
+  next.version = 12;
   return next;
 }
-export function migrateGraph(graph) {
+function migrateBeforeAccumulatorGraph(graph) {
   const next = migrateLegacyGraph(graph);
   if (![10, 11].includes(next?.version) || !Array.isArray(next.nodes) || !Array.isArray(next.edges)) return next;
   if (next.version === 11) {
     const pairedIds = new Set(next.nodes.filter(node => node.type === 'PairedTextToDOM').map(node => node.id));
-    const converted = convertPairedDOMGraph(next), errors = validateGraph(converted);
-    if (!pairedIds.size) return converted;
+    if (!pairedIds.size) return convertPairedDOMGraph(next);
+    const converted = convertAccumulatorGraph(convertPairedDOMGraph(next)), errors = validateGraph(converted);
     const removed = next.edges.filter(route => pairedIds.has(route?.to?.[0]) && route.to[1] === 'error')
       .map(route => `${route.from?.join('.')} → ${route.to.join('.')}`);
     const error = new Error(`Paired DOM graph v12 requires review. PairedTextToDOM source/text become input1/input2, with neutral labels and an empty right cell for omitted input2. ${removed.length ? `Removed formatter error routes in draft: ${removed.join('; ')}. ` : ''}Specific translation errors remain in translation diagnostics; other error routes are preserved. Review the draft and Save; the original saved graph is kept for recovery.`);
@@ -431,8 +429,50 @@ export function migrateGraph(graph) {
     else error.message += ` Conversion needs repair: ${errors.join(' ')}`;
     throw error;
   }
-  const converted = convertDOMGraph(next), errors = validateGraph(converted);
+  const converted = convertAccumulatorGraph(convertDOMGraph(next)), errors = validateGraph(converted);
   const error = new Error('DOM display graph v11 requires review. LiveTextDisplay now accepts only dom: DOM. PairedTextToDOM source/text become input1/input2; former formatter error routes are removed in the draft, with specific errors in translation diagnostics. Review the TextToDOM conversion draft and Save; the original saved graph is kept for recovery.');
+  if (!errors.length) error.recoveryGraph = converted;
+  else error.message += ` Conversion needs repair: ${errors.join(' ')}`;
+  throw error;
+}
+// Display previews become independent DOM snapshots, without inferring stream
+// correlation. Every preview conversion requires reviewed Save; arbitrary TEXT
+// consumers remain blocked because their string semantics cannot be preserved.
+function convertAccumulatorGraph(graph) {
+  const next = structuredClone(graph), ids = new Set(next.nodes.map(node => node.id));
+  for (const accumulator of next.nodes.filter(node => node.type === 'TextAccumulator')) {
+    const previews = next.edges.filter(route => route?.to?.[0] === accumulator.id && route.to[1] === 'preview');
+    if (!previews.length) continue;
+    const outputs = next.edges.filter(route => route?.from?.[0] === accumulator.id);
+    const formatters = outputs.map(route => next.nodes.find(node => node.id === route.to?.[0]));
+    if (previews.length !== 1 || !outputs.length || outputs.some((route, i) => route.from[1] !== 'text' || route.to[1] !== 'text' ||
+        formatters[i]?.type !== 'TextToDOM' || next.edges.some(other => other !== route && other.to?.[0] === route.to[0]))) {
+      throw Error(`TextAccumulator ${accumulator.id} needs manual repair: shared formatters or non-DOM consumers cannot be converted without changing their TEXT values. The original JSON and all routes are kept. Compose each preview explicitly with TextToDOM and DOMCombiner, and choose its producer's finalization and Stop/Cancel behavior before Save.`);
+    }
+    for (const formatter of formatters) {
+      const previewId = unusedId(ids, `${formatter.id}-preview`), combinedId = unusedId(ids, `${formatter.id}-combined`);
+      next.nodes.push({ ...graphNode('TextToDOM', previewId, formatter.position.x, formatter.position.y + 240), settings: structuredClone(formatter.settings) },
+        graphNode('DOMCombiner', combinedId, formatter.position.x + 330, formatter.position.y + 240));
+      for (const route of next.edges) if (route.from?.[0] === formatter.id) route.from = [combinedId, route.from[1]];
+      next.edges.push({ ...structuredClone(previews[0]), to: [previewId, 'text'] }, edge(formatter.id, 'dom', combinedId, 'first'), edge(previewId, 'dom', combinedId, 'second'));
+    }
+    next.edges = next.edges.filter(route => !previews.includes(route));
+  }
+  for (const node of next.nodes) if (node.type === 'TextAccumulator') delete node.legacyDisplay;
+  next.version = GRAPH_VERSION;
+  return next;
+}
+export function migrateGraph(graph) {
+  let next;
+  try { next = migrateBeforeAccumulatorGraph(graph); }
+  catch (error) {
+    if (error.recoveryGraph) error.message += ' The v13 draft also composes any accumulator previews as separate DOM snapshots. Independent/preview-only sources retain their latest snapshot until their producer clears it; unrelated append and Stop/Cancel no longer clear it. Review lifecycle behavior before Save; no correlation is inferred.';
+    throw error;
+  }
+  if (next?.version !== 12 || !Array.isArray(next.nodes) || !Array.isArray(next.edges)) return next;
+  const converted = convertAccumulatorGraph(next), errors = validateGraph(converted);
+  if (!next.edges.some(route => route?.to?.[1] === 'preview' && next.nodes.some(node => node.id === route.to[0] && node.type === 'TextAccumulator'))) return converted;
+  const error = new Error('TextAccumulator graph v13 requires review. Preview routes become explicit TextToDOM and DOMCombiner branches. Paired producers clear their own provisional output on final, Stop and Cancel. Independent and preview-only sources retain their latest snapshot: append no longer clears them, and Stop/Cancel only clear when their producer does so. No correlation is inferred; review lifecycle behavior and reconnect deliberately. Review the draft and Save; the exact original JSON and earlier recovery copies are kept.');
   if (!errors.length) error.recoveryGraph = converted;
   else error.message += ` Conversion needs repair: ${errors.join(' ')}`;
   throw error;

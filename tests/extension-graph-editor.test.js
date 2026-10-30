@@ -89,7 +89,7 @@ test('formatter Add/Remove changes only that instance and the removed last wire;
   assert.equal(Object.keys(nodeDefinition(a).inputs).length, 7);
   a.settings.template = '{7}\n{1}'; e.resizeFormatter(a, -1);
   assert.equal(a.settings.template, '{7}\n{1}'); assert.match(validateGraph(graph).join(' '), /Input \{7\} is not configured/);
-  assert.equal(graph.edges.length, 8, 'unaffected wires preserved');
+  assert.equal(graph.edges.length, 10, 'unaffected wires preserved');
   e.resizeFormatter(a, 1); assert.deepEqual(validateGraph(graph), []);
   for (let i = 0; i < 4; i++) e.resizeFormatter(a, -1);
   assert.equal(a.settings.inputCount, 3);

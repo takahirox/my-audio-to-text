@@ -28,7 +28,7 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
 | PairedTextToDOM | grouped input1/input2: TEXT → dom: DOM | One pair only per completed atomic result; no history; hover/focus CSS |
 | DOMAccumulator | append: DOM → dom: DOM | Ordered session history of validated, cloned snapshots; Start clears, Stop/Cancel retain |
-| TextAccumulator | append/preview: TEXT → text: TEXT | Newline-separated committed segments plus optional uncommitted tail |
+| TextAccumulator | append: TEXT → text: TEXT | Exact newline-separated committed segments |
 | TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
 | TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
 | Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
@@ -94,8 +94,8 @@ the old graph, and keeps the original storage untouched until the user reviews a
 Saves. A sole paired formatter → display.replace route becomes append; ambiguous
 shared/output routes remain in place for deliberate review. Unrelated nodes,
 labels, positions, literal content and supported fan-out remain unchanged.
-After Save, the original JSON remains under `processing-graph-before-v9` and is
-visible in Graph Editor's **Original saved graph (migration recovery copy)**.
+After Save, new recovery copies use `processing-graph-before-v13`; earlier
+`processing-graph-before-v*` copies remain available in Graph Editor's Recovery disclosure.
 Malformed/ambiguous older graphs fail visibly without overwriting storage.
 `PairedTextFormatter` has no supported palette or runtime implementation.
 
@@ -116,3 +116,9 @@ Graph v12 reviews PairedTextToDOM source/text → input1/input2 and explicitly
 removes former formatter error routes only in the draft, retaining unrelated error
 fan-out. Missing input2 renders blank; the formatter owns no translation error UI.
 See [DOM ownership, paired formatting and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+
+Graph v13 removes TextAccumulator's provisional input. Its only input is append:
+TEXT; each event emits the full exact newline-separated committed history.
+Replaceable provisional text travels through a separate TextToDOM branch and
+DOMCombiner. Saved preview routes require reviewed conversion or deliberate
+manual repair, with exact original JSON retained. See [v13 recovery details](extension-graph.md#graph-v13-append-only-migration-and-recovery).

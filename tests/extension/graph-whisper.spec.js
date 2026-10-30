@@ -1,7 +1,7 @@
 import { openPalette, clickGraphAction } from './ui-controls.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { test, expect, openGraph, startGraph } from './graph-fixture.js';
+import { test, expect, openGraph, startGraph, disconnectWire } from './graph-fixture.js';
 
 import { selectWhisper } from './whisper-fixture.js';
 
@@ -88,7 +88,7 @@ for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'k
     }
     localStorage.setItem(GRAPH_KEY, JSON.stringify(graph)); return graph;
   }, unsafe);
-  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = 12;
+  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = 13;
   expected.edges = expected.edges.filter(route => route.from[1] !== 'provisional');
   await editor.reload();
   await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(0);
@@ -109,6 +109,7 @@ for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'k
 
 test('MV3 Text literal and empty values round-trip and deliver once to an ordinary TEXT consumer', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
+  await disconnectWire(editor, 'speech.provisional to transcript-preview.text');
   await openPalette(editor); await editor.locator('#graph-node-type').selectOption('Text'); await editor.locator('#graph-add').click();
   await editor.getByRole('button', { name: 'text output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();

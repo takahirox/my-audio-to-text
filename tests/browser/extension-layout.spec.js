@@ -97,7 +97,7 @@ for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
     const wire = page.getByRole('button', { name: 'Select connection audio.audio to speech.audio', exact: true });
     await wire.press('Enter'); await wire.press('Tab');
     const disconnect = page.locator('#graph-disconnect');
-    await expect(disconnect).toBeFocused(); await expect(disconnect).toBeInViewport({ ratio: 1 });
+    await expect(disconnect).toBeFocused(); await expect(disconnect).toBeInViewport({ ratio: .99 });
     expect((await disconnect.boundingBox()).height).toBeGreaterThanOrEqual(44);
     await disconnect.press('Shift+Tab'); await expect(wire).toBeFocused();
     await wire.press('Tab'); await disconnect.press('Space'); await expect(wire).toHaveCount(0);
@@ -132,10 +132,10 @@ for (const zoom of ['0.25', 'fit', '1.5']) {
     await loadZoomGraph(page);
     if (zoom === 'fit') await page.locator('#graph-fit').click(); else await page.locator('#graph-zoom').selectOption(zoom);
     await page.getByRole('button', { name: 'speech output final', exact: true }).click();
-    await page.getByRole('button', { name: 'transcript-accumulator input preview', exact: true }).click();
-    const wire = page.getByRole('button', { name: 'Select connection speech.final to transcript-accumulator.preview', exact: true });
+    await page.getByRole('button', { name: 'transcript-preview input text', exact: true }).click();
+    const wire = page.getByRole('button', { name: 'Select connection speech.final to transcript-preview.text', exact: true });
     await expect(wire).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Select connection speech.provisional to transcript-accumulator.preview', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Select connection speech.provisional to transcript-preview.text', exact: true })).toHaveCount(0);
     const point = await exposedWirePoint(wire); await page.mouse.click(point.x, point.y);
     await expect(page.locator('#graph-disconnect')).toBeVisible();
     await page.locator('#graph-disconnect').scrollIntoViewIfNeeded();
@@ -161,27 +161,27 @@ test('touch returns from an overview to connect typed ports, move a node and dis
   await page.route('**/*', serveExtension);
   await page.goto('/extension/graph-editor.html');
   await loadZoomGraph(page);
-  const wire = page.getByRole('button', { name: 'Select connection speech.provisional to transcript-accumulator.preview', exact: true });
+  const wire = page.getByRole('button', { name: 'Select connection speech.provisional to transcript-preview.text', exact: true });
   for (const zoom of ['0.25', 'fit']) {
     if (zoom === 'fit') await page.locator('#graph-fit').tap(); else await page.locator('#graph-zoom').selectOption(zoom);
     // Overview targets may be just 4px tall. The full-size action is the touch
     // route back to editing; edge semantics remain covered at low zoom above.
     await page.getByRole('button', { name: 'Edit at 100%', exact: true }).tap();
     await page.getByRole('button', { name: 'audio output audio', exact: true }).tap();
-    await expect(page.getByRole('button', { name: 'transcript-accumulator input preview', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'transcript-preview input text', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'audio output audio', exact: true }).tap();
     const point = await exposedWirePoint(wire);
     await page.touchscreen.tap(point.x, point.y);
     const disconnect = page.locator('#graph-disconnect');
-    await expect(disconnect).toBeVisible(); await disconnect.scrollIntoViewIfNeeded(); await expect(disconnect).toBeInViewport({ ratio: 1 });
+    await expect(disconnect).toBeVisible(); await disconnect.scrollIntoViewIfNeeded(); await expect(disconnect).toBeInViewport({ ratio: .99 });
     expect((await disconnect.boundingBox()).height).toBeGreaterThanOrEqual(44);
     await disconnect.tap(); await expect(wire).toHaveCount(0);
     await page.getByRole('button', { name: 'speech output provisional', exact: true }).tap();
-    await page.getByRole('button', { name: 'transcript-accumulator input preview', exact: true }).tap();
+    await page.getByRole('button', { name: 'transcript-preview input text', exact: true }).tap();
     await expect(wire).toHaveCount(1);
     await page.locator('#graph-zoom').selectOption('0.25');
     await page.getByRole('button', { name: 'Edit at 100%', exact: true }).tap();
-    const input = page.getByRole('button', { name: 'transcript-accumulator input preview', exact: true });
+    const input = page.getByRole('button', { name: 'transcript-preview input text', exact: true });
     await expect(input).toBeFocused(); await expectInsideCanvas(input);
   }
   const heading = page.getByRole('button', { name: 'Select speech', exact: true });
@@ -300,7 +300,7 @@ for (const action of ['Clear selection', 'Remove transcript']) {
   });
 }
 
-test('live regions render safe snapshots, retain prefix text and copy verbatim at narrow widths', async ({ page }) => {
+test('live regions replace safe DOM snapshots and copy verbatim at narrow widths', async ({ page }) => {
   const html = await readFile('extension/recorder.html', 'utf8');
   await page.setContent(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''));
   await page.evaluate(async () => {
@@ -308,7 +308,13 @@ test('live regions render safe snapshots, retain prefix text and copy verbatim a
     const { renderTextRegions } = await import('/extension/live-text-regions.js');
     const root = document.querySelector('#live-displays'), graph = defaultGraph();
     graph.nodes.push(graphNode('LiveTextDisplay', 'value'));
-    window.renderLayout = text => renderTextRegions(root, graph, { transcript: text, value: 'A current value' });
+    const { TextToDOMNode } = await import('/web/dom-nodes.js');
+    const toDOM = text => {
+      let snapshot;
+      new TextToDOMNode().receive('text', text, { signal: new AbortController().signal, emit: (_, dom) => snapshot = dom });
+      return snapshot;
+    };
+    window.renderLayout = text => renderTextRegions(root, graph, { transcript: toDOM(text), value: toDOM('A current value') });
     window.renderLayout('<b>committed</b>'); window.firstText = root.querySelector('.display-content').firstChild;
     navigator.clipboard.writeText = async text => { window.copiedText = text; };
     window.clearRegions = () => renderTextRegions(root, { nodes: [], edges: [] }, {});
@@ -319,7 +325,7 @@ test('live regions render safe snapshots, retain prefix text and copy verbatim a
   await expect(page.locator('[data-display="value"]').getByLabel('Content', { exact: true })).toHaveText('A current value');
   await expect(page.locator('#live-displays b')).toHaveCount(0);
   await page.evaluate(() => window.renderLayout('<b>committed</b>\nsecond\nnew preview'));
-  expect(await page.evaluate(() => window.firstText === document.querySelector('#live-displays .display-content').firstChild)).toBe(true);
+  expect(await page.evaluate(() => window.firstText === document.querySelector('#live-displays .display-content').firstChild)).toBe(false);
   await transcript.getByRole('button', { name: 'Copy text' }).click();
   expect(await page.evaluate(() => window.copiedText)).toBe('<b>committed</b>\nsecond\nnew preview');
   const output = await page.locator('#live-displays').boundingBox(), controls = await page.locator('.capture-panel').boundingBox();

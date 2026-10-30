@@ -220,16 +220,18 @@ export class Pipeline {
     this.state = 'canceling';
     this.cleanupController = new AbortController();
     for (const entry of this.order) { entry.controller.abort(); entry.queue = Promise.resolve(); }
-    for (const entry of this.order) {
-      if (!entry.active || entry.closed || entry.failed) continue;
-      const context = Object.freeze({ ...entry.context, signal: this.cleanupController.signal,
-        emit: (port, value) => this.emit(entry, port, value, undefined, true),
-        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, true, options?.provisional === true),
-      });
-      try { entry.node.cancel?.(context); } catch (error) { this.fail(entry, error); }
-    }
     return this.canceling = (async () => {
-      for (const entry of this.order) await entry.queue;
+      // Drain upstream cleanup before closing each downstream processor. This
+      // lets ordinary multi-hop snapshots reach sinks before their cancel hook.
+      for (const entry of this.order) {
+        await entry.queue;
+        if (!entry.active || entry.closed || entry.failed) continue;
+        const context = Object.freeze({ ...entry.context, signal: this.cleanupController.signal,
+          emit: (port, value) => this.emit(entry, port, value, undefined, true),
+          emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, true, options?.provisional === true),
+        });
+        try { await entry.node.cancel?.(context); } catch (error) { this.fail(entry, error); }
+      }
       await this.dispose();
     })();
   }

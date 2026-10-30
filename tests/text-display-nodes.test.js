@@ -7,45 +7,37 @@ import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, s
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const context = () => ({ signal: new AbortController().signal });
 
-test('accumulator preserves every segment, exact whitespace and duplicates; grouped append wins', () => {
+test('accumulator preserves exact segments, duplicates and empty strings; reset, Stop and Cancel retain committed history', () => {
   const states = [], node = new TextAccumulatorNode(), c = { ...context(), emit: (port, text) => { assert.equal(port, 'text'); states.push(text); } };
+  assert.deepEqual(node.inputs, { append: TEXT });
   node.start(c);
-  const segments = ['', 'same', 'same', '', '  raw\n\t', ''];
   const accepted = [];
-  for (const text of segments) {
-    for (const preview of ['pending', '', 'new tail']) {
-      node.receive('preview', preview, c);
-      assert.equal(states.at(-1), accepted.join('\n') + (preview ? (accepted.length ? '\n' : '') + preview : ''));
-    }
+  for (const text of ['', 'same', 'same', '', '  raw\n\t', '']) {
     node.receive('append', text, c); accepted.push(text);
     assert.equal(states.at(-1), accepted.join('\n'));
   }
-  for (const values of [{ preview: 'stale', append: 'group' }, { append: 'group', preview: 'stale' }]) {
-    node.receiveInputs(values, c); accepted.push('group'); assert.equal(states.at(-1), accepted.join('\n'));
-  }
   const before = states.length;
-  assert.throws(() => node.receiveInputs({ preview: 'valid', append: null }, c), /TEXT/);
-  assert.equal(node.preview, ''); assert.equal(states.length, before);
+  for (const values of [{ preview: 'invalid' }, { append: null }, { append: 'valid', preview: 'invalid' }]) assert.throws(() => node.receiveInputs(values, c), /TEXT/);
+  assert.equal(Object.hasOwn(node, 'preview'), false); assert.equal(states.length, before);
   node.receive('append', 'late', { ...c, signal: AbortSignal.abort() }); assert.equal(states.length, before);
-  node.receive('preview', 'remove at Stop', c); node.stop(c); assert.equal(states.at(-1), accepted.join('\n'));
-  node.receive('preview', 'remove at Cancel', c); const publications = states.length;
-  assert.equal(node.cancel(), accepted.join('\n')); node.dispose(); assert.equal(states.length, publications);
+  node.stop(c); assert.equal(states.length, before); assert.equal(node.text, accepted.join('\n'));
+  assert.equal(node.cancel(), accepted.join('\n')); node.dispose(); assert.equal(states.length, before);
+  node.receive('append', 'after cancel', c); assert.equal(states.length, before);
   node.start(c); assert.equal(states.at(-1), ''); assert.equal(node.count, 0);
 });
 
-test('Pipeline grouped/separate delivery, generic formatter fan-out, Stop and Cancel are composable', async () => {
+test('Pipeline grouped/separate append delivery and generic formatter fan-out retain exact snapshots', async () => {
   let emit, group; const snapshots = [], display = [];
-  const accumulator = new TextAccumulatorNode();
   const pipeline = new Pipeline({ nodes: {
-    source: { outputs: { final: TEXT, provisional: TEXT }, start(c) { emit = c.emit; group = c.emitOutputs; } }, accumulator,
+    source: { outputs: { final: TEXT, provisional: TEXT }, start(c) { emit = c.emit; group = c.emitOutputs; } }, accumulator: new TextAccumulatorNode(),
     live: new TextSink(text => display.push(text)), formatter: new TextFormatterNode({ template: 'Transcript: {1}' }),
     consumer: { inputs: { text: TEXT }, receive(_, value) { snapshots.push(value); } },
-  }, connections: [edge('source', 'final', 'accumulator', 'append'), edge('source', 'provisional', 'accumulator', 'preview'),
+  }, connections: [edge('source', 'final', 'accumulator', 'append'),
     edge('accumulator', 'text', 'live', 'content'), edge('accumulator', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'consumer', 'text')] });
   await pipeline.start(); await tick(); snapshots.length = 0; display.length = 0;
-  group({ provisional: 'discard', final: 'A' }); emit('provisional', 'tail'); emit('final', 'A'); emit('provisional', 'Stop removes');
+  group({ provisional: '', final: 'A' }); emit('provisional', 'tail'); emit('final', 'A'); emit('final', '');
   await pipeline.stop();
-  assert.deepEqual(display, ['A', 'A\ntail', 'A\nA', 'A\nA\nStop removes', 'A\nA']);
+  assert.deepEqual(display, ['A', 'A\nA', 'A\nA\n']);
   assert.deepEqual(snapshots, display.map(s => 'Transcript: ' + s));
   await pipeline.dispose(); const before = display.length; emit('final', 'stale'); await tick(); assert.equal(display.length, before);
 });

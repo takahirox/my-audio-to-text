@@ -9,7 +9,7 @@ pinned assets; each owns a local WebGPU Worker and bounded incremental context.
 `text` input, an editable English condition and `yes` / `no` TEXT outputs. Both
 outputs preserve the original input string; only the selected branch emits.
 Its pinned local model is prepared through Save graph, and errors stop only that
-instance with a visible status. It uses version 12 or Pipeline routing.
+instance with a visible status. It uses version 13 or Pipeline routing.
 
 The **Simple / Graph** switch connects Live's minimal recording window and the
 full-size Graph Editor tab. **Models** is a secondary link for asset preparation
@@ -85,11 +85,12 @@ Load saved. Recreated windows and Chrome restarts in the same profile retain the
 saved graph. Drafts remain page-local. Transcripts/audio are never persisted.
 Closing/reloading Live releases capture/Workers and revokes audio URLs.
 
-Fresh installs and **Reset draft to default** use exactly five Nodes:
-`ChromeTabAudio`, `SpeechToTextReazonSpeech`, `TextAccumulator`, `TextToDOM`, and one generic `LiveTextDisplay` labeled Text
-(language unspecified). The named-port edges are `ChromeTabAudio.audio →
-SpeechToTextReazonSpeech.audio`, `SpeechToTextReazonSpeech.provisional → TextAccumulator.preview`,
-`SpeechToTextReazonSpeech.final → TextAccumulator.append`, and `TextAccumulator.text → TextToDOM.text → dom → LiveTextDisplay.dom`. No translation is
+Fresh installs and **Reset draft to default** use seven Nodes:
+`ChromeTabAudio`, `SpeechToTextReazonSpeech`, `TextAccumulator`, two `TextToDOM`
+processors, `DOMCombiner`, and one generic `LiveTextDisplay` labeled Text.
+Audio feeds ASR. Final TEXT feeds the accumulator, whose complete history feeds
+TextToDOM → DOMCombiner.first. Provisional TEXT feeds a separate TextToDOM →
+DOMCombiner.second; the combined DOM feeds LiveTextDisplay. No translation is
 included. Reset changes only the draft until Save; upgrades never replace a
 saved graph with the new default. Existing explicit boolean translation
 preferences migrate once when no graph is saved: only `enabled: true` adds the
@@ -106,7 +107,8 @@ tests also call the helper to construct explicit translation graphs. Saved graph
 migration uses the stored description rather than regenerating this default.
 
 Retain the imported layout. **Original** shows all committed ASR text plus its
-current preview through `TextAccumulator → TextToDOM`. **Translation** shows one
+current preview through separate TextToDOM branches joined by DOMCombiner;
+TextAccumulator retains only the committed original text. **Translation** shows one
 completed original/translation pair through a direct `PairedTextToDOM` route.
 Although the latest source appears in both panels, the standalone original also
 keeps earlier utterances and remains current while translation waits or fails.
@@ -167,7 +169,7 @@ Workers start during Save. Runtime inference remains cache-only.
 The translation migration introduced in v9 handles versions 1–8 before v10 display migration, using the same storage key. Legacy
 field sinks become focused TEXT sinks, extraction adapters preserve downstream
 fan-out, and `SpeechToText` becomes `SpeechToTextReazonSpeech`. Legacy transcript
-views become `LiveTextDisplay` with provisional → preview and final → append on an inserted TextAccumulator,
+views become `LiveTextDisplay` with an explicit provisional DOM branch and final → append on an inserted TextAccumulator,
 retaining display IDs/positions and deriving labels/language from old settings.
 Existing generic formatters acquire `inputCount: 4`, preserving every old reference.
 
@@ -188,7 +190,7 @@ The visible warning directs you to **Graph actions → Recovery**. Before and af
 Save, open Recovery to view, copy or download the complete original JSON,
 including removed routes/configurations. The version selector also exposes older
 and numbered recovery copies. Copy and download retain the exact original text.
-Before v10 this used `processing-graph-before-v9`; new saves use `processing-graph-before-v12`; this backup remains
+Before v10 this used `processing-graph-before-v9`; new saves use `processing-graph-before-v13`; this backup remains
 across page reloads and later ordinary saves. To reattempt recovery, export this
 copy and import it in a compatible version or restore it to the graph storage key.
 Reset changes only the draft and still requires Save. Transcripts/history were
@@ -245,7 +247,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | PairedTextToDOM | input1/input2: TEXT | dom: DOM; one completed grouped pair of texts |
 | DOMAccumulator | append: DOM | dom: DOM; ordered accumulated snapshots |
 | DOMCombiner | first / second: DOM | dom: DOM; latest first snapshot followed by latest second snapshot |
-| TextAccumulator | append / preview: TEXT, individually optional; text: TEXT output | full committed transcript plus ephemeral tail |
+| TextAccumulator | append: TEXT; text: TEXT output | exact committed transcript snapshots |
 | TextWindow | text: TEXT | text: TEXT (closed batches); provisional: TEXT (optional open snapshots); length/deadline/sentence settings |
 | TranslationCommit | boundary/source/text/error: TEXT | provisional/final/error: TEXT; opt-in closed-window commits |
 | TextFormatter | input1…inputN: TEXT, instance-configured, individually optional | text: TEXT; at least one input must connect |
@@ -283,7 +285,7 @@ consumer waiting with an explicit status, rather than silently using its default
 For two independent transcript displays, connect:
 
 - `ChromeTabAudio.audio → SpeechToTextZipformerEn.audio`, with `final → remote-accumulator.append`
-  and optional `provisional → remote-accumulator.preview`, then `text → TextToDOM.text → dom → remote.dom` on a LiveTextDisplay labeled Remote speaker.
+  and optional `provisional → TextToDOM → DOMCombiner.second`; history feeds `TextToDOM → DOMCombiner.first → dom → remote.dom` on a LiveTextDisplay labeled Remote speaker.
 - `MicrophoneAudio.audio → SpeechToTextWhisper.audio`, with `final → local-accumulator.append → text → TextToDOM.text → dom → local.dom`
   on another LiveTextDisplay labeled Local speaker. ReazonSpeech is another option.
 
@@ -415,17 +417,17 @@ Summary and generic TextFormatter snapshots pass through this processor.
 `TextAccumulator` constructs reusable transcripts upstream. `append` accepts each
 exact string once, including empty strings, whitespace and equal consecutive
 segments. One newline separates committed segments, including empty segments.
-`preview` replaces the uncommitted tail; `''` clears it. A nonempty tail is
-separated from committed segments by one newline. Append clears preview; grouped
-append + preview gives append precedence regardless of property order. Independent
-emissions preserve delivery order; a later preview starts a new tail. Every
-accepted delivery emits the entire current `text: TEXT` snapshot, usable by any
-TEXT consumer. Stop emits committed text when removing a nonempty preview.
-Cancel aborts outstanding work, then the accumulator emits its committed snapshot
-through ordinary routes. Direct displays, formatters and independent sinks all
-observe the same cleanup; aborted model and side-effect Nodes cannot resume work. Fresh sessions start empty. No persistence or model
-assets are involved. Keep utterance consumers such as TTS, fields and translators
-connected to the original final outputs unless full snapshots are desired.
+Every append emits the complete `text: TEXT` snapshot for any TEXT consumer.
+Start clears history and emits empty text. Stop and Cancel retain committed
+history without another emission. There is no provisional state in this Node.
+For a replaceable tail, route the producer's provisional output through a separate
+TextToDOM into DOMCombiner.second, with history DOM on first. ASR and
+TranslationCommit emit a grouped empty provisional alongside each final, and clear
+provisional on Stop/Cancel. Clears originate at the producer, before delayed
+translation or rendering; stale identified partials/finals cannot reopen a closed
+utterance. DOMCombiner only combines latest snapshots in fixed order. Keep
+utterance consumers such as TTS, fields and translators connected to original
+final outputs unless full snapshots are desired.
 
 The accumulator retains one growing string and a segment count, avoiding an
 item-array copy per event. JS engines may share string prefixes; this is an engine
@@ -722,12 +724,12 @@ translation checks with optional real-model limits.
 processor with only `audio: MONO_16KHZ_PCM` input and real online
 `provisional: TEXT` / `final: TEXT` outputs. Search for Zipformer or English in
 Add Node. Replace the ASR, reconnect the audio source, then connect provisional
-to `TextAccumulator.preview` and final to `TextAccumulator.append`, then text to `TextToDOM.text → dom → LiveTextDisplay.dom`. Remove an
+through TextToDOM → DOMCombiner.second, and final through TextAccumulator.append → TextToDOM → DOMCombiner.first. Connect combined DOM to LiveTextDisplay.dom. Remove an
 unused Number/Text configuration source when replacing the old ASR, or leave it
 parked. ReazonSpeech, Whisper and Zipformer can coexist with independent settings. Existing TEXT sinks and
 translation Nodes use the same contracts.
 
-Adding Zipformer needs no extra migration beyond the current version 12 graph.
+Adding Zipformer needs no extra migration beyond the current version 13 graph.
 Unrelated ASR nodes, IDs, settings, routes and positions stay intact; earlier
 versions use the migration rules above. The minimal ReazonSpeech default remains. See [model pins, fixed 12-second segments,
 Stop/drain, setup and limitations](zipformer-node.md).
@@ -767,7 +769,7 @@ and [#124 validation](evidence/translation-124.md).
 ## Windowed and revisable translation (#128)
 
 The model-independent **TextWindow** and opt-in **TranslationCommit** processors
-use ordinary TEXT ports, require no weights, and use graph version 12. See
+use ordinary TEXT ports, require no weights, and use graph version 13. See
 [connections, limits, lifecycle and measured comparison](windowed-translation.md).
 Defaults and existing per-segment translator paths remain unchanged.
 
@@ -790,9 +792,9 @@ code. No HTML-string port, generic component system or Worker DOM serialization
 is supported. Inference remains in existing Workers using TEXT RPCs.
 
 ```text
-ASR.final → TextAccumulator.append
-ASR.provisional → TextAccumulator.preview
-TextAccumulator.text → TextToDOM.text → dom → LiveTextDisplay.dom
+ASR.final → TextAccumulator.append → TextToDOM.text → DOMCombiner.first
+ASR.provisional → TextToDOM.text → DOMCombiner.second
+DOMCombiner.dom → LiveTextDisplay.dom
 MeetingSummary.summary → TextToDOM.text → dom → LiveTextDisplay.dom
 
 OpusMtJaEn.source → PairedTextToDOM.input1
@@ -911,14 +913,12 @@ settings, positions, unrelated branches and text fan-out remain intact. There is
 no alternate TEXT display mode. Disconnected displays remain drafts. Invalid or
 ambiguous conversions require explicit repair/reset; storage stays untouched.
 
-Versions 1–9 first follow their earlier migrations, including v9 append/preview
-accumulator insertion, and then the same reviewed DOM conversion. Migrated
-`legacyDisplay` accumulators retain snapshot-only behavior when all append sources
-are inactive, matching the earlier migration. New accumulators keep their normal
-Stop/Cancel preview cleanup.
+Versions 1–9 first follow their earlier migrations and then the reviewed DOM
+and append-only conversions described below. Legacy display-only replacement
+branches become explicit DOM snapshots; no runtime legacy-display flag remains.
 
 On reviewed Save or Reset-and-Save, the exact original JSON is backed up under
-`processing-graph-before-v12` for current saves (v11 used
+`processing-graph-before-v13` for current saves (v11 used
 `processing-graph-before-v11`). Older backups remain available. Conflicting copies
 get suffixes -2, -3, etc.; identical originals reuse their copy. Backup failures
 leave the original saved graph untouched. Graph Editor exposes original JSON both
@@ -1034,3 +1034,28 @@ deterministic model/runtime fixtures. `npm run build:extension` was blocked by
 missing local model assets (`Missing local models. Run npm run prepare:assets
 first.`). A complete production asset build and real-model smokes were not run;
 fixture results do not establish model accuracy. `git diff --check` passed.
+
+### Graph v13 append-only migration and recovery
+
+TextAccumulator exposes only append: TEXT → text: TEXT. Graphs through v12 with
+preview edges require review before execution. Display-only routes receive an
+unsaved draft with collision-safe TextToDOM and DOMCombiner branches. Existing
+accumulators, formatters, display IDs, settings, positions and unrelated routes
+remain intact, including multiple display outputs and explicit DOM compositions.
+ASR and TranslationCommit clear their own provisional outputs on final and at
+session end. Independent and preview-only streams remain independent snapshots:
+an unrelated append no longer clears them, and Stop/Cancel clear them only when
+their producer emits a clear. The migration warning explains this lifecycle
+change; review the sources and reconnect deliberately before Save. A disconnected
+append draft is retained and may be completed later without hidden behavior.
+
+Shared TextToDOM inputs and arbitrary accumulated TEXT consumers cannot be
+converted without changing their values. These routes remain blocked with a
+manual-repair explanation and the complete original JSON in Recovery; no edge
+is silently removed. Recompose display previews separately, and keep ordinary
+TEXT consumers on the intended committed history, before importing/saving.
+Save (including Reset-and-Save) first preserves the exact original under
+processing-graph-before-v13, with numbered collision copies. Existing
+processing-graph-before-v* backups are never overwritten. Failed backup writes
+leave the original in place. Valid append-only v12 graphs upgrade without
+changing nodes or edges; explicit current DOM compositions are unchanged.

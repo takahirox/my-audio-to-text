@@ -27,7 +27,7 @@ class Worker {
   terminate() { this.released = true; }
 }
 const graph = () => {
-  const g = { version: 12, nodes: [graphNode('ChromeTabAudio', 'audio'), ...types.flatMap(([type], i) => [graphNode(type, `asr${i}`), graphNode('LiveTextDisplay', `out${i}`)])],
+  const g = { version: 13, nodes: [graphNode('ChromeTabAudio', 'audio'), ...types.flatMap(([type], i) => [graphNode(type, `asr${i}`), graphNode('LiveTextDisplay', `out${i}`)])],
     edges: types.flatMap(([, , , , partial], i) => [edge('audio', 'audio', `asr${i}`, 'audio'), edge(`asr${i}`, 'final', `out${i}`, 'append'), ...(partial ? [edge(`asr${i}`, 'provisional', `out${i}`, 'replace')] : [])]) };
   for (let i = 0; i < types.length; i++) accumulateDisplay(g, `out${i}`);
   return g;
@@ -88,7 +88,7 @@ for (const [type, Node, key, factoryKey, partial] of types) {
     await node.start({ signal: new AbortController().signal, emit: (...args) => output.push(args), fail: () => assert.fail('peer graph must survive') });
     const stop = node.stop(); worker.send({ type: 'error', session: 1, message: 'missing GPU or corrupt weights; Retry preparation' });
     await stop; assert.equal(events.at(-1).branchUnavailable, true); assert.equal(worker.released, true);
-    assert.deepEqual(output, partial ? [['provisional', '']] : []);
+    assert.deepEqual(output, partial ? [['provisional', ''], ['provisional', '']] : []);
     node.receiveEvent({ type: 'final', id: 0, text: 'stale' }); assert.equal(output.some(([, text]) => text === 'stale'), false);
     node.dispose();
   });
@@ -117,7 +117,7 @@ for (const [type, Node, key, factoryKey, partial] of types) {
 }
 
 test('new independent paths retain Graph v11/default/migrations, save/reload exactly, bind production types and fan out plain TEXT', () => {
-  const original = defaultGraph(); assert.equal(original.version, 12); assert.deepEqual(graphModelRequirements(original), []);
+  const original = defaultGraph(); assert.equal(original.version, 13); assert.deepEqual(graphModelRequirements(original), []);
   assert.equal(migrateGraph(original), original);
   const description = graph(); description.nodes.push(graphNode('TextFormatter', 'format'), graphNode('OpusMtEnJa', 'translate'), graphNode('FocusedInputTextOutputNode', 'field'));
   description.edges.push(edge('asr0', 'final', 'format', 'input1'), edge('asr1', 'final', 'translate', 'text'), edge('asr0', 'final', 'field', 'text'));

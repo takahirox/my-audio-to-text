@@ -26,7 +26,7 @@ selected-media capture. Capture and resampling use the existing helpers.
 | Node | Outputs | Suggested wiring |
 | --- | --- | --- |
 | `SpeechToTextParakeetV3` | `final: TEXT` only | final → TextAccumulator.append |
-| `SpeechToTextMoonshineMediumEn` | `provisional: TEXT`, `final: TEXT` | provisional → TextAccumulator.preview; final → append |
+| `SpeechToTextMoonshineMediumEn` | `provisional: TEXT`, `final: TEXT` | provisional → TextToDOM → DOMCombiner.second; final → TextAccumulator.append → TextToDOM → DOMCombiner.first |
 
 Finals are ordinary committed strings. Fan out independently to TextFormatter,
 OPUS-MT.text, focused text output or other TEXT consumers. Each Node owns a
@@ -209,4 +209,4 @@ inference. Physical microphone, meeting audio, other devices, comparative
 accuracy and user acceptance remain untested/out of scope. There is no required
 post-merge verification for this Issue.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final/preview text upstream with TextAccumulator. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An omitted second value leaves a blank right cell; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final TEXT with TextAccumulator and compose provisional TEXT through separate TextToDOM and DOMCombiner branches. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An omitted second value leaves a blank right cell; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).

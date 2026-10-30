@@ -64,7 +64,7 @@ test('Whisper schema and concrete runtime expose exactly final; ReazonSpeech ret
   assert.deepEqual(new SpeechToTextWhisperNode().outputs, { final: TEXT });
   assert.deepEqual(NODE_TYPES.SpeechToTextReazonSpeech.outputs, { provisional: TEXT, final: TEXT });
   assert.deepEqual(new SpeechToTextNode().outputs, { provisional: TEXT, final: TEXT });
-  assert.deepEqual(defaultGraph().edges.slice(1), [edge('speech', 'provisional', 'transcript-accumulator', 'preview'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript', 'dom')]);
+  assert.deepEqual(defaultGraph().edges.slice(1), [edge('speech', 'provisional', 'transcript-preview', 'text'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript-combined', 'first'), edge('transcript-preview', 'dom', 'transcript-combined', 'second'), edge('transcript-combined', 'dom', 'transcript', 'dom')]);
   const graph = whisperGraph();
   assert.deepEqual(validateGraph(graph), []);
   const built = buildGraph(graph, {});

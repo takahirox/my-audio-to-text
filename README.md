@@ -83,10 +83,12 @@ The extension Graph Editor exposes **ReazonSpeech ja-en ASR**, **Whisper tiny
 constant. Whisper defaults to English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
 Japanese. Whisper exposes only `final: TEXT`; connect it to
 `TextAccumulator.append → text → TextToDOM.text → dom → LiveTextDisplay.dom` for completed segments. The default stays
-ChromeTabAudio → ReazonSpeech → TextAccumulator → TextToDOM → LiveTextDisplay. See [Whisper pins, setup,
+ChromeTabAudio → ReazonSpeech, with separate committed history and provisional
+TextToDOM branches combined by DOMCombiner → LiveTextDisplay. See [Whisper pins, setup,
 usage and real-model validation](docs/whisper-node.md). For real incremental English
 previews, opt into [English online Zipformer](docs/zipformer-node.md): connect
-`provisional → TextAccumulator.preview` and `final → TextAccumulator.append`, then `text → TextToDOM.text → dom → LiveTextDisplay.dom`.
+`final → TextAccumulator.append → TextToDOM → DOMCombiner.first` and
+`provisional → TextToDOM → DOMCombiner.second`, then `DOMCombiner.dom → LiveTextDisplay.dom`.
 
 The extension also offers independent **Parakeet TDT 0.6B v3** (WebGPU, final
 TEXT only) and **Moonshine Medium Streaming English 245M** (CPU WASM, real

@@ -75,7 +75,7 @@ async function graph(mode = 'revisable', settings) {
   const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory,
     onDisplay: (_, state) => displays.push(domText(state)) });
   await built.pipeline.start(); await built.translations[0].ready;
-  return { ...f, ...built, displays, send: text => built.pipeline.entries.get('input').context.emit('value', text), display: () => displays.at(-1), accumulator: built.pipeline.entries.get('display-accumulator').node };
+  return { ...f, ...built, displays, send: text => built.pipeline.entries.get('input').context.emit('value', text), display: () => displays.at(-1), preview: () => built.pipeline.entries.get('display-combined')?.node.snapshots.second?.textContent ?? '', accumulator: built.pipeline.entries.get('display-accumulator').node };
 }
 async function drain(f) {
   let done = false, failure;
@@ -91,7 +91,7 @@ for (const mode of ['baseline', 'window', 'revisable']) test(`${mode}: fixed fix
   await drain(f);
   const expected = mode === 'baseline' ? windowTranscript : closedWindows;
   assert.deepEqual(f.display(), ([...(mode === 'baseline' ? [''] : []), ...expected.map(s => `訳:${s}`)]).join('\n'));
-  assert.equal(f.accumulator.preview, '');
+  assert.equal(f.preview(), '');
   assert.deepEqual(f.requests.slice(mode === 'revisable' ? 1 : 0).map(r => r.text), expected);
   assert.equal(f.requests.length, expected.length + (mode === 'revisable' ? 1 : 0));
   assert.equal(f.pipeline.errors.length, 0); await f.pipeline.dispose();
@@ -103,9 +103,9 @@ test('slow inference coalesces growing snapshots, suppresses stale results and a
   for (const text of ['meeting', 'starts', 'at']) f.send(text);
   await tick(); assert.equal(f.requests.length, 1);
   const scheduler = f.translations[0]; assert.equal(scheduler.preview.source, 'The meeting starts at');
-  f.complete(0); await tick(); assert.equal(f.accumulator.preview, ''); assert.equal(f.requests.length, 2);
-  f.complete(1); await tick(); assert.equal(f.accumulator.preview, '訳:The meeting starts at');
-  f.send('ten.'); await tick(); assert.equal(f.accumulator.preview, '');
+  f.complete(0); await tick(); assert.equal(f.preview(), ''); assert.equal(f.requests.length, 2);
+  f.complete(1); await tick(); assert.equal(f.preview(), '訳:The meeting starts at');
+  f.send('ten.'); await tick(); assert.equal(f.preview(), '');
   f.complete(2); await tick(); assert.deepEqual(f.display(), (['訳:The meeting starts at ten.']).join('\n'));
   // The next equal source is a distinct window; an old duplicate reply cannot
   // satisfy it, even while its own provisional work is running.
@@ -121,13 +121,13 @@ for (const when of ['running', 'stopping']) test(`Cancel while ${when} invalidat
   f.send('unfinished'); await tick();
   const stopping = when === 'stopping' ? f.pipeline.stop() : null;
   await tick(); await f.pipeline.dispose(); f.complete(1); await stopping;
-  assert.deepEqual(f.display(), (['訳:First.']).join('\n')); assert.equal(f.accumulator.preview, '');
+  assert.deepEqual(f.display(), (['訳:First.']).join('\n')); assert.equal(f.preview(), '');
   assert.ok(f.owned.every(w => w.terminated)); assert.equal(f.pipeline.entries.get('window').node.timer, null);
 });
 
 test('Cancel clears a completed visible preview without committing it', async () => {
   const f = await graph(); f.send('open'); await tick(); f.complete(0); await tick();
-  assert.equal(f.accumulator.preview, '訳:open'); assert.equal(f.accumulator.committed, '');
+  assert.equal(f.preview(), '訳:open'); assert.equal(f.accumulator.committed, '');
   await f.pipeline.dispose(); f.complete(0);
   assert.equal(f.accumulator.text, ''); // Dispose publishes no canceled snapshot.
   assert.equal(f.display(), '訳:open');
@@ -136,7 +136,7 @@ test('Cancel clears a completed visible preview without committing it', async ()
 test('failed previews append nothing; failed closed windows visibly retain source and previous commits', async () => {
   const f = await graph(); f.send('First.'); await tick(); f.complete(0); await tick();
   f.send('unfinished'); await tick(); f.complete(1, true); await tick();
-  assert.deepEqual(f.display(), (['訳:First.']).join('\n')); assert.equal(f.accumulator.preview, '');
+  assert.deepEqual(f.display(), (['訳:First.']).join('\n')); assert.equal(f.preview(), '');
   // Worker failure is terminal for this existing translator. Its final still
   // reports source/error, and is committed as a visible source fallback.
   f.send('tail.'); await f.pipeline.stop();
@@ -181,7 +181,7 @@ test('hundreds of growing open snapshots retain one pending preview and eventual
   assert.equal(f.translations[0].preview.source, Array(500).fill('a').join(' '));
   assert.equal(f.translations[0].finals.length, 0);
   const stopping = f.pipeline.stop(); await tick(); f.complete(0); await tick();
-  assert.equal(f.accumulator.preview, ''); assert.equal(f.requests.length, 2);
+  assert.equal(f.preview(), ''); assert.equal(f.requests.length, 2);
   f.complete(1); await stopping;
   assert.deepEqual(f.display(), ([`訳:${Array(500).fill('a').join(' ')}`]).join('\n'));
   await f.pipeline.dispose();
@@ -194,7 +194,7 @@ for (const reverse of [false, true]) test(`independent concurrent windows surviv
     g.edges.forEach(e => { e.from[0] += suffix; e.to[0] += suffix; });
     return g;
   });
-  const description = { version: 12, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
+  const description = { version: 13, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
   if (reverse) description.nodes.reverse();
   const f = workers(), displays = {};
   const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => { s = domText(s); displays[id] = s; } });
@@ -252,7 +252,7 @@ test('graph saves/reloads with no version migration, no new weights, and permits
   g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'source').from = ['input', 'value'];
   assert.deepEqual(validateGraph(addDOMFormatters(g)), []);
   assert.deepEqual(graphModelRequirements({ nodes: [graphNode('TextWindow', 'w'), graphNode('TranslationCommit', 'c')] }), []);
-  assert.equal(defaultGraph().version, 12);
+  assert.equal(defaultGraph().version, 13);
 });
 
 test('TranslationCommit rejects independent/malformed results and detects an undrained boundary', () => {
