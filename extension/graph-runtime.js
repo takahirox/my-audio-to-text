@@ -6,6 +6,7 @@ import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, Translat
 import { verifiedTranslateGemmaCache } from './translategemma-cache.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
 import { AudioOutputNode } from '../web/synthesized-audio.js';
+import { SpeakerOutputNode } from '../web/speaker-output.js';
 import { ExtensionTab } from './tab-source.js';
 import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode } from './translation-scheduler.js';
@@ -168,6 +169,9 @@ export function buildGraph(graph, options) {
         node = new PreparedTtsNode(production, spec.type, spec.settings, state => options.onTtsState?.(`${spec.id}: ${state}`), options.prepareTts || verifiedTtsCache); break;
       }
       case 'AudioOutput': node = new AudioOutputNode(options.onSynthesizedAudio); break;
+      case 'SpeakerOutput': node = options.speakers?.get(spec.id) || new SpeakerOutputNode({
+        contextFactory: options.speakerContextFactory, onState: state => options.onSpeakerState?.(state, spec.id),
+      }); break;
       default: throw new Error(`Unsupported Node: ${spec.type}`);
     }
     nodes[spec.id] = node;
