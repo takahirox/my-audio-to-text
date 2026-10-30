@@ -13,30 +13,37 @@ export class TranslationCommitNode {
   }
   receiveInputs(values, context) {
     if (this.stopped || context.signal.aborted) return;
-    for (const [port, value] of Object.entries(values)) {
-      if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('TranslationCommit expects TEXT inputs.');
-    }
-    if (Object.hasOwn(values, 'boundary')) {
-      if (Object.keys(values).length !== 1) throw Error('Boundary must be a separate source event.');
-      if (values.boundary.length > 1000 || this.boundaries.length >= 32 || this.chars + values.boundary.length > 32768) throw Error('TranslationCommit backlog limit exceeded (32 windows / 32,768 characters). Stop and start again with a slower source.');
-      if (!context.delivery) throw Error('Boundary requires a Pipeline delivery identity.');
-      this.boundaries.push({ text: values.boundary, delivery: context.delivery }); this.chars += values.boundary.length;
+    try {
+      for (const [port, value] of Object.entries(values)) {
+        if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('TranslationCommit expects TEXT inputs.');
+      }
+      if (Object.hasOwn(values, 'boundary')) {
+        if (Object.keys(values).length !== 1) throw Error('Boundary must be a separate source event.');
+        if (values.boundary.length > 1000 || this.boundaries.length >= 32 || this.chars + values.boundary.length > 32768) throw Error('TranslationCommit backlog limit exceeded (32 windows / 32,768 characters). Stop and start again with a slower source.');
+        if (!context.delivery) throw Error('Boundary requires a Pipeline delivery identity.');
+        this.boundaries.push({ text: values.boundary, delivery: context.delivery }); this.chars += values.boundary.length;
+        context.emit('provisional', '');
+        return;
+      }
+      if (!context.cause) throw Error('Translation result requires a causal source delivery.');
+      if (!['source', 'text', 'error'].every(port => context.groupInputs?.includes(port)) ||
+          typeof values.source !== 'string' || typeof values.error !== 'string' || (!values.error && typeof values.text !== 'string')) {
+        throw Error('Supply grouped source/text/error from one atomic result.');
+      }
+      if (this.boundaries.length) {
+        if (values.source !== this.boundaries[0].text || !context.cause || context.cause !== this.boundaries[0].delivery) throw Error('Translation result does not match the next closed source window.');
+        this.chars -= this.boundaries.shift().text.length;
+        // A failed final retains its source visibly; never fabricate a translation
+        // or delete previously committed items. Preview failures append nothing.
+        context.emitOutputs({ provisional: '', final: values.error ? `[Translation failed: ${values.error}]\n${values.source}` : values.text, error: values.error });
+      } else {
+        context.emitOutputs({ provisional: values.error ? '' : values.text, error: values.error });
+      }
+    } catch (error) {
+      // Pipeline skips failed Nodes during Stop/Cancel, so clear the tail
+      // while this producer can still emit, before the error fails the Node.
       context.emit('provisional', '');
-      return;
-    }
-    if (!context.cause) throw Error('Translation result requires a causal source delivery.');
-    if (!['source', 'text', 'error'].every(port => context.groupInputs?.includes(port)) ||
-        typeof values.source !== 'string' || typeof values.error !== 'string' || (!values.error && typeof values.text !== 'string')) {
-      throw Error('Supply grouped source/text/error from one atomic result.');
-    }
-    if (this.boundaries.length) {
-      if (values.source !== this.boundaries[0].text || !context.cause || context.cause !== this.boundaries[0].delivery) throw Error('Translation result does not match the next closed source window.');
-      this.chars -= this.boundaries.shift().text.length;
-      // A failed final retains its source visibly; never fabricate a translation
-      // or delete previously committed items. Preview failures append nothing.
-      context.emitOutputs({ provisional: '', final: values.error ? `[Translation failed: ${values.error}]\n${values.source}` : values.text, error: values.error });
-    } else {
-      context.emitOutputs({ provisional: values.error ? '' : values.text, error: values.error });
+      throw error;
     }
   }
   stop(context) {
