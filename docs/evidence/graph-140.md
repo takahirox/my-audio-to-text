@@ -1,5 +1,8 @@
 # Explicit DOM history (#140)
 
+Historical record: Issue #169 supersedes the provisional-delivery rejection below;
+PairedTextToDOM now formats provisional and committed atomic groups identically.
+
 PairedTextToDOM now emits one completed pair per correlated grouped delivery and
 retains no translation history. Direct v11 formatter → display routes show only
 the latest pair; their saved wiring is unchanged. LiveTextDisplay and the Live

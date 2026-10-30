@@ -61,9 +61,8 @@ export class PairedTextToDOMNode {
     // One atomic delivery, never a cache of independently arriving strings.
     const required = new Set(['input1', 'input2', ...(context.connectedInputs || [])]);
     if (![...required].every(port => context.groupInputs?.includes(port))) {
-      throw Error('PairedTextToDOM requires a completed grouped input1/input2 delivery from one producer.');
+      throw Error('PairedTextToDOM requires an atomic grouped input1/input2 delivery from one producer.');
     }
-    if (context.provisional) throw Error('PairedTextToDOM requires completed results; provisional deliveries cannot be committed.');
     if (!Object.hasOwn(values, 'input1')) return;
     this.render({ input1: values.input1, input2: values.input2 ?? '' }, context);
   }

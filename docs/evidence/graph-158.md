@@ -1,5 +1,8 @@
 # Generic paired TEXT formatting (#158)
 
+Historical record: Issue #169 supersedes the provisional-delivery rejection below;
+PairedTextToDOM now formats provisional and committed atomic groups identically.
+
 PairedTextToDOM now exposes only input1/input2: TEXT and dom: DOM. Each completed
 Pipeline group containing input1 emits one literal pair; omitted input2 is blank,
 input2-only groups emit nothing, and independent/mismatched/provisional deliveries

@@ -126,9 +126,12 @@ separate TextToDOM → LiveTextDisplay replacement branch; its explicit empty-st
 events clear previews on final acceptance, Stop and Cancel. This needs no
 context.provisional inspection and no accumulator preview state. Preview-only
 TextFormatter formatting must stay on that separate branch; never append it to committed
-history. PairedTextToDOM remains a generic completed-pair formatter and continues to
-reject provisional deliveries. For a combined display, use DOMCombiner with committed
-history as first and the plain preview DOM as second.
+history. PairedTextToDOM formats provisional and committed atomic groups identically. For
+paired previews, wire provisionalSource/provisionalText to input1/input2 on a
+separate PairedTextToDOM → LiveTextDisplay replacement branch. Empty cleanup
+groups render blank cells; the producer owns when cleanup occurs. Keep source/text
+on a separate formatter branch for optional DOMAccumulator history. For a combined
+display, use DOMCombiner with committed history as first and preview DOM as second.
 
 | Event | Output and order |
 | --- | --- |

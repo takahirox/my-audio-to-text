@@ -11,7 +11,7 @@ import { TabSession } from '../extension/session.js';
 import { defaultGraph, graphNode, edge, NODE_TYPES, translationViewEdges, pairedTextEdges } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
 import { TextAccumulatorNode, TextFormatterNode, LiveTextDisplayNode } from '../web/text-nodes.js';
-import { DOMCombinerNode, PairedTextToDOMNode, TextToDOMNode } from '../web/dom-nodes.js';
+import { DOMAccumulatorNode, DOMCombinerNode, PairedTextToDOMNode, TextToDOMNode } from '../web/dom-nodes.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function workerFixture({ holdLoad = false, failLoad = false, failTranslate = false, empty = false } = {}) {
@@ -78,6 +78,44 @@ for (const mode of ['success', 'empty', 'failure']) test(`committed paired consu
   assert.equal(plain.at(-1),mode === 'failure' ? '' : 'later committed');
   await pipeline.cancel(); assert.equal(snapshots.length,2); assert.ok(f.workers.every(worker => worker.terminated));
 });
+
+for (const TranslationNode of [EnglishToJapaneseTranslateGemmaTranslationNode, TranslateGemmaTranslationNode])
+  for (const lifecycle of ['stop','cancel']) test(`${TranslationNode.name}: paired previews replace independently of committed DOM history (${lifecycle})`, async () => {
+    const f = workerFixture(), preview = [], history = []; let source;
+    const scheduler = new TranslationSchedulerNode({ TranslationNode, workerFactory:f.workerFactory });
+    const pipeline = new Pipeline({ nodes: {
+      source:{outputs:{closed:TEXT,draft:TEXT},start(c){source=c;}}, scheduler,
+      committed:new PairedTextToDOMNode(), preview:new PairedTextToDOMNode(), history:new DOMAccumulatorNode(),
+      previewDisplay:new LiveTextDisplayNode(dom=>preview.push(dom)), historyDisplay:new LiveTextDisplayNode(dom=>history.push(dom)),
+    }, connections:[
+      edge('source','closed','scheduler','text'), edge('source','draft','scheduler','provisional'),
+      ...pairedTextEdges('scheduler','committed'),
+      edge('scheduler','provisionalSource','preview','input1'), edge('scheduler','provisionalText','preview','input2'),
+      edge('committed','dom','history','append'), edge('history','dom','historyDisplay','dom'),
+      edge('preview','dom','previewDisplay','dom'),
+    ] });
+    try {
+      await pipeline.start(); source.emit('closed','same'); await tick(); f.complete(0,'translated'); await tick();
+      for (const index of [1,2]) {
+        source.emit('draft','same'); await tick(); f.complete(index,'translated'); await tick();
+        assert.equal(domText(preview.at(-1)),'same\ntranslated');
+        assert.equal(preview.at(-1).querySelectorAll('tbody tr').length,1);
+        assert.equal(domText(history.at(-1)),'same\ntranslated');
+      }
+      assert.notEqual(preview.at(-1),preview.at(-2),'duplicate previews still emit independent snapshots');
+      source.emit('draft',''); await tick(); assert.equal(domText(preview.at(-1)),'\n');
+      source.emit('closed','same'); await tick(); f.complete(3,'translated'); await tick();
+      assert.equal(domText(history.at(-1)),'same\ntranslated\nsame\ntranslated');
+      source.emit('draft','pending'); await tick();
+      const closing = pipeline[lifecycle](); await tick();
+      if (lifecycle === 'stop') f.complete(4,'stale');
+      await closing; f.complete(4,'late'); await tick();
+      assert.equal(domText(preview.at(-1)),'\n');
+      assert.equal(history.at(-1).querySelectorAll('tbody tr').length,2,'previews and cleanup never append committed rows');
+      assert.deepEqual(pipeline.errors,[]);
+    } finally { await pipeline.dispose(); }
+    assert.ok(f.workers.every(worker=>worker.terminated));
+  });
 
 test('production pinned manifest includes all seven runtime files and reviewed bounded hashes', () => {
   const files = JSON.parse(readFileSync('extension/opus-mt-assets.json'));

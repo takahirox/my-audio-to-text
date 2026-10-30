@@ -77,8 +77,8 @@ test('DOM accepts fragments and text nodes, clones before mounting, and rejects 
   assert.throws(() => sink.receive('content','old TEXT',c),/dom: DOM/);
 });
 
-test('paired formatter emits one literal neutral pair, with omissions and no retained history', () => {
-  const snapshots = [], node = new PairedTextToDOMNode(), c = { ...ctx((_,dom) => snapshots.push(dom)), groupInputs: ['input1','input2'] };
+for (const provisional of [false, true]) test(`paired formatter emits one literal neutral pair, with omissions and no retained history (provisional=${provisional})`, () => {
+  const snapshots = [], node = new PairedTextToDOMNode(), c = { ...ctx((_,dom) => snapshots.push(dom)), provisional, groupInputs: ['input1','input2'] };
   assert.deepEqual(node.inputs, {input1: TEXT, input2: TEXT}); assert.deepEqual(node.outputs, {dom: DOM});
   node.start(c); assert.equal(snapshots.length, 0);
   for (const value of [{input1:' same\n',input2:' first '}, {input1:' same\n',input2:' first '}, {input1:'',input2:''}, {input1:'<b>literal</b>'}]) node.receiveInputs(value,c);
@@ -93,11 +93,32 @@ test('paired formatter emits one literal neutral pair, with omissions and no ret
     for (const [index,cell] of [...snapshot.querySelectorAll('td')].entries()) assert.equal(cell.getAttribute('aria-label'),`${index ? 'Second' : 'First'} text: ${cell.textContent}`);
   }
   node.receiveInputs({input2:'alone'},c); assert.equal(snapshots.length,4);
-  for (const value of [{input1:'independent'},{input2:'independent'}]) assert.throws(() => node.receiveInputs(value,ctx()),/grouped/);
+  for (const value of [{input1:'independent'},{input2:'independent'}]) assert.throws(() => node.receiveInputs(value,{...ctx(),provisional}),/grouped/);
   for (const port of ['source','text','error']) assert.throws(()=>node.receiveInputs({[port]:'old'},c),/TEXT inputs/);
   node.receiveInputs({input1:'late',input2:'late'},{...c,signal:AbortSignal.abort()}); assert.equal(snapshots.length,4);
   node.stop(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,4);
-  node.cancel(); node.start(c); assert.equal(snapshots.length,4);
+  node.start(c); node.cancel(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,4);
+  node.start(c); node.dispose(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,4);
+  node.start(c); assert.equal(snapshots.length,4);
+});
+
+test('provisional and committed paired snapshots have identical safe DOM for every value', () => {
+  const node = new PairedTextToDOMNode(), snapshots = [];
+  node.start();
+  for (const values of [
+    {input1:' same\n',input2:' same\n'}, {input1:' same\n',input2:' same\n'},
+    {input1:'',input2:''}, {input1:'',input2:'right'}, {input1:'<script>literal</script> &'}, {input1:''},
+  ]) {
+    const markup = [];
+    for (const provisional of [false,true]) node.receiveInputs(values, {
+      ...ctx((_,dom) => {
+        const root = document.createElement('div'); root.append(cloneDOM(dom));
+        markup.push(root.innerHTML); snapshots.push(dom);
+      }), groupInputs:['input1','input2'], provisional,
+    });
+    assert.equal(markup[0], markup[1]);
+  }
+  assert.equal(new Set(snapshots).size, 12, 'every delivery owns a fresh snapshot, including duplicates');
 });
 
 test('DOMAccumulator owns inert generic snapshots and emits independent ordered history including duplicates', () => {
@@ -194,7 +215,7 @@ for (const reverse of [false, true]) test(`paired compatible drafts save with al
   }
 });
 
-for (const reverse of [false, true]) test(`paired consumer accepts alternate grouped producers and arbitrary output names (${reverse})`, async () => {
+for (const reverse of [false, true]) for (const provisional of [false, true]) test(`paired consumer accepts alternate grouped producers and arbitrary output names (${reverse}, provisional=${provisional})`, async () => {
   let c; const pairs = new PairedTextToDOMNode(), snapshots = [];
   const connections = [edge('pairs','dom','snapshots','dom'),edge('alternate','original','pairs','input1'),edge('alternate','translated','pairs','input2')];
   const pipeline = new Pipeline({ nodes: { alternate: { outputs: { original: TEXT, translated: TEXT, failure: TEXT }, start(context) { c = context; } }, pairs,
@@ -202,16 +223,16 @@ for (const reverse of [false, true]) test(`paired consumer accepts alternate gro
     connections: reverse ? connections.reverse() : connections });
   await pipeline.start();
   for (const translated of ['one','two','']) {
-    c.emitOutputs(reverse ? { translated, original: 'same', failure: '' } : { original: 'same', translated, failure: '' });
+    c.emitOutputs(reverse ? { translated, original: 'same', failure: '' } : { original: 'same', translated, failure: '' }, { provisional });
   }
-  c.emitOutputs({ original: 'failed', failure: 'offline' });
+  c.emitOutputs({ original: 'failed', failure: 'offline' }, { provisional });
   await pipeline.stop();
   assert.deepEqual(snapshots.map(domText), ['same\none','same\ntwo','same\n','failed\n']);
   assert.deepEqual(pipeline.errors,[]); await pipeline.dispose();
 });
 
-for (const reverse of [false, true]) for (const mode of ['separate emissions','mixed producers','provisional']) {
-  test(`paired consumer rejects ${mode} without affecting ordinary fan-out (${reverse})`, async () => {
+for (const reverse of [false, true]) for (const provisional of [false, true]) for (const mode of ['separate emissions','mixed producers']) {
+  test(`paired consumer rejects ${mode} without affecting ordinary fan-out (${reverse}, provisional=${provisional})`, async () => {
     let a, b; const pairs = new PairedTextToDOMNode(), plain = [], snapshots = [];
     const connections = [edge('pairs','dom','snapshots','dom'),edge('a','s','pairs','input1'),edge(mode === 'mixed producers' ? 'b' : 'a','t','pairs','input2'),edge('a','t','plain','text')];
     const pipeline = new Pipeline({ nodes: {
@@ -224,12 +245,12 @@ for (const reverse of [false, true]) for (const mode of ['separate emissions','m
     if (mode === 'separate emissions') { a.emit('s','same'); a.emit('t','same'); }
     else {
       if (reverse) b.emitOutputs({t:'same',e:''});
-      a.emitOutputs({s:'same',t:'same',e:''}, {provisional: mode === 'provisional'});
+      a.emitOutputs({s:'same',t:'same',e:''}, {provisional});
       if (!reverse) b.emitOutputs({t:'same',e:''});
     }
     await tick();
     assert.deepEqual(snapshots,[]); assert.equal(pipeline.errors.length,1);
-    assert.match(pipeline.errors[0].message,mode === 'provisional' ? /provisional/ : /grouped/);
+    assert.match(pipeline.errors[0].message,/grouped/);
     a.emit('t','healthy'); await tick(); assert.deepEqual(plain,['same','healthy']);
     await pipeline.cancel(); assert.deepEqual(snapshots,[]);
   });
@@ -333,12 +354,12 @@ test('invalid legacy paired conversions offer recovery instructions instead of d
   assert.throws(()=>assertGraph(old),/Unknown port/);
 });
 
-for (const reverse of [false,true]) test(`atomic second-only groups emit nothing and cannot contaminate later omitted/empty pairs (${reverse})`, async () => {
+for (const reverse of [false,true]) for (const provisional of [false,true]) test(`atomic second-only groups emit nothing and cannot contaminate later omitted/empty pairs (${reverse}, provisional=${provisional})`, async () => {
   let source; const snapshots=[];
   const connections=[edge('source','left','pairs','input1'),edge('source','right','pairs','input2'),edge('pairs','dom','sink','dom')];
   const pipeline=new Pipeline({nodes:{source:{outputs:{left:TEXT,right:TEXT},start(c){source=c;}},pairs:new PairedTextToDOMNode(),sink:{inputs:{dom:DOM},receive(_,dom){snapshots.push(dom);}}},connections:reverse?connections.reverse():connections});
   await pipeline.start();
-  for(const values of [{right:'orphan'},{left:'same',right:'same'},{left:'same',right:'same'},{right:'stale'},{left:'same'},{left:''},{left:'',right:''}]) source.emitOutputs(values);
+  for(const values of [{right:'orphan'},{left:'same',right:'same'},{left:'same',right:'same'},{right:'stale'},{left:'same'},{left:''},{left:'',right:''}]) source.emitOutputs(values, {provisional});
   await pipeline.stop();
   assert.deepEqual(snapshots.map(domText),['same\nsame','same\nsame','same\n','\n','\n']);
   assert.deepEqual(pipeline.errors,[]);
