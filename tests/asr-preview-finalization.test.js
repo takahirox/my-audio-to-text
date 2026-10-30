@@ -37,6 +37,42 @@ import { TextToDOMNode, DOMCombinerNode } from '../web/dom-nodes.js';
 import { edge } from '../extension/graph.js';
 import { domText } from './fixtures/dom.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
+for (const Node of [SpeechToTextNode, SpeechToTextZipformerEnNode]) {
+  for (const operation of ['stop', 'cancel']) {
+    test(`${Node.name}: worker failure clears preview and ${operation} preserves committed text in both displays`, async () => {
+      const workers = [], displays = {}, acc = new TextAccumulatorNode();
+      const speech = new Node({ workerFactory() {
+        const worker = { postMessage() {}, terminate() { this.terminated = true; } };
+        workers.push(worker); return worker;
+      } });
+      const pipeline = new Pipeline({ nodes: { speech, acc, history: new TextToDOMNode(), preview: new TextToDOMNode(), combined: new DOMCombinerNode(),
+        one: new LiveTextDisplayNode(dom => displays.one = dom), two: new LiveTextDisplayNode(dom => displays.two = dom) }, connections: [
+        edge('speech', 'final', 'acc', 'append'), edge('acc', 'text', 'history', 'text'), edge('speech', 'provisional', 'preview', 'text'),
+        edge('history', 'dom', 'combined', 'first'), edge('preview', 'dom', 'combined', 'second'),
+        edge('combined', 'dom', 'one', 'dom'), edge('combined', 'dom', 'two', 'dom'),
+      ] });
+      try {
+        const loading = speech.load();
+        workers.forEach(worker => worker.onmessage({ data: { type: 'ready' } }));
+        await loading; await pipeline.start();
+        speech.receiveEvent({ type: 'final', id: 0, text: 'committed' });
+        speech.receiveEvent({ type: 'partial', id: 1, text: 'uncommitted' }); await tick();
+        for (const display of Object.values(displays)) assert.equal(domText(display), 'committeduncommitted');
+        workers[0].onerror({ preventDefault() {}, message: 'controlled worker failure' }); await tick();
+        assert.equal(pipeline.entries.get('speech').failed, true);
+        for (const display of Object.values(displays)) assert.equal(domText(display), 'committed');
+        if (operation === 'stop') await assert.rejects(pipeline.stop(), AggregateError);
+        else await pipeline.cancel();
+        speech.receiveEvent({ type: 'partial', id: 1, text: 'late preview' });
+        speech.receiveEvent({ type: 'final', id: 1, text: 'late final' }); await tick();
+        for (const display of Object.values(displays)) assert.equal(domText(display), 'committed');
+        assert.equal(acc.committed, 'committed'); assert.equal(acc.count, 1);
+        assert.equal(pipeline.errors.length, 1); assert.match(pipeline.errors[0].message, /controlled worker failure/);
+        assert.ok(workers.every(worker => worker.terminated));
+      } finally { await pipeline.dispose(); }
+    });
+  }
+}
 for (const operation of ['stop', 'cancel']) for (const reverse of [false, true]) {
   test(`explicit history/tail composition: ${operation}, reverse routes=${reverse}, late/empty/repeated updates and two displays`, async () => {
     const speech = new SpeechToTextZipformerEnNode(), acc = new TextAccumulatorNode(), displays = {};

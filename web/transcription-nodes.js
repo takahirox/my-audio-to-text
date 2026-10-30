@@ -94,6 +94,8 @@ export class SpeechToTextNode {
     else if (event.type === 'stopped') this.draining?.resolve();
     else if (event.type === 'error') {
       const error = new Error(event.message);
+      // Failure aborts this producer; Stop/Cancel skip its cleanup hooks.
+      if (this.outputs.provisional) this.context?.emit('provisional', '');
       this.loading?.reject(error); this.draining?.reject(error);
       this.context?.fail(error);
     } else if (event.type === 'partial' || event.type === 'final') {
