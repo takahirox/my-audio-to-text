@@ -164,7 +164,8 @@ Live displays accept only `dom: DOM` in Graph v11. Route complete TEXT snapshots
 through `TextToDOM.text → dom → LiveTextDisplay.dom`. For text history, explicitly
 use TextAccumulator.append upstream of TextToDOM. Compose provisional TEXT with
 a separate TextToDOM feeding DOMCombiner.second; committed DOM feeds first. PairedTextToDOM
-accepts completed grouped input1/input2 TEXT from any compatible producer;
+accepts atomic grouped input1/input2 TEXT, provisional or committed, from any
+compatible producer;
 translator.source explicitly connects to input1 and translator.text to input2.
 Missing input2 leaves the right cell blank; specific errors stay in translation diagnostics;
 its consumer-owned correlation validation does not depend on producer identity.

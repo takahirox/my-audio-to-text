@@ -203,9 +203,11 @@ one display: provisional text replaces only the preview, and each final appends
 a committed item. Translation remains an explicit graph addition. Configurable
 `TextFormatter` Nodes compose primitive TEXT with editable multiline templates.
 Older paired views open a reviewed migration draft and keep a recovery copy;
-`PairedTextToDOM` formats one completed pair and direct display connections show
-only the latest pair. Its generic TEXT inputs are `input1` (left) and `input2`
-(right); connect translator.source/text explicitly to those ports. Missing input2
+`PairedTextToDOM` formats one atomic grouped pair, provisional or committed.
+Direct display connections show only the latest pair. Its generic TEXT inputs are
+`input1` (left) and `input2` (right); connect translator.source/text explicitly to those ports. For paired
+previews, use a separate formatter wired to provisionalSource/provisionalText
+and a replacement display; keep committed history on its own branch. Missing input2
 leaves a blank cell, while specific errors remain in translation diagnostics.
 Saved paired source/text/error wiring requires a v12 review draft and Save,
 with exact original JSON retained for recovery. For optional comparison
