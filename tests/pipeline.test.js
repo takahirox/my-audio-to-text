@@ -152,6 +152,40 @@ test('startup failure releases partially initialized resources and dispose clean
   await assert.rejects(cleanup.dispose(), AggregateError); assert.ok(released.includes('b'));
 });
 
+test('Cancel awaits async cleanup through consumers before closing them, without waiting for aborted work', async () => {
+  const held = gate(), calls = [], values = [], a = source();
+  a.cancel = async context => { await tick(); context.emit('text', 'cleanup'); };
+  const b = { inputs: { text }, outputs: { text },
+    async receive(_, value, context) {
+      assert.equal(this.closed, undefined);
+      calls.push(value);
+      if (value === 'running') await held.promise;
+      else { assert.equal(context.signal.aborted, false); await tick(); }
+      context.emit('text', value);
+    },
+    cancel() { this.closed = true; },
+  };
+  const c = { inputs: { text },
+    async receive(_, value, context) {
+      assert.equal(this.closed, undefined); assert.equal(context.signal.aborted, false);
+      await tick(); values.push(value);
+    },
+    cancel() { this.closed = true; },
+  };
+  const pipeline = new Pipeline({ nodes: { a, b, c }, connections: [
+    connection('a', 'text', 'b', 'text'), connection('b', 'text', 'c', 'text'),
+  ] });
+  await pipeline.start(); a.context.emit('text', 'running'); a.context.emit('text', 'queued'); await tick();
+  const canceled = pipeline.cancel();
+  assert.equal(pipeline.cancel(), canceled);
+  assert.ok([...pipeline.entries.values()].every(entry => entry.controller.signal.aborted));
+  await canceled;
+  assert.deepEqual(calls, ['running', 'cleanup']); assert.deepEqual(values, ['cleanup']);
+  assert.equal(b.closed, true); assert.equal(c.closed, true); assert.equal(pipeline.state, 'disposed');
+  held.resolve(); a.context.emit('text', 'late'); await tick();
+  assert.deepEqual(values, ['cleanup']); assert.deepEqual(pipeline.errors, []);
+});
+
 test('unknown emissions fail once, even when the error observer throws', async () => {
   const a = source();
   const pipeline = new Pipeline({ nodes: { a }, onError() { throw new Error('observer failure'); } });

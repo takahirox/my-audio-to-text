@@ -166,9 +166,11 @@ output names or optional upstream wiring.
   rejects with cancellation; pending Stop exits when disposal interrupts it.
   Dispose is idempotent and attempts every cleanup even if one fails.
 - `await pipeline.cancel()` aborts pending work and skips queued deliveries,
-  then invokes optional Node-owned `cancel(context)` hooks. Their cleanup snapshots
-  travel through ordinary routes with a cleanup signal, including formatters and
-  sinks; aborted model/side-effect Nodes discard pending work. It then disposes.
+  then invokes optional Node-owned `cancel(context)` hooks in topological order,
+  awaiting each hook and its upstream cleanup deliveries before canceling consumers.
+  Their cleanup snapshots travel through ordinary routes with a cleanup signal,
+  including formatters and sinks; aborted model/side-effect Nodes discard pending
+  work. It then disposes.
   TextAccumulator uses this to clear previews consistently across fan-out. Bare
   Dispose emits no cleanup snapshots.
 - Input or background failures (`context.fail`) disable the failing node and

@@ -10,8 +10,8 @@ import { TranslationSchedulerNode, TRANSLATION_OUTPUTS } from '../extension/tran
 import { TabSession } from '../extension/session.js';
 import { defaultGraph, graphNode, edge, NODE_TYPES, translationViewEdges, pairedTextEdges } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
-import { TextFormatterNode } from '../web/text-nodes.js';
-import { PairedTextToDOMNode } from '../web/dom-nodes.js';
+import { TextAccumulatorNode, TextFormatterNode, LiveTextDisplayNode } from '../web/text-nodes.js';
+import { DOMCombinerNode, PairedTextToDOMNode, TextToDOMNode } from '../web/dom-nodes.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function workerFixture({ holdLoad = false, failLoad = false, failTranslate = false, empty = false } = {}) {
@@ -285,6 +285,32 @@ test('optional error wire is not required to clear a previous translation in the
 });
 
 for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
+  test(`${direction}: Cancel clears the translated preview through DOMCombiner while preserving history`, async () => {
+    const f = workerFixture(), displays = []; let source;
+    const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory,
+      TranslationNode: { 'en-ja': EnglishToJapaneseOpusMtTranslationNode, 'gemma-en-ja': EnglishToJapaneseTranslateGemmaTranslationNode,
+        'gemma-ja-en': TranslateGemmaTranslationNode }[direction] });
+    const pipeline = new Pipeline({ nodes: {
+      source: { outputs: { final: TEXT, draft: TEXT }, start(c) { source = c; } }, scheduler,
+      history: new TextAccumulatorNode(), historyDOM: new TextToDOMNode(), previewDOM: new TextToDOMNode(),
+      combined: new DOMCombinerNode(), display: new LiveTextDisplayNode(dom => displays.push(domText(dom))),
+    }, connections: [edge('source', 'final', 'scheduler', 'text'), edge('source', 'draft', 'scheduler', 'provisional'),
+      edge('scheduler', 'text', 'history', 'append'), edge('history', 'text', 'historyDOM', 'text'),
+      edge('historyDOM', 'dom', 'combined', 'first'), edge('scheduler', 'provisionalText', 'previewDOM', 'text'),
+      edge('previewDOM', 'dom', 'combined', 'second'), edge('combined', 'dom', 'display', 'dom')] });
+    await pipeline.start(); source.emit('final', 'committed source'); await tick(); f.complete(0, 'history'); await tick();
+    source.emit('draft', 'shown draft'); await tick(); f.complete(1, 'preview'); await tick();
+    assert.equal(displays.at(-1), 'historypreview');
+    source.emit('draft', 'in flight'); await tick(); source.emit('draft', 'pending'); await tick();
+    const canceled = pipeline.cancel();
+    assert.equal(pipeline.cancel(), canceled);
+    await canceled;
+    assert.equal(displays.at(-1), 'history');
+    const retained = displays.slice(); f.complete(2, 'late preview'); source.emit('final', 'late final'); await tick();
+    assert.deepEqual(displays, retained); assert.equal(f.requests.length, 3);
+    assert.equal(pipeline.entries.get('history').node.count, 1);
+    assert.equal(f.workers.length, 1); assert.ok(f.workers[0].terminated); assert.deepEqual(pipeline.errors, []);
+  });
   test(`${direction}: explicit preview family replaces, clears on final acceptance, and shares one priority FIFO Worker`, async () => {
     const f = await schedulerGraph({ direction });
     f.preview('old'); await tick();
