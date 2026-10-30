@@ -1,9 +1,15 @@
 # Issue #168 — local streaming TTS evidence
 
 Status: **partial**. Qwen3-TTS has a real local MV3 streaming implementation;
-CosyVoice3 does not. Keep #168 open until CosyVoice3 ships or its remaining
-scope is explicitly split. No push, PR, merge, comment or external follow-up
-issue is part of this checkpoint. Required post-merge verification is pending.
+CosyVoice3 remains unsupported. Its remaining implementation and verification
+are now explicitly tracked in [Task #172](https://github.com/takahirox/my-audio-to-text/issues/172),
+as permitted by requirement 6 and the tracking update in
+[Issue #168](https://github.com/takahirox/my-audio-to-text/issues/168).
+[PR #170](https://github.com/takahirox/my-audio-to-text/pull/170) remains draft
+pending review of the parent's bounded acceptance. Use `Refs #168` and keep the
+Issue open while acceptance and required post-merge verification are pending.
+The measurements below are implementation-stage evidence, not new runs or
+post-merge results.
 
 ## Environment and assets
 
@@ -112,12 +118,58 @@ browser export bakes in whole-utterance flow/HiFT finalization. The
 [candidate conclusions](../streaming-tts.md#separate-candidate-conclusions)
 record exact official/community revisions, tokenizer/vocoder and licensing
 considerations, and the export/runtime work needed. No CosyVoice3 browser
-inference, pre-EOS audio or hardware claim is made.
+inference, pre-EOS audio or hardware claim is made. [Task #172](https://github.com/takahirox/my-audio-to-text/issues/172)
+preserves that work, including pinned browser assets, streaming Worker execution,
+stream/Speaker lifecycle regressions and real-model verification. This allowed
+split requires no additional scope approval solely for delivering Qwen3-TTS;
+the parent's original bounded acceptance still requires review.
 
 **Post-merge verification: pending.** Build/load the merged extension and repeat
 real Japanese/English first-chunk/render/EOS timing, consecutive utterances,
 Stop/Cancel and offline Start with exact pins. Record hardware and peak memory.
 Other GPUs/browsers, lower-memory/mobile devices, long-session peak memory and
 GPU-loss recovery remain unqualified. Planning estimates are not measured
-minimum hardware requirements. These limits and the CosyVoice3 scope decision
-prevent a claim that all of #168 is complete.
+minimum hardware requirements. The follow-up does not waive implementation or
+verification requirements, and pending post-merge checks prevent a claim of
+fully verified Issue completion.
+
+## Tracking reconciliation and acceptance review — 2026-10-31
+
+Read the live #168, draft PR #170 and open draft Task #172, together with the
+repository's development flow and review guidelines. Task #172 explicitly
+retains the CosyVoice3 export/runtime implementation and real-model verification.
+The checked-in PR-description artifact now uses `Refs #168`, links that Task,
+and removes the obsolete claim that the split still needs a scope decision.
+Keep the PR draft for acceptance review and keep post-merge verification pending.
+No GitHub metadata was changed during this revision.
+
+Fetched and merged current `origin/main` at
+`7c4442d1bb5cad2cf15ab619b38be9c5c0870efc` without conflicts. This includes #169's
+provisional paired-text fix. Reviewed the original bounded acceptance against
+the implementation and evidence, rather than inferring completion from the split:
+
+| Original acceptance | Implementation and evidence reviewed |
+| --- | --- |
+| Real saved-graph Japanese/English speech before synthesis completes | The owned Qwen Worker runs the talker/predictor loop and decodes prefixes every eight frames with two-frame lookahead; it does not wait for EOS to split a finished waveform. The implementation-stage packaged-extension JSON records first nonzero render before EOS for both languages and both utterances. Rechecked those timestamps, chunk sequences, scheduled continuity and WAV hashes against the retained files. This is existing real-model evidence, not a fresh inference run. |
+| Separate browser feasibility conclusions | The candidate report pins the Qwen model/tokenizer/codec/runtime set and documents the CosyVoice3 export's whole-utterance flow/HiFT finalization. CosyVoice3 has no palette/runtime Node; #172 retains its implementation and verification. No CosyVoice3 inference or hardware result is claimed. |
+| Ordered boundaries, bounded queues, Stop/Cancel and late replies | Reviewed `audio-stream.js`, `qwen3-tts-node.js`, its owned Worker and `speaker-output.js`: explicit start/chunk/end/abort events, increasing IDs/sequences, one PCM transfer awaiting acknowledgement, bounded text/audio queues, Stop-drain, Worker termination and late-reply guards. The deterministic suite includes overflow followed by abort, replay/order errors, repeated committed strings, activation recovery and independent producers. The controlled MV3 test checks native scheduling, ordered utterances, Stop and Cancel. |
+| Graph, preparation, CSP, diagnostics and existing paths | `AUDIO_STREAM` remains distinct from completed clips; graph version is unchanged. Save/Models prepares reviewed assets and the Worker verifies cached bytes only at Start. Missing/corrupt/evicted cache tests pass. The controlled MV3 test saves/reloads explicit ports under the production CSP. Existing Supertonic3/Kokoro, player/WAV and completed-clip Speaker browser checks pass. Main's DOM/translation regression checks also pass; provisional text remains rejected by Qwen. |
+| Real browser checks plus deterministic coverage and honest limits | Existing real-model playback and decoder evidence are retained separately from this revision's controlled transport tests. No pinned Qwen model weights are present here (0 of 9 files), so the real-model tests were not rerun. Hardware, minimum/peak memory and long-session limits above still apply. The decoder reference remains finite and below its documented continuity tolerance. |
+| Local-only genuine streaming, with no speculative framework | Reviewed the Worker/runtime, cache preparation and packaging paths: local pinned runtime imports, explicit model preparation, cache-only Start, required WebGPU and no server/cloud or whole-model CPU fallback. Streaming Speaker is a distinct typed input on the existing Speaker path. Existing pre-EOS evidence supports the Qwen streaming label; CosyVoice3 remains unsupported. |
+
+Revision checks after main integration:
+
+| Check | Result |
+| --- | --- |
+| `npm test` | **749 passed**, zero failed/skipped |
+| `TTS_BROWSER_CHANNEL=chrome npx playwright test --config playwright.extension.config.js tests/extension/streaming-tts.spec.js` | **1 controlled MV3 test passed**, **1 real decoder test intentionally skipped** without `STREAMING_TTS_SMOKE=1`; no new real inference claim |
+| `ASR_BASE_URL=http://127.0.0.1:18768 TRANSLATION_CHANNEL=chrome npx playwright test tests/browser/speaker.spec.js tests/browser/tts.spec.js tests/browser/dom-display.spec.js tests/browser/translation-ports.spec.js --project=chromium --workers=1` | **35 passed** on Chrome 156, served from this worktree using the existing Pages handler on an isolated local port because 8000 was occupied |
+| `npm run prepare:tts-assets` | **Passed**, 106,440,918 bytes staged; pinned Qwen runtime/tokenizer/notices sizes and hashes rechecked |
+| Model manifests and retained evidence consistency | **Passed**: nine model paths/URLs/sizes and chunk-hash counts agree; retained WAV hashes, timing/order/drain records and real decoder tolerance agree. Model weight hashes were not rechecked without the files. |
+| PR artifact and whitespace | **Passed**: valid JSON, non-closing `Refs #168`, #172 link, unsupported status and pending post-merge verification retained; `git diff --check` and `git diff --check origin/main...HEAD` |
+
+The complete extension build and real-model tests were not rerun in this
+revision; their earlier implementation-stage results above remain historical.
+Required verification of the merged packaged extension is still **pending** with
+the expected results specified above. This review creates no substitute human
+result, CosyVoice3 completion claim or waiver of the parent's bounded acceptance.

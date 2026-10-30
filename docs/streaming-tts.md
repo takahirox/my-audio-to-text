@@ -1,9 +1,12 @@
 # Local streaming TTS (Issue #168)
 
 **Qwen3-TTS 0.6B CustomVoice has a working local MV3 streaming path. CosyVoice3
-remains unsupported. Issue #168 is partial: keep it open unless the remaining
-CosyVoice3 work is explicitly split into a follow-up.** Neither both-model
-completion nor post-merge production verification is claimed.
+remains unsupported; its remaining implementation and real-model verification
+are tracked in [Task #172](https://github.com/takahirox/my-audio-to-text/issues/172),
+as permitted by requirement 6 of [Issue #168](https://github.com/takahirox/my-audio-to-text/issues/168).**
+Review of #168's bounded acceptance remains required. The split preserves the
+CosyVoice3 work and does not establish that it shipped. Required post-merge
+verification remains pending; no production verification is claimed.
 
 ## Graph and preparation
 
@@ -184,12 +187,16 @@ here. The weights declare Apache-2.0; the WebGPU conversion's LibriTTS-R referen
 voice separately requires CC BY 4.0 attribution. Tokenizer, flow/vocoder state
 and memory must be reviewed as well as LLM weights.
 
-**Required follow-up/scope decision:** export/review incremental flow masks,
+**Remaining implementation in [Task #172](https://github.com/takahirox/my-audio-to-text/issues/172):**
+export/review incremental flow masks,
 lookahead/finalization and HiFT overlap/cache state, implement the matching
-Worker/tokenizer/voice path, then prove Japanese/English pre-EOS playback in MV3
-with memory/timing evidence. This is additional model/runtime work. Do not expose
-a CosyVoice3 Node, mark its implementation complete, or close #168 without that
-work or an explicit scope split. This change opens no external issue.
+Worker/tokenizer/voice path, then prove real pre-EOS playback in MV3 with
+memory/timing evidence and separate Japanese/English results where supported.
+The Task remains draft while the browser export/runtime blocker is unresolved.
+Do not expose a CosyVoice3 Node or mark its implementation complete until that
+work passes validation. The parent Issue explicitly permits this follow-up;
+no further Qwen-only scope approval is required solely for the split. All of
+#168's bounded acceptance and required post-merge verification still apply.
 
 ## Reproduce checks
 
