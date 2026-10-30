@@ -45,7 +45,11 @@ const session = new TabSession(view => {
   element('saved-state').textContent = pending ? 'Saved graph changed. This session keeps its active graph; changes apply on Start.' : '';
   renderTextRegions(element('live-displays'), view.activeGraph || view.savedGraph, view.displays);
   element('no-live-displays').hidden = !!element('live-displays').children.length;
-  element('tts-output').hidden = !view.ttsStatus && !audioURLs.size;
+  const hasSpeaker = current.nodes.some(node => node.type === 'SpeakerOutput');
+  element('speaker-hint').hidden = !hasSpeaker;
+  element('speaker-status').textContent = view.speakerStatus;
+  element('enable-speaker').hidden = !view.speakerNeedsActivation;
+  element('tts-output').hidden = !view.ttsStatus && !audioURLs.size && !view.speakerStatus && !hasSpeaker;
   element('model-recovery').hidden = !/missing|evict|retry|unavailable/i.test(`${view.translationStatus} ${view.ttsStatus} ${view.conditionStatus} ${view.summaryStatus}`);
   element('cancel-session').disabled = !running;
   const needsTab = nextGraph.nodes.some(node => ['ChromeTabAudio', 'SelectedPageMediaAudio'].includes(node.type));
@@ -68,7 +72,8 @@ function refreshSaved() {
   try { const next = readGraph(localStorage); graphError = ''; session.setGraph(next); return true; }
   catch (error) { graphError = `Saved graph unavailable: ${error.message}${error.recoveryGraph ? ' Open Graph Editor to review and Save the migration draft.' : '. Reset and Save in Graph Editor to recover.'}`; session.update(); return false; }
 }
-element('start').onclick = () => { clearAudio(); if (refreshSaved()) void session.start(session.view.tabId, { microphoneGesture: true }); };
+element('start').onclick = () => { clearAudio(); if (refreshSaved()) void session.start(session.view.tabId, { microphoneGesture: true, speakerGesture: true }); };
+element('enable-speaker').onclick = () => session.enableSpeakers();
 element('stop').onclick = () => { void session.stop(); };
 element('cancel-session').onclick = () => { session.cancel(); clearAudio(); session.update({ status: 'Canceled. Pending processing discarded.' }); };
 chrome.runtime.onMessage.addListener((message, sender, respond) => {

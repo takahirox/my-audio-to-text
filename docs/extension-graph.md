@@ -252,6 +252,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | OpusMtJaEn / OpusMtEnJa / TranslateGemmaEnJa / TranslateGemmaJaEn | text: TEXT; provisional: TEXT (optional snapshot from any producer) | source/text/error: TEXT, grouped results; no text on failure |
 | Supertonic3 / Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; configured language/voice |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | native audio player / WAV |
+| SpeakerOutput | audio: SYNTHESIZED_AUDIO | automatic sequential default-speaker playback (no output ports) |
 
 Multiple audio sources, same-type or different ASRs, translators, processors and
 sinks can run independently. A source may fan out to several compatible ASRs;
@@ -618,6 +619,64 @@ capture, final ASR, ordered translation and TTS inputs, then output delivery;
 Cancel immediately aborts and terminates Workers and discards pending audio.
 Completed audio uses separate player controls (press Play) and WAV downloads;
 playback never becomes another ASR input. The next session clears prior players.
+
+For automatic live speech, add **Speaker** (`SpeakerOutput`) from **Outputs**:
+
+```text
+ASR.final / Translator.text → Supertonic3.text (or Kokoro.text)
+TTS.audio: SYNTHESIZED_AUDIO → SpeakerOutput.audio: SYNTHESIZED_AUDIO
+```
+
+Speaker has one `audio` input, no output ports or settings. It plays completed
+mono PCM clips through the browser's default audio output in arrival order,
+starting the next clip after the previous one ends. This is successive playback
+of complete clips, with browser scheduling latency. **Audio player / WAV** remains
+the separate manual player/download output; existing saved graphs are unchanged
+and adding Speaker requires no graph-version migration.
+
+Press **Start** in Live to enable Speaker. Toolbar invocation prepares the session
+and prompts for Start instead of attempting playback without a Live user gesture.
+Start creates and resumes owned Web Audio contexts before microphone permission
+or model-loading awaits. If the browser suspends/rejects audio or reports an
+output failure, Live shows an actionable message and **Enable speaker**. Check
+the system's default audio output, then use that button to retry; accepted clips
+stay queued. An unexpectedly closed audio context instead directs Cancel and
+Start, because a closed browser context cannot resume. No device picker or
+per-clip controls are added.
+
+The queue includes the playing clip and accepts at most **32 clips, 120 seconds,
+or 32 MiB of PCM**, whichever comes first (plus one bounded browser playback
+buffer). On saturation, Live explicitly reports the number of rejected clips;
+the Node stops accepting new clips for that session, while preserving accepted
+audio. Stop to drain accepted audio, then Start again to reset the queue and
+overflow state. There is no unbounded playback backlog or automatic replay.
+
+**Stop** drains already accepted upstream ASR/translation/TTS work and Speaker
+playback in order. If playback is blocked, Stop waits for **Enable speaker**;
+**Cancel** remains available to discard the queue immediately. The existing Stop
+during model loading cancels startup before any generated audio has been accepted.
+**Cancel**, reload and window close stop the current source, clear queued PCM,
+disconnect audio nodes and close their contexts. Each new Start owns fresh audio
+state, and canceled/previous-session replies cannot start playback. Speaker uses
+no audio object URLs. Manual AudioOutput retains its existing URL cleanup.
+
+**Keep the Live window open.** Playback belongs to that session's extension UI;
+closing it cancels output. Opening Graph or Models while Live stays open is
+supported. Background-service-worker playback is not provided.
+
+Focused checks using controlled audio (no model downloads):
+
+```sh
+node --test tests/speaker-output.test.js
+npx playwright test tests/browser/speaker.spec.js
+npx playwright test --config playwright.extension.config.js tests/extension/graph-speaker.spec.js
+```
+
+The browser checks exercise native Web Audio in Chromium and WebKit. Packaged
+MV3 checks use production graph routing/TTS Workers with controlled synthesis
+fixtures, including both TTS types, autoplay/output failure recovery, overflow,
+Stop, Cancel, repeat Start and Live close. See [#164 validation evidence](evidence/graph-164.md)
+for packaging and physical-device/model validation limits.
 
 All inference/text stays in local Workers. Only explicit preparation sends
 asset-only GET requests to immutable reviewed model URLs. Supertonic cache-only

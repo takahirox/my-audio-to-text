@@ -14,7 +14,7 @@ SHARED_FILES = (
     "meeting-summary-models.js", "meeting-summary-node.js", "meeting-summary-policy.js", "meeting-summary-worker.js",
     "if-condition-model.js", "if-condition-node.js", "if-condition-policy.js", "if-condition-worker.js",
     "text-window-node.js", "translation-commit-node.js", "pipeline.js", "port-contracts.js", "dom-nodes.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
-    "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "supertonic3-worker.js", "supertonic3-runtime.js",
+    "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "speaker-output.js", "supertonic3-worker.js", "supertonic3-runtime.js",
     "kokoro-worker.js", "kokoro-english.js", "kokoro-japanese.js", "kokoro-hepburn.js",
     "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js", "opus-mt-en-ja-worker.js", "translategemma-worker.js",
     "audio.js", "capture-worklet.js", "local-asr-core.js", "local-asr-config.js",
