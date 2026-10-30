@@ -5,9 +5,7 @@ Stage 1 batches short committed ASR fragments. Stage 2 optionally retranslates
 only the current bounded, uncommitted source window. It does not provide
 conversation-wide context, conversation memory, or guaranteed translation
 accuracy improvements. Both processors are in Graph Editor's Processors palette.
-They require no model weights. Graph v11 uses explicit TextAccumulator state and TextToDOM upstream
-of the DOM-only LiveTextDisplay sink. Primitive TEXT identity, the generic
-Pipeline and translator/formatter outputs remain unchanged.
+They require no model weights. Graph v13 uses append-only committed routing and a separate preview display. TextAccumulator holds committed history; TextToDOM converts TEXT for DOM-only LiveTextDisplay sinks.
 
 ## Stage 1: batching without retranslation
 
@@ -65,7 +63,7 @@ nothing. Each instance owns its buffer, timer and lifecycle.
 
 ## Stage 2: bounded retranslation with immutable commits
 
-Use a separate translator for this opt-in path:
+Use one translator for both committed windows and replaceable previews:
 
 ```text
 ASR.final → TextWindow.text
@@ -75,34 +73,37 @@ TextWindow.provisional ────→ Translator.provisional
 Translator.source ────────→ TranslationCommit.source
 Translator.text ──────────→ TranslationCommit.text
 Translator.error ─────────→ TranslationCommit.error
-TranslationCommit.provisional → TextAccumulator.preview
+Translator.provisionalText ──→ PreviewTextToDOM.text → dom → PreviewDisplay.dom
 TranslationCommit.final ──────→ TextAccumulator.append
 TextAccumulator.text ────────→ TextToDOM.text → dom → LiveTextDisplay.dom
 ```
 
 Translator means any of OpusMtEnJa, OpusMtJaEn, TranslateGemmaEnJa or
-TranslateGemmaJaEn. Its optional provisional input is the only existing Node
-contract extension: ordinary text-only graphs are unchanged, and the shared
-standalone web translator Nodes are unchanged. A forward boundary edge lets the
-commit processor distinguish immutable closed windows from open snapshots
-without a feedback cycle, payload wrapper, public request IDs or status ports.
-Graph validation accepts any compatible TEXT producer on any input, in either
-connection order, including direct ASR.provisional → Translator.provisional and
-ASR.final → Translator.text. TextWindow is one batching option. No source type
-or neighboring Node enables a feature mode.
+TranslateGemmaJaEn. PreviewTextToDOM and PreviewDisplay are ordinary TextToDOM and
+LiveTextDisplay instances. All four translators expose the same explicit output
+families; standalone web translator Nodes retain their existing text-only behavior.
+TranslationCommit is optional for routing: committed translator.text can connect
+directly to append, fields or TTS. Retain the forward boundary edge when causal
+window-commit verification and visible failed-source fallback are needed without a
+feedback cycle, payload wrapper, public request IDs or status ports. Graph validation
+accepts any compatible TEXT producer on any input, in either connection order, including
+direct ASR.provisional → Translator.provisional and ASR.final → Translator.text.
+TextWindow is one batching option. No source type or neighboring Node enables a feature
+mode.
 
-TranslationCommit treats `boundary` as a declaration of a closed source event.
-Fan out that same event to a processor's text input and boundary; equal text from
-independent emissions is insufficient. The processor must return atomic grouped
-source/text/error using its received context (retain it with asynchronous work).
-The commit Node checks the result's causal delivery against the oldest boundary,
-as well as exact source text. It never joins split groups or unrelated equal
-strings. A mismatch fails visibly without appending. With no pending boundary,
-a causally derived grouped result is only a preview; no result commits itself.
-Unresolved boundaries fail on Stop. Arbitrary processors may satisfy these data
-semantics; an intermediary which emits a fresh result without preserving the
-immediate source delivery cannot fabricate correlation. No public metadata ports,
-producer registry, payload wrappers or graph pairing checks are added.
+TranslationCommit treats `boundary` as a declaration of a closed source event. Fan out
+that same event to a processor's text input and boundary; equal text from independent
+emissions is insufficient. The processor must return atomic grouped source/text/error
+using its received context (retain it with asynchronous work). The commit Node checks
+the result's causal delivery against the oldest boundary, as well as exact source text.
+It never joins split groups or unrelated equal strings. A mismatch fails visibly without
+appending. With no pending boundary, a result fails visibly; previews bypass
+TranslationCommit entirely. Its retained provisional output carries only empty
+boundary/final clears for existing compositions, never preview translations. Unresolved
+boundaries fail on Stop. Arbitrary processors may satisfy these data semantics; an
+intermediary which emits a fresh result without preserving the immediate source delivery
+cannot fabricate correlation. No public metadata ports, producer registry, payload
+wrappers or graph pairing checks are added.
 
 Every translator accepts one running inference, one latest pending provisional
 snapshot, and a bounded FIFO of closed windows. New
@@ -113,22 +114,32 @@ inference intentionally runs again even if a matching preview succeeded: there
 is no speculative translated-prefix stabilization or implicit cached commit.
 Stage 1 creates no preview inference.
 
-All translator results remain atomic primitive **source/text/error: TEXT**;
-failed groups omit text. When provisional is connected, translator text includes
-preview translations. Route through TranslationCommit before append-only
-destinations such as TextAccumulator.append, focused fields or TTS. Direct formatter
-fan-out may observe previews; it must not be treated as committed history.
+The two atomic TEXT output families are **source/text/error** for committed input and
+**provisionalSource/provisionalText/provisionalError** for preview input. A failed group
+omits its family's translated text; connected generic formatters clear that omitted
+sibling, without clearing the other family's inputs. Empty/whitespace input succeeds
+with empty translated text and its original source, without inference. Errors also reach
+existing translator diagnostics.
+
+Route committed text directly to append-only destinations. Route provisionalText to a
+separate TextToDOM → LiveTextDisplay replacement branch; its explicit empty-string
+events clear previews on final acceptance, Stop and Cancel. This needs no
+context.provisional inspection and no accumulator preview state. Preview-only
+TextFormatter formatting must stay on that separate branch; never append it to committed
+history. PairedTextToDOM remains a generic completed-pair formatter and continues to
+reject provisional deliveries. For a combined display, use DOMCombiner with committed
+history as first and the plain preview DOM as second.
 
 | Event | Output and order |
 | --- | --- |
 | Source grows while open | Translate the latest snapshot when available; no final. The most recent successful preview remains until replaced or the source closes. Superseded in-flight results emit nothing. |
-| Latest open translation succeeds | Commit emits provisional equal to the translated text, replacing only Live's preview. |
-| Source closes by punctuation, cap, deadline or Stop | Boundary arrives before its async final result. Commit emits provisional `''` immediately to clear the obsolete preview and queues that source exactly once. |
-| Closed translation succeeds | Match the oldest boundary by causal delivery and source text in FIFO order; emit grouped provisional `''`, final translation, error `''`. Live appends once and clears preview atomically. |
-| Open translation fails | Emit provisional `''` and error, without a final item. Existing translator model failures remain terminal for that translator instance. |
+| Latest open translation succeeds | Translator emits its grouped provisional family; provisionalText replaces only the explicit preview display. |
+| Source closes by punctuation, cap, deadline or Stop | Boundary arrives before its async final result. Translator emits all three provisional ports as `''` immediately to clear the obsolete preview, even while stale inference is running. Commit queues the source boundary exactly once. |
+| Closed translation succeeds | Match the oldest boundary by causal delivery and source text in FIFO order; Commit emits final translation and error `''` (with its legacy empty clear). The committed history appends once; previews remain on their separate branch. |
+| Open translation fails | Emit provisionalSource and provisionalError without provisionalText; no committed output or final item. A grouped preview formatter clears omitted translated text. A direct provisionalText-only display keeps its previous snapshot until replacement or an explicit clear. Existing translator model failures remain terminal for that translator instance. |
 | Closed translation fails | Emit grouped provisional `''`, final `[Translation failed: MESSAGE]\nSOURCE`, error MESSAGE. This visibly retains source instead of inventing a translation; prior committed items remain immutable. |
-| Stop | TextWindow flushes tail; translator suppresses previews and drains closed work; commit verifies all boundaries resolved, then display discards preview. |
-| Cancel | Pipeline invalidates emissions first; buffers, pending work and Workers are disposed. Previously committed accumulator text remains, while previews and late replies are discarded. |
+| Stop | TextWindow flushes tail; translator suppresses previews and drains closed work; commit verifies all boundaries resolved, and the explicit preview family clears its display. |
+| Cancel | Pipeline invalidates emissions first; buffers, pending work and Workers are disposed. Previously committed accumulator text remains, while a cleanup emission clears the preview display and late replies are discarded. Bare dispose emits nothing and retains the last display snapshot. |
 
 The scheduler does not emit previews ahead of queued closed results. A closed
 window is the sole commit rule; similarity between Japanese strings is never
@@ -201,4 +212,23 @@ Measured results and limitations are recorded in
 [`docs/evidence/translation-128.md`](evidence/translation-128.md). No required
 check introduced by this experiment depends on a post-merge deployment.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final/preview text upstream with TextAccumulator. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An omitted second value leaves a blank right cell; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, route committed text to TextAccumulator.append. Keep previews on a separate replacement branch. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An omitted second value leaves a blank right cell; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+
+## Saved graph review (#163)
+
+Graph v13 audits all four shared-scheduler translators. Any older graph with a
+provisional translator input connected or a TranslationCommit Node requires an explicit
+review, including inactive drafts. Loading/executing the saved graph is blocked; the
+repair draft retains every route, Node and setting, while warning that source/text/error
+now carry committed results only. Reconnect deliberate previews to
+provisionalSource/provisionalText/provisionalError and include their empty clearing
+route. Old TranslationCommit compositions need a separate preview route. No preview
+branch is guessed or auto-committed.
+
+The original JSON remains untouched until Save, then is backed up byte-for-byte under
+processing-graph-before-v13 (numbered on collisions). Older copies remain available
+through Graph actions → Recovery, Copy JSON and Download JSON. V12 graphs without
+provisional translator input or TranslationCommit upgrade without changing their routes.
+Earlier display/paired-port review requirements still apply. This change does not alter
+TextAccumulator or add a preview manager; it is compatible with #162's append-only
+accumulator direction.

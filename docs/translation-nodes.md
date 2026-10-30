@@ -199,9 +199,9 @@ until this verification is recorded. The unpacked extension has no deployment ga
 
 ## TranslateGemma in the extension (#124)
 
-Graph version 9 adds `TranslateGemmaEnJa` (**TranslateGemma 4B English → Japanese**)
-and `TranslateGemmaJaEn` (**Japanese → English**). Defaults, existing OPUS-MT
-Nodes and migrations are unchanged. Add either processor; there is no translation
+The extension provides `TranslateGemmaEnJa` (**TranslateGemma 4B English → Japanese**)
+and `TranslateGemmaJaEn` (**Japanese → English**). Both now share the explicit
+committed/preview port contract with OPUS-MT (graph v13). Add either processor; there is no translation
 preset. Connect `Text.value → TranslateGemmaEnJa.text → TextAccumulator.append`
 (using the processor's `text` output), or
 `ChromeTabAudio.audio → SpeechToTextZipformerEn.audio`,
@@ -275,10 +275,6 @@ separate user evaluation. No post-merge-only check is introduced by #124.
 [TextWindow and TranslationCommit](windowed-translation.md) provide bounded
 source batching and an opt-in preview/commit experiment in the extension graph.
 The four extension translators accept optional provisional TEXT from any
-compatible producer, independently of the committed text source and edge order. Their primitive grouped
-source/text/error outputs remain unchanged. Existing text-only connections and
-standalone web translator Nodes retain their behavior. Use TranslationCommit
-for the experimental path; direct translator text now includes preview results
-when provisional is explicitly connected.
+compatible producer, independently of the committed text source and edge order. Their committed source/text/error and preview provisionalSource/provisionalText/provisionalError TEXT outputs form separate atomic families sharing one owned Worker. Direct text is safe for committed history or TTS even when provisional is connected. Route provisionalText to a separate replacement display; empty clears on final acceptance, Stop and Cancel. TranslationCommit remains optional for causal closed-window checks, not preview/final routing. Standalone web translator Nodes retain their behavior. Older preview-enabled graphs require the reviewed v13 repair and preserve original JSON; see the windowed-translation guide.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final/preview text upstream with TextAccumulator. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An omitted second value leaves a blank right cell; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, route committed text to TextAccumulator.append; previews use a separate replacement display. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An omitted second value leaves a blank right cell; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).

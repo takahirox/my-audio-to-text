@@ -57,9 +57,9 @@ function workers() {
 
 for (const translator of translators) test(`${translator}: direct ASR previews coalesce, finals stay FIFO and boundary matching survives equal text`, async () => {
   const f = workers(), displays = {};
-  const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TranslationCommit','commit'), graphNode('TextAccumulator','acc'),graphNode('LiveTextDisplay','translated'));
+  const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TranslationCommit','commit'), graphNode('TextAccumulator','acc'),graphNode('LiveTextDisplay','translated'),graphNode('LiveTextDisplay','preview'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),edge('speech','final','commit','boundary'),
-    ...['source','text','error'].map(p => edge('translator',p,'commit',p)),edge('commit','provisional','acc','preview'),edge('commit','final','acc','append'),edge('acc','text','translated','content'));
+    ...['source','text','error'].map(p => edge('translator',p,'commit',p)),edge('translator','provisionalText','preview','content'),edge('commit','final','acc','append'),edge('acc','text','translated','content'));
   const built = buildGraph(addDOMFormatters(graph), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
   try {
     await built.pipeline.start(); await built.translations[0].ready;
@@ -67,9 +67,9 @@ for (const translator of translators) test(`${translator}: direct ASR previews c
     speech.receiveEvent({type:'partial',text:'old'}); await tick();
     speech.receiveEvent({type:'partial',text:'new'}); speech.receiveEvent({type:'partial',text:'latest'}); await tick();
     f.complete(0); await tick(); assert.equal(displays.translated,'');
-    f.complete(1); await tick(); assert.equal(displays.translated,'translated:latest');
+    f.complete(1); await tick(); assert.equal(displays.preview,'translated:latest'); assert.equal(displays.translated,'');
     speech.receiveEvent({type:'final',text:'same',id:1}); speech.receiveEvent({type:'final',text:'same',id:2}); await tick();
-    assert.equal(displays.translated,''); f.complete(2); await tick(); f.complete(3); await built.pipeline.stop();
+    assert.equal(displays.translated,''); assert.equal(displays.preview,''); f.complete(2); await tick(); f.complete(3); await built.pipeline.stop();
     assert.equal(displays.translated,'translated:same\ntranslated:same'); assert.deepEqual(built.pipeline.errors,[]);
   } finally { await built.pipeline.dispose(); }
   assert.ok(f.owned.every(w=>w.terminated));
@@ -161,14 +161,14 @@ test('Cancel closes field side effects before accumulator cleanup follows ordina
 
 test('Text literals and formatter/accumulator snapshots execute as independent translator previews', async () => {
   for (const type of ['Text','TextFormatter','TextAccumulator']) {
-    const f=workers(),graph={version:GRAPH_VERSION,nodes:[graphNode('Text','final'),graphNode('Text','seed'),graphNode(type,'alternate'),graphNode('TranslateGemmaEnJa','translator'),graphNode('LiveTextDisplay','view')],
-      edges:[edge('final','value','translator','text'),edge('translator','text','view','content')]};
+    const f=workers(),graph={version:GRAPH_VERSION,nodes:[graphNode('Text','final'),graphNode('Text','seed'),graphNode(type,'alternate'),graphNode('TranslateGemmaEnJa','translator'),graphNode('LiveTextDisplay','view'),graphNode('LiveTextDisplay','preview')],
+      edges:[edge('final','value','translator','text'),edge('translator','text','view','content'),edge('translator','provisionalText','preview','content')]};
     if(type!=='Text')graph.edges.push(edge('seed','value','alternate',type==='TextFormatter'?'input1':'preview'));
     graph.edges.push(edge('alternate',type==='Text'?'value':'text','translator','provisional'));
-    let display;const built=buildGraph(addDOMFormatters(graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(_,v)=>{ v = domText(v);display=v;}});
+    let display,preview;const built=buildGraph(addDOMFormatters(graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='view')display=v;else preview=v;}});
     await built.pipeline.start();await tick();
     built.pipeline.entries.get(type==='Text'?'alternate':'seed').context.emit('value','preview');await tick();f.complete(0);await tick();
-    assert.equal(display,'translated:preview',type);
+    assert.equal(preview,'translated:preview',type); assert.equal(display,'',type);
     built.pipeline.entries.get('final').context.emit('value','committed');await tick();f.complete(1);await tick();
     assert.equal(display,'translated:committed',type);await built.pipeline.stop();assert.deepEqual(built.pipeline.errors,[]);await built.pipeline.dispose();
   }
@@ -177,7 +177,7 @@ test('Text literals and formatter/accumulator snapshots execute as independent t
 test('TranslationCommit final is an ordinary TEXT producer for another translator preview', async () => {
   const {windowGraph}=await import('./fixtures/windowed-translation.js');const f=workers(),graph=windowGraph('revisable');
   graph.nodes.push(graphNode('Text','independent'),graphNode('TranslateGemmaEnJa','second'),graphNode('LiveTextDisplay','second-view'));
-  graph.edges.push(edge('independent','value','second','text'),edge('commit','final','second','provisional'),edge('second','text','second-view','content'));
+  graph.edges.push(edge('independent','value','second','text'),edge('commit','final','second','provisional'),edge('second','provisionalText','second-view','content'));
   let display;const built=buildGraph(addDOMFormatters(graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='second-view')display=v;}});
   await built.pipeline.start();await tick();built.pipeline.entries.get('input').context.emit('value','First.');await tick();f.complete(0);await tick();
   assert.equal(f.requests[1].text,'translated:First.');f.complete(1);await tick();assert.equal(display,'translated:translated:First.');

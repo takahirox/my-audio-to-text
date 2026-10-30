@@ -41,7 +41,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
       const run = await page.evaluate(async ({ graph, texts, mode }) => {
         const { buildGraph } = await import('./graph-runtime.js');
         const started = performance.now(), now = () => performance.now() - started;
-        const inferences = [], emissions = [], displayEvents = [], inputs = [], workers = [];
+        const inferences = [], emissions = [], displayEvents = [], inputs = [], workers = [], previews = [];
         const NativeWorker = Worker;
         const workerFactory = url => {
           const worker = new NativeWorker(url, { type: 'module' }), post = worker.postMessage.bind(worker), terminate = worker.terminate.bind(worker);
@@ -60,8 +60,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
             if (m.type === 'load') queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } }));
             if (m.type === 'vad-stop') queueMicrotask(() => this.onmessage?.({ data: { type: 'vad-stopped', session: m.session } }));
           }, terminate() {} }),
-          onDisplay: (_, s) => { display = s.textContent; displayEvents.push({ ms: now(), text: s.textContent }); } });
-        const accumulator = built.pipeline.entries.get('display-accumulator').node;
+          onDisplay: (id, s) => { if (id === 'display') display = s.textContent; else previews.push(s.textContent); displayEvents.push({ id, ms: now(), text: s.textContent }); } });
         const scheduler = built.translations[0], emit = scheduler.emit.bind(scheduler);
         scheduler.emit = (job, text, error) => {
           if (!job.provisional || job.revision === scheduler.revision) emissions.push({ ms: now(), source: job.source, provisional: !!job.provisional, text, error });
@@ -73,7 +72,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
           if (mode === 'direct-asr') {
             built.speechNodes.get('input').receiveEvent({ type: 'partial', text: 'Please' });
             const deadline = performance.now() + 30000;
-            while (!accumulator.preview) {
+            while (!previews.at(-1)) {
               if (performance.now() > deadline) throw Error('Real direct-ASR preview did not arrive.');
               await new Promise(r => setTimeout(r, 25));
             }
@@ -88,7 +87,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
               // comparison: let a real open-window preview become visible.
               const deadline = performance.now() + 20000;
               const previous = emissions.length;
-              while (!emissions.slice(previous).some(e => e.provisional) || !accumulator.preview) {
+              while (!emissions.slice(previous).some(e => e.provisional) || !previews.at(-1)) {
                 if (performance.now() > deadline) throw Error('Real open-window preview did not arrive.');
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
@@ -96,7 +95,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
             await new Promise(resolve => setTimeout(resolve, 150));
           }
           const stopMs = now(); await built.pipeline.stop();
-          return { mode, readyMs, stopMs, totalMs: now(), inputs, inferences, emissions, displayEvents, display, preview: accumulator.preview,
+          return { mode, readyMs, stopMs, totalMs: now(), inputs, inferences, emissions, displayEvents, display, preview: previews.at(-1) ?? '',
             errors: built.pipeline.errors.map(e => e.message), inferenceCount: inferences.length };
         } finally {
           await built.pipeline.dispose();

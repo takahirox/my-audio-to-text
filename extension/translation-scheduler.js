@@ -1,12 +1,17 @@
 import { Pipeline } from '../web/pipeline.js';
 import { OpusMtTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
 
-export const TRANSLATION_OUTPUTS = Object.freeze({ source: TEXT, text: TEXT, error: TEXT });
+export const TRANSLATION_OUTPUT_GROUPS = Object.freeze([
+  Object.freeze(['source', 'text', 'error']),
+  Object.freeze(['provisionalSource', 'provisionalText', 'provisionalError']),
+]);
+export const TRANSLATION_OUTPUTS = Object.freeze(Object.fromEntries(TRANSLATION_OUTPUT_GROUPS.flat().map(port => [port, TEXT])));
 
 // Session-owned FIFO of committed utterances. Ordering and request IDs stay internal.
 export class TranslationSchedulerNode {
   inputs = { text: TEXT, provisional: TEXT };
   outputs = TRANSLATION_OUTPUTS;
+  outputGroups = TRANSLATION_OUTPUT_GROUPS;
   constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, modelName = 'OPUS-MT', onState = () => {} } = {}) {
     this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
     this.modelName = modelName;
@@ -40,7 +45,15 @@ export class TranslationSchedulerNode {
     // Per-utterance validation errors must reach diagnostics even when the
     // generic formatter (or any other consumer) leaves error disconnected.
     if (error && !this.error) this.onState(`Translation unavailable: ${error}`);
-    (job.context || this.context).emitOutputs({ source: job.source, error, ...(error ? {} : { text }) }, { provisional: job.provisional === true });
+    const [sourcePort, textPort, errorPort] = this.outputGroups[job.provisional ? 1 : 0];
+    (job.context || this.context).emitOutputs({ [sourcePort]: job.source, [errorPort]: error, ...(error ? {} : { [textPort]: text }) }, { provisional: job.provisional === true });
+  }
+  clearPreview(context = this.context) {
+    if (!this.hasPreview) return;
+    this.hasPreview = false;
+    // An ordinary TEXT route clears the preview as soon as a final is accepted,
+    // even while an obsolete inference still owns the single Worker.
+    this.emit({ source: '', provisional: true, revision: this.revision, context }, '');
   }
   receiveInputs(values, context) {
     for (const [port, value] of Object.entries(values)) {
@@ -59,7 +72,8 @@ export class TranslationSchedulerNode {
     // One replaceable pending preview, and at most one running inference.
     // Committed input invalidates every older preview regardless of producer.
     this.preview = port === 'provisional' ? { source, provisional: true, revision: this.revision, context } : null;
-    if (port === 'provisional') { this.pump(); return; }
+    if (port === 'provisional') { this.hasPreview = true; this.pump(); return; }
+    this.clearPreview(context);
     // Bound closed work too. Overflow is an explicit branch failure, never a
     // silently dropped utterance; the existing default FIFO remains unchanged.
     if (this.finals.length >= 32 || this.queuedChars + source.length > 32768) throw Error('Translation backlog limit exceeded (32 windows / 32,768 characters).');
@@ -104,9 +118,19 @@ export class TranslationSchedulerNode {
   }
   async stop() {
     this.preview = null; this.revision++;
+    this.clearPreview();
     await this.ready;
     await this.working;
     if (!this.error && !this.disposed) await this.translation?.stop();
+  }
+  cancel(context) {
+    // Pipeline has already aborted inference. Publish only a cleanup snapshot
+    // through the explicit preview family, using its live cleanup context.
+    if (this.hasPreview) {
+      this.hasPreview = false;
+      context.emitOutputs({ provisionalSource: '', provisionalText: '', provisionalError: '' }, { provisional: true });
+    }
+    return this.dispose();
   }
   dispose() {
     this.context?.signal.removeEventListener('abort', this.abort);

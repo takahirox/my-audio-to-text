@@ -98,18 +98,23 @@ completion order; the producer owns any required input-order buffering. The
 translation scheduler uses a FIFO of committed utterances before publishing,
 rather than asking consumers to compare source text.
 
-Correlation is supported between ports emitted together by **one producer and
-connected directly to one receiver**. Separate processor branches are not joined:
-the runtime does not merge groups, wait for missing ports, or synchronize
-independent consumers. A forwarding context retains only immediate delivery
-causality, which a consumer may validate without joining unrelated streams. A processor may explicitly publish
-a new group, but has to own its association. For an explicit `emitOutputs()` delivery, `context.groupInputs` is a frozen list
-of receiver inputs wired directly from that producer, including omitted siblings.
-It is delivery-local context, not a port payload or cross-hop correlation ID.
-`TextFormatter` treats this as a producer snapshot and clears omitted siblings;
-ordinary `emit()` deliveries carry no groupInputs and retain other latest values.
-A receiving group can otherwise be a partial update by design; consumers must not infer a pair from separate groups or assume
-required graph inputs are included in every emission.
+Correlation is supported between ports emitted together by **one producer and connected
+directly to one receiver**. Separate processor branches are not joined: the runtime does
+not merge groups, wait for missing ports, or synchronize independent consumers. A
+forwarding context retains only immediate delivery causality, which a consumer may
+validate without joining unrelated streams. A processor may explicitly publish a new
+group, but has to own its association. For an explicit `emitOutputs()` delivery,
+`context.groupInputs` is a frozen list of receiver inputs wired directly from that
+producer, including omitted siblings. A Node may declare independent atomic output
+families with `outputGroups: [['source', 'text', 'error'], ['provisionalSource',
+'provisionalText', 'provisionalError']]`. In that case groupInputs includes only the
+families represented in the emission, so an omitted preview sibling never clears a
+committed input. Nodes without outputGroups retain their single-family behavior. It is
+delivery-local context, not a port payload or cross-hop correlation ID. `TextFormatter`
+treats this as a producer snapshot and clears omitted siblings; ordinary `emit()`
+deliveries carry no groupInputs and retain other latest values. A receiving group can
+otherwise be a partial update by design; consumers must not infer a pair from separate
+groups or assume required graph inputs are included in every emission.
 
 Errors abort the failing target and skip its remaining queued groups; ordinary
 per-port fallback also stops the current group on failure/abort. Previously

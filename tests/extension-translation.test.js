@@ -44,20 +44,20 @@ async function schedulerGraph(options = {}) {
     modelName: options.direction?.startsWith('gemma') ? 'TranslateGemma 4B' : 'OPUS-MT',
     onState: state => states.push(state) });
   const pipeline = new Pipeline({ nodes: {
-    source: { outputs: { text: TEXT }, start(c) { emit = c.emit; } }, scheduler,
+    source: { outputs: { text: TEXT, provisional: TEXT }, start(c) { emit = c.emit; } }, scheduler,
     sink: { inputs: TRANSLATION_OUTPUTS, async receiveInputs(values) { await options.receiveInputs?.(values); outputs.push(values); } },
     plain: new TextOutputNode(text => plain.push(text)),
     formatter: new TextFormatterNode({ inputCount: 3, template: '{1}|{2}|{3}' }),
     formatted: new TextOutputNode(text => formatted.push(text)),
-  }, connections: [edge('source', 'text', 'scheduler', 'text'),
+  }, connections: [edge('source', 'text', 'scheduler', 'text'), edge('source', 'provisional', 'scheduler', 'provisional'),
     ...Object.keys(TRANSLATION_OUTPUTS).map(port => edge('scheduler', port, 'sink', port)),
     ...translationViewEdges('scheduler', 'formatter').filter(route => options.includeError !== false || route.from[1] !== 'error'), edge('scheduler', 'text', 'plain', 'text'),
     edge('formatter', 'text', 'formatted', 'text')] });
   await pipeline.start();
-  return { ...f, pipeline, scheduler, outputs, states, plain, formatted, send: text => emit('text', text) };
+  return { ...f, pipeline, scheduler, outputs, states, plain, formatted, send: text => emit('text', text), preview: text => emit('provisional', text) };
 }
 
-for (const mode of ['success', 'empty', 'failure']) test(`paired consumer rejects actual scheduler ${mode} previews while committed fan-out continues`, async () => {
+for (const mode of ['success', 'empty', 'failure']) test(`committed paired consumer never receives scheduler ${mode} previews`, async () => {
   const f = workerFixture(), pairs = new PairedTextToDOMNode(), plain = [], snapshots = []; let source;
   const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory });
   const pipeline = new Pipeline({ nodes: {
@@ -72,11 +72,11 @@ for (const mode of ['success', 'empty', 'failure']) test(`paired consumer reject
   if (mode === 'failure') f.requests[1].worker.reply({ id: f.requests[1].id, type: 'error', message: 'preview failed' });
   await tick();
   assert.deepEqual(snapshots.map(dom=>[...dom.querySelectorAll('td')].map(cell=>cell.textContent)),[['same','committed']]);
-  assert.equal(pipeline.errors.length,1); assert.match(pipeline.errors[0].message,/provisional/);
+  assert.deepEqual(pipeline.errors, []); assert.deepEqual(plain, ['committed']);
   source.emit('closed',mode === 'failure' ? '' : 'later'); await tick();
   if (mode !== 'failure') { f.complete(mode === 'empty' ? 1 : 2,'later committed'); await tick(); }
   assert.equal(plain.at(-1),mode === 'failure' ? '' : 'later committed');
-  await pipeline.cancel(); assert.equal(snapshots.length,1); assert.ok(f.workers.every(worker => worker.terminated));
+  await pipeline.cancel(); assert.equal(snapshots.length,2); assert.ok(f.workers.every(worker => worker.terminated));
 });
 
 test('production pinned manifest includes all seven runtime files and reviewed bounded hashes', () => {
@@ -93,7 +93,7 @@ for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
   test(`${direction}: committed results are atomic, FIFO, repeat-safe and ignore duplicate worker replies`, async () => {
     const f = await graph();
     assert.deepEqual(Object.keys(f.scheduler.inputs), ['text', 'provisional']);
-    assert.deepEqual(Object.keys(f.scheduler.outputs), ['source', 'text', 'error']);
+    assert.deepEqual(Object.keys(f.scheduler.outputs), Object.keys(TRANSLATION_OUTPUTS));
     f.send('same'); f.send('same'); f.send(''); f.send('  '); f.send('last'); await tick();
     assert.deepEqual(f.outputs, [], 'pending emits no formatter rows'); assert.equal(f.requests.length, 1);
     assert.equal(f.workers[0].messages[0].cacheOnly, true);
@@ -283,3 +283,99 @@ test('optional error wire is not required to clear a previous translation in the
   assert.equal(f.formatted[1], 'x'.repeat(1001) + '||');
   assert.deepEqual(f.plain, ['previous translation']); await f.pipeline.dispose();
 });
+
+for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
+  test(`${direction}: explicit preview family replaces, clears on final acceptance, and shares one priority FIFO Worker`, async () => {
+    const f = await schedulerGraph({ direction });
+    f.preview('old'); await tick();
+    f.preview('new'); f.preview('latest'); await tick();
+    assert.equal(f.scheduler.preview.source, 'latest');
+    assert.equal(f.requests.length, 1);
+    f.complete(0, 'stale'); await tick();
+    assert.deepEqual(f.outputs, []);
+    f.complete(1, 'visible preview'); await tick();
+    assert.deepEqual(f.outputs, [{ provisionalSource: 'latest', provisionalText: 'visible preview', provisionalError: '' }]);
+    assert.deepEqual(f.plain, []); assert.deepEqual(f.formatted, []);
+    f.preview('in flight'); await tick();
+    f.send('same'); f.send('same'); f.preview('pending'); f.preview('last preview'); await tick();
+    assert.deepEqual(f.outputs.at(-1), { provisionalSource: '', provisionalText: '', provisionalError: '' });
+    f.complete(2, 'late after final'); await tick();
+    assert.equal(f.requests[3].text, 'same');
+    // A duplicate obsolete reply cannot resolve the active committed request.
+    f.complete(2, 'duplicate'); await tick(); assert.deepEqual(f.plain, []);
+    f.complete(3, 'first'); await tick(); assert.equal(f.requests[4].text, 'same');
+    f.complete(4, 'second'); await tick(); assert.equal(f.requests[5].text, 'last preview');
+    f.complete(5, 'new preview'); await tick();
+    assert.deepEqual(f.plain, ['first', 'second']);
+    assert.deepEqual(f.outputs.at(-1), { provisionalSource: 'last preview', provisionalText: 'new preview', provisionalError: '' });
+    await f.pipeline.stop();
+    assert.deepEqual(f.outputs.at(-1), { provisionalSource: '', provisionalText: '', provisionalError: '' });
+    assert.equal(f.workers.length, 1);
+    assert.deepEqual(f.pipeline.errors, []); await f.pipeline.dispose();
+    assert.ok(f.workers[0].terminated);
+  });
+  for (const kind of ['empty', 'whitespace', 'failure', 'missing result', 'preparation']) test(`${direction}: preview ${kind} stays in its atomic family`, async () => {
+    const f = await schedulerGraph({ direction, empty: kind === 'missing result', failTranslate: kind === 'failure',
+      prepare: kind === 'preparation' ? async () => { throw Error('missing preview assets'); } : undefined });
+    const source = kind === 'empty' ? '' : kind === 'whitespace' ? '  ' : 'draft';
+    f.preview(source); await tick();
+    if (f.requests.length) { f.complete(0); await tick(); }
+    assert.deepEqual(f.plain, []); assert.deepEqual(f.formatted, []);
+    assert.equal(f.outputs.length, 1);
+    const result = f.outputs[0]; assert.equal(result.provisionalSource, source);
+    if (['empty', 'whitespace'].includes(kind)) {
+      assert.deepEqual(result, { provisionalSource: source, provisionalText: '', provisionalError: '' });
+      assert.equal(f.requests.length, 0);
+    } else {
+      assert.ok(result.provisionalError); assert.equal(Object.hasOwn(result, 'provisionalText'), false);
+      assert.ok(f.states.some(s => s.startsWith('Translation unavailable:')));
+    }
+    await f.pipeline.dispose();
+  });
+  for (const ending of ['stop', 'cancel']) test(`${direction}: ${ending} clears explicit preview, ignores late completions, and a fresh runtime restarts`, async () => {
+    const f = await schedulerGraph({ direction });
+    f.preview('shown'); await tick(); f.complete(0, 'shown translation'); await tick();
+    f.preview('running'); await tick(); f.preview('discard pending'); await tick();
+    const ended = f.pipeline[ending](); await tick();
+    assert.deepEqual(f.outputs.at(-1), { provisionalSource: '', provisionalText: '', provisionalError: '' });
+    f.complete(1, 'late'); await ended; await f.pipeline.dispose();
+    assert.equal(f.requests.length, 2); assert.deepEqual(f.plain, []);
+    const next = await schedulerGraph({ direction });
+    f.complete(1, 'late after restart'); next.send('fresh'); await tick(); next.complete(0, 'new'); await next.pipeline.stop();
+    assert.deepEqual(next.plain, ['new']); await next.pipeline.dispose();
+  });
+}
+
+test('independent atomic output families clear omitted siblings without clearing the other family at a shared formatter', async () => {
+  const f = workerFixture(), values = []; let source;
+  const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory });
+  const pipeline = new Pipeline({ nodes: {
+    source: { outputs: { final: TEXT, draft: TEXT }, start(c) { source = c; } }, scheduler,
+    formatter: new TextFormatterNode({ inputCount: 4, template: '{1}|{2}|{3}|{4}' }),
+    sink: new TextOutputNode(value => values.push(value)),
+  }, connections: [edge('source', 'final', 'scheduler', 'text'), edge('source', 'draft', 'scheduler', 'provisional'),
+    ...['source', 'text', 'provisionalSource', 'provisionalText'].map((port, i) => edge('scheduler', port, 'formatter', `input${i + 1}`)),
+    edge('formatter', 'text', 'sink', 'text')] });
+  await pipeline.start(); source.emit('final', 'committed'); await tick(); f.complete(0, 'keep'); await tick();
+  source.emit('draft', 'draft'); await tick(); f.complete(1, 'preview'); await tick();
+  assert.equal(values.at(-1), 'committed|keep|draft|preview');
+  source.emit('draft', 'failed draft'); await tick();
+  const r = f.requests[2]; r.worker.reply({ id: r.id, type: 'error', message: 'failed' }); await tick();
+  assert.equal(values.at(-1), 'committed|keep|failed draft|');
+  await pipeline.stop(); assert.equal(values.at(-1), 'committed|keep||'); await pipeline.dispose();
+});
+
+for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
+  for (const phase of ['prepare', 'load']) test(`${direction}: Cancel during preview ${phase} clears only the preview route and suppresses late startup`, async () => {
+    let finish;
+    const f = await schedulerGraph({ direction, holdLoad: phase === 'load',
+      prepare: phase === 'prepare' ? () => new Promise(resolve => { finish = resolve; }) : undefined });
+    f.preview('old'); f.preview('latest'); await tick();
+    await f.pipeline.cancel();
+    if (finish) finish(); else f.workers[0].reply({ type: 'ready', id: 1 });
+    await tick();
+    assert.deepEqual(f.outputs, [{ provisionalSource: '', provisionalText: '', provisionalError: '' }]);
+    assert.deepEqual(f.plain, []); assert.deepEqual(f.requests, []);
+    assert.ok(f.workers.every(w => w.terminated));
+  });
+}

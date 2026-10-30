@@ -23,7 +23,7 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | SpeechToTextReazonSpeech / TranscriptOutput / speech Playground | `audio: PCM`, optional startup `maxDuration: NUMBER` in seconds; `provisional: TEXT`, `final: TEXT`, plain strings | Frozen session cap (default 6 s, supported 1–12 s), core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
-| Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source`, `text`, `error`: TEXT outputs | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
+| Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source/text/error` and `provisionalSource/provisionalText/provisionalError`: two atomic TEXT output families | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
 | LiveTextDisplay | dom: DOM | Clone and mount the complete inert DOM snapshot |
 | TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
 | PairedTextToDOM | grouped input1/input2: TEXT → dom: DOM | One pair only per completed atomic result; no history; hover/focus CSS |
@@ -58,11 +58,10 @@ Cancel discards pending jobs, terminates the Worker and suppresses late replies.
 A new session uses fresh Nodes. Provisional inputs coalesce to one pending
 preview; newer inputs suppress stale preview results. Committed input wins if
 both arrive in one group. Finals retain FIFO order. The same bounded queue
-policy applies to every producer. Route preview-enabled results through
-TranslationCommit before append-only consumers; see [correlation semantics](windowed-translation.md#stage-2-bounded-retranslation-with-immutable-commits).
+policy applies to every producer. Committed results use source/text/error only; preview results use provisionalSource/provisionalText/provisionalError only. Final acceptance, Stop and Cancel publish an empty preview family to clear explicit replacement routes. TranslationCommit validates causal closed windows, while ordinary wiring separates previews from commits; see [correlation semantics](windowed-translation.md#stage-2-bounded-retranslation-with-immutable-commits).
 
 Direct `TextFormatter` inputs consume one coherent group. An explicit group is a
-snapshot of that producer's connected formatter inputs; omitted siblings clear.
+snapshot of the emitted output family's connected formatter inputs; omitted siblings clear within that family only.
 This makes a source/error result clear a previous translation even when error is
 not wired, without sending a fake successful TEXT to other consumers. Delivery-local
 `context.groupInputs` lists only the inputs wired directly from this producer.
@@ -111,8 +110,16 @@ Graph v10 migrates each v9 append display through its own TextAccumulator; repla
 
 Graph v11 removes the TEXT display port. Reviewed drafts insert TextToDOM while
 keeping unrelated graph data. Current saves retain exact originals under
-`processing-graph-before-v12`; older v11 recovery keys remain available.
+`processing-graph-before-v13`; older v11 recovery keys remain available.
 Graph v12 reviews PairedTextToDOM source/text → input1/input2 and explicitly
 removes former formatter error routes only in the draft, retaining unrelated error
 fan-out. Missing input2 renders blank; the formatter owns no translation error UI.
 See [DOM ownership, paired formatting and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+
+Graph v13 splits all four extension translators into independent atomic committed
+and preview TEXT families sharing one Worker. Older graphs with provisional
+translator inputs or TranslationCommit require reviewed repair. The draft retains
+v12 routes; original JSON stays untouched until Save and is then preserved under
+processing-graph-before-v13 (numbered on collisions). Preview formatting stays on
+an explicit replacement branch. No accumulator preview state or new data type is
+needed for this composition.

@@ -30,7 +30,7 @@ for (const id of ['constructor', 'toString', 'hasOwnProperty']) {
     await live.close(); live = await openGraph({ ...f, url: `${f.url}?error=&tab=42` });
     await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled(); await live.close(); live = await openGraph({ ...f, url: `${f.url}?error=&tab=42` });
     const migrated = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-    expect(migrated.version).toBe(12);
+    expect(migrated.version).toBe(13);
     expect(migrated.nodes.find(node => node.id === id).type).toBe('LiveTextDisplay');
     expect(migrated.edges.filter(route => route.to[0] === id)).toEqual([{ from: [`${id}-dom`, 'dom'], to: [id, 'dom'] }]);
     await expect(live.locator('.live-text-region')).toHaveCount(1);
@@ -153,9 +153,9 @@ test('MV3 v9 migration retains recovery versions and replace-only summary drafts
   await live.reload(); await live.editor.reload();
   await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled(); await live.reload();
   const graph = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(graph.version).toBe(12); expect(graph.nodes.filter(n => n.type === 'TextAccumulator')).toHaveLength(1);
+  expect(graph.version).toBe(13); expect(graph.nodes.filter(n => n.type === 'TextAccumulator')).toHaveLength(1);
   expect(graph.edges).toContainEqual({ from: ['summary', 'summary'], to: ['notes-dom', 'text'] });
-  expect(await live.evaluate(() => localStorage.getItem('processing-graph-before-v12'))).toBe(raw);
+  expect(await live.evaluate(() => localStorage.getItem('processing-graph-before-v13'))).toBe(raw);
   await live.editor.locator('.graph-actions > summary').click();
   await live.editor.getByText('Recovery', { exact: true }).click();
   await expect(live.editor.getByLabel('Original saved graph JSON', { exact: true })).toHaveValue(raw);
@@ -177,7 +177,7 @@ test('MV3 migrated snapshot survives Stop/Cancel with an inactive append draft',
   const saved = await live.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
   expect(saved.nodes.some(node => node.id === 'draft')).toBe(true);
   expect(saved.edges).toContainEqual({ from: ['draft', 'text'], to: ['view-accumulator', 'append'] });
-  expect(await live.evaluate(() => localStorage.getItem('processing-graph-before-v12'))).toBe(raw);
+  expect(await live.evaluate(() => localStorage.getItem('processing-graph-before-v13'))).toBe(raw);
   // Reload the persisted v10 migration before exercising the actual Live controls.
   await live.reload();
   const content = region(live, 'view').locator('.display-content');
@@ -262,9 +262,9 @@ test('MV3 v10 TEXT display is blocked until reviewed Save; original JSON and old
   await expect(live.editor.getByLabel('Original saved graph JSON',{exact:true})).toHaveValue(raw);
   await live.editor.locator('#graph-save').click();await expect(live.editor.locator('#graph-save')).toBeEnabled();
   const saved=await live.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(saved.version).toBe(12);expect(saved.nodes.some(node=>node.id==='parked')).toBe(true);
+  expect(saved.version).toBe(13);expect(saved.nodes.some(node=>node.id==='parked')).toBe(true);
   expect(saved.edges).toContainEqual({from:['notes-dom','dom'],to:['notes','dom']});
-  expect(await live.evaluate(()=>localStorage.getItem('processing-graph-before-v12'))).toBe(raw);
+  expect(await live.evaluate(()=>localStorage.getItem('processing-graph-before-v13'))).toBe(raw);
   expect(await live.evaluate(()=>localStorage.getItem('processing-graph-before-v10'))).toBe('older recovery');
   await live.locator('#start').click();await expect(region(live,'notes').locator('.display-content')).toHaveText('<script>literal</script>\nnotes');
   await expect(region(live,'notes').locator('script')).toHaveCount(0);await live.locator('#stop').click();
@@ -453,7 +453,7 @@ for (const includeError of [false,true]) test(`MV3 v11 paired port review preser
     if(includeError) old.edges.push(edge('translation','error','translated-format','error'));
     const raw=JSON.stringify(old,null,2);localStorage.setItem(GRAPH_KEY,raw);
     localStorage.setItem('processing-graph-before-v11','previous recovery');
-    const expected=structuredClone(old);expected.version=12;
+    const expected=structuredClone(old);expected.version=13;
     expected.edges=expected.edges.filter(route=>route.to[0]!=='translated-format'||route.to[1]!=='error');
     for(const route of expected.edges) if(route.to[0]==='translated-format') route.to[1]=route.to[1]==='source'?'input1':'input2';
     return {raw,expected};
@@ -470,7 +470,7 @@ for (const includeError of [false,true]) test(`MV3 v11 paired port review preser
   for(const port of ['source','text','error']) await expect(live.editor.getByRole('button',{name:`translated-format input ${port}`,exact:true})).toHaveCount(0);
   await live.editor.locator('#graph-save').click();await expect(live.editor.locator('#graph-save')).toBeEnabled();
   expect(await live.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(expected);
-  expect(await live.evaluate(()=>localStorage.getItem('processing-graph-before-v12'))).toBe(raw);
+  expect(await live.evaluate(()=>localStorage.getItem('processing-graph-before-v13'))).toBe(raw);
   expect(await live.evaluate(()=>localStorage.getItem('processing-graph-before-v11'))).toBe('previous recovery');
   await live.reload();await live.editor.reload();
   await expect(live.locator('#start')).toBeEnabled();await expect(live.locator('#errors')).toBeEmpty();

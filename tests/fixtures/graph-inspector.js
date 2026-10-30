@@ -52,7 +52,7 @@ export async function loadInputGraph(page) {
       graphNode('TextFormatter', 'second', 650, 20), graphNode('Text', 'alternate', 20, 400),
       graphNode('DOMCombiner', 'dom', 650, 400)];
     nodes[0].settings.value = 'Keep settings';
-    saveGraph(localStorage, { version: 12, nodes, edges: [edge('source', 'value', 'first', 'input1'),
+    saveGraph(localStorage, { version: 13, nodes, edges: [edge('source', 'value', 'first', 'input1'),
       edge('source', 'value', 'second', 'input1'), edge('alternate', 'value', 'first', 'input2')] });
   });
   await page.reload();
@@ -171,7 +171,7 @@ export async function checkRecovery(page, kind) {
   await page.reload();
   await page.locator('.graph-actions > summary').click(); await recovery.locator('summary').click();
   if (blocking) {
-    await page.getByLabel('Graph recovery version').selectOption({ label: 'processing-graph-before-v12-3' });
+    await page.getByLabel('Graph recovery version').selectOption({ label: 'processing-graph-before-v13' });
     await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(raw.replaceAll('\r\n', '\n'));
   }
   for (const [key, value] of Object.entries(backups)) {
@@ -183,5 +183,5 @@ export async function checkRecovery(page, kind) {
   await page.locator('.graph-actions > summary').click(); await page.locator('#graph-save').click();
   await expect(page.locator('#graph-save')).toBeEnabled();
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
-  if (blocking) expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v12-3'))).toBe(raw);
+  if (blocking) expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v13'))).toBe(raw);
 }
