@@ -9,7 +9,7 @@ pinned assets; each owns a local WebGPU Worker and bounded incremental context.
 `text` input, an editable English condition and `yes` / `no` TEXT outputs. Both
 outputs preserve the original input string; only the selected branch emits.
 Its pinned local model is prepared through Save graph, and errors stop only that
-instance with a visible status. It uses version 13 or Pipeline routing.
+instance with a visible status. It uses version 14 or Pipeline routing.
 
 The **Simple / Graph** switch connects Live's minimal recording window and the
 full-size Graph Editor tab. **Models** is a secondary link for asset preparation
@@ -190,7 +190,7 @@ The visible warning directs you to **Graph actions → Recovery**. Before and af
 Save, open Recovery to view, copy or download the complete original JSON,
 including removed routes/configurations. The version selector also exposes older
 and numbered recovery copies. Copy and download retain the exact original text.
-Before v10 this used `processing-graph-before-v9`; new saves use `processing-graph-before-v13`; this backup remains
+Before v10 this used `processing-graph-before-v9`; new saves use `processing-graph-before-v14`; this backup remains
 across page reloads and later ordinary saves. To reattempt recovery, export this
 copy and import it in a compatible version or restore it to the graph storage key.
 Reset changes only the draft and still requires Save. Transcripts/history were
@@ -251,7 +251,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | TextWindow | text: TEXT | text: TEXT (closed batches); provisional: TEXT (optional open snapshots); length/deadline/sentence settings |
 | TranslationCommit | boundary/source/text/error: TEXT | provisional/final/error: TEXT; opt-in closed-window commits |
 | TextFormatter | input1…inputN: TEXT, instance-configured, individually optional | text: TEXT; at least one input must connect |
-| OpusMtJaEn / OpusMtEnJa / TranslateGemmaEnJa / TranslateGemmaJaEn | text: TEXT; provisional: TEXT (optional snapshot from any producer) | source/text/error: TEXT, grouped results; no text on failure |
+| OpusMtJaEn / OpusMtEnJa / TranslateGemmaEnJa / TranslateGemmaJaEn | text: TEXT; provisional: TEXT (optional snapshot from any producer) | source/text/error: TEXT committed family; provisionalSource/provisionalText/provisionalError: TEXT preview family; failed groups omit translated text |
 | Supertonic3 / Kokoro | text: TEXT | audio: SYNTHESIZED_AUDIO; configured language/voice |
 | AudioOutput | audio: SYNTHESIZED_AUDIO | native audio player / WAV |
 | SpeakerOutput | audio: SYNTHESIZED_AUDIO | automatic sequential default-speaker playback (no output ports) |
@@ -546,8 +546,7 @@ Final adapters apply a session-local monotonic ID policy when their transcript
 producer supplies IDs, dropping repeated/stale confirmed results before emitting
 plain strings. By default, completed translations alone emit text; pending/error
 values do not. The opt-in [windowed translation path](windowed-translation.md)
-also translates provisional source snapshots; route its results through
-TranslationCommit and connect only final to append-only destinations. Distinct utterances with identical text remain distinct. A source
+also translates provisional source snapshots; connect committed text directly to append-only destinations, and provisionalText to a separate preview display. TranslationCommit optionally verifies causal window commits. Distinct utterances with identical text remain distinct. A source
 without IDs delivers each plain value once; the sink does not deduplicate by text.
 Pipeline serializes each sink. Its page port uses a local sequence outside TEXT
 and never retries an uncertain edit. Stop drains new final deliveries, with no
@@ -788,7 +787,7 @@ unused Number/Text configuration source when replacing the old ASR, or leave it
 parked. ReazonSpeech, Whisper and Zipformer can coexist with independent settings. Existing TEXT sinks and
 translation Nodes use the same contracts.
 
-Adding Zipformer needs no extra migration beyond the current version 13 graph.
+Adding Zipformer needs no extra migration beyond the current version 14 graph.
 Unrelated ASR nodes, IDs, settings, routes and positions stay intact; earlier
 versions use the migration rules above. The minimal ReazonSpeech default remains. See [model pins, fixed 12-second segments,
 Stop/drain, setup and limitations](zipformer-node.md).
@@ -811,12 +810,11 @@ Processors palette. Both use the existing `text: TEXT` input and grouped
 final or a Text constant can feed English → Japanese. Direct text fan-out to
 TextAccumulator.append, a focused field and Japanese TTS works without display changes.
 For bilingual history, connect source/text/error to three TextFormatter inputs.
-Pending/Cancel emit nothing; Stop drains. Parked Nodes remain saved and are
+Pending emits nothing; Stop drains committed work. Final acceptance, Stop and Cancel explicitly clear the preview family. Parked Nodes remain saved and are
 prepared on Save but run only on a complete source-to-sink path. Multiple
 independent model Nodes own separate Workers and require memory for each.
 
-Graph version stays **9** and existing defaults/saved routes/migrations remain
-unchanged. Save prepares one shared **3.112 GB** checkpoint for both directions;
+Graph v14 requires reviewed repair for saved provisional-enabled routes; committed-only routes retain their behavior. Save prepares one shared **3.112 GB** checkpoint for both directions;
 preparation failures do not undo storage. Allow 7 GB free storage and several GB
 RAM/GPU memory; Worker WebGPU and a usable adapter are required. Missing/evicted
 weights need Save or Models recovery before starting. No runtime downloads,
@@ -828,7 +826,7 @@ and [#124 validation](evidence/translation-124.md).
 ## Windowed and revisable translation (#128)
 
 The model-independent **TextWindow** and opt-in **TranslationCommit** processors
-use ordinary TEXT ports, require no weights, and use graph version 13. See
+use ordinary TEXT ports, require no weights, and use graph version 14. See
 [connections, limits, lifecycle and measured comparison](windowed-translation.md).
 Defaults and existing per-segment translator paths remain unchanged.
 
@@ -959,8 +957,9 @@ without joining values by equality or timing. The scheduler marks actual preview
 results using internal `emitOutputs(values, { provisional: true })` provenance;
 PairedTextToDOM rejects those deliveries before formatting a pair. Merely connecting an
 optional provisional branch does not invalidate the graph; inactive branches are
-excluded from execution. For bounded retranslation use TranslationCommit →
-TextAccumulator → TextToDOM. Plain TextFormatter remains available for independent
+excluded from execution. For bounded retranslation, route translator.provisionalText to a separate
+TextToDOM preview branch; optional TranslationCommit → TextAccumulator → TextToDOM
+keeps causal window checks on committed results. Plain TextFormatter remains available for independent
 latest values; it does not claim correlation.
 
 ### Graph v11 display migration and recovery
@@ -977,7 +976,7 @@ and append-only conversions described below. Legacy display-only replacement
 branches become explicit DOM snapshots; no runtime legacy-display flag remains.
 
 On reviewed Save or Reset-and-Save, the exact original JSON is backed up under
-`processing-graph-before-v13` for current saves (v11 used
+`processing-graph-before-v14` for current saves (v11 used
 `processing-graph-before-v11`). Older backups remain available. Conflicting copies
 get suffixes -2, -3, etc.; identical originals reuse their copy. Backup failures
 leave the original saved graph untouched. Graph Editor exposes original JSON both
@@ -1113,8 +1112,41 @@ converted without changing their values. These routes remain blocked with a
 manual-repair explanation and the complete original JSON in Recovery; no edge
 is silently removed. Recompose display previews separately, and keep ordinary
 TEXT consumers on the intended committed history, before importing/saving.
-Save (including Reset-and-Save) first preserves the exact original under
-processing-graph-before-v13, with numbered collision copies. Existing
+Current Save (including Reset-and-Save) first preserves the exact original under
+processing-graph-before-v14, with numbered collision copies. Existing
 processing-graph-before-v* backups are never overwritten. Failed backup writes
 leave the original in place. Valid append-only v12 graphs upgrade without
 changing nodes or edges; explicit current DOM compositions are unchanged.
+
+### Graph v14 translation output migration (#163)
+
+Both TranslateGemma directions and both OPUS-MT directions use one scheduler and one
+Worker per Node for committed and provisional requests. Committed text input emits
+grouped source/text/error; provisional input emits grouped
+provisionalSource/provisionalText/provisionalError. A failure omits translated text
+within its own family and reports diagnostics. Committed input wins grouped input,
+drains FIFO before pending previews, invalidates stale previews, and immediately emits
+an empty preview family. Stop also clears previews; Cancel publishes the same empty
+cleanup family before disposal. Direct text-to-history/field/TTS is committed-only.
+
+Wire provisionalText → a separate TextToDOM.text → LiveTextDisplay.dom. Its empty values
+clear that branch. Use a separate TextFormatter if preview formatting is needed; never
+append its output to history. Generic display/composition Nodes have no
+translator-specific rules. PairedTextToDOM retains its generic completed-group
+requirement. DOMCombiner can combine committed DOM history with a replacement preview
+branch. TranslationCommit checks causal closed-window results only and rejects unclosed
+results; preview routing bypasses it. Its existing provisional output supplies only
+empty boundary/final clears for compatibility.
+
+Older graphs with provisional connected to any of the four translators, or with any
+TranslationCommit Node, require review before execution, including inactive drafts. The
+recovery draft retains all existing Nodes, settings and routes. The warning identifies
+affected translators and the new output ports; deliberately reconnect preview consumers
+and clearing paths before Save. The v13 append-only accumulator migration still applies
+to older preview routes; graphs saved at v13 also receive this v14 translation review.
+When both reviews apply, the warning describes both changes in one repair draft.
+No mixed route is silently reinterpreted. V13 graphs
+without provisional translator input or TranslationCommit upgrade unchanged. Earlier
+reviewed DOM migrations still apply. Save preserves the exact original string under
+processing-graph-before-v14, numbered on collision; older recovery copies remain
+accessible through Graph actions → Recovery, Copy JSON and Download JSON.

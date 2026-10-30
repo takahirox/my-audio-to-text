@@ -52,7 +52,7 @@ export async function loadInputGraph(page) {
       graphNode('TextFormatter', 'second', 650, 20), graphNode('Text', 'alternate', 20, 400),
       graphNode('DOMCombiner', 'dom', 650, 400)];
     nodes[0].settings.value = 'Keep settings';
-    saveGraph(localStorage, { version: 13, nodes, edges: [edge('source', 'value', 'first', 'input1'),
+    saveGraph(localStorage, { version: 14, nodes, edges: [edge('source', 'value', 'first', 'input1'),
       edge('source', 'value', 'second', 'input1'), edge('alternate', 'value', 'first', 'input2')] });
   });
   await page.reload();
@@ -128,7 +128,7 @@ export async function checkRecovery(page, kind) {
     const { defaultGraph, GRAPH_KEY } = await import(new URL('./graph.js', location.href));
     const graph = defaultGraph({ enabled: true });
     const backups = { 'processing-graph-before-v9': 'older original\r\n',
-      'processing-graph-before-v13': 'previous original', 'processing-graph-before-v13-2': 'numbered original\n' };
+      'processing-graph-before-v13': 'v13 original', 'processing-graph-before-v14': 'previous original', 'processing-graph-before-v14-2': 'numbered original\n' };
     for (const [key, value] of Object.entries(backups)) localStorage.setItem(key, value);
     if (kind === 'paired') {
       graph.version = 11;
@@ -171,7 +171,7 @@ export async function checkRecovery(page, kind) {
   await page.reload();
   await page.locator('.graph-actions > summary').click(); await recovery.locator('summary').click();
   if (blocking) {
-    await page.getByLabel('Graph recovery version').selectOption({ label: 'processing-graph-before-v13-3' });
+    await page.getByLabel('Graph recovery version').selectOption({ label: 'processing-graph-before-v14-3' });
     await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(raw.replaceAll('\r\n', '\n'));
   }
   for (const [key, value] of Object.entries(backups)) {
@@ -183,5 +183,5 @@ export async function checkRecovery(page, kind) {
   await page.locator('.graph-actions > summary').click(); await page.locator('#graph-save').click();
   await expect(page.locator('#graph-save')).toBeEnabled();
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
-  if (blocking) expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v13-3'))).toBe(raw);
+  if (blocking) expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v14-3'))).toBe(raw);
 }

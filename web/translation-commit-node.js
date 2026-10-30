@@ -2,7 +2,7 @@ import { TEXT } from './port-contracts.js';
 
 // Grouped results with delivery-local causal identity. Closed source windows travel on an
 // independent forward edge, before their asynchronous translation can finish.
-// The scheduler suppresses superseded previews and drains closed windows FIFO.
+// Only committed results enter here; preview routing uses the producer's ports.
 export class TranslationCommitNode {
   inputs = { boundary: TEXT, source: TEXT, text: TEXT, error: TEXT };
   outputs = { provisional: TEXT, final: TEXT, error: TEXT };
@@ -34,10 +34,10 @@ export class TranslationCommitNode {
         if (values.source !== this.boundaries[0].text || !context.cause || context.cause !== this.boundaries[0].delivery) throw Error('Translation result does not match the next closed source window.');
         this.chars -= this.boundaries.shift().text.length;
         // A failed final retains its source visibly; never fabricate a translation
-        // or delete previously committed items. Preview failures append nothing.
+        // or delete previously committed items. Previews use a separate route.
         context.emitOutputs({ provisional: '', final: values.error ? `[Translation failed: ${values.error}]\n${values.source}` : values.text, error: values.error });
       } else {
-        context.emitOutputs({ provisional: values.error ? '' : values.text, error: values.error });
+        throw Error('Translation result has no closed source window. Route previews separately.');
       }
     } catch (error) {
       // Pipeline skips failed Nodes during Stop/Cancel, so clear the tail

@@ -15,6 +15,7 @@ export class Pipeline {
     this.errors = [];
     this.entries = new Map(Object.entries(nodes).map(([id, node]) => [id, {
       id, node, inputs: { ...node.inputs }, outputs: { ...node.outputs },
+      outputGroups: (node.outputGroups || [Object.keys(node.outputs || {})]).map(ports => [...ports]),
       routes: new Map(), queue: Promise.resolve(), controller: new AbortController(),
       active: false, closed: false, failed: false,
     }]));
@@ -84,6 +85,9 @@ export class Pipeline {
     for (const [port] of outputs) if (!Object.hasOwn(entry.outputs, port)) {
       this.fail(entry, new Error(`Unknown output port: ${entry.id}.${port}`)); return;
     }
+    // Omitted siblings clear within the emitted family only. A producer can
+    // declare independent atomic families sharing the same TEXT consumers.
+    const groupOutputs = new Set(entry.outputGroups.filter(ports => outputs.some(([port]) => ports.includes(port))).flat());
     const deliveries = new Map();
     for (const [port, value] of outputs) {
       for (const { entry: target, port: input } of entry.routes.get(port) || []) {
@@ -94,7 +98,7 @@ export class Pipeline {
     const delivery = Object.freeze({});
     for (const [target, inputs] of deliveries) {
       // Delivery-local provenance, never payload metadata or cross-branch matching.
-      const groupInputs = grouped ? Object.freeze([...new Set([...entry.routes.values()].flat()
+      const groupInputs = grouped ? Object.freeze([...new Set([...entry.routes].filter(([port]) => groupOutputs.has(port)).flatMap(([, routes]) => routes)
         .filter(route => route.entry === target).map(route => route.port))]) : undefined;
       // A forwarding emission gets a fresh identity with its incoming event as
       // cause. Async processors retain this context with their accepted work.
@@ -220,20 +224,22 @@ export class Pipeline {
     this.state = 'canceling';
     this.cleanupController = new AbortController();
     for (const entry of this.order) { entry.controller.abort(); entry.queue = Promise.resolve(); }
-    return this.canceling = (async () => {
-      // Drain upstream cleanup before closing each downstream processor. This
-      // lets ordinary multi-hop snapshots reach sinks before their cancel hook.
-      for (const entry of this.order) {
-        await entry.queue;
-        if (!entry.active || entry.closed || entry.failed) continue;
-        const context = Object.freeze({ ...entry.context, signal: this.cleanupController.signal,
-          emit: (port, value) => this.emit(entry, port, value, undefined, true),
-          emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, true, options?.provisional === true),
-        });
-        try { await entry.node.cancel?.(context); } catch (error) { this.fail(entry, error); }
-      }
-      await this.dispose();
-    })();
+    return this.canceling = this.cancelNodes();
+  }
+  async cancelNodes() {
+    for (const entry of this.order) {
+      // Only cleanup deliveries remain in these fresh queues. Let upstream
+      // snapshots pass through each consumer before its cancel hook closes it.
+      await entry.queue;
+      if (this.state === 'disposed') return this.dispose();
+      if (!entry.active || entry.closed || entry.failed) continue;
+      const context = Object.freeze({ ...entry.context, signal: this.cleanupController.signal,
+        emit: (port, value) => this.emit(entry, port, value, undefined, true),
+        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, true, options?.provisional === true),
+      });
+      try { await entry.node.cancel?.(context); } catch (error) { this.fail(entry, error); }
+    }
+    await this.dispose();
   }
   dispose() {
     if (this.disposing) return this.disposing;
