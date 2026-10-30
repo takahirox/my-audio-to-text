@@ -467,7 +467,7 @@ function migrateAccumulatorGraph(graph) {
   let next;
   try { next = migrateBeforeAccumulatorGraph(graph); }
   catch (error) {
-    if (error.recoveryGraph) error.message += ' The v13 draft also composes any accumulator previews as separate DOM snapshots. Independent/preview-only sources retain their latest snapshot until their producer clears it; unrelated append and Stop/Cancel no longer clear it. Review lifecycle behavior before Save; no correlation is inferred.';
+    if (error.recoveryGraph) error.message += ' The draft also applies the v13 migration, composing any accumulator previews as separate DOM snapshots. Independent/preview-only sources retain their latest snapshot until their producer clears it; unrelated append and Stop/Cancel no longer clear it. Review lifecycle behavior before Save; no correlation is inferred.';
     throw error;
   }
   if (next?.version !== 12 || !Array.isArray(next.nodes) || !Array.isArray(next.edges)) return next;

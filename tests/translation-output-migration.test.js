@@ -4,7 +4,7 @@ import { GRAPH_VERSION, GRAPH_KEY, GRAPH_RECOVERY_KEY, defaultGraph, graphNode, 
 import { buildGraph } from '../extension/graph-runtime.js';
 
 function store(raw) {
-  const values = new Map([[GRAPH_KEY, raw], [GRAPH_RECOVERY_KEY, 'earlier recovery\r\n'], ['processing-graph-before-v12', 'v12 recovery']]);
+  const values = new Map([[GRAPH_KEY, raw], [GRAPH_RECOVERY_KEY, 'earlier recovery\r\n'], ['processing-graph-before-v12', 'v12 recovery'], ['processing-graph-before-v13', 'v13 recovery\r\n']]);
   return { values, getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: k => values.delete(k) };
 }
 for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'OpusMtEnJa', 'OpusMtJaEn']) {
@@ -31,11 +31,12 @@ for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'OpusMtEnJa', 'O
     assert.equal(storage.getItem(`${GRAPH_RECOVERY_KEY}-2`), raw);
     assert.equal(storage.getItem(GRAPH_RECOVERY_KEY), 'earlier recovery\r\n');
     assert.equal(storage.getItem('processing-graph-before-v12'), 'v12 recovery');
+    assert.equal(storage.getItem('processing-graph-before-v13'), 'v13 recovery\r\n');
     const saved = storage.getItem(GRAPH_KEY); saveGraph(storage, readGraph(storage));
     assert.equal(storage.getItem(GRAPH_KEY), saved); assert.equal(storage.getItem(`${GRAPH_RECOVERY_KEY}-2`), raw);
   });
-  test(`${type}: v12 committed-only graph upgrades without route changes; failed backup leaves saved JSON intact`, () => {
-    const old = defaultGraph({ enabled: true }); old.version = 12;
+  for (const version of [12, 13]) test(`${type}: v${version} committed-only graph upgrades without route changes; failed backup leaves saved JSON intact`, () => {
+    const old = defaultGraph({ enabled: true }); old.version = version;
     old.nodes.find(n => n.id === 'translation').type = type;
     const raw = JSON.stringify(old), storage = store(raw), write = storage.setItem;
     storage.setItem = () => { throw Error('storage full'); };
@@ -65,8 +66,8 @@ test('a committed result without a closed boundary cannot become a preview or an
   assert.equal(assertGraph(defaultGraph()).version, GRAPH_VERSION);
 });
 
-test('legacy generic TranslationCommit preview routing requires review even without a provisional translator connection', () => {
-  const old = defaultGraph(); old.version = 12;
+for (const version of [12, 13]) test(`v${version} generic TranslationCommit preview routing requires review even without a provisional translator connection`, () => {
+  const old = defaultGraph(); old.version = version;
   old.nodes.push(graphNode('TranslationCommit', 'generic-commit'));
   const raw = JSON.stringify(old), storage = store(raw);
   assert.throws(() => readGraph(storage), error => {
@@ -76,3 +77,33 @@ test('legacy generic TranslationCommit preview routing requires review even with
   });
   assert.equal(storage.getItem(GRAPH_KEY), raw);
 });
+
+for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'OpusMtEnJa', 'OpusMtJaEn']) {
+  test(`${type}: v12 accumulator and translator migrations require a combined review with intact v13 recovery`, () => {
+    const old = defaultGraph({ enabled: true }); old.version = 12;
+    old.nodes.find(n => n.id === 'translation').type = type;
+    const preview = old.edges.find(e => e.to[0] === 'transcript-preview');
+    preview.to = ['transcript-accumulator', 'preview'];
+    old.edges.push(edge('speech', 'provisional', 'translation', 'provisional'));
+    const original = structuredClone(old), raw = JSON.stringify(old, null, 2).replaceAll('\n', '\r\n'), storage = store(raw);
+    let draft;
+    assert.throws(() => readGraph(storage), error => {
+      assert.match(error.message, /TextAccumulator graph v13 requires review/);
+      assert.match(error.message, /Translation output graph v14 requires review/);
+      draft = error.recoveryGraph; return !!draft;
+    });
+    assert.deepEqual(old, original); assert.equal(storage.getItem(GRAPH_KEY), raw);
+    assert.equal(draft.version, GRAPH_VERSION);
+    assert.equal(draft.edges.some(e => e.to[1] === 'preview'), false);
+    for (const route of old.edges.filter(e => e.to[0] !== 'transcript-accumulator')) {
+      // Accumulator conversion rehomes only its own DOM display fan-out.
+      if (route.from[0] === 'transcript-dom') continue;
+      assert.ok(draft.edges.some(e => JSON.stringify(e) === JSON.stringify(route)));
+    }
+    draft.nodes.push(graphNode('TextToDOM', 'translation-preview-dom'), graphNode('LiveTextDisplay', 'translation-preview'));
+    draft.edges.push(edge('translation', 'provisionalText', 'translation-preview-dom', 'text'), edge('translation-preview-dom', 'dom', 'translation-preview', 'dom'));
+    saveGraph(storage, draft); assert.deepEqual(readGraph(storage), draft);
+    assert.equal(storage.getItem(`${GRAPH_RECOVERY_KEY}-2`), raw);
+    assert.equal(storage.getItem('processing-graph-before-v13'), 'v13 recovery\r\n');
+  });
+}

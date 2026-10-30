@@ -116,7 +116,6 @@ removes former formatter error routes only in the draft, retaining unrelated err
 fan-out. Missing input2 renders blank; the formatter owns no translation error UI.
 See [DOM ownership, paired formatting and recovery](extension-graph.md#dom-formatters-and-display-ownership).
 
-
 Graph v13 removes TextAccumulator's provisional input. Its only input is append:
 TEXT; each event emits the full exact newline-separated committed history.
 Replaceable provisional text travels through a separate TextToDOM branch and

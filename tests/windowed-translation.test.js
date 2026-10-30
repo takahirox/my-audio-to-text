@@ -138,18 +138,18 @@ test('bare dispose retains the last preview display without committing it', asyn
 });
 
 for (const operation of ['stop', 'cancel']) {
-  test(`TranslationCommit input failure clears the composed preview before ${operation} and retains committed history`, async () => {
-    const results = [], displays = {}, accumulator = new TextAccumulatorNode();
+  test(`TranslationCommit input failure emits its compatibility clear before ${operation} and retains committed history`, async () => {
+    const results = [], clears = [], displays = {}, accumulator = new TextAccumulatorNode();
     const pipeline = new Pipeline({ nodes: {
       input: { outputs: { boundary: TEXT, provisional: TEXT } },
       translator: { inputs: { text: TEXT, provisional: TEXT }, outputs: { source: TEXT, text: TEXT, error: TEXT, provisionalText: TEXT },
         receive(port, source, context) { results.push(() => context.emitOutputs(port === 'provisional' ? { provisionalText: `訳:${source}` } : { source, text: `訳:${source}`, error: '' })); } },
-      commit: new TranslationCommitNode(), accumulator, history: new TextToDOMNode(), preview: new TextToDOMNode(), combined: new DOMCombinerNode(),
+      commit: new TranslationCommitNode(), clears: { inputs: { text: TEXT }, receive(_, value) { clears.push(value); } }, accumulator, history: new TextToDOMNode(), preview: new TextToDOMNode(), combined: new DOMCombinerNode(),
       one: new LiveTextDisplayNode(dom => displays.one = domText(dom)), two: new LiveTextDisplayNode(dom => displays.two = domText(dom)),
     }, connections: [
       edge('input', 'boundary', 'commit', 'boundary'), edge('input', 'boundary', 'translator', 'text'), edge('input', 'provisional', 'translator', 'provisional'),
       ...['source', 'text', 'error'].map(port => edge('translator', port, 'commit', port)),
-      edge('commit', 'final', 'accumulator', 'append'), edge('accumulator', 'text', 'history', 'text'), edge('commit', 'provisional', 'preview', 'text'), edge('translator', 'provisionalText', 'preview', 'text'),
+      edge('commit', 'final', 'accumulator', 'append'), edge('accumulator', 'text', 'history', 'text'), edge('commit', 'provisional', 'preview', 'text'), edge('commit', 'provisional', 'clears', 'text'),
       edge('history', 'dom', 'combined', 'first'), edge('preview', 'dom', 'combined', 'second'),
       edge('combined', 'dom', 'one', 'dom'), edge('combined', 'dom', 'two', 'dom'),
     ] });
@@ -157,17 +157,18 @@ for (const operation of ['stop', 'cancel']) {
       await pipeline.start();
       const input = pipeline.entries.get('input').context;
       input.emit('boundary', 'First.'); await tick(); results[0](); await tick();
-      input.emit('provisional', 'unfinished'); await tick(); results[1](); await tick();
-      assert.deepEqual(displays, { one: '訳:First.訳:unfinished', two: '訳:First.訳:unfinished' });
+      const clearCount = clears.length;
+      assert.deepEqual(displays, { one: '訳:First.', two: '訳:First.' });
       input.emit('boundary', 'x'.repeat(1001)); await tick();
       assert.equal(pipeline.entries.get('commit').failed, true);
       assert.equal(pipeline.errors.length, 1); assert.match(pipeline.errors[0].message, /backlog limit/);
+      assert.equal(clears.length, clearCount + 1); assert.equal(clears.at(-1), '');
       assert.deepEqual(displays, { one: '訳:First.', two: '訳:First.' });
-      results[1](); results[2](); await tick();
+      results[0](); results[1](); await tick();
       assert.deepEqual(displays, { one: '訳:First.', two: '訳:First.' });
       if (operation === 'stop') await assert.rejects(pipeline.stop(), AggregateError);
       else await pipeline.cancel();
-      results[1](); results[2](); await tick();
+      results[0](); results[1](); await tick();
       assert.deepEqual(displays, { one: '訳:First.', two: '訳:First.' });
       assert.equal(accumulator.committed, '訳:First.'); assert.equal(accumulator.count, 1);
     } finally { await pipeline.dispose(); }

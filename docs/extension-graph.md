@@ -9,7 +9,7 @@ pinned assets; each owns a local WebGPU Worker and bounded incremental context.
 `text` input, an editable English condition and `yes` / `no` TEXT outputs. Both
 outputs preserve the original input string; only the selected branch emits.
 Its pinned local model is prepared through Save graph, and errors stop only that
-instance with a visible status. It uses version 13 or Pipeline routing.
+instance with a visible status. It uses version 14 or Pipeline routing.
 
 The **Simple / Graph** switch connects Live's minimal recording window and the
 full-size Graph Editor tab. **Models** is a secondary link for asset preparation
@@ -787,7 +787,7 @@ unused Number/Text configuration source when replacing the old ASR, or leave it
 parked. ReazonSpeech, Whisper and Zipformer can coexist with independent settings. Existing TEXT sinks and
 translation Nodes use the same contracts.
 
-Adding Zipformer needs no extra migration beyond the current version 13 graph.
+Adding Zipformer needs no extra migration beyond the current version 14 graph.
 Unrelated ASR nodes, IDs, settings, routes and positions stay intact; earlier
 versions use the migration rules above. The minimal ReazonSpeech default remains. See [model pins, fixed 12-second segments,
 Stop/drain, setup and limitations](zipformer-node.md).
@@ -826,7 +826,7 @@ and [#124 validation](evidence/translation-124.md).
 ## Windowed and revisable translation (#128)
 
 The model-independent **TextWindow** and opt-in **TranslationCommit** processors
-use ordinary TEXT ports, require no weights, and use graph version 13. See
+use ordinary TEXT ports, require no weights, and use graph version 14. See
 [connections, limits, lifecycle and measured comparison](windowed-translation.md).
 Defaults and existing per-segment translator paths remain unchanged.
 
@@ -1093,7 +1093,6 @@ missing local model assets (`Missing local models. Run npm run prepare:assets
 first.`). A complete production asset build and real-model smokes were not run;
 fixture results do not establish model accuracy. `git diff --check` passed.
 
-
 ### Graph v13 append-only migration and recovery
 
 TextAccumulator exposes only append: TEXT → text: TEXT. Graphs through v12 with
@@ -1143,7 +1142,10 @@ Older graphs with provisional connected to any of the four translators, or with 
 TranslationCommit Node, require review before execution, including inactive drafts. The
 recovery draft retains all existing Nodes, settings and routes. The warning identifies
 affected translators and the new output ports; deliberately reconnect preview consumers
-and clearing paths before Save. No mixed route is silently reinterpreted. V13 graphs
+and clearing paths before Save. The v13 append-only accumulator migration still applies
+to older preview routes; graphs saved at v13 also receive this v14 translation review.
+When both reviews apply, the warning describes both changes in one repair draft.
+No mixed route is silently reinterpreted. V13 graphs
 without provisional translator input or TranslationCommit upgrade unchanged. Earlier
 reviewed DOM migrations still apply. Save preserves the exact original string under
 processing-graph-before-v14, numbered on collision; older recovery copies remain

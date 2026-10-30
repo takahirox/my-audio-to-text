@@ -33,8 +33,10 @@ routes translator.provisionalText directly to its own TextToDOM/display, while
 committed results retain causal window checks and append-only history routing.
 
 Graph v14 requires review for older graphs with any provisional translator input
-or TranslationCommit Node, including inactive drafts. The v12 repair draft
-retains every Node, setting and route; it never guesses preview wiring. Older
+or TranslationCommit Node, including inactive drafts and graphs already saved at
+v13. The translation repair draft retains every Node, setting and route; it never
+guesses preview wiring. Older accumulator preview routes also receive the v13
+append-only conversion and its lifecycle warning in the same reviewed draft. Older
 DOM/paired-port migrations retain their existing review paths and add the new
 warning where applicable. Committed-only graphs without TranslationCommit
 upgrade without route changes. Save preserves original JSON bytes under
@@ -42,7 +44,7 @@ processing-graph-before-v14, numbered on collision, with older copies retained.
 Read/execute blocking, deliberate route repair, Save/reload, storage-write failure,
 CRLF Copy/Download integrity and older recovery copies are covered.
 
-Validation on 2026-10-30:
+Validation before integration with #165 on 2026-10-30:
 
 - `npm test`: 678 passed, none skipped. Includes both translation directions and
   relevant OPUS users, atomic success/empty/failure groups, diagnostic reporting,
@@ -75,3 +77,38 @@ contracts, ownership, routing and lifecycle only. The opt-in real windowed-model
 smoke was updated to observe the separate preview display but was not run.
 
 Required post-merge verification: none specified by #163.
+
+
+## Integration with main's v13 accumulator migration (#165)
+
+Local history was rebased onto b2202a39f80b0705df334ea670431c0a72a37c2a.
+The accumulator review remains v13; translation output review is v14. Saved v13
+preview-enabled graphs are blocked for deliberate repair, while committed-only
+v13 graphs upgrade without route changes. Older graphs needing both migrations
+receive both warnings and a combined repair draft. Current recovery copies use
+processing-graph-before-v14; existing v13 and earlier copies remain intact.
+TranslationCommit retains input-failure and lifecycle cleanup, and Pipeline
+retains ordered cancellation cleanup through generic consumers.
+
+Validation after integration on 2026-10-30:
+
+- `npm test`: 723 passed. Includes v12/v13 translation review for all four
+  translators, combined accumulator/translator migration, recovery collisions,
+  exact original bytes, Save/reload, backup-write failure, composition and lifecycle.
+- Browser suite: 98 passed across Chromium and WebKit, running
+  `translation-ports.spec.js`, `text-window.spec.js`, `text-display.spec.js`,
+  `dom-display.spec.js`, `extension-layout.spec.js` and `speaker.spec.js` with
+  `--workers=2`. An isolated local server used the existing PagesHandler and
+  ASR_BASE_URL on a free port. No tests were excluded.
+- Packaged MV3 fixture suite: 81 passed, running `translation-ports.spec.js`,
+  `windowed-translation.spec.js`, `primitive-composition.spec.js`,
+  `translategemma.spec.js`, `live-text.spec.js`, `graph-models.spec.js` and
+  `graph.spec.js` with `playwright.extension.config.js`. Includes reviewed v13
+  repair and old recovery copies, append-only accumulator migration, direct
+  preview routing, optional retranslation, Stop/Cancel and restart.
+- `git diff --check`: passed. Main is an ancestor of the reconciled local history.
+
+`npm run build:extension` still stops at missing local models. MV3 tests used a
+fresh source-layout fixture package with the current builder's shared source
+list, explicitly marked FIXTURE-ONLY.txt. Production packaging and real model
+inference remain unverified; no production assets were downloaded.

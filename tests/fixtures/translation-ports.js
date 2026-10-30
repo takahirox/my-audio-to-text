@@ -84,7 +84,7 @@ export async function checkTranslationPorts(page, type, base = './') {
 export async function checkTranslationPortRecovery(editor, type) {
   const raw = await editor.evaluate(async type => {
     const { defaultGraph, graphNode, edge, GRAPH_KEY, GRAPH_RECOVERY_KEY } = await import(new URL('./graph.js', location.href));
-    const graph = defaultGraph({ enabled: true }); graph.version = 12;
+    const graph = defaultGraph({ enabled: true }); graph.version = 13;
     graph.nodes.find(n => n.id === 'translation').type = type;
     graph.nodes.push(graphNode('TextToDOM', 'preview-dom'), graphNode('LiveTextDisplay', 'preview'));
     graph.edges.push(edge('speech', 'provisional', 'translation', 'provisional'),
@@ -124,4 +124,5 @@ export async function checkTranslationPortRecovery(editor, type) {
   expect(await editor.evaluate(() => localStorage.getItem('processing-graph-before-v14-2'))).toBe(raw);
   expect(await editor.evaluate(() => localStorage.getItem('processing-graph-before-v14'))).toBe('older recovery');
   expect(await editor.evaluate(() => localStorage.getItem('processing-graph-before-v12'))).toBe('previous version');
+  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-before-v13'))).toBe('v13 recovery');
 }
