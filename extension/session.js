@@ -2,7 +2,7 @@ import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
 import { assertGraph, executableGraph, defaultGraph, graphPreferences, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
-import { SpeakerOutputNode } from '../web/speaker-output.js';
+import { SpeakerOutputNode, StreamingSpeakerOutputNode } from '../web/speaker-output.js';
 
 // Owns tab targeting and the window's UI. Nodes own capture and recognition.
 export class TabSession {
@@ -38,8 +38,8 @@ export class TabSession {
     } catch (error) { this.update({ error: error.message }); return; }
     const preferences = graphPreferences(graph);
     const hasDisplay = graph.nodes.some(node => node.type === 'LiveTextDisplay');
-    const hasAudioOutput = graph.nodes.some(node => ['AudioOutput', 'SpeakerOutput'].includes(node.type));
-    const speakers = graph.nodes.filter(node => node.type === 'SpeakerOutput');
+    const hasAudioOutput = graph.nodes.some(node => ['AudioOutput', 'SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
+    const speakers = graph.nodes.filter(node => ['SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
     const sources = graph.nodes.filter(n => INPUT_TYPES.includes(n.type));
     const microphones = sources.filter(n => n.type === 'MicrophoneAudio');
     if (sources.some(node => node.type !== 'MicrophoneAudio') && !Number.isInteger(tabId)) {
@@ -59,7 +59,8 @@ export class TabSession {
     this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, summaryStatus: '', conditionStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Preparing local translation…' : 'Translation off', status: graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
     try {
       for (const spec of speakers) {
-        const node = new SpeakerOutputNode({ contextFactory: this.speakerContextFactory, onState: state => {
+        const Speaker = spec.type === 'StreamingSpeakerOutput' ? StreamingSpeakerOutputNode : SpeakerOutputNode;
+        const node = new Speaker({ contextFactory: this.speakerContextFactory, onState: state => {
           if (this.session !== session) return;
           session.speakerStates[spec.id] = state;
           this.update({ speakerStatus: Object.entries(session.speakerStates).map(([id, value]) => `${id}: ${value.message}`).join('\n'),

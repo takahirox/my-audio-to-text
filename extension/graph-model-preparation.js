@@ -7,6 +7,7 @@ import { translateGemmaManifest } from './translategemma-cache.js';
 import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
 import { ifConditionManifest } from './if-condition-cache.js';
 import { ttsManifest } from './tts-cache.js';
+import { qwen3TtsManifest } from './qwen3-tts-cache.js';
 
 // Follow every saved model-bearing Node, including parked Nodes. Language does
 // not change Supertonic's weights; its voice does. Existing ASR assets stay packaged; optional ASR weights follow Save.
@@ -26,6 +27,7 @@ export function graphModelRequirements(graph) {
     else if (['TranslateGemmaEnJa', 'TranslateGemmaJaEn'].includes(node.type)) requirement = { key: 'translategemma', id: 'translategemma', title: 'TranslateGemma 4B · 3.112 GB download · several GB RAM/GPU memory · WebGPU · Gemma Terms apply', manifest: translateGemmaManifest };
     else if (node.type === 'SpeechToTextParakeetV3') requirement = { key: 'parakeet-v3', id: 'parakeet-v3', title: 'Parakeet v3 · 1.26 GB download · WebGPU shader-f16 · allow 6 GB RAM/GPU memory, 3 GB storage', manifest: parakeetManifest };
     else if (node.type === 'SpeechToTextMoonshineMediumEn') requirement = { key: 'moonshine-medium-en', id: 'moonshine-medium-en', title: 'Moonshine Medium English Streaming · 305 MB download · CPU WASM · allow 2 GB RAM, 700 MB storage', manifest: moonshineManifest };
+    else if (node.type === 'Qwen3TtsStreaming') requirement = { key: 'qwen3-tts', id: 'qwen3-tts', title: 'Qwen3-TTS 0.6B CustomVoice · 690 MB · desktop WebGPU · allow 2 GB storage, 6 GB free RAM/GPU (estimate) · Apache 2.0', manifest: qwen3TtsManifest };
     else if (['Supertonic3', 'Kokoro'].includes(node.type)) {
       const { type } = node, settings = { ...node.settings }, id = type.toLowerCase();
       requirement = { key: `${id}:${settings.voice}`, id, title: `${type === 'Supertonic3' ? 'Supertonic 3' : 'Kokoro'} · ${settings.voice}`,

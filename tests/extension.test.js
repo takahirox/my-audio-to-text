@@ -279,13 +279,18 @@ with tempfile.TemporaryDirectory() as tmp:
                  'transformers.js', 'ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm',
                  'phonemizer.js', 'phonemizer-engine.mjs', 'phonemizer-source.tar.gz',
                  'openjtalk-wasm-wrapper-D6E3BSJO.js', 'openjtalk-wasm.wasm',
-                 'open_jtalk_dic_utf_8-1.11.tar.gz', 'openjtalk-voice.htsvoice'):
+                 'open_jtalk_dic_utf_8-1.11.tar.gz', 'openjtalk-voice.htsvoice',
+                 'qwen3/ort.webgpu.min.mjs', 'qwen3/ort-wasm-simd-threaded.asyncify.mjs',
+                 'qwen3/ort-wasm-simd-threaded.asyncify.wasm', 'qwen3/ort-LICENSE',
+                 'qwen3/ort-ThirdPartyNotices.txt', 'qwen3/model-LICENSE'):
+        (tts / name).parent.mkdir(parents=True, exist_ok=True)
         (tts / name).write_bytes(b'pinned TTS runtime fixture')
     whisper = root / 'web' / 'vendor' / 'whisper' / 'tiny'
     whisper.mkdir(parents=True)
     (whisper / 'fixture.onnx').write_bytes(b'pinned Whisper fixture')
     (root / 'scripts').mkdir()
     import hashlib
+    (root / 'scripts/qwen3-tts-runtime.json').write_text(json.dumps({'files': [{'path': str(path.relative_to(tts)), 'bytes': path.stat().st_size, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for path in tts.rglob('*') if path.is_file()]}))
     summary_runtime = root / 'web/vendor/meeting-summary'
     summary_runtime.mkdir()
     (summary_runtime / 'transformers.js').write_bytes(b'pinned isolated summary runtime fixture')

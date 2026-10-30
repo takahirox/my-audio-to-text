@@ -15,6 +15,7 @@ SHARED_FILES = (
     "if-condition-model.js", "if-condition-node.js", "if-condition-policy.js", "if-condition-worker.js",
     "text-window-node.js", "translation-commit-node.js", "pipeline.js", "port-contracts.js", "dom-nodes.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
     "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "speaker-output.js", "supertonic3-worker.js", "supertonic3-runtime.js",
+    "audio-stream.js", "qwen3-tts-node.js", "qwen3-tts-worker.js", "qwen3-tts-runtime.js",
     "kokoro-worker.js", "kokoro-english.js", "kokoro-japanese.js", "kokoro-hepburn.js",
     "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js", "opus-mt-en-ja-worker.js", "translategemma-worker.js",
     "audio.js", "capture-worklet.js", "local-asr-core.js", "local-asr-config.js",
@@ -70,8 +71,14 @@ def main():
             "transformers.js", "ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm",
             "phonemizer.js", "phonemizer-engine.mjs", "phonemizer-source.tar.gz",
             "openjtalk-wasm-wrapper-D6E3BSJO.js", "openjtalk-wasm.wasm",
-            "open_jtalk_dic_utf_8-1.11.tar.gz", "openjtalk-voice.htsvoice")):
+            "open_jtalk_dic_utf_8-1.11.tar.gz", "openjtalk-voice.htsvoice",
+            "qwen3/ort.webgpu.min.mjs", "qwen3/ort-wasm-simd-threaded.asyncify.mjs",
+            "qwen3/ort-wasm-simd-threaded.asyncify.wasm", "qwen3/ort-LICENSE", "qwen3/ort-ThirdPartyNotices.txt", "qwen3/model-LICENSE")):
         raise SystemExit("Missing TTS runtime/frontend/source. Run npm run prepare:tts-assets.")
+    for entry in json.loads((ROOT / 'scripts/qwen3-tts-runtime.json').read_text())['files']:
+        asset = tts / entry['path']
+        if not asset.is_file() or asset.stat().st_size != entry['bytes'] or hashlib.sha256(asset.read_bytes()).hexdigest() != entry['sha256']:
+            raise SystemExit('Invalid pinned Qwen3-TTS runtime/tokenizer/notices. Run npm run prepare:tts-assets.')
     target = ROOT / "dist" / "chrome-extension"
     if target.exists():
         shutil.rmtree(target)
