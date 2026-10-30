@@ -153,9 +153,11 @@ export class StreamingSpeakerOutputNode extends SpeakerOutputNode {
     this.onState({ message: message + overflow, needsActivation, overflow: !!this.rejected, ...fields });
   }
   receive(port, value, context) {
-    if (this.disposed || this.stopping || context.signal.aborted || this.rejected) return;
+    if (this.disposed || this.stopping || context.signal.aborted) return;
     if (port !== 'stream') throw TypeError('Unknown streaming speaker input port.');
     const event = validateAudioStream(value);
+    // Overflow rejects audio, but the failed utterance can still be aborted.
+    if (this.rejected && (!this.active || event.id !== this.active.id)) return;
     if (event.type === 'start') {
       if (this.active || event.id <= this.lastId) throw Error('Audio stream start is overlapping or replayed.');
       this.active = { id: event.id, sequence: 0, sampleRate: event.sampleRate };
@@ -173,12 +175,14 @@ export class StreamingSpeakerOutputNode extends SpeakerOutputNode {
     }
     const sampleRate = this.active.sampleRate, seconds = event.samples.length / sampleRate;
     if (seconds > AUDIO_STREAM_LIMITS.chunkSeconds) throw RangeError('An audio stream chunk exceeds two seconds.');
+    // Count discarded chunks too so the producer's final boundary still matches.
+    this.active.sequence++;
+    if (this.rejected) return;
     if (this.queue.length >= STREAM_SPEAKER_LIMITS.chunks || this.seconds + seconds > STREAM_SPEAKER_LIMITS.seconds
         || this.bytes + event.samples.byteLength > STREAM_SPEAKER_LIMITS.bytes) {
-      this.rejected = 1; this.active = null;
+      this.rejected = 1;
       this.report('Streaming speaker reached its buffering limit.', this.blocked || this.audio?.state !== 'running'); return;
     }
-    this.active.sequence++;
     this.queue.push({ id: event.id, sequence: event.sequence, samples: event.samples.slice(), sampleRate });
     this.seconds += seconds; this.bytes += event.samples.byteLength; this.pump();
   }
@@ -228,7 +232,8 @@ export class StreamingSpeakerOutputNode extends SpeakerOutputNode {
     }
   }
   stop() {
-    if (this.active) throw Error('Audio stream ended without an end/abort boundary.');
+    // Overflow must still allow Stop to drain the audio already accepted.
+    if (this.active && !this.rejected) throw Error('Audio stream ended without an end/abort boundary.');
     return super.stop();
   }
   dispose() {

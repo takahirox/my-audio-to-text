@@ -102,6 +102,39 @@ test('abort removes only the current utterance; Cancel stops scheduled audio and
   assert.equal(f.sources.length, 4); assert.equal(f.audio.closes, 1); assert.equal(f.node.bytes, 0);
 });
 
+test('abort after overflow removes the failed utterance while retaining earlier audio', async () => {
+  for (const suspended of [false, true]) {
+    for (const earlier of [false, true]) {
+      const f = fixture({ suspended });
+      if (earlier) { f.send(begin()); f.send(chunk(0, 1, 24000)); f.send(end()); }
+      const id = earlier ? 2 : 1;
+      f.send(begin(id));
+      for (let sequence = 0; sequence < 9; sequence++) f.send(chunk(sequence, id, 24000));
+      assert.equal(f.node.rejected, 1); assert.equal(f.node.seconds, 8);
+      const late = f.sources.at(-1)?.onended;
+      f.send({ type: 'abort', id, sequence: 9, message: 'GPU lost after overflow' });
+      assert.equal(f.node.active, null);
+      assert.equal(f.node.queue.length, earlier ? 1 : 0);
+      assert.equal(f.node.seconds, earlier ? 1 : 0);
+      assert.equal(f.node.bytes, earlier ? 24000 * 4 : 0);
+      assert.ok(f.node.queue.every(item => item.id === 1));
+      assert.ok(f.sources.slice(earlier ? 1 : 0).every(source =>
+        source.stops === 1 && source.disconnects === 1 && source.buffer === null));
+      if (earlier && !suspended) assert.equal(f.sources[0].stops, 0);
+      late?.(); // A retired callback must not replay removed chunks.
+      f.send(begin(id + 1)); f.send(chunk(0, id + 1));
+      assert.equal(f.node.queue.length, earlier ? 1 : 0);
+      const stop = f.node.stop();
+      f.audio.state = 'running'; f.node.enable();
+      for (const source of f.sources) source.end();
+      await stop;
+      assert.equal(f.sources.length, suspended ? Number(earlier) : 8);
+      assert.equal(f.node.bytes, 0); assert.equal(f.node.seconds, 0);
+      await f.node.dispose();
+    }
+  }
+});
+
 function workerFixture() {
   const messages = [], events = [], emitted = [], failures = [], controller = new AbortController();
   const worker = { postMessage(message) { messages.push(message); }, terminate() { this.terminated = true; } };
