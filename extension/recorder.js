@@ -45,7 +45,7 @@ const session = new TabSession(view => {
   element('saved-state').textContent = pending ? 'Saved graph changed. This session keeps its active graph; changes apply on Start.' : '';
   renderTextRegions(element('live-displays'), view.activeGraph || view.savedGraph, view.displays);
   element('no-live-displays').hidden = !!element('live-displays').children.length;
-  const hasSpeaker = current.nodes.some(node => node.type === 'SpeakerOutput');
+  const hasSpeaker = current.nodes.some(node => ['SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
   element('speaker-hint').hidden = !hasSpeaker;
   element('speaker-status').textContent = view.speakerStatus;
   element('enable-speaker').hidden = !view.speakerNeedsActivation;

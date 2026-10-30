@@ -593,6 +593,12 @@ Microphone requires no capture tab and is not mixed with tab/media capture.
 
 ## Optional TTS paths
 
+For incremental audio use [Qwen3-TTS streaming](streaming-tts.md): committed TEXT
+→ Qwen3-TTS 0.6B · streaming → `AUDIO_STREAM` → Speaker · streaming. Save prepares
+690 MB; desktop Worker WebGPU is required. CosyVoice3 remains unsupported, with
+its blocker and required follow-up documented separately. The completed-clip
+paths below retain their existing behavior and ports.
+
 Connect SpeechToTextReazonSpeech.final → Supertonic3.text (or Kokoro.text) → AudioOutput.audio.
 To speak translations, connect OPUS-MT.text directly to TTS.text. These outputs
 emit whole utterances; pending/error diagnostics use separate ports. The TTS

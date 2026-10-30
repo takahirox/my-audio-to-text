@@ -6,6 +6,7 @@ import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
 import { ifConditionManifest } from './if-condition-cache.js';
 import { translateGemmaManifest } from './translategemma-cache.js';
 import { ttsManifest } from './tts-cache.js';
+import { qwen3TtsManifest } from './qwen3-tts-cache.js';
 import { readGraph } from './graph.js';
 
 const el = (tag, text) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; };
@@ -14,6 +15,7 @@ const cards = [];
 let closed = false, savedNodes = [];
 try { savedNodes = readGraph(localStorage).nodes; } catch { /* Models can recover assets even with a broken saved graph. */ }
 const definitions = [
+  { id: 'qwen3-tts', title: 'Qwen3-TTS 0.6B CustomVoice · streaming', size: '690 MB shared by Japanese/English and both voices. Desktop Worker WebGPU required; allow 2 GB storage, 6 GB free RAM/GPU memory (planning estimate). No CPU/cloud fallback. CosyVoice3 is unsupported: available browser exports finalize whole utterances.', manifest: qwen3TtsManifest, terms: 'Qwen Team / Danyal Malik ONNX conversion · Apache 2.0. Includes a separately pinned Qwen speech decoder. Choose language and voice in Graph Node settings.', url: '../web/licenses/qwen3-tts.txt' },
   { id: 'meeting-summary-lfm2', title: 'Meeting Summary · LFM2.5 1.2B JP', size: '749 MB download; allow 2 GB storage and 4 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Summary history is lossy.', manifest: () => meetingSummaryManifest('MeetingSummaryLfm2'), terms: 'Liquid AI · LFM Open License 1.0. Commercial use above the $10M annual revenue threshold needs a separate license; redistribution requires the license and preserved notices.', url: '../web/licenses/meeting-summary-lfm2.txt' },
   { id: 'meeting-summary-qwen35', title: 'Meeting Summary · Qwen3.5 2B', size: '1.403 GB download; allow 3 GB storage and 6 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Text-only ONNX Community optimized conversion of Qwen/Qwen3.5-2B; export card has no conversion details. Summary history is lossy.', manifest: () => meetingSummaryManifest('MeetingSummaryQwen35'), terms: 'Qwen Team · Apache 2.0 source license. See Help documentation for pinned conversion provenance and evidence.', url: '../web/licenses/meeting-summary-qwen35.txt' },
   { id: 'if-condition', title: 'IfCondition · XtremeDistil', size: '14 MB download; allow 40 MB storage and 250 MB free RAM per active Node. CPU WASM.', manifest: ifConditionManifest, terms: 'Moritz Laurer / Microsoft · MIT', url: '../web/licenses/if-condition-model.txt' },

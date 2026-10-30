@@ -1,5 +1,9 @@
 # Browser text-to-speech Nodes (Issue #73)
 
+For the extension's Qwen3-TTS incremental PCM path and the explicit CosyVoice3
+blocker, see [local streaming TTS (#168)](streaming-tts.md). The two Nodes below
+continue to emit completed `SYNTHESIZED_AUDIO` clips.
+
 The [Supertonic 3 page](../web/nodes/supertonic3/index.html) and
 [Kokoro 82M page](../web/nodes/kokoro/index.html) each run a separate production
 Node, dedicated inference Worker and Pipeline graph. Models/frontends execute
@@ -60,7 +64,7 @@ require that gesture. Cancel terminates all Node resources; repeats use fresh
 graphs/Workers. Cache/HTTP cache reuse avoids repeat network downloads where
 the browser permits it, but does not reuse a live model across graphs.
 
-Staging downloads these exact npm archives (no install scripts):
+The original completed-clip Nodes use these exact npm archives (no install scripts):
 
 | Package | Staged files / size |
 | --- | --- |
@@ -69,10 +73,11 @@ Staging downloads these exact npm archives (no install scripts):
 | Source-built eSpeak NG `0dfd1d77dd7f96ef1ea6856c9fa5cfac01599582` | WASM/English data embedded in `phonemizer-engine.mjs` (1,742,316 bytes), English-only `phonemizer.js` adapter; GPL-3.0-or-later. Complete corresponding source/data/build bundle staged alongside the modules |
 | `kokoro-js-jp` 0.2.0 | Open JTalk wrapper 93,921 bytes; WASM 395,024 bytes; dictionary 1.11 gzip archive 23,643,819 bytes (about 100 MB unpacked in WASM memory); Mei voice 862,503 bytes; third-party notices |
 
-The three npm archives, complete eSpeak source archive and rebuilt engine have
+The three original npm archives, complete eSpeak source archive and rebuilt engine have
 SHA-256 pins in the staging script. The Pages artifact includes `web/tts-assets/`
 with the matching downloadable eSpeak source bundle (16,315,334 bytes;
-77,218,463 bytes total staged assets), but no TTS weights. This
+77,218,463 bytes for the original #73 asset set; the separately pinned Qwen3
+streaming runtime/notices bring staging to 106,440,918 bytes), but no TTS weights. This
 separate directory keeps the existing extension's `vendor/` packaging and
 ASR preparation independent. Each page requests only its needed runtime and
 frontend. URLs derive from owning module URLs, preserving `/my-audio-to-text/`.

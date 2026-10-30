@@ -50,8 +50,10 @@ the Pipeline, with Japanese/English input and playable mono audio at each
 model's native rate. Each has its own WASM Worker and page with Generate,
 Cancel and WAV download. Run `npm run prepare:tts-assets` for local setup;
 model downloads start on Generate. See [TTS pins, terms and testing](docs/tts-nodes.md)
-and [real inference evidence](docs/evidence/tts-73.md). ASR → translation → TTS
-composition remains future work.
+and [real inference evidence](docs/evidence/tts-73.md). The extension also offers
+[Qwen3-TTS local streaming](docs/streaming-tts.md): committed text → incremental
+PCM → Speaker · streaming, with explicit preparation and cache-only Start.
+CosyVoice3 remains unsupported pending a browser streaming export/runtime.
 
 The retained hayamimi-inspired path uses 0.8-second pre-roll, provisional recognition about every 0.5 seconds of active speech, a 0.35-second trailing-silence endpoint, and a 6-second default maximum audio segment including pre-roll. The extension's reusable Number source can configure a 1–12 second cap, including decimals, through optional SpeechToTextReazonSpeech.maxDuration before session startup; saved edits apply next session. Continuous speech splits without audio gaps. This is an audio cap, not final-result latency: mid-sentence cuts may reduce accuracy. See [configuration and validation limits](docs/extension-graph.md#maximum-speech-segment-duration). Stop finalizes active speech. Silero VAD and ASR run in separate workers; inference is serialized, superseded previews are coalesced, and pending audio is bounded at 30 seconds. ReazonSpeech uses the evidence-based one-thread default from [Issue #38](docs/evidence/reazon-38.md).
 

@@ -7,12 +7,19 @@ Archives are read member-by-member, with no install scripts or native addons.
 import hashlib
 import io
 import gzip
+import json
 from pathlib import Path
 import tarfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = [
+    ('ort-qwen3-1.31.1', 'https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-1.31.1.tgz',
+     'bdccdb9fbb9ab537247c0c734e9b1d2b1b338b4f2a09faa58f0dc1cfa27c312c', {
+         'dist/ort.webgpu.min.mjs': 'qwen3/ort.webgpu.min.mjs',
+         'dist/ort-wasm-simd-threaded.asyncify.mjs': 'qwen3/ort-wasm-simd-threaded.asyncify.mjs',
+         'dist/ort-wasm-simd-threaded.asyncify.wasm': 'qwen3/ort-wasm-simd-threaded.asyncify.wasm',
+     }),
     ('transformers-3.8.1', 'https://registry.npmjs.org/@huggingface/transformers/-/transformers-3.8.1.tgz',
      '207714c36765b87accfd9b7b0672c3505805af97140990e0d9f8ac6e3cd5471e', {
          'dist/transformers.min.js': 'transformers.js',
@@ -35,6 +42,16 @@ PACKAGES = [
          'dist/openjtalk-voice.htsvoice': 'openjtalk-voice.htsvoice',
          'THIRD_PARTY_NOTICES.md': 'openjtalk-NOTICES',
      }),
+]
+# The ORT npm archive omits notices. Stage the matching immutable source notices
+# alongside the binaries, and the conversion's own Apache-2.0 license.
+QWEN_NOTICES = [
+    ('ort-qwen3-license', 'https://raw.githubusercontent.com/microsoft/onnxruntime/6af1a932e2286d5c58166085d24c68783033edee/LICENSE',
+     '2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c', 'qwen3/ort-LICENSE'),
+    ('ort-qwen3-notices', 'https://raw.githubusercontent.com/microsoft/onnxruntime/6af1a932e2286d5c58166085d24c68783033edee/ThirdPartyNotices.txt',
+     '143764b952fdb1a7c69ce653bfba74a7744d6a8a573bfb73e235fba356c83de3', 'qwen3/ort-ThirdPartyNotices.txt'),
+    ('qwen3-model-license', 'https://huggingface.co/danyalmalik/Qwen3-TTS-12Hz-0.6B-CustomVoice-ONNX-WebGPU/resolve/ccdd14012062ee383dda616d7799cc955924af8a/LICENSE',
+     'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4', 'qwen3/model-LICENSE'),
 ]
 ESPEAK_SOURCE = (
     'espeak-ng-0dfd1d77dd7f96ef1ea6856c9fa5cfac01599582',
@@ -93,10 +110,18 @@ def main():
     files = {}
     for name, url, digest, members in PACKAGES:
         files.update(stage(fetch(name, url, digest), digest, members))
+    for name, url, digest, target in QWEN_NOTICES:
+        files[target] = fetch(name, url, digest)
     files.update(english_frontend(fetch(*ESPEAK_SOURCE)))
+    for entry in json.loads((ROOT / 'scripts/qwen3-tts-runtime.json').read_text())['files']:
+        data = files[entry['path']]
+        if len(data) != entry['bytes']:
+            raise RuntimeError('Qwen3-TTS runtime size mismatch')
+        verify(data, entry['sha256'])
     target = ROOT / 'web' / 'tts-assets'
     target.mkdir(parents=True, exist_ok=True)
     for name, data in files.items():
+        (target / name).parent.mkdir(parents=True, exist_ok=True)
         (target / name).write_bytes(data)
     # Remove the former npm wrapper's notice when restaging an existing tree.
     (target / 'phonemizer-LICENSE').unlink(missing_ok=True)

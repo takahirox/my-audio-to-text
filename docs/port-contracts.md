@@ -33,8 +33,10 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
 | Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
 | AudioOutput / playback and WAV adapter | `audio: SYNTHESIZED_AUDIO`, `{ samples: Float32Array, sampleRate: positive integer, channels: 1 }` | Playback URLs and cleanup |
+| Qwen3-TTS streaming / Speaker · streaming | [`stream: AUDIO_STREAM`](streaming-tts.md#public-port-limits-and-lifecycle), explicit start/chunk/end/abort events | Ordered utterance IDs, chunk sequences and native-rate PCM; distinct from a completed clip |
 
-The portable structured public value is **synthesized audio**. DOM snapshots are native page objects, never Worker payloads. Samples,
+The portable structured public values are **synthesized audio** and explicit
+**audio stream events**. DOM snapshots are native page objects, never Worker payloads. Samples,
 rate and channel layout are intrinsically coupled: interpreting samples without
 their format changes duration/pitch or produces invalid playback/WAV. Models
 produce different native rates. Captured audio instead has a fixed, agreed mono

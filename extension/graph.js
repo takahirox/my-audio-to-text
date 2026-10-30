@@ -3,6 +3,7 @@ import { TEXT } from '../web/translation-nodes.js';
 import { TRANSLATION_OUTPUTS } from './translation-scheduler.js';
 import { FORMAT_INPUTS, formatInputs, parseTemplate } from '../web/text-nodes.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
+import { AUDIO_STREAM } from '../web/audio-stream.js';
 import { DOM, NUMBER } from '../web/port-contracts.js';
 import { validateCondition, MAX_CONDITION_CHARS } from '../web/if-condition-policy.js';
 import { finiteNumber } from '../web/number-node.js';
@@ -52,8 +53,12 @@ export const NODE_TYPES = Object.freeze({
   TextFormatter: { label: 'Text formatter', inputs: FORMAT_INPUTS, optionalInputs: Object.keys(FORMAT_INPUTS), outputs: { text: TEXT }, numberSettings: { inputCount: { default: 4 } }, textSettings: { template: { default: '{1}', maxLength: 2048, multiline: true } }, help: 'Add/remove numbered inputs in Settings. Use {1}, {2}, etc., labels and literal newlines. Escape braces as {{ and }}. Missing inputs are empty. Each emission formats the latest input values; directly grouped emissions replace the emitted family’s connected inputs together (omitted siblings clear). Independent branches are not correlated.' },
   Supertonic3: { label: 'Supertonic 3 TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { language: ['ja', 'en'], voice: ['F1', 'M1'] } },
   Kokoro: { label: 'Kokoro TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { voice: ['jf_alpha', 'af_heart'] } },
+  Qwen3TtsStreaming: { label: 'Qwen3-TTS 0.6B · streaming', inputs: { text: TEXT }, outputs: { stream: AUDIO_STREAM }, settings: { language: ['japanese', 'english'], voice: ['ono_anna', 'ryan'] },
+    preparationNotice: 'Qwen3-TTS: Save prepares 690 MB. Desktop Worker WebGPU required; allow 2 GB storage and 6 GB free RAM/GPU memory (planning estimate). Apache 2.0; reviewed community ONNX conversion. See Models.',
+    help: 'Committed TEXT → genuinely incremental mono PCM → Speaker · streaming. Choose language and voice explicitly (ono_anna Japanese, ryan English). Use ASR.final or committed translation.text, never revisable previews. Up to 300 characters/256 tokens and 20.48 seconds of generated speech per utterance; split longer text before this Node. 16 utterances/4,800 characters queued. Save prepares pinned weights; Start is cache-only, with no CPU/cloud fallback. Stop drains accepted speech; Cancel terminates the owned Worker and playback. Desktop WebGPU only; speed depends on hardware. CosyVoice3 is unsupported pending a streaming browser export.' },
   AudioOutput: { label: 'Audio player / WAV', inputs: { audio: SYNTHESIZED_AUDIO }, outputs: {} },
   SpeakerOutput: { label: 'Speaker', inputs: { audio: SYNTHESIZED_AUDIO }, outputs: {}, help: 'Automatically play completed TTS clips in order through the browser default speaker. Press Start in Live to enable audio and keep that window open. Stop drains accepted audio; Cancel clears playback. Queue limits: 32 clips, 120 seconds or 32 MiB; overflow is reported in Live.' },
+  StreamingSpeakerOutput: { label: 'Speaker · streaming', inputs: { stream: AUDIO_STREAM }, outputs: {}, help: 'Play ordered incremental PCM with explicit utterance boundaries through the default speaker. Press Start in Live to enable audio; keep Live open. Chunks share the audio clock and are resampled by Web Audio. Eight seconds/64 chunks/8 MiB maximum queued; overflow visibly rejects further audio until restart. Stop drains accepted chunks; Cancel stops immediately. Completed TTS clips use the ordinary Speaker input.' },
 });
 const LEGACY_VIEWS = {
   TranscriptView: { label: 'Original transcript', inputs: paired(TEXT), optionalInputs: ['provisional'], outputs: {}, settings: { direction: ['ja-en', 'en-ja'] } },
