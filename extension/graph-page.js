@@ -8,13 +8,14 @@ let graph, editor, base, recoveryGraph, migrationError, conflict = false;
 try { graph = readGraph(localStorage); }
 catch (error) {
   recoveryGraph = error.recoveryGraph; migrationError = true;
-  element('errors').textContent = `Saved graph unavailable: ${error.message}${recoveryGraph ? ' The affected graph is open as an unsaved repair draft.' : '. Reset draft and Save to recover.'}`;
+  element('errors').textContent = `Saved graph unavailable: ${error.message}${recoveryGraph ? ' Review the unsaved repair draft, then Save.' : ' Reset draft and Save to recover.'} The original is available under Graph actions → Recovery.`;
   graph = defaultGraph();
 }
 base = localStorage.getItem(GRAPH_KEY);
 // A plain-text recovery copy is accessible before and after the reviewed Save.
 const recoveryCopy = document.createElement('details');
-const recoveryTitle = document.createElement('summary'); recoveryTitle.textContent = 'Original saved graph (migration recovery copy)';
+recoveryCopy.className = 'graph-recovery';
+const recoveryTitle = document.createElement('summary'); recoveryTitle.textContent = 'Recovery';
 const recoveryText = document.createElement('textarea'); recoveryText.readOnly = true;
 recoveryText.setAttribute('aria-label', 'Original saved graph JSON');
 const recoveryKeys = Object.keys(localStorage).filter(key => /^processing-graph-before-v\d+(?:-\d+)?$/.test(key)).sort();
@@ -26,11 +27,23 @@ for (const [index, [label]] of copies.entries()) {
 }
 const preferred = Math.max(0, copies.findIndex(([key]) => key === GRAPH_RECOVERY_KEY));
 recoverySelect.value = String(migrationError ? 0 : preferred);
-const showRecovery = () => { recoveryText.value = copies[Number(recoverySelect.value)]?.[1] || ''; };
+const originalRecovery = () => copies[Number(recoverySelect.value)]?.[1] || '';
+const showRecovery = () => { recoveryText.value = originalRecovery(); };
 recoverySelect.onchange = showRecovery; showRecovery();
 recoveryCopy.hidden = !copies.length; recoverySelect.hidden = copies.length < 2;
-recoveryCopy.append(recoveryTitle, recoverySelect, recoveryText);
-element('errors').after(recoveryCopy);
+const copyRecovery = document.createElement('button'); copyRecovery.type = 'button'; copyRecovery.textContent = 'Copy JSON';
+const recoveryStatus = document.createElement('p'); recoveryStatus.setAttribute('role', 'status');
+copyRecovery.onclick = async () => {
+  try { await navigator.clipboard.writeText(originalRecovery()); recoveryStatus.textContent = 'Original JSON copied.'; }
+  catch { recoveryStatus.textContent = 'Select and copy the original JSON below.'; recoveryText.focus(); recoveryText.select(); }
+};
+const exportRecovery = document.createElement('button'); exportRecovery.type = 'button'; exportRecovery.textContent = 'Download JSON';
+exportRecovery.onclick = () => {
+  const url = URL.createObjectURL(new Blob([originalRecovery()], { type: 'application/json' }));
+  const link = document.createElement('a'); link.href = url; link.download = 'graph-recovery.json'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+};
+recoveryCopy.append(recoveryTitle, recoverySelect, copyRecovery, exportRecovery, recoveryStatus, recoveryText);
 async function persist(next) {
   const saved = await navigator.locks.request('processing-graph-save', async () => {
     if (conflict || localStorage.getItem(GRAPH_KEY) !== base) throw new Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');
@@ -46,6 +59,7 @@ editor = new GraphEditor(element('graph-editor'), graph, { recoveryGraph, onSave
   const next = readGraph(localStorage);
   conflict = false; base = localStorage.getItem(GRAPH_KEY); return next;
 } });
+editor.actions.querySelector('.graph-command-list').append(recoveryCopy);
 window.addEventListener('storage', event => {
   if (event.key !== GRAPH_KEY && event.key !== null) return;
   // Another page now owns the saved snapshot. Stop preparing this page's old

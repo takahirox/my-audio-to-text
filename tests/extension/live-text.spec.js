@@ -156,7 +156,8 @@ test('MV3 v9 migration retains recovery versions and replace-only summary drafts
   expect(graph.version).toBe(12); expect(graph.nodes.filter(n => n.type === 'TextAccumulator')).toHaveLength(1);
   expect(graph.edges).toContainEqual({ from: ['summary', 'summary'], to: ['notes-dom', 'text'] });
   expect(await live.evaluate(() => localStorage.getItem('processing-graph-before-v12'))).toBe(raw);
-  await live.editor.getByText('Original saved graph (migration recovery copy)', { exact: true }).click();
+  await live.editor.locator('.graph-actions > summary').click();
+  await live.editor.getByText('Recovery', { exact: true }).click();
   await expect(live.editor.getByLabel('Original saved graph JSON', { exact: true })).toHaveValue(raw);
   await live.editor.getByLabel('Graph recovery version').selectOption({ label: 'processing-graph-before-v9' });
   await expect(live.editor.getByLabel('Original saved graph JSON', { exact: true })).toHaveValue('older original');
@@ -256,7 +257,8 @@ test('MV3 v10 TEXT display is blocked until reviewed Save; original JSON and old
   await live.reload();await live.editor.reload();
   await expect(live.locator('#start')).toBeDisabled();await expect(live.locator('#errors')).toContainText('v11 requires review');
   expect(await live.evaluate(()=>localStorage.getItem('processing-graph-v1'))).toBe(raw);
-  await live.editor.getByText('Original saved graph (migration recovery copy)',{exact:true}).click();
+  await live.editor.locator('.graph-actions > summary').click();
+  await live.editor.getByText('Recovery', { exact: true }).click();
   await expect(live.editor.getByLabel('Original saved graph JSON',{exact:true})).toHaveValue(raw);
   await live.editor.locator('#graph-save').click();await expect(live.editor.locator('#graph-save')).toBeEnabled();
   const saved=await live.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')));
@@ -461,7 +463,8 @@ for (const includeError of [false,true]) test(`MV3 v11 paired port review preser
   await expect(live.editor.locator('#errors')).toContainText('v12 requires review');
   if(includeError) await expect(live.editor.locator('#errors')).toContainText('Removed formatter error routes in draft: translation.error → translated-format.error');
   expect(await live.evaluate(()=>localStorage.getItem('processing-graph-v1'))).toBe(raw);
-  await live.editor.getByText('Original saved graph (migration recovery copy)',{exact:true}).click();
+  await live.editor.locator('.graph-actions > summary').click();
+  await live.editor.getByText('Recovery', { exact: true }).click();
   await expect(live.editor.getByLabel('Original saved graph JSON',{exact:true})).toHaveValue(raw);
   for(const port of ['input1','input2']) await expect(live.editor.getByRole('button',{name:`translated-format input ${port}`,exact:true})).toHaveCount(1);
   for(const port of ['source','text','error']) await expect(live.editor.getByRole('button',{name:`translated-format input ${port}`,exact:true})).toHaveCount(0);

@@ -1,3 +1,4 @@
+import { checkRecovery, checkInputReconnect, checkStableInspector, checkInputDetach, loadInputGraph, inputDragPoints } from '../fixtures/graph-inspector.js';
 import { clickGraphAction, loadTranslationFixture } from './ui-controls.js';
 import { legacyGraph } from '../fixtures/legacy-graph.js';
 import { writeFile } from 'node:fs/promises';
@@ -12,18 +13,18 @@ async function save(page) {
 }
 
 const wireFor = (editor, route) => editor.getByRole('button', { name: `Select connection ${route}`, exact: true });
-for (const action of ['Close settings', 'Remove transcript']) {
+for (const action of ['Clear selection', 'Remove transcript']) {
   test(`packaged inspector commits text edits before a single ${action} click`, async ({ graphExtension: f }) => {
     const live = await openGraph(f), editor = live.editor, before = await saved(live);
     await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
     await editor.getByLabel('transcript label', { exact: true }).fill('Edited output');
     await editor.getByRole('button', { name: action, exact: true }).click();
-    await expect(editor.locator('.graph-inspector')).toBeHidden();
+    await expect(editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
     await expect(editor.locator('.graph-scroll')).toBeFocused();
     await expect(editor.locator('#graph-state')).toContainText('Unsaved draft');
     expect(await saved(live)).toEqual(before);
     const expected = structuredClone(before);
-    if (action === 'Close settings') {
+    if (action === 'Clear selection') {
       expected.nodes.find(node => node.id === 'transcript').settings.label = 'Edited output';
       await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
       await expect(editor.getByLabel('transcript label', { exact: true })).toHaveValue('Edited output');
@@ -76,7 +77,7 @@ async function touch(editor, point) {
 }
 
 for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
-  test(`on-canvas pointer disconnect, selection clearing and precise fan-out at ${zoom} zoom`, async ({ graphExtension: f }) => {
+  test(`inspector pointer disconnect, selection clearing and precise fan-out at ${zoom} zoom`, async ({ graphExtension: f }) => {
     const live = await openGraph(f), editor = live.editor, before = await saved(live);
     await editor.setViewportSize({ width: 1600, height: 1000 });
     await editor.locator('#graph-zoom').selectOption(zoom);
@@ -102,18 +103,8 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
     await expect(control).toBeHidden(); await expect(editor.locator('.selected-wire')).toHaveCount(0);
     await pointerSelect(editor, 'speech.provisional to transcript-accumulator.preview');
     await expect(control).toBeVisible(); await expect(control).toHaveText('Disconnect');
-    const box = await control.boundingBox(), viewport = await editor.locator('.graph-scroll').boundingBox();
-    expect(box.width).toBeGreaterThanOrEqual(112); expect(box.height).toBeGreaterThanOrEqual(44);
-    expect(box.x).toBeGreaterThan(viewport.x); expect(box.y).toBeGreaterThan(viewport.y);
-    expect(box.x + box.width).toBeLessThan(viewport.x + viewport.width);
-    expect(box.y + box.height).toBeLessThan(viewport.y + viewport.height);
-    expect(await control.evaluate(button => {
-      const b = button.getBoundingClientRect();
-      return [...button.closest('.graph-canvas').querySelectorAll('.graph-ports button')].filter(port => {
-        const p = port.getBoundingClientRect();
-        return b.left < p.right && b.right > p.left && b.top < p.bottom && b.bottom > p.top;
-      }).length;
-    })).toBe(0);
+    await expect(editor.locator('.graph-inspector #graph-disconnect')).toBeVisible();
+    await expect(editor.locator('#graph-canvas #graph-disconnect')).toHaveCount(0);
     // A native pointer click acts on the selected edge, without any key press.
     await control.click();
     await expect(wireFor(editor, 'speech.provisional to transcript-accumulator.preview')).toHaveCount(0);
@@ -131,7 +122,7 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
   });
 }
 
-test('selected-edge control follows zoom, canvas scrolling and a narrow layout', async ({ graphExtension: f }) => {
+test('inspector disconnect remains available through zoom, scrolling and a narrow layout', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   await editor.setViewportSize({ width: 1600, height: 650 });
   await pointerSelect(editor, 'audio.audio to speech.audio');
@@ -139,7 +130,7 @@ test('selected-edge control follows zoom, canvas scrolling and a narrow layout',
   await editor.locator('#graph-zoom').selectOption('1.5');
   await expect(control).toBeVisible(); await expect(editor.locator('.selected-wire')).toHaveCount(1);
   await scroll.evaluate(canvas => { canvas.scrollTop = 500; });
-  await expect(control).toBeHidden(); await expect(editor.locator('.selected-wire')).toHaveCount(1);
+  await expect(control).toBeVisible(); await expect(editor.locator('.selected-wire')).toHaveCount(1);
   await scroll.evaluate(canvas => { canvas.scrollTop = 0; });
   await expect(control).toBeVisible();
   await editor.setViewportSize({ width: 390, height: 844 });
@@ -147,9 +138,7 @@ test('selected-edge control follows zoom, canvas scrolling and a narrow layout',
   await wireFor(editor, 'audio.audio to speech.audio').scrollIntoViewIfNeeded();
   await wireFor(editor, 'audio.audio to speech.audio').focus();
   await expect(control).toBeVisible();
-  const box = await control.boundingBox(), viewport = await scroll.boundingBox();
-  expect(box.width).toBeGreaterThanOrEqual(112); expect(box.height).toBeGreaterThanOrEqual(44);
-  expect(box.x).toBeGreaterThan(viewport.x); expect(box.x + box.width).toBeLessThan(viewport.x + viewport.width);
+  await expect(editor.locator('.graph-inspector #graph-disconnect')).toBeVisible();
   await control.click(); await expect(wireFor(editor, 'audio.audio to speech.audio')).toHaveCount(0);
   await expect(scroll).toBeFocused();
 });
@@ -180,7 +169,7 @@ test('a pointer-selected short visible segment of a long wire still reveals a re
   await expect(editor.locator('.graph-scroll')).toBeFocused();
 });
 
-for (const key of ['Delete', 'Backspace']) test(`focused wire ${key} and keyboard-accessible on-canvas removal`, async ({ graphExtension: f }) => {
+for (const key of ['Delete', 'Backspace']) test(`focused wire ${key} and keyboard-accessible inspector removal`, async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor, before = await saved(live);
   await editor.setViewportSize({ width: 1600, height: 1000 });
   const wire = wireFor(editor, 'audio.audio to speech.audio');
@@ -284,6 +273,8 @@ for (const version of [4, 5]) for (const direction of ['ja-en', 'en-ja']) for (c
     await live.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), legacy);
     await live.close(); live = await openGraph(f);
     await expect(live.editor.locator('#errors')).toContainText('migration needs review');
+    await live.editor.locator('.graph-actions > summary').click();
+    await live.editor.getByText('Recovery', { exact: true }).click();
     await expect(live.editor.getByLabel('Original saved graph JSON')).toHaveValue(JSON.stringify(legacy));
     await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
     const graph = await saved(live);
@@ -306,3 +297,35 @@ for (const version of [4, 5]) for (const direction of ['ja-en', 'en-ja']) for (c
     expect(await saved(live)).toEqual(graph);
   });
 }
+
+for (const width of [390, 1440]) {
+  test(`MV3 selection keeps inspector and canvas geometry stable at ${width}px`, async ({ graphExtension: f }) => {
+    const live = await openGraph(f); await checkStableInspector(live.editor, width);
+  });
+  test(`MV3 connected input drag detaches only its wire at ${width}px`, async ({ graphExtension: f }) => {
+    const live = await openGraph(f); await checkInputDetach(live.editor, width);
+  });
+}
+
+test('native touch drags an occupied input to blank canvas without changing its fan-out', async ({ graphExtension: f }) => {
+  const live = await openGraph(f), editor = live.editor;
+  await editor.setViewportSize({ width: 390, height: 900 }); await loadInputGraph(editor);
+  await editor.locator('#graph-zoom').selectOption('0.5');
+  const before = await saved(live), { start, end } = await inputDragPoints(editor);
+  const session = await editor.context().newCDPSession(editor);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
+  for (let i = 1; i <= 5; i++) await session.send('Input.dispatchTouchEvent', { type: 'touchMove',
+    touchPoints: [{ x: start.x + (end.x - start.x) * i / 5, y: start.y + (end.y - start.y) * i / 5 }] });
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await session.detach();
+  await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length - 1);
+  expect(await saved(live)).toEqual(before);
+  await save(editor);
+  expect(await saved(live)).toEqual({ ...before, edges: before.edges.slice(1) });
+});
+
+test('MV3 input-end dragging reconnects transactionally and cancellation preserves the wire', async ({ graphExtension: f }) => {
+  const live = await openGraph(f); await checkInputReconnect(live.editor);
+});
+for (const kind of ['current', 'paired', 'invalid']) test(`MV3 Graph actions recovery preserves exact ${kind} originals and numbered backups`, async ({ graphExtension: f }) => {
+  const live = await openGraph(f); await checkRecovery(live.editor, kind);
+});

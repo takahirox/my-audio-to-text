@@ -126,7 +126,7 @@ test('Graph stays canvas-first and Models keeps preparation and legal notices se
     await expect(live.editor.locator('#graph-save')).toBeInViewport();
     await expect(live.editor.locator('#graph-palette-toggle')).toBeInViewport();
     await expect(live.editor.locator('#graph-palette')).toBeHidden();
-    await expect(live.editor.locator('.graph-inspector')).toBeHidden();
+    await expect(live.editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
     await expect(live.editor.locator('.graph-actions')).not.toHaveAttribute('open', '');
     await live.editor.locator('#graph-fit').click();
     await live.editor.getByRole('button', { name: 'Simple', exact: true }).focus();

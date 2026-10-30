@@ -38,27 +38,30 @@ or selected wire for editing. Increasing Canvas zoom also reveals that control.
 **Help** opens the detailed editing instructions on demand. Connecting to
 an occupied input replaces only its incoming wire; other inputs and source
 fan-out stay intact. Repeating the same connection changes nothing. Invalid
-connections keep the previous wire. Click a wire directly on the canvas (or
-focus it and press Enter/Space): the selected wire turns yellow and reveals a
-nearby **Disconnect** button on the canvas. Selecting alone keeps the wire.
-Click or tap Disconnect to remove only that edge; it needs no hover or keyboard.
-The button and wire hit targets keep the same screen size at every supported
-zoom, and the button stays within the visible canvas near the selected segment,
-preferring space clear of Nodes, ports and other wires. With a selected wire
+connections keep the previous wire. Drag a connected input endpoint into blank
+canvas to detach only its wire, or onto a compatible input to reconnect it.
+A click, cancelled drag or drop on a Node body keeps the connection. Click a wire
+directly on the canvas (or focus it and press Enter/Space): the selected wire
+turns yellow and shows connection details and **Disconnect** in the inspector.
+Selecting alone keeps the wire. Click or tap Disconnect to remove only that edge;
+it needs no hover or keyboard. The inspector action and wire hit targets keep
+the same screen size at every supported zoom. With a selected wire
 focused, Tab moves to Disconnect; Enter/Space activates it. Delete/Backspace on
 a focused wire also removes it. Escape or clicking blank canvas clears selection
 and hides Disconnect. After removal, focus returns to the scrollable canvas.
 **Remove Node** in the selected node’s inspector deletes it and its edges. Select a heading to
-edit display labels, templates, language/voice in the contextual **Settings**
-inspector (below the canvas in narrow windows). Canvas headings show only the
+edit display labels, templates, language/voice in the **Settings** inspector.
+The inspector keeps a constant width beside the canvas, or a compact scrollable
+region below it in narrow windows. Clearing selection shows a minimal empty
+state without resizing the canvas. Canvas headings show only the
 node type label; Settings shows the selected node's ID, including for multiple
-nodes of the same type. Close settings or click blank
-canvas to reclaim space. **Node help and ports** reveals contracts and detailed
+nodes of the same type. **Clear selection**, Escape or blank canvas clears the
+inspector. **Node help and ports** reveals contracts and detailed
 usage only when needed. OPUS-MT directions are
 separate executable Node types.
 
 **Graph actions** contains **Validate draft**, **Load saved**, **Reset draft to
-default** and **Show optional warnings**.
+default**, **Show optional warnings** and **Recovery** when saved recovery copies exist.
 Optional warnings are off by default and the preference persists locally.
 **Validate draft** explicitly reports blocking **Error:** diagnostics and optional
 **Warning:** diagnostics, including incomplete, disconnected and unused Nodes.
@@ -181,8 +184,10 @@ keep their routes for explicit review of the new latest-result TEXT semantics.
 These behavior changes require a **reviewed migration**: the old saved graph stays
 untouched and cannot run; Graph Editor opens a converted **unsaved repair draft**.
 Review the report and reconnect unsupported routes deliberately, then Save.
-Before and after Save, expand **Original saved graph (migration recovery copy)**
-to copy the complete original JSON, including removed routes/configurations.
+The visible warning directs you to **Graph actions → Recovery**. Before and after
+Save, open Recovery to view, copy or download the complete original JSON,
+including removed routes/configurations. The version selector also exposes older
+and numbered recovery copies. Copy and download retain the exact original text.
 Before v10 this used `processing-graph-before-v9`; new saves use `processing-graph-before-v12`; this backup remains
 across page reloads and later ordinary saves. To reattempt recovery, export this
 copy and import it in a compatible version or restore it to the graph storage key.
