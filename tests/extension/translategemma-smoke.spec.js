@@ -7,6 +7,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { ordinaryEnglishFixtures } from '../fixtures/translation-en-ja.js';
 import { TRANSLATE_GEMMA } from '../../web/translation-models.js';
+import { translationContextFixtures } from '../fixtures/translation-context.js';
 
 const fixtures = [...ordinaryEnglishFixtures,
   { text: 'Could you repeat the last point more slowly?', meanings: [/最後|直前/, /もう一度|繰り返/, /ゆっくり/] },
@@ -45,7 +46,8 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic en�
     context.on('request', r => {
       const url = new URL(r.url());
       requests.push({ url: `${url.protocol}//${url.host}${url.pathname}`, method: r.method(), hasBody: r.postData() !== null,
-        textInURL: fixtures.some(f => decodeURIComponent(r.url()).includes(f.text)) });
+        textInURL: [...fixtures, ...Object.values(translationContextFixtures).flat()].some(f => decodeURIComponent(r.url()).includes(f.text)
+          || (f.context && decodeURIComponent(r.url()).includes(f.context))) });
     });
     await context.addInitScript(`window.addDOMFormatters = ${addDOMFormatters.toString()};`);
     const editor = await context.newPage(); editor.on('pageerror', e => errors.push(e.message));
@@ -98,10 +100,15 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic en�
       await page.goto(`chrome-extension://${id}/extension/recorder.html`);
       const first = requests.length;
       const texts = direction === 'en-ja' ? fixtures.map(f => f.text) : ['会議は金曜日の午前十時に始まります。'];
-      const run = await page.evaluate(async ({ direction, texts }) => {
-        const { readGraph } = await import('./graph.js'); const { buildGraph } = await import('./graph-runtime.js');
+      const probes = translationContextFixtures[direction];
+      const targets = [...texts, ...probes.flatMap(f => [f.text, f.text, f.text])];
+      const contexts = [...texts.map(() => ''), ...probes.flatMap(f => ['', f.context, ''])];
+      const run = await page.evaluate(async ({ direction, targets, contexts }) => {
+        const { readGraph, graphNode, edge } = await import('./graph.js'); const { buildGraph } = await import('./graph-runtime.js');
         const graph = readGraph(localStorage); graph.nodes.find(n => n.id === 'gemma').type = direction === 'en-ja' ? 'TranslateGemmaEnJa' : 'TranslateGemmaJaEn';
-        graph.nodes.find(n => n.id === 'input').settings.value = texts[0];
+        graph.nodes.find(n => n.id === 'input').settings.value = targets[0];
+        graph.nodes.push(graphNode('Text', 'context'));
+        graph.edges.push(edge('context', 'value', 'gemma', 'context'));
         const displays = {}, states = [], started = performance.now();
         const NativeWorker = Worker, workers = [];
         globalThis.Worker = class extends NativeWorker {
@@ -118,21 +125,33 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic en�
           await built.pipeline.start();
           // First input comes from the production Text Node. Further controlled
           // fixtures traverse that source's real TEXT routes and scheduler FIFO.
-          for (const text of texts.slice(1)) built.pipeline.entries.get('input').context.emit('value', text);
+          for (let i = 1; i < targets.length; i++) {
+            built.pipeline.entries.get('context').context.emit('value', contexts[i]);
+            built.pipeline.entries.get('input').context.emit('value', targets[i]);
+          }
           await built.pipeline.stop();
           return { direction, displays, translated, states, ms: performance.now() - started, errors: built.pipeline.errors.map(e => e.message) };
         } finally { await built.pipeline.dispose(); if (workers.length !== 1 || !workers.every(w => w.released)) throw Error('Owned Worker was not released or parked Node executed'); }
-      }, { direction, texts });
+      }, { direction, targets, contexts });
+      run.contextComparisons = probes.map((f, i) => ({ text: f.text, context: f.context,
+        official: run.translated[texts.length + i * 3], contextual: run.translated[texts.length + i * 3 + 1], reset: run.translated[texts.length + i * 3 + 2] }));
       run.offline = offline; runs.push(run); console.log(JSON.stringify(run));
       expect(run.errors).toEqual([]); expect(run.states).toContain('Local TranslateGemma 4B ready');
       expect(run.displays.other).toBe('Independent branch');
-      expect(run.translated).toHaveLength(texts.length);
+      expect(run.translated).toHaveLength(targets.length);
       expect(run.displays.plain).toBe(run.translated.join('\n'));
-      expect(run.displays.paired).toBe(texts.map((text, i) => `${text}\n${run.translated[i]}`).join('\n'));
+      expect(run.displays.paired).toBe(targets.map((text, i) => `${text}\n${run.translated[i]}`).join('\n'));
       for (let i = 0; i < texts.length; i++) {
         const output = run.translated[i];
         expect(output.trim()).not.toBe(texts[i]);
         for (const meaning of direction === 'en-ja' ? fixtures[i].meanings : [/meeting/i, /Friday/i, /10|ten/i, /start|begin/i]) expect(output, `Meaning of ${texts[i]}: ${meaning}`).toMatch(meaning);
+      }
+      for (const [i, probe] of probes.entries()) {
+        const comparison = run.contextComparisons[i];
+        expect(comparison.reset).toBe(comparison.official);
+        for (const meaning of probe.meanings) expect(comparison.contextual).toMatch(meaning);
+        expect(comparison.contextual).not.toMatch(probe.forbidden);
+        expect(comparison.contextual).not.toMatch(/```|"(?:context|text)"\s*:|^(?:translation|context|翻訳|訳文)\s*[:：]/i);
       }
       expect(requests.slice(first).filter(r => !r.url.startsWith('chrome-extension:'))).toEqual([]);
       await page.close();

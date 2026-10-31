@@ -270,6 +270,66 @@ no skipped device check counts as inference success. See
 not comparative quality evidence. Any OPUS-MT quality comparison remains a
 separate user evaluation. No post-merge-only check is introduced by #124.
 
+## Optional TranslateGemma context (#173)
+
+Both extension TranslateGemma Nodes accept optional `context: TEXT` from any
+TEXT producer, for example `Text.value → TranslateGemmaEnJa.context`. There is
+no prompt setting, new Node or model instance. OPUS-MT has no context port.
+Existing graphs remain v14: adding an optional input needs no migration, and
+Save/reload preserves an explicitly connected context edge.
+
+With no context value, or with explicit `""`, inference uses the unchanged
+structured translation item and official TranslateGemma chat template, with
+`max_new_tokens: 256, do_sample: false`. Sending `""` clears a previously supplied
+context. Whitespace is a nonempty context. Context-only updates never translate
+or replace a preview. Each accepted text/provisional request retains the latest
+context at receipt, including while loading or queued; subsequent context updates
+apply to later requests. A grouped emission applies context before the current
+target, regardless of port order. Committed input takes priority over a grouped
+provisional value as before. Stop drains committed snapshots and clears context;
+Cancel/dispose discard it. A fresh session starts without context. Context is
+runtime state, not added to graph settings or persisted by the translator (a
+Text source's explicitly saved literal still persists normally).
+
+Nonempty context uses a fixed **experimental** prompt in the same text-generation
+runtime. It asks the model to use context for pronouns, omitted subjects, meaning and terminology,
+translate only the current target, and return only its translation. JSON quotes
+both fields and escapes `<` so input cannot introduce tokenizer control tokens
+or extra chat turns. The prompt has one Gemma user turn and an open model turn;
+it includes one BOS token, disables added special tokens and truncation, and
+returns generated text only. This is not evidence that context improves quality
+or that a model always follows the instruction; model-dependent behavior needs
+real inference checks.
+
+Limits: 1,000 UTF-16 code units per target, 4,000 per context, and 3,840 tokens
+for the complete context prompt with 256 output tokens reserved (4,096 total).
+Validation rejects over-budget data with an understandable error; it never
+silently truncates, retries with different text or falls back to another model.
+The token budget is checked with the loaded tokenizer before inference. A bad
+context update fails the Node visibly before storing it; prompt/inference errors
+use the existing committed or provisional error family and diagnostics. FIFO,
+latest-only previews, stale suppression and one owned Worker remain unchanged.
+
+The opt-in real-model probes compare official/context/reset prompts for ambiguous
+pronouns and domain terminology in both directions, check context-marker echo,
+and save outputs/latencies. Run after preparing the pinned runtime:
+
+```sh
+npm run prepare:translation-assets
+TRANSLATEGEMMA_CONTEXT_SMOKE=1 TRANSLATION_CHANNEL=chromium npx playwright test tests/browser/translategemma-context-smoke.spec.js --project=chromium --workers=1
+```
+
+This attempts the public pinned 3.112 GB model download and requires Worker
+WebGPU and several GB of free RAM/GPU memory. To reuse the model asset cache
+across fresh Workers/directions or repeated probes, optionally set
+`TRANSLATEGEMMA_PROFILE_DIR="$PWD/.cache/translategemma-context-profile"`.
+This is a test-only browser profile, not translator context persistence.
+The existing packaged MV3 real
+smoke also includes these comparisons. Deterministic tests verify contracts and
+prompt construction, not translation quality. See [implementation evidence](evidence/translation-173.md)
+for performed checks and any real-inference blockers. No post-merge-only check
+is required by #173.
+
 ## Windowed source text and optional retranslation (#128)
 
 [TextWindow and TranslationCommit](windowed-translation.md) provide bounded

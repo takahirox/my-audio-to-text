@@ -16,7 +16,8 @@ test('palette, Save and reload preserve current connected graph and parked direc
   for (const type of ['Text', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'TextToDOM', 'LiveTextDisplay']) await add(editor, type);
   await expect(editor.locator('#graph-asset-notice')).toContainText('3.112 GB');
   await expect(editor.locator('#graph-asset-notice')).toContainText('Gemma Terms');
-  for (const [source, output, target, input] of [['text', 'value', 'translategemmaenja', 'text'], ['translategemmaenja', 'text', 'texttodom', 'text'], ['texttodom','dom','livetextdisplay','dom']]) {
+  for (const type of ['translategemmaenja', 'translategemmajaen']) await expect(editor.getByRole('button', { name: `${type} input context`, exact: true })).toBeVisible();
+  for (const [source, output, target, input] of [['text', 'value', 'translategemmaenja', 'text'], ['text', 'value', 'translategemmaenja', 'context'], ['translategemmaenja', 'text', 'texttodom', 'text'], ['texttodom','dom','livetextdisplay','dom']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).press('Enter');
     await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).press('Enter');
   }
@@ -26,6 +27,7 @@ test('palette, Save and reload preserve current connected graph and parked direc
   const graph = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
   expect(graph.version).toBe(14); expect(graph.nodes.some(n => n.type === 'TranslateGemmaJaEn')).toBe(true);
   expect(graph.edges).toContainEqual({ from: ['translategemmaenja', 'text'], to: ['texttodom', 'text'] });
+  expect(graph.edges).toContainEqual({ from: ['text', 'value'], to: ['translategemmaenja', 'context'] });
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   await save(editor); await expect(card(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(8);
   await editor.reload(); expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
@@ -98,4 +100,36 @@ for (const mode of ['normal', 'missing-gpu', 'no-adapter', 'inference-error', 'c
     }
   }
   expect(await live.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+});
+
+for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']) test(`${type}: explicit context graph runs the production prompt Worker and clears to the official path`, async ({ graphExtension: f }) => {
+  const live = await openGraph(f), editor = live.editor;
+  await add(editor, type); await save(editor);
+  await expect(card(editor).locator('.model-status')).toContainText('Ready');
+  const before = f.requests.length;
+  await f.context.setOffline(true);
+  const result = await live.evaluate(async type => {
+    const { graphNode, edge } = await import('./graph.js'); const { buildGraph } = await import('./graph-runtime.js');
+    const graph = { version: 14, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'gemma'), graphNode('TextToDOM', 'dom'), graphNode('LiveTextDisplay', 'out')],
+      edges: [edge('input', 'value', 'gemma', 'text'), edge('context', 'value', 'gemma', 'context'), edge('gemma', 'text', 'dom', 'text'), edge('dom', 'dom', 'out', 'dom')] };
+    const outputs = [], built = buildGraph(graph, { onDisplay: (_, dom) => outputs.push(dom.textContent) });
+    try {
+      await built.pipeline.start(); await built.translations[0].ready;
+      const input = built.pipeline.entries.get('input').context, context = built.pipeline.entries.get('context').context;
+      context.emit('value', 'private context only'); await built.pipeline.entries.get('gemma').queue;
+      const worker = window.graphWorkers.at(-1);
+      const before = worker.messages.filter(m => m.type === 'translate').length;
+      context.emit('value', 'first context'); input.emit('value', 'First target');
+      context.emit('value', 'second context'); input.emit('value', 'Second target');
+      context.emit('value', ''); input.emit('value', 'Official target');
+      await built.pipeline.stop();
+      return { before, outputs: outputs.filter(Boolean), messages: worker.messages.filter(m => m.type === 'translate'), errors: built.pipeline.errors.map(e => e.message) };
+    } finally { await built.pipeline.dispose(); }
+  }, type);
+  expect(result.before).toBe(0); expect(result.errors).toEqual([]);
+  expect(result.messages.map(m => m.context)).toEqual(['first context', 'second context', undefined]);
+  const target = type === 'TranslateGemmaEnJa' ? 'Japanese' : 'English';
+  expect(result.outputs).toEqual(['First target', 'Second target', 'Official target'].map(text => `${target}: ${text}`));
+  expect(f.requests).toHaveLength(before);
+  expect(await live.evaluate(() => window.graphWorkers.length === 1 && window.graphWorkers[0].released)).toBe(true);
 });

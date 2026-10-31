@@ -1,5 +1,6 @@
 import { TRANSLATE_GEMMA } from './translation-models.js';
 import { serveTranslationWorker, translationRuntime, modelLoadError } from './translation-worker.js';
+import { translateGemmaContextPrompt, validateTranslateGemmaContext, validateTranslateGemmaPrompt } from './translategemma-context.js';
 
 serveTranslationWorker(async (progress, { cacheOnly = false, direction = 'ja-en' } = {}) => {
   if (!['ja-en', 'en-ja'].includes(direction)) throw new Error('Unsupported TranslateGemma direction.');
@@ -21,7 +22,23 @@ serveTranslationWorker(async (progress, { cacheOnly = false, direction = 'ja-en'
       ...TRANSLATE_GEMMA, progress_callback: progress,
     });
   } catch (error) { throw modelLoadError(new Error(`TranslateGemma 4B needs several GB of free RAM/GPU memory and a compatible WebGPU adapter. ${error.message || error}`)); }
-  return async text => {
+  return async (text, { context = '' } = {}) => {
+    validateTranslateGemmaContext(context);
+    if (context !== '') {
+      const prompt = translateGemmaContextPrompt(text, context, direction);
+      validateTranslateGemmaPrompt(translate, prompt);
+      let result;
+      try {
+        result = await translate(prompt, {
+          max_new_tokens: 256, do_sample: false, add_special_tokens: false, return_full_text: false,
+          tokenizer_encode_kwargs: { truncation: false },
+        });
+      } catch (error) { throw new Error(`TranslateGemma inference failed: ${error.message || error}. Check WebGPU device availability and free RAM/GPU memory; retry with a fresh run.`); }
+      return result.map(value => {
+        if (typeof value.generated_text !== 'string') throw new Error('TranslateGemma returned an invalid context-aware translation.');
+        return value.generated_text.trim();
+      });
+    }
     const messages = [{ role: 'user', content: [{
       type: 'text', source_lang_code, target_lang_code, text,
     }] }];

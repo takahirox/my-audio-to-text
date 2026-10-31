@@ -1,5 +1,6 @@
 import { Pipeline } from '../web/pipeline.js';
 import { OpusMtTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
+import { validateTranslateGemmaContext } from '../web/translategemma-context.js';
 
 export const TRANSLATION_OUTPUT_GROUPS = Object.freeze([
   Object.freeze(['source', 'text', 'error']),
@@ -15,6 +16,9 @@ export class TranslationSchedulerNode {
   constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, modelName = 'OPUS-MT', onState = () => {} } = {}) {
     this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
     this.modelName = modelName;
+    this.acceptsContext = TranslationNode.supportsContext === true;
+    if (this.acceptsContext) this.inputs = { ...this.inputs, context: TEXT };
+    this.translationContext = '';
     this.finals = [];
     this.revision = 0; this.queuedChars = 0;
   }
@@ -29,7 +33,9 @@ export class TranslationSchedulerNode {
     await this.prepare?.(this.context.signal);
     this.context.signal.throwIfAborted();
     const source = { inputs: {}, outputs: { text: TEXT }, start: context => { this.send = text => context.emit('text', text); } };
-    const translator = new this.TranslationNode({ workerFactory: this.workerFactory, loadOptions: { cacheOnly: true }, requireSingleOutput: true });
+    // Read the active job's accepted snapshot, never the mutable latest context.
+    const translator = new this.TranslationNode({ workerFactory: this.workerFactory, loadOptions: { cacheOnly: true }, requireSingleOutput: true,
+      getTranslationContext: () => this.active?.job.translationContext ?? '' });
     const sink = new TextOutputNode(text => this.active?.resolve(text));
     this.translation = new Pipeline({ nodes: { source, translator, sink }, connections: [
       { from: ['source', 'text'], to: ['translator', 'text'] },
@@ -57,28 +63,38 @@ export class TranslationSchedulerNode {
   }
   receiveInputs(values, context) {
     for (const [port, value] of Object.entries(values)) {
-      if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('Expected TEXT on text or provisional.');
+      if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError(this.acceptsContext
+        ? 'Expected TEXT on text, provisional or context.' : 'Expected TEXT on text or provisional.');
     }
+    // Apply a grouped context value before either target, irrespective of port order.
+    if (Object.hasOwn(values, 'context')) this.receive('context', values.context, context);
     // A single source emission may contain both channels. Its committed value
     // supersedes its preview before any inference or empty result can run.
     if (Object.hasOwn(values, 'text')) return this.receive('text', values.text, context);
     if (Object.hasOwn(values, 'provisional')) return this.receive('provisional', values.provisional, context);
   }
   receive(port, source, context = this.context) {
+    if (port === 'context' && this.acceptsContext) {
+      if (this.disposed) return;
+      validateTranslateGemmaContext(source);
+      this.translationContext = source;
+      return; // Context alone neither runs inference nor changes preview revisions.
+    }
     if ((port !== 'text' && port !== 'provisional') || typeof source !== 'string') throw new TypeError('Expected TEXT on text or provisional.');
     if (this.disposed) return;
     if (port === 'provisional' && source.length > 1000) throw Error('Provisional translation accepts at most 1,000 characters.');
     this.revision++;
+    const snapshot = this.acceptsContext ? { translationContext: this.translationContext } : {};
     // One replaceable pending preview, and at most one running inference.
     // Committed input invalidates every older preview regardless of producer.
-    this.preview = port === 'provisional' ? { source, provisional: true, revision: this.revision, context } : null;
+    this.preview = port === 'provisional' ? { source, provisional: true, revision: this.revision, context, ...snapshot } : null;
     if (port === 'provisional') { this.hasPreview = true; this.pump(); return; }
     this.clearPreview(context);
     // Bound closed work too. Overflow is an explicit branch failure, never a
     // silently dropped utterance; the existing default FIFO remains unchanged.
     if (this.finals.length >= 32 || this.queuedChars + source.length > 32768) throw Error('Translation backlog limit exceeded (32 windows / 32,768 characters).');
     // Empty utterances still have a position in the FIFO; they need no inference.
-    this.finals.push({ source, context });
+    this.finals.push({ source, context, ...snapshot });
     this.queuedChars += source.length;
     this.pump();
   }
@@ -122,6 +138,7 @@ export class TranslationSchedulerNode {
     await this.ready;
     await this.working;
     if (!this.error && !this.disposed) await this.translation?.stop();
+    this.translationContext = '';
   }
   cancel(context) {
     // Pipeline has already aborted inference. Publish only a cleanup snapshot
@@ -135,6 +152,7 @@ export class TranslationSchedulerNode {
   dispose() {
     this.context?.signal.removeEventListener('abort', this.abort);
     this.disposed = true; this.finals = []; this.preview = null; this.queuedChars = 0;
+    this.translationContext = '';
     this.active?.reject(new DOMException('Translation canceled.', 'AbortError'));
     return this.translation?.dispose();
   }

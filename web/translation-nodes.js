@@ -51,11 +51,11 @@ class WorkerTranslationNode {
       catch (error) { this.pending.delete(id); reject(error); }
     });
   }
-  async receive(port, text, context) {
+  async receive(port, text, context, payload = {}) {
     if (port !== 'text' || typeof text !== 'string') throw new TypeError('Translation input must be a text string.');
     if (text.length > 1000) throw new RangeError('Use a short snippet of at most 1,000 characters.');
     if (!text.trim()) return; // zero outputs; no inference for whitespace
-    const result = await this.request('translate', 'result', { text });
+    const result = await this.request('translate', 'result', { ...payload, text });
     context.signal.throwIfAborted();
     if (!Array.isArray(result.texts) || result.texts.some(value => typeof value !== 'string')) {
       throw new TypeError('Invalid translation Worker output.');
@@ -87,14 +87,21 @@ export class EnglishToJapaneseOpusMtTranslationNode extends WorkerTranslationNod
   constructor(options) { super(new URL('./opus-mt-en-ja-worker.js', import.meta.url), options); }
 }
 export class TranslateGemmaTranslationNode extends WorkerTranslationNode {
-  constructor(options) { super(new URL('./translategemma-worker.js', import.meta.url), {
-    ...options, loadOptions: { ...options?.loadOptions, direction: 'ja-en' },
-  }); }
+  static supportsContext = true;
+  constructor(options, direction = 'ja-en') {
+    super(new URL('./translategemma-worker.js', import.meta.url), {
+      ...options, loadOptions: { ...options?.loadOptions, direction },
+    });
+    // Internal scheduler adapter. Standalone TEXT ports remain unchanged.
+    this.getTranslationContext = options?.getTranslationContext;
+  }
+  receive(port, text, context) {
+    const translationContext = this.getTranslationContext?.() ?? '';
+    return super.receive(port, text, context, translationContext ? { context: translationContext } : {});
+  }
 }
-export class EnglishToJapaneseTranslateGemmaTranslationNode extends WorkerTranslationNode {
-  constructor(options) { super(new URL('./translategemma-worker.js', import.meta.url), {
-    ...options, loadOptions: { ...options?.loadOptions, direction: 'en-ja' },
-  }); }
+export class EnglishToJapaneseTranslateGemmaTranslationNode extends TranslateGemmaTranslationNode {
+  constructor(options) { super(options, 'en-ja'); }
 }
 
 export class TextInputNode {
