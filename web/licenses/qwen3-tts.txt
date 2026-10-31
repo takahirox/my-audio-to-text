@@ -26,6 +26,6 @@ Full license: transformers-tts-LICENSE.txt
 
 Local inference only. Models downloads pinned weights; text/audio are never sent
 to a service. The browser runtime and tokenizer are packaged with the extension.
-CosyVoice3 has no runnable Node: reviewed browser exports finalize complete
-utterances. Its upstream streaming Python implementation is not MV3 support.
+CosyVoice3 uses a separate repaired export/runtime; see cosyvoice3.txt for its
+model and CC BY 4.0 reference-voice attribution.
 See docs/streaming-tts.md in the source repository for evidence and limitations.

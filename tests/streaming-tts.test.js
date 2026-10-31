@@ -5,6 +5,7 @@ import { TEXT } from '../web/translation-nodes.js';
 import { AUDIO_STREAM, validateAudioStream } from '../web/audio-stream.js';
 import { Qwen3TtsNode, QWEN3_TTS_LIMITS } from '../web/qwen3-tts-node.js';
 import { StreamingSpeakerOutputNode, STREAM_SPEAKER_LIMITS } from '../web/speaker-output.js';
+import { CosyVoice3Node } from '../web/cosyvoice3-node.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 import { GRAPH_VERSION, NODE_TYPES, graphNode, edge, saveGraph, readGraph, assertGraph, executableGraph } from '../extension/graph.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
@@ -135,17 +136,18 @@ test('abort after overflow removes the failed utterance while retaining earlier 
   }
 });
 
+for (const [Node, type, voice] of [[Qwen3TtsNode, 'Qwen3TtsStreaming', 'ryan'], [CosyVoice3Node, 'CosyVoice3Streaming', 'libritts-r-4446']]) {
 function workerFixture() {
   const messages = [], events = [], emitted = [], failures = [], controller = new AbortController();
   const worker = { postMessage(message) { messages.push(message); }, terminate() { this.terminated = true; } };
-  const node = new Qwen3TtsNode({ workerFactory: () => worker, onEvent: event => events.push(event) });
+  const node = new Node({ workerFactory: () => worker, onEvent: event => events.push(event) });
   const context = { signal: controller.signal, emit(port, value) { emitted.push([port, value]); }, fail(error) { failures.push(error); } };
   const start = node.start(context); worker.onmessage({ data: { type: 'ready' } });
   return { node, worker, messages, events, emitted, failures, controller, context, start,
     reply(data) { worker.onmessage({ data }); }, receive(text) { node.receive('text', text, context); } };
 }
 
-test('Qwen Worker ownership serializes repeated committed utterances, acknowledges chunks, and Stop waits for final boundaries', async () => {
+test(`${Node.name} Worker ownership serializes repeated committed utterances, acknowledges chunks, and Stop waits for final boundaries`, async () => {
   const f = workerFixture(); await f.start; f.receive('Same text'); f.receive('Same text');
   assert.deepEqual(f.messages.map(message => message.type), ['load', 'generate']);
   f.reply(begin()); f.reply(chunk()); assert.equal(f.emitted.length, 2);
@@ -158,7 +160,7 @@ test('Qwen Worker ownership serializes repeated committed utterances, acknowledg
   assert.equal(f.node.characters, 0); assert.equal(f.failures.length, 0); f.node.dispose();
 });
 
-test('Qwen text queue is bounded, provisional text is rejected and oversize input never reaches the Worker', async () => {
+test(`${Node.name} text queue is bounded, provisional text is rejected and oversize input never reaches the Worker`, async () => {
   const f = workerFixture(); await f.start;
   for (const provisional of [true, false]) {
     const invalid = workerFixture(); await invalid.start; invalid.receive('In progress'); invalid.reply(begin()); invalid.reply(chunk());
@@ -171,17 +173,17 @@ test('Qwen text queue is bounded, provisional text is rejected and oversize inpu
   f.reply(begin()); f.reply(chunk()); assert.match(f.events.at(-1).message, /Text queue full.*Stop to drain/); f.node.dispose();
 });
 
-test('Cancel during Qwen model loading rejects startup and ignores late ready/data', async () => {
+test(`Cancel during ${Node.name} model loading rejects startup and ignores late ready/data`, async () => {
   const controller = new AbortController(), events = [];
   const worker = { postMessage() {}, terminate() { this.terminated = true; } };
-  const node = new Qwen3TtsNode({ workerFactory: () => worker, onEvent: event => events.push(event) });
+  const node = new Node({ workerFactory: () => worker, onEvent: event => events.push(event) });
   const start = node.start({ signal: controller.signal, emit() { assert.fail('Late audio'); }, fail() {} });
   const late = worker.onmessage; controller.abort(); await assert.rejects(start, /canceled/);
   late({ data: { type: 'ready' } }); late({ data: begin() }); late({ data: chunk() });
   assert.equal(worker.terminated, true); assert.deepEqual(events, []);
 });
 
-test('Qwen failure emits an abort, cancels queued work, and late Worker replies after Cancel are inert', async () => {
+test(`${Node.name} failure emits an abort, cancels queued work, and late Worker replies after Cancel are inert`, async () => {
   const f = workerFixture(); await f.start; f.receive('One'); f.receive('Two'); f.reply(begin()); f.reply(chunk());
   const late = f.worker.onmessage; f.reply({ type: 'error', id: 1, message: 'GPU device lost' });
   assert.equal(f.emitted.at(-1)[1].type, 'abort'); assert.equal(f.emitted.at(-1)[1].sequence, 1);
@@ -193,22 +195,22 @@ test('Qwen failure emits an abort, cancels queued work, and late Worker replies 
   assert.equal(canceled.emitted.length, 2); assert.equal(canceled.worker.terminated, true);
 });
 
-test('streaming graph saves without migration, prepares shared model once, and accepts alternate AUDIO_STREAM producers', () => {
-  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode('Qwen3TtsStreaming', 'tts'), graphNode('StreamingSpeakerOutput', 'speaker')],
+test(`${Node.name} graph saves without migration, prepares shared model once, and accepts alternate AUDIO_STREAM producers`, () => {
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode(type, 'tts'), graphNode('StreamingSpeakerOutput', 'speaker')],
     edges: [edge('text', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'stream')] };
   const storage = { value: '', setItem(key, value) { this.value = value; }, getItem() { return this.value; }, removeItem() {} };
   saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph); assert.equal(executableGraph(graph).nodes.length, 3);
   assert.deepEqual(NODE_TYPES.StreamingSpeakerOutput.inputs, { stream: AUDIO_STREAM });
-  assert.equal(graphModelRequirements({ nodes: [graph.nodes[1], { ...graphNode('Qwen3TtsStreaming', 'other'), settings: { language: 'english', voice: 'ryan' } }] }).length, 1);
-  assert.equal(Object.keys(NODE_TYPES).some(type => /cosy/i.test(type)), false);
+  assert.equal(graphModelRequirements({ nodes: [graph.nodes[1], { ...graphNode(type, 'other'), settings: { language: 'english', voice } }] }).length, 1);
+  assert.deepEqual(NODE_TYPES[type].outputs, { stream: AUDIO_STREAM });
   const bad = structuredClone(graph); bad.nodes[2] = graphNode('AudioOutput', 'speaker'); bad.edges[1].to[1] = 'audio';
   assert.throws(() => assertGraph(bad), /contract|Incompatible/i);
   assert.doesNotThrow(() => new Pipeline({ nodes: { alternate: { outputs: { pcm: AUDIO_STREAM } }, speaker: new StreamingSpeakerOutputNode() },
     connections: [{ from: ['alternate', 'pcm'], to: ['speaker', 'stream'] }] }));
 });
 
-test('streaming Speaker needs Start gesture and audio activation happens before model initialization', async () => {
-  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode('Qwen3TtsStreaming', 'tts'), graphNode('StreamingSpeakerOutput', 'speaker')],
+test(`${Node.name} Speaker needs Start gesture and audio activation happens before model initialization`, async () => {
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode(type, 'tts'), graphNode('StreamingSpeakerOutput', 'speaker')],
     edges: [edge('text', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'stream')] };
   const f = fixture(), order = []; await f.node.dispose();
   const session = new TabSession(() => {}, { graph,
@@ -218,3 +220,16 @@ test('streaming Speaker needs Start gesture and audio activation happens before 
   await session.start(42); assert.deepEqual(order, []); assert.match(session.view.status, /Press Start/);
   await session.start(42, { speakerGesture: true }); assert.deepEqual(order, ['audio', 'worker']); await session.cancel();
 });
+
+test(`${Node.name} bare teardown terminates work and ignores retained callbacks; malformed boundaries abort visibly`, async () => {
+  const f = workerFixture(); await f.start; f.receive('One'); f.receive('Two'); f.reply(begin());
+  const late = f.worker.onmessage; f.node.dispose();
+  late({ data: chunk() }); late({ data: end() });
+  assert.equal(f.worker.terminated, true); assert.equal(f.node.queue.length, 0); assert.equal(f.emitted.length, 1);
+  for (const bad of [begin(), chunk(1), end(2)]) {
+    const invalid = workerFixture(); await invalid.start; invalid.receive('One'); invalid.reply(begin()); invalid.reply(bad);
+    assert.equal(invalid.worker.terminated, true); assert.equal(invalid.failures.length, 1); assert.equal(invalid.emitted.at(-1)[1].type, 'abort');
+  }
+});
+
+}
