@@ -30,6 +30,7 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | PairedTextToDOM | grouped input1/input2: TEXT → dom: DOM | One pair per atomic result, provisional or committed; no history; hover/focus CSS |
 | DOMAccumulator | append: DOM → dom: DOM | Ordered session history of validated, cloned snapshots; Start clears, Stop/Cancel retain |
 | TextAccumulator | append: TEXT → text: TEXT | Exact newline-separated committed segments |
+| [TextSlidingWindow](text-sliding-window.md) | text: TEXT, optional maxChars: NUMBER → text: TEXT | Rolling bounded history; sentence/word eviction, code-point-safe suffix fallback; limit updates emit nothing |
 | TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
 | TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
 | Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
