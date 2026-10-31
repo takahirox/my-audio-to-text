@@ -164,18 +164,20 @@ Live displays accept only `dom: DOM` in Graph v11. Route complete TEXT snapshots
 through `TextToDOM.text → dom → LiveTextDisplay.dom`. For text history, explicitly
 use TextAccumulator.append upstream of TextToDOM. Compose provisional TEXT with
 a separate TextToDOM feeding DOMCombiner.second; committed DOM feeds first. PairedTextToDOM
-accepts atomic grouped input1/input2 TEXT, provisional or committed, from any
-compatible producer;
-translator.source explicitly connects to input1 and translator.text to input2.
-Missing input2 leaves the right cell blank; specific errors stay in translation diagnostics;
-its consumer-owned correlation validation does not depend on producer identity.
+holds the latest input1/input2 TEXT, both initially empty, and emits a fresh pair
+on either update, including duplicates and empty clears. Either side may be
+unconnected. Independent producers can temporarily combine new and previous text;
+send both values atomically for exactly one consistent snapshot. Explicit groups
+clear omitted siblings within that group only. For translation, connect
+translator.source to input1 and translator.text to input2. Specific errors stay in
+translation diagnostics; no same-producer identity is required.
 
 These implemented compositions differ only through explicit wiring (node names
 abbreviate their compatible ports):
 
 ```text
-Grouped TEXT → PairedTextToDOM → LiveTextDisplay                   # latest pair only
-Grouped TEXT → PairedTextToDOM → DOMAccumulator → LiveTextDisplay  # explicit history
+TEXT inputs → PairedTextToDOM → LiveTextDisplay                   # latest pair only
+TEXT inputs → PairedTextToDOM → DOMAccumulator → LiveTextDisplay  # explicit history
 DOM history + latest provisional DOM → DOMCombiner → LiveTextDisplay
 ```
 

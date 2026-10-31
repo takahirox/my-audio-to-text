@@ -100,15 +100,15 @@ test('direct paired formatter replaces the previous pair with literal pairs, omi
   }
 });
 
-test('Pipeline groups arbitrary producer outputs exactly once without matching independent or mismatched texts', async ({page}) => {
+test('Pipeline emits consistent atomic pairs and symmetric independent snapshots from arbitrary producers', async ({page}) => {
   await page.goto('/');
   const result=await page.evaluate(async()=>{
     const {Pipeline}=await import('/pipeline.js'), {TEXT,DOM}=await import('/port-contracts.js'), {PairedTextToDOMNode}=await import('/dom-nodes.js');
     const edge=(source,output,target,input)=>({from:[source,output],to:[target,input]});
     const outcomes=[];
-    for(const reverse of [false,true]) for(const mode of ['grouped','independent','mismatched','provisional']) {
+    for(const reverse of [false,true]) for(const mode of ['grouped','independent','unrelated','provisional']) {
       let a,b;const snapshots=[],plain=[];
-      const connections=[edge('a','left','pairs','input1'),edge(mode==='mismatched'?'b':'a','right','pairs','input2'),edge('a','left','plain','text'),edge('pairs','dom','sink','dom')];
+      const connections=[edge('a','left','pairs','input1'),edge(mode==='unrelated'?'b':'a','right','pairs','input2'),edge('a','left','plain','text'),edge('pairs','dom','sink','dom')];
       const pipeline=new Pipeline({nodes:{
         a:{outputs:{left:TEXT,right:TEXT},start(c){a=c;}},b:{outputs:{right:TEXT},start(c){b=c;}},pairs:new PairedTextToDOMNode(),
         sink:{inputs:{dom:DOM},receive(_,dom){snapshots.push([...dom.querySelectorAll('td')].map(cell=>cell.textContent));}},
@@ -117,7 +117,11 @@ test('Pipeline groups arbitrary producer outputs exactly once without matching i
       await pipeline.start();
       if(mode==='grouped'||mode==='provisional') {
         for(const group of [{right:'orphan'},{left:'same',right:'same'},{left:'same',right:'same'},{left:'same'},{left:'',right:''}]) a.emitOutputs(group,{provisional:mode==='provisional'});
-      } else if(mode==='independent') {a.emit('left','same');a.emit('right','same');}
+      } else if(mode==='independent') {
+        if(reverse) a.emit('right','same');
+        a.emit('left','same');
+        if(!reverse) a.emit('right','same');
+      }
       else {a.emitOutputs({left:'same',right:'same'},{provisional:mode==='provisional'});b.emitOutputs({right:'same'});}
       await pipeline.entries.get('pairs').queue;await pipeline.entries.get('sink').queue;await pipeline.entries.get('plain').queue;
       outcomes.push({reverse,mode,snapshots,plain,errors:pipeline.errors.map(error=>error.message)});
@@ -125,13 +129,12 @@ test('Pipeline groups arbitrary producer outputs exactly once without matching i
     }
     return outcomes;
   });
-  for(const {mode,snapshots,plain,errors} of result) {
+  for(const {reverse,mode,snapshots,plain,errors} of result) {
     if(mode==='grouped'||mode==='provisional') {
-      expect(snapshots).toEqual([['same','same'],['same','same'],['same',''],['','']]);
+      expect(snapshots).toEqual([['','orphan'],['same','same'],['same','same'],['same',''],['','']]);
       expect(plain).toEqual(['same','same','same','']);expect(errors).toEqual([]);
     } else {
-      expect(snapshots).toEqual([]);expect(plain).toEqual(['same']);expect(errors).toHaveLength(1);
-      expect(errors[0]).toContain('grouped');
+      expect(snapshots).toEqual([mode==='independent'&&reverse?['','same']:['same',''],['same','same']]);expect(plain).toEqual(['same']);expect(errors).toEqual([]);
     }
   }
 });
