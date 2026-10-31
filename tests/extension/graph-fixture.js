@@ -83,13 +83,22 @@ export const test = base.extend({
               for (const file of ['config.json','generation_config.json','tokenizer_config.json','tokenizer.json','chat_template.jinja','onnx/model_q4.onnx','onnx/model_q4.onnx_data','onnx/model_q4.onnx_data_1']) {
                 if (!await env.customCache.match('https://huggingface.co/'+id+'/resolve/'+options.revision+'/'+file)) throw Error('Missing verified asset');
               }
-              return async messages => {
+              const translate = async (messages, settings) => {
+                if (settings.max_new_tokens !== 256 || settings.do_sample !== false) throw Error('Wrong generation settings');
+                if (typeof messages === 'string') {
+                  if (settings.add_special_tokens !== false || settings.return_full_text !== false || settings.tokenizer_encode_kwargs.truncation !== false) throw Error('Wrong context tokenization');
+                  const data = JSON.parse(messages.split('\\n').at(-4));
+                  const target = messages.includes('from English to Japanese') ? 'Japanese' : 'English';
+                  return [{ generated_text: target + ': ' + data.text }];
+                }
                 const c = messages[0].content[0];
                 if (c.type !== 'text' || !['en','ja'].includes(c.source_lang_code) || c.target_lang_code === c.source_lang_code) throw Error('Wrong direction prompt');
                 if (c.text === 'slow') await new Promise(r => setTimeout(r,2000));
                 if (c.text === 'fail') throw Error('Controlled GPU memory failure');
                 return [{ generated_text: [...messages,{role:'assistant',content:(c.target_lang_code === 'ja' ? 'Japanese: ' : 'English: ')+c.text}] }];
               };
+              translate.tokenizer = () => ({ input_ids: { dims: [1, 100] } });
+              return translate;
             }
           `);
         }
@@ -131,7 +140,7 @@ export async function openGraph(f) {
     window.Worker = class extends NativeWorker {
       constructor(...args) { super(...args); this.url = String(args[0]); this.messages = []; this.released = false; window.graphWorkers.push(this); }
       postMessage(data, ...rest) {
-        this.messages.push({ type: data.type, text: data.text, language: data.language });
+        this.messages.push({ type: data.type, text: data.text, language: data.language, ...(data.context === undefined ? {} : { context: data.context }) });
         if (window.holdTtsLoad && this.url.match(/supertonic3-worker|kokoro-worker/) && data.type === 'load') return;
         super.postMessage(data, ...rest);
       }

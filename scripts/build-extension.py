@@ -17,7 +17,7 @@ SHARED_FILES = (
     "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "speaker-output.js", "supertonic3-worker.js", "supertonic3-runtime.js",
     "audio-stream.js", "qwen3-tts-node.js", "qwen3-tts-worker.js", "qwen3-tts-runtime.js",
     "kokoro-worker.js", "kokoro-english.js", "kokoro-japanese.js", "kokoro-hepburn.js",
-    "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js", "opus-mt-en-ja-worker.js", "translategemma-worker.js",
+    "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js", "opus-mt-en-ja-worker.js", "translategemma-worker.js", "translategemma-context.js",
     "audio.js", "capture-worklet.js", "local-asr-core.js", "local-asr-config.js",
     "reazon-simulation.js", "reazon-config.js", "sherpa-worker.js", "silero-worker.js",
     "third-party-notices.txt",

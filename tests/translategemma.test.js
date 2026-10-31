@@ -3,11 +3,12 @@ import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { defaultGraph, graphNode, edge, saveGraph, readGraph, executableGraph, graphPreferences } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, saveGraph, readGraph, executableGraph, graphPreferences, NODE_TYPES } from '../extension/graph.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { TRANSLATE_GEMMA } from '../web/translation-models.js';
 import { defineAssetSet } from '../extension/model-asset-cache.js';
+import { TEXT } from '../web/port-contracts.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 test('Gemma directions share a complete immutable q4 manifest, including both external data shards and translation template', () => {
@@ -25,6 +26,19 @@ test('Gemma directions share a complete immutable q4 manifest, including both ex
 });
 
 for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGemmaJaEn', 'ja-en']]) {
+  test(`${type}: optional context persists explicitly without changing settings, graph version or existing routes`, () => {
+    assert.deepEqual(NODE_TYPES[type].inputs, { text: TEXT, provisional: TEXT, context: TEXT });
+    assert.deepEqual(NODE_TYPES[type].optionalInputs, ['provisional', 'context']);
+    assert.deepEqual(graphNode(type, 'translation').settings, {});
+    const graph = { version: 14, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'translation'), graphNode('TextToDOM', 'dom'), graphNode('LiveTextDisplay', 'out')],
+      edges: [edge('input', 'value', 'translation', 'text'), edge('translation', 'text', 'dom', 'text'), edge('dom', 'dom', 'out', 'dom')] };
+    const entries = new Map(), storage = { getItem: key => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value), removeItem: key => entries.delete(key) };
+    saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
+    graph.edges.push(edge('context', 'value', 'translation', 'context'));
+    saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
+    assert.ok(executableGraph(graph).edges.some(e => e.to[1] === 'context'));
+    assert.equal(entries.size, 1, 'no migration/recovery rewrite for an additive optional port');
+  });
   test(`${type}: v11 save/reload preserves independent and parked Nodes; real builder routes grouped TEXT to formatter and direct sinks`, async () => {
     const graph = { version: 14, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
       graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain'),

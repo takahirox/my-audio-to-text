@@ -12,7 +12,7 @@ export function serveTranslationWorker(load) {
         } else if (type === 'translate') {
           if (!translator) throw new Error('Translation model is not ready.');
           if (typeof text !== 'string' || text.length > 1000) throw new TypeError('Invalid translation text.');
-          const texts = text.trim() ? await translator(text) : [];
+          const texts = text.trim() ? await translator(text, data) : [];
           if (!Array.isArray(texts) || texts.some(value => typeof value !== 'string')) {
             throw new Error('Model returned invalid translated text.');
           }

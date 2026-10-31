@@ -38,23 +38,25 @@ function workerFixture({ holdLoad = false, failLoad = false, failTranslate = fal
 }
 async function schedulerGraph(options = {}) {
   const f = workerFixture(options), outputs = [], states = [], plain = [], formatted = [];
-  let emit;
+  let emit, emitOutputs;
   const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory, prepare: options.prepare,
     TranslationNode: { 'en-ja': EnglishToJapaneseOpusMtTranslationNode, 'gemma-en-ja': EnglishToJapaneseTranslateGemmaTranslationNode, 'gemma-ja-en': TranslateGemmaTranslationNode }[options.direction],
     modelName: options.direction?.startsWith('gemma') ? 'TranslateGemma 4B' : 'OPUS-MT',
     onState: state => states.push(state) });
   const pipeline = new Pipeline({ nodes: {
-    source: { outputs: { text: TEXT, provisional: TEXT }, start(c) { emit = c.emit; } }, scheduler,
+    source: { outputs: { text: TEXT, provisional: TEXT, context: TEXT }, start(c) { emit = c.emit; emitOutputs = c.emitOutputs; } }, scheduler,
     sink: { inputs: TRANSLATION_OUTPUTS, async receiveInputs(values) { await options.receiveInputs?.(values); outputs.push(values); } },
     plain: new TextOutputNode(text => plain.push(text)),
     formatter: new TextFormatterNode({ inputCount: 3, template: '{1}|{2}|{3}' }),
     formatted: new TextOutputNode(text => formatted.push(text)),
   }, connections: [edge('source', 'text', 'scheduler', 'text'), edge('source', 'provisional', 'scheduler', 'provisional'),
+    ...(scheduler.acceptsContext ? [edge('source', 'context', 'scheduler', 'context')] : []),
     ...Object.keys(TRANSLATION_OUTPUTS).map(port => edge('scheduler', port, 'sink', port)),
     ...translationViewEdges('scheduler', 'formatter').filter(route => options.includeError !== false || route.from[1] !== 'error'), edge('scheduler', 'text', 'plain', 'text'),
     edge('formatter', 'text', 'formatted', 'text')] });
   await pipeline.start();
-  return { ...f, pipeline, scheduler, outputs, states, plain, formatted, send: text => emit('text', text), preview: text => emit('provisional', text) };
+  return { ...f, pipeline, scheduler, outputs, states, plain, formatted, send: text => emit('text', text), preview: text => emit('provisional', text),
+    setContext: text => emit('context', text), emitOutputs };
 }
 
 for (const mode of ['success', 'empty', 'failure']) test(`committed paired consumer never receives scheduler ${mode} previews`, async () => {
@@ -130,7 +132,7 @@ for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
   const graph = options => schedulerGraph({ ...options, direction });
   test(`${direction}: committed results are atomic, FIFO, repeat-safe and ignore duplicate worker replies`, async () => {
     const f = await graph();
-    assert.deepEqual(Object.keys(f.scheduler.inputs), ['text', 'provisional']);
+    assert.deepEqual(Object.keys(f.scheduler.inputs), direction.startsWith('gemma') ? ['text', 'provisional', 'context'] : ['text', 'provisional']);
     assert.deepEqual(Object.keys(f.scheduler.outputs), Object.keys(TRANSLATION_OUTPUTS));
     f.send('same'); f.send('same'); f.send(''); f.send('  '); f.send('last'); await tick();
     assert.deepEqual(f.outputs, [], 'pending emits no formatter rows'); assert.equal(f.requests.length, 1);
@@ -443,3 +445,81 @@ for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
     assert.ok(f.workers.every(w => w.terminated));
   });
 }
+
+for (const direction of ['gemma-en-ja', 'gemma-ja-en']) {
+  test(`${direction}: context-only updates, grouped snapshots, FIFO and explicit empty reset`, async () => {
+    const f = await schedulerGraph({ direction, holdLoad: true });
+    f.send('default'); f.setContext('first context'); f.send('one');
+    f.emitOutputs({ text: 'two', provisional: 'ignored', context: 'grouped context' });
+    f.setContext(''); f.send('reset'); f.setContext('later context'); await tick();
+    assert.equal(f.requests.length, 0);
+    f.workers[0].reply({ type: 'ready', id: 1 }); await tick();
+    for (const [i, [text, context]] of [['default', undefined], ['one', 'first context'], ['two', 'grouped context'], ['reset', undefined]].entries()) {
+      assert.equal(f.requests[i].text, text); assert.equal(f.requests[i].context, context);
+      f.complete(i, 'translated ' + text); await tick();
+    }
+    assert.deepEqual(f.plain, ['translated default', 'translated one', 'translated two', 'translated reset']);
+    assert.equal(f.requests.length, 4, 'context-only updates never infer');
+    await f.pipeline.stop(); assert.equal(f.scheduler.translationContext, '');
+    assert.deepEqual(f.pipeline.errors, []); await f.pipeline.dispose();
+  });
+  test(`${direction}: context updates keep preview snapshots, replacement and committed priority`, async () => {
+    const f = await schedulerGraph({ direction });
+    f.setContext('old'); f.preview('running preview'); await tick();
+    f.setContext('new'); f.preview('replaced'); f.setContext('latest'); f.preview('latest preview'); await tick();
+    f.complete(0, 'stale'); await tick();
+    assert.deepEqual(f.outputs, []); assert.equal(f.requests[1].context, 'latest');
+    f.setContext('changed while running'); await tick(); f.complete(1, 'visible'); await tick();
+    assert.equal(f.outputs.at(-1).provisionalText, 'visible', 'context alone does not invalidate or revive previews');
+    f.preview('obsolete'); await tick();
+    f.setContext('committed'); f.send('final'); f.setContext('pending'); f.preview('pending preview'); f.setContext('future'); await tick();
+    assert.equal(f.outputs.at(-1).provisionalText, '');
+    f.complete(2, 'obsolete output'); await tick();
+    assert.equal(f.requests[3].text, 'final'); assert.equal(f.requests[3].context, 'committed');
+    f.complete(3, 'committed output'); await tick();
+    assert.equal(f.requests[4].text, 'pending preview'); assert.equal(f.requests[4].context, 'pending');
+    f.complete(4, 'preview output'); await tick();
+    assert.deepEqual(f.plain, ['committed output']); assert.equal(f.outputs.at(-1).provisionalText, 'preview output');
+    await f.pipeline.stop(); await f.pipeline.dispose();
+    assert.equal(f.workers.length, 1); assert.ok(f.workers[0].terminated);
+  });
+  test(`${direction}: Stop drains queued context snapshots before clearing session state`, async () => {
+    const f = await schedulerGraph({ direction });
+    f.setContext('one context'); f.send('one'); f.setContext('two context'); f.send('two');
+    f.setContext(''); f.send('three'); await tick();
+    const stopping = f.pipeline.stop(); await tick();
+    for (const [i, context] of ['one context', 'two context', undefined].entries()) {
+      assert.equal(f.requests[i].context, context); f.complete(i, 'translated ' + i); await tick();
+    }
+    await stopping;
+    assert.deepEqual(f.plain, ['translated 0', 'translated 1', 'translated 2']);
+    assert.equal(f.scheduler.translationContext, ''); await f.pipeline.dispose();
+  });
+  for (const phase of ['prepare', 'load', 'inference']) test(`${direction}: Cancel during ${phase} discards context, jobs and late replies`, async () => {
+    let finish;
+    const f = await schedulerGraph({ direction, holdLoad: phase === 'load',
+      prepare: phase === 'prepare' ? () => new Promise(resolve => { finish = resolve; }) : undefined });
+    f.setContext('private session context'); f.preview('preview'); f.send('committed'); await tick();
+    await f.pipeline.cancel();
+    assert.equal(f.scheduler.translationContext, ''); assert.deepEqual(f.scheduler.finals, []);
+    const outputs = [...f.outputs];
+    if (finish) finish(); else if (phase === 'load') f.workers[0].reply({ type: 'ready', id: 1 }); else f.complete(0, 'late');
+    f.setContext('late context'); await tick(); assert.deepEqual(f.outputs, outputs);
+    assert.ok(f.workers.every(w => w.terminated));
+    const next = await schedulerGraph({ direction }); next.send('fresh'); await tick();
+    assert.equal(next.requests[0].context, undefined); next.complete(0, 'fresh output'); await next.pipeline.stop(); await next.pipeline.dispose();
+  });
+  test(`${direction}: context is bounded before storage and invalid updates report an explicit failure`, async () => {
+    const f = await schedulerGraph({ direction });
+    f.setContext('x'.repeat(4000)); await tick(); assert.equal(f.scheduler.translationContext.length, 4000);
+    f.setContext('x'.repeat(4001)); await tick();
+    assert.match(f.pipeline.errors[0].message, /context accepts at most 4,000/);
+    assert.equal(f.requests.length, 0); await f.pipeline.dispose(); assert.equal(f.scheduler.translationContext, '');
+  });
+}
+
+test('OPUS-MT has no context capability', () => {
+  for (const type of ['OpusMtJaEn', 'OpusMtEnJa']) assert.equal(Object.hasOwn(NODE_TYPES[type].inputs, 'context'), false);
+  const node = new TranslationSchedulerNode();
+  assert.throws(() => node.receive('context', 'unused'), /Expected TEXT/);
+});
