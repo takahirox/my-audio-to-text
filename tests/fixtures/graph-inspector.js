@@ -52,7 +52,7 @@ export async function loadInputGraph(page) {
       graphNode('TextFormatter', 'second', 650, 20), graphNode('Text', 'alternate', 20, 400),
       graphNode('DOMCombiner', 'dom', 650, 400)];
     nodes[0].settings.value = 'Keep settings';
-    saveGraph(localStorage, { version: 14, nodes, edges: [edge('source', 'value', 'first', 'input1'),
+    saveGraph(localStorage, { version: 15, nodes, edges: [edge('source', 'value', 'first', 'input1'),
       edge('source', 'value', 'second', 'input1'), edge('alternate', 'value', 'first', 'input2')] });
   });
   await page.reload();

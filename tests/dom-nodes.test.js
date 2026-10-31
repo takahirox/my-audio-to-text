@@ -326,7 +326,7 @@ for (const includeError of [false, true]) test(`v11 paired ports require review 
   assert.throws(()=>buildGraph(old,{}),/requires review/);
   assert.equal(storage.getItem(GRAPH_KEY),raw);
   assert.deepEqual(draft.nodes,old.nodes); assert.equal(draft.translationDirection,old.translationDirection);
-  const expected = structuredClone(old); expected.version=14;
+  const expected = structuredClone(old); expected.version=15;
   expected.edges=expected.edges.filter(route=>route.to[0]!=='translated-format'||route.to[1]!=='error');
   for (const route of expected.edges) if (route.to[0]==='translated-format') route.to[1]=route.to[1]==='source'?'input1':'input2';
   assert.deepEqual(draft,expected);
@@ -342,7 +342,7 @@ test('v11 without paired formatters upgrades without changing nodes or routes; f
   const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>{if(key===GRAPH_RECOVERY_KEY) throw Error('storage full');values.set(key,value);},removeItem:key=>values.delete(key)};
   assert.throws(()=>readGraph(storage),/storage full/); assert.equal(storage.getItem(GRAPH_KEY),raw);
   storage.setItem=(key,value)=>values.set(key,value);
-  const next=readGraph(storage); assert.equal(next.version,14); assert.deepEqual(next.nodes,old.nodes); assert.deepEqual(next.edges,old.edges);
+  const next=readGraph(storage); assert.equal(next.version,15); assert.deepEqual(next.nodes,old.nodes); assert.deepEqual(next.edges,old.edges);
   assert.equal(storage.getItem(GRAPH_RECOVERY_KEY),raw);
 });
 

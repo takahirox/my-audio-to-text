@@ -10,7 +10,7 @@ import { GraphEditor } from '../extension/graph-editor.js';
 function graph() {
   const nodes = ['Text','IfCondition','LiveTextDisplay','LiveTextDisplay','LiveTextDisplay'].map((t,i) => graphNode(t,['source','condition','yes','no','peer'][i]));
   nodes[0].settings.value = '  Same?\n';
-  return { version: 14, nodes, edges: [edge('source','value','condition','text'),edge('condition','yes','yes','content'),edge('condition','no','no','content'),edge('source','value','peer','content')] };
+  return { version: 15, nodes, edges: [edge('source','value','condition','text'),edge('condition','yes','yes','content'),edge('condition','no','no','content'),edge('source','value','peer','content')] };
 }
 function factory({ fail = false } = {}) {
   const workers = [];
@@ -25,7 +25,7 @@ function factory({ fail = false } = {}) {
 
 test('v11 save/reload retains conditions, two output wires, fan-out and unrelated defaults; no version migration', () => {
   const g = addDOMFormatters(graph()), saved = new Map(), storage = { getItem: k => saved.get(k) ?? null, setItem: (k,v) => saved.set(k,v), removeItem: k => saved.delete(k) };
-  assert.equal(GRAPH_VERSION,14); assert.deepEqual(validateGraph(addDOMFormatters(g)),[]);
+  assert.equal(GRAPH_VERSION,15); assert.deepEqual(validateGraph(addDOMFormatters(g)),[]);
   saveGraph(storage, addDOMFormatters(g)); const raw = storage.getItem(GRAPH_KEY); assert.deepEqual(readGraph(storage),g); assert.equal(storage.getItem(GRAPH_KEY),raw);
   assert.deepEqual(assertGraph(defaultGraph()),defaultGraph());
   const editor = Object.assign(Object.create(GraphEditor.prototype), { draft: structuredClone(g), draw() {}, canvas:{querySelector(){}} });

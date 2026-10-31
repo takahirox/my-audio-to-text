@@ -30,7 +30,7 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
     assert.deepEqual(NODE_TYPES[type].inputs, { text: TEXT, provisional: TEXT, context: TEXT });
     assert.deepEqual(NODE_TYPES[type].optionalInputs, ['provisional', 'context']);
     assert.deepEqual(graphNode(type, 'translation').settings, {});
-    const graph = { version: 14, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'translation'), graphNode('TextToDOM', 'dom'), graphNode('LiveTextDisplay', 'out')],
+    const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'translation'), graphNode('TextToDOM', 'dom'), graphNode('LiveTextDisplay', 'out')],
       edges: [edge('input', 'value', 'translation', 'text'), edge('translation', 'text', 'dom', 'text'), edge('dom', 'dom', 'out', 'dom')] };
     const entries = new Map(), storage = { getItem: key => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value), removeItem: key => entries.delete(key) };
     saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
@@ -40,7 +40,7 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
     assert.equal(entries.size, 1, 'no migration/recovery rewrite for an additive optional port');
   });
   test(`${type}: v11 save/reload preserves independent and parked Nodes; real builder routes grouped TEXT to formatter and direct sinks`, async () => {
-    const graph = { version: 14, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
+    const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
       graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain'),
       graphNode('Text', 'independent'), graphNode('LiveTextDisplay', 'other'), graphNode(type, 'parked')], edges: [
       edge('input', 'value', 'translation', 'text'), edge('translation', 'source', 'format', 'input1'),

@@ -34,7 +34,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
     evidence.preparation = { status: await card.locator('.model-status').textContent(), error: await card.locator('.model-error').textContent() };
     expect(evidence.preparation.status, evidence.preparation.error).toContain('Ready');
     await context.setOffline(true);
-    for (const mode of ['baseline', 'window', 'revisable', 'revisable-preview', 'direct-asr']) {
+    for (const mode of ['baseline', 'window', 'revisable', 'direct-asr']) {
       const page = await context.newPage(); page.on('pageerror', e => evidence.errors.push(e.message));
       await page.goto(`chrome-extension://${id}/extension/recorder.html`);
       const first = evidence.requests.length;
@@ -82,16 +82,6 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
             inputs.push({ text, ms: now() });
             if (mode === 'direct-asr') built.speechNodes.get('input').receiveEvent({ type: 'final', text, id: finalId++ });
             else built.pipeline.entries.get('input').context.emit('value', text);
-            if (mode === 'revisable-preview' && !/[.!?]$/.test(text)) {
-              // A deliberate pause experiment, separate from the equal-cadence
-              // comparison: let a real open-window preview become visible.
-              const deadline = performance.now() + 20000;
-              const previous = emissions.length;
-              while (!emissions.slice(previous).some(e => e.provisional) || !previews.at(-1)) {
-                if (performance.now() > deadline) throw Error('Real open-window preview did not arrive.');
-                await new Promise(resolve => setTimeout(resolve, 25));
-              }
-            }
             await new Promise(resolve => setTimeout(resolve, 150));
           }
           const stopMs = now(); await built.pipeline.stop();
@@ -102,16 +92,18 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
           if (workers.length !== 1 || !workers.every(w => w.released)) throw Error('Translator Worker ownership violation.');
         }
       }, { graph: (() => {
-        const graph = windowGraph(['revisable-preview', 'direct-asr'].includes(mode) ? 'revisable' : mode);
+        const graph = windowGraph(mode === 'direct-asr' ? 'revisable' : mode);
+        // Keep the real-model comparison on fixed length/Stop boundaries;
+        // deadline behavior is covered by controlled and browser checks.
+        if (mode !== 'baseline') graph.nodes.find(n => n.id === 'window-wait').settings.value = 30;
         if (mode === 'direct-asr') {
-          graph.nodes = graph.nodes.filter(n => n.id !== 'window');
+          graph.nodes = graph.nodes.filter(n => !['window', 'window-chars', 'window-wait'].includes(n.id));
           Object.assign(graph.nodes.find(n => n.id === 'input'), { type: 'SpeechToTextReazonSpeech', settings: {} });
           graph.nodes.push({ id: 'audio', type: 'ChromeTabAudio', settings: {}, position: { x: 0, y: 0 } });
           graph.edges = graph.edges.filter(e => e.to[0] !== 'window');
           for (const e of graph.edges) if (e.from[0] === 'window') e.from = ['input', e.from[1] === 'text' ? 'final' : 'provisional'];
-          graph.edges.push({ from: ['audio', 'audio'], to: ['input', 'audio'] });
+          graph.edges.push({ from: ['audio', 'audio'], to: ['input', 'audio'] }, { from: ['input', 'provisional'], to: ['translator', 'provisional'] });
         }
-        if (mode === 'revisable-preview') graph.nodes.find(n => n.id === 'window').settings.maxWaitMs = 30000;
         return graph;
       })(), texts: mode === 'direct-asr' ? ['Please wait.', 'Please wait.'] : windowTranscript, mode });
       evidence.runs.push(run);
@@ -121,9 +113,10 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
       const accepted = run.emissions.filter(e => !e.provisional && !e.error && typeof e.text === 'string');
       expect(run.display).toBe(accepted.map(e => e.text).join('\n'));
       expect(run.preview).toBe(''); expect(finals.every(e => e.text?.trim() && !e.error)).toBe(true);
-      if (mode === 'revisable-preview') expect(run.displayEvents.some(e => e.text && e.text !== run.display)).toBe(true);
-      const repeatedIndex = mode === 'direct-asr' ? 0 : mode === 'baseline' ? 2 : 1;
-      expect(finals[repeatedIndex].text).toBe(finals[repeatedIndex + 1].text);
+      if (['direct-asr', 'baseline'].includes(mode)) {
+        const repeatedIndex = mode === 'direct-asr' ? 0 : 2;
+        expect(finals[repeatedIndex].text).toBe(finals[repeatedIndex + 1].text);
+      }
       expect(evidence.requests.slice(first).filter(r => !r.url.startsWith('chrome-extension:'))).toEqual([]);
       console.log(JSON.stringify({ mode, inferences: run.inferenceCount, totalMs: run.totalMs, display: run.display }));
       await page.close();
@@ -132,7 +125,6 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
     expect(evidence.requests.every(r => r.method === 'GET' && !r.hasBody)).toBe(true);
     const batched = evidence.runs[1].display, revisable = evidence.runs[2].display;
     expect(revisable).toEqual(batched);
-    expect(evidence.runs[3].display).toEqual(batched);
   } finally {
     const file = info.outputPath('window-translation-evidence.json'); await writeFile(file, JSON.stringify(evidence, null, 2) + '\n');
     await info.attach('window-translation-evidence', { path: file, contentType: 'application/json' });

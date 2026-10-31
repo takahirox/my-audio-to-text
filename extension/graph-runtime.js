@@ -149,7 +149,7 @@ export function buildGraph(graph, options) {
       case 'DOMAccumulator': node = new DOMAccumulatorNode(); break;
       case 'DOMCombiner': node = new DOMCombinerNode(); break;
       case 'TextAccumulator': node = new TextAccumulatorNode(); break;
-      case 'TextWindow': node = new TextWindowNode(spec.settings); break;
+      case 'TextWindow': node = new TextWindowNode(); break;
       case 'TranslationCommit': node = new TranslationCommitNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
       case 'TranslateGemmaEnJa': case 'TranslateGemmaJaEn':

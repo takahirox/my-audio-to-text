@@ -26,6 +26,7 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source/text/error` and `provisionalSource/provisionalText/provisionalError`: two atomic TEXT output families | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
 | LiveTextDisplay | dom: DOM | Clone and mount the complete inert DOM snapshot |
 | TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
+| TextWindow | text: TEXT; optional maxChars: NUMBER, maxWaitSeconds: NUMBER → text: TEXT | Exact generic batching; independent defaults 600 / 1.5 s; length/time/Stop only; Stop flushes once, Cancel discards; no threshold Settings or preview output |
 | PairedTextToDOM | grouped input1/input2: TEXT → dom: DOM | One pair per atomic result, provisional or committed; no history; hover/focus CSS |
 | DOMAccumulator | append: DOM → dom: DOM | Ordered session history of validated, cloned snapshots; Start clears, Stop/Cancel retain |
 | TextAccumulator | append: TEXT → text: TEXT | Exact newline-separated committed segments |
@@ -131,3 +132,10 @@ existing routes; original JSON stays untouched until Save and is then preserved 
 processing-graph-before-v14 (numbered on collisions). Preview formatting stays on
 an explicit replacement branch. No accumulator preview state or new data type is
 needed for this composition.
+
+Graph v15 changes TextWindow to one TEXT output and optional NUMBER limits. Its
+old Settings become explicit Number sources only in a reviewed repair draft;
+removed provisional routes are listed, never silently redirected. Original JSON
+and unrelated wiring are preserved. The established recovery namespace remains
+processing-graph-before-v14 with numbered collisions. See [TextWindow contract
+and recovery](windowed-translation.md#textwindow-saved-graph-review-178).

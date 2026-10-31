@@ -278,7 +278,7 @@ for (const version of [4, 5]) for (const direction of ['ja-en', 'en-ja']) for (c
     await expect(live.editor.getByLabel('Original saved graph JSON')).toHaveValue(JSON.stringify(legacy));
     await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
     const graph = await saved(live);
-    expect(graph.version).toBe(14); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
+    expect(graph.version).toBe(15); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
     await fixtureTranslation(f, live); await startGraph(live);
     const text = live.locator('[data-display="translated"] .display-content');
     await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'preview' }));
