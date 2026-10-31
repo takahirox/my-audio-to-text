@@ -4,14 +4,14 @@ import { graphNode, edge, defaultGraph } from '../../extension/graph.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa','OpusMtJaEn']) test(`${translator}: MV3 editor connects ASR/window previews in either order and saves incomplete drafts`, async ({ graphExtension:f }) => {
+for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa','OpusMtJaEn']) test(`${translator}: MV3 editor connects ASR previews and window text in either order and saves incomplete drafts`, async ({ graphExtension:f }) => {
   test.setTimeout(90000);
   const live=await openGraph(f), editor=live.editor;
   for(const source of ['speech','window']) for(const ports of [['provisional','text'],['text','provisional']]) {
     const graph=defaultGraph(); graph.nodes.push(graphNode(translator,'translator',600,400),graphNode('TextWindow','window',300,400));
     await editor.evaluate(async graph=>{const {saveGraph}=await import('./graph.js');saveGraph(localStorage, window.addDOMFormatters(graph));},graph);await editor.reload();
     for(const input of ports){
-      const output=source==='speech'&&input==='text'?'final':input;
+      const output=source==='window'?'text':input==='text'?'final':'provisional';
       await editor.getByRole('button',{name:`${source} output ${output}`,exact:true}).press('Enter');
       await editor.getByRole('button',{name:`translator input ${input}`,exact:true}).press('Enter');
       await expect(editor.locator('#graph-errors')).toBeEmpty();

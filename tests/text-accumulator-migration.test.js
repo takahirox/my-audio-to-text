@@ -21,7 +21,7 @@ function legacy() {
 
 test('v9 migration retains independent sources, drafts, fan-out, positions/settings and minimal collision-safe accumulation', () => {
   const graph = legacy(), original = structuredClone(graph), next = reviewGraph(graph);
-  assert.equal(next.version, 14); assert.deepEqual(graph, original);
+  assert.equal(next.version, 15); assert.deepEqual(graph, original);
   for (const node of original.nodes) assert.deepEqual(next.nodes.find(n => n.id === node.id), node);
   assert.equal(next.nodes.length, original.nodes.length + 8);
   assert.ok(next.edges.some(e => JSON.stringify(e) === JSON.stringify(edge('a', 'value', 'mixed-accumulator-2', 'append'))));
@@ -34,7 +34,7 @@ test('v9 migration retains independent sources, drafts, fan-out, positions/setti
 test('v9 read retains exact original and all older recovery copies; repeated imports never overwrite backups', () => {
   const storage = store(), raw = JSON.stringify(legacy(), null, 2);
   storage.setItem('processing-graph-before-v9', 'older recovery'); storage.setItem(GRAPH_RECOVERY_KEY, 'earlier v9 recovery'); storage.setItem(GRAPH_KEY, raw);
-  const graph = reviewSavedGraph(storage); assert.equal(graph.version, 14);
+  const graph = reviewSavedGraph(storage); assert.equal(graph.version, 15);
   assert.equal(storage.getItem('processing-graph-before-v9'), 'older recovery'); assert.equal(storage.getItem(GRAPH_RECOVERY_KEY), 'earlier v9 recovery');
   assert.equal(storage.getItem(`${GRAPH_RECOVERY_KEY}-2`), raw);
   storage.setItem(GRAPH_KEY, raw); reviewSavedGraph(storage); assert.equal(storage.getItem(`${GRAPH_RECOVERY_KEY}-3`), null);
@@ -156,5 +156,5 @@ for (const version of [11, 12]) test(`v${version} append-only and explicit DOM c
   graph.edges = graph.edges.filter(e => e.to[1] !== 'preview');
   graph.nodes.push(graphNode('TextToDOM', 'explicit-preview'), graphNode('DOMCombiner', 'explicit-combined'));
   graph.edges.push(edge('speech', 'provisional', 'explicit-preview', 'text'), edge('explicit-preview', 'dom', 'explicit-combined', 'second'), edge('dom', 'dom', 'explicit-combined', 'first'));
-  assert.deepEqual(assertGraph(graph), { ...graph, version: 14 });
+  assert.deepEqual(assertGraph(graph), { ...graph, version: 15 });
 });

@@ -248,7 +248,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | DOMAccumulator | append: DOM | dom: DOM; ordered accumulated snapshots |
 | DOMCombiner | first / second: DOM | dom: DOM; latest first snapshot followed by latest second snapshot |
 | TextAccumulator | append: TEXT; text: TEXT output | exact committed transcript snapshots |
-| TextWindow | text: TEXT | text: TEXT (closed batches); provisional: TEXT (optional open snapshots); length/deadline/sentence settings |
+| TextWindow | text: TEXT; optional maxChars: NUMBER (default 600), maxWaitSeconds: NUMBER (default 1.5) | text: TEXT; exact batching at length/time/Stop only; no threshold Settings or preview output |
 | TranslationCommit | boundary/source/text/error: TEXT | provisional/final/error: TEXT; opt-in closed-window commits |
 | TextFormatter | input1…inputN: TEXT, instance-configured, individually optional | text: TEXT; at least one input must connect |
 | OpusMtJaEn / OpusMtEnJa / TranslateGemmaEnJa / TranslateGemmaJaEn | text: TEXT; provisional: TEXT (optional snapshot from any producer) | source/text/error: TEXT committed family; provisionalSource/provisionalText/provisionalError: TEXT preview family; failed groups omit translated text |
@@ -1160,3 +1160,21 @@ without provisional translator input or TranslationCommit upgrade unchanged. Ear
 reviewed DOM migrations still apply. Save preserves the exact original string under
 processing-graph-before-v14, numbered on collision; older recovery copies remain
 accessible through Graph actions → Recovery, Copy JSON and Download JSON.
+
+### TextWindow batching and v15 recovery (#178)
+
+TextWindow has required text: TEXT, optional maxChars: NUMBER and
+maxWaitSeconds: NUMBER inputs, and only text: TEXT output. Use Number sources
+for limits; unconnected/never-supplied thresholds default independently to 600
+UTF-16 code units and 1.5 seconds. A received limit updates the pending window.
+Text concatenates exactly without added separators; punctuation never emits.
+Stop flushes the remaining tail once; Cancel discards it and clears timers.
+See [threshold validation, deadline updates and saved graph review](windowed-translation.md#textwindow-saved-graph-review-178).
+
+Older graphs containing TextWindow require review before execution or Save.
+The draft converts maxChars/maxWaitMs Settings to explicit Number nodes, removes
+sentenceBoundary, and lists removed provisional edges without rerouting them.
+Unrelated nodes and wiring remain intact. The original JSON stays untouched until
+Save, then remains available through Graph actions → Recovery using the established
+processing-graph-before-v14 backup namespace, including numbered collisions.
+Graphs without TextWindow retain their nodes, settings and routes on version upgrade.

@@ -25,7 +25,7 @@ test('palette, Save and reload preserve current connected graph and parked direc
   await expect(card(editor)).toHaveCount(1); await expect(card(editor).locator('.model-status')).toContainText('Ready');
   expect(f.requests).toHaveLength(8); expect(f.requests.every(r => r.startsWith('/translategemma-assets.json/'))).toBe(true);
   const graph = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(graph.version).toBe(14); expect(graph.nodes.some(n => n.type === 'TranslateGemmaJaEn')).toBe(true);
+  expect(graph.version).toBe(15); expect(graph.nodes.some(n => n.type === 'TranslateGemmaJaEn')).toBe(true);
   expect(graph.edges).toContainEqual({ from: ['translategemmaenja', 'text'], to: ['texttodom', 'text'] });
   expect(graph.edges).toContainEqual({ from: ['text', 'value'], to: ['translategemmaenja', 'context'] });
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
@@ -70,7 +70,7 @@ for (const mode of ['normal', 'missing-gpu', 'no-adapter', 'inference-error', 'c
   await f.context.setOffline(true);
   const result = await live.evaluate(async mode => {
     const { graphNode, edge } = await import('./graph.js'); const { buildGraph } = await import('./graph-runtime.js');
-    const graph = { version: 14, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemmaEnJa', 'gemma'),
+    const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemmaEnJa', 'gemma'),
       graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain')], edges: [
       edge('input', 'value', 'gemma', 'text'), edge('gemma', 'source', 'format', 'input1'), edge('gemma', 'text', 'format', 'input2'), edge('gemma', 'error', 'format', 'input3'),
       edge('format', 'text', 'paired', 'content'), edge('gemma', 'text', 'plain', 'content'),
@@ -110,7 +110,7 @@ for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']) test(`${type}: 
   await f.context.setOffline(true);
   const result = await live.evaluate(async type => {
     const { graphNode, edge } = await import('./graph.js'); const { buildGraph } = await import('./graph-runtime.js');
-    const graph = { version: 14, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'gemma'), graphNode('TextToDOM', 'dom'), graphNode('LiveTextDisplay', 'out')],
+    const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'gemma'), graphNode('TextToDOM', 'dom'), graphNode('LiveTextDisplay', 'out')],
       edges: [edge('input', 'value', 'gemma', 'text'), edge('context', 'value', 'gemma', 'context'), edge('gemma', 'text', 'dom', 'text'), edge('dom', 'dom', 'out', 'dom')] };
     const outputs = [], built = buildGraph(graph, { onDisplay: (_, dom) => outputs.push(dom.textContent) });
     try {

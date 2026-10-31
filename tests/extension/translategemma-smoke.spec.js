@@ -68,7 +68,7 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
     expect(publicAccess).toEqual({ status: 200, architecture: 'Gemma3ForCausalLM' });
     await editor.evaluate(async initial => {
       const { graphNode, edge, saveGraph } = await import('./graph.js');
-      const graph = { version: 14, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemmaEnJa', 'gemma'),
+      const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemmaEnJa', 'gemma'),
         graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain'),
         graphNode('TranslateGemmaJaEn', 'parked'), graphNode('Text', 'independent'), graphNode('LiveTextDisplay', 'other')], edges: [
         edge('input', 'value', 'gemma', 'text'), edge('gemma', 'source', 'format', 'input1'), edge('gemma', 'text', 'format', 'input2'), edge('gemma', 'error', 'format', 'input3'),

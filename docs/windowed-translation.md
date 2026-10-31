@@ -1,11 +1,11 @@
 # Windowed translation experiment (#128)
 
 This experiment composes existing local translators with two text processors.
-Stage 1 batches short committed ASR fragments. Stage 2 optionally retranslates
-only the current bounded, uncommitted source window. It does not provide
+Stage 1 batches short committed ASR fragments. Stage 2 optionally accepts previews from an explicitly wired TEXT snapshot source.
+TextWindow itself only emits completed batches. It does not provide
 conversation-wide context, conversation memory, or guaranteed translation
 accuracy improvements. Both processors are in Graph Editor's Processors palette.
-They require no model weights. Graph v14 uses append-only committed routing and a separate preview display. TextAccumulator holds committed history; TextToDOM converts TEXT for DOM-only LiveTextDisplay sinks.
+They require no model weights. Graph v15 uses append-only committed routing and a separate preview display. TextAccumulator holds committed history; TextToDOM converts TEXT for DOM-only LiveTextDisplay sinks.
 
 ## Stage 1: batching without retranslation
 
@@ -26,35 +26,43 @@ display. TextWindow expects committed fragments; ASR provisional snapshots inste
 to translator.provisional. This is a value-semantics distinction: TextWindow inputs
 are already committed source segments.
 
-Select TextWindow's heading to edit its three settings:
+TextWindow is a generic text batcher with no threshold Settings and one output:
 
-| Setting | Default | Rule |
+| Port | Contract | Default / rule |
 | --- | --- | --- |
-| maxChars | 600 | Integer 2–1000, measured in UTF-16 code units, like the translator's input limit |
-| maxWaitMs | 1500 | Integer 1–30000 ms from the first pending fragment, without extending the deadline on further arrivals |
-| sentenceBoundary | on | Close conservative punctuation boundaries; off uses only length, deadline and Stop |
+| text (input) | TEXT, required | Append exactly, preserving order and every code unit |
+| maxChars (input) | NUMBER, optional | 600; safe integer ≥2, measured in UTF-16 code units; 2,000 and larger batches supported |
+| maxWaitSeconds (input) | NUMBER, optional | 1.5; finite positive seconds, at most 2147483.647 (JavaScript timer range); decimals supported |
+| text (output) | TEXT | Completed chunk, emitted at length, deadline or Stop only |
 
-The timer flushes even when no subsequent input arrives. JavaScript scheduling
-or a suspended browser may delay a timer; this is not an inference-latency
-guarantee. New leftovers get a new deadline. Sentence detection accepts `. ! ?
-。 ！ ？` with an optional closing quote/bracket followed by whitespace or end
-of input. Dots following digits, initials, dotted abbreviations and a short
-list of common English titles/abbreviations do not close the window. This is a
-heuristic, not a linguistic sentence tokenizer; ASR need not provide punctuation.
-Short unpunctuated speech still flushes by deadline.
+Connect ordinary Number.value sources to either threshold input, or leave them
+unconnected to use defaults. A connected source which has never supplied a value
+also uses the default. Each received threshold updates only that limit; omitted
+siblings retain their latest values. Numeric strings, non-finite numbers,
+non-integer character limits and out-of-range values fail visibly without coercion.
+A grouped delivery validates all values before changing any state, then applies
+thresholds before text. Threshold values are never appended to the text buffer.
 
-Inputs are never trimmed or deduplicated. Adjacent segments inside an open
-window receive one separating space unless either side already has whitespace.
-Original code units and explicit whitespace remain in order. Closed windows
-are independent items, without an added cross-window separator. At the length
-cap the last available whitespace boundary is preferred and the leftover stays
-pending. A word longer than the cap may split mid-word; surrogate pairs within an input stay intact.
-Every leftover is processed. Empty strings are ignored; whitespace-only inputs
-are retained (existing translators return successful empty TEXT without model
-inference). Non-TEXT, unknown ports and individual inputs over **32,768** code
-units fail visibly rather than being silently truncated. Split oversized source
-events before sending them. Pending TextWindow storage never exceeds maxChars;
-it has no background input FIFO.
+The timer starts when nonempty text first enters an empty buffer. More text does
+not reset it. A wait-limit update recomputes the deadline from that same arrival:
+shortening an elapsed deadline flushes immediately; extending it moves the deadline
+relative to the original arrival. Reducing maxChars emits all available full chunks
+immediately. Every emitted portion is removed; an un-emitted remainder starts a new
+window and deadline. A timer fires without another input; browser suspension or
+JavaScript scheduling may delay it. This is not an inference-latency guarantee.
+
+Text is concatenated exactly: no trimming, deduplication or inserted spaces.
+Supply separators explicitly in source fragments when needed. Punctuation never
+closes a window. At the character threshold, chunks obey the hard UTF-16 bound,
+without splitting surrogate pairs inside the buffer; this can produce a chunk one
+unit shorter than the bound. Long words may split. Empty strings are ignored;
+whitespace-only text is retained. Unknown ports, non-TEXT text and individual text
+inputs over **32,768** code units fail visibly before being accepted. Split larger
+source events first. After processing, pending text is shorter than maxChars;
+TextWindow retains no emitted history or background input FIFO. Consumers retain
+their own limits: translators and TranslationCommit still require chunks of at
+most 1,000 units, so choose maxChars for the connected consumer. Larger batches
+are available for other text consumers.
 
 Stop cancels the timer, emits the pending tail exactly once, and lets the
 translator drain before the sink closes. Repeated Stop cannot duplicate it.
@@ -69,7 +77,7 @@ Use one translator for both committed windows and replaceable previews:
 ASR.final → TextWindow.text
 TextWindow.text ───────────→ Translator.text
                └──────────→ TranslationCommit.boundary
-TextWindow.provisional ────→ Translator.provisional
+Explicit TEXT snapshots ──→ Translator.provisional (optional)
 Translator.source ────────→ TranslationCommit.source
 Translator.text ──────────→ TranslationCommit.text
 Translator.error ─────────→ TranslationCommit.error
@@ -137,7 +145,7 @@ display, use DOMCombiner with committed history as first and preview DOM as seco
 | --- | --- |
 | Source grows while open | Translate the latest snapshot when available; no final. The most recent successful preview remains until replaced or the source closes. Superseded in-flight results emit nothing. |
 | Latest open translation succeeds | Translator emits its grouped provisional family; provisionalText replaces only the explicit preview display. |
-| Source closes by punctuation, cap, deadline or Stop | Boundary arrives before its async final result. Translator emits all three provisional ports as `''` immediately to clear the obsolete preview, even while stale inference is running. Commit queues the source boundary exactly once. |
+| Source closes by cap, deadline or Stop | Boundary arrives before its async final result. Translator emits all three provisional ports as `''` immediately to clear the obsolete preview, even while stale inference is running. Commit queues the source boundary exactly once. |
 | Closed translation succeeds | Match the oldest boundary by causal delivery and source text in FIFO order; Commit emits final translation and error `''` (with its legacy empty clear). The committed history appends once; previews remain on their separate branch. |
 | Open translation fails | Emit provisionalSource and provisionalError without provisionalText; no committed output or final item. A grouped preview formatter clears omitted translated text. A direct provisionalText-only display keeps its previous snapshot until replacement or an explicit clear. Existing translator model failures remain terminal for that translator instance. |
 | Closed translation fails | Emit grouped provisional `''`, final `[Translation failed: MESSAGE]\nSOURCE`, error MESSAGE. This visibly retains source instead of inventing a translation; prior committed items remain immutable. |
@@ -183,12 +191,15 @@ details](translation-nodes.md#translategemma-in-the-extension-124).
 
 ## Reproduction and evidence
 
-Pinned inputs and three graph descriptions are in
+Pinned inputs and graph descriptions are in
 [`tests/fixtures/windowed-translation.js`](../tests/fixtures/windowed-translation.js).
 They split meeting/time and two different meanings of “bank” across ASR events,
 repeat “Please wait.” as separate utterances, and end with unpunctuated speech.
-The graphs use maxChars 160, maxWaitMs 800 and sentence boundaries on. They
-compare the current per-segment path, Stage 1 and Stage 2 with the same text.
+The graphs wire Number.value inputs for maxChars 160 and maxWaitSeconds 0.8.
+Source fragments include their own spaces. The fixtures compare the per-segment
+path, completed batching and optional closed-window commit verification. They
+never connect the removed TextWindow.provisional port. Direct-ASR preview
+coverage wires ASR.provisional separately to Translator.provisional.
 
 ```sh
 npm ci
@@ -202,7 +213,9 @@ WINDOW_TRANSLATION_SMOKE=1 npx playwright test --config playwright.extension.con
 The opt-in real-model check uses the actual packaged MV3 graph, unmodified
 public weight URLs, Save preparation and real TranslateGemma Workers. Each path
 starts a fresh Worker and runs offline after preparation, with fixtures 150 ms
-apart. Its JSON attachment records inputs, model results, source correlation,
+apart. The real-model comparison wires a 30-second wait limit so the fixed
+160-unit length/Stop boundaries remain comparable; controlled checks exercise
+the shorter deadline independently. Its JSON attachment records inputs, model results, source correlation,
 display events, inference count, request timings, load time and Stop/drain time.
 The packaged deterministic suite separately exercises ASR.final composition
 with controlled recognition and inference. It is not real speech-recognition
@@ -235,3 +248,44 @@ provisional translator input or TranslationCommit upgrade without changing their
 Earlier display/paired-port review requirements still apply. This change does not alter
 TextAccumulator or add a preview manager; it is compatible with #162's append-only
 accumulator contract.
+
+## TextWindow saved graph review (#178)
+
+Graph v15 requires review for every older TextWindow, including inactive drafts
+and default-only nodes, because exact concatenation and punctuation behavior changed.
+The unsaved repair draft converts maxChars and maxWaitMs Settings to ordinary
+Number nodes wired to maxChars and maxWaitSeconds (milliseconds divided by 1,000).
+Generated IDs avoid collisions. sentenceBoundary is removed. Every removed
+TextWindow.provisional connection is named in the migration report; no alternative
+preview producer or port is guessed. Wire deliberate TEXT snapshots separately if
+previews are still wanted. Thresholds are never copied into new Settings.
+
+Loading and execution remain blocked until review and Save. Unsupported settings,
+unknown ports, invalid limits or simultaneous old settings/new threshold wiring
+require explicit repair. Original storage remains byte-for-byte intact until Save;
+Save retains it in the established processing-graph-before-v14 recovery namespace
+(numbered on collisions), alongside older backups. Graph actions → Recovery supports
+Copy JSON and Download JSON. Unrelated nodes, settings, positions and routes are
+preserved. Graphs without TextWindow only advance their version; existing earlier
+migration requirements continue to apply.
+
+### Issue #178 validation (2026-10-31)
+
+- `npm test`: **803 passed**, including exact concatenation, 2,000-unit windows,
+  fractional deadlines, independent/grouped numeric updates, invalid values,
+  never-supplied connected thresholds, Stop/Cancel, stale callbacks, v9–v14
+  migration and exact backup retention. The package test uses fixture assets.
+- `npx playwright test tests/browser/text-window.spec.js --workers=1`: **2 passed**
+  (Chromium and WebKit), exercising actual NUMBER port delivery, length/remainder
+  timers, fan-out, Stop and Cancel.
+- Controlled MV3 checks in `windowed-translation.spec.js`,
+  `primitive-composition.spec.js`, `graph.spec.js` and
+  `graph-interactions.spec.js`: **56 distinct tests passed**, including threshold
+  port UI/Save/reload, removed preview wiring, reviewed migration and recovery.
+  These used production source modules assembled in the extension layout with
+  the existing controlled-model harness; they do not establish real inference.
+- `git diff --check` passed. The updated real-model smoke test loads successfully
+  but was **skipped** without `WINDOW_TRANSLATION_SMOKE`.
+- `npm run build:extension` was **blocked** by missing local models in this
+  worktree (`Missing local models. Run npm run prepare:assets first.`).
+  Full asset-backed packaging and real-model inference were not validated here.

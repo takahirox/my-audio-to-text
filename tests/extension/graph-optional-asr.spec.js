@@ -18,7 +18,7 @@ test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepar
     expect(f.requests.some(url => url.includes(key))).toBe(true);
   }
   const nodes = await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage));
-  expect(nodes.version).toBe(14); expect(nodes.nodes.filter(n => n.type.includes('Parakeet') || n.type.includes('Moonshine'))).toHaveLength(2);
+  expect(nodes.version).toBe(15); expect(nodes.nodes.filter(n => n.type.includes('Parakeet') || n.type.includes('Moonshine'))).toHaveLength(2);
   await editor.reload();
   expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(nodes);
   await expect(editor.getByRole('button', { name: 'speechtotextparakeetv3 output provisional', exact: true })).toHaveCount(0);

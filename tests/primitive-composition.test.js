@@ -177,6 +177,7 @@ test('Text literals and formatter/accumulator snapshots execute as independent t
 
 test('TranslationCommit final is an ordinary TEXT producer for another translator preview', async () => {
   const {windowGraph}=await import('./fixtures/windowed-translation.js');const f=workers(),graph=windowGraph('revisable');
+  graph.nodes.find(n=>n.id==='window-chars').settings.value=6;
   graph.nodes.push(graphNode('Text','independent'),graphNode('TranslateGemmaEnJa','second'),graphNode('LiveTextDisplay','second-view'));
   graph.edges.push(edge('independent','value','second','text'),edge('commit','final','second','provisional'),edge('second','provisionalText','second-view','content'));
   let display;const built=buildGraph(addDOMFormatters(graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='second-view')display=v;}});

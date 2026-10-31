@@ -90,7 +90,7 @@ test('legacy preference migration, direction switch and corrupt saved graph reco
   await page.evaluate(() => localStorage.setItem('processing-graph-v1', '{broken')); await page.reload(); await page.editor.reload();
   await expect(page.locator('#errors')).toContainText('Saved graph unavailable'); await expect(page.locator('#start')).toBeDisabled();
   await clickGraphAction(page.editor, 'graph-reset'); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await expect(page.locator('#errors')).toBeEmpty();
-  expect((await saved(page)).version).toBe(14);
+  expect((await saved(page)).version).toBe(15);
 });
 
 for (const type of ['Supertonic3', 'Kokoro']) {
@@ -280,7 +280,7 @@ test('version 1/2/3 field sinks migrate in MV3 to direct TEXT; ambiguous routes 
     await expect(page.editor.locator('#errors')).toContainText('requires review');
     await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
     const graph = await saved(page);
-    expect(graph.version).toBe(14); expect(graph.nodes.some(n => n.type === 'SelectedFormFieldTextOutputNode')).toBe(false);
+    expect(graph.version).toBe(15); expect(graph.nodes.some(n => n.type === 'SelectedFormFieldTextOutputNode')).toBe(false);
     expect(graph.nodes.some(n => n.type === 'FinalText')).toBe(false);
     expect(graph.edges).toContainEqual({ from: ['speech', 'final'], to: ['field', 'text'] });
     await expect(page.editor.locator('#graph-errors')).toBeEmpty();
@@ -293,7 +293,7 @@ test('version 1/2/3 field sinks migrate in MV3 to direct TEXT; ambiguous routes 
   await page.reload(); await page.editor.reload();
   await expect(page.locator('#errors')).toContainText('Cannot migrate field output'); await expect(page.locator('#start')).toBeDisabled();
   await clickGraphAction(page.editor, 'graph-reset'); await page.editor.locator('#graph-save').click();
-  await expect(page.locator('#errors')).toBeEmpty(); expect((await saved(page)).version).toBe(14);
+  await expect(page.locator('#errors')).toBeEmpty(); expect((await saved(page)).version).toBe(15);
 });
 
 test('MV3 editor accepts translated TEXT through TextToDOM into LiveTextDisplay and field output with optional interim/diagnostics disconnected', async ({ graphExtension: f }) => {
@@ -340,7 +340,7 @@ test('MV3 version 3 migration preserves translated field fan-out and reviewed fo
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v14'))).toBe(original);
   const graph = await saved(page);
-  expect(graph.version).toBe(14); expect(graph.nodes.some(node => node.id === 'text')).toBe(false);
+  expect(graph.version).toBe(15); expect(graph.nodes.some(node => node.id === 'text')).toBe(false);
   for (const target of ['a', 'b']) expect(graph.edges).toContainEqual({ from: ['translation', 'text'], to: [target, 'text'] });
   expect(graph.edges).toContainEqual({ from: ['translation', 'source'], to: ['translated-format', 'input1'] });
   await expect(page.editor.locator('#graph-errors')).toBeEmpty();
