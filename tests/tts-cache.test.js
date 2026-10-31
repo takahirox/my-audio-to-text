@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ttsAsset, requireWasm } from '../web/tts-worker.js';
+import { cosyVoice3Assets } from '../extension/cosyvoice3-cache.js';
 import { qwen3TtsAssets } from '../extension/qwen3-tts-cache.js';
 import { createHash } from 'node:crypto';
 
@@ -40,14 +41,15 @@ test('TTS asset caching survives eviction, storage failure and offline misses wi
   }
 });
 
-test('Qwen startup verifies cached bytes, permits only reviewed files, and never downloads a missing/evicted/corrupt weight', async () => {
+for (const [name, assets] of [['qwen3-tts', qwen3TtsAssets], ['cosyvoice3', cosyVoice3Assets]]) {
+test(`${name} startup verifies cached bytes, permits only reviewed files, and never downloads a missing/evicted/corrupt weight`, async () => {
   const original = { caches: globalThis.caches, fetch: globalThis.fetch };
   const body = Buffer.from('reviewed weights');
   const spec = { id: 'reviewed/qwen3-tts', revision: 'a'.repeat(40), files: [{ path: 'weights.onnx', bytes: body.length,
     sha256Chunks: [createHash('sha256').update(body).digest('hex')] }] };
   let cached = body, requests = 0, deleted = 0;
   globalThis.fetch = async url => {
-    assert.ok(String(url).endsWith('/qwen3-tts-assets.json')); requests++;
+    assert.ok(String(url).endsWith('/'+name+'-assets.json')); requests++;
     return Response.json(spec);
   };
   globalThis.caches = { async open(name) {
@@ -58,18 +60,19 @@ test('Qwen startup verifies cached bytes, permits only reviewed files, and never
     }, async delete() { deleted++; cached = null; } };
   } };
   try {
-    const read = await qwen3TtsAssets(); assert.deepEqual(await read('weights.onnx'), new Uint8Array(body));
+    const read = await assets(); assert.deepEqual(await read('weights.onnx'), new Uint8Array(body));
     await assert.rejects(read('unreviewed.bin'), /Unreviewed/);
     cached = null; await assert.rejects(read('weights.onnx'), /evicted during load/);
-    await assert.rejects(qwen3TtsAssets(), /missing or evicted/);
-    cached = Buffer.alloc(body.length); await assert.rejects(qwen3TtsAssets(), /missing or evicted/); assert.equal(deleted, 1);
+    await assert.rejects(assets(), /missing or evicted/);
+    cached = Buffer.alloc(body.length); await assert.rejects(assets(), /missing or evicted/); assert.equal(deleted, 1);
     globalThis.caches.open = async () => { throw Error('Cache Storage unavailable'); };
-    await assert.rejects(qwen3TtsAssets(), /Cache Storage unavailable/);
+    await assert.rejects(assets(), /Cache Storage unavailable/);
     assert.equal(requests, 4); // packaged JSON only; no weight GET/fallback
   } finally {
     for (const [key, value] of Object.entries(original)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; }
   }
 });
+}
 
 test('extension cache-only TTS never refetches evicted assets or falls back when storage is unavailable', async () => {
   const { serveTts } = await import('../web/tts-worker.js');

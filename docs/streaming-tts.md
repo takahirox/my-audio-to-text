@@ -1,12 +1,10 @@
 # Local streaming TTS (Issue #168)
 
-**Qwen3-TTS 0.6B CustomVoice has a working local MV3 streaming path. CosyVoice3
-remains unsupported; its remaining implementation and real-model verification
-are tracked in [Task #172](https://github.com/takahirox/my-audio-to-text/issues/172),
-as permitted by requirement 6 of [Issue #168](https://github.com/takahirox/my-audio-to-text/issues/168).**
-Review of #168's bounded acceptance remains required. The split preserves the
-CosyVoice3 work and does not establish that it shipped. Required post-merge
-verification remains pending; no production verification is claimed.
+**Qwen3-TTS 0.6B CustomVoice and CosyVoice3 0.5B have local MV3 streaming
+paths.** [CosyVoice3 #172](cosyvoice3-streaming.md) repairs the reviewed flow/HiFT
+exports and records separate real packaged English/Japanese evidence. Qwen-only
+evidence from #168 does not establish CosyVoice3 support. Required verification
+of each merged revision remains pending; no production verification is claimed.
 
 ## Graph and preparation
 
@@ -161,42 +159,17 @@ streaming API. The selected WebGPU exports provide the full browser component
 set. Real execution below establishes support, rather than a model card or
 the presence of an ONNX file.
 
-### Fun-CosyVoice3 0.5B: blocked; no runnable Node
+### Fun-CosyVoice3 0.5B: separate repaired MV3 streaming path
 
-The [official checkpoint](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/tree/29e01c4e8d000f4bcd70751be16fa94bf3d85a18)
-includes `llm.pt` (2,024,669,519 bytes), `flow.pt` (1,329,116,148), `hift.pt`
-(83,202,622), Qwen2 tokenizer files, CAM++ and speech-tokenizer ONNX graphs. Its
-ONNX flow estimator is only one component. The
-[native source examined](https://github.com/QwenAudio/CosyVoice/tree/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc)
-provides Python streaming, not Chrome execution.
-
-The [WebGPU conversion examined](https://huggingface.co/danyalmalik/Fun-CosyVoice3-0.5B-ONNX-WebGPU/tree/dcdb9df4bce4a47d318f5f8736de0b080efd944f)
-does provide LLM, flow, HiFT, tokenizer, fixed noise and precomputed reference
-voice assets. Its concrete streaming blocker is the
-[pinned exporter](https://github.com/mdanyalmalik/quick-inf/blob/3a27ecbd9efaced7274231bf1d922d6827253d84/tools/export/export_cosyvoice3.py):
-the flow encoder finalizes whole utterances (lines 148–169), flow calls
-`streaming=False` (187), and HiFT exports `finalize=True` (204). Its
-[matching runtime](https://github.com/mdanyalmalik/quick-inf/blob/3a27ecbd9efaced7274231bf1d922d6827253d84/src/runtime/speech/speech-engine.ts#L1430)
-collects speech tokens to EOS before flow/vocoding. Splitting that completed PCM,
-or separately synthesizing 80-token text segments, would fail this issue.
-The [ayousanz ONNX snapshot](https://huggingface.co/ayousanz/cosy-voice3-onnx/tree/4ed032d72f396804d21b508bec7b6ad7c3b1b763)
-also documents Python/native inference, not an MV3 streaming implementation.
-
-No real CosyVoice3 inference, playback or hardware qualification was performed
-here. The weights declare Apache-2.0; the WebGPU conversion's LibriTTS-R reference
-voice separately requires CC BY 4.0 attribution. Tokenizer, flow/vocoder state
-and memory must be reviewed as well as LLM weights.
-
-**Remaining implementation in [Task #172](https://github.com/takahirox/my-audio-to-text/issues/172):**
-export/review incremental flow masks,
-lookahead/finalization and HiFT overlap/cache state, implement the matching
-Worker/tokenizer/voice path, then prove real pre-EOS playback in MV3 with
-memory/timing evidence and separate Japanese/English results where supported.
-The Task remains draft while the browser export/runtime blocker is unresolved.
-Do not expose a CosyVoice3 Node or mark its implementation complete until that
-work passes validation. The parent Issue explicitly permits this follow-up;
-no further Qwen-only scope approval is required solely for the split. All of
-#168's bounded acceptance and required post-merge verification still apply.
+The original candidate review correctly rejected the whole-utterance conversion
+as streaming evidence. [Issue #172's implementation](cosyvoice3-streaming.md)
+exposes the flow's 22 causal attention masks, preserves three-token lookahead,
+repairs a long-prefix WebGPU nearest-Resize overflow in HiFT, and retains mel and
+vocoder right context. Its owned Worker emits PCM during token generation using
+the same typed stream and bounded Speaker contracts. It has its own explicit
+917 MB model preparation, English/Japanese browser evidence, attribution and
+resource limits. See [exact pins](cosyvoice3-artifacts.json) and
+[validation](evidence/cosyvoice3-172.md); post-merge verification is pending.
 
 ## Reproduce checks
 

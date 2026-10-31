@@ -1,7 +1,8 @@
 # Browser text-to-speech Nodes (Issue #73)
 
-For the extension's Qwen3-TTS incremental PCM path and the explicit CosyVoice3
-blocker, see [local streaming TTS (#168)](streaming-tts.md). The two Nodes below
+For the extension's Qwen3-TTS and CosyVoice3 incremental PCM paths, see
+[local streaming TTS (#168)](streaming-tts.md) and
+[CosyVoice3 (#172)](cosyvoice3-streaming.md). The two Nodes below
 continue to emit completed `SYNTHESIZED_AUDIO` clips.
 
 The [Supertonic 3 page](../web/nodes/supertonic3/index.html) and

@@ -8,6 +8,7 @@ import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-
 import { AudioOutputNode } from '../web/synthesized-audio.js';
 import { SpeakerOutputNode, StreamingSpeakerOutputNode } from '../web/speaker-output.js';
 import { Qwen3TtsNode } from '../web/qwen3-tts-node.js';
+import { CosyVoice3Node } from '../web/cosyvoice3-node.js';
 import { ExtensionTab } from './tab-source.js';
 import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode } from './translation-scheduler.js';
@@ -168,6 +169,8 @@ export function buildGraph(graph, options) {
       }
       case 'AudioOutput': node = new AudioOutputNode(options.onSynthesizedAudio); break;
       case 'Qwen3TtsStreaming': node = new Qwen3TtsNode({ ...spec.settings, workerFactory: options.ttsWorkerFactory,
+        onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`) }); break;
+      case 'CosyVoice3Streaming': node = new CosyVoice3Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,
         onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`) }); break;
       case 'StreamingSpeakerOutput': node = options.speakers?.get(spec.id) || new StreamingSpeakerOutputNode({
         contextFactory: options.speakerContextFactory, onState: state => options.onSpeakerState?.(state, spec.id),

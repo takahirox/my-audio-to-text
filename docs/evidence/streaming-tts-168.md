@@ -1,5 +1,9 @@
 # Issue #168 — local streaming TTS evidence
 
+This is the historical Qwen3-TTS acceptance record. Subsequent CosyVoice3
+implementation and independent evidence are in [Issue #172's report](cosyvoice3-172.md).
+The CosyVoice3 blocker statements below describe the #168 snapshot.
+
 Status: **partial**. Qwen3-TTS has a real local MV3 streaming implementation;
 CosyVoice3 remains unsupported. Its remaining implementation and verification
 are now explicitly tracked in [Task #172](https://github.com/takahirox/my-audio-to-text/issues/172),
