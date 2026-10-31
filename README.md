@@ -199,7 +199,7 @@ Separate issues should define and implement:
 
 ## Contributing
 
-See the [development flow](docs/development-flow.md) for workflow and language policy, and the [review guidelines](docs/review-guidelines.md) for review and merge criteria.
+See the [development flow](docs/development-flow.md) for workflow and language policy, the [test and CI principles](docs/development-flow.md#test-and-ci-principles) for validation scope and cost, and the [review guidelines](docs/review-guidelines.md) for review and merge criteria.
 
 The extension Live window renders graph-configured `LiveTextDisplay` sinks with
 custom labels. Fresh setup and Reset default to Chrome tab audio → SpeechToText →

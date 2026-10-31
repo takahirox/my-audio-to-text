@@ -62,6 +62,10 @@ including their requirement to preserve essential labels and accessibility infor
 
 ## Ordinary quality
 
+Apply the [test and CI principles](development-flow.md#test-and-ci-principles): consider the additional defects detected, overlap with existing coverage, and execution/maintenance cost of new or expanded checks. Ask:
+
+> Does this change provide sufficient confidence with the lightest appropriate validation, without redundant execution?
+
 Also review:
 
 - correctness and behavior against the expected outcome;
