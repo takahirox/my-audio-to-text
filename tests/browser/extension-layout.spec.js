@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkZoomRecovery, expectInsideCanvas, exposedWirePoint, loadZoomGraph } from '../fixtures/graph-zoom.js';
+import { openPalette, clickGraphAction } from '../extension/ui-controls.js';
 
 // Exercise the real extension HTML/modules in both browser engines without
 // Chrome capture APIs or model inference. Packaged MV3 tests cover those paths.
@@ -15,6 +16,103 @@ async function serveExtension(route) {
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', serveExtension);
   await page.goto('/extension/graph-editor.html');
+});
+
+for (const width of [390, 1440]) {
+  test(`model requirements live in Help with keyboard access and focus recovery at ${width}px`, async ({ page, browserName }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.context().route('**/*', serveExtension);
+    // WebKit on macOS uses Option+Tab to include links in keyboard navigation.
+    const optionTab = browserName === 'webkit' && process.platform === 'darwin';
+    const tab = optionTab ? 'Alt+Tab' : 'Tab';
+    const backTab = optionTab ? 'Alt+Shift+Tab' : 'Shift+Tab';
+    const stored = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+    await openPalette(page);
+    await page.locator('#graph-node-type').selectOption('TranslateGemmaEnJa');
+    await page.locator('#graph-add').click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#graph-editor > #graph-asset-notice')).toHaveCount(0);
+    await expect(page.locator('#graph-asset-notice')).toBeHidden();
+    await page.locator('#graph-help').press('Enter');
+    const help = page.getByRole('dialog', { name: 'Graph Editor help' });
+    const notice = help.locator('#graph-asset-notice'), summary = notice.locator('summary');
+    await expect(summary).toBeVisible(); await expect(summary).toBeInViewport({ ratio: 1 });
+    await expect(summary).toBeFocused();
+    await expect(notice).not.toHaveAttribute('open');
+    await expect(notice.locator('p')).toBeHidden();
+    await summary.press('Enter');
+    await expect(notice.locator('p')).toBeVisible();
+    await expect(notice).toContainText('3.112 GB shared by both directions');
+    await expect(notice).toContainText('7 GB free storage');
+    await expect(notice).toContainText('Google Gemma Terms of Use and Prohibited Use Policy');
+    await summary.press(tab);
+    const models = notice.getByRole('link', { name: 'Models for preparation, recovery and model license/terms' });
+    await expect(models).toBeFocused();
+    await expect(models).toHaveAttribute('href', 'model-cache.html');
+    await expect(models).toHaveAttribute('target', '_blank');
+    const popup = page.waitForEvent('popup'); await models.press('Enter');
+    const modelsPage = await popup;
+    await expect(modelsPage.getByRole('heading', { name: 'Models', exact: true })).toBeVisible();
+    await modelsPage.waitForLoadState('load'); await modelsPage.close();
+    await models.press(backTab); await expect(summary).toBeFocused();
+    await summary.press('Space'); await expect(notice).not.toHaveAttribute('open');
+    await summary.press('Enter');
+    await models.press(tab);
+    const terms = help.getByRole('link', { name: 'TranslateGemma terms, prohibited-use policy and attribution' });
+    await expect(terms).toBeFocused();
+    await expect(terms).toHaveAttribute('href', '../web/licenses/gemma-notices.txt');
+    expect(await help.evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth)).toBe(true);
+    await terms.press(tab);
+    await expect(help.getByRole('button', { name: 'Close help' })).toBeFocused();
+    await page.keyboard.press('Enter'); await expect(help).toBeHidden();
+    await expect(page.locator('#graph-help')).toBeFocused();
+    await page.locator('#graph-help').press('Space'); await expect(help).toBeVisible();
+    await page.keyboard.press('Escape'); await expect(help).toBeHidden();
+    await expect(page.locator('#graph-help')).toBeFocused();
+    await expect(page.locator('[data-node="translategemmaenja"]')).toHaveCount(1);
+    expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(stored);
+  });
+}
+
+test('Help notices follow draft additions/removals, saved loading and reset without preparing models', async ({ page }) => {
+  const { types, notices } = await page.evaluate(async () => {
+    const { NODE_TYPES, defaultGraph, graphNode, saveGraph } = await import('/extension/graph.js');
+    const types = Object.keys(NODE_TYPES).filter(type => NODE_TYPES[type].preparationNotice);
+    const graph = defaultGraph();
+    graph.nodes.push(...types.map(type => graphNode(type, type.toLowerCase())));
+    saveGraph(localStorage, graph);
+    return { types, notices: [...new Set(types.map(type => NODE_TYPES[type].preparationNotice))].join(' ') };
+  });
+  await page.reload();
+  const stored = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const preparationRequests = [];
+  page.on('request', request => { if (new URL(request.url()).origin !== new URL(page.url()).origin) preparationRequests.push(request.url()); });
+  const notice = page.locator('#graph-asset-notice');
+  const showNotices = async expected => {
+    await page.locator('#graph-help').click();
+    if (await notice.getAttribute('open') === null) await notice.locator('summary').click();
+    await expect(notice.locator('p')).toHaveText(expected);
+    await page.keyboard.press('Escape');
+  };
+  await showNotices(notices);
+  // Remove every notice-bearing Node via the inspector, including both Gemma directions.
+  for (const type of types) {
+    await page.getByRole('button', { name: `Select ${type.toLowerCase()}`, exact: true }).press('Enter');
+    await page.getByRole('button', { name: `Remove ${type.toLowerCase()}`, exact: true }).click();
+  }
+  await showNotices('No model preparation notices for Nodes in the current draft.');
+  await openPalette(page); await page.locator('#graph-node-type').selectOption('SpeechToTextParakeetV3');
+  await page.locator('#graph-add').click(); await page.keyboard.press('Escape');
+  await page.locator('#graph-help').click();
+  await expect(notice.locator('p')).toContainText('Parakeet v3: Save prepares 1.26 GB.');
+  await expect(notice.locator('p')).not.toContainText('TranslateGemma');
+  await page.keyboard.press('Escape');
+  await clickGraphAction(page, 'graph-load'); await showNotices(notices);
+  await clickGraphAction(page, 'graph-reset');
+  await showNotices('No model preparation notices for Nodes in the current draft.');
+  await clickGraphAction(page, 'graph-load'); await showNotices(notices);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(stored);
+  expect(preparationRequests).toEqual([]);
 });
 
 for (const width of [390, 1440]) {

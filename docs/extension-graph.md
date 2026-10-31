@@ -35,8 +35,12 @@ canvas scrollbars, touch scrolling, **Canvas zoom** and **Fit graph** to navigat
 a large graph. Zoomed-out views provide an overview. **Edit at 100%** appears
 beside Zoom and Fit while below 100%; it returns to the last focused Node/port
 or selected wire for editing. Increasing Canvas zoom also reveals that control.
-**Help** opens the detailed editing instructions on demand. Connecting to
-an occupied input replaces only its incoming wire; other inputs and source
+**Help** opens the detailed editing instructions and an initially collapsed
+**Model requirements and terms** section near the top. Expand it for preparation
+notices for the current draft's Nodes, including parked Nodes, and a **Models**
+link for preparation, recovery and model license/terms. Notices update as Nodes
+are added/removed or drafts are loaded/reset; the section says when none apply.
+Connecting to an occupied input replaces only its incoming wire; other inputs and source
 fan-out stay intact. Repeating the same connection changes nothing. Invalid
 connections keep the previous wire. Drag a connected input endpoint into blank
 canvas to detach only its wire, or onto a compatible input to reconnect it.
@@ -151,7 +155,7 @@ Supertonic language settings share weights, while each distinct TTS voice is pre
 Existing packaged ASR assets need no runtime preparation. Optional Parakeet v3
 and Moonshine Medium Streaming weights follow saved-node preparation, including
 parked Nodes; [download/memory guidance](optional-asr-nodes.md) is available in
-**Model requirements and terms** before Save. Per-model status and byte progress
+**Help → Model requirements and terms** before Save. Per-model status and byte progress
 appear in **Saved graph model weights** below the graph, with **Cancel preparation**, **Retry preparation** and
 **Check cache**. **Ready · Cached and verified** requires the complete pinned set.
 Preparation opens on Save or a new failure and can be collapsed. Models keeps

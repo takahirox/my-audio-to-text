@@ -52,8 +52,13 @@ export class GraphEditor {
     };
     warningLabel.append(this.warningPreference, ' Show optional warnings'); commands.append(warningLabel);
     this.actions.append(commands);
+    this.assetNotice = el('details'); this.assetNotice.id = 'graph-asset-notice';
+    this.assetRequirements = el('p');
+    const modelsLink = el('a', 'Models for preparation, recovery and model license/terms');
+    modelsLink.href = 'model-cache.html'; modelsLink.target = '_blank'; modelsLink.rel = 'noopener';
+    this.assetNotice.append(el('summary', 'Model requirements and terms'), this.assetRequirements, modelsLink);
     this.help = el('dialog', undefined, 'graph-help'); this.help.setAttribute('aria-label', 'Graph Editor help');
-    this.help.append(el('h2', 'Graph Editor help'),
+    this.help.append(el('h2', 'Graph Editor help'), this.assetNotice,
       el('p', 'Save applies to the next session. Start runs complete paths to outputs; incomplete Nodes remain in the draft. Graph actions provides validation, Load saved and Reset.'),
       el('p', 'Add nodes using search and categories. Select a node heading for settings and optional node help. Drag a heading or use arrow keys to move it.'),
       el('p', 'Connect by clicking an output then a matching input, or drag from an output to an input. Reconnecting replaces only that input’s wire. Drag a connected input into blank canvas to detach its wire, or to a matching input to move it. Select a wire for connection details and Disconnect in the inspector. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape, Clear selection or blank canvas clears selection.'),
@@ -67,8 +72,6 @@ export class GraphEditor {
     this.helpButton = button('Help', 'graph-help', () => this.help.showModal());
     this.help.onclose = () => this.helpButton.focus();
     toolbar.append(this.saveButton, this.summary, this.paletteButton, this.actions, this.helpButton);
-    this.assetNotice = el('details'); this.assetNotice.id = 'graph-asset-notice'; this.assetNotice.hidden = true;
-    this.assetRequirements = el('p'); this.assetNotice.append(el('summary', 'Model requirements and terms'), this.assetRequirements);
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
     this.workspace = el('div', undefined, 'graph-workspace');
     this.palette = el('aside', undefined, 'graph-palette'); this.palette.id = 'graph-palette'; this.palette.hidden = true; this.palette.setAttribute('aria-label', 'Node palette');
@@ -112,7 +115,7 @@ export class GraphEditor {
     this.editScaleButton = button('Edit at 100%', 'graph-edit-scale', () => this.setZoom(1, true));
     zoomLabel.append(this.zoomControl); viewportActions.append(zoomLabel, button('Fit graph', 'graph-fit', () => this.fit()), this.editScaleButton);
     viewport.append(viewportActions, this.scroll); this.workspace.append(viewport, this.inspector, this.palette);
-    root.replaceChildren(toolbar, this.assetNotice, this.errors, this.workspace, this.help);
+    root.replaceChildren(toolbar, this.errors, this.workspace, this.help);
     root.addEventListener('keydown', event => {
       const wire = event.target.closest('.graph-wire');
       if (event.key === 'Escape') {
@@ -205,7 +208,7 @@ export class GraphEditor {
   updateSummary() {
     const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(this.saved);
     const notices = [...new Set(this.draft.nodes.map(node => NODE_TYPES[node.type]?.preparationNotice).filter(Boolean))];
-    this.assetNotice.hidden = !notices.length; this.assetRequirements.textContent = notices.join(' ');
+    this.assetRequirements.textContent = notices.join(' ') || 'No model preparation notices for Nodes in the current draft.';
     this.summary.textContent = `${this.isDirty() ? 'Unsaved draft' : 'Saved graph'} · ${running ? `Active${Number.isInteger(this.tabId) ? ` · tab ${this.tabId}` : ''}${pending ? ' · earlier graph; saved edits apply next session' : ''}` : 'No active recording'}`;
     if (this.externalChange) this.summary.textContent += ' · Saved graph changed elsewhere; draft kept. Load saved before saving.';
     this.summary.classList.toggle('graph-conflict', !!this.externalChange);
