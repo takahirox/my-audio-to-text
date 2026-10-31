@@ -139,13 +139,18 @@ Ordinary emissions default to false. Forwarding through the receive context
 retains true across async work, including `emit()` and grouped emissions; passing
 false cannot clear inherited provisional provenance. Independent source emissions
 do not inherit it. The translation scheduler marks preview jobs this way.
-PairedTextToDOM formats provisional and committed deliveries identically and checks
-that both input1/input2 routes occur in the same producer's `groupInputs`.
-Each atomic group with input1 renders once; omitted input2 is blank and an
-input2-only group emits nothing. No independent values are cached or matched.
-Correlation constraints belong to the consumer;
-the graph editor allows compatible drafts without inspecting producer types,
-output names or optional upstream wiring.
+PairedTextToDOM formats provisional and committed deliveries identically. It holds
+the latest input1/input2 strings, both initialized to empty on Start. An update to
+either input emits one fresh pair, including duplicate and empty values. Unconnected
+or never-supplied inputs stay empty. Independent producers and ordinary `emit()`
+deliveries retain the other side's latest value; no group identity is required. As
+with TextFormatter, explicit producer snapshots clear omitted siblings in
+`context.groupInputs` only. All updates in one atomic delivery apply before exactly
+one snapshot emits. Independent inputs can temporarily combine new and previous
+text; producers needing a consistent pair should send both values atomically.
+Stop/Cancel/dispose close input handling; Start resets both held values. The graph
+editor allows compatible drafts, and either available input enables execution
+without requiring a producer type, output name or same-producer connection.
 
 ## Lifecycle and errors
 

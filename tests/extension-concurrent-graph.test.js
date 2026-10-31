@@ -17,7 +17,7 @@ test('large current drafts retain every Node, route, setting and position beyond
   assert.deepEqual(readGraph(storage), graph); assert.deepEqual(executableGraph(addDOMFormatters(graph)), graph);
 });
 
-test('saveable incomplete paths do not contaminate a complete sibling, including incomplete correlated formatters', async () => {
+test('saveable incomplete paths do not contaminate a complete sibling, while either available paired input activates its display', async () => {
   const graph = defaultGraph({ enabled: true });
   graph.edges = graph.edges.filter(route => route.to[0] !== 'translation');
   graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextWhisper', 'whisper'));
@@ -33,7 +33,10 @@ test('saveable incomplete paths do not contaminate a complete sibling, including
   graph.edges.find(route => route.to[0] === 'translated-format' && route.to[1] === 'input1').from = ['speech', 'final'];
   assert.deepEqual(validateGraph(graph), []);
   saveGraph(storage,graph); assert.deepEqual(readGraph(storage),graph);
-  assert.deepEqual(executableGraph(graph),active,'independent wiring does not activate an incomplete pair');
+  const paired = executableGraph(graph);
+  assert.deepEqual(paired.nodes.map(node => node.id), graph.nodes.filter(node => active.nodes.some(active => active.id === node.id) || ['translated-format', 'translated'].includes(node.id)).map(node => node.id));
+  assert.ok(paired.edges.some(route => route.from[0] === 'speech' && route.to[0] === 'translated-format'));
+  assert.equal(paired.nodes.some(node => node.id === 'translation'), false, 'an unavailable second producer does not block the independent first input');
 });
 
 test('constant text roots execute without audio or ASR, while drafts with no sink stay saveable', async () => {

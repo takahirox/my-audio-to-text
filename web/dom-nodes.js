@@ -52,20 +52,20 @@ const pairedCSS = `
 export class PairedTextToDOMNode {
   inputs = { input1: TEXT, input2: TEXT };
   outputs = { dom: DOM };
-  start() { this.closed = false; }
+  start() { this.values = { input1: '', input2: '' }; this.closed = false; }
   receiveInputs(values, context) {
     if (this.closed || context.signal.aborted) return;
     for (const [port, value] of Object.entries(values)) {
       if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('PairedTextToDOM expects TEXT inputs.');
     }
-    // One atomic delivery, never a cache of independently arriving strings.
-    const required = new Set(['input1', 'input2', ...(context.connectedInputs || [])]);
-    if (![...required].every(port => context.groupInputs?.includes(port))) {
-      throw Error('PairedTextToDOM requires an atomic grouped input1/input2 delivery from one producer.');
-    }
-    if (!Object.hasOwn(values, 'input1')) return;
-    this.render({ input1: values.input1, input2: values.input2 ?? '' }, context);
+    if (!Object.keys(values).length) return;
+    // Explicit groups are producer snapshots: clear omitted siblings only in
+    // that family. Independent deliveries retain the other side's latest text.
+    for (const port of context.groupInputs || []) if (Object.hasOwn(this.inputs, port)) this.values[port] = '';
+    Object.assign(this.values, values);
+    this.render(this.values, context);
   }
+  receive(port, value, context) { return this.receiveInputs({ [port]: value }, context); }
   render(pair, context) {
     const snapshot = document.createDocumentFragment(), style = document.createElement('style');
     style.textContent = pairedCSS;

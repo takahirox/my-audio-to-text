@@ -5,7 +5,7 @@ import { DOM, TEXT } from '../web/port-contracts.js';
 import { Pipeline } from '../web/pipeline.js';
 import { TextToDOMNode, PairedTextToDOMNode, DOMAccumulatorNode, cloneDOM } from '../web/dom-nodes.js';
 import { LiveTextDisplayNode } from '../web/text-nodes.js';
-import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, GRAPH_KEY, GRAPH_RECOVERY_KEY } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, validateGraph, graphWarnings, executableGraph, assertGraph, readGraph, saveGraph, GRAPH_KEY, GRAPH_RECOVERY_KEY } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const ctx = (emit = () => {}) => ({ signal: new AbortController().signal, emit });
@@ -92,14 +92,14 @@ for (const provisional of [false, true]) test(`paired formatter emits one litera
     assert.doesNotMatch(snapshot.querySelector('table').outerHTML, /Original|Translation|failed/);
     for (const [index,cell] of [...snapshot.querySelectorAll('td')].entries()) assert.equal(cell.getAttribute('aria-label'),`${index ? 'Second' : 'First'} text: ${cell.textContent}`);
   }
-  node.receiveInputs({input2:'alone'},c); assert.equal(snapshots.length,4);
-  for (const value of [{input1:'independent'},{input2:'independent'}]) assert.throws(() => node.receiveInputs(value,{...ctx(),provisional}),/grouped/);
+  node.receiveInputs({input2:'alone'},c); assert.equal(snapshots.length,5);
+  assert.deepEqual([...snapshots.at(-1).querySelectorAll('td')].map(cell => cell.textContent), ['', 'alone']);
   for (const port of ['source','text','error']) assert.throws(()=>node.receiveInputs({[port]:'old'},c),/TEXT inputs/);
-  node.receiveInputs({input1:'late',input2:'late'},{...c,signal:AbortSignal.abort()}); assert.equal(snapshots.length,4);
-  node.stop(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,4);
-  node.start(c); node.cancel(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,4);
-  node.start(c); node.dispose(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,4);
-  node.start(c); assert.equal(snapshots.length,4);
+  node.receiveInputs({input1:'late',input2:'late'},{...c,signal:AbortSignal.abort()}); assert.equal(snapshots.length,5);
+  node.stop(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,5);
+  node.start(c); node.cancel(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,5);
+  node.start(c); node.dispose(); node.receiveInputs({input1:'late',input2:'late'},c); assert.equal(snapshots.length,5);
+  node.start(c); assert.equal(snapshots.length,5);
 });
 
 test('provisional and committed paired snapshots have identical safe DOM for every value', () => {
@@ -232,7 +232,7 @@ for (const reverse of [false, true]) for (const provisional of [false, true]) te
 });
 
 for (const reverse of [false, true]) for (const provisional of [false, true]) for (const mode of ['separate emissions','mixed producers']) {
-  test(`paired consumer rejects ${mode} without affecting ordinary fan-out (${reverse}, provisional=${provisional})`, async () => {
+  test(`paired consumer accepts ${mode} and preserves ordinary fan-out (${reverse}, provisional=${provisional})`, async () => {
     let a, b; const pairs = new PairedTextToDOMNode(), plain = [], snapshots = [];
     const connections = [edge('pairs','dom','snapshots','dom'),edge('a','s','pairs','input1'),edge(mode === 'mixed producers' ? 'b' : 'a','t','pairs','input2'),edge('a','t','plain','text')];
     const pipeline = new Pipeline({ nodes: {
@@ -242,17 +242,24 @@ for (const reverse of [false, true]) for (const provisional of [false, true]) fo
       plain: { inputs: { text: TEXT }, receive(_,value) { plain.push(value); } },
     }, connections: reverse ? connections.reverse() : connections });
     await pipeline.start();
-    if (mode === 'separate emissions') { a.emit('s','same'); a.emit('t','same'); }
+    if (mode === 'separate emissions') {
+      if (reverse) a.emit('t','same');
+      a.emit('s','same');
+      if (!reverse) a.emit('t','same');
+    }
     else {
       if (reverse) b.emitOutputs({t:'same',e:''});
       a.emitOutputs({s:'same',t:'same',e:''}, {provisional});
       if (!reverse) b.emitOutputs({t:'same',e:''});
     }
     await tick();
-    assert.deepEqual(snapshots,[]); assert.equal(pipeline.errors.length,1);
-    assert.match(pipeline.errors[0].message,/grouped/);
+    assert.deepEqual(snapshots.map(domText), reverse ? ['\nsame','same\nsame'] : ['same\n','same\nsame']);
+    assert.deepEqual(pipeline.errors,[]);
     a.emit('t','healthy'); await tick(); assert.deepEqual(plain,['same','healthy']);
-    await pipeline.cancel(); assert.deepEqual(snapshots,[]);
+    assert.equal(domText(snapshots.at(-1)), mode === 'mixed producers' ? 'same\nsame' : 'same\nhealthy');
+    const count = snapshots.length;
+    await pipeline.cancel(); a.emit('s','late'); b.emit('t','late'); await tick(); assert.equal(snapshots.length,count);
+    await pipeline.dispose();
   });
 }
 
@@ -354,13 +361,81 @@ test('invalid legacy paired conversions offer recovery instructions instead of d
   assert.throws(()=>assertGraph(old),/Unknown port/);
 });
 
-for (const reverse of [false,true]) for (const provisional of [false,true]) test(`atomic second-only groups emit nothing and cannot contaminate later omitted/empty pairs (${reverse}, provisional=${provisional})`, async () => {
+for (const reverse of [false,true]) for (const provisional of [false,true]) test(`atomic groups update either side once and clear only omitted siblings in their family (${reverse}, provisional=${provisional})`, async () => {
   let source; const snapshots=[];
   const connections=[edge('source','left','pairs','input1'),edge('source','right','pairs','input2'),edge('pairs','dom','sink','dom')];
   const pipeline=new Pipeline({nodes:{source:{outputs:{left:TEXT,right:TEXT},start(c){source=c;}},pairs:new PairedTextToDOMNode(),sink:{inputs:{dom:DOM},receive(_,dom){snapshots.push(dom);}}},connections:reverse?connections.reverse():connections});
   await pipeline.start();
   for(const values of [{right:'orphan'},{left:'same',right:'same'},{left:'same',right:'same'},{right:'stale'},{left:'same'},{left:''},{left:'',right:''}]) source.emitOutputs(values, {provisional});
   await pipeline.stop();
-  assert.deepEqual(snapshots.map(domText),['same\nsame','same\nsame','same\n','\n','\n']);
+  assert.deepEqual(snapshots.map(domText),['\norphan','same\nsame','same\nsame','\nstale','same\n','\n','\n']);
   assert.deepEqual(pipeline.errors,[]);
+});
+
+
+for (const first of ['input1', 'input2']) test(`independent ${first} events hold both latest values, including duplicate and empty updates`, () => {
+  const second = first === 'input1' ? 'input2' : 'input1';
+  const snapshots = [], node = new PairedTextToDOMNode(), c = ctx((_, dom) => snapshots.push(dom));
+  const cells = () => snapshots.map(dom => [...dom.querySelectorAll('td')].map(cell => cell.textContent));
+  const pair = (a, b) => first === 'input1' ? [a, b] : [b, a];
+  node.start();
+  node.receive(first, '<script>literal</script>\n  ', c);
+  node.receive(second, 'held', c);
+  node.receiveInputs({ [first]: 'changed' }, c);
+  node.receive(first, 'changed', c);
+  node.receive(second, '', c);
+  node.receive(second, '', c);
+  node.receive(first, '', c);
+  assert.deepEqual(cells(), [pair('<script>literal</script>\n  ', ''), pair('<script>literal</script>\n  ', 'held'),
+    pair('changed', 'held'), pair('changed', 'held'), pair('changed', ''), pair('changed', ''), pair('', '')]);
+  assert.equal(new Set(snapshots).size, 7);
+  for (const dom of snapshots) assert.equal(dom.querySelector('script'), null);
+  node.receiveInputs({}, c); assert.equal(snapshots.length, 7);
+  node.receiveInputs({ input1: 'left', input2: 'right' }, c);
+  assert.deepEqual(cells().at(-1), ['left', 'right']); assert.equal(snapshots.length, 8);
+  assert.throws(() => node.receiveInputs({ [first]: 'must not stick', [second]: null }, c), /TEXT inputs/);
+  node.receive(second, 'after invalid', c);
+  assert.deepEqual(cells().at(-1), pair(first === 'input1' ? 'left' : 'right', 'after invalid'));
+});
+
+for (const end of ['stop', 'cancel', 'dispose']) for (const port of ['input1', 'input2']) test(`paired ${end} blocks updates and Start resets both held values (${port})`, () => {
+  const node = new PairedTextToDOMNode(), snapshots = [], c = ctx((_, dom) => snapshots.push(dom));
+  const cells = () => [...snapshots.at(-1).querySelectorAll('td')].map(cell => cell.textContent);
+  node.start(); node.receiveInputs({ input1: 'left', input2: 'right' }, c);
+  node.receive(port, 'aborted', { ...c, signal: AbortSignal.abort() });
+  assert.equal(snapshots.length, 1);
+  node[end](); node.receive(port, 'late', c); assert.equal(snapshots.length, 1);
+  node.start(); assert.equal(snapshots.length, 1);
+  node.receive(port, 'fresh', c);
+  assert.deepEqual(cells(), port === 'input1' ? ['fresh', ''] : ['', 'fresh']);
+});
+
+for (const port of ['input1', 'input2']) for (const constant of [undefined, '', 'fixed']) test(`saved paired graph executes ${port} with other Text=${JSON.stringify(constant)}`, async () => {
+  const other = port === 'input1' ? 'input2' : 'input1';
+  const graph = { version: defaultGraph().version, nodes: [graphNode('Text', 'changing'), graphNode('PairedTextToDOM', 'pair'), graphNode('LiveTextDisplay', 'display')],
+    edges: [edge('changing', 'value', 'pair', port), edge('pair', 'dom', 'display', 'dom')] };
+  graph.nodes[0].settings.value = 'initial';
+  if (constant !== undefined) {
+    graph.nodes.push(graphNode('Text', 'constant')); graph.nodes.at(-1).settings.value = constant;
+    graph.edges.push(edge('constant', 'value', 'pair', other));
+  }
+  const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  saveGraph(storage, graph); const saved = readGraph(storage);
+  assert.deepEqual(saved, graph); assert.deepEqual(graphWarnings(saved), []);
+  assert.equal(executableGraph(saved).nodes.length, graph.nodes.length);
+  const snapshots = [], { pipeline } = buildGraph(saved, { onDisplay: (_, dom) => snapshots.push(dom) });
+  await pipeline.start(); await tick();
+  const count = snapshots.length, source = pipeline.entries.get('changing').context;
+  for (const value of ['next', 'next', '', '']) source.emit('value', value);
+  await pipeline.stop();
+  const pair = value => port === 'input1' ? [value, constant ?? ''] : [constant ?? '', value];
+  assert.deepEqual(snapshots.slice(count).map(dom => [...dom.querySelectorAll('td')].map(cell => cell.textContent)), ['next', 'next', '', ''].map(pair));
+  assert.deepEqual(pipeline.errors, []); await pipeline.dispose();
+});
+
+test('paired formatter without either input stays inactive and has a useful graph warning', () => {
+  const graph = { version: defaultGraph().version, nodes: [graphNode('PairedTextToDOM', 'pair'), graphNode('LiveTextDisplay', 'display')], edges: [edge('pair', 'dom', 'display', 'dom')] };
+  assert.deepEqual(validateGraph(graph), []);
+  assert.ok(graphWarnings(graph).includes('Required connection missing: pair needs at least one TEXT input'));
+  assert.deepEqual(executableGraph(graph).nodes, []);
 });

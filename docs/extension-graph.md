@@ -248,7 +248,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | SpeechToTextReazonSpeech | audio: PCM; maxDuration: NUMBER (optional, seconds) | provisional/final: TEXT |
 | LiveTextDisplay | dom: DOM | clone and mount each complete inert DOM snapshot |
 | TextToDOM | text: TEXT | dom: DOM; literal text snapshot with visible whitespace |
-| PairedTextToDOM | input1/input2: TEXT | dom: DOM; one atomic grouped pair, provisional or committed |
+| PairedTextToDOM | input1/input2: TEXT; either may be unconnected | dom: DOM; either update emits the latest pair; one snapshot per atomic delivery |
 | DOMAccumulator | append: DOM | dom: DOM; ordered accumulated snapshots |
 | DOMCombiner | first / second: DOM | dom: DOM; latest first snapshot followed by latest second snapshot |
 | TextAccumulator | append: TEXT; text: TEXT output | exact committed transcript snapshots |
@@ -870,19 +870,39 @@ OpusMtJaEn.text   → PairedTextToDOM.input2
 PairedTextToDOM.dom → LiveTextDisplay.dom
 ```
 
-PairedTextToDOM formats each atomic result, provisional or committed, into a fresh
-DOM snapshot containing **only that pair**. A direct formatter → display connection shows the
-latest pair, replacing the previous one. The formatter keeps no history and never
-caches independent inputs for later matching. Exact input strings, including
-whitespace, duplicates and empty results, stay literal. Input1 renders on the left and input2 on the right. An atomic group
-with input1 but no input2 leaves the right cell empty, without reusing a previous
-value. Input2 alone emits nothing. The formatter has no error port or error UI.
+PairedTextToDOM holds the latest `input1` (left) and `input2` (right) TEXT values.
+Both start empty; an unconnected or never-supplied side stays empty. An update to
+**either input** emits one fresh DOM snapshot with both latest values, whether
+provisional or committed. Exact whitespace, duplicates and empty strings stay
+literal; duplicates emit again and empty strings clear either cell. A direct
+formatter → display connection replaces the previous pair and keeps no history.
+
+Independent producers may arrive at different times, temporarily combining new text
+with the other side's previous value. Send both values in one atomic delivery for
+exactly one consistent snapshot. Explicit atomic producer snapshots still clear
+omitted siblings within their group only (as with TextFormatter); an unrelated
+producer's held input is retained. No group identity or same-producer connection is
+required. Start resets both held values; Stop/Cancel/dispose reject later updates.
+The formatter has no error port or error UI.
 Translation failures retain the source in the left cell; specific errors remain
 visible in the existing translation status/observer diagnostics (preparation,
 load, inference, malformed/empty output, Worker communication and utterance limits).
 One headerless table row contains both cells, so unequal text heights stay aligned. Cells have accessible
 First text/Second text labels; formatter-owned CSS highlights both cells of just the
 hovered/focused pair, and both cells are keyboard focusable.
+
+For example, display provisional ASR as a paired row with an empty right cell:
+
+```text
+ASR.provisional → PairedTextToDOM.input1
+Text.value=""   → PairedTextToDOM.input2  # optional; unconnected is also empty
+PairedTextToDOM.dom → DOMCombiner.second
+```
+
+The reverse works equally: a fixed Text constant on input1 and changing TEXT on
+input2 emits on every input2 update. Either side alone is an executable path; no
+saved graph version or port migration is needed for these timing semantics. This
+does not retain pending translations after ASR finalization.
 
 For a growing comparison transcript, explicitly insert DOMAccumulator:
 
@@ -1147,7 +1167,8 @@ Wire provisionalText → a separate TextToDOM.text → LiveTextDisplay.dom. Its 
 clear that branch. Use a separate TextFormatter if preview formatting is needed; never
 append its output to history. Generic display/composition Nodes have no
 translator-specific rules. PairedTextToDOM accepts both families on separate
-branches and requires an atomic group from one producer for each pair. DOMCombiner
+branches, and also accepts independent TEXT inputs symmetrically. Atomic groups
+produce one consistent pair; independent updates use both latest values. DOMCombiner
 can combine committed DOM history with a replacement preview branch.
 TranslationCommit checks causal closed-window results only and rejects unclosed
 results; preview routing bypasses it. Its existing provisional output supplies only
