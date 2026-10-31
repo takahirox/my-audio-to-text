@@ -9,7 +9,7 @@ test('Simple lays out 0, 1, 2 and 4 saved displays at narrow and wide sizes with
       const displays = Array.from({ length: count }, (_, i) => {
         const node = graphNode('LiveTextDisplay', `display-${i}`); node.settings.label = `Output ${i + 1}`; return node;
       });
-      saveGraph(localStorage, window.addDOMFormatters({ version: 14, nodes: [source, ...displays], edges: displays.map(node => edge('source', 'value', node.id, 'content')) }));
+      saveGraph(localStorage, window.addDOMFormatters({ version: 15, nodes: [source, ...displays], edges: displays.map(node => edge('source', 'value', node.id, 'content')) }));
     }, count);
     // A stopped session retains its output snapshot until the next Start/reload.
     await live.reload();

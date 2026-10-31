@@ -7,9 +7,9 @@ import { AUDIO_STREAM } from '../web/audio-stream.js';
 import { DOM, NUMBER } from '../web/port-contracts.js';
 import { validateCondition, MAX_CONDITION_CHARS } from '../web/if-condition-policy.js';
 import { finiteNumber } from '../web/number-node.js';
-import { windowSettings } from '../web/text-window-node.js';
+import { validateWindowThreshold } from '../web/text-window-node.js';
 
-export const GRAPH_VERSION = 14;
+export const GRAPH_VERSION = 15;
 export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn', 'SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'];
 export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
@@ -49,7 +49,7 @@ export const NODE_TYPES = Object.freeze({
   DOMCombiner: { label: 'DOM combiner', inputs: { first: DOM, second: DOM }, optionalInputs: ['first', 'second'], outputs: { dom: DOM }, help: 'Combine the latest first and second inert DOM snapshots in that order. Each update replaces only its input; empty snapshots clear it. Inputs and outputs are validated deep clones. Start clears both; Stop/Cancel retain the latest output and reject stale deliveries. Main thread only.' },
   TextAccumulator: { label: 'Text accumulator', inputs: { append: TEXT }, outputs: { text: TEXT }, help: 'Append each exact TEXT segment separated by a newline, including repeated and empty values. Every append emits the complete accumulated snapshot. Start clears history and emits empty text; Stop/Cancel retain committed text. Compose provisional display separately with TextToDOM and DOMCombiner. No truncation or persistence; growing snapshots consume memory and rendering time.' },
   TextSlidingWindow: { label: 'Text sliding window', inputs: { text: TEXT, maxChars: NUMBER }, optionalInputs: ['maxChars'], outputs: { text: TEXT }, help: 'Append fragments exactly and emit the entire retained window on every text event, including empty text and duplicates. Optional maxChars: positive safe integer in UTF-16 code units (default 1000). Evicts oldest sentences, then words, then clips a suffix without splitting surrogate pairs. Limit updates trim silently; Stop/Cancel discard history. No Settings.' },
-  TextWindow: { label: 'Text window', inputs: { text: TEXT }, outputs: { text: TEXT, provisional: TEXT }, numberSettings: { maxChars: { default: 600 }, maxWaitMs: { default: 1500 } }, settings: { sentenceBoundary: ['on', 'off'] }, help: 'Model-independent committed speech batching. 2–1000 characters, 1–30000 ms from first pending text; sentenceBoundary closes conservative punctuation boundaries. Empty strings are ignored; equal utterances and whitespace are retained. Stop flushes once, Cancel discards. text → any translator.text. Optional provisional → the same translator.provisional for bounded retranslation; see TranslationCommit.' },
+  TextWindow: { label: 'Text window', inputs: { text: TEXT, maxChars: NUMBER, maxWaitSeconds: NUMBER }, optionalInputs: ['maxChars', 'maxWaitSeconds'], outputs: { text: TEXT }, help: 'Generic exact text batching. Optional NUMBER inputs: maxChars (whole number ≥2 UTF-16 units; default 600) and maxWaitSeconds (positive seconds; default 1.5). Updates apply independently to pending text; the deadline starts with the first fragment and is not reset by arrivals. No added separators or punctuation rules. Length emissions remove only their chunk and preserve the remainder. Stop flushes once; Cancel discards. No threshold Settings or preview output.' },
   TranslationCommit: { label: 'Translation commit (experiment)', inputs: { boundary: TEXT, source: TEXT, text: TEXT, error: TEXT }, outputs: { provisional: TEXT, final: TEXT, error: TEXT }, help: 'Opt-in bounded retranslation: Fan out each committed source event to boundary and translator.text. Results must be one grouped source/text/error emission causally linked to that event; unclosed results are rejected. Any TEXT producer can supply boundaries. Route translator.provisionalText to a separate preview display; final → TextAccumulator.append. Only correlated closed source events commit, exactly once; equal text alone never matches. Failures retain source with an error in the committed item. 32-window backlog cap; no new weights or conversation-wide memory.' },
   TextFormatter: { label: 'Text formatter', inputs: FORMAT_INPUTS, optionalInputs: Object.keys(FORMAT_INPUTS), outputs: { text: TEXT }, numberSettings: { inputCount: { default: 4 } }, textSettings: { template: { default: '{1}', maxLength: 2048, multiline: true } }, help: 'Add/remove numbered inputs in Settings. Use {1}, {2}, etc., labels and literal newlines. Escape braces as {{ and }}. Missing inputs are empty. Each emission formats the latest input values; directly grouped emissions replace the emitted family’s connected inputs together (omitted siblings clear). Independent branches are not correlated.' },
   Supertonic3: { label: 'Supertonic 3 TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { language: ['ja', 'en'], voice: ['F1', 'M1'] } },
@@ -147,7 +147,6 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
       if (typeof node.settings[key] !== 'string' || node.settings[key].length > (spec.maxLength ?? Infinity) || (key === 'label' && !node.settings[key].trim())) errors.push(`Invalid setting: ${node.id}.${key}`);
     }
     if (!legacy && node.type === 'IfCondition') try { validateCondition(node.settings.condition); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
-    if (!legacy && node.type === 'TextWindow') try { windowSettings(node.settings); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
     if (!legacy && node.type === 'TextFormatter') try { formatInputs(node.settings.inputCount); parseTemplate(node.settings.template, node.settings.inputCount); } catch (error) { errors.push(`${node.id}: ${error.message}`); }
   }
   for (const connection of graph.edges) {
@@ -489,7 +488,7 @@ function migrateAccumulatorGraph(graph) {
 }
 // v14 follows main's v13 append-only migration. Never reinterpret a saved
 // translator preview route, including one already reviewed and saved at v13.
-export function migrateGraph(graph) {
+function migrateBeforeTextWindowGraph(graph) {
   const legacy = record(graph) && Number.isInteger(graph.version) && graph.version < 14 &&
     Array.isArray(graph.nodes) && Array.isArray(graph.edges);
   const mixed = legacy
@@ -504,7 +503,7 @@ export function migrateGraph(graph) {
     if (needsReview) error.message += ` ${review}`;
     throw error;
   }
-  if (next?.version === 13) next = { ...structuredClone(next), version: GRAPH_VERSION };
+  if ([13, 14].includes(next?.version)) next = { ...structuredClone(next), version: GRAPH_VERSION };
   if (needsReview && next?.version === GRAPH_VERSION) {
     const error = new Error(review), errors = validateGraph(next);
     if (!errors.length) error.recoveryGraph = next;
@@ -512,6 +511,47 @@ export function migrateGraph(graph) {
     throw error;
   }
   return next;
+}
+// v15 changes only TextWindow. Convert its old thresholds into explicit Number
+// sources in a review draft; never guess a replacement for removed preview edges.
+export function migrateGraph(graph) {
+  const legacy = record(graph) && Number.isInteger(graph.version) && graph.version < GRAPH_VERSION &&
+    Array.isArray(graph.nodes) && Array.isArray(graph.edges);
+  const windows = legacy ? graph.nodes.filter(node => node?.type === 'TextWindow') : [];
+  if (!windows.length) return migrateBeforeTextWindowGraph(graph);
+  const next = structuredClone(graph), ids = new Set(next.nodes.map(node => node.id)), changes = [];
+  for (const original of windows) {
+    const node = next.nodes.find(node => node.id === original.id);
+    if (!record(node.settings)) throw Error(`TextWindow ${node.id}: invalid legacy settings; original JSON is kept. Repair manually.`);
+    for (const [key, port, scale] of [['maxChars', 'maxChars', 1], ['maxWaitMs', 'maxWaitSeconds', 0.001]]) {
+      if (!Object.hasOwn(node.settings, key)) continue;
+      const value = node.settings[key];
+      validateWindowThreshold(port, typeof value === 'number' ? value * scale : value);
+      if (next.edges.some(route => route?.to?.[0] === node.id && route.to[1] === port)) throw Error(`TextWindow ${node.id}: both legacy ${key} and a ${port} input exist; original JSON is kept. Choose the threshold manually.`);
+      const id = unusedId(ids, `${node.id}-${port}`);
+      const source = graphNode('Number', id, Math.max(0, node.position.x - 250), node.position.y + (port === 'maxChars' ? 240 : 480));
+      source.settings.value = value * scale;
+      next.nodes.push(source); next.edges.push(edge(id, 'value', node.id, port));
+      delete node.settings[key]; changes.push(`${node.id}.${key} becomes ${id}.value → ${node.id}.${port}`);
+    }
+    if (Object.hasOwn(node.settings, 'sentenceBoundary')) {
+      delete node.settings.sentenceBoundary;
+      changes.push(`${node.id}.sentenceBoundary removed; punctuation no longer closes windows`);
+    }
+    next.edges = next.edges.filter(route => {
+      if (route?.from?.[0] !== node.id || route.from[1] !== 'provisional') return true;
+      changes.push(`Removed ${route.from.join('.')} → ${route.to?.join('.')}; reconnect previews from a deliberate TEXT source`);
+      return false;
+    });
+  }
+  const review = `TextWindow graph v15 requires review for ${windows.map(node => node.id).join(', ')}. Text is concatenated exactly without added spaces; only length, time or Stop emits text. The provisional output is removed. ${changes.join('; ')}. Review the draft and Save; the exact original JSON and unrelated routes are kept for recovery.`;
+  let converted;
+  try { converted = migrateBeforeTextWindowGraph(next); }
+  catch (error) { error.message += ` ${review}`; throw error; }
+  const error = new Error(review), errors = validateGraph(converted);
+  if (!errors.length) error.recoveryGraph = converted;
+  else error.message += ` Manual repair required: ${errors.join(' ')}`;
+  throw error;
 }
 export function assertGraph(graph) {
   const migrated = migrateGraph(graph), errors = validateGraph(migrated);

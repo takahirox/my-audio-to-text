@@ -45,7 +45,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
   expect(await editor.evaluate(() => window.beforePersistence)).toEqual(Array(7).fill(false));
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.evaluate(() => window.graphWorkers.length)).toBe(0);
-  const before = await saved(live); expect(before.version).toBe(14); expect(before.edges).toHaveLength(7);
+  const before = await saved(live); expect(before.version).toBe(15); expect(before.edges).toHaveLength(7);
   await save(editor); await expect(cards(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(7);
   for (const corrupt of [true, false]) {
     await editor.evaluate(async corrupt => {

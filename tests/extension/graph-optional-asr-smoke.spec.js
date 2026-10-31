@@ -68,7 +68,7 @@ for (const [key, type, module, className, partials] of [
         constructor(...args) { super(...args); window.workers.push(this); }
         terminate() { this.released = true; super.terminate(); }
       };
-      const graph = assertGraph({ version: 14, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode(type, 'speech'), graphNode('TextAccumulator','acc'), graphNode('TextToDOM','dom'), graphNode('LiveTextDisplay', 'out'), ...(type.includes('Moonshine') ? [graphNode('TextToDOM', 'preview'), graphNode('DOMCombiner', 'combined')] : [])],
+      const graph = assertGraph({ version: 15, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode(type, 'speech'), graphNode('TextAccumulator','acc'), graphNode('TextToDOM','dom'), graphNode('LiveTextDisplay', 'out'), ...(type.includes('Moonshine') ? [graphNode('TextToDOM', 'preview'), graphNode('DOMCombiner', 'combined')] : [])],
         edges: [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'acc', 'append'),edge('acc','text','dom','text'),...(type.includes('Moonshine') ? [edge('speech', 'provisional', 'preview', 'text'), edge('dom', 'dom', 'combined', 'first'), edge('preview', 'dom', 'combined', 'second'), edge('combined', 'dom', 'out', 'dom')] : [edge('dom', 'dom', 'out', 'dom')])] });
       window.session = new TabSession(view => { window.view = view; }, { graph,
         sourceFactory: (tabId, onAudio) => ({ start() { window.feed = onAudio; }, stop() {} }) });
