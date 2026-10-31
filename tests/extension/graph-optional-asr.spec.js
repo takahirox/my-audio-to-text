@@ -9,7 +9,12 @@ test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepar
     await editor.getByRole('searchbox', { name: 'Search nodes' }).fill(search);
     await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
     expect(f.requests).toHaveLength(before);
-    await expect(editor.locator('#graph-asset-notice')).toContainText(search === 'Parakeet' ? '1.26 GB' : '305 MB');
+    await editor.locator('#graph-help').click();
+    const notice = editor.getByRole('dialog').locator('#graph-asset-notice');
+    if (await notice.getAttribute('open') === null) await notice.locator('summary').click();
+    await expect(notice.locator('p')).toBeVisible();
+    await expect(notice).toContainText(search === 'Parakeet' ? '1.26 GB' : '305 MB');
+    await editor.keyboard.press('Escape');
     f.mode('error'); await editor.locator('#graph-save').click();
     const card = editor.locator('#graph-models .model-card').filter({ has: editor.getByRole('heading', { name: new RegExp(search) }) });
     await expect(card).toHaveAttribute('data-state', 'Error');

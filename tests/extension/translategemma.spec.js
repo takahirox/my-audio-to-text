@@ -14,8 +14,12 @@ const card = editor => editor.locator('#graph-models .model-card');
 test('palette, Save and reload preserve current connected graph and parked directions; shared verified preparation and recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   for (const type of ['Text', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'TextToDOM', 'LiveTextDisplay']) await add(editor, type);
+  await editor.locator('#graph-help').click();
+  await editor.locator('#graph-asset-notice summary').click();
+  await expect(editor.locator('#graph-asset-notice p')).toBeVisible();
   await expect(editor.locator('#graph-asset-notice')).toContainText('3.112 GB');
   await expect(editor.locator('#graph-asset-notice')).toContainText('Gemma Terms');
+  await editor.keyboard.press('Escape');
   for (const type of ['translategemmaenja', 'translategemmajaen']) await expect(editor.getByRole('button', { name: `${type} input context`, exact: true })).toBeVisible();
   for (const [source, output, target, input] of [['text', 'value', 'translategemmaenja', 'text'], ['text', 'value', 'translategemmaenja', 'context'], ['translategemmaenja', 'text', 'texttodom', 'text'], ['texttodom','dom','livetextdisplay','dom']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).press('Enter');
