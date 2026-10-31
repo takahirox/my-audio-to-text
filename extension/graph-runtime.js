@@ -24,6 +24,7 @@ import { SpeechToTextParakeetV3Node } from '../web/parakeet-v3-node.js';
 import { SpeechToTextMoonshineMediumEnNode } from '../web/moonshine-medium-node.js';
 import { IfConditionNode } from '../web/if-condition-node.js';
 import { NumberNode } from '../web/number-node.js';
+import { TextSlidingWindowNode } from '../web/text-sliding-window-node.js';
 import { TextWindowNode } from '../web/text-window-node.js';
 import { TranslationCommitNode } from '../web/translation-commit-node.js';
 
@@ -149,6 +150,7 @@ export function buildGraph(graph, options) {
       case 'DOMAccumulator': node = new DOMAccumulatorNode(); break;
       case 'DOMCombiner': node = new DOMCombinerNode(); break;
       case 'TextAccumulator': node = new TextAccumulatorNode(); break;
+      case 'TextSlidingWindow': node = new TextSlidingWindowNode(); break;
       case 'TextWindow': node = new TextWindowNode(spec.settings); break;
       case 'TranslationCommit': node = new TranslationCommitNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;

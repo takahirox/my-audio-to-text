@@ -248,6 +248,7 @@ Each edge has `from: [nodeID, outputPort]`, `to: [nodeID, inputPort]`.
 | DOMAccumulator | append: DOM | dom: DOM; ordered accumulated snapshots |
 | DOMCombiner | first / second: DOM | dom: DOM; latest first snapshot followed by latest second snapshot |
 | TextAccumulator | append: TEXT; text: TEXT output | exact committed transcript snapshots |
+| [TextSlidingWindow](text-sliding-window.md) | text: TEXT; maxChars: NUMBER (optional, default 1000) | text: TEXT; rolling bounded snapshot per text event; no Settings |
 | TextWindow | text: TEXT | text: TEXT (closed batches); provisional: TEXT (optional open snapshots); length/deadline/sentence settings |
 | TranslationCommit | boundary/source/text/error: TEXT | provisional/final/error: TEXT; opt-in closed-window commits |
 | TextFormatter | input1…inputN: TEXT, instance-configured, individually optional | text: TEXT; at least one input must connect |
