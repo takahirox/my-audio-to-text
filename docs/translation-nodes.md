@@ -291,15 +291,20 @@ Cancel/dispose discard it. A fresh session starts without context. Context is
 runtime state, not added to graph settings or persisted by the translator (a
 Text source's explicitly saved literal still persists normally).
 
-Nonempty context uses a fixed **experimental** prompt in the same text-generation
-runtime. It asks the model to use context for pronouns, omitted subjects, meaning and terminology,
-translate only the current target, and return only its translation. JSON quotes
-both fields and escapes `<` so input cannot introduce tokenizer control tokens
-or extra chat turns. The prompt has one Gemma user turn and an open model turn;
-it includes one BOS token, disables added special tokens and truncation, and
-returns generated text only. This is not evidence that context improves quality
-or that a model always follows the instruction; model-dependent behavior needs
-real inference checks.
+Nonempty context uses a fixed **experimental** adaptation of the pinned official
+text-translation template (#190) in the same text-generation runtime. The official
+structured API accepts exactly one translation item and has no native context
+field. The adaptation preserves its language names/codes, translator instructions,
+target-only output request, final plain-text translation target (trimmed as in
+the official template), and exact turn boundaries. It inserts only a reference
+section between the translator introduction and the final translation request.
+This section labels context as untrusted data for disambiguation and forbids
+translating, summarizing, continuing, or including it in the response. External
+context and target escape every `<` as literal `\u003c`, preventing tokenizer
+controls, extra turns, or a forged reference-section closing tag. No JSON field
+decoding is requested. The prompt has one BOS, one user turn and an open model
+turn, disables added special tokens and truncation, and returns generated text
+only. Instructions do not guarantee model compliance or better translation.
 
 Limits: 1,000 UTF-16 code units per target, 4,000 per context, and 3,840 tokens
 for the complete context prompt with 256 output tokens reserved (4,096 total).
@@ -310,9 +315,14 @@ context update fails the Node visibly before storing it; prompt/inference errors
 use the existing committed or provisional error family and diagnostics. FIFO,
 latest-only previews, stale suppression and one owned Worker remain unchanged.
 
-The opt-in real-model probes compare official/context/reset prompts for ambiguous
-pronouns and domain terminology in both directions, check context-marker echo,
-and save outputs/latencies. Run after preparing the pinned runtime:
+The opt-in real-model probes compare official/context/reset prompts for person
+references and domain terminology in both directions, check context-marker echo,
+and save outputs/latencies. The aligned prompt does not reliably resolve the
+female person reference that the earlier prompt resolved; the probes accept a
+translation preserving the original ambiguous referent, while still checking
+domain meaning and absence of background details. Raw positive and negative
+results are in the [#190 evidence](evidence/translation-190.md).
+Run after preparing the pinned runtime:
 
 ```sh
 npm run prepare:translation-assets
@@ -324,6 +334,28 @@ WebGPU and several GB of free RAM/GPU memory. To reuse the model asset cache
 across fresh Workers/directions or repeated probes, optionally set
 `TRANSLATEGEMMA_PROFILE_DIR="$PWD/.cache/translategemma-context-profile"`.
 This is a test-only browser profile, not translator context persistence.
+For reproducible local asset transport, `python3 scripts/review-translategemma-assets.py`
+downloads and verifies the pinned model into `.cache/translategemma`. Set
+`TRANSLATEGEMMA_ASSET_DIR="$PWD/.cache/translategemma"` to use those exact bytes
+through a test-only loopback server, with SHA-256 checks before use.
+
+The separate prompt probe checks the pinned official template and exact token
+IDs in both directions, including control-string injection. With real inference
+enabled it captures the actual model input tensors and compares no context,
+the frozen pre-#190 JSON prompt, and the aligned prompt for short fragments with
+long synthetic rolling ASR history, plus the person/domain probes and resets:
+
+```sh
+TRANSLATEGEMMA_TOKENIZER_SMOKE=1 TRANSLATEGEMMA_ASSET_DIR="$PWD/.cache/translategemma" TRANSLATION_CHANNEL=chromium npx playwright test tests/browser/translategemma-prompt-smoke.spec.js --project=chromium --workers=1
+TRANSLATEGEMMA_PROMPT_SMOKE=1 TRANSLATEGEMMA_ASSET_DIR="$PWD/.cache/translategemma" TRANSLATION_CHANNEL=chromium npx playwright test tests/browser/translategemma-prompt-smoke.spec.js --project=chromium --workers=1
+```
+
+The tokenizer-only command needs no WebGPU or weights (the asset directory needs
+the five small metadata/tokenizer/template files). Evidence includes prompts,
+input/output token IDs, raw outputs, character/script counts, settings and
+latencies. Script counts are not automatic language identification. These probes
+have not reproduced the reported English output in English → Japanese; a
+Japanese → English history-translation failure occurred with the old prompt.
 The existing packaged MV3 real
 smoke also includes these comparisons. Deterministic tests verify contracts and
 prompt construction, not translation quality. See [implementation evidence](evidence/translation-173.md)
