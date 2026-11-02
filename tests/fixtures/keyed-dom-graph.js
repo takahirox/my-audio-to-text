@@ -19,3 +19,18 @@ export function keyedDOMGraph(translator = 'OpusMtEnJa') {
   }
   return { version: GRAPH_VERSION, nodes, edges: edges.filter(route => nodes.some(node => node.id === route.from[0])) };
 }
+
+// Ordinary Number and Text sources feed independent ID-bearing consumers.
+export function independentIDGraph(translator = 'OpusMtEnJa') {
+  const nodes = [graphNode('Text', 'text'), graphNode('Number', 'number'), graphNode(translator, 'translation'),
+    graphNode('PairedTextToDOM', 'pair'), graphNode('TextToDOM', 'plain'), graphNode('KeyedDOMAccumulator', 'history'), graphNode('LiveTextDisplay', 'display')];
+  nodes[0].settings.value = 'independent'; nodes[1].settings.value = -1.5;
+  return { version: GRAPH_VERSION, nodes, edges: [
+    edge('text', 'value', 'translation', 'text'), edge('number', 'value', 'translation', 'id'),
+    edge('number', 'value', 'pair', 'id'),
+    edge('text', 'value', 'plain', 'text'),
+    ...[1, 2, 3].flatMap(slot => [edge('number', 'value', 'history', `id${slot}`), edge(slot === 3 ? 'pair' : 'plain', 'dom', 'history', `dom${slot}`)]),
+    edge('history', 'dom', 'display', 'dom'),
+    edge('translation', 'source', 'pair', 'input1'), edge('translation', 'text', 'pair', 'input2'),
+  ] };
+}

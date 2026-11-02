@@ -51,10 +51,10 @@ internal interfaces, not Node-to-Node port contracts.
 ## Correlated utterance IDs
 
 ASR `provisionalId/finalId: NUMBER` accompany the respective TEXT updates;
-final-only ASRs also expose `finalId`. Translation optionally accepts atomic
-`id/text` and `provisionalId/provisional`, retaining the ID in its corresponding
-result family. PairedTextToDOM forwards a supplied ID atomically with DOM.
-KeyedDOMAccumulator combines three atomic ID/DOM routes with explicit slot
+final-only ASRs also expose `finalId`. Translation accepts independent or atomic
+`id/text` and `provisionalId/provisional`, snapshotting the latest available ID
+(or no ID) per job. Any finite NUMBER producer can supply these optional IDs. PairedTextToDOM forwards a supplied ID atomically with DOM.
+KeyedDOMAccumulator combines three independent or atomic ID/DOM slots with explicit slot
 precedence and stable row ordering. See the [continuous ASR wiring and lifecycle
 contract](keyed-dom-history.md). Existing ID-less ports and saved graphs retain
 their behavior.

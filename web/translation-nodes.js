@@ -1,4 +1,4 @@
-import { validateRowId } from './number-node.js';
+import { finiteNumber } from './number-node.js';
 import { TEXT, NUMBER } from './port-contracts.js';
 export { TEXT } from './port-contracts.js';
 
@@ -56,34 +56,38 @@ class WorkerTranslationNode {
   }
   receiveInputs(values, context) {
     for (const port of Object.keys(values)) if (!Object.hasOwn(this.inputs, port)) throw TypeError('Unknown translation input.');
-    if (Object.hasOwn(values, 'id')) validateRowId(values.id);
+    if (Object.hasOwn(values, 'id')) finiteNumber(values.id, 'id');
+    if (Object.hasOwn(values, 'text') && typeof values.text !== 'string') throw new TypeError('Translation input must be a text string.');
+    if (this.disposed || context.signal.aborted) return;
+    if (Object.hasOwn(values, 'id')) this.latestId = values.id;
+    else if (Object.hasOwn(values, 'text') && context.groupInputs?.includes('id')) this.latestId = undefined;
     if (!Object.hasOwn(values, 'text')) return;
-    if (Object.hasOwn(values, 'id') && (!context.groupInputs?.includes('id') || !context.groupInputs.includes('text'))) throw TypeError('Translation ID and TEXT must be grouped.');
-    if (context.connectedInputs?.includes('id') && !Object.hasOwn(values, 'id')) throw TypeError('Translation TEXT is missing its grouped ID.');
-    return this.receive('text', values.text, context, values.id);
+    return this.translate(values.text, context, this.latestId);
   }
+  receive(port, value, context) { return this.receiveInputs({ [port]: value }, context); }
   translationPayload() { return {}; }
-  async receive(port, text, context, id) {
-    if (port !== 'text' || typeof text !== 'string') throw new TypeError('Translation input must be a text string.');
-    const keyed = id !== undefined;
+  async translate(text, context, id) {
+    // Snapshot once, including absence. Later ID events never relabel this job.
+    const metadata = id !== undefined || context.connectedInputs?.includes('id');
+    const identity = id === undefined ? {} : { id };
     try {
       if (text.length > 1000) throw new RangeError('Use a short snippet of at most 1,000 characters.');
       if (!text.trim()) {
-        if (keyed) context.emitOutputs({ id, source: text, text: '', error: '' });
+        if (metadata) context.emitOutputs({ ...identity, source: text, text: '', error: '' });
         return;
       }
       const result = await this.request('translate', 'result', { ...this.translationPayload(), text });
       context.signal.throwIfAborted();
       if (!Array.isArray(result.texts) || result.texts.some(value => typeof value !== 'string')) throw new TypeError('Invalid translation Worker output.');
-      if ((keyed || this.requireSingleOutput) && (result.texts.length !== 1 || !result.texts[0].trim())) throw new Error('Translation model returned no single nonempty translation.');
+      if ((metadata || this.requireSingleOutput) && (result.texts.length !== 1 || !result.texts[0].trim())) throw new Error('Translation model returned no single nonempty translation.');
       for (const value of result.texts) {
-        if (keyed) context.emitOutputs({ id, source: text, text: value, error: '' });
+        if (metadata) context.emitOutputs({ ...identity, source: text, text: value, error: '' });
         else context.emit('text', value);
       }
     } catch (error) {
-      if (!keyed) throw error;
+      if (!metadata) throw error;
       if (this.disposed || context.signal.aborted) return;
-      context.emitOutputs({ id, source: text, error: error.message });
+      context.emitOutputs({ ...identity, source: text, error: error.message });
       try { this.onEvent({ type: 'error', message: error.message }); } catch { /* diagnostic observer only */ }
     }
   }

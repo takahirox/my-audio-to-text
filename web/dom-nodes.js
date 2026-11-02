@@ -1,4 +1,4 @@
-import { validateRowId } from './number-node.js';
+import { finiteNumber } from './number-node.js';
 import { DOM, TEXT, NUMBER } from './port-contracts.js';
 
 // Main-thread, immutable snapshots only. Never send these through a Worker.
@@ -53,34 +53,40 @@ const pairedCSS = `
 export class PairedTextToDOMNode {
   inputs = { input1: TEXT, input2: TEXT, id: NUMBER };
   outputs = { dom: DOM, id: NUMBER };
-  start() { this.values = { input1: '', input2: '' }; this.closed = false; }
+  start() {
+    this.values = { input1: '', input2: '' }; this.id = undefined;
+    this.pending = false; this.pendingContext = undefined; this.closed = false;
+  }
   receiveInputs(values, context) {
     if (this.closed || context.signal.aborted) return;
     for (const [port, value] of Object.entries(values)) {
-      if (port === 'id') { validateRowId(value); continue; }
+      if (port === 'id') { finiteNumber(value, 'id'); continue; }
       if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('PairedTextToDOM expects TEXT inputs.');
     }
-    if (!Object.hasOwn(values, 'input1') && !Object.hasOwn(values, 'input2')) return;
-    const keyed = Object.hasOwn(values, 'id');
-    // ID-bearing updates are delivery-local snapshots, never latest-value joins.
-    // Only an explicitly provisional empty clear may omit its ID (Stop/Cancel).
-    if (context.connectedInputs?.includes('id') && !keyed) {
-      if (context.provisional && Object.values(values).every(value => value === '')) return;
-      throw TypeError('PairedTextToDOM TEXT is missing its grouped ID.');
+    const hasText = Object.hasOwn(values, 'input1') || Object.hasOwn(values, 'input2');
+    const hasId = Object.hasOwn(values, 'id');
+    const missingId = hasText && context.groupInputs?.includes('id') && !hasId;
+    // An ID change starts an empty pair. Only text still waiting for its first
+    // ID can be bound by an ID-only event; emitted text is never reassigned.
+    if ((hasId && this.id !== undefined && this.id !== values.id) || missingId) {
+      this.values = { input1: '', input2: '' }; this.pending = false;
     }
-    if (keyed) {
-      if (!context.groupInputs?.includes('id') || Object.keys(values).some(port => !context.groupInputs.includes(port))) throw TypeError('PairedTextToDOM id and TEXT must be grouped.');
-      // A keyed provisional clear retires a preview route, not the utterance.
-      // Keep its row until a committed update with the same ID replaces it.
-      if (context.provisional && !(values.input1 ?? '') && !(values.input2 ?? '')) return;
-      this.render({ input1: values.input1 ?? '', input2: values.input2 ?? '' }, context, values.id);
-      return;
+    if (hasId || missingId) this.id = values.id;
+    if (hasText) {
+      for (const port of context.groupInputs || []) if (port === 'input1' || port === 'input2') this.values[port] = '';
+      for (const port of ['input1', 'input2']) if (Object.hasOwn(values, port)) this.values[port] = values[port];
+      this.pending = true; this.pendingContext = context;
     }
-    // Explicit groups are producer snapshots: clear omitted siblings only in
-    // that family. Independent deliveries retain the other side's latest text.
-    for (const port of context.groupInputs || []) if (Object.hasOwn(this.inputs, port)) this.values[port] = '';
-    Object.assign(this.values, values);
-    this.render(this.values, context);
+    if (!this.pending) return;
+    const keyed = hasId || missingId || this.id !== undefined || context.connectedInputs?.includes('id');
+    // Preview clears retire a route without blanking the retained row, even
+    // while the committed branch is delayed. Classify the buffered text by its
+    // own context: an independent ID may come from a provisional output.
+    // Empty committed text is valid.
+    if (keyed && this.pendingContext.provisional && !this.values.input1 && !this.values.input2) { this.pending = false; return; }
+    if (keyed && this.id === undefined) return;
+    this.render(this.values, this.pendingContext, this.id);
+    this.pending = false; this.pendingContext = undefined;
   }
   receive(port, value, context) { return this.receiveInputs({ [port]: value }, context); }
   render(pair, context, id) {
@@ -148,7 +154,7 @@ export class DOMCombinerNode {
   dispose() { this.closed = true; this.snapshots = {}; }
 }
 
-// Three independent atomic inputs. Higher numbered slots explicitly supersede
+// Three independent latest-ID slots. Higher numbered slots explicitly supersede
 // lower slots for the same key, irrespective of branch scheduling. Equal-slot
 // updates replace in arrival order. No payload inspection or producer knowledge.
 export const KEYED_DOM_INPUTS = Object.freeze(Object.fromEntries([1, 2, 3].flatMap(n => [[`id${n}`, NUMBER], [`dom${n}`, DOM]])));
@@ -156,21 +162,28 @@ export class KeyedDOMAccumulatorNode {
   inputs = KEYED_DOM_INPUTS;
   outputs = { dom: DOM };
   start(context) {
-    this.rows = new Map(); this.closed = false;
+    this.rows = new Map(); this.slots = [{}, {}, {}]; this.closed = false;
     context.emit('dom', document.createDocumentFragment());
   }
   receiveInputs(values, context) {
     if (this.closed || context.signal.aborted) return;
+    // Validate and clone the whole delivery before mutating any slot or row.
+    const snapshots = {};
+    for (const [port, value] of Object.entries(values)) {
+      if (!Object.hasOwn(this.inputs, port)) throw TypeError('Unknown keyed DOM input.');
+      snapshots[port] = port.startsWith('id') ? finiteNumber(value, port) : cloneDOM(value);
+    }
     const updates = [];
-    for (const port of Object.keys(values)) if (!Object.hasOwn(this.inputs, port)) throw TypeError('Unknown keyed DOM input.');
     for (const slot of [1, 2, 3]) {
-      const idPort = `id${slot}`, domPort = `dom${slot}`;
-      if (!Object.hasOwn(values, idPort) && !Object.hasOwn(values, domPort)) continue;
-      if (!Object.hasOwn(values, idPort) || !Object.hasOwn(values, domPort) || !context.groupInputs?.includes(idPort) || !context.groupInputs.includes(domPort)) {
-        throw TypeError('KeyedDOMAccumulator requires grouped ID + DOM per slot.');
-      }
-      validateRowId(values[idPort]);
-      updates.push({ id: values[idPort], slot, dom: cloneDOM(values[domPort]) });
+      const state = this.slots[slot - 1], idPort = `id${slot}`, domPort = `dom${slot}`;
+      const hasId = Object.hasOwn(snapshots, idPort), hasDOM = Object.hasOwn(snapshots, domPort);
+      const missingId = hasDOM && context.groupInputs?.includes(idPort) && !hasId;
+      if ((hasId && state.id !== undefined && state.id !== snapshots[idPort]) || missingId) delete state.pending;
+      if (hasId || missingId) state.id = snapshots[idPort];
+      if (hasDOM) state.pending = snapshots[domPort];
+      if (state.id === undefined || !state.pending) continue;
+      updates.push({ id: state.id, slot, dom: state.pending });
+      delete state.pending;
     }
     let changed = false;
     for (const update of updates) {
