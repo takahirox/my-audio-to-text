@@ -1,3 +1,4 @@
+import { NUMBER } from '../web/port-contracts.js';
 import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { accumulateDisplay } from './fixtures/text-accumulator.js';
@@ -38,7 +39,7 @@ for (const [type, Node, key, factoryKey, partial] of types) {
     const worker = new Worker(), events = [], output = [];
     const node = new Node({ workerFactory: path => { assert.match(path, key.startsWith('parakeet') ? /parakeet-v3-worker/ : /moonshine-medium-worker/); return worker; }, onEvent: event => events.push(event) });
     assert.deepEqual(node.inputs, { audio: MONO_16KHZ_PCM });
-    assert.deepEqual(node.outputs, partial ? { provisional: TEXT, final: TEXT } : { final: TEXT });
+    assert.deepEqual(node.outputs, partial ? { provisional: TEXT, provisionalId: NUMBER, final: TEXT, finalId: NUMBER } : { final: TEXT, finalId: NUMBER });
     const ready = node.load(); worker.send({ type: 'ready' }); await ready;
     const controller = new AbortController(), context = { signal: controller.signal, emit: (...value) => output.push(value), emitOutputs: values => output.push(...Object.entries(values)), fail: error => { throw error; } };
     await node.start(context);
@@ -62,7 +63,7 @@ for (const [type, Node, key, factoryKey, partial] of types) {
     worker.send({ type: 'error', session: 1, message: 'old session error' });
     worker.send({ type: 'final', session: 1, id: 2, text: 'stale' });
     worker.send({ type: 'final', session: 2, id: 0, text: 'fresh' });
-    assert.deepEqual(output.at(-1), ['final', 'fresh']);
+    assert.deepEqual(output.filter(([port]) => port === 'final').at(-1), ['final', 'fresh']);
     next.dispose(); assert.equal(worker.released, true);
     assert.equal(next.core.pendingSamples, 0); assert.equal(next.core.queue.length, 0);
     assert.throws(() => node.receive('language', 'en'), /Unknown/);

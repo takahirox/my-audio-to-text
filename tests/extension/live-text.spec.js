@@ -444,7 +444,7 @@ for (const rootType of ['inline', 'text', 'fragment']) {
 for (const includeError of [false,true]) test(`MV3 v11 paired port review preserves original JSON, unrelated routes and editor save/reload (error=${includeError})`, async ({graphExtension:f}) => {
   const live=await openGraph({...f,url:`${f.url}?error=&tab=42`});
   const {raw,expected}=await live.evaluate(async includeError=>{
-    const {defaultGraph,graphNode,edge,GRAPH_KEY}=await import('./graph.js');
+    const {defaultGraph,graphNode,edge,GRAPH_KEY,GRAPH_VERSION}=await import('./graph.js');
     const old=defaultGraph({enabled:true,direction:'en-ja'});old.version=11;
     old.nodes.find(node=>node.id==='translated').settings.label='My comparison';
     old.nodes.push(graphNode('TextFormatter','diagnostics'),graphNode('Text','parked'));
@@ -453,7 +453,7 @@ for (const includeError of [false,true]) test(`MV3 v11 paired port review preser
     if(includeError) old.edges.push(edge('translation','error','translated-format','error'));
     const raw=JSON.stringify(old,null,2);localStorage.setItem(GRAPH_KEY,raw);
     localStorage.setItem('processing-graph-before-v11','previous recovery');
-    const expected=structuredClone(old);expected.version=14;
+    const expected=structuredClone(old);expected.version=GRAPH_VERSION;
     expected.edges=expected.edges.filter(route=>route.to[0]!=='translated-format'||route.to[1]!=='error');
     for(const route of expected.edges) if(route.to[0]==='translated-format') route.to[1]=route.to[1]==='source'?'input1':'input2';
     return {raw,expected};

@@ -1,3 +1,4 @@
+import { NUMBER } from '../web/port-contracts.js';
 import { addDOMFormatters, reviewSavedGraph } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { accumulateDisplay } from './fixtures/text-accumulator.js';
@@ -59,11 +60,11 @@ function fixture({ language, hold, failure } = {}) {
   return { ...built, speech: built.speechNodes.get('speech'), workers, finals, previews, requests };
 }
 
-test('Whisper schema and concrete runtime expose exactly final; ReazonSpeech retains both outputs and default routes', async () => {
-  assert.deepEqual(NODE_TYPES.SpeechToTextWhisper.outputs, { final: TEXT });
-  assert.deepEqual(new SpeechToTextWhisperNode().outputs, { final: TEXT });
-  assert.deepEqual(NODE_TYPES.SpeechToTextReazonSpeech.outputs, { provisional: TEXT, final: TEXT });
-  assert.deepEqual(new SpeechToTextNode().outputs, { provisional: TEXT, final: TEXT });
+test('Whisper schema and concrete runtime expose final and its ID; ReazonSpeech retains both outputs and default routes', async () => {
+  assert.deepEqual(NODE_TYPES.SpeechToTextWhisper.outputs, { final: TEXT, finalId: NUMBER });
+  assert.deepEqual(new SpeechToTextWhisperNode().outputs, { final: TEXT, finalId: NUMBER });
+  assert.deepEqual(NODE_TYPES.SpeechToTextReazonSpeech.outputs, { provisional: TEXT, provisionalId: NUMBER, final: TEXT, finalId: NUMBER });
+  assert.deepEqual(new SpeechToTextNode().outputs, { provisional: TEXT, provisionalId: NUMBER, final: TEXT, finalId: NUMBER });
   assert.deepEqual(defaultGraph().edges.slice(1), [edge('speech', 'provisional', 'transcript-preview', 'text'), edge('speech', 'final', 'transcript-accumulator', 'append'), edge('transcript-accumulator', 'text', 'transcript-dom', 'text'), edge('transcript-dom', 'dom', 'transcript-combined', 'first'), edge('transcript-preview', 'dom', 'transcript-combined', 'second'), edge('transcript-combined', 'dom', 'transcript', 'dom')]);
   const graph = whisperGraph();
   assert.deepEqual(validateGraph(graph), []);

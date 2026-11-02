@@ -17,6 +17,7 @@ export class OptionalAsrNode extends SpeechToTextNode {
     catch (error) { if (this.disposed || error.name === 'AbortError') throw error; this.unavailable = true; }
   }
   async start(context) {
+    this.resetUtterances();
     this.context = context;
     await this.load(); context.signal.throwIfAborted();
     if (!this.unavailable) try { this.core.start(); } catch (error) { this.receiveEvent({ type: 'error', message: error.message }); }

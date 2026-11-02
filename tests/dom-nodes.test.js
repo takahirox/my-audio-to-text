@@ -1,3 +1,4 @@
+import { NUMBER } from '../web/port-contracts.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { document, domText } from './fixtures/dom.js';
@@ -79,7 +80,7 @@ test('DOM accepts fragments and text nodes, clones before mounting, and rejects 
 
 for (const provisional of [false, true]) test(`paired formatter emits one literal neutral pair, with omissions and no retained history (provisional=${provisional})`, () => {
   const snapshots = [], node = new PairedTextToDOMNode(), c = { ...ctx((_,dom) => snapshots.push(dom)), provisional, groupInputs: ['input1','input2'] };
-  assert.deepEqual(node.inputs, {input1: TEXT, input2: TEXT}); assert.deepEqual(node.outputs, {dom: DOM});
+  assert.deepEqual(node.inputs, {input1: TEXT, input2: TEXT, id: NUMBER}); assert.deepEqual(node.outputs, {dom: DOM, id: NUMBER});
   node.start(c); assert.equal(snapshots.length, 0);
   for (const value of [{input1:' same\n',input2:' first '}, {input1:' same\n',input2:' first '}, {input1:'',input2:''}, {input1:'<b>literal</b>'}]) node.receiveInputs(value,c);
   assert.deepEqual(snapshots.map(dom => [...dom.querySelectorAll('td')].map(cell => cell.textContent)),

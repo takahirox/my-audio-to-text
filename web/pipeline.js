@@ -15,6 +15,7 @@ export class Pipeline {
     this.errors = [];
     this.entries = new Map(Object.entries(nodes).map(([id, node]) => [id, {
       id, node, inputs: { ...node.inputs }, outputs: { ...node.outputs },
+      provisionalOutputs: new Set(node.provisionalOutputs || []),
       outputGroups: (node.outputGroups || [Object.keys(node.outputs || {})]).map(ports => [...ports]),
       routes: new Map(), queue: Promise.resolve(), controller: new AbortController(),
       active: false, closed: false, failed: false,
@@ -105,10 +106,15 @@ export class Pipeline {
       // No Node types, output names or payload equality participate in identity.
       // Producers can mark unfinished results without changing primitive ports.
       // Retaining a receive context also retains this flag across async forwarding.
-      const context = Object.freeze({ ...target.context, groupInputs, delivery, cause, provisional,
+      // A simultaneous final/preview-clear group can route unfinished outputs
+      // to one consumer and committed outputs to another. Preserve that meaning
+      // without splitting the atomic delivery or interpreting port names.
+      const unfinished = provisional || outputs.filter(([port]) => (entry.routes.get(port) || []).some(route => route.entry === target))
+        .every(([port]) => entry.provisionalOutputs.has(port));
+      const context = Object.freeze({ ...target.context, groupInputs, delivery, cause, provisional: unfinished,
         ...(cleanup ? { signal: this.cleanupController.signal } : {}),
-        emit: (port, value) => this.emit(target, port, value, delivery, cleanup, provisional),
-        emitOutputs: (values, options) => this.emitOutputs(target, values, true, delivery, cleanup, provisional || options?.provisional === true),
+        emit: (port, value) => this.emit(target, port, value, delivery, cleanup, unfinished),
+        emitOutputs: (values, options) => this.emitOutputs(target, values, true, delivery, cleanup, unfinished || options?.provisional === true),
       });
       Object.freeze(inputs);
       // One queue item per target: no interleaving while an async hook runs.

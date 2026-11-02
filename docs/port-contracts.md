@@ -27,7 +27,8 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | LiveTextDisplay | dom: DOM | Clone and mount the complete inert DOM snapshot |
 | TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
 | TextWindow | text: TEXT; optional maxChars: NUMBER, maxWaitSeconds: NUMBER → text: TEXT | Exact generic batching; independent defaults 600 / 1.5 s; length/time/Stop only; Stop flushes once, Cancel discards; no threshold Settings or preview output |
-| PairedTextToDOM | input1/input2: TEXT → dom: DOM; either side may be unconnected | Either input emits both latest values, initially empty; one snapshot per atomic delivery; no history; hover/focus CSS |
+| PairedTextToDOM | input1/input2: TEXT, optional id: NUMBER → dom: DOM, optional id: NUMBER; either text side may be unconnected | Either input emits both latest values, initially empty; one snapshot per atomic delivery; no history; hover/focus CSS |
+| KeyedDOMAccumulator | atomic id1/dom1, id2/dom2, id3/dom3: NUMBER/DOM → dom: DOM | Append new keys, replace matching rows in place; higher slot supersedes lower; Start clears |
 | DOMAccumulator | append: DOM → dom: DOM | Ordered session history of validated, cloned snapshots; Start clears, Stop/Cancel retain |
 | TextAccumulator | append: TEXT → text: TEXT | Exact newline-separated committed segments |
 | [TextSlidingWindow](text-sliding-window.md) | text: TEXT, optional maxChars: NUMBER → text: TEXT | Rolling bounded history; sentence/word eviction, code-point-safe suffix fallback; limit updates emit nothing |
@@ -46,6 +47,17 @@ produce different native rates. Captured audio instead has a fixed, agreed mono
 misinterpreting synthesis output as capture input; no blanket unification is needed.
 Observer events, worker RPCs, configuration, graph JSON and UI row objects are
 internal interfaces, not Node-to-Node port contracts.
+
+## Correlated utterance IDs
+
+ASR `provisionalId/finalId: NUMBER` accompany the respective TEXT updates;
+final-only ASRs also expose `finalId`. Translation optionally accepts atomic
+`id/text` and `provisionalId/provisional`, retaining the ID in its corresponding
+result family. PairedTextToDOM forwards a supplied ID atomically with DOM.
+KeyedDOMAccumulator combines three atomic ID/DOM routes with explicit slot
+precedence and stable row ordering. See the [continuous ASR wiring and lifecycle
+contract](keyed-dom-history.md). Existing ID-less ports and saved graphs retain
+their behavior.
 
 ## Correlated translation primitives
 

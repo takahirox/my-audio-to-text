@@ -1,10 +1,11 @@
-import { TEXT } from './port-contracts.js';
+import { validateRowId } from './number-node.js';
+import { TEXT, NUMBER } from './port-contracts.js';
 export { TEXT } from './port-contracts.js';
 
 // Private transport only: every node instance owns its Worker and pending RPCs.
 class WorkerTranslationNode {
-  inputs = { text: TEXT };
-  outputs = { text: TEXT };
+  inputs = { text: TEXT, id: NUMBER };
+  outputs = { text: TEXT, source: TEXT, error: TEXT, id: NUMBER };
   constructor(url, { workerFactory = url => new Worker(url, { type: 'module' }), onEvent = () => {}, loadOptions = {}, requireSingleOutput = false } = {}) {
     this.url = url; this.workerFactory = workerFactory; this.onEvent = onEvent;
     this.loadOptions = loadOptions; this.requireSingleOutput = requireSingleOutput;
@@ -31,7 +32,8 @@ class WorkerTranslationNode {
     const workerError = event => {
       const error = new Error(event.message || 'Translation Worker communication failed.');
       for (const pending of this.pending.values()) pending.reject(error);
-      this.pending.clear(); context.fail(error);
+      this.pending.clear(); this.failureError = error;
+      if (!context.connectedInputs?.includes('id')) context.fail(error);
     };
     this.worker.onerror = workerError; this.worker.onmessageerror = workerError;
     this.abort = () => this.dispose();
@@ -44,6 +46,7 @@ class WorkerTranslationNode {
     if (this.disposed || this.context?.signal.aborted) {
       return Promise.reject(new DOMException('Translation canceled.', 'AbortError'));
     }
+    if (this.failureError) return Promise.reject(this.failureError);
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject, type: reply });
@@ -51,21 +54,40 @@ class WorkerTranslationNode {
       catch (error) { this.pending.delete(id); reject(error); }
     });
   }
-  async receive(port, text, context, payload = {}) {
-    if (port !== 'text' || typeof text !== 'string') throw new TypeError('Translation input must be a text string.');
-    if (text.length > 1000) throw new RangeError('Use a short snippet of at most 1,000 characters.');
-    if (!text.trim()) return; // zero outputs; no inference for whitespace
-    const result = await this.request('translate', 'result', { ...payload, text });
-    context.signal.throwIfAborted();
-    if (!Array.isArray(result.texts) || result.texts.some(value => typeof value !== 'string')) {
-      throw new TypeError('Invalid translation Worker output.');
-    }
-    if (this.requireSingleOutput && (result.texts.length !== 1 || !result.texts[0].trim())) {
-      throw new Error('Translation model returned no single nonempty translation.');
-    }
-    for (const value of result.texts) context.emit('text', value);
+  receiveInputs(values, context) {
+    for (const port of Object.keys(values)) if (!Object.hasOwn(this.inputs, port)) throw TypeError('Unknown translation input.');
+    if (Object.hasOwn(values, 'id')) validateRowId(values.id);
+    if (!Object.hasOwn(values, 'text')) return;
+    if (Object.hasOwn(values, 'id') && (!context.groupInputs?.includes('id') || !context.groupInputs.includes('text'))) throw TypeError('Translation ID and TEXT must be grouped.');
+    if (context.connectedInputs?.includes('id') && !Object.hasOwn(values, 'id')) throw TypeError('Translation TEXT is missing its grouped ID.');
+    return this.receive('text', values.text, context, values.id);
   }
-  async stop() { await this.request('drain', 'drained'); }
+  translationPayload() { return {}; }
+  async receive(port, text, context, id) {
+    if (port !== 'text' || typeof text !== 'string') throw new TypeError('Translation input must be a text string.');
+    const keyed = id !== undefined;
+    try {
+      if (text.length > 1000) throw new RangeError('Use a short snippet of at most 1,000 characters.');
+      if (!text.trim()) {
+        if (keyed) context.emitOutputs({ id, source: text, text: '', error: '' });
+        return;
+      }
+      const result = await this.request('translate', 'result', { ...this.translationPayload(), text });
+      context.signal.throwIfAborted();
+      if (!Array.isArray(result.texts) || result.texts.some(value => typeof value !== 'string')) throw new TypeError('Invalid translation Worker output.');
+      if ((keyed || this.requireSingleOutput) && (result.texts.length !== 1 || !result.texts[0].trim())) throw new Error('Translation model returned no single nonempty translation.');
+      for (const value of result.texts) {
+        if (keyed) context.emitOutputs({ id, source: text, text: value, error: '' });
+        else context.emit('text', value);
+      }
+    } catch (error) {
+      if (!keyed) throw error;
+      if (this.disposed || context.signal.aborted) return;
+      context.emitOutputs({ id, source: text, error: error.message });
+      try { this.onEvent({ type: 'error', message: error.message }); } catch { /* diagnostic observer only */ }
+    }
+  }
+  async stop() { if (!this.failureError) await this.request('drain', 'drained'); }
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
@@ -92,12 +114,12 @@ export class TranslateGemmaTranslationNode extends WorkerTranslationNode {
     super(new URL('./translategemma-worker.js', import.meta.url), {
       ...options, loadOptions: { ...options?.loadOptions, direction },
     });
-    // Internal scheduler adapter. Standalone TEXT ports remain unchanged.
+    // Internal scheduler adapter; context is snapshotted by the scheduler.
     this.getTranslationContext = options?.getTranslationContext;
   }
-  receive(port, text, context) {
+  translationPayload() {
     const translationContext = this.getTranslationContext?.() ?? '';
-    return super.receive(port, text, context, translationContext ? { context: translationContext } : {});
+    return translationContext ? { context: translationContext } : {};
   }
 }
 export class EnglishToJapaneseTranslateGemmaTranslationNode extends TranslateGemmaTranslationNode {

@@ -221,12 +221,12 @@ errors remain in translation diagnostics.
 Saved paired source/text/error wiring requires a v12 review draft and Save,
 with exact original JSON retained for recovery. For optional comparison
 history, explicitly connect `PairedTextToDOM.dom → DOMAccumulator.append → dom →
-LiveTextDisplay.dom`. To include live ASR beneath that history in one display,
-connect history to `DOMCombiner.first`, ASR provisional → `TextToDOM` to
-`DOMCombiner.second`, and `DOMCombiner.dom` to the display. Final ASR clears its
-preview immediately; final English awaiting translation has no pending row.
-Set that preview TextToDOM's `className` to `paired-text-tail` to align its italic
-text with the original column, leaving the translation side empty.
+LiveTextDisplay.dom`. For continuous ASR rows while translation is pending,
+connect ASR provisional/final and translation through three ID-bearing paired
+formatters to `KeyedDOMAccumulator` slots 1/2/3, then to the display. The same
+utterance stays visible as preview → final source → translated pair; overlapping
+utterances replace their own rows. See the [concrete wiring and ID lifecycle](docs/keyed-dom-history.md).
+Existing ID-less append-only and separate-preview compositions remain supported.
 Each Live region follows incoming DOM while you are reading near the bottom;
 scrolling up keeps your position until you return to the bottom.
 Formatting, accumulation, combination and display remain separate processors.

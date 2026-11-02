@@ -12,3 +12,7 @@ export class NumberNode {
   constructor({ value = 6 } = {}) { this.value = finiteNumber(value); }
   start(context) { context.emit('value', this.value); }
 }
+
+export function validateRowId(id) {
+  if (!Number.isSafeInteger(id) || id < 0) throw TypeError('Row ID must be a nonnegative safe integer NUMBER.');
+}

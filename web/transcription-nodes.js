@@ -7,6 +7,12 @@ export { TEXT } from './port-contracts.js';
 
 export const MONO_16KHZ_PCM = portContract('mono 16 kHz Float32Array PCM');
 
+// Page-session unique across all ASR instances, including warm nextSession cores.
+// Never reuse numbers: late work from an old graph cannot address a new row.
+let utteranceSequence = 0;
+export const asrOutputs = (preview = true) => ({ ...(preview ? { provisional: TEXT, provisionalId: NUMBER } : {}), final: TEXT, finalId: NUMBER });
+export const ASR_OUTPUT_GROUPS = [['provisional', 'provisionalId'], ['final', 'finalId']];
+
 // Capture and diagnostics remain source policy, outside the generic runtime.
 class BrowserAudioNode {
   inputs = {};
@@ -80,7 +86,9 @@ export class MicrophoneAudioNode extends BrowserAudioNode {
 
 export class SpeechToTextNode {
   inputs = { audio: MONO_16KHZ_PCM, maxDuration: NUMBER };
-  outputs = { provisional: TEXT, final: TEXT };
+  outputs = asrOutputs();
+  outputGroups = ASR_OUTPUT_GROUPS;
+  provisionalOutputs = ['provisional', 'provisionalId'];
   configurationPort = 'maxDuration';
   constructor({ onEvent = () => {}, workerFactory, maxDuration = ASR_CONFIG.defaultMaxDurationSeconds, configurationConnected = false } = {}) {
     maxDurationSamples(maxDuration); this.maxDuration = maxDuration;
@@ -89,7 +97,7 @@ export class SpeechToTextNode {
     this.core = new LocalAsrCore(event => this.receiveEvent(event), { workerFactory });
   }
   receiveEvent(event) {
-    if (this.disposed || this.stopped || !this.core) return;
+    if (this.disposed || this.stopped || this.context?.signal.aborted || !this.core) return;
     if (event.type === 'ready') this.loading?.resolve();
     else if (event.type === 'stopped') this.draining?.resolve();
     else if (event.type === 'error') {
@@ -100,17 +108,23 @@ export class SpeechToTextNode {
       this.context?.fail(error);
     } else if (event.type === 'partial' || event.type === 'final') {
       // Deduplicate worker finals here, before fan-out. Identical strings with
-      // different utterance IDs remain distinct values; IDs stay core-local.
+      // different utterance IDs remain distinct values; public IDs are allocated independently of core-local IDs.
       if (Number.isSafeInteger(event.id) && event.id >= 0) {
         if (event.id <= (this.lastFinalId ?? -1)) return;
         if (event.type === 'final') this.lastFinalId = event.id;
       }
-      // One atomic finalization: translators let final win over the
-      // cleared preview, preserving causal identity and avoiding an empty preview
-      // translation. Clear here, never on completion of delayed downstream work.
-      if (event.type === 'final' && this.outputs.provisional) {
-        this.context?.emitOutputs({ provisional: '', final: event.text });
-      } else this.context?.emit(event.type === 'partial' ? 'provisional' : 'final', event.text);
+      this.utteranceIds ??= new Map();
+      if (!this.utteranceIds.has(event.id)) {
+        if (!Number.isSafeInteger(++utteranceSequence)) throw RangeError('ASR utterance ID space exhausted.');
+        this.utteranceIds.set(event.id, utteranceSequence);
+      }
+      const id = this.utteranceIds.get(event.id);
+      if (event.type === 'final') {
+        // Final and preview clear carry the same key in one delivery. The
+        // preview output family remains provisional for downstream clear handling.
+        this.context?.emitOutputs({ ...(this.outputs.provisional ? { provisional: '', provisionalId: id } : {}), final: event.text, finalId: id });
+        this.utteranceIds.delete(event.id);
+      } else this.context?.emitOutputs({ provisional: event.text, provisionalId: id }, { provisional: true });
     }
     this.onEvent(event);
   }
@@ -127,8 +141,10 @@ export class SpeechToTextNode {
     }
     return this.loading.promise;
   }
+  resetUtterances() { this.utteranceIds = new Map(); this.lastFinalId = undefined; }
   start(context) {
     context.signal.throwIfAborted();
+    this.resetUtterances();
     this.context = context;
     this.abort = () => this.dispose();
     context.signal.addEventListener('abort', this.abort, { once: true });

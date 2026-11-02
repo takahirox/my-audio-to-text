@@ -1,4 +1,4 @@
-import { SpeechToTextNode, MONO_16KHZ_PCM, TEXT } from './transcription-nodes.js';
+import { SpeechToTextNode, MONO_16KHZ_PCM, TEXT, asrOutputs } from './transcription-nodes.js';
 import { LocalAsrCore } from './local-asr-core.js';
 import { whisperLanguage } from './whisper-config.js';
 
@@ -6,7 +6,7 @@ import { whisperLanguage } from './whisper-config.js';
 // goes to Whisper. It never performs or publishes provisional inference.
 export class SpeechToTextWhisperNode extends SpeechToTextNode {
   inputs = { audio: MONO_16KHZ_PCM, language: TEXT };
-  outputs = { final: TEXT };
+  outputs = asrOutputs(false);
   configurationPort = 'language';
   constructor({ language = 'en', workerFactory, ...options } = {}) {
     super({ ...options, maxDuration: 6 });
