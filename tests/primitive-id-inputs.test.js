@@ -149,7 +149,7 @@ for (const type of ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'Translate
 
 test('all current same-contract ID routes are producer/family-independent', () => {
   for (const [sourceType, source] of Object.entries(NODE_TYPES)) for (const [output, contract] of Object.entries(source.outputs)) {
-    for (const targetType of ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'PairedTextToDOM', 'KeyedDOMAccumulator']) {
+    for (const targetType of ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'PairedTextToDOM', 'KeyedDOMAccumulator', 'KeyedTextCoalesce']) {
       for (const [input, expected] of Object.entries(NODE_TYPES[targetType].inputs)) {
         if (contract !== expected) continue;
         const graph = independentIDGraph();
