@@ -107,6 +107,19 @@ test('field-only graph reports every unavailable destination without adding a fa
   await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /No text destination is active/);
   f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop(); assert.equal((domText(f.session.view.displays.transcript) || ''), '');
 });
+test('portable Display remains an active destination when a focused field is unavailable', async () => {
+  const graph = fieldOutputs({ live: false });
+  graph.nodes.push(graphNode('ViewBuilder', 'view'), graphNode('Display', 'portable'));
+  graph.edges.push(edge('speech', 'final', 'view', 'input1'), edge('view', 'view', 'portable', 'view'));
+  const f = fixture({ graph, pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
+  await f.session.start(42);
+  assert.equal(f.session.view.state, 'running');
+  assert.match(f.session.view.targetStatus, /output skipped/);
+  assert.doesNotMatch(f.session.view.targetStatus, /No text destination is active/);
+  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', id: 1, text: 'Portable output' });
+  await drain(); assert.equal(domText(f.session.view.displays.portable), 'Portable output');
+  await f.session.stop();
+});
 test('stale document disables focused output while Live continues; cancellation releases capture and workers', async () => {
   const f = fixture({ graph: fieldOutputs(), pageConnectionFactory: () => ({ request: async () => { throw Error('Permission lost'); }, close() {} }) });
   f.session.outputTarget = { tabId: 42, documentId: 'stale', label: 'Page' };

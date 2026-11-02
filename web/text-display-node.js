@@ -1,8 +1,8 @@
 import { NUMBER, TEXT } from './port-contracts.js';
 import { finiteNumber } from './number-node.js';
 
-// Browser implementation of the logical text output sink. DOM is private to
-// this host callback; the graph has only primitive inputs and no outputs.
+// Compatibility implementation for saved #194 graphs. New graphs compose
+// ViewBuilder (portable history) -> Display (VIEW-only browser rendering).
 export class TextDisplayNode {
   inputs = { id: NUMBER, input1: TEXT, input2: TEXT };
   outputs = {};

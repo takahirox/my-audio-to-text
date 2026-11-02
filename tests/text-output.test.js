@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { document } from './fixtures/dom.js';
 import { keyedTextGraph } from './fixtures/keyed-text-graph.js';
+import { viewGraph } from './fixtures/view-graph.js';
 import { keyedDOMGraph } from './fixtures/keyed-dom-graph.js';
-import { NUMBER, TEXT } from '../web/port-contracts.js';
+import { NUMBER, TEXT, VIEW } from '../web/port-contracts.js';
 import { TextDisplayNode } from '../web/text-display-node.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { renderTextRegions } from '../extension/live-text-regions.js';
@@ -84,12 +85,12 @@ function workers() {
   const complete = (index, error) => { const r = requests[index]; r.w.onmessage?.({ data: { id: r.id, type: error ? 'error' : 'result', message: error, texts: [`translated:${r.text}`] } }); };
   return { factory, requests, owned, complete };
 }
-for (const translator of ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', null]) {
-  test(`${translator || 'direct ASR'}: preview → final → late A translation while B is active, no gap, literal rendering and lifecycle`, async () => {
-    const f = workers(), snapshots = [], graph = keyedTextGraph(translator);
+for (const graphFactory of [keyedTextGraph, viewGraph]) for (const translator of ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', null]) {
+  test(`${graphFactory.name}/${translator || 'direct ASR'}: preview → final → late A translation while B is active, no gap, literal rendering and lifecycle`, async () => {
+    const f = workers(), snapshots = [], graph = graphFactory(translator);
     assert.deepEqual(validateGraph(graph), []); assert.deepEqual(graphWarnings(graph), []);
     assert.deepEqual(executableGraph(graph), graph);
-    for (const r of graph.edges.filter(r => r.from[0] !== 'audio')) assert.ok([NUMBER, TEXT].includes(NODE_TYPES[graph.nodes.find(n => n.id === r.from[0]).type].outputs[r.from[1]]));
+    for (const r of graph.edges.filter(r => r.from[0] !== 'audio')) assert.ok([NUMBER, TEXT, VIEW].includes(NODE_TYPES[graph.nodes.find(n => n.id === r.from[0]).type].outputs[r.from[1]]));
     const built = buildGraph(graph, { sourceFactory: () => ({ start() {}, stop() {} }), workerFactory: f.factory,
       translationWorkerFactory: f.factory, prepareTranslation() {}, prepareTranslateGemma() {}, onDisplay: (_, dom) => snapshots.push(dom) });
     try {
@@ -122,7 +123,7 @@ for (const translator of ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'Tra
 test('saved graphs round-trip without migration or changes to legacy DOM graphs/recovery', () => {
   const values = new Map([[GRAPH_RECOVERY_KEY, 'original recovery']]);
   const storage = { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: k => values.delete(k) };
-  for (const graph of [keyedDOMGraph(), keyedTextGraph()]) {
+  for (const graph of [keyedDOMGraph(), keyedTextGraph(), viewGraph()]) {
     saveGraph(storage, graph); const original = storage.getItem(GRAPH_KEY);
     assert.deepEqual(readGraph(storage), graph); assert.equal(storage.getItem(GRAPH_KEY), original);
     assert.equal(storage.getItem(GRAPH_RECOVERY_KEY), 'original recovery');

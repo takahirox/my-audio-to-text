@@ -1,6 +1,6 @@
 import { GRAPH_VERSION, graphNode, edge } from '../../extension/graph.js';
 
-// Recommended transcript graph: every edge after ASR is NUMBER or TEXT.
+// Legacy #194 transcript graph, retained to exercise saved-graph compatibility.
 export function keyedTextGraph(translator = 'OpusMtEnJa') {
   const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30),
     graphNode('SpeechToTextReazonSpeech', 'speech', 300, 30),

@@ -1215,14 +1215,21 @@ preview, finalized source and translated rows. See the
 Version 15 graphs are unchanged unless these optional ports are connected.
 
 
-## Primitive text pairing and output (#194)
+## Portable view processing and output (#196)
 
 For new continuous transcript graphs, connect ASR final/provisional through
-`KeyedTextCoalesce`, pair its selected original text with independently keyed
-translation using `KeyedTextPair`, then connect all three snapshot outputs to
-`TextDisplay`. Processing uses only existing NUMBER/TEXT ports; browser rendering
-and visible row history live inside the output sink. Both new Nodes are selectable,
-have no Settings and serialize as ordinary version 15 nodes. No graph version
-bump, migration or legacy DOM rewiring is needed.
+`KeyedTextCoalesce`, pair its original text with independently keyed translation
+using `KeyedTextPair`, then connect all three outputs to `ViewBuilder`.
+`ViewBuilder.view → Display.view` is the only structured rendering boundary.
+Primitive processors keep NUMBER/TEXT contracts; the builder creates complete
+portable VIEW snapshots and owns history. Display receives VIEW only and renders
+literal browser text without accumulating or interpreting IDs or sources.
+One-cell plain text and two-cell transcript rows use the same builder and sink.
+Both Nodes have no Settings and serialize as ordinary version 15 nodes.
 
-See [exact wiring, delivery semantics and host boundary](keyed-text-history.md).
+See [data invariants, exact wiring, delivery and lifecycle](view.md) and the
+[recommended importable graph](evidence/view-196.json). Saved #194 TextDisplay
+and earlier DOM compositions remain supported unchanged; no graph version bump,
+automatic rewiring or storage migration is needed. Existing defaults and legacy
+preference imports retain their established browser behavior. The
+[former #194 graph](keyed-text-history.md) is a compatibility reference.

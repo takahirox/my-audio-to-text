@@ -218,7 +218,7 @@ Each branch's ID selects subsequent text updates. Text before its first ID waits
 (latest value only); ID-only changes never relabel completed text or emit blanks.
 Grouped ID/text updates apply atomically; an omitted grouped ID waits for an ID
 rather than borrowing the old key. Start resets state; Stop/Cancel reject late
-updates. Route `text → TextDisplay.input1` for the latest plain text, or
+updates. Route `text → ViewBuilder.input1 → view → Display.view` for latest plain text, or
 `id/text → KeyedTextPair.id1/input1` for a keyed two-column transcript.
 
 `PairedTextToDOM` emits one fresh DOM pair whenever either generic TEXT input updates,
@@ -236,17 +236,20 @@ Saved paired source/text/error wiring requires a v12 review draft and Save,
 with exact original JSON retained for recovery. For optional comparison
 history, explicitly connect `PairedTextToDOM.dom → DOMAccumulator.append → dom →
 LiveTextDisplay.dom`. For continuous ASR rows while translation is pending,
-use `ASR → KeyedTextCoalesce → KeyedTextPair → TextDisplay`, with a separate
+use `ASR → KeyedTextCoalesce → KeyedTextPair → ViewBuilder → Display`, with a separate
 `ASR.finalId/final → translator.id/text → KeyedTextPair.id2/input2` branch.
-`KeyedTextPair` retains left and right strings per numeric ID, emits complete
-primitive snapshots and has no DOM dependency or Settings. `TextDisplay` is the
-output sink: one TEXT input shows plain text, both show two columns. Optional
-`id` gives first-seen row order and replacement in place; without it, the latest
-snapshot replaces the view. Rendering and visible history belong to the sink.
-Original text appears immediately; late A translation updates A while B remains
-visible. See the [exact primitive wiring](docs/keyed-text-history.md) and
-[executable graph fixture](tests/fixtures/keyed-text-graph.js). Legacy DOM Nodes
-and saved graphs remain supported without rewiring.
+`KeyedTextPair` retains left and right strings per independent numeric ID and
+emits complete primitive snapshots. `ViewBuilder` owns first-seen row order and
+replacement history, emitting portable `VIEW` data: `{ rows: [{ id?, cells }] }`.
+Without id it emits one latest row; one TEXT input gives one cell, both give two.
+`Display` receives only `view: VIEW` and renders the complete snapshot literally,
+with no keyed history or source knowledge. Empty strings and line breaks survive;
+HTML-like text is inert. Original text appears immediately; late A translation
+updates A while B remains visible. See the [VIEW contract and exact wiring](docs/view.md),
+[importable graph](docs/evidence/view-196.json) and
+[executable fixture](tests/fixtures/view-graph.js). Saved `TextDisplay` and legacy
+DOM graphs retain their original browser compatibility path without rewiring;
+new portable graphs need only ViewBuilder and Display.
 Existing ID-less append-only and separate-preview compositions remain supported.
 Each Live region follows incoming DOM while you are reading near the bottom;
 scrolling up keeps your position until you return to the bottom.
