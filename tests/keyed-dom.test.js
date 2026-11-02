@@ -112,6 +112,32 @@ test('paired ID changes and provisional clears never reassign or blank a retaine
   node.cancel(); node.receiveInputs({ id: 4, input1: 'late' }, c); assert.equal(out.length, 4);
 });
 
+for (const first of ['id', 'text']) for (const provisional of [false, true]) for (const port of ['input1', 'input2']) {
+  test(`empty paired ${port} uses its own provisional state with an independent provisional ID (${first}-first, text provisional=${provisional})`, async () => {
+    let idSource, textSource;
+    const outputs = [], pipeline = new Pipeline({ nodes: {
+      ids: { outputs: { id: NUMBER }, provisionalOutputs: ['id'], start(c) { idSource = c; } },
+      texts: { outputs: { text: TEXT }, provisionalOutputs: provisional ? ['text'] : [], start(c) { textSource = c; } },
+      pair: new PairedTextToDOMNode(),
+      sink: { inputs: { id: NUMBER, dom: DOM }, receiveInputs(values, c) {
+        outputs.push({ id: values.id, cells: cells(values.dom), provisional: c.provisional });
+      } },
+    }, connections: [edge('ids', 'id', 'pair', 'id'), edge('texts', 'text', 'pair', port),
+      edge('pair', 'id', 'sink', 'id'), edge('pair', 'dom', 'sink', 'dom')] });
+    try {
+      await pipeline.start();
+      if (first === 'id') idSource.emit('id', 7);
+      else textSource.emit('text', '');
+      await tick(); assert.deepEqual(outputs, [], 'neither an ID alone nor text waiting for its ID emits');
+      if (first === 'id') textSource.emit('text', '');
+      else idSource.emit('id', 7);
+      await tick();
+      assert.deepEqual(outputs, provisional ? [] : [{ id: 7, cells: [['', '']], provisional: false }]);
+      assert.deepEqual(pipeline.errors, []);
+    } finally { await pipeline.dispose(); }
+  });
+}
+
 test('keyed history accepts independent values and clones retained, pending and emitted DOM', () => {
   const node = new KeyedDOMAccumulatorNode(), snapshots = [], c = context({ emit: (_, dom) => snapshots.push(dom) });
   node.start(c); const dom = document.createElement('div'); dom.textContent = 'owned';

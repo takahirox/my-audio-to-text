@@ -80,8 +80,10 @@ export class PairedTextToDOMNode {
     if (!this.pending) return;
     const keyed = hasId || missingId || this.id !== undefined || context.connectedInputs?.includes('id');
     // Preview clears retire a route without blanking the retained row, even
-    // while the committed branch is delayed. Empty committed text is valid.
-    if (keyed && context.provisional && !this.values.input1 && !this.values.input2) { this.pending = false; return; }
+    // while the committed branch is delayed. Classify the buffered text by its
+    // own context: an independent ID may come from a provisional output.
+    // Empty committed text is valid.
+    if (keyed && this.pendingContext.provisional && !this.values.input1 && !this.values.input2) { this.pending = false; return; }
     if (keyed && this.id === undefined) return;
     this.render(this.values, this.pendingContext, this.id);
     this.pending = false; this.pendingContext = undefined;
