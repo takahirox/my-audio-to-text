@@ -218,8 +218,8 @@ Each branch's ID selects subsequent text updates. Text before its first ID waits
 (latest value only); ID-only changes never relabel completed text or emit blanks.
 Grouped ID/text updates apply atomically; an omitted grouped ID waits for an ID
 rather than borrowing the old key. Start resets state; Stop/Cancel reject late
-updates. Route `text → TextToDOM → LiveTextDisplay`, or `id/text →
-PairedTextToDOM.id/input1` to compose keyed displays.
+updates. Route `text → TextDisplay.input1` for the latest plain text, or
+`id/text → KeyedTextPair.id1/input1` for a keyed two-column transcript.
 
 `PairedTextToDOM` emits one fresh DOM pair whenever either generic TEXT input updates,
 using the latest `input1` (left) and `input2` (right). Both start empty; an
@@ -236,12 +236,19 @@ Saved paired source/text/error wiring requires a v12 review draft and Save,
 with exact original JSON retained for recovery. For optional comparison
 history, explicitly connect `PairedTextToDOM.dom → DOMAccumulator.append → dom →
 LiveTextDisplay.dom`. For continuous ASR rows while translation is pending,
-connect ASR provisional/final and translation through three ID-bearing paired
-formatters to `KeyedDOMAccumulator` slots 1/2/3, then to the display. The same
-utterance stays visible as preview → final source → translated pair; overlapping
-utterances replace their own rows. See the [concrete wiring and ID lifecycle](docs/keyed-dom-history.md).
+use `ASR → KeyedTextCoalesce → KeyedTextPair → TextDisplay`, with a separate
+`ASR.finalId/final → translator.id/text → KeyedTextPair.id2/input2` branch.
+`KeyedTextPair` retains left and right strings per numeric ID, emits complete
+primitive snapshots and has no DOM dependency or Settings. `TextDisplay` is the
+output sink: one TEXT input shows plain text, both show two columns. Optional
+`id` gives first-seen row order and replacement in place; without it, the latest
+snapshot replaces the view. Rendering and visible history belong to the sink.
+Original text appears immediately; late A translation updates A while B remains
+visible. See the [exact primitive wiring](docs/keyed-text-history.md) and
+[executable graph fixture](tests/fixtures/keyed-text-graph.js). Legacy DOM Nodes
+and saved graphs remain supported without rewiring.
 Existing ID-less append-only and separate-preview compositions remain supported.
 Each Live region follows incoming DOM while you are reading near the bottom;
 scrolling up keeps your position until you return to the bottom.
-Formatting, accumulation, combination and display remain separate processors.
+Legacy DOM formatting, accumulation and combination remain available for other uses.
 See [Live display and migration semantics](docs/extension-graph.md).
