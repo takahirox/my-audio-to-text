@@ -100,26 +100,28 @@ for (const immediate of [false, true]) test(`independent delayed branches cannot
   await pipeline.stop(); assert.deepEqual(pipeline.errors, []); await pipeline.dispose();
 });
 
-test('paired IDs are delivery-local; clears and ID-only updates never reuse another pair', () => {
-  const out = [], node = new PairedTextToDOMNode(), c = context({ connectedInputs: ['id', 'input1', 'input2'], groupInputs: ['id', 'input1', 'input2'], emitOutputs: v => out.push(v) });
+test('paired ID changes and provisional clears never reassign or blank a retained pair', () => {
+  const out = [], node = new PairedTextToDOMNode(), c = context({ connectedInputs: ['id', 'input1', 'input2'], emitOutputs: v => out.push(v) });
   node.start(); node.receiveInputs({ id: 1, input1: 'same', input2: 'old' }, c);
-  node.receiveInputs({ id: 2 }, c); node.receiveInputs({ input1: '' }, { ...c, provisional: true });
-  assert.throws(() => node.receiveInputs({ input1: '' }, c), /missing/);
-  assert.equal(out.length, 1);
-  node.receiveInputs({ id: 2, input1: 'same' }, c); assert.deepEqual(cells(out[1].dom), [['same', '']]); assert.equal(out[1].id, 2);
-  assert.throws(() => node.receiveInputs({ id: 3, input1: 'wrong' }, { ...c, groupInputs: undefined }), /grouped/);
-  assert.throws(() => node.receiveInputs({ input1: 'wrong' }, c), /missing/);
-  node.cancel(); node.receiveInputs({ id: 3, input1: 'late' }, c); assert.equal(out.length, 2);
+  node.receive('id', 2, c); assert.equal(out.length, 1);
+  node.receive('input1', '', { ...c, provisional: true }); assert.equal(out.length, 1);
+  node.receive('input1', '', c); assert.deepEqual(cells(out.at(-1).dom), [['', '']]);
+  assert.equal(out.at(-1).id, 2);
+  node.receive('input2', 'fresh', c); assert.deepEqual(cells(out.at(-1).dom), [['', 'fresh']]);
+  node.receiveInputs({ id: 3, input1: 'next' }, c); assert.deepEqual(cells(out.at(-1).dom), [['next', '']]);
+  node.cancel(); node.receiveInputs({ id: 4, input1: 'late' }, c); assert.equal(out.length, 4);
 });
 
-test('keyed history validates complete groups and clones retained and emitted DOM', () => {
-  const node = new KeyedDOMAccumulatorNode(), snapshots = [], c = context({ groupInputs: ['id1', 'dom1'], emit: (_, dom) => snapshots.push(dom) });
+test('keyed history accepts independent values and clones retained, pending and emitted DOM', () => {
+  const node = new KeyedDOMAccumulatorNode(), snapshots = [], c = context({ emit: (_, dom) => snapshots.push(dom) });
   node.start(c); const dom = document.createElement('div'); dom.textContent = 'owned';
-  node.receiveInputs({ id1: 1, dom1: dom }, c); dom.textContent = 'changed'; snapshots[1].firstChild.textContent = 'sink mutation';
+  node.receive('dom1', dom, c); dom.textContent = 'changed'; assert.equal(snapshots.length, 1);
+  node.receive('id1', -1.5, c); snapshots[1].firstChild.textContent = 'sink mutation';
   node.receiveInputs({ id1: 2, dom1: document.createDocumentFragment() }, c);
   assert.equal(snapshots.at(-1).firstChild.textContent, 'owned'); assert.equal(node.rows.size, 2);
-  for (const values of [{ id1: 1 }, { dom1: dom }, { id1: NaN, dom1: dom }, { id1: -1, dom1: dom }, { id1: 1, dom1: 'bad' }]) assert.throws(() => node.receiveInputs(values, c));
-  assert.throws(() => node.receiveInputs({ id1: 1, dom1: dom }, { ...c, groupInputs: undefined }), /grouped/);
+  for (const id1 of [NaN, Infinity, -Infinity, '1', null, undefined]) assert.throws(() => node.receiveInputs({ id1, dom1: dom }, c), /finite number/);
+  assert.throws(() => node.receiveInputs({ id1: 3, dom1: 'bad' }, c), /DOM/);
+  node.receive('dom1', dom, c); assert.equal(node.rows.size, 2, 'invalid groups never change the current ID');
   node.stop(); node.receiveInputs({ id1: 3, dom1: dom }, c); assert.equal(node.rows.size, 2);
 });
 
@@ -139,13 +141,14 @@ for (const Node of [OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNod
   });
 }
 
-test('saved keyed graphs round-trip; ID-less storage and migration recovery stay intact; malformed groups are visible', () => {
+test('saved keyed graphs round-trip; ID-less storage and migration recovery stay intact; cross-family primitive edges are valid', () => {
   const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
   const old = defaultGraph(), original = JSON.stringify(old); storage.setItem(GRAPH_KEY, original); storage.setItem(GRAPH_RECOVERY_KEY, 'original recovery');
   assert.deepEqual(readGraph(storage), old); assert.equal(storage.getItem(GRAPH_KEY), original);
   const graph = keyedDOMGraph(); saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph); assert.equal(storage.getItem(GRAPH_RECOVERY_KEY), 'original recovery');
   const id = graph.edges.find(route => route.to.join('.') === 'final.id'); id.from = ['speech', 'provisionalId'];
-  assert.match(validateGraph(graph).join(), /atomic family/);
+  assert.deepEqual(validateGraph(graph), []);
+  assert.equal(executableGraph(graph).nodes.length, graph.nodes.length);
   id.from = ['speech', 'finalId']; graph.edges = graph.edges.filter(route => route.to.join('.') !== 'final.input1');
   assert.deepEqual(validateGraph(graph), []); assert.ok(!executableGraph(graph).nodes.some(node => node.id === 'final'));
   storage.setItem(GRAPH_KEY, '{bad'); assert.throws(() => readGraph(storage), /kept/); assert.equal(storage.getItem(GRAPH_KEY), '{bad');

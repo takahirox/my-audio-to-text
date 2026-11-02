@@ -1,5 +1,5 @@
 import { NUMBER } from '../web/port-contracts.js';
-import { validateRowId } from '../web/number-node.js';
+import { finiteNumber } from '../web/number-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { OpusMtTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
 import { validateTranslateGemmaContext } from '../web/translategemma-context.js';
@@ -21,6 +21,7 @@ export class TranslationSchedulerNode {
     this.acceptsContext = TranslationNode.supportsContext === true;
     if (this.acceptsContext) this.inputs = { ...this.inputs, context: TEXT };
     this.translationContext = '';
+    this.ids = {};
     this.finals = [];
     this.revision = 0; this.queuedChars = 0;
   }
@@ -64,34 +65,29 @@ export class TranslationSchedulerNode {
     this.emit({ source: '', id: this.previewId, provisional: true, revision: this.revision, context }, '');
     this.previewId = undefined;
   }
-  receiveInputs(values, context) {
+  receiveInputs(values, context = this.context) {
+    if (this.disposed || context?.signal.aborted) return;
     for (const [port, value] of Object.entries(values)) {
-      if (port === 'id' || port === 'provisionalId') { validateRowId(value); continue; }
+      if (port === 'id' || port === 'provisionalId') { finiteNumber(value, port); continue; }
       if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError(this.acceptsContext
         ? 'Expected TEXT on text, provisional or context.' : 'Expected TEXT on text or provisional.');
     }
-    // Apply a grouped context value before either target, irrespective of port order.
-    if (Object.hasOwn(values, 'context')) this.receive('context', values.context, context);
-    // A single source emission may contain both channels. Its committed value
-    // supersedes its preview before any inference or empty result can run.
-    if (Object.hasOwn(values, 'text')) return this.accept('text', values.text, context, values.id);
-    if (Object.hasOwn(values, 'provisional')) return this.accept('provisional', values.provisional, context, values.provisionalId);
-  }
-  accept(port, source, context, id) {
-    const idPort = port === 'text' ? 'id' : 'provisionalId';
-    if (id !== undefined && (!context.groupInputs?.includes(idPort) || !context.groupInputs.includes(port))) throw TypeError('Translation ID and TEXT must be grouped.');
-    if (id === undefined && context.connectedInputs?.includes(idPort) && !(port === 'provisional' && source === '')) throw TypeError('Translation TEXT is missing its grouped ID.');
-    return this.receive(port, source, context, id);
-  }
-  receive(port, source, context = this.context, id) {
-    if (port === 'context' && this.acceptsContext) {
-      if (this.disposed) return;
-      validateTranslateGemmaContext(source);
-      this.translationContext = source;
-      return; // Context alone neither runs inference nor changes preview revisions.
+    // Apply metadata before accepting either target, irrespective of port order.
+    if (Object.hasOwn(values, 'context')) {
+      validateTranslateGemmaContext(values.context);
+      this.translationContext = values.context;
     }
-    if ((port !== 'text' && port !== 'provisional') || typeof source !== 'string') throw new TypeError('Expected TEXT on text or provisional.');
-    if (this.disposed) return;
+    for (const [id, text] of [['id', 'text'], ['provisionalId', 'provisional']]) {
+      if (Object.hasOwn(values, id)) this.ids[id] = values[id];
+      // An explicit snapshot without an ID cannot borrow a previous job's ID.
+      else if (Object.hasOwn(values, text) && context.groupInputs?.includes(id)) delete this.ids[id];
+    }
+    // A combined committed/preview delivery accepts only the committed target.
+    if (Object.hasOwn(values, 'text')) return this.accept('text', values.text, context, this.ids.id);
+    if (Object.hasOwn(values, 'provisional')) return this.accept('provisional', values.provisional, context, this.ids.provisionalId);
+  }
+  receive(port, value, context = this.context) { return this.receiveInputs({ [port]: value }, context); }
+  accept(port, source, context, id) {
     if (port === 'provisional' && source.length > 1000) throw Error('Provisional translation accepts at most 1,000 characters.');
     this.revision++;
     const snapshot = { ...(id === undefined ? {} : { id }), ...(this.acceptsContext ? { translationContext: this.translationContext } : {}) };
