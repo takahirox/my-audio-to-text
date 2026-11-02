@@ -33,7 +33,7 @@ function scrollState(content) {
 // The Live surface only mounts DOM snapshots. Processor
 // identity, translation status, formatting and row correlation stay in Nodes.
 export function renderTextRegions(root, graph, displays) {
-  const specs = graph?.nodes.filter(node => ['LiveTextDisplay', 'TextDisplay'].includes(node.type)) || [];
+  const specs = graph?.nodes.filter(node => ['Display', 'LiveTextDisplay', 'TextDisplay'].includes(node.type)) || [];
   const existing = new Map(Array.from(root.children, region => [region.dataset.display, region]));
   for (const [index, spec] of specs.entries()) {
     let region = existing.get(spec.id);

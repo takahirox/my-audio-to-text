@@ -2,7 +2,7 @@
 
 Issues #91, #95, #99, #119 and #134 audit shared Nodes, the Node Playground, and the extension.
 Ordinary text uses shared `TEXT`; Number constants and speech duration use shared `NUMBER`
-from `web/port-contracts.js`; page-local rendered snapshots use shared `DOM`. No BOOLEAN value is consumed, so none is introduced.
+from `web/port-contracts.js`; portable complete text-row snapshots use shared `VIEW`; legacy page-local rendered snapshots use shared `DOM`. No BOOLEAN value is consumed, so none is introduced.
 Contracts are identities; receiving Nodes validate their payloads. A compatible
 ordinary edge’s type compatibility never depends on producer type, output name,
 neighboring Nodes, or connection order. Correlated consumers validate delivery-local
@@ -24,7 +24,10 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
 | Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source/text/error` and `provisionalSource/provisionalText/provisionalError`: two atomic TEXT output families | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
-| LiveTextDisplay | dom: DOM | Clone and mount the complete inert DOM snapshot |
+| ViewBuilder | optional id: NUMBER, input1/input2: TEXT → view: VIEW | Portable full text-row snapshots; optional keyed first-seen history, otherwise one latest row; no host APIs or Settings |
+| Display | view: VIEW only; no outputs | Render a complete snapshot in the host; no row accumulator or producer knowledge |
+| TextDisplay (legacy) | optional id: NUMBER, input1/input2: TEXT; no outputs | Saved #194 browser compatibility with existing keyed history |
+| LiveTextDisplay (legacy) | dom: DOM | Clone and mount the complete inert DOM snapshot |
 | TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
 | TextWindow | text: TEXT; optional maxChars: NUMBER, maxWaitSeconds: NUMBER → text: TEXT | Exact generic batching; independent defaults 600 / 1.5 s; length/time/Stop only; Stop flushes once, Cancel discards; no threshold Settings or preview output |
 | PairedTextToDOM | input1/input2: TEXT, optional id: NUMBER → dom: DOM, optional id: NUMBER; either text side may be unconnected | Either input emits both latest values, initially empty; one snapshot per atomic delivery; no history; hover/focus CSS |
@@ -38,8 +41,10 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | AudioOutput / playback and WAV adapter | `audio: SYNTHESIZED_AUDIO`, `{ samples: Float32Array, sampleRate: positive integer, channels: 1 }` | Playback URLs and cleanup |
 | Qwen3-TTS streaming / Speaker · streaming | [`stream: AUDIO_STREAM`](streaming-tts.md#public-port-limits-and-lifecycle), explicit start/chunk/end/abort events | Ordered utterance IDs, chunk sequences and native-rate PCM; distinct from a completed clip |
 
-The portable structured public values are **synthesized audio** and explicit
-**audio stream events**. DOM snapshots are native page objects, never Worker payloads. Samples,
+The portable structured public values are **VIEW snapshots**, **synthesized audio**
+and explicit **audio stream events**. VIEW is minimal serializable data with ordered
+rows of literal text cells and optional unique finite numeric IDs; see the
+[VIEW invariants and builder/sink boundary](view.md). DOM snapshots are native page objects, never Worker payloads. Samples,
 rate and channel layout are intrinsically coupled: interpreting samples without
 their format changes duration/pitch or produces invalid playback/WAV. Models
 produce different native rates. Captured audio instead has a fixed, agreed mono

@@ -1,6 +1,8 @@
 # Primitive transcript pairing and text output
 
-Use this graph for continuous ASR and translation. Original text appears before
+For new graphs, use the [portable VIEW path](view.md):
+KeyedTextPair → ViewBuilder → Display. This document records the #194
+TextDisplay compatibility path, retained for saved graphs. Original text appears before
 translation, with a blank right side. Final text replaces provisional text in one
 snapshot; a late translation for A updates A even while B receives ASR updates.
 
@@ -19,7 +21,7 @@ exact production Nodes and edges. It accepts either OPUS-MT direction, either
 TranslateGemma direction, or `null` for direct transcription. All edges after
 ASR are ordinary NUMBER/TEXT. The audio source still supplies the existing audio
 contract. ASR final and provisional clear travel together, so coalescing applies
-both before selecting the nonempty final. The sink never chooses text priority.
+both before selecting the nonempty final. The legacy sink never chooses text priority.
 
 ## KeyedTextPair
 

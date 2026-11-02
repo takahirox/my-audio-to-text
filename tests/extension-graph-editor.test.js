@@ -97,3 +97,19 @@ test('formatter Add/Remove changes only that instance and the removed last wire;
   assert.ok(!graph.edges.some(route => route.to[0] === 'a' && route.to[1] === 'input4'));
   assert.ok(graph.edges.some(route => route.to[0] === 'b' && route.to[1] === 'input4'));
 });
+
+test('VIEW connections use type only, accept either builder and reject primitive/legacy DOM outputs', () => {
+  const graph = defaultGraph();
+  for (const [type, id] of [['ViewBuilder', 'one'], ['ViewBuilder', 'two'], ['Display', 'view-output'], ['Number', 'key']]) graph.nodes.push(graphNode(type, id));
+  const e = editor(graph);
+  for (const source of ['one', 'two']) {
+    connect(e, source, 'view', 'view-output', 'view');
+    assert.deepEqual(e.draft.edges.filter(route => route.to[0] === 'view-output'), [edge(source, 'view', 'view-output', 'view')]);
+    assert.deepEqual(validateGraph(e.draft), []);
+  }
+  const before = structuredClone(e.draft.edges);
+  for (const [source, port] of [['speech', 'final'], ['key', 'value'], ['transcript-dom', 'dom']]) {
+    connect(e, source, port, 'view-output', 'view'); assert.deepEqual(e.draft.edges, before);
+  }
+  connect(e, 'two', 'view', 'one', 'input1'); assert.deepEqual(e.draft.edges, before);
+});

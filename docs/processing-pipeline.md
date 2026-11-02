@@ -151,6 +151,12 @@ orchestration only when real implementations demonstrate a need.
 Apply the [design principles](../README.md#design-principles): formatting,
 history, composition and rendering have explicit contracts and graph connections.
 
+New portable text graphs use `ViewBuilder → view: VIEW → Display`. The builder
+owns text-row construction and optional keyed history; Display only renders full
+snapshots. One-cell plain text and multi-cell rows use the same contract and sink.
+See the [VIEW data invariants, exact graph and compatibility path](view.md).
+The DOM compositions below remain supported for existing browser graphs.
+
 The extension separates producer, formatting and display responsibilities. Any
 TEXT producer can connect to `TextToDOM.text → dom → LiveTextDisplay.dom`; a bounded
 `TextFormatter` is optional. Live renders sink labels/output by active graph Node
