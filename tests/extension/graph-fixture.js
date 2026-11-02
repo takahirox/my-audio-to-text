@@ -87,9 +87,11 @@ export const test = base.extend({
                 if (settings.max_new_tokens !== 256 || settings.do_sample !== false) throw Error('Wrong generation settings');
                 if (typeof messages === 'string') {
                   if (settings.add_special_tokens !== false || settings.return_full_text !== false || settings.tokenizer_encode_kwargs.truncation !== false) throw Error('Wrong context tokenization');
-                  const data = JSON.parse(messages.split('\\n').at(-4));
-                  const target = messages.includes('from English to Japanese') ? 'Japanese' : 'English';
-                  return [{ generated_text: target + ': ' + data.text }];
+                  const target = messages.includes('English (en) to Japanese (ja)') ? 'Japanese' : 'English';
+                  const marker = 'text into ' + target + ':\\n\\n\\n';
+                  if (!messages.includes('<reference_context>\\n') || !messages.includes(marker)) throw Error('Missing official-aligned context/target sections');
+                  const text = messages.split(marker).at(-1).split('<end_of_turn>')[0];
+                  return [{ generated_text: target + ': ' + text }];
                 }
                 const c = messages[0].content[0];
                 if (c.type !== 'text' || !['en','ja'].includes(c.source_lang_code) || c.target_lang_code === c.source_lang_code) throw Error('Wrong direction prompt');

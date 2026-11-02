@@ -1,0 +1,185 @@
+{
+  "direction": "en-ja",
+  "model": {
+    "id": "onnx-community/translategemma-text-4b-it-ONNX",
+    "revision": "f7874a1ac60758872a4f78aac0df95b17b776994",
+    "dtype": "q4",
+    "device": "webgpu"
+  },
+  "time": "2026-11-02T08:22:48.051Z",
+  "browser": "153.0.8010.12",
+  "transport": "SHA-256 verified pinned bytes via loopback; runtime remoteHost only changed",
+  "capabilities": {
+    "gpu": true,
+    "secure": true
+  },
+  "runs": [
+    {
+      "text": "They are ready.",
+      "context": "A single female surgeon has finished preparing for the operation. They refers to that surgeon. Context marker: ORCHID731.",
+      "official": [
+        "準備はできました。"
+      ],
+      "officialMs": 470,
+      "contextual": [
+        "準備はできました。"
+      ],
+      "contextualMs": 416,
+      "reset": [
+        "準備はできました。"
+      ],
+      "resetMs": 220.60000002384186
+    },
+    {
+      "text": "The port is blocked.",
+      "context": "A network firewall has denied traffic to TCP port 443. This is a computing discussion. Context marker: CEDAR842.",
+      "official": [
+        "港は閉鎖されています。"
+      ],
+      "officialMs": 243.5999999642372,
+      "contextual": [
+        "ポートは遮断されています。"
+      ],
+      "contextualMs": 408.2000000476837,
+      "reset": [
+        "港は閉鎖されています。"
+      ],
+      "resetMs": 244.5999999642372
+    }
+  ],
+  "networkErrors": [],
+  "requests": [
+    {
+      "url": "http://127.0.0.1:8000/nodes/translategemma/",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/style.css",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/nodes/translategemma/app.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/translation-nodes.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/nodes/translation-page.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/pipeline.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/number-node.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/port-contracts.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/translategemma-worker.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/translation-models.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/translation-worker.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/translategemma-context.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/vendor/translation/transformers.js",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:57542/onnx-community/translategemma-text-4b-it-ONNX/resolve/f7874a1ac60758872a4f78aac0df95b17b776994/tokenizer.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:57542/onnx-community/translategemma-text-4b-it-ONNX/resolve/f7874a1ac60758872a4f78aac0df95b17b776994/tokenizer_config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:57542/onnx-community/translategemma-text-4b-it-ONNX/resolve/f7874a1ac60758872a4f78aac0df95b17b776994/config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:57542/onnx-community/translategemma-text-4b-it-ONNX/resolve/f7874a1ac60758872a4f78aac0df95b17b776994/onnx/model_q4.onnx",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:57542/onnx-community/translategemma-text-4b-it-ONNX/resolve/f7874a1ac60758872a4f78aac0df95b17b776994/onnx/model_q4.onnx_data",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:57542/onnx-community/translategemma-text-4b-it-ONNX/resolve/f7874a1ac60758872a4f78aac0df95b17b776994/onnx/model_q4.onnx_data_1",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:57542/onnx-community/translategemma-text-4b-it-ONNX/resolve/f7874a1ac60758872a4f78aac0df95b17b776994/generation_config.json",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/vendor/translation/ort-wasm-simd-threaded.asyncify.mjs",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    },
+    {
+      "url": "http://127.0.0.1:8000/vendor/translation/ort-wasm-simd-threaded.asyncify.wasm",
+      "method": "GET",
+      "hasBody": false,
+      "containsData": false
+    }
+  ]
+}

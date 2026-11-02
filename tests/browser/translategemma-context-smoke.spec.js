@@ -2,12 +2,13 @@ import { test, expect, chromium } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { translationContextFixtures } from '../fixtures/translation-context.js';
 import { TRANSLATE_GEMMA } from '../../web/translation-models.js';
+import { translateGemmaAssetMirror } from '../fixtures/translategemma-assets.js';
 
 for (const direction of ['en-ja', 'ja-en']) test(`real TranslateGemma ${direction}: official vs context, target-only output and reset`, async ({ page: fixturePage, browser }, info) => {
   test.skip(!process.env.TRANSLATEGEMMA_CONTEXT_SMOKE || info.project.name !== 'chromium', 'Opt in with TRANSLATEGEMMA_CONTEXT_SMOKE=1; pinned runtime, 3.112 GB weights and Worker WebGPU required.');
   test.setTimeout(900000);
   const probes = translationContextFixtures[direction], runs = [], networkErrors = [], requests = [];
-  let capabilities, failure, persistent, page = fixturePage;
+  let capabilities, failure, persistent, mirror, page = fixturePage;
   if (process.env.TRANSLATEGEMMA_PROFILE_DIR) {
     persistent = await chromium.launchPersistentContext(process.env.TRANSLATEGEMMA_PROFILE_DIR, {
       channel: process.env.TRANSLATION_CHANNEL || 'chromium', headless: !process.env.TRANSLATION_HEADED,
@@ -20,6 +21,14 @@ for (const direction of ['en-ja', 'ja-en']) test(`real TranslateGemma ${directio
     method: r.method(), hasBody: r.postData() !== null,
     containsData: probes.some(probe => [probe.text, probe.context].some(value => decodeURIComponent(r.url()).includes(value))) }));
   try {
+    mirror = await translateGemmaAssetMirror();
+    if (mirror) await page.context().route('**/translation-worker.js', async route => {
+      const response = await route.fetch();
+      // Test transport only: real production Worker/runtime and pinned bytes.
+      const body = (await response.text()).replace('env.allowLocalModels = false;',
+        `env.allowLocalModels = false; env.remoteHost = ${JSON.stringify(mirror.url)};`);
+      await route.fulfill({ response, body });
+    });
     await page.goto('./nodes/translategemma/');
     capabilities = await page.evaluate(() => ({ gpu: !!navigator.gpu, secure: isSecureContext }));
     const result = await page.evaluate(async ({ direction, probes }) => {
@@ -69,8 +78,10 @@ for (const direction of ['en-ja', 'ja-en']) test(`real TranslateGemma ${directio
     }
   } finally {
     const file = info.outputPath('context-inference-evidence.json');
-    await writeFile(file, JSON.stringify({ direction, model: TRANSLATE_GEMMA, time: new Date().toISOString(), browser: browser.version(), capabilities, failure, runs, networkErrors, requests }, null, 2) + '\n');
+    await writeFile(file, JSON.stringify({ direction, model: TRANSLATE_GEMMA, time: new Date().toISOString(), browser: browser.version(),
+      transport: mirror ? 'SHA-256 verified pinned bytes via loopback; runtime remoteHost only changed' : 'public pinned URLs', capabilities, failure, runs, networkErrors, requests }, null, 2) + '\n');
     await info.attach('context-inference-evidence', { path: file, contentType: 'application/json' });
     await persistent?.close();
+    await mirror?.close();
   }
 });
