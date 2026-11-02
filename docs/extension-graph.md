@@ -1204,3 +1204,12 @@ Unrelated nodes and wiring remain intact. The original JSON stays untouched unti
 Save, then remains available through Graph actions → Recovery using the established
 processing-graph-before-v14 backup namespace, including numbered collisions.
 Graphs without TextWindow retain their nodes, settings and routes on version upgrade.
+
+## Continuous keyed utterance history (#186)
+
+Optional NUMBER IDs now accompany ASR provisional/final TEXT and translation
+results. `PairedTextToDOM` can forward an atomic ID/DOM snapshot to the generic
+`KeyedDOMAccumulator`, whose three input pairs give explicit precedence to
+preview, finalized source and translated rows. See the
+[concrete wiring, lifecycle and compatibility contract](keyed-dom-history.md).
+Version 15 graphs are unchanged unless these optional ports are connected.

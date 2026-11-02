@@ -399,3 +399,9 @@ set and serialize it with full Stop. The Extension computes the live-source
 reachability set and drains only its complement on source completion. Shared
 consumers remain open. Closed entries are skipped by subsequent full Stop;
 Cancel/dispose invalidates all entries, including a drain in progress.
+
+For atomic final/preview-clear deliveries, a Node can declare `provisionalOutputs`
+as the names of its unfinished output family. A consumer receiving only those
+outputs retains `context.provisional`; a consumer receiving committed outputs in
+the same delivery sees a committed group. Forwarding retains the flag across
+async processing. See [keyed utterance history](keyed-dom-history.md).

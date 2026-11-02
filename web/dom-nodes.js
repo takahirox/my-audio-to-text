@@ -1,4 +1,5 @@
-import { DOM, TEXT } from './port-contracts.js';
+import { validateRowId } from './number-node.js';
+import { DOM, TEXT, NUMBER } from './port-contracts.js';
 
 // Main-thread, immutable snapshots only. Never send these through a Worker.
 // Inert HTML formatting and code-authored CSS are allowed; active content,
@@ -50,15 +51,31 @@ const pairedCSS = `
 `;
 
 export class PairedTextToDOMNode {
-  inputs = { input1: TEXT, input2: TEXT };
-  outputs = { dom: DOM };
+  inputs = { input1: TEXT, input2: TEXT, id: NUMBER };
+  outputs = { dom: DOM, id: NUMBER };
   start() { this.values = { input1: '', input2: '' }; this.closed = false; }
   receiveInputs(values, context) {
     if (this.closed || context.signal.aborted) return;
     for (const [port, value] of Object.entries(values)) {
+      if (port === 'id') { validateRowId(value); continue; }
       if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError('PairedTextToDOM expects TEXT inputs.');
     }
-    if (!Object.keys(values).length) return;
+    if (!Object.hasOwn(values, 'input1') && !Object.hasOwn(values, 'input2')) return;
+    const keyed = Object.hasOwn(values, 'id');
+    // ID-bearing updates are delivery-local snapshots, never latest-value joins.
+    // Only an explicitly provisional empty clear may omit its ID (Stop/Cancel).
+    if (context.connectedInputs?.includes('id') && !keyed) {
+      if (context.provisional && Object.values(values).every(value => value === '')) return;
+      throw TypeError('PairedTextToDOM TEXT is missing its grouped ID.');
+    }
+    if (keyed) {
+      if (!context.groupInputs?.includes('id') || Object.keys(values).some(port => !context.groupInputs.includes(port))) throw TypeError('PairedTextToDOM id and TEXT must be grouped.');
+      // A keyed provisional clear retires a preview route, not the utterance.
+      // Keep its row until a committed update with the same ID replaces it.
+      if (context.provisional && !(values.input1 ?? '') && !(values.input2 ?? '')) return;
+      this.render({ input1: values.input1 ?? '', input2: values.input2 ?? '' }, context, values.id);
+      return;
+    }
     // Explicit groups are producer snapshots: clear omitted siblings only in
     // that family. Independent deliveries retain the other side's latest text.
     for (const port of context.groupInputs || []) if (Object.hasOwn(this.inputs, port)) this.values[port] = '';
@@ -66,7 +83,7 @@ export class PairedTextToDOMNode {
     this.render(this.values, context);
   }
   receive(port, value, context) { return this.receiveInputs({ [port]: value }, context); }
-  render(pair, context) {
+  render(pair, context, id) {
     const snapshot = document.createDocumentFragment(), style = document.createElement('style');
     style.textContent = pairedCSS;
     const table = document.createElement('table'); table.className = 'paired-text-dom';
@@ -79,7 +96,9 @@ export class PairedTextToDOMNode {
       cell.setAttribute('aria-label', `${label}: ${text}`); cell.textContent = text; row.append(cell);
     }
     body.append(row);
-    table.append(body); snapshot.append(style, table); context.emit('dom', snapshot);
+    table.append(body); snapshot.append(style, table);
+    if (id === undefined) context.emit('dom', snapshot);
+    else context.emitOutputs({ id, dom: snapshot });
   }
   stop() { this.closed = true; }
   cancel() { this.closed = true; }
@@ -127,4 +146,44 @@ export class DOMCombinerNode {
   stop() { this.closed = true; }
   cancel() { this.closed = true; }
   dispose() { this.closed = true; this.snapshots = {}; }
+}
+
+// Three independent atomic inputs. Higher numbered slots explicitly supersede
+// lower slots for the same key, irrespective of branch scheduling. Equal-slot
+// updates replace in arrival order. No payload inspection or producer knowledge.
+export const KEYED_DOM_INPUTS = Object.freeze(Object.fromEntries([1, 2, 3].flatMap(n => [[`id${n}`, NUMBER], [`dom${n}`, DOM]])));
+export class KeyedDOMAccumulatorNode {
+  inputs = KEYED_DOM_INPUTS;
+  outputs = { dom: DOM };
+  start(context) {
+    this.rows = new Map(); this.closed = false;
+    context.emit('dom', document.createDocumentFragment());
+  }
+  receiveInputs(values, context) {
+    if (this.closed || context.signal.aborted) return;
+    const updates = [];
+    for (const port of Object.keys(values)) if (!Object.hasOwn(this.inputs, port)) throw TypeError('Unknown keyed DOM input.');
+    for (const slot of [1, 2, 3]) {
+      const idPort = `id${slot}`, domPort = `dom${slot}`;
+      if (!Object.hasOwn(values, idPort) && !Object.hasOwn(values, domPort)) continue;
+      if (!Object.hasOwn(values, idPort) || !Object.hasOwn(values, domPort) || !context.groupInputs?.includes(idPort) || !context.groupInputs.includes(domPort)) {
+        throw TypeError('KeyedDOMAccumulator requires grouped ID + DOM per slot.');
+      }
+      validateRowId(values[idPort]);
+      updates.push({ id: values[idPort], slot, dom: cloneDOM(values[domPort]) });
+    }
+    let changed = false;
+    for (const update of updates) {
+      if ((this.rows.get(update.id)?.slot ?? 0) > update.slot) continue;
+      this.rows.set(update.id, update); changed = true;
+    }
+    if (!changed) return;
+    const snapshot = document.createDocumentFragment();
+    for (const { dom } of this.rows.values()) snapshot.append(cloneDOM(dom));
+    context.emit('dom', snapshot);
+  }
+  receive(port, value, context) { return this.receiveInputs({ [port]: value }, context); }
+  stop() { this.closed = true; }
+  cancel() { this.closed = true; }
+  dispose() { this.closed = true; }
 }

@@ -1,3 +1,4 @@
+import { NUMBER } from '../web/port-contracts.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
@@ -38,7 +39,7 @@ for (const Node of [OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNod
       if (message.type === 'drain') return { type: 'drained' };
       return { type: 'result', texts: message.text === 'zero' ? [] : [message.text, message.text + ' second'] };
     });
-    assert.deepEqual(f.node.inputs, { text: TEXT }); assert.deepEqual(f.node.outputs, { text: TEXT });
+    assert.deepEqual(f.node.inputs, { text: TEXT, id: NUMBER }); assert.deepEqual(f.node.outputs, { text: TEXT, source: TEXT, error: TEXT, id: NUMBER });
     await f.pipeline.start();
     for (const text of [' ', 'one', 'zero', 'two']) f.emit(text);
     await f.pipeline.stop();

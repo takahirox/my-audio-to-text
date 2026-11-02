@@ -1,16 +1,18 @@
+import { NUMBER } from '../web/port-contracts.js';
+import { validateRowId } from '../web/number-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { OpusMtTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
 import { validateTranslateGemmaContext } from '../web/translategemma-context.js';
 
 export const TRANSLATION_OUTPUT_GROUPS = Object.freeze([
-  Object.freeze(['source', 'text', 'error']),
-  Object.freeze(['provisionalSource', 'provisionalText', 'provisionalError']),
+  Object.freeze(['source', 'text', 'error', 'id']),
+  Object.freeze(['provisionalSource', 'provisionalText', 'provisionalError', 'provisionalId']),
 ]);
-export const TRANSLATION_OUTPUTS = Object.freeze(Object.fromEntries(TRANSLATION_OUTPUT_GROUPS.flat().map(port => [port, TEXT])));
+export const TRANSLATION_OUTPUTS = Object.freeze(Object.fromEntries(TRANSLATION_OUTPUT_GROUPS.flat().map(port => [port, port === 'id' || port === 'provisionalId' ? NUMBER : TEXT])));
 
 // Session-owned FIFO of committed utterances. Ordering and request IDs stay internal.
 export class TranslationSchedulerNode {
-  inputs = { text: TEXT, provisional: TEXT };
+  inputs = { text: TEXT, provisional: TEXT, id: NUMBER, provisionalId: NUMBER };
   outputs = TRANSLATION_OUTPUTS;
   outputGroups = TRANSLATION_OUTPUT_GROUPS;
   constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, modelName = 'OPUS-MT', onState = () => {} } = {}) {
@@ -51,18 +53,20 @@ export class TranslationSchedulerNode {
     // Per-utterance validation errors must reach diagnostics even when the
     // generic formatter (or any other consumer) leaves error disconnected.
     if (error && !this.error) this.onState(`Translation unavailable: ${error}`);
-    const [sourcePort, textPort, errorPort] = this.outputGroups[job.provisional ? 1 : 0];
-    (job.context || this.context).emitOutputs({ [sourcePort]: job.source, [errorPort]: error, ...(error ? {} : { [textPort]: text }) }, { provisional: job.provisional === true });
+    const [sourcePort, textPort, errorPort, idPort] = this.outputGroups[job.provisional ? 1 : 0];
+    (job.context || this.context).emitOutputs({ ...(job.id === undefined ? {} : { [idPort]: job.id }), [sourcePort]: job.source, [errorPort]: error, ...(error ? {} : { [textPort]: text }) }, { provisional: job.provisional === true });
   }
   clearPreview(context = this.context) {
     if (!this.hasPreview) return;
     this.hasPreview = false;
     // An ordinary TEXT route clears the preview as soon as a final is accepted,
     // even while an obsolete inference still owns the single Worker.
-    this.emit({ source: '', provisional: true, revision: this.revision, context }, '');
+    this.emit({ source: '', id: this.previewId, provisional: true, revision: this.revision, context }, '');
+    this.previewId = undefined;
   }
   receiveInputs(values, context) {
     for (const [port, value] of Object.entries(values)) {
+      if (port === 'id' || port === 'provisionalId') { validateRowId(value); continue; }
       if (!Object.hasOwn(this.inputs, port) || typeof value !== 'string') throw TypeError(this.acceptsContext
         ? 'Expected TEXT on text, provisional or context.' : 'Expected TEXT on text or provisional.');
     }
@@ -70,10 +74,16 @@ export class TranslationSchedulerNode {
     if (Object.hasOwn(values, 'context')) this.receive('context', values.context, context);
     // A single source emission may contain both channels. Its committed value
     // supersedes its preview before any inference or empty result can run.
-    if (Object.hasOwn(values, 'text')) return this.receive('text', values.text, context);
-    if (Object.hasOwn(values, 'provisional')) return this.receive('provisional', values.provisional, context);
+    if (Object.hasOwn(values, 'text')) return this.accept('text', values.text, context, values.id);
+    if (Object.hasOwn(values, 'provisional')) return this.accept('provisional', values.provisional, context, values.provisionalId);
   }
-  receive(port, source, context = this.context) {
+  accept(port, source, context, id) {
+    const idPort = port === 'text' ? 'id' : 'provisionalId';
+    if (id !== undefined && (!context.groupInputs?.includes(idPort) || !context.groupInputs.includes(port))) throw TypeError('Translation ID and TEXT must be grouped.');
+    if (id === undefined && context.connectedInputs?.includes(idPort) && !(port === 'provisional' && source === '')) throw TypeError('Translation TEXT is missing its grouped ID.');
+    return this.receive(port, source, context, id);
+  }
+  receive(port, source, context = this.context, id) {
     if (port === 'context' && this.acceptsContext) {
       if (this.disposed) return;
       validateTranslateGemmaContext(source);
@@ -84,11 +94,11 @@ export class TranslationSchedulerNode {
     if (this.disposed) return;
     if (port === 'provisional' && source.length > 1000) throw Error('Provisional translation accepts at most 1,000 characters.');
     this.revision++;
-    const snapshot = this.acceptsContext ? { translationContext: this.translationContext } : {};
+    const snapshot = { ...(id === undefined ? {} : { id }), ...(this.acceptsContext ? { translationContext: this.translationContext } : {}) };
     // One replaceable pending preview, and at most one running inference.
     // Committed input invalidates every older preview regardless of producer.
     this.preview = port === 'provisional' ? { source, provisional: true, revision: this.revision, context, ...snapshot } : null;
-    if (port === 'provisional') { this.hasPreview = true; this.pump(); return; }
+    if (port === 'provisional') { this.previewId = id; this.hasPreview = true; this.pump(); return; }
     this.clearPreview(context);
     // Bound closed work too. Overflow is an explicit branch failure, never a
     // silently dropped utterance; the existing default FIFO remains unchanged.
@@ -145,7 +155,7 @@ export class TranslationSchedulerNode {
     // through the explicit preview family, using its live cleanup context.
     if (this.hasPreview) {
       this.hasPreview = false;
-      context.emitOutputs({ provisionalSource: '', provisionalText: '', provisionalError: '' }, { provisional: true });
+      context.emitOutputs({ ...(this.previewId === undefined ? {} : { provisionalId: this.previewId }), provisionalSource: '', provisionalText: '', provisionalError: '' }, { provisional: true });
     }
     return this.dispose();
   }

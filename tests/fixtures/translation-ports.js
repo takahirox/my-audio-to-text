@@ -1,3 +1,4 @@
+import { GRAPH_VERSION } from '../../extension/graph.js';
 import { expect } from '@playwright/test';
 
 // Only inference is controlled. Real module Workers, runtime allocation,
@@ -123,7 +124,7 @@ export async function checkTranslationPortRecovery(editor, type) {
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   await expect(editor.locator('#errors')).toBeEmpty();
   const saved = await editor.evaluate(() => localStorage.getItem('processing-graph-v1'));
-  const graph = JSON.parse(saved), expected = JSON.parse(raw); expected.version = 14;
+  const graph = JSON.parse(saved), expected = JSON.parse(raw); expected.version = GRAPH_VERSION;
   const replacement = expected.edges.find(e => e.to[0] === 'preview-dom');
   expected.edges = expected.edges.filter(e => e !== replacement); replacement.from[1] = 'provisionalText'; expected.edges.push(replacement);
   expect(graph).toEqual(expected);

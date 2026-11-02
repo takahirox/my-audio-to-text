@@ -1,4 +1,4 @@
-import { TextToDOMNode, PairedTextToDOMNode, DOMAccumulatorNode, DOMCombinerNode } from '../web/dom-nodes.js';
+import { TextToDOMNode, PairedTextToDOMNode, DOMAccumulatorNode, KeyedDOMAccumulatorNode, DOMCombinerNode } from '../web/dom-nodes.js';
 import { MeetingSummaryNode } from '../web/meeting-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
@@ -147,6 +147,7 @@ export function buildGraph(graph, options) {
       case 'LiveTextDisplay': node = new LiveTextDisplayNode(dom => options.onDisplay?.(spec.id, dom)); break;
       case 'TextToDOM': node = new TextToDOMNode(spec.settings); break;
       case 'PairedTextToDOM': node = new PairedTextToDOMNode(); break;
+      case 'KeyedDOMAccumulator': node = new KeyedDOMAccumulatorNode(); break;
       case 'DOMAccumulator': node = new DOMAccumulatorNode(); break;
       case 'DOMCombiner': node = new DOMCombinerNode(); break;
       case 'TextAccumulator': node = new TextAccumulatorNode(); break;

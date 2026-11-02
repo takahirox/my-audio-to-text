@@ -132,7 +132,7 @@ for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
   const graph = options => schedulerGraph({ ...options, direction });
   test(`${direction}: committed results are atomic, FIFO, repeat-safe and ignore duplicate worker replies`, async () => {
     const f = await graph();
-    assert.deepEqual(Object.keys(f.scheduler.inputs), direction.startsWith('gemma') ? ['text', 'provisional', 'context'] : ['text', 'provisional']);
+    assert.deepEqual(Object.keys(f.scheduler.inputs), direction.startsWith('gemma') ? ['text', 'provisional', 'id', 'provisionalId', 'context'] : ['text', 'provisional', 'id', 'provisionalId']);
     assert.deepEqual(Object.keys(f.scheduler.outputs), Object.keys(TRANSLATION_OUTPUTS));
     f.send('same'); f.send('same'); f.send(''); f.send('  '); f.send('last'); await tick();
     assert.deepEqual(f.outputs, [], 'pending emits no formatter rows'); assert.equal(f.requests.length, 1);
