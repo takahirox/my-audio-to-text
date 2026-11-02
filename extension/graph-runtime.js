@@ -24,6 +24,7 @@ import { SpeechToTextParakeetV3Node } from '../web/parakeet-v3-node.js';
 import { SpeechToTextMoonshineMediumEnNode } from '../web/moonshine-medium-node.js';
 import { IfConditionNode } from '../web/if-condition-node.js';
 import { NumberNode } from '../web/number-node.js';
+import { KeyedTextCoalesceNode } from '../web/keyed-text-coalesce-node.js';
 import { TextSlidingWindowNode } from '../web/text-sliding-window-node.js';
 import { TextWindowNode } from '../web/text-window-node.js';
 import { TranslationCommitNode } from '../web/translation-commit-node.js';
@@ -155,6 +156,7 @@ export function buildGraph(graph, options) {
       case 'TextWindow': node = new TextWindowNode(); break;
       case 'TranslationCommit': node = new TranslationCommitNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
+      case 'KeyedTextCoalesce': node = new KeyedTextCoalesceNode(); break;
       case 'TranslateGemmaEnJa': case 'TranslateGemmaJaEn':
         node = new TranslationSchedulerNode({ prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
           TranslationNode: spec.type === 'TranslateGemmaEnJa' ? EnglishToJapaneseTranslateGemmaTranslationNode : TranslateGemmaTranslationNode,

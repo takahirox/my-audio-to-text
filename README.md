@@ -206,7 +206,21 @@ custom labels. Fresh setup and Reset default to Chrome tab audio → SpeechToTex
 one display: provisional text replaces only the preview, and each final appends
 a committed item. Translation remains an explicit graph addition. Configurable
 `TextFormatter` Nodes compose primitive TEXT with editable multiline templates.
-Older paired views open a reviewed migration draft and keep a recovery copy;
+Older paired views open a reviewed migration draft and keep a recovery copy.
+
+`KeyedTextCoalesce` selects the latest nonempty `input1`, otherwise `input2`,
+separately for each finite numeric ID. Connect independent `NUMBER` sources to
+`id1`/`id2` and `TEXT` sources to `input1`/`input2`; for example, one `Number.value`
+can key a preferred `Text.value` and a backup `Text.value`. Only `''` is empty;
+whitespace, duplicates and explicit empty updates count. Clearing input1 restores
+the latest fallback for that ID. Each text event emits `id` and `text` together.
+Each branch's ID selects subsequent text updates. Text before its first ID waits
+(latest value only); ID-only changes never relabel completed text or emit blanks.
+Grouped ID/text updates apply atomically; an omitted grouped ID waits for an ID
+rather than borrowing the old key. Start resets state; Stop/Cancel reject late
+updates. Route `text → TextToDOM → LiveTextDisplay`, or `id/text →
+PairedTextToDOM.id/input1` to compose keyed displays.
+
 `PairedTextToDOM` emits one fresh DOM pair whenever either generic TEXT input updates,
 using the latest `input1` (left) and `input2` (right). Both start empty; an
 unconnected or never-supplied side stays empty. Duplicate and empty updates emit

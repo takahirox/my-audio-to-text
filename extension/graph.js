@@ -26,6 +26,7 @@ export const NODE_TYPES = Object.freeze({
   MicrophoneAudio: { label: 'Microphone audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Press Start in Live to request microphone permission.' },
   FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect SpeechToTextReazonSpeech.final or a processor’s completed text output; no separate authorization or field picker.' },
   Number: { label: 'Number', inputs: {}, outputs: { value: NUMBER }, numberSettings: { value: { default: 6 } }, help: 'Reusable finite numeric constant. Select this Node to edit value. Units and limits belong to its consumer. SpeechToTextReazonSpeech.maxDuration accepts 1–12 seconds, including decimals; saves apply next session.' },
+  KeyedTextCoalesce: { label: 'Keyed text coalesce', inputs: { id1: NUMBER, input1: TEXT, id2: NUMBER, input2: TEXT }, optionalInputs: ['id1', 'input1', 'id2', 'input2'], outputs: { id: NUMBER, text: TEXT }, help: 'For each finite numeric ID, select nonempty input1, otherwise input2, otherwise empty text. Only the exact empty string is empty; whitespace and duplicate updates count. Each independent idN selects the key for subsequent inputN events; text before the first ID waits (latest value only). ID-only changes never replay completed text or emit blanks. Grouped ID/text updates apply atomically; an omitted grouped ID cannot borrow the previous key. Both branches keep their latest text separately per ID. Each text update emits id/text together, even if unchanged or empty. Start clears all state; Stop/Cancel close delivery. Example: Number.value → id1 and id2, preferred Text.value → input1, backup Text.value → input2; text → TextToDOM → LiveTextDisplay. No Settings or producer restrictions.' },
   SpeechToTextReazonSpeech: { label: 'ReazonSpeech ja-en ASR', inputs: { audio: MONO_16KHZ_PCM, maxDuration: NUMBER }, optionalInputs: ['maxDuration'], outputs: asrOutputs(), outputGroups: ASR_OUTPUT_GROUPS, help: 'Optional maxDuration: connect any NUMBER source for a 1–12 second audio segment cap (default 6 seconds). Includes pre-roll; decimals round down to whole 16 kHz samples. Frozen before model loading; waiting audio is bounded at 30 seconds; saved edits apply next session. VAD can end sooner. Mid-sentence splits may reduce recognition quality. Inference and final display can take longer than the cap.' },
   Text: { label: 'Text', inputs: {}, outputs: { value: TEXT }, textSettings: { value: { default: '', multiline: true } }, help: 'Reusable literal text constant, including empty text. Delivered once at session start to ordinary TEXT consumers. Whisper.language consumes its first TEXT value before model loading; saves apply next session.' },
   SpeechToTextWhisper: { label: 'Whisper tiny (multilingual) ASR', inputs: { audio: MONO_16KHZ_PCM, language: TEXT }, optionalInputs: ['language'], outputs: asrOutputs(false), outputGroups: ASR_OUTPUT_GROUPS, help: 'Packaged local multilingual Whisper tiny (q8, CPU WASM). Defaults to English (en); connect any TEXT source supplying en or ja. Only final: TEXT is available; connect final to TextAccumulator.append for committed segments. Silero ends speech at silence or a 6-second cap; Stop drains every segment. No downloads while recording.' },
@@ -184,6 +185,7 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
     if (!legacy) {
       const route = port => incoming.get(JSON.stringify([node.id, port]));
       if (node.type === 'KeyedDOMAccumulator' && !Object.keys(definition.inputs).some(port => route(port))) warnings.push(`Required connection missing: ${node.id} needs an ID/DOM pair`);
+      if (node.type === 'KeyedTextCoalesce' && ![1, 2].some(n => route(`id${n}`) && route(`input${n}`))) warnings.push(`Required connection missing: ${node.id} needs an ID/TEXT pair`);
     }
     if (legacy && node.type === 'TranslationView') {
       const connected = port => incoming.has(JSON.stringify([node.id, port]));
@@ -225,6 +227,7 @@ function selectExecutable(description) {
       if (!required.every(available)) continue;
       if (node.type === 'PairedTextToDOM' && !['input1', 'input2'].some(available)) continue;
       if (node.type === 'KeyedDOMAccumulator' && ![1, 2, 3].some(n => available(`id${n}`) && available(`dom${n}`))) continue;
+      if (node.type === 'KeyedTextCoalesce' && ![1, 2].some(n => available(`id${n}`) && available(`input${n}`))) continue;
       if (Object.keys(definition.inputs).length && !routes.some(route => ready.has(route.from[0]))) continue;
       ready.add(node.id); changed = true;
     }
