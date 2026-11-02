@@ -1205,7 +1205,7 @@ Save, then remains available through Graph actions → Recovery using the establ
 processing-graph-before-v14 backup namespace, including numbered collisions.
 Graphs without TextWindow retain their nodes, settings and routes on version upgrade.
 
-## Continuous keyed utterance history (#186)
+## Legacy DOM keyed utterance history (#186)
 
 Optional NUMBER IDs now accompany ASR provisional/final TEXT and translation
 results. `PairedTextToDOM` can forward an atomic ID/DOM snapshot to the generic
@@ -1213,3 +1213,16 @@ results. `PairedTextToDOM` can forward an atomic ID/DOM snapshot to the generic
 preview, finalized source and translated rows. See the
 [concrete wiring, lifecycle and compatibility contract](keyed-dom-history.md).
 Version 15 graphs are unchanged unless these optional ports are connected.
+
+
+## Primitive text pairing and output (#194)
+
+For new continuous transcript graphs, connect ASR final/provisional through
+`KeyedTextCoalesce`, pair its selected original text with independently keyed
+translation using `KeyedTextPair`, then connect all three snapshot outputs to
+`TextDisplay`. Processing uses only existing NUMBER/TEXT ports; browser rendering
+and visible row history live inside the output sink. Both new Nodes are selectable,
+have no Settings and serialize as ordinary version 15 nodes. No graph version
+bump, migration or legacy DOM rewiring is needed.
+
+See [exact wiring, delivery semantics and host boundary](keyed-text-history.md).

@@ -33,7 +33,7 @@ function scrollState(content) {
 // The Live surface only mounts DOM snapshots. Processor
 // identity, translation status, formatting and row correlation stay in Nodes.
 export function renderTextRegions(root, graph, displays) {
-  const specs = graph?.nodes.filter(node => node.type === 'LiveTextDisplay') || [];
+  const specs = graph?.nodes.filter(node => ['LiveTextDisplay', 'TextDisplay'].includes(node.type)) || [];
   const existing = new Map(Array.from(root.children, region => [region.dataset.display, region]));
   for (const [index, spec] of specs.entries()) {
     let region = existing.get(spec.id);
@@ -50,9 +50,9 @@ export function renderTextRegions(root, graph, displays) {
       const header = document.createElement('div'); header.className = 'section-heading'; header.append(heading, copy);
       region.append(header, notice, content);
     }
-    const heading = region.querySelector('h2');
-    if (heading.textContent !== spec.settings.label) heading.textContent = spec.settings.label;
-    region.setAttribute('aria-label', spec.settings.label); region.lang = spec.settings.language;
+    const heading = region.querySelector('h2'), label = spec.settings.label ?? 'Text';
+    if (heading.textContent !== label) heading.textContent = label;
+    region.setAttribute('aria-label', label); region.lang = spec.settings.language ?? 'und';
     // Mount new regions before measuring layout. Reattaching an existing region
     // unnecessarily would clear browser text selection.
     if (root.children[index] !== region) root.insertBefore(region, root.children[index] || null);

@@ -37,7 +37,7 @@ export class TabSession {
       if (!graph.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination in Graph Editor.');
     } catch (error) { this.update({ error: error.message }); return; }
     const preferences = graphPreferences(graph);
-    const hasDisplay = graph.nodes.some(node => node.type === 'LiveTextDisplay');
+    const hasDisplay = graph.nodes.some(node => ['LiveTextDisplay', 'TextDisplay'].includes(node.type));
     const hasAudioOutput = graph.nodes.some(node => ['AudioOutput', 'SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
     const speakers = graph.nodes.filter(node => ['SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
     const sources = graph.nodes.filter(n => INPUT_TYPES.includes(n.type));

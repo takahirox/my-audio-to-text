@@ -1,4 +1,9 @@
-# Continuous ASR and translation rows
+# Legacy DOM transcript history
+
+For new transcript graphs, use the [primitive text path](keyed-text-history.md):
+`KeyedTextCoalesce → KeyedTextPair → TextDisplay`. The DOM composition below
+remains supported for existing saved graphs and other DOM uses; no migration or
+automatic rewiring is performed.
 
 For one visible row per utterance, use three `PairedTextToDOM` Nodes and one
 `KeyedDOMAccumulator`. Both use existing primitive `TEXT`, `NUMBER` and `DOM`
