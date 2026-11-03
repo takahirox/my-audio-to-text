@@ -1,7 +1,7 @@
 # Primitive transcript pairing and text output
 
-For new graphs, use the [portable VIEW path](view.md):
-KeyedTextPair → ViewBuilder → Display. This document records the #194
+For new graphs, use the [portable ITEM path](display-items.md):
+KeyedTextPair → KeyedPairedTextAccumulator → Display. This document records the #194
 TextDisplay compatibility path, retained for saved graphs. Original text appears before
 translation, with a blank right side. Final text replaces provisional text in one
 snapshot; a late translation for A updates A even while B receives ASR updates.
@@ -26,7 +26,8 @@ both before selecting the nonempty final. The legacy sink never chooses text pri
 ## KeyedTextPair
 
 Inputs are `id1: NUMBER`, `input1: TEXT`, `id2: NUMBER`, `input2: TEXT`.
-Outputs are `id: NUMBER`, `input1: TEXT`, `input2: TEXT`. Despite their shared
+Outputs include immutable `pair: KEYED_PAIRED_TEXT` plus the compatible
+`id: NUMBER`, `input1: TEXT`, `input2: TEXT` ports. Despite their shared
 names, the output ports are complete snapshots, not passthrough input events.
 Each text update emits the updated ID and both latest strings for that ID as
 one atomic group; a missing side is `''`. Explicit empty, duplicate and whitespace

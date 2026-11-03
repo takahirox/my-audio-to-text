@@ -1,5 +1,5 @@
-// A contract is a shared identity, not a schema or a payload wrapper.
-export const portContract = name => Object.freeze({ name });
+import { compatiblePorts, snapshotPortValue, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST } from './port-contracts.js';
+export { portContract } from './port-contracts.js';
 
 /**
  * Nodes declare inputs/outputs as { portName: contract }. Optional async hooks:
@@ -32,7 +32,7 @@ export class Pipeline {
       if (!a || !b) throw new Error(`Unknown connection node: ${!a ? source : target}`);
       if (!Object.hasOwn(a.outputs, output)) throw new Error(`Unknown output port: ${source}.${output}`);
       if (!Object.hasOwn(b.inputs, input)) throw new Error(`Unknown input port: ${target}.${input}`);
-      if (!a.outputs[output] || a.outputs[output] !== b.inputs[input]) {
+      if (!compatiblePorts(a.outputs[output], b.inputs[input])) {
         throw new Error(`Incompatible port contracts: ${source}.${output} → ${target}.${input}`);
       }
       if (typeof b.node.receive !== 'function' && typeof b.node.receiveInputs !== 'function') throw new Error(`Input node ${target} needs receive() or receiveInputs().`);
@@ -82,10 +82,18 @@ export class Pipeline {
       this.fail(entry, new TypeError('emitOutputs needs a named output map.')); return;
     }
     // Snapshot and validate the entire group before enqueueing any branch.
-    const outputs = Object.entries(values);
+    let outputs = Object.entries(values);
     for (const [port] of outputs) if (!Object.hasOwn(entry.outputs, port)) {
       this.fail(entry, new Error(`Unknown output port: ${entry.id}.${port}`)); return;
     }
+    try {
+      outputs = outputs.map(([port, value]) => {
+        const contract = entry.outputs[port];
+        const portable = [ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST].includes(contract) ||
+          (entry.routes.get(port) || []).some(route => route.entry.inputs[route.port] === ITEM);
+        return [port, portable ? snapshotPortValue(contract, value) : value];
+      });
+    } catch (error) { this.fail(entry, error); return; }
     // Omitted siblings clear within the emitted family only. A producer can
     // declare independent atomic families sharing the same TEXT consumers.
     const groupOutputs = new Set(entry.outputGroups.filter(ports => outputs.some(([port]) => ports.includes(port))).flat());

@@ -1,19 +1,28 @@
-import { VIEW } from './port-contracts.js';
+import { ITEM, VIEW } from './port-contracts.js';
+import { snapshotItem } from './paired-text.js';
 import { snapshotView } from './view.js';
 
 // Browser host adapter. Every input is the entire view; there is no row state.
 export class DisplayNode {
-  inputs = { view: VIEW };
+  inputs = { input: ITEM };
   outputs = {};
-  constructor(onDisplay = () => {}) { this.onDisplay = onDisplay; }
+  constructor(onDisplay = () => {}, { legacyView = false } = {}) {
+    this.onDisplay = onDisplay; this.legacyView = legacyView;
+    if (legacyView) this.inputs = { view: VIEW };
+  }
   start(context) {
     this.signal = context.signal; this.closed = false;
     this.render({ rows: [] });
   }
   receiveInputs(values, context) {
     if (this.closed || context.signal.aborted || context.signal !== this.signal) return;
-    if (Object.keys(values).some(port => port !== 'view')) throw TypeError('Display accepts only view: VIEW.');
-    if (Object.hasOwn(values, 'view')) this.render(snapshotView(values.view));
+    const port = this.legacyView ? 'view' : 'input';
+    if (Object.keys(values).some(key => key !== port)) throw TypeError(`Display accepts only ${port}.`);
+    if (!Object.hasOwn(values, port)) return;
+    if (this.legacyView) { this.render(snapshotView(values.view)); return; }
+    const item = snapshotItem(values.input);
+    this.render({ rows: typeof item === 'string' ? [{ cells: [item] }] :
+      (Array.isArray(item) ? item : [item]).map(pair => ({ cells: [pair.first, pair.second] })) });
   }
   receive(port, value, context) { this.receiveInputs({ [port]: value }, context); }
   render(view) {

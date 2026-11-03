@@ -1215,21 +1215,23 @@ preview, finalized source and translated rows. See the
 Version 15 graphs are unchanged unless these optional ports are connected.
 
 
-## Portable view processing and output (#196)
+## Portable display items and output (#198)
 
 For new continuous transcript graphs, connect ASR final/provisional through
-`KeyedTextCoalesce`, pair its original text with independently keyed translation
-using `KeyedTextPair`, then connect all three outputs to `ViewBuilder`.
-`ViewBuilder.view → Display.view` is the only structured rendering boundary.
-Primitive processors keep NUMBER/TEXT contracts; the builder creates complete
-portable VIEW snapshots and owns history. Display receives VIEW only and renders
-literal browser text without accumulating or interpreting IDs or sources.
-One-cell plain text and two-cell transcript rows use the same builder and sink.
-Both Nodes have no Settings and serialize as ordinary version 15 nodes.
+KeyedTextCoalesce, pair its original text with independently keyed translation
+using KeyedTextPair, then `pair → KeyedPairedTextAccumulator.pair` and
+`pairs → Display.input`. The accumulator owns portable ordered keyed history;
+Display accepts TEXT, KEYED_PAIRED_TEXT or KEYED_PAIRED_TEXT_LIST through one
+ITEM input and renders each whole snapshot without accumulation or selection.
+Any TEXT output connects directly for plain latest text; a pair connects directly
+for the latest pair. These Nodes have no Settings.
 
-See [data invariants, exact wiring, delivery and lifecycle](view.md) and the
-[recommended importable graph](evidence/view-196.json). Saved #194 TextDisplay
-and earlier DOM compositions remain supported unchanged; no graph version bump,
-automatic rewiring or storage migration is needed. Existing defaults and legacy
-preference imports retain their established browser behavior. The
-[former #194 graph](keyed-text-history.md) is a compatibility reference.
+See [data invariants, exact wiring and lifecycle](display-items.md) and the
+[recommended importable graph](evidence/item-198.json). Graph version stays 15.
+Saved ViewBuilder.view → Display.view routes open a reviewed draft adding only
+`legacyView: true` to the existing Display. This keeps its VIEW port and rendering;
+all graph data and exact original JSON are retained for recovery after Save.
+Saved TextDisplay and earlier DOM compositions remain supported unchanged.
+Existing defaults and preference imports retain their established behavior.
+The [VIEW path](view.md) and [#194 path](keyed-text-history.md) remain legacy
+references. See [verification and packaging limits](evidence/item-198.md).

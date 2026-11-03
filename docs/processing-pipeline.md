@@ -151,10 +151,11 @@ orchestration only when real implementations demonstrate a need.
 Apply the [design principles](../README.md#design-principles): formatting,
 history, composition and rendering have explicit contracts and graph connections.
 
-New portable text graphs use `ViewBuilder → view: VIEW → Display`. The builder
-owns text-row construction and optional keyed history; Display only renders full
-snapshots. One-cell plain text and multi-cell rows use the same contract and sink.
-See the [VIEW data invariants, exact graph and compatibility path](view.md).
+New portable text graphs use `TEXT → Display.input: ITEM`, or
+`KeyedTextPair.pair → KeyedPairedTextAccumulator.pair → pairs → Display.input`.
+The accumulator owns ordered keyed history; Display renders each complete
+TEXT/pair/list snapshot without history or selection. See the
+[ITEM contracts, exact wiring and compatibility path](display-items.md).
 The DOM compositions below remain supported for existing browser graphs.
 
 The extension separates producer, formatting and display responsibilities. Any

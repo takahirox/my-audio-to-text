@@ -5,7 +5,7 @@ import { TRANSLATION_OUTPUTS, TRANSLATION_OUTPUT_GROUPS } from './translation-sc
 import { FORMAT_INPUTS, formatInputs, parseTemplate } from '../web/text-nodes.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 import { AUDIO_STREAM } from '../web/audio-stream.js';
-import { DOM, NUMBER, VIEW } from '../web/port-contracts.js';
+import { DOM, NUMBER, VIEW, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST, compatiblePorts } from '../web/port-contracts.js';
 import { validateCondition, MAX_CONDITION_CHARS } from '../web/if-condition-policy.js';
 import { finiteNumber } from '../web/number-node.js';
 import { validateWindowThreshold } from '../web/text-window-node.js';
@@ -26,11 +26,12 @@ export const NODE_TYPES = Object.freeze({
   MicrophoneAudio: { label: 'Microphone audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Press Start in Live to request microphone permission.' },
   FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect SpeechToTextReazonSpeech.final or a processor’s completed text output; no separate authorization or field picker.' },
   Number: { label: 'Number', inputs: {}, outputs: { value: NUMBER }, numberSettings: { value: { default: 6 } }, help: 'Reusable finite numeric constant. Select this Node to edit value. Units and limits belong to its consumer. SpeechToTextReazonSpeech.maxDuration accepts 1–12 seconds, including decimals; saves apply next session.' },
-  KeyedTextCoalesce: { label: 'Keyed text coalesce', inputs: { id1: NUMBER, input1: TEXT, id2: NUMBER, input2: TEXT }, optionalInputs: ['id1', 'input1', 'id2', 'input2'], outputs: { id: NUMBER, text: TEXT }, help: 'For each finite numeric ID, select nonempty input1, otherwise input2, otherwise empty text. Only the exact empty string is empty; whitespace and duplicate updates count. Each independent idN selects the key for subsequent inputN events; text before the first ID waits (latest value only). ID-only changes never replay completed text or emit blanks. Grouped ID/text updates apply atomically; an omitted grouped ID cannot borrow the previous key. Both branches keep their latest text separately per ID. Each text update emits id/text together, even if unchanged or empty. Start clears all state; Stop/Cancel close delivery. Example: Number.value → id1 and id2, preferred Text.value → input1, backup Text.value → input2; text → ViewBuilder.input1 → view → Display.view. No Settings or producer restrictions.' },
-  KeyedTextPair: { label: 'Keyed text pair', inputs: { id1: NUMBER, input1: TEXT, id2: NUMBER, input2: TEXT }, optionalInputs: ['id1', 'input1', 'id2', 'input2'], outputs: { id: NUMBER, input1: TEXT, input2: TEXT }, help: 'Keep the latest left and right text separately per finite numeric ID. Each text update emits one complete id/input1/input2 snapshot; missing sides are empty. Empty and duplicate strings are real updates. Each branch uses its own latest ID; text before its first ID waits. ID-only changes never replay completed text. Atomic updates apply both sides before emitting once per affected ID; an omitted grouped ID cannot borrow a previous key. Any NUMBER and TEXT producers may connect independently. Start clears; Stop/Cancel reject late work. No Settings, DOM or selection priority. Connect snapshots to ViewBuilder, then view to Display.view.' },
-  ViewBuilder: { label: 'View builder', inputs: { id: NUMBER, input1: TEXT, input2: TEXT }, optionalInputs: ['id', 'input1', 'input2'], outputs: { view: VIEW }, help: 'Build full portable VIEW snapshots. Connect one TEXT input for one-cell rows, both for two cells. Optional finite numeric id appends new keys and replaces existing rows in first-seen order. Without id, keep one latest row without inventing IDs. Empty and duplicate strings count. Independent updates retain the other side for the same key; grouped omitted TEXT siblings clear. Text before a connected ID waits; ID-only changes never replay completed text. Start clears; Stop/Cancel retain the last snapshot and reject late work. No Settings or browser dependencies. Connect view to Display.view.' },
-  Display: { label: 'Display', inputs: { view: VIEW }, outputs: {}, help: 'Render each complete portable VIEW snapshot as literal text rows. One-cell rows show plain text; multi-cell rows use equal-width table columns. Each delivery replaces the whole view, with no keyed history or producer knowledge. Any VIEW producer can connect. Start clears; Stop/Cancel retain the view and reject late work. No Settings.' },
-  TextDisplay: { label: 'Text display (legacy)', inputs: { id: NUMBER, input1: TEXT, input2: TEXT }, optionalInputs: ['id', 'input1', 'input2'], outputs: {}, help: 'Compatibility for saved graphs. Prefer ViewBuilder → Display for portable processing and rendering. Text output sink. Connect one TEXT input for plain text or both for two columns. Browser rendering is literal and safe inside this output Node; no DOM graph edges. With optional id, first-seen keys append and later snapshots replace that row without reordering; no selection priority. With no id, show the latest snapshot. Empty values clear; grouped omitted TEXT siblings clear. Independent inputs retain the other side within the same key. Text before a connected ID waits; ID-only changes never replay completed text. Start clears visible history; Stop/Cancel retain it and reject late work. No Settings.' },
+  KeyedTextCoalesce: { label: 'Keyed text coalesce', inputs: { id1: NUMBER, input1: TEXT, id2: NUMBER, input2: TEXT }, optionalInputs: ['id1', 'input1', 'id2', 'input2'], outputs: { id: NUMBER, text: TEXT }, help: 'For each finite numeric ID, select nonempty input1, otherwise input2, otherwise empty text. Only the exact empty string is empty; whitespace and duplicate updates count. Each independent idN selects the key for subsequent inputN events; text before the first ID waits (latest value only). ID-only changes never replay completed text or emit blanks. Grouped ID/text updates apply atomically; an omitted grouped ID cannot borrow the previous key. Both branches keep their latest text separately per ID. Each text update emits id/text together, even if unchanged or empty. Start clears all state; Stop/Cancel close delivery. Example: Number.value → id1 and id2, preferred Text.value → input1, backup Text.value → input2; text → Display.input. No Settings or producer restrictions.' },
+  KeyedTextPair: { label: 'Keyed text pair', inputs: { id1: NUMBER, input1: TEXT, id2: NUMBER, input2: TEXT }, optionalInputs: ['id1', 'input1', 'id2', 'input2'], outputs: { id: NUMBER, input1: TEXT, input2: TEXT, pair: KEYED_PAIRED_TEXT }, help: 'Keep the latest left and right text separately per finite numeric ID. Each text update emits a complete immutable pair: KEYED_PAIRED_TEXT { id, first, second } plus compatible id/input1/input2 outputs; missing sides are empty. Empty and duplicate strings are real updates. Each branch uses its own latest ID; text before its first ID waits. ID-only changes never replay completed text. Atomic updates apply both sides before emitting once per affected ID; an omitted grouped ID cannot borrow a previous key. Any NUMBER and TEXT producers may connect independently. Start clears; Stop/Cancel reject late work. No Settings, DOM or selection priority. Connect pair → KeyedPairedTextAccumulator.pair → pairs → Display.input, or pair directly to Display.input for the latest pair.' },
+  ViewBuilder: { label: 'View builder (legacy)', inputs: { id: NUMBER, input1: TEXT, input2: TEXT }, optionalInputs: ['id', 'input1', 'input2'], outputs: { view: VIEW }, help: 'Build full portable VIEW snapshots. Connect one TEXT input for one-cell rows, both for two cells. Optional finite numeric id appends new keys and replaces existing rows in first-seen order. Without id, keep one latest row without inventing IDs. Empty and duplicate strings count. Independent updates retain the other side for the same key; grouped omitted TEXT siblings clear. Text before a connected ID waits; ID-only changes never replay completed text. Start clears; Stop/Cancel retain the last snapshot and reject late work. No Settings or browser dependencies. Retained for saved VIEW graphs; connect view to a reviewed legacy Display.view. New graphs use KeyedTextPair → KeyedPairedTextAccumulator → Display.input.' },
+  KeyedPairedTextAccumulator: { label: 'Keyed paired text accumulator', inputs: { pair: KEYED_PAIRED_TEXT }, outputs: { pairs: KEYED_PAIRED_TEXT_LIST }, help: 'Append a new numeric ID; replace an existing ID in place in arrival order. Emit a complete immutable ordered array after every pair, including empty and duplicate updates. No stage priorities, selection or rendering. Start clears; Stop/Cancel retain history and reject late work. Connect pairs to Display.input. No Settings.' },
+  Display: { label: 'Display', inputs: { input: ITEM }, outputs: {}, help: 'One input: ITEM accepts TEXT, KEYED_PAIRED_TEXT or KEYED_PAIRED_TEXT_LIST from any producer. Render latest plain text, one pair or a complete ordered pair history literally. Every delivery replaces the whole display; no keyed accumulation or selection. Start clears; Stop/Cancel retain the view and reject late work. No Settings. Saved VIEW displays use an explicit reviewed legacy mode.' },
+  TextDisplay: { label: 'Text display (legacy)', inputs: { id: NUMBER, input1: TEXT, input2: TEXT }, optionalInputs: ['id', 'input1', 'input2'], outputs: {}, help: 'Compatibility for saved graphs. Prefer TEXT → Display.input or KeyedTextPair → KeyedPairedTextAccumulator → Display.input. Text output sink. Connect one TEXT input for plain text or both for two columns. Browser rendering is literal and safe inside this output Node; no DOM graph edges. With optional id, first-seen keys append and later snapshots replace that row without reordering; no selection priority. With no id, show the latest snapshot. Empty values clear; grouped omitted TEXT siblings clear. Independent inputs retain the other side within the same key. Text before a connected ID waits; ID-only changes never replay completed text. Start clears visible history; Stop/Cancel retain it and reject late work. No Settings.' },
   SpeechToTextReazonSpeech: { label: 'ReazonSpeech ja-en ASR', inputs: { audio: MONO_16KHZ_PCM, maxDuration: NUMBER }, optionalInputs: ['maxDuration'], outputs: asrOutputs(), outputGroups: ASR_OUTPUT_GROUPS, help: 'Optional maxDuration: connect any NUMBER source for a 1–12 second audio segment cap (default 6 seconds). Includes pre-roll; decimals round down to whole 16 kHz samples. Frozen before model loading; waiting audio is bounded at 30 seconds; saved edits apply next session. VAD can end sooner. Mid-sentence splits may reduce recognition quality. Inference and final display can take longer than the cap.' },
   Text: { label: 'Text', inputs: {}, outputs: { value: TEXT }, textSettings: { value: { default: '', multiline: true } }, help: 'Reusable literal text constant, including empty text. Delivered once at session start to ordinary TEXT consumers. Whisper.language consumes its first TEXT value before model loading; saves apply next session.' },
   SpeechToTextWhisper: { label: 'Whisper tiny (multilingual) ASR', inputs: { audio: MONO_16KHZ_PCM, language: TEXT }, optionalInputs: ['language'], outputs: asrOutputs(false), outputGroups: ASR_OUTPUT_GROUPS, help: 'Packaged local multilingual Whisper tiny (q8, CPU WASM). Defaults to English (en); connect any TEXT source supplying en or ja. Only final: TEXT is available; connect final to TextAccumulator.append for committed segments. Silero ends speech at silence or a 6-second cap; Stop drains every segment. No downloads while recording.' },
@@ -78,6 +79,10 @@ const LEGACY_VIEWS = {
   }, optionalInputs: [...Object.keys(LEGACY_TRANSLATION_OUTPUTS).filter(port => port !== 'provisional'), 'provisionalText'], outputs: {}, help: 'Plain display: provisionalText and/or text. Paired display: text plus finalSource, finalStatus, finalIndex, finalError from the same translator; optional provisionalText plus provisionalSource, provisionalStatus, provisionalError. Groups travel directly from one producer; separate processor branches cannot be joined.' },
 };
 export function nodeDefinition(node) {
+  if (node?.type === 'Display' && node.legacyView === true) return {
+    ...NODE_TYPES.Display, label: 'Display (legacy VIEW)', inputs: { view: VIEW },
+    help: 'Compatibility for saved VIEW graphs. Render complete VIEW snapshots literally without history. To adopt ITEM, replace this sink with a new Display and connect TEXT, KEYED_PAIRED_TEXT or KEYED_PAIRED_TEXT_LIST to input.',
+  };
   const definition = Object.hasOwn(NODE_TYPES, node?.type) ? NODE_TYPES[node.type] : undefined;
   if (!definition) return undefined;
   if (node.type !== 'TextFormatter') return definition;
@@ -144,6 +149,7 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
     nodes.set(node.id, node);
     const definition = legacy ? definitionOf(node.type) : nodeDefinition(node);
     if (!definition) { errors.push(`Unknown Node type: ${node.type}`); continue; }
+    if (Object.hasOwn(node, 'legacyView') && (node.type !== 'Display' || node.legacyView !== true)) errors.push(`Invalid legacy VIEW mode: ${node.id}`);
     if (!record(node.position) || ![node.position.x, node.position.y].every(n => Number.isFinite(n) && n >= 0)) errors.push(`Invalid position: ${node.id}`);
     if (!record(node.settings)) { errors.push(`Invalid settings: ${node.id}`); continue; }
     for (const key of Object.keys(node.settings)) if (!Object.hasOwn(definition.settings || {}, key) && !Object.hasOwn(definition.textSettings || {}, key) && !Object.hasOwn(definition.numberSettings || {}, key)) errors.push(`Unknown setting: ${node.id}.${key}`);
@@ -165,7 +171,7 @@ export function validateGraph(graph, legacy = false, optionalWarnings = false) {
     const a = legacy ? definitionOf(nodes.get(source)?.type) : nodeDefinition(nodes.get(source)), b = legacy ? definitionOf(nodes.get(target)?.type) : nodeDefinition(nodes.get(target));
     if (!a || !b) { errors.push(`Unknown edge Node: ${source} → ${target}`); continue; }
     if (!Object.hasOwn(a.outputs, output) || !Object.hasOwn(b.inputs, input)) { errors.push(`Unknown port: ${source}.${output} → ${target}.${input}`); continue; }
-    if (a.outputs[output] !== b.inputs[input]) errors.push(`Incompatible port types: ${source}.${output} → ${target}.${input}`);
+    if (!compatiblePorts(a.outputs[output], b.inputs[input])) errors.push(`Incompatible port types: ${source}.${output} → ${target}.${input}`);
     const destination = JSON.stringify([target, input]);
     if (incoming.has(destination)) errors.push(`Only one connection allowed to ${target}.${input}`);
     incoming.set(destination, connection.from);
@@ -537,7 +543,7 @@ function migrateBeforeTextWindowGraph(graph) {
 }
 // v15 changes only TextWindow. Convert its old thresholds into explicit Number
 // sources in a review draft; never guess a replacement for removed preview edges.
-export function migrateGraph(graph) {
+function migrateTextWindowGraph(graph) {
   const legacy = record(graph) && Number.isInteger(graph.version) && graph.version < GRAPH_VERSION &&
     Array.isArray(graph.nodes) && Array.isArray(graph.edges);
   const windows = legacy ? graph.nodes.filter(node => node?.type === 'TextWindow') : [];
@@ -575,6 +581,32 @@ export function migrateGraph(graph) {
   if (!errors.length) error.recoveryGraph = converted;
   else error.message += ` Manual repair required: ${errors.join(' ')}`;
   throw error;
+}
+// Same graph version: only the Display port changed. Preserve the exact saved
+// JSON until reviewed Save, then retain a recovery copy through saveGraph.
+export function migrateGraph(graph) {
+  let next;
+  try { next = migrateTextWindowGraph(graph); }
+  catch (error) {
+    if (error.recoveryGraph) error.recoveryGraph = legacyViewDraft(error.recoveryGraph);
+    throw error;
+  }
+  const draft = legacyViewDraft(next);
+  if (draft === next) return next;
+  const error = new Error('Display ITEM port requires review. Saved Display.view connections retain VIEW rendering in an explicit legacy mode; all nodes, settings and edges are preserved. Review the draft and Save; the exact original JSON and earlier recovery copies are kept. New Display nodes use input: ITEM.');
+  const errors = validateGraph(draft);
+  if (!errors.length) error.recoveryGraph = draft;
+  else error.message += ` Repair required: ${errors.join(' ')}`;
+  throw error;
+}
+function legacyViewDraft(graph) {
+  if (!Array.isArray(graph?.nodes) || !Array.isArray(graph?.edges)) return graph;
+  const ids = graph.nodes.filter(node => node?.type === 'Display' && node.legacyView === undefined &&
+    graph.edges.some(route => route?.to?.[0] === node.id && route.to[1] === 'view')).map(node => node.id);
+  if (!ids.length) return graph;
+  const next = structuredClone(graph);
+  for (const node of next.nodes) if (node && ids.includes(node.id)) node.legacyView = true;
+  return next;
 }
 export function assertGraph(graph) {
   const migrated = migrateGraph(graph), errors = validateGraph(migrated);

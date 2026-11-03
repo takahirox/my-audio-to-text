@@ -27,6 +27,7 @@ import { NumberNode } from '../web/number-node.js';
 import { TextDisplayNode } from '../web/text-display-node.js';
 import { ViewBuilderNode } from '../web/view-builder-node.js';
 import { DisplayNode } from '../web/display-node.js';
+import { KeyedPairedTextAccumulatorNode } from '../web/keyed-paired-text-accumulator-node.js';
 import { KeyedTextPairNode } from '../web/keyed-text-pair-node.js';
 import { KeyedTextCoalesceNode } from '../web/keyed-text-coalesce-node.js';
 import { TextSlidingWindowNode } from '../web/text-sliding-window-node.js';
@@ -151,7 +152,8 @@ export function buildGraph(graph, options) {
         node = new SpeechToTextNode({ configurationConnected: graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'maxDuration'), workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'KeyedTextPair': node = new KeyedTextPairNode(); break;
       case 'ViewBuilder': node = new ViewBuilderNode(); break;
-      case 'Display': node = new DisplayNode(dom => options.onDisplay?.(spec.id, dom)); break;
+      case 'KeyedPairedTextAccumulator': node = new KeyedPairedTextAccumulatorNode(); break;
+      case 'Display': node = new DisplayNode(dom => options.onDisplay?.(spec.id, dom), { legacyView: spec.legacyView === true }); break;
       case 'TextDisplay': node = new TextDisplayNode(dom => options.onDisplay?.(spec.id, dom)); break;
       case 'LiveTextDisplay': node = new LiveTextDisplayNode(dom => options.onDisplay?.(spec.id, dom)); break;
       case 'TextToDOM': node = new TextToDOMNode(spec.settings); break;

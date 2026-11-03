@@ -218,7 +218,7 @@ Each branch's ID selects subsequent text updates. Text before its first ID waits
 (latest value only); ID-only changes never relabel completed text or emit blanks.
 Grouped ID/text updates apply atomically; an omitted grouped ID waits for an ID
 rather than borrowing the old key. Start resets state; Stop/Cancel reject late
-updates. Route `text → ViewBuilder.input1 → view → Display.view` for latest plain text, or
+updates. Route `text → Display.input` for latest plain text, or
 `id/text → KeyedTextPair.id1/input1` for a keyed two-column transcript.
 
 `PairedTextToDOM` emits one fresh DOM pair whenever either generic TEXT input updates,
@@ -236,20 +236,21 @@ Saved paired source/text/error wiring requires a v12 review draft and Save,
 with exact original JSON retained for recovery. For optional comparison
 history, explicitly connect `PairedTextToDOM.dom → DOMAccumulator.append → dom →
 LiveTextDisplay.dom`. For continuous ASR rows while translation is pending,
-use `ASR → KeyedTextCoalesce → KeyedTextPair → ViewBuilder → Display`, with a separate
-`ASR.finalId/final → translator.id/text → KeyedTextPair.id2/input2` branch.
-`KeyedTextPair` retains left and right strings per independent numeric ID and
-emits complete primitive snapshots. `ViewBuilder` owns first-seen row order and
-replacement history, emitting portable `VIEW` data: `{ rows: [{ id?, cells }] }`.
-Without id it emits one latest row; one TEXT input gives one cell, both give two.
-`Display` receives only `view: VIEW` and renders the complete snapshot literally,
-with no keyed history or source knowledge. Empty strings and line breaks survive;
-HTML-like text is inert. Original text appears immediately; late A translation
-updates A while B remains visible. See the [VIEW contract and exact wiring](docs/view.md),
-[importable graph](docs/evidence/view-196.json) and
-[executable fixture](tests/fixtures/view-graph.js). Saved `TextDisplay` and legacy
-DOM graphs retain their original browser compatibility path without rewiring;
-new portable graphs need only ViewBuilder and Display.
+use `ASR → KeyedTextCoalesce → KeyedTextPair → KeyedPairedTextAccumulator → Display`,
+with a separate `ASR.finalId/final → translator.id/text → KeyedTextPair.id2/input2`
+branch. `KeyedTextPair` emits an immutable `{ id, first, second }` pair while
+retaining its legacy primitive outputs. The accumulator appends new IDs and
+replaces existing IDs in place in arrival order, emitting complete ordered pair
+arrays. `Display.input: ITEM` accepts TEXT, KEYED_PAIRED_TEXT or
+KEYED_PAIRED_TEXT_LIST and renders each whole snapshot literally without history
+or selection. Any TEXT output connects directly for latest plain text; a pair
+connects directly for the latest pair. Empty strings and line breaks survive;
+HTML-like text is inert. Late translation A updates A while B remains visible.
+See the [ITEM contracts and exact wiring](docs/display-items.md),
+[importable graph](docs/evidence/item-198.json) and
+[executable fixture](tests/fixtures/item-graph.js). Saved VIEW displays open a
+reviewed compatibility draft preserving original graph data and recovery copies.
+Saved TextDisplay and older DOM paths keep their existing behavior.
 Existing ID-less append-only and separate-preview compositions remain supported.
 Each Live region follows incoming DOM while you are reading near the bottom;
 scrolling up keeps your position until you return to the bottom.

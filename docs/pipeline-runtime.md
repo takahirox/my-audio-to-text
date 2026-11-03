@@ -376,11 +376,12 @@ Independent formatter inputs update latest values immediately; only directly
 grouped inputs update together. No editor, model selection, storage or inference
 policy is added to the generic Pipeline runtime.
 
-Portable text graphs add one shared `VIEW` identity. `ViewBuilder` consumes
-NUMBER/TEXT and emits complete immutable text-row snapshots; `Display` receives
-only VIEW and renders them in the host. Ordinary type-only routing, atomic
+Portable text graphs use KEYED_PAIRED_TEXT and KEYED_PAIRED_TEXT_LIST snapshots.
+KeyedTextPair emits a complete immutable pair; KeyedPairedTextAccumulator emits
+ordered append/replace histories. Display receives only input: ITEM, accepting
+TEXT, one pair or a full pair list, and renders each whole snapshot in the host. Ordinary type-only routing, atomic
 deliveries and fan-out apply without runtime special cases. See the
-[VIEW contract](view.md). The DOM Nodes above remain the saved-graph browser
+[ITEM contracts](display-items.md). The DOM Nodes above remain the saved-graph browser
 compatibility path; they are not required by portable processing.
 
 ## Optional transcript correction

@@ -1,6 +1,12 @@
-# Portable views and rendering (#196)
+# Legacy portable views and rendering (#196)
 
-New graphs use one portable view/history processor and one rendering sink:
+New graphs use [ITEM-compatible Display and paired-text accumulation](display-items.md).
+This document describes the retained VIEW compatibility path. Saved Display.view
+routes open a reviewed draft adding `legacyView: true` to the sink, preserving
+all graph data and exact original recovery copies on Save. New Display Nodes
+expose only input: ITEM; VIEW remains distinct.
+
+Legacy graphs use one portable view/history processor and one rendering sink:
 
 ```text
 ASR finalId/final ────────→ KeyedTextCoalesce.id1/input1
@@ -13,7 +19,7 @@ ViewBuilder.view ─────────→ Display.view
 ```
 
 Import the
-[recommended saved graph](evidence/view-196.json) in Graph Editor, or use the
+[historical saved graph](evidence/view-196.json) in Graph Editor, or use the
 [executable fixture](../tests/fixtures/view-graph.js) with either OPUS-MT or
 TranslateGemma direction, or `null` for transcription without translation.
 Provisional A appears with an empty right cell. Final A replaces it without a
@@ -89,7 +95,7 @@ only, unbounded, and full snapshots cost memory and time proportional to history
 
 ## Display host boundary
 
-`Display` has **only `view: VIEW` input and no outputs**. Each valid delivery
+`Display` in reviewed legacy mode has **only `view: VIEW` input and no outputs**. Each valid delivery
 replaces the entire rendered view, including removing rows absent from the new
 snapshot. It does not keep IDs, row history, latest text sides, stage priority or
 producer information. Any compatible VIEW output can connect to it, regardless
@@ -109,7 +115,7 @@ outside this change; no DOM or renderer callbacks cross VIEW ports.
 
 ## Saved graph compatibility
 
-This is additive to graph version 15. Saved #194 `TextDisplay` graphs keep the
+Graph version remains 15; the reviewed legacy Display marker preserves VIEW rendering. Saved #194 `TextDisplay` graphs keep the
 original implementation, inputs, history, lifecycle and literal rendering; the
 palette marks it legacy. `TextToDOM`, `PairedTextToDOM`, `KeyedDOMAccumulator`,
 `DOMAccumulator`, `DOMCombiner` and `LiveTextDisplay` remain the existing browser
@@ -118,10 +124,9 @@ also keep their established behavior. Their nodes, IDs, settings, positions,
 wires and serialized storage are not rewritten. Earlier reviewed migrations and
 all recovery copies remain intact. Historical evidence JSON stays unchanged.
 
-To adopt the new path deliberately, export the original graph first. Replace
-each TextDisplay with ViewBuilder using the same incoming wires, then connect
-its view to a new Display. Existing custom DOM compositions can keep their legacy
-path; no automatic conversion claims to preserve arbitrary DOM formatting.
-The new recommendation and importable JSON above use the portable path.
+To adopt the current ITEM path deliberately, use the
+[new wiring and migration guidance](display-items.md#saved-graphs-and-recovery).
+The #196 JSON remains unchanged as a historical recovery/compatibility fixture.
 
-See the [verification record](evidence/view-196.md) for checks and limits.
+See the [historical verification record](evidence/view-196.md) and
+[current checks](evidence/item-198.md).

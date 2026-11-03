@@ -1,3 +1,4 @@
+import { compatiblePorts } from '../web/port-contracts.js';
 import { NODE_TYPES, nodeDefinition, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
 
 const el = (tag, text, className) => {
@@ -64,8 +65,8 @@ export class GraphEditor {
       el('p', 'Connect by clicking an output then a matching input, or drag from an output to an input. Reconnecting replaces only that input’s wire. Drag a connected input into blank canvas to detach its wire, or to a matching input to move it. Select a wire for connection details and Disconnect in the inspector. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape, Clear selection or blank canvas clears selection.'),
       el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
       el('p', 'LiveTextDisplay mounts DOM and follows the bottom while you are reading there. TextToDOM formats plain text; PairedTextToDOM emits the latest pair whenever either TEXT input updates: input1 on the left, input2 on the right. An unconnected side stays empty. Send both values atomically for one consistent snapshot. DOMAccumulator keeps append-only DOM history; DOMCombiner combines the latest first and second snapshots. TextAccumulator appends committed text only. For live ASR, connect final → TextAccumulator.append → TextToDOM.text → DOMCombiner.first, provisional → a separate TextToDOM.text → DOMCombiner.second, then DOMCombiner.dom → LiveTextDisplay.dom. Configure languages in Node settings. Save prepares required model weights; Models provides asset recovery.'),
-      el('p', 'For continuous ASR/translation rows, connect ASR finalId/final → KeyedTextCoalesce.id1/input1 and provisionalId/provisional → id2/input2. Also connect ASR finalId/final directly to translator.id/text. Connect coalesce.id/text → KeyedTextPair.id1/input1 and translator.id/text → KeyedTextPair.id2/input2, then pair.id/input1/input2 → ViewBuilder.id/input1/input2, then ViewBuilder.view → Display.view. Originals appear immediately; late translations replace their own row. KeyedTextPair pairs only by numeric ID. ViewBuilder owns portable history; Display only renders VIEW snapshots. All processing edges are NUMBER/TEXT until the single VIEW boundary. For plain text, connect either ViewBuilder TEXT input without id, then view → Display.view. TextDisplay owns browser rendering and visible history only on the legacy compatibility path. Existing DOM Nodes remain available for saved graphs and other DOM uses.'),
-      el('p', 'KeyedTextCoalesce selects nonempty input1, otherwise input2, separately for each numeric ID. Connect Number.value to id1/id2 and independent preferred/backup TEXT sources to input1/input2, then text → ViewBuilder.input1 → view → Display.view. Only the exact empty string is empty. Each branch uses its latest ID; text before the first ID waits. ID-only changes never replay old text. Grouped ID/text updates stay atomic, and each selection emits id/text together.'),
+      el('p', 'For continuous ASR/translation rows, connect ASR finalId/final → KeyedTextCoalesce.id1/input1 and provisionalId/provisional → id2/input2. Also connect ASR finalId/final directly to translator.id/text. Connect coalesce.id/text → KeyedTextPair.id1/input1 and translator.id/text → KeyedTextPair.id2/input2, then KeyedTextPair.pair → KeyedPairedTextAccumulator.pair, then pairs → Display.input. Originals appear immediately; late translations replace their own row. KeyedTextPair pairs only by numeric ID. KeyedPairedTextAccumulator owns portable ordered pair history, replacing each ID in arrival order. Display has one input: ITEM accepting TEXT, KEYED_PAIRED_TEXT or KEYED_PAIRED_TEXT_LIST from any producer; it renders each whole snapshot without accumulation or selection. For plain text, connect any TEXT output directly to Display.input. Saved ViewBuilder.view → Display.view graphs open a reviewed legacy-mode draft; Save preserves the exact original JSON and earlier recovery copies. TextDisplay owns browser rendering and visible history only on the legacy compatibility path. Existing DOM Nodes remain available for saved graphs and other DOM uses.'),
+      el('p', 'KeyedTextCoalesce selects nonempty input1, otherwise input2, separately for each numeric ID. Connect Number.value to id1/id2 and independent preferred/backup TEXT sources to input1/input2, then text → Display.input. Only the exact empty string is empty. Each branch uses its latest ID; text before the first ID waits. ID-only changes never replay old text. Grouped ID/text updates stay atomic, and each selection emits id/text together.'),
       el('p', 'TextWindow batches exact incoming TEXT for any consumer. Optional maxChars and maxWaitSeconds NUMBER inputs default to 600 and 1.5 seconds. Connect text → translator.text → TextAccumulator.append. For optional previews, connect a deliberate TEXT snapshot source → translator.provisional; connect TextWindow.text → TranslationCommit.boundary and translator.source/text/error directly to TranslationCommit.source/text/error, then TranslationCommit.final → TextAccumulator.append. Route translator.provisionalText → TextToDOM → DOMCombiner.second for previews; route committed TextAccumulator.text through a separate TextToDOM → DOMCombiner.first, then DOMCombiner.dom → LiveTextDisplay.dom. TranslationCommit.provisional emits empty clears only. Only bounded closed windows commit; this does not retain conversation-wide context.'),
       el('p', 'TranslateGemma 4B English → Japanese: connect English ASR.final or Text.value → text, then text → TextAccumulator.append, or source/text/error → TextFormatter inputs. Both directions share a 3.112 GB download; allow 7 GB free storage and several GB free RAM/GPU memory. Requires Worker WebGPU; no fallback. Saving a graph containing either direction prepares these weights, including parked Nodes. Google Gemma Terms of Use and Prohibited Use Policy apply to use of this public ONNX conversion.'),
       (() => { const link = el('a', 'TranslateGemma terms, prohibited-use policy and attribution'); link.href = '../web/licenses/gemma-notices.txt'; return link; })(),
@@ -216,7 +217,7 @@ export class GraphEditor {
     this.summary.classList.toggle('graph-conflict', !!this.externalChange);
   }
   connect(id, port, contract, movingConnection = null) {
-    if (this.selected && this.selected.contract === contract && this.selected.id !== id) {
+    if (this.selected && compatiblePorts(this.selected.contract, contract) && this.selected.id !== id) {
       const proposed = edge(this.selected.id, this.selected.port, id, port);
       const identical = this.draft.edges.some(e => JSON.stringify(e) === JSON.stringify(proposed));
       if (!identical) {
@@ -387,7 +388,7 @@ export class GraphEditor {
           control.append(el('small', typeLabel(contract)));
           control.dataset.port = port; control.dataset.side = side; control.title = `${side}: ${port} (${contract.name})`;
           control.setAttribute('aria-label', `${node.id} ${side} ${port}`);
-          if (side === 'input' && this.selected) control.disabled = this.selected.contract !== contract || this.selected.id === node.id;
+          if (side === 'input' && this.selected) control.disabled = !compatiblePorts(this.selected.contract, contract) || this.selected.id === node.id;
           if (side === 'output') {
             control.setAttribute('aria-pressed', String(this.selected?.id === node.id && this.selected.port === port));
             control.draggable = true;
@@ -395,12 +396,12 @@ export class GraphEditor {
               this.selected = { id: node.id, port, contract }; event.dataTransfer.setData('text/plain', `${node.id}.${port}`);
               for (const input of this.canvas.querySelectorAll('[data-side="input"]')) {
                 const target = this.draft.nodes.find(n => n.id === input.closest('[data-node]').dataset.node);
-                input.disabled = target.id === node.id || nodeDefinition(target).inputs[input.dataset.port] !== contract;
+                input.disabled = target.id === node.id || !compatiblePorts(contract, nodeDefinition(target).inputs[input.dataset.port]);
               }
             };
             control.ondragend = () => { this.selected = null; this.draw(); };
           } else {
-            control.ondragover = event => { if (this.selected?.contract === contract && this.selected.id !== node.id) event.preventDefault(); };
+            control.ondragover = event => { if (compatiblePorts(this.selected?.contract, contract) && this.selected.id !== node.id) event.preventDefault(); };
             control.ondrop = event => { event.preventDefault(); this.connect(node.id, port, contract); };
             const connection = this.draft.edges.find(e => e.to[0] === node.id && e.to[1] === port);
             if (connection) {

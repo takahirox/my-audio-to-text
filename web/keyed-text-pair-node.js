@@ -1,9 +1,10 @@
-import { NUMBER, TEXT } from './port-contracts.js';
+import { NUMBER, TEXT, KEYED_PAIRED_TEXT } from './port-contracts.js';
+import { snapshotPairedText } from './paired-text.js';
 import { finiteNumber } from './number-node.js';
 
 export class KeyedTextPairNode {
   inputs = { id1: NUMBER, input1: TEXT, id2: NUMBER, input2: TEXT };
-  outputs = { id: NUMBER, input1: TEXT, input2: TEXT };
+  outputs = { id: NUMBER, input1: TEXT, input2: TEXT, pair: KEYED_PAIRED_TEXT };
   start(context) {
     this.signal = context.signal;
     this.closed = false;
@@ -36,7 +37,7 @@ export class KeyedTextPairNode {
     for (const id of affected) {
       const first = this.branches[0].values.get(id) ?? '';
       const second = this.branches[1].values.get(id) ?? '';
-      context.emitOutputs({ id, input1: first, input2: second });
+      context.emitOutputs({ id, input1: first, input2: second, pair: snapshotPairedText({ id, first, second }) });
     }
   }
   receive(port, value, context) { this.receiveInputs({ [port]: value }, context); }
