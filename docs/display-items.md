@@ -28,7 +28,7 @@ contracts and processing Nodes require no browser APIs.
 fourth concrete representation. The shared `compatiblePorts(output, input)` rule
 accepts identical contract identities, plus TEXT/KEYED_PAIRED_TEXT/
 KEYED_PAIRED_TEXT_LIST outputs into ITEM. ITEM cannot feed a consumer requiring
-a concrete subtype. NUMBER, VIEW, DOM, audio and unrelated objects are not ITEM
+a concrete subtype. NUMBER, audio and unrelated objects are not ITEM
 subtypes. TEXT cannot feed the pair accumulator. There are no producer, model,
 output-name, group-origin or connection-order restrictions. Editor gestures,
 saved validation, executable selection and Pipeline construction share this rule;
@@ -51,7 +51,7 @@ Import the [example graph](evidence/item-198.json) in Graph Editor. The
 or TranslateGemma direction, or `null` for transcription alone.
 
 `KeyedTextPair` keeps its four independently connectable NUMBER/TEXT inputs and
-all three legacy outputs. Each coherent same-ID update also emits immutable
+emits only immutable
 `pair: KEYED_PAIRED_TEXT`, including missing/empty right text. Its two branches
 retain their own IDs and values, independent of delivery order and translator
 timing. ID-only changes never replay completed text. See the
@@ -96,26 +96,17 @@ implementation is outside this Issue.
 
 ## Saved graphs and recovery
 
-Graph version remains 15. An old `ViewBuilder.view → Display.view` route opens
-an **unsaved reviewed compatibility draft**. The only draft addition is
-`legacyView: true` on the existing Display spec: it keeps the single `view: VIEW`
-port and its existing rendering implementation. IDs, settings, positions, edges,
-fan-out and literal content remain intact. It is a saved compatibility marker,
-not a new display type or configurable presentation setting. New Display Nodes
-always expose only input: ITEM. An incompatible mixture of ports fails visibly.
+Graph version remains 15. Removed display Nodes and ports are unsupported,
+including older display routes saved with that version. Validation reports the
+unknown Node/port explicitly; Live disables Start and links to Graph Editor.
+The editor opens a valid current default draft and shows the original saved JSON
+under Graph actions → Saved JSON. Reading never rewrites stored data.
 
-The original saved JSON is untouched until reviewed Save. Save preserves its
-exact bytes under `processing-graph-before-v14`, with numbered copies on collision;
-all earlier recovery copies remain available under Graph actions → Recovery.
-Reloading a reviewed legacy graph does not migrate again. To adopt ITEM, replace
-that sink with a new Display and deliberately connect one supported concrete
-stream. VIEW is not implicitly converted to ITEM.
+Choose Reset draft to default or Import graph JSON, inspect the current graph,
+then Save to replace the saved graph. Import validates before changing the draft;
+unsupported imports leave it intact. There is no automatic migration, rewiring,
+legacy mode or accumulating display variant.
 
-Saved TextDisplay and TextToDOM/PairedTextToDOM/KeyedDOMAccumulator/
-LiveTextDisplay routes keep their existing implementations and storage without
-migration. Existing defaults and preference-import graphs remain unchanged.
-The [VIEW contract](view.md) and historical evidence JSON remain available for
-legacy use; unrelated DOM functionality is retained.
-
-See the [verification record](evidence/item-198.md) for checks and unperformed
-real-model, full asset packaging and native-host validation.
+Validation uses unit contracts, editor/runtime tests, browser rendering and
+controlled module Workers. These checks cover composition and lifecycle, without
+claiming real model inference or a native host renderer.

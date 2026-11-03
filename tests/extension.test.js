@@ -1,5 +1,4 @@
-import { addDOMFormatters } from './fixtures/dom-graph.js';
-import { DOM } from '../web/port-contracts.js';
+import { ITEM } from '../web/port-contracts.js';
 import { domText } from './fixtures/dom.js';
 import { accumulateDisplay } from './fixtures/text-accumulator.js';
 import { test } from 'node:test';
@@ -15,7 +14,7 @@ import { defaultGraph, graphNode, edge, GRAPH_VERSION } from '../extension/graph
 function fixture({ holdLoad = false, holdSource = false, asyncFlush = false, sourceError, stopError, graph, pageConnectionFactory } = {}) {
   const workers = [], sources = [], views = [];
   const session = new TabSession(view => views.push(view), {
-    graph: graph ? addDOMFormatters(graph) : undefined, pageConnectionFactory,
+    graph: graph ? (graph) : undefined, pageConnectionFactory,
     workerFactory(path) {
       const worker = { path, messages: [], terminated: false,
         postMessage(data) {
@@ -65,10 +64,10 @@ test('Number duration is set before model start; saves during load/capture affec
   const starting = f.session.start(42); await drain();
   assert.equal(f.sources.length, 1);
   assert.equal(f.session.session.speechNodes.get('speech').maxDuration, 2.5);
-  graph.nodes.at(-1).settings.value = 3.75; f.session.setGraph(addDOMFormatters(graph));
+  graph.nodes.at(-1).settings.value = 3.75; f.session.setGraph((graph));
   f.workers.forEach(w => w.reply({ type: 'ready' })); await starting;
   assert.equal(f.session.session.speechNodes.get('speech').core.simulation.maxSamples, 40000);
-  graph.nodes.at(-1).settings.value = 1.25; f.session.setGraph(addDOMFormatters(graph));
+  graph.nodes.at(-1).settings.value = 1.25; f.session.setGraph((graph));
   f.sources[0].onAudio(new Float32Array(40000).fill(0.05)); await drain();
   assert.equal(f.workers[0].messages.find(m => m.type === 'decode').audio.length, 40000);
   await f.session.stop();
@@ -142,11 +141,11 @@ test('extension session emits provisional/final output, flushes once and clears 
   const graph = session.session.pipeline;
   assert.ok(graph instanceof Pipeline);
   assert.deepEqual(graph.order.map(entry => entry.node.constructor.name),
-    ['ExtensionTabAudioNode', 'SpeechToTextNode', 'TextToDOMNode', 'TextAccumulatorNode', 'TextToDOMNode', 'DOMCombinerNode', 'LiveTextDisplayNode']);
+    ['ExtensionTabAudioNode', 'SpeechToTextNode', 'KeyedTextCoalesceNode', 'KeyedTextPairNode', 'KeyedPairedTextAccumulatorNode', 'DisplayNode']);
   assert.equal(graph.entries.get('audio').outputs.audio, MONO_16KHZ_PCM);
   assert.equal(graph.entries.get('speech').inputs.audio, MONO_16KHZ_PCM);
-  assert.equal(graph.entries.get('transcript-preview').inputs.text, TEXT);
-  assert.equal(graph.entries.get('transcript').inputs.dom, DOM);
+  assert.equal(graph.entries.get('coalesce').inputs.input2, TEXT);
+  assert.equal(graph.entries.get('transcript').inputs.input, ITEM);
   sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
   assert.equal((domText(session.view.displays.transcript) || ''), 'provisional text');
   await session.start(99); assert.equal(sources.length, 1, 'live capture cannot be retargeted');
@@ -351,7 +350,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 function concurrentGraph({ fanout = false } = {}) {
   const graph = defaultGraph();
-  graph.nodes.push(graphNode('ChromeTabAudio', 'second-audio'), graphNode('SpeechToTextReazonSpeech', 'second-speech'), graphNode('LiveTextDisplay', 'second-display'));
+  graph.nodes.push(graphNode('ChromeTabAudio', 'second-audio'), graphNode('SpeechToTextReazonSpeech', 'second-speech'), graphNode('Display', 'second-display'));
   graph.edges.push(edge(fanout ? 'audio' : 'second-audio', 'audio', 'second-speech', 'audio'), edge('second-speech', 'final', 'second-display', 'append'));
   return accumulateDisplay(graph, 'second-display');
 }
@@ -425,11 +424,11 @@ test('fan-out uses one capture with independent same-type model processors and s
 
 test('parked and incomplete nodes do not load models, request microphone permission or capture', async () => {
   const graph = defaultGraph();
-  for (const [type, id] of [['MicrophoneAudio', 'parked-mic'], ['SpeechToTextWhisper', 'parked-model'], ['TextFormatter', 'unfinished'], ['Kokoro', 'parked-tts'], ['LiveTextDisplay', 'parked-output']]) graph.nodes.push(graphNode(type, id));
-  graph.edges.push(edge('parked-model', 'final', 'unfinished', 'input1'), edge('unfinished', 'text', 'parked-output', 'content'));
+  for (const [type, id] of [['MicrophoneAudio', 'parked-mic'], ['SpeechToTextWhisper', 'parked-model'], ['TextFormatter', 'unfinished'], ['Kokoro', 'parked-tts'], ['Display', 'parked-output']]) graph.nodes.push(graphNode(type, id));
+  graph.edges.push(edge('parked-model', 'final', 'unfinished', 'input1'), edge('unfinished', 'text', 'parked-output', 'input'));
   const f = fixture({ graph }); await f.session.start(42);
   assert.equal(f.session.view.state, 'running'); assert.equal(f.workers.length, 2); assert.equal(f.sources.length, 1);
-  assert.deepEqual([...f.session.session.pipeline.entries.keys()], ['audio', 'speech', 'transcript', 'transcript-accumulator', 'transcript-dom', 'transcript-preview', 'transcript-combined']);
+  assert.deepEqual([...f.session.session.pipeline.entries.keys()], ['audio', 'speech', 'coalesce', 'pair', 'history', 'transcript']);
   assert.deepEqual(f.session.graph, graph); await f.session.stop();
   const draft = { version: GRAPH_VERSION, nodes: graph.nodes.slice(3), edges: [] };
   f.session.setGraph(draft); await f.session.start(42, { microphoneGesture: true });
@@ -438,9 +437,9 @@ test('parked and incomplete nodes do not load models, request microphone permiss
 });
 
 test('a shared formatter stays live after one input path ends', async () => {
-  const graph = concurrentGraph(); graph.nodes.push(graphNode('TextFormatter', 'shared'), graphNode('LiveTextDisplay', 'combined'));
+  const graph = concurrentGraph(); graph.nodes.push(graphNode('TextFormatter', 'shared'), graphNode('Display', 'combined'));
   graph.nodes.at(-2).settings.template = '{1}/{2}';
-  graph.edges.push(edge('speech', 'final', 'shared', 'input1'), edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'content'));
+  graph.edges.push(edge('speech', 'final', 'shared', 'input1'), edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'input'));
   const f = fixture({ graph }); await f.session.start(42); const active = f.session.session;
   active.audioSources.get('audio').end(); await active.branchDrain;
   assert.equal(active.pipeline.entries.get('shared').closed, false);

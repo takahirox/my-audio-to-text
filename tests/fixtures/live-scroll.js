@@ -5,31 +5,30 @@ import { readFile } from 'node:fs/promises';
 export async function installLiveScrollFixture(page, packaged = false) {
   if (!packaged) {
     const source = await readFile(new URL('../../extension/live-text-regions.js', import.meta.url), 'utf8');
-    await page.route('**/live-text-regions.js', route => route.fulfill({ contentType: 'text/javascript', body: source.replace('../web/dom-nodes.js', '/dom-nodes.js') }));
+    await page.route('**/live-text-regions.js', route => route.fulfill({ contentType: 'text/javascript', body: source }));
     await page.addStyleTag({ content: await readFile(new URL('../../extension/recorder.css', import.meta.url), 'utf8') });
   }
   await page.evaluate(async packaged => {
     const { renderTextRegions } = await import(packaged ? './live-text-regions.js' : '/live-text-regions.js');
-    const { DOMCombinerNode, DOMAccumulatorNode, PairedTextToDOMNode, TextToDOMNode } = await import(packaged ? '../web/dom-nodes.js' : '/dom-nodes.js');
+    const { DisplayNode } = await import(packaged ? '../web/display-node.js' : '/display-node.js');
     const root = document.createElement('div'); root.id = 'scroll-fixture'; document.body.append(root);
-    const graph = { nodes: ['a', 'b'].map(id => ({ id, type: 'LiveTextDisplay', settings: { label: id, language: 'und' } })) };
-    const displays = {}, contexts = {}, histories = {}, previews = {};
-    const signal = new AbortController().signal;
+    const graph = { nodes: ['a', 'b'].map(id => ({ id, type: 'Display', settings: {} })) };
+    const displays = {}, histories = {}, sinks = {};
+    const context = { signal: new AbortController().signal };
     window.scrollFixture = {
-      pair(id, source = 'original', translated = 'translation') { const pair = new PairedTextToDOMNode(); pair.start(); pair.receiveInputs({ input1: source, input2: translated }, { signal, groupInputs: ['input1', 'input2'], emit: (_, dom) => histories[id].receive('append', dom, contexts[id].history) }); },
-      preview(id, text) { new TextToDOMNode({ className: 'paired-text-tail' }).receive('text', text, previews[id]); },
+      pair(id, source = 'original', translated = 'translation') {
+        const rows = histories[id]; rows.push({ id: rows.length, first: source, second: translated }); this.update(id);
+      },
+      preview(id, text) { this.update(id, text); },
+      update(id, text = '') { sinks[id].receive('input', [...histories[id], ...(text ? [{ id: -1, first: text, second: '' }] : [])], context); },
       resize(width) { root.style.width = `${width}px`; },
-      clear(id) { histories[id].start(contexts[id].history); this.preview(id, ''); },
+      clear(id) { histories[id] = []; this.update(id); },
       snapshot(id, dom) { displays[id] = dom; this.render(); },
       render() { renderTextRegions(root, graph, displays); },
     };
     for (const id of ['a', 'b']) {
-      const combiner = new DOMCombinerNode();
-      const output = { signal, emit: (_, dom) => { displays[id] = dom; renderTextRegions(root, graph, displays); } };
-      combiner.start(output);
-      const history = { signal, emit: (_, dom) => combiner.receive('first', dom, output) };
-      contexts[id] = { history }; previews[id] = { signal, emit: (_, dom) => combiner.receive('second', dom, output) };
-      histories[id] = new DOMAccumulatorNode(); histories[id].start(history);
+      histories[id] = [];
+      sinks[id] = new DisplayNode(dom => { displays[id] = dom; scrollFixture.render(); }); sinks[id].start(context);
       for (let i = 0; i < 20; i++) scrollFixture.pair(id, `original ${i} ` + 'words '.repeat(8), `translation ${i} ` + '日本語 '.repeat(8));
     }
   }, packaged);

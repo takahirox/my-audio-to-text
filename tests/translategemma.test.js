@@ -1,5 +1,4 @@
 import { NUMBER } from '../web/port-contracts.js';
-import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -31,8 +30,8 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
     assert.deepEqual(NODE_TYPES[type].inputs, { text: TEXT, provisional: TEXT, id: NUMBER, provisionalId: NUMBER, context: TEXT });
     assert.deepEqual(NODE_TYPES[type].optionalInputs, ['provisional', 'id', 'provisionalId', 'context']);
     assert.deepEqual(graphNode(type, 'translation').settings, {});
-    const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'translation'), graphNode('TextToDOM', 'dom'), graphNode('LiveTextDisplay', 'out')],
-      edges: [edge('input', 'value', 'translation', 'text'), edge('translation', 'text', 'dom', 'text'), edge('dom', 'dom', 'out', 'dom')] };
+    const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'translation'), graphNode('Display', 'out')],
+      edges: [edge('input', 'value', 'translation', 'text'), edge('translation', 'text', 'out', 'input')] };
     const entries = new Map(), storage = { getItem: key => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value), removeItem: key => entries.delete(key) };
     saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
     graph.edges.push(edge('context', 'value', 'translation', 'context'));
@@ -42,22 +41,22 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
   });
   test(`${type}: v11 save/reload preserves independent and parked Nodes; real builder routes grouped TEXT to formatter and direct sinks`, async () => {
     const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode(type, 'translation'),
-      graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain'),
-      graphNode('Text', 'independent'), graphNode('LiveTextDisplay', 'other'), graphNode(type, 'parked')], edges: [
+      graphNode('TextFormatter', 'format'), graphNode('Display', 'paired'), graphNode('Display', 'plain'),
+      graphNode('Text', 'independent'), graphNode('Display', 'other'), graphNode(type, 'parked')], edges: [
       edge('input', 'value', 'translation', 'text'), edge('translation', 'source', 'format', 'input1'),
       edge('translation', 'text', 'format', 'input2'), edge('translation', 'error', 'format', 'input3'),
-      edge('format', 'text', 'paired', 'content'), edge('translation', 'text', 'plain', 'content'),
-      edge('independent', 'value', 'other', 'content'),
+      edge('format', 'text', 'paired', 'input'), edge('translation', 'text', 'plain', 'input'),
+      edge('independent', 'value', 'other', 'input'),
     ] };
     graph.nodes[0].settings.value = 'Original source'; graph.nodes[2].settings.template = '{1}|{2}|{3}';
     graph.nodes[5].settings.value = 'Other branch';
     const entries = new Map(), storage = { getItem: key => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value), removeItem: key => entries.delete(key) };
-    saveGraph(storage, addDOMFormatters(graph)); assert.deepEqual(readGraph(storage), graph);
+    saveGraph(storage, (graph)); assert.deepEqual(readGraph(storage), graph);
     assert.deepEqual(graphPreferences(graph), { enabled: true, direction });
-    assert.equal(executableGraph(addDOMFormatters(graph)).nodes.some(n => n.id === 'parked'), false);
+    assert.equal(executableGraph((graph)).nodes.some(n => n.id === 'parked'), false);
     for (const fail of [false, true]) {
       const workers = [], displays = {}, states = [];
-      const built = buildGraph(addDOMFormatters(graph), { prepareTranslateGemma: async () => { if (fail) throw Error('weights evicted'); },
+      const built = buildGraph((graph), { prepareTranslateGemma: async () => { if (fail) throw Error('weights evicted'); },
         onDisplay: (id, state) => { state = domText(state); displays[id] = state; }, onTranslationState: state => states.push(state),
         translationWorkerFactory: url => {
           const worker = { messages: [], postMessage(message) {

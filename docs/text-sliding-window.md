@@ -40,7 +40,7 @@ discard history, reject late input, and emit nothing.
 Add **Text sliding window** from Graph Editor → Add Node → Processors. For example,
 connect any TEXT producer to `text`, optionally connect `Number.value` to
 `maxChars`, and route `text` to an ordinary TEXT consumer. Use
-`TextToDOM → LiveTextDisplay` to display the latest snapshot. The node can also
+`Display.input` to display the latest snapshot. The node can also
 supply `TranslateGemma.context`; it has no translation-specific behavior or
 automatic wiring. Saved graphs retain ports and connections, while runtime
 history is session-local. Existing `TextWindow` batching behavior is unchanged.

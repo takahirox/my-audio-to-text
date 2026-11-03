@@ -93,8 +93,6 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .graph-command-list { max-height: 75dvh; overflow: auto; }
 .graph-recovery select, .graph-recovery textarea { width: 100%; min-width: 0; }
 .graph-recovery textarea { min-height: 10rem; }
-#graph-translation label { display: block; margin: .5rem 0; }
-#graph-translation select { max-width: 100%; }
 .graph-help { color: inherit; background: var(--panel); border: 1px solid var(--border); border-radius: .75rem; max-width: 38rem; max-height: 85dvh; padding: 1.5rem; }
 .graph-help::backdrop { background: #0009; }
 .graph-heading { min-height: 44px; }
@@ -139,7 +137,3 @@ button, summary, nav a { min-height: 44px; }
 #audio-outputs { padding: 0; list-style: none; }
 .display-content { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch; max-height: 52dvh; overflow: auto; overflow-anchor: none; scrollbar-gutter: stable; }
 .display-flow { display: flow-root; }
-
-/* Selected explicitly by the bilingual composition's TextToDOM formatter. */
-.paired-text-tail:not(:empty) { box-sizing: border-box; width: 50%; padding: .6em; font-style: italic; }
-.paired-text-tail:empty { display: none; }

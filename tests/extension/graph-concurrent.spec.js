@@ -7,12 +7,10 @@ async function saveConcurrent(page) {
   return page.evaluate(async () => {
     const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
     const graph = defaultGraph();
-    graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextWhisper', 'local'), graphNode('LiveTextDisplay', 'local-display'),
+    graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextWhisper', 'local'), graphNode('Display', 'local-display'),
       graphNode('MicrophoneAudio', 'parked-mic'), graphNode('Kokoro', 'parked-tts'), graphNode('SpeechToTextWhisper', 'unfinished-model'));
-    graph.nodes.find(node => node.id === 'transcript').settings.label = 'Remote speaker';
-    graph.nodes.find(node => node.id === 'local-display').settings.label = 'Local speaker';
-    graph.edges.push(edge('mic', 'audio', 'local', 'audio'), edge('local', 'final', 'local-display', 'content'));
-    saveGraph(localStorage, window.addDOMFormatters(graph)); return graph;
+    graph.edges.push(edge('mic', 'audio', 'local', 'audio'), edge('local', 'final', 'local-display', 'input'));
+    saveGraph(localStorage, (graph)); return graph;
   });
 }
 
@@ -24,7 +22,7 @@ test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauth
     graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'parked-output'),
       graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'unfinished-output'));
     graph.edges.push(edge('unfinished', 'final', 'unfinished-output', 'text'));
-    saveGraph(localStorage, window.addDOMFormatters(graph));
+    saveGraph(localStorage, (graph));
     window.pageAllocations = [];
     chrome.scripting.executeScript = async () => { window.pageAllocations.push('script'); throw Error('Inactive output requested authorization'); };
     chrome.tabs.connect = () => { window.pageAllocations.push('connection'); throw Error('Inactive output opened a connection'); };
@@ -117,7 +115,7 @@ test('MV3 drafts save/reload, optional warnings default off and persist, empty e
   await page.evaluate(async () => {
     const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
     const graph = defaultGraph(); graph.nodes.push(graphNode('MicrophoneAudio','parked'),graphNode('SpeechToTextWhisper','unfinished'));
-    graph.edges=[]; saveGraph(localStorage, window.addDOMFormatters(graph));
+    graph.edges=[]; saveGraph(localStorage, (graph));
   });
   await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
   await editor.locator('.graph-actions > summary').click();
@@ -140,7 +138,7 @@ test('MV3 TEXT-only path starts without a toolbar tab or microphone permission',
   await page.evaluate(async () => {
     const { graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
     const text = graphNode('Text', 'text'); text.settings.value = 'Independent text path';
-    saveGraph(localStorage, window.addDOMFormatters({ version: 15, nodes: [text, graphNode('LiveTextDisplay', 'display')], edges: [edge('text', 'value', 'display', 'content')] }));
+    saveGraph(localStorage, ({ version: 15, nodes: [text, graphNode('Display', 'display')], edges: [edge('text', 'value', 'display', 'input')] }));
     window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
     navigator.mediaDevices.getUserMedia = () => { throw Error('No microphone permission should be requested'); };
   });

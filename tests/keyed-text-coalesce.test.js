@@ -177,12 +177,12 @@ test('independent Number and TEXT producers keep different active keys through d
 
 function savedGraph() {
   const graph = { version: GRAPH_VERSION, nodes: [graphNode('Number', 'key'), graphNode('Text', 'preferred'), graphNode('Text', 'backup'),
-    graphNode('KeyedTextCoalesce', 'select'), graphNode('PairedTextToDOM', 'pair'), graphNode('TextToDOM', 'plain'),
-    graphNode('LiveTextDisplay', 'paired-display'), graphNode('LiveTextDisplay', 'plain-display')], edges: [
+    graphNode('KeyedTextCoalesce', 'select'), graphNode('KeyedTextPair', 'pair'),
+    graphNode('Display', 'paired-display'), graphNode('Display', 'plain-display')], edges: [
     edge('key', 'value', 'select', 'id1'), edge('preferred', 'value', 'select', 'input1'),
     edge('key', 'value', 'select', 'id2'), edge('backup', 'value', 'select', 'input2'),
-    edge('select', 'id', 'pair', 'id'), edge('select', 'text', 'pair', 'input1'),
-    edge('select', 'text', 'plain', 'text'), edge('pair', 'dom', 'paired-display', 'dom'), edge('plain', 'dom', 'plain-display', 'dom'),
+    edge('select', 'id', 'pair', 'id1'), edge('select', 'text', 'pair', 'input1'),
+     edge('pair', 'pair', 'paired-display', 'input'), edge('select', 'text', 'plain-display', 'input'),
   ] };
   graph.nodes[0].settings.value = -2.5; graph.nodes[1].settings.value = ''; graph.nodes[2].settings.value = 'backup';
   return graph;
@@ -205,7 +205,7 @@ test('real editor connects independent Number/TEXT, saves/reloads and builds exe
   assert.ok(built.pipeline.entries.get('select').node instanceof KeyedTextCoalesceNode);
   assert.deepEqual(built.pipeline.errors, []);
   assert.equal(out.filter(([id]) => id === 'plain-display').at(-1)[1], 'backup');
-  assert.equal(out.filter(([id]) => id === 'paired-display').at(-1)[1], 'backup\n');
+  assert.equal(out.filter(([id]) => id === 'paired-display').at(-1)[1], 'backup');
   await built.pipeline.dispose();
 });
 

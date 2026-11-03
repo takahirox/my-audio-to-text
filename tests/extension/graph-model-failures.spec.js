@@ -24,8 +24,8 @@ async function setup(f, type, phase) {
   await page.editor.evaluate(async type => {
     const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
     const graph = defaultGraph();
-    graph.nodes.push(graphNode(type, 'summary'), graphNode('TextToDOM', 'notes-dom'), graphNode('LiveTextDisplay', 'notes'));
-    graph.edges.push(edge('speech', 'final', 'summary', 'text'), edge('summary', 'summary', 'notes-dom', 'text'), edge('notes-dom', 'dom', 'notes', 'dom'));
+    graph.nodes.push(graphNode(type, 'summary'), graphNode('Display', 'notes'));
+    graph.edges.push(edge('speech', 'final', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input'));
     saveGraph(localStorage, graph);
   }, type);
   return page;

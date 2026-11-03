@@ -35,10 +35,7 @@ test('parallel production Nodes fan out finals, preserve repeats, clear failed p
   const page = await openGraph(f);
   await page.evaluate(async () => {
     const { graphNode, edge, saveGraph, assertGraph } = await import('./graph.js');
-    const legacy = { version: 9, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextParakeetV3', 'parakeet'), graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('LiveTextDisplay', 'p'), graphNode('LiveTextDisplay', 'm'), graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'formatted')],
-      edges: [edge('audio', 'audio', 'parakeet', 'audio'), edge('audio', 'audio', 'moonshine', 'audio'), edge('parakeet', 'final', 'p', 'append'), edge('moonshine', 'final', 'm', 'append'), edge('moonshine', 'provisional', 'm', 'replace'), edge('parakeet', 'final', 'format', 'input1'), edge('format', 'text', 'formatted', 'append')] };
-    let reviewed; try { reviewed = assertGraph(legacy); } catch (error) { if (!error.recoveryGraph) throw error; reviewed = error.recoveryGraph; }
-    saveGraph(localStorage, reviewed);
+
   });
   for (let repeat = 0; repeat < 2; repeat++) {
     await startGraph(page);

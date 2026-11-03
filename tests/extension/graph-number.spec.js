@@ -53,7 +53,7 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   await editor.getByLabel('number value', { exact: true }).fill('1.25');
   await editor.getByRole('button', { name: 'number output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
-  await expect(editor.getByRole('button', { name: 'transcript-accumulator input append', exact: true })).toBeDisabled();
+  await expect(editor.getByRole('button', { name: 'transcript input input', exact: true })).toBeDisabled();
   await editor.getByRole('button', { name: 'speech input maxDuration', exact: true }).click();
   await expect(editor.locator('#graph-errors')).toBeEmpty(); await save(editor);
   await editor.reload(); await editor.getByRole('button', { name: 'Select number', exact: true }).click();

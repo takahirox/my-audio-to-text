@@ -53,7 +53,7 @@ accommodates existing pre-roll; the 12-second upper bound stays within the model
 policy and 30-second pending buffer. This caps audio length, not inference or
 final-display wall time: ReazonSpeech ja-en runs serialized offline decodes with
 coalesced previews. Mid-sentence segmentation can reduce recognition accuracy
-through loss of context. See [Number configuration delivery](extension-graph.md#maximum-speech-segment-duration).
+through loss of context. See [Number configuration delivery](extension-graph.md).
 
 Stop accepts no more PCM after the call, suppresses pending provisional results,
 waits for VAD's final short frame, and emits `stopped` only after all finals drain.

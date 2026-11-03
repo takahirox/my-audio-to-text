@@ -33,7 +33,7 @@ test('Pipeline grouped/separate append delivery and generic formatter fan-out re
     live: new TextSink(text => display.push(text)), formatter: new TextFormatterNode({ template: 'Transcript: {1}' }),
     consumer: { inputs: { text: TEXT }, receive(_, value) { snapshots.push(value); } },
   }, connections: [edge('source', 'final', 'accumulator', 'append'),
-    edge('accumulator', 'text', 'live', 'content'), edge('accumulator', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'consumer', 'text')] });
+    edge('accumulator', 'text', 'live', 'input'), edge('accumulator', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'consumer', 'text')] });
   await pipeline.start(); await tick(); snapshots.length = 0; display.length = 0;
   group({ provisional: '', final: 'A' }); emit('provisional', 'tail'); emit('final', 'A'); emit('final', '');
   await pipeline.stop();
@@ -76,7 +76,7 @@ test('direct grouped formatter update emits once; separate branches emit latest 
     a: { outputs: { one: TEXT, two: TEXT }, start(c) { a = c.emitOutputs; } },
     b: { outputs: { text: TEXT }, start(c) { b = c.emit; } }, formatter,
     sink: new TextSink(state => { result.push(state); }),
-  }, connections: [edge('a', 'one', 'formatter', 'input1'), edge('a', 'two', 'formatter', 'input3'), edge('b', 'text', 'formatter', 'input2'), edge('formatter', 'text', 'sink', 'content')] });
+  }, connections: [edge('a', 'one', 'formatter', 'input1'), edge('a', 'two', 'formatter', 'input3'), edge('b', 'text', 'formatter', 'input2'), edge('formatter', 'text', 'sink', 'input')] });
   await pipeline.start(); a({ one: 'A', two: 'grouped' }); await tick(); assert.deepEqual(result, ['', 'A||grouped']);
   b('text', 'B'); await tick(); assert.deepEqual(result, ['', 'A||grouped', 'A|B|grouped']);
   a({ one: 'C' }); await pipeline.stop(); assert.deepEqual(result, ['', 'A||grouped', 'A|B|grouped', 'C|B|']); await pipeline.dispose();
@@ -96,7 +96,7 @@ test('formatter instances have independent counts above four, safe multi-digit r
 });
 
 class TextSink {
-  inputs = { content: TEXT }; outputs = {};
+  inputs = { input: TEXT }; outputs = {};
   constructor(callback) { this.callback = callback; }
   start() { this.callback(''); }
   receive(_, text, context) { if (!context.signal.aborted) this.callback(text); }

@@ -13,21 +13,20 @@ Remove the current ASR, add Streaming Zipformer English ASR (search `Zipformer`
 or `English`), then connect:
 
 ```text
-ChromeTabAudio.audio       → SpeechToTextZipformerEn.audio
-SpeechToTextZipformerEn.final → TextAccumulator.append → TextToDOM.text → DOMCombiner.first
-SpeechToTextZipformerEn.provisional → TextToDOM.text → DOMCombiner.second
-DOMCombiner.dom → LiveTextDisplay.dom
+ChromeTabAudio.audio → SpeechToTextZipformerEn.audio
+SpeechToTextZipformerEn.finalId/final → KeyedTextCoalesce.id1/input1
+SpeechToTextZipformerEn.provisionalId/provisional → KeyedTextCoalesce.id2/input2
+KeyedTextCoalesce.id/text → KeyedTextPair.id1/input1
+KeyedTextPair.pair → KeyedPairedTextAccumulator.pair
+KeyedPairedTextAccumulator.pairs → Display.input
 ```
 
 Save, then Start in Live. Selected media and microphone sources provide the same
 PCM contract. There is no language or maxDuration input: this is English-only,
-with a fixed policy. Remove any now-unused Number/Text source and configuration
-wire from the old ASR. Multiple ASRs can coexist or share a compatible source. Finals can feed existing
-TEXT formatters, OPUS-MT, focused fields and TTS. All downstream contracts and
-sinks are unchanged. Default/reset remains the ReazonSpeech → TextAccumulator → LiveTextDisplay graph.
-Zipformer adds no separate migration. Current version 10 graphs retain these ASR
-contracts; older graphs use the [translation/formatter migration and recovery
-rules](extension-graph.md), preserving unrelated ASR routes and settings.
+with a fixed policy. Remove unused configuration sources/edges when replacing
+another ASR. Multiple ASRs may share a compatible source. Finals can also feed
+TEXT formatters, translators, fields and TTS. Default/reset uses ReazonSpeech
+with the same keyed display path.
 
 ## Segmentation and ownership
 
@@ -143,7 +142,7 @@ sessions, worker disposal and zero HTTP requests. Irregular accelerated chunks
 also exercise capture block boundaries independently of model decode chunks.
 Deterministic tests cover exact audio accounting, repeated equal finals,
 backlog, failure/crash cleanup, Cancel, warm transfer, typed connections,
-unchanged v8 saves/defaults and existing migrations. The deterministic recognizer
+current saves/defaults and explicit unsupported-graph recovery. The deterministic recognizer
 is a fake and supplies no acoustic accuracy evidence.
 
 ## Measured behavior and limits
@@ -167,4 +166,4 @@ snapshot** decoding and its Number-configured cap. Whisper still exposes
 online acoustic/decoder state between incoming blocks within each capped segment;
 its provisional output comes from that real incremental inference.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final TEXT with TextAccumulator and compose provisional TEXT through separate TextToDOM and DOMCombiner branches. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An unconnected side stays empty; either input update emits both latest values. An atomic group clears omitted siblings within that group only; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.

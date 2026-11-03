@@ -13,7 +13,7 @@ const card = editor => editor.locator('#graph-models .model-card');
 
 test('palette, Save and reload preserve current connected graph and parked directions; shared verified preparation and recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
-  for (const type of ['Text', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'TextToDOM', 'LiveTextDisplay']) await add(editor, type);
+  for (const type of ['Text', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'Display']) await add(editor, type);
   await editor.locator('#graph-help').click();
   await editor.locator('#graph-asset-notice summary').click();
   await expect(editor.locator('#graph-asset-notice p')).toBeVisible();
@@ -75,15 +75,15 @@ for (const mode of ['normal', 'missing-gpu', 'no-adapter', 'inference-error', 'c
   const result = await live.evaluate(async mode => {
     const { graphNode, edge } = await import('./graph.js'); const { buildGraph } = await import('./graph-runtime.js');
     const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemmaEnJa', 'gemma'),
-      graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain')], edges: [
+      graphNode('TextFormatter', 'format'), graphNode('Display', 'paired'), graphNode('Display', 'plain')], edges: [
       edge('input', 'value', 'gemma', 'text'), edge('gemma', 'source', 'format', 'input1'), edge('gemma', 'text', 'format', 'input2'), edge('gemma', 'error', 'format', 'input3'),
-      edge('format', 'text', 'paired', 'content'), edge('gemma', 'text', 'plain', 'content'),
+      edge('format', 'text', 'paired', 'input'), edge('gemma', 'text', 'plain', 'input'),
     ] };
     graph.nodes[0].settings.value = mode === 'inference-error' ? 'fail' : mode === 'cancel' ? 'slow' : 'Hello';
     graph.nodes[2].settings.template = '{1}|{2}|{3}';
     const runs = [];
     for (let i = 0; i < 2; i++) {
-      const displays = {}, states = [], built = buildGraph(window.addDOMFormatters(graph), { onDisplay: (id, state) => { displays[id] = state.textContent; }, onTranslationState: s => states.push(s) });
+      const displays = {}, states = [], built = buildGraph((graph), { onDisplay: (id, state) => { displays[id] = state.textContent; }, onTranslationState: s => states.push(s) });
       await built.pipeline.start();
       if (mode === 'cancel') {
         await built.translations[0].ready; await new Promise(r => setTimeout(r, 30));
@@ -114,8 +114,8 @@ for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']) test(`${type}: 
   await f.context.setOffline(true);
   const result = await live.evaluate(async type => {
     const { graphNode, edge } = await import('./graph.js'); const { buildGraph } = await import('./graph-runtime.js');
-    const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'gemma'), graphNode('TextToDOM', 'dom'), graphNode('LiveTextDisplay', 'out')],
-      edges: [edge('input', 'value', 'gemma', 'text'), edge('context', 'value', 'gemma', 'context'), edge('gemma', 'text', 'dom', 'text'), edge('dom', 'dom', 'out', 'dom')] };
+    const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'gemma'), graphNode('Display', 'out')],
+      edges: [edge('input', 'value', 'gemma', 'text'), edge('context', 'value', 'gemma', 'context'), edge('gemma', 'text', 'out', 'input')] };
     const outputs = [], built = buildGraph(graph, { onDisplay: (_, dom) => outputs.push(dom.textContent) });
     try {
       await built.pipeline.start(); await built.translations[0].ready;

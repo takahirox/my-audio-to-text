@@ -1,12 +1,11 @@
-import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TranslationCommitNode } from '../web/translation-commit-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT } from '../web/port-contracts.js';
-import { TextAccumulatorNode, LiveTextDisplayNode } from '../web/text-nodes.js';
-import { TextToDOMNode, DOMCombinerNode } from '../web/dom-nodes.js';
+import { TextAccumulatorNode } from '../web/text-nodes.js';
+import { DisplayNode } from '../web/display-node.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { validateGraph, graphNode, edge, readGraph, saveGraph, defaultGraph, GRAPH_VERSION } from '../extension/graph.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
@@ -36,7 +35,7 @@ async function graph(mode = 'revisable', limits = {}) {
   }
   const preview = graphNode('Text', 'preview-input'); description.nodes.push(preview);
   description.edges.push(edge(preview.id, 'value', 'translator', 'provisional'));
-  const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory,
+  const built = buildGraph((description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory,
     onDisplay: (id, state) => { if (id === 'display') displays.push(domText(state)); else previews.push(domText(state)); } });
   await built.pipeline.start(); await built.translations[0].ready;
   return { ...f, ...built, displays, previews, preview: () => previews.at(-1) ?? '',
@@ -92,14 +91,13 @@ for (const operation of ['stop', 'cancel']) {
       input: { outputs: { boundary: TEXT, provisional: TEXT } },
       translator: { inputs: { text: TEXT, provisional: TEXT }, outputs: { source: TEXT, text: TEXT, error: TEXT, provisionalText: TEXT },
         receive(port, source, context) { results.push(() => context.emitOutputs(port === 'provisional' ? { provisionalText: `訳:${source}` } : { source, text: `訳:${source}`, error: '' })); } },
-      commit: new TranslationCommitNode(), clears: { inputs: { text: TEXT }, receive(_, value) { clears.push(value); } }, accumulator, history: new TextToDOMNode(), preview: new TextToDOMNode(), combined: new DOMCombinerNode(),
-      one: new LiveTextDisplayNode(dom => displays.one = domText(dom)), two: new LiveTextDisplayNode(dom => displays.two = domText(dom)),
+      commit: new TranslationCommitNode(), clears: { inputs: { text: TEXT }, receive(_, value) { clears.push(value); } }, accumulator,
+      one: new DisplayNode(dom => displays.one = domText(dom)), two: new DisplayNode(dom => displays.two = domText(dom)),
     }, connections: [
       edge('input', 'boundary', 'commit', 'boundary'), edge('input', 'boundary', 'translator', 'text'), edge('input', 'provisional', 'translator', 'provisional'),
       ...['source', 'text', 'error'].map(port => edge('translator', port, 'commit', port)),
-      edge('commit', 'final', 'accumulator', 'append'), edge('accumulator', 'text', 'history', 'text'), edge('commit', 'provisional', 'preview', 'text'), edge('commit', 'provisional', 'clears', 'text'),
-      edge('history', 'dom', 'combined', 'first'), edge('preview', 'dom', 'combined', 'second'),
-      edge('combined', 'dom', 'one', 'dom'), edge('combined', 'dom', 'two', 'dom'),
+      edge('commit', 'final', 'accumulator', 'append'), edge('commit', 'provisional', 'clears', 'text'),
+      edge('accumulator', 'text', 'one', 'input'), edge('accumulator', 'text', 'two', 'input'),
     ] });
     try {
       await pipeline.start();
@@ -141,9 +139,9 @@ test('bare dispose retains an explicit preview snapshot without committing pendi
 
 test('Live reports a buffer failure while independent TEXT delivery continues', async () => {
   const description = windowGraph('revisable'); description.nodes.find(n => n.id === 'window-chars').settings.value = 6;
-  description.nodes.push(graphNode('LiveTextDisplay', 'peer')); description.edges.push(edge('input', 'value', 'peer', 'content'));
+  description.nodes.push(graphNode('Display', 'peer')); description.edges.push(edge('input', 'value', 'peer', 'input'));
   const f = workers();
-  const session = new TabSession(() => {}, { graph: addDOMFormatters(description), prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory });
+  const session = new TabSession(() => {}, { graph: (description), prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory });
   await session.start(); await session.session.translations[0].ready;
   const send = text => session.session.pipeline.entries.get('input').context.emit('value', text);
   send('First.'); await tick(); f.complete(0); await tick(); send('x'.repeat(32769)); await tick();
@@ -187,7 +185,7 @@ for (const reverse of [false, true]) test(`independent windows drain separately 
   const description = { version: GRAPH_VERSION, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
   if (reverse) description.nodes.reverse();
   const f = workers(), displays = {};
-  const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => displays[id] = domText(s) });
+  const built = buildGraph((description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => displays[id] = domText(s) });
   await built.pipeline.start(); await Promise.all(built.translations.map(n => n.ready));
   const send = (suffix, s) => built.pipeline.entries.get(`input${suffix}`).context.emit('value', s);
   send('a', 'same'); send('b', 'same'); await tick(); assert.equal(f.requests.length, 0);
@@ -200,9 +198,9 @@ for (const reverse of [false, true]) test(`independent windows drain separately 
 
 test('32-window overload is visible and leaves an independent TEXT branch running', async () => {
   const description = windowGraph('revisable'); description.nodes.find(n => n.id === 'window-chars').settings.value = 5;
-  description.nodes.push(graphNode('LiveTextDisplay', 'independent')); description.edges.push(edge('input', 'value', 'independent', 'content'));
+  description.nodes.push(graphNode('Display', 'independent')); description.edges.push(edge('input', 'value', 'independent', 'input'));
   const f = workers(), displays = {};
-  const built = buildGraph(addDOMFormatters(description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => displays[id] = domText(s) });
+  const built = buildGraph((description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => displays[id] = domText(s) });
   await built.pipeline.start(); await built.translations[0].ready;
   for (let i = 0; i < 50; i++) built.pipeline.entries.get('input').context.emit('value', 'Wait.');
   await tick(); assert.equal(displays.independent, 'Wait.');
@@ -213,13 +211,13 @@ test('32-window overload is visible and leaves an independent TEXT branch runnin
 test('graphs save/reload with explicit NUMBER wiring, no new weights and generic commit validation', () => {
   const values = new Map(), storage = { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: k => values.delete(k) };
   for (const mode of ['window', 'revisable']) {
-    const g = windowGraph(mode); assert.deepEqual(validateGraph(addDOMFormatters(g)), []);
+    const g = windowGraph(mode); assert.deepEqual(validateGraph((g)), []);
     saveGraph(storage, g); assert.deepEqual(readGraph(storage), g);
     assert.deepEqual(graphModelRequirements(g).map(r => r.id), ['translategemma']);
     assert.ok(!g.edges.some(e => e.from[0] === 'window' && e.from[1] === 'provisional'));
   }
   const g = windowGraph('revisable'); g.nodes.push(graphNode('TextWindow', 'other'));
-  g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'boundary').from[0] = 'other'; assert.deepEqual(validateGraph(addDOMFormatters(g)), []);
+  g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'boundary').from[0] = 'other'; assert.deepEqual(validateGraph((g)), []);
   assert.deepEqual(graphModelRequirements({ nodes: [graphNode('TextWindow', 'w'), graphNode('TranslationCommit', 'c')] }), []);
   assert.equal(defaultGraph().version, GRAPH_VERSION);
 });

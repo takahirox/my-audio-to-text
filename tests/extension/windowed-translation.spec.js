@@ -48,7 +48,7 @@ for (const mode of ['baseline', 'window', 'revisable']) test(`packaged ${mode}: 
     const runs = [];
     for (let run = 0; run < 2; run++) {
       let display; const events = [];
-      const built = buildGraph(window.addDOMFormatters(graph), { tabId: 42, prepareTranslation() {}, onDisplay: (_, s) => { display = s.textContent; events.push(s.textContent); } });
+      const built = buildGraph((graph), { tabId: 42, prepareTranslation() {}, onDisplay: (_, s) => { display = s.textContent; events.push(s.textContent); } });
       try {
         await built.pipeline.start(); await built.translations[0].ready;
         for (const text of texts) built.speechNodes.get('input').receiveEvent({ type: 'final', text });
@@ -63,33 +63,4 @@ for (const mode of ['baseline', 'window', 'revisable']) test(`packaged ${mode}: 
     expect(run.errors).toEqual([]); expect(run.display).toEqual(expected.map(s => `訳:${s}`).join('\n'));
   }
   expect(await live.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
-});
-
-test('v14 TextWindow recovery names removed routes, preserves original storage and saves explicit Number inputs', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
-  const raw = await editor.evaluate(async () => {
-    const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js');
-    const graph = defaultGraph(); graph.version = 14;
-    const window = graphNode('TextWindow', 'window', 300, 400);
-    window.settings = { maxChars: 2000, maxWaitMs: 2500, sentenceBoundary: 'on' };
-    graph.nodes.push(window, graphNode('TextFormatter', 'preview', 600, 400));
-    graph.edges.push(edge('speech', 'final', 'window', 'text'), edge('window', 'provisional', 'preview', 'input1'));
-    const raw = JSON.stringify(graph, null, 2); localStorage.setItem(GRAPH_KEY, raw); return raw;
-  });
-  await editor.reload();
-  await expect(editor.locator('#errors')).toContainText('TextWindow graph v15 requires review');
-  await expect(editor.locator('#errors')).toContainText('Removed window.provisional → preview.input1');
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
-  await expect(editor.getByRole('button', { name: 'window output provisional', exact: true })).toHaveCount(0);
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  await expect(editor.locator('#errors')).toBeEmpty();
-  const saved = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
-  expect(saved.version).toBe(15);
-  expect(saved.nodes.find(n => n.id === 'window').settings).toEqual({});
-  expect(saved.nodes.find(n => n.id === 'window-maxChars').settings.value).toBe(2000);
-  expect(saved.nodes.find(n => n.id === 'window-maxWaitSeconds').settings.value).toBe(2.5);
-  expect(saved.nodes.find(n => n.id === 'preview')).toEqual(JSON.parse(raw).nodes.find(n => n.id === 'preview'));
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-before-v14'))).toBe(raw);
-  await editor.reload(); await expect(editor.locator('#errors')).toBeEmpty();
-  expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(saved);
 });

@@ -1,4 +1,3 @@
-import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -140,11 +139,11 @@ for (const type of MEETING_SUMMARY_TYPES) {
 
   test(`${type}: v11 graph Save/reload, independent branches and missing model isolation`, async () => {
     const g = meetingGraph(type), values = new Map(), storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), removeItem: k => values.delete(k) };
-    assert.deepEqual(validateGraph(addDOMFormatters(g)), []); saveGraph(storage, addDOMFormatters(g)); assert.deepEqual(readGraph(storage), g);
+    assert.deepEqual(validateGraph((g)), []); saveGraph(storage, (g)); assert.deepEqual(readGraph(storage), g);
     assert.deepEqual(assertGraph(defaultGraph()), defaultGraph());
     for (const failLoad of [false, true]) {
       const f = fixture(type, { failLoad }), displays = {}, events = [];
-      const built = buildGraph(addDOMFormatters(g), { meetingSummaryWorkerFactory: () => f.worker, onDisplay: (id,state) => displays[id] = domText(state), onMeetingSummaryEvent: event => events.push(event) });
+      const built = buildGraph((g), { meetingSummaryWorkerFactory: () => f.worker, onDisplay: (id,state) => displays[id] = domText(state), onMeetingSummaryEvent: event => events.push(event) });
       await built.pipeline.start();
       if (failLoad) await assert.rejects(built.pipeline.stop(), AggregateError);
       else await built.pipeline.stop();
@@ -155,7 +154,7 @@ for (const type of MEETING_SUMMARY_TYPES) {
       if (failLoad) assert.ok(events.some(e => e.type === 'error'));
       await built.pipeline.dispose();
     }
-    g.nodes[1].settings.language = 'unknown'; assert.match(validateGraph(addDOMFormatters(g)).join(' '), /language/);
+    g.nodes[1].settings.language = 'unknown'; assert.match(validateGraph((g)).join(' '), /language/);
   });
 
   test(`${type}: immutable manifests include tokenizer/template and each external file; no executable model data`, async () => {
@@ -193,10 +192,10 @@ test('parked processors prepare both pinned asset sets and duplicates share stor
 test('concurrent processors own independent Workers, languages and notes while sharing TEXT fan-out', async () => {
   const g = meetingGraph('MeetingSummaryLfm2'), second = graphNode('MeetingSummaryQwen35', 'second');
   second.settings.language = 'en';
-  g.nodes.push(second, graphNode('LiveTextDisplay', 'english'));
-  g.edges.push({ from: ['input', 'value'], to: ['second', 'text'] }, { from: ['second', 'summary'], to: ['english', 'content'] });
+  g.nodes.push(second, graphNode('Display', 'english'));
+  g.edges.push({ from: ['input', 'value'], to: ['second', 'text'] }, { from: ['second', 'summary'], to: ['english', 'input'] });
   const workers = [], displays = {};
-  const built = buildGraph(addDOMFormatters(g), { meetingSummaryWorkerFactory: () => {
+  const built = buildGraph((g), { meetingSummaryWorkerFactory: () => {
     const f = fixture(workers.length ? 'MeetingSummaryQwen35' : 'MeetingSummaryLfm2'); workers.push(f); return f.worker;
   }, onDisplay: (id, state) => displays[id] = domText(state) });
   await built.pipeline.start(); await built.pipeline.stop();

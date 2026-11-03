@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { document } from './fixtures/dom.js';
 import { snapshotPairedText, snapshotPairedTextList, snapshotItem } from '../web/paired-text.js';
-import { TEXT, NUMBER, DOM, VIEW, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST, compatiblePorts } from '../web/port-contracts.js';
+import { TEXT, NUMBER, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST, compatiblePorts } from '../web/port-contracts.js';
 import { Pipeline, portContract } from '../web/pipeline.js';
 import { KeyedPairedTextAccumulatorNode } from '../web/keyed-paired-text-accumulator-node.js';
 import { KeyedTextPairNode } from '../web/keyed-text-pair-node.js';
 import { DisplayNode } from '../web/display-node.js';
 import { GraphEditor } from '../extension/graph-editor.js';
-import { NODE_TYPES, GRAPH_VERSION, GRAPH_KEY, GRAPH_RECOVERY_KEY, graphNode, edge, assertGraph, validateGraph, executableGraph, readGraph, saveGraph } from '../extension/graph.js';
+import { NODE_TYPES, GRAPH_VERSION, GRAPH_KEY, graphNode, edge, assertGraph, validateGraph, executableGraph, readGraph, saveGraph } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { itemGraph } from './fixtures/item-graph.js';
 
@@ -21,7 +21,7 @@ function fixture(node = new KeyedPairedTextAccumulatorNode()) {
   return { node, out, context, send: value => node.receive('pair', value, context) };
 }
 function storage(raw) {
-  const values = new Map([[GRAPH_KEY, raw], [GRAPH_RECOVERY_KEY, 'older recovery']]);
+  const values = new Map([[GRAPH_KEY, raw], ['older recovery']]);
   return { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: k => values.delete(k) };
 }
 
@@ -47,7 +47,7 @@ test('portable contracts accept exactly one finite ID/two strings or a dense ord
 });
 
 test('small directional compatibility matrix preserves strict concrete contracts and shared identities', () => {
-  const contracts = [TEXT, NUMBER, DOM, VIEW, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST, portContract('text')];
+  const contracts = [TEXT, NUMBER, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST, portContract('text')];
   for (const output of contracts) for (const input of contracts) {
     assert.equal(compatiblePorts(output, input), output === input || (input === ITEM && [TEXT, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST].includes(output)));
   }
@@ -114,7 +114,7 @@ for (const reverse of [false, true]) test(`arbitrary output names/types, immutab
     await pipeline.stop(); assert.deepEqual(pipeline.errors, []); assert.equal(received.length, 1);
     assert.doesNotMatch(outputs.at(-1).firstChild.textContent, /caller mutation/); await pipeline.dispose();
   }
-  for (const contract of [NUMBER, DOM, VIEW]) assert.throws(() => new Pipeline({ nodes: {
+  for (const contract of [NUMBER, portContract('other')]) assert.throws(() => new Pipeline({ nodes: {
     any: { outputs: { arbitrary: contract } }, display: new DisplayNode(),
   }, connections: [edge('any', 'arbitrary', 'display', 'input')] }), /Incompatible/);
 });
@@ -131,7 +131,7 @@ test('runtime rejects values contradicting declared concrete types without any f
 });
 
 test('editor, saved validation and executable selection accept concrete ITEM streams, enforce one edge and reject unrelated types', async () => {
-  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode('Number', 'number'), graphNode('KeyedTextPair', 'pair'), graphNode('KeyedPairedTextAccumulator', 'history'), graphNode('TextToDOM', 'dom'), graphNode('ViewBuilder', 'view'), graphNode('Display', 'display')], edges: [] };
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode('Number', 'number'), graphNode('KeyedTextPair', 'pair'), graphNode('KeyedPairedTextAccumulator', 'history'), graphNode('Display', 'display')], edges: [] };
   const editor = Object.assign(Object.create(GraphEditor.prototype), { draft: graph, draw() {}, canvas: { querySelector() {} } });
   for (const [source, port] of [['text', 'value'], ['pair', 'pair'], ['history', 'pairs'], ['text', 'value']]) {
     editor.selected = { id: source, port, contract: NODE_TYPES[graph.nodes.find(n => n.id === source).type].outputs[port] };
@@ -140,7 +140,7 @@ test('editor, saved validation and executable selection accept concrete ITEM str
     const store = storage(null); saveGraph(store, graph); assert.deepEqual(readGraph(store), graph);
   }
   assert.deepEqual(executableGraph(graph).nodes.map(n => n.id), ['text', 'display']);
-  for (const [source, port] of [['number', 'value'], ['dom', 'dom'], ['view', 'view']]) {
+  for (const [source, port] of [['number', 'value']]) {
     const invalid = { ...graph, edges: [edge(source, port, 'display', 'input')] };
     assert.match(validateGraph(invalid).join(), /Incompatible/); assert.throws(() => executableGraph(invalid), /Incompatible/);
     assert.throws(() => saveGraph(storage(null), invalid), /Incompatible/);
@@ -164,21 +164,6 @@ test('pair snapshots remain independent across same-ID changes; new accumulator 
   }
   const bundle = readFileSync(new URL('../scripts/build-extension.py', import.meta.url), 'utf8');
   for (const name of ['paired-text.js', 'keyed-paired-text-accumulator-node.js', 'display-node.js']) assert.ok(bundle.includes(`"${name}"`));
-});
-
-test('VIEW migration is an explicit review draft; Save preserves exact JSON, all graph data and older recovery copies; reload executes', async () => {
-  const raw = readFileSync(new URL('../docs/evidence/view-196.json', import.meta.url), 'utf8'), original = JSON.parse(raw), store = storage(raw);
-  let draft; assert.throws(() => readGraph(store), error => { draft = error.recoveryGraph; return /requires review/.test(error.message); });
-  assert.equal(store.getItem(GRAPH_KEY), raw); assert.equal(store.getItem(GRAPH_RECOVERY_KEY), 'older recovery');
-  const withoutMarker = structuredClone(draft); delete withoutMarker.nodes.find(n => n.id === 'display').legacyView;
-  assert.deepEqual(withoutMarker, original); assert.deepEqual(validateGraph(draft), []);
-  saveGraph(store, draft); assert.equal(store.getItem(`${GRAPH_RECOVERY_KEY}-2`), raw); assert.deepEqual(readGraph(store), draft);
-  // Exercise the preserved builder/view sink without loading ASR/translation.
-  const graph = { ...draft, nodes: [graphNode('Text', 'literal'), ...draft.nodes.filter(n => ['view', 'display'].includes(n.id))],
-    edges: [edge('literal', 'value', 'view', 'input1'), edge('view', 'view', 'display', 'view')] };
-  graph.nodes[0].settings.value = 'legacy literal'; const out = [], built = buildGraph(graph, { onDisplay: (_, dom) => out.push(dom) });
-  await built.pipeline.start(); await built.pipeline.stop(); assert.equal(out.at(-1).firstChild.textContent, 'legacy literal'); await built.pipeline.dispose();
-  saveGraph(store, itemGraph()); assert.equal(store.getItem(`${GRAPH_RECOVERY_KEY}-2`), raw);
 });
 
 test('importable ITEM graph matches the exact independently keyed ASR/translation fixture', () => {

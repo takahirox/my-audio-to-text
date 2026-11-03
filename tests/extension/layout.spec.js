@@ -47,9 +47,9 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
   await live.evaluate(async () => {
     const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
     const graph = defaultGraph();
-    graph.nodes.push(graphNode('LiveTextDisplay', 'value'), graphNode('OpusMtJaEn', 'forward'), graphNode('OpusMtEnJa', 'reverse'), graphNode('LiveTextDisplay', 'forward-output'), graphNode('LiveTextDisplay', 'reverse-output'));
-    graph.edges.push(edge('speech', 'final', 'value', 'content'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'content'), edge('reverse', 'text', 'reverse-output', 'content'));
-    saveGraph(localStorage, window.addDOMFormatters(graph));
+    graph.nodes.push(graphNode('Display', 'value'), graphNode('OpusMtJaEn', 'forward'), graphNode('OpusMtEnJa', 'reverse'), graphNode('Display', 'forward-output'), graphNode('Display', 'reverse-output'));
+    graph.edges.push(edge('speech', 'final', 'value', 'input'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'input'), edge('reverse', 'text', 'reverse-output', 'input'));
+    saveGraph(localStorage, (graph));
   });
   await editor.reload();
   await expect(editor.locator('[data-node=forward]')).toContainText('OPUS-MT Japanese → English');

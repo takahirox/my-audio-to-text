@@ -1,11 +1,10 @@
-import { graphNode, edge } from '../../extension/graph.js';
-import { keyedTextGraph } from './keyed-text-graph.js';
+import { defaultGraph } from '../../extension/graph.js';
 
 export function itemGraph(translator = 'OpusMtEnJa') {
-  const graph = keyedTextGraph(translator);
-  graph.nodes = graph.nodes.filter(node => node.id !== 'display');
-  graph.nodes.push(graphNode('KeyedPairedTextAccumulator', 'history', 1300, 30), graphNode('Display', 'display', 1640, 30));
-  graph.edges = graph.edges.filter(route => route.to[0] !== 'display');
-  graph.edges.push(edge('pair', 'pair', 'history', 'pair'), edge('history', 'pairs', 'display', 'input'));
+  const graph = defaultGraph({ enabled: !!translator, direction: 'en-ja' });
+  delete graph.translationDirection;
+  const display = graph.nodes.find(node => node.id === 'transcript'); display.id = 'display';
+  for (const route of graph.edges) if (route.to[0] === 'transcript') route.to[0] = 'display';
+  if (translator) graph.nodes.find(node => node.id === 'translation').type = translator;
   return graph;
 }

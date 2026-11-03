@@ -2,7 +2,7 @@
 
 These are independent Chrome extension processor Nodes. Add either or both in
 Graph Editor. Existing ReazonSpeech, Whisper tiny, Zipformer, default graph,
-Graph v10 preserves these ASR contracts and migrates saved display state into explicit TextAccumulator processors.
+Current graphs use portable display items; unsupported saved display routes require explicit Reset or Import and Save.
 Successful fixture recognition is **not a quality comparison**, WER/CER result,
 meeting-room validation or user acceptance.
 
@@ -26,7 +26,7 @@ selected-media capture. Capture and resampling use the existing helpers.
 | Node | Outputs | Suggested wiring |
 | --- | --- | --- |
 | `SpeechToTextParakeetV3` | `final: TEXT` only | final → TextAccumulator.append |
-| `SpeechToTextMoonshineMediumEn` | `provisional: TEXT`, `final: TEXT` | provisional → TextToDOM → DOMCombiner.second; final → TextAccumulator.append → TextToDOM → DOMCombiner.first |
+| `SpeechToTextMoonshineMediumEn` | `provisional: TEXT`, `final: TEXT` | finalId/final and provisionalId/provisional → KeyedTextCoalesce → KeyedTextPair → KeyedPairedTextAccumulator → Display.input |
 
 Finals are ordinary committed strings. Fan out independently to TextFormatter,
 OPUS-MT.text, focused text output or other TEXT consumers. Each Node owns a
@@ -182,7 +182,7 @@ reads cached model bytes; it cannot fetch missing weights. No speech upload,
 remote inference, recording-time runtime download or silent model fallback.
 
 Deterministic validation: `npm test`, `npm run test:extension`; includes ports,
-Graph v10/default/migrations, Save/reload, parked requirements, preparation retry,
+Current defaults and unsupported-graph recovery, Save/reload, parked requirements, preparation retry,
 bounded input, repeat/deduplication, tails, native-stream renewal, Cancel, crashes,
 peer-path isolation and Worker release. Existing generic cache tests cover
 corruption, quota, cancellation, cross-page locks and reuse.
@@ -209,4 +209,4 @@ inference. Physical microphone, meeting audio, other devices, comparative
 accuracy and user acceptance remain untested/out of scope. There is no required
 post-merge verification for this Issue.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final TEXT with TextAccumulator and compose provisional TEXT through separate TextToDOM and DOMCombiner branches. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An unconnected side stays empty; either input update emits both latest values. An atomic group clears omitted siblings within that group only; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.

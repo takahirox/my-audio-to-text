@@ -139,19 +139,6 @@ Ordinary emissions default to false. Forwarding through the receive context
 retains true across async work, including `emit()` and grouped emissions; passing
 false cannot clear inherited provisional provenance. Independent source emissions
 do not inherit it. The translation scheduler marks preview jobs this way.
-PairedTextToDOM formats provisional and committed deliveries identically. It holds
-the latest input1/input2 strings, both initialized to empty on Start. An update to
-either input emits one fresh pair, including duplicate and empty values. Unconnected
-or never-supplied inputs stay empty. Independent producers and ordinary `emit()`
-deliveries retain the other side's latest value; no group identity is required. As
-with TextFormatter, explicit producer snapshots clear omitted siblings in
-`context.groupInputs` only. All updates in one atomic delivery apply before exactly
-one snapshot emits. Independent inputs can temporarily combine new and previous
-text; producers needing a consistent pair should send both values atomically.
-Stop/Cancel/dispose close input handling; Start resets both held values. The graph
-editor allows compatible drafts, and either available input enables execution
-without requiring a producer type, output name or same-producer connection.
-
 ## Lifecycle and errors
 
 - `await pipeline.start()` starts consumers before producers. Outputs emitted
@@ -357,32 +344,19 @@ requires no TTS policy or modification.
 
 ## Extension visual graph composition
 
-The [extension graph editor](extension-graph.md) saves a version 9 description
-with concrete production Node types and explicit named-port edges. The extension
-builder constructs this shared Pipeline at each session boundary. ASR, OPUS-MT
-directions, Supertonic 3 and Kokoro remain independent production processors;
-ordinary text flows connect directly through shared `TEXT` ports, and audio
-playback remains a separate Node. Version 1–8 descriptions migrate explicitly
-to version 9, removing extraction adapters while preserving their downstream
-routes and fan-out; old paired result edges expand into correlated primitive
-routes. Version 7 removes only dead Whisper provisional connections, with
-non-destructive repair if required inputs become disconnected; Whisper exposes
-only final TEXT, while ReazonSpeech retains both outputs. Legacy views become
-generic TEXT displays. Version 9 replaces paired formatters with ordinary configurable
-TextFormatter Nodes through a visible, non-destructive migration review. Removed
-status/index/provisional routes stay recoverable in the original JSON backup. Shared `LiveTextDisplayNode`
-mounts DOM only. TextAccumulator owns text history; DOMAccumulator explicitly owns DOM history; TextFormatter owns bounded formatting; TextToDOM and PairedTextToDOM construct DOM on the page main thread. Native DOM snapshots never cross Worker messages.
-Independent formatter inputs update latest values immediately; only directly
-grouped inputs update together. No editor, model selection, storage or inference
-policy is added to the generic Pipeline runtime.
+The [extension graph editor](extension-graph.md) saves a version 15 description
+with explicit production Nodes and named-port edges. The builder constructs this
+Pipeline at each session boundary. Processing uses portable TEXT and keyed pairs;
+Display privately renders the supplied whole item. Unknown Nodes/ports fail
+visibly with explicit Reset/Import recovery and no automatic migration. The
+Pipeline itself owns no model selection, editor or persistence policy.
 
 Portable text graphs use KEYED_PAIRED_TEXT and KEYED_PAIRED_TEXT_LIST snapshots.
 KeyedTextPair emits a complete immutable pair; KeyedPairedTextAccumulator emits
 ordered append/replace histories. Display receives only input: ITEM, accepting
 TEXT, one pair or a full pair list, and renders each whole snapshot in the host. Ordinary type-only routing, atomic
 deliveries and fan-out apply without runtime special cases. See the
-[ITEM contracts](display-items.md). The DOM Nodes above remain the saved-graph browser
-compatibility path; they are not required by portable processing.
+[ITEM contracts](display-items.md).
 
 ## Optional transcript correction
 
@@ -399,7 +373,7 @@ explicitly bypassed, with no default graph or extension change. See
 The Extension validates stored structure separately from execution. It selects
 complete paths to ready sinks before constructing a Pipeline; parked Nodes never
 allocate resources. Multiple active source/model instances retain their own
-contexts, queues and routes. See [the graph policy](extension-graph.md#stored-drafts-and-concurrent-execution).
+contexts, queues and routes. See [the graph policy](extension-graph.md).
 
 `Pipeline.drain(nodeIds)` applies the same topological queue/stop/close sequence
 to a selected set. The caller must ensure no live producer can deliver to that
@@ -412,4 +386,4 @@ For atomic final/preview-clear deliveries, a Node can declare `provisionalOutput
 as the names of its unfinished output family. A consumer receiving only those
 outputs retains `context.provisional`; a consumer receiving committed outputs in
 the same delivery sees a committed group. Forwarding retains the flag across
-async processing. See [keyed utterance history](keyed-dom-history.md).
+async processing. See [keyed utterance history](display-items.md).

@@ -9,14 +9,14 @@ import { NODE_TYPES, graphNode, edge, graphWarnings, executableGraph, GRAPH_VERS
 
 function fixture(node = new KeyedTextPairNode()) {
   const out = [], controller = new AbortController();
-  const context = { signal: controller.signal, emitOutputs: ({ pair, ...value }) => { assert.deepEqual(pair, { id: value.id, first: value.input1, second: value.input2 }); assert.ok(Object.isFrozen(pair)); out.push(value); } };
+  const context = { signal: controller.signal, emitOutputs: value => { assert.deepEqual(Object.keys(value), ['pair']); const { pair } = value; assert.ok(Object.isFrozen(pair)); out.push({ id: pair.id, input1: pair.first, input2: pair.second }); } };
   node.start(context);
   return { node, out, context, controller, send: v => node.receiveInputs(v, context) };
 }
 test('generic primitive contracts, no settings, registered in the extension bundle', () => {
   const node = new KeyedTextPairNode();
   assert.deepEqual(node.inputs, { id1: NUMBER, input1: TEXT, id2: NUMBER, input2: TEXT });
-  assert.deepEqual(node.outputs, { id: NUMBER, input1: TEXT, input2: TEXT, pair: KEYED_PAIRED_TEXT });
+  assert.deepEqual(node.outputs, { pair: KEYED_PAIRED_TEXT });
   assert.deepEqual(NODE_TYPES.KeyedTextPair.inputs, node.inputs);
   assert.deepEqual(NODE_TYPES.KeyedTextPair.outputs, node.outputs);
   assert.deepEqual(graphNode('KeyedTextPair', 'pair').settings, {});
@@ -74,13 +74,13 @@ for (const reverse of [false, true]) test(`independent NUMBER/TEXT sources and g
   const out = [], plain = []; let left, right;
   const connections = [edge('key1', 'value', 'pair', 'id1'), edge('key2', 'value', 'pair', 'id2'),
     edge('left', 'arbitrary', 'pair', 'input1'), edge('right', 'other', 'pair', 'input2'),
-    ...['id', 'input1', 'input2'].map(port => edge('pair', port, 'sink', port)), edge('pair', 'input1', 'plain', 'text')];
+    edge('pair', 'pair', 'sink', 'pair'), edge('pair', 'pair', 'plain', 'pair')];
   const pipeline = new Pipeline({ nodes: {
     key1: new NumberNode({ value: 1 }), key2: new NumberNode({ value: 2 }),
     left: { outputs: { arbitrary: TEXT }, start(c) { left = c; } },
     right: { outputs: { other: TEXT }, start(c) { right = c; } }, pair: new KeyedTextPairNode(),
-    sink: { inputs: { id: NUMBER, input1: TEXT, input2: TEXT }, receiveInputs(v) { assert.ok(Object.isFrozen(v)); out.push(v); } },
-    plain: { inputs: { text: TEXT }, receive(_, v) { plain.push(v); } },
+    sink: { inputs: { pair: KEYED_PAIRED_TEXT }, receiveInputs(v) { assert.ok(Object.isFrozen(v.pair)); out.push({ id: v.pair.id, input1: v.pair.first, input2: v.pair.second }); } },
+    plain: { inputs: { pair: KEYED_PAIRED_TEXT }, receive(_, v) { plain.push(v.first); } },
   }, connections: reverse ? connections.reverse() : connections });
   await pipeline.start(); right.emit('other', 'R2'); left.emit('arbitrary', 'L1');
   await new Promise(resolve => setImmediate(resolve));
@@ -90,8 +90,8 @@ for (const reverse of [false, true]) test(`independent NUMBER/TEXT sources and g
   assert.deepEqual(plain, ['', 'L1', 'L1']); assert.deepEqual(pipeline.errors, []); await pipeline.dispose();
 });
 test('unfinished branches stay saveable; either complete branch is executable', () => {
-  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Number', 'id'), graphNode('Text', 'text'), graphNode('KeyedTextPair', 'pair'), graphNode('TextDisplay', 'display')],
-    edges: [edge('id', 'value', 'pair', 'id1'), ...['id', 'input1', 'input2'].map(p => edge('pair', p, 'display', p))] };
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Number', 'id'), graphNode('Text', 'text'), graphNode('KeyedTextPair', 'pair'), graphNode('Display', 'display')],
+    edges: [edge('id', 'value', 'pair', 'id1'), edge('pair', 'pair', 'display', 'input')] };
   assert.match(graphWarnings(graph).join(), /pair needs an ID\/TEXT pair/);
   assert.equal(executableGraph(graph).nodes.length, 0);
   graph.edges.push(edge('text', 'value', 'pair', 'input1'));

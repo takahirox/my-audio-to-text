@@ -13,7 +13,7 @@ before model loading with instructions to correct the value or disconnect the co
 Remove ReazonSpeech, add Whisper, connect the audio source's `audio` to Whisper's
 `audio`, and connect `final → TextAccumulator.append` only. Multiple independent ASRs are
 allowed. Whisper's final text can also feed the existing TextFormatter, OPUS-MT, focused-field output or TTS
-ports directly. You can deliberately connect final to `TextToDOM.text → dom → LiveTextDisplay.dom`
+ports directly. You can deliberately connect final to `Display.input`
 for latest-value replacement instead of committed history. No translator is
 required. Remove any old maxDuration edge and unused Number Node when replacing ReazonSpeech; Whisper has a fixed 6-second
 cap. Defaults/reset still use ReazonSpeech.
@@ -33,22 +33,6 @@ on Stop or overflow fails visibly; updates after loading begins are rejected.
 Incomplete graphs stay saveable. Saved edits affect the next session. See
 [startup configuration semantics](pipeline-runtime.md#executable-browser-tab-transcription-example).
 
-## Saved graph migration
-
-Graph version 8 migrates version 7 by removing only outgoing
-`SpeechToTextWhisper.provisional` connections, which never emitted events. IDs,
-positions, settings, final routes and unrelated routes are preserved. No edge
-is automatically redirected to final. Valid results are saved in the same
-storage key. For Whisper-only graphs without these edges, only the version changes.
-Current version 10 also applies the [translation/formatter migration and visible
-recovery rules](extension-graph.md) when those processors occur in an older graph.
-
-If removal leaves a missing input, the destination remains in the saved draft
-and stays inactive until connected. Optional warnings and explicit Validate draft
-explain the incomplete branch. Choose `final → append` for committed Whisper
-text, or `final → replace` for replacement semantics. No route is silently
-redirected. Structural wiring/settings errors still prevent saving or execution.
-ReazonSpeech keeps its provisional/final outputs and default wiring.
 
 ## Recognition policy
 
@@ -120,8 +104,7 @@ python3 scripts/prepare-reazon-ja-en-fixtures.py
 npm run test:whisper-real
 ```
 
-Unit tests cover version 7 dead-edge migration and retained incomplete drafts,
-lossless version 6 migration, earlier migrations, defaults and
+Unit tests cover explicit unsupported-graph rejection, incomplete drafts, defaults and
 invalid recovery; literal Text persistence, configuration order and invalid
 types/codes; model replacement, formatter compatibility; final-only segmentation,
 audio boundary accounting, repeated text, Stop, Cancel, overflow, worker errors
@@ -148,4 +131,4 @@ supported here in desktop Chrome MV3; WebKit cannot load this extension and has
 no Whisper support claim. Real fixtures and models must be prepared before the
 opt-in check; otherwise its explicit skip is not evidence of passing inference.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final TEXT with TextAccumulator and compose provisional TEXT through separate TextToDOM and DOMCombiner branches. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An unconnected side stays empty; either input update emits both latest values. An atomic group clears omitted siblings within that group only; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.

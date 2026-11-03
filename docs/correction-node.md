@@ -79,7 +79,7 @@ leave already cached complete files; partial responses are not usable entries.
 import { Pipeline } from './pipeline.js';
 import { SpeechTranscriptCorrectionNode } from './correction-nodes.js';
 
-// speech, originalTranscriptView, correctedTextView and translation are
+// speech, originalDisplay, correctedDisplay and translation are
 // consumers/processors supplied by the application. No default graph changes.
 const correction = new SpeechTranscriptCorrectionNode({
   language: 'auto',          // 'ja' or 'en' also supported; not input metadata
@@ -88,11 +88,11 @@ const correction = new SpeechTranscriptCorrectionNode({
   onEvent: event => console.log(event),
 });
 const graph = new Pipeline({
-  nodes: { speech, originalTranscriptView, correction, correctedTextView, translation },
+  nodes: { speech, originalDisplay, correction, correctedDisplay, translation },
   connections: [
-    { from: ['speech', 'final'], to: ['originalTranscriptView', 'final'] },
+    { from: ['speech', 'final'], to: ['originalDisplay', 'input'] },
     { from: ['speech', 'final'], to: ['correction', 'text'] },
-    { from: ['correction', 'text'], to: ['correctedTextView', 'text'] },
+    { from: ['correction', 'text'], to: ['correctedDisplay', 'input'] },
     { from: ['correction', 'text'], to: ['translation', 'text'] },
   ],
 });

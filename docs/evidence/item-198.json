@@ -15,7 +15,7 @@
       "type": "SpeechToTextReazonSpeech",
       "settings": {},
       "position": {
-        "x": 300,
+        "x": 270,
         "y": 30
       }
     },
@@ -38,15 +38,6 @@
       }
     },
     {
-      "id": "translation",
-      "type": "OpusMtEnJa",
-      "settings": {},
-      "position": {
-        "x": 620,
-        "y": 430
-      }
-    },
-    {
       "id": "history",
       "type": "KeyedPairedTextAccumulator",
       "settings": {},
@@ -62,6 +53,15 @@
       "position": {
         "x": 1640,
         "y": 30
+      }
+    },
+    {
+      "id": "translation",
+      "type": "OpusMtEnJa",
+      "settings": {},
+      "position": {
+        "x": 620,
+        "y": 430
       }
     }
   ],
@@ -138,6 +138,26 @@
     },
     {
       "from": [
+        "pair",
+        "pair"
+      ],
+      "to": [
+        "history",
+        "pair"
+      ]
+    },
+    {
+      "from": [
+        "history",
+        "pairs"
+      ],
+      "to": [
+        "display",
+        "input"
+      ]
+    },
+    {
+      "from": [
         "speech",
         "finalId"
       ],
@@ -174,26 +194,6 @@
       "to": [
         "pair",
         "input2"
-      ]
-    },
-    {
-      "from": [
-        "pair",
-        "pair"
-      ],
-      "to": [
-        "history",
-        "pair"
-      ]
-    },
-    {
-      "from": [
-        "history",
-        "pairs"
-      ],
-      "to": [
-        "display",
-        "input"
       ]
     }
   ]
