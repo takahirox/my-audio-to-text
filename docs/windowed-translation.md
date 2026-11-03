@@ -198,7 +198,7 @@ coverage wires ASR.provisional separately to Translator.provisional.
 npm ci
 npm run setup:extension
 npm test
-npx playwright test tests/browser/text-window.spec.js tests/browser/text-contracts.spec.js tests/browser/text-display.spec.js tests/browser/translation.spec.js
+npx playwright test tests/browser/text-window.spec.js tests/browser/text-contracts.spec.js tests/browser/display-items.spec.js tests/browser/translation.spec.js
 npm run test:extension -- tests/extension/windowed-translation.spec.js
 WINDOW_TRANSLATION_SMOKE=1 npx playwright test --config playwright.extension.config.js tests/extension/windowed-translation-smoke.spec.js
 ```

@@ -20,7 +20,7 @@ test('fresh install and Reset use current transcription; explicit translation ed
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
   expect(await page.evaluate(() => window.graphWorkers.length)).toBe(workers);
   await expect(page.locator('#saved-state')).toBeVisible();
-  await page.locator('#stop').click(); await startGraph(page);
+  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await startGraph(page);
   await expect(page.locator('#translation-status')).toHaveText('Translation off');
   await page.locator('#stop').click(); await clickGraphAction(page.editor, 'graph-reset');
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();

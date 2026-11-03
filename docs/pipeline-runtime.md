@@ -356,8 +356,7 @@ KeyedTextPair emits a complete immutable pair; KeyedPairedTextAccumulator emits
 ordered append/replace histories. Display receives only input: ITEM, accepting
 TEXT, one pair or a full pair list, and renders each whole snapshot in the host. Ordinary type-only routing, atomic
 deliveries and fan-out apply without runtime special cases. See the
-[ITEM contracts](display-items.md). The DOM Nodes above remain the saved-graph browser
-compatibility path; they are not required by portable processing.
+[ITEM contracts](display-items.md).
 
 ## Optional transcript correction
 
