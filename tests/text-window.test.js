@@ -23,7 +23,7 @@ test('TextWindow editor/runtime expose one TEXT output and two optional NUMBER i
   const graph = defaultGraph(); graph.nodes.push(graphNode('TextWindow', 'window'));
   graph.edges.push(edge('speech', 'final', 'window', 'text'));
   assert.deepEqual(validateGraph(graph), []);
-  graph.edges.push(edge('window', 'provisional', 'transcript-preview', 'text'));
+  graph.edges.push(edge('window', 'provisional', 'transcript', 'input'));
   assert.match(validateGraph(graph).join(' '), /Unknown port: window.provisional/);
 });
 

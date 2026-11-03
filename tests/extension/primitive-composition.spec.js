@@ -9,7 +9,7 @@ for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa'
   const live=await openGraph(f), editor=live.editor;
   for(const source of ['speech','window']) for(const ports of [['provisional','text'],['text','provisional']]) {
     const graph=defaultGraph(); graph.nodes.push(graphNode(translator,'translator',600,400),graphNode('TextWindow','window',300,400));
-    await editor.evaluate(async graph=>{const {saveGraph}=await import('./graph.js');saveGraph(localStorage, window.addDOMFormatters(graph));},graph);await editor.reload();
+    await editor.evaluate(async graph=>{const {saveGraph}=await import('./graph.js');saveGraph(localStorage, (graph));},graph);await editor.reload();
     for(const input of ports){
       const output=source==='window'?'text':input==='text'?'final':'provisional';
       await editor.getByRole('button',{name:`${source} output ${output}`,exact:true}).press('Enter');
@@ -31,12 +31,12 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
       if(m.type==='translate')setTimeout(()=>postMessage({id:m.id,type:'result',texts:['translated:'+m.text]}),20);
     };`);
   const live=await openGraph(f);
-  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TranslationCommit','commit'),graphNode('TextAccumulator','acc'),graphNode('LiveTextDisplay','translated'),graphNode('LiveTextDisplay','preview'));
+  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TranslationCommit','commit'),graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),edge('speech','final','commit','boundary'),
-    ...['source','text','error'].map(p=>edge('translator',p,'commit',p)),edge('commit','final','acc','append'),edge('translator','provisionalText','preview','content'),edge('acc','text','translated','content'));
+    ...['source','text','error'].map(p=>edge('translator',p,'commit',p)),edge('commit','final','acc','append'),edge('translator','provisionalText','preview','input'),edge('acc','text','translated','input'));
   const result=await live.evaluate(async graph=>{
     const {buildGraph}=await import('./graph-runtime.js');const displays={},events=[];
-    const built=buildGraph(window.addDOMFormatters(graph),{tabId:42,prepareTranslateGemma(){},onDisplay(id,dom){const text=dom.textContent;displays[id]=text;events.push({id,text});}});
+    const built=buildGraph((graph),{tabId:42,prepareTranslateGemma(){},onDisplay(id,dom){const text=dom.textContent;displays[id]=text;events.push({id,text});}});
     const wait=async predicate=>{const deadline=Date.now()+5000;while(!predicate()){if(Date.now()>deadline)throw Error('Timed out waiting for packaged translation');await new Promise(r=>setTimeout(r,5));}};
     try{
       await built.pipeline.start();await built.translations[0].ready;const speech=built.speechNodes.get('speech');
@@ -52,12 +52,12 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
 
 test('MV3 formatter startup configuration is delivered before Whisper loads, and late values fail locally',async({graphExtension:f})=>{
   await writeFile(path.join(f.root,'web/whisper-worker.js'),`self.onmessage=({data:m})=>{if(m.type==='load')postMessage({type:'ready'});};`);
-  const live=await openGraph(f),graph=defaultGraph();graph.nodes[1].type='SpeechToTextWhisper';graph.edges=graph.edges.filter(e=>e.from[1]!=='provisional');
-  graph.nodes.push(graphNode('Text','language'),graphNode('TextFormatter','format'),graphNode('LiveTextDisplay','peer'));graph.nodes.at(-3).settings.value='ja';
-  graph.edges.push(edge('language','value','format','input1'),edge('format','text','speech','language'),edge('language','value','peer','content'));
+  const live=await openGraph(f),graph=defaultGraph();graph.nodes[1].type='SpeechToTextWhisper';graph.edges=graph.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
+  graph.nodes.push(graphNode('Text','language'),graphNode('TextFormatter','format'),graphNode('Display','peer'));graph.nodes.at(-3).settings.value='ja';
+  graph.edges.push(edge('language','value','format','input1'),edge('format','text','speech','language'),edge('language','value','peer','input'));
   const result=await live.evaluate(async graph=>{
     const {buildGraph}=await import('./graph-runtime.js');const displays={};
-    const built=buildGraph(window.addDOMFormatters(graph),{tabId:42,onDisplay:(id,t)=>{displays[id]=t.textContent;}});
+    const built=buildGraph((graph),{tabId:42,onDisplay:(id,t)=>{displays[id]=t.textContent;}});
     try{
       await built.pipeline.start();await built.pipeline.entries.get('format').queue;await built.pipeline.entries.get('speech').queue;
       const language=window.graphWorkers.find(w=>w.url.includes('whisper-worker')).messages.find(m=>m.type==='load').language;
@@ -72,11 +72,11 @@ test('MV3 Cancel retains committed snapshots on direct and formatted paths',asyn
   const live=await openGraph(f);
   const result=await live.evaluate(async()=>{
     const {Pipeline}=await import('../web/pipeline.js');const {TEXT}=await import('../web/port-contracts.js');
-    const {TextToDOMNode}=await import('../web/dom-nodes.js');
-    const {TextAccumulatorNode,TextFormatterNode,LiveTextDisplayNode}=await import('../web/text-nodes.js');let source;const states={};
+    const {DisplayNode}=await import('../web/display-node.js');
+    const {TextAccumulatorNode,TextFormatterNode}=await import('../web/text-nodes.js');let source;const states={};
     const acc=new TextAccumulatorNode(),pipeline=new Pipeline({nodes:{source:{outputs:{text:TEXT},start(c){source=c;}},acc,format:new TextFormatterNode({template:'[{1}]'}),
-      directDOM:new TextToDOMNode(),indirectDOM:new TextToDOMNode(),direct:new LiveTextDisplayNode(t=>{states.direct=t.textContent;}),indirect:new LiveTextDisplayNode(t=>{states.indirect=t.textContent;})},connections:[
-      {from:['source','text'],to:['acc','append']},{from:['acc','text'],to:['directDOM','text']},{from:['directDOM','dom'],to:['direct','dom']},{from:['acc','text'],to:['format','input1']},{from:['format','text'],to:['indirectDOM','text']},{from:['indirectDOM','dom'],to:['indirect','dom']}]});
+      direct:new DisplayNode(t=>{states.direct=t.textContent;}),indirect:new DisplayNode(t=>{states.indirect=t.textContent;})},connections:[
+      {from:['source','text'],to:['acc','append']},{from:['acc','text'],to:['direct','input']},{from:['acc','text'],to:['format','input1']},{from:['format','text'],to:['indirect','input']}]});
     await pipeline.start();source.emit('text','keep');await pipeline.entries.get('acc').queue;
     await pipeline.entries.get('format').queue;
     source.emit('text','queued');await pipeline.cancel();source.emit('text','late');return states;
@@ -85,7 +85,7 @@ test('MV3 Cancel retains committed snapshots on direct and formatted paths',asyn
 });
 
 test('MV3 session waits for inactive startup sources and rejects invalid values before creating model Workers',async({graphExtension:f})=>{
-  const live=await openGraph(f),missing=defaultGraph();missing.nodes[1].type='SpeechToTextWhisper';missing.edges=missing.edges.filter(e=>e.from[1]!=='provisional');
+  const live=await openGraph(f),missing=defaultGraph();missing.nodes[1].type='SpeechToTextWhisper';missing.edges=missing.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
   missing.nodes.push(graphNode('TextFormatter','unready'),graphNode('SpeechToTextWhisper','unready-asr'));
   missing.edges.push(edge('unready-asr','final','unready','input1'),edge('unready','text','speech','language'));
   const invalid=defaultGraph();invalid.nodes.push(graphNode('Number','cap'));invalid.edges.push(edge('cap','value','speech','maxDuration'));

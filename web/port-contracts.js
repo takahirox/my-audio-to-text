@@ -7,8 +7,6 @@ export const KEYED_PAIRED_TEXT = portContract('keyed_paired_text');
 export const KEYED_PAIRED_TEXT_LIST = portContract('keyed_paired_text_list');
 // Accepting union only: concrete consumers never accept ITEM implicitly.
 export const ITEM = portContract('item');
-export const VIEW = portContract('view');
-export const DOM = portContract('dom');
 export const compatiblePorts = (output, input) => !!output &&
   (output === input || (input === ITEM && [TEXT, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST].includes(output)));
 

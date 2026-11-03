@@ -7,6 +7,6 @@ export function domText(snapshot) {
   if (!snapshot) return '';
   const copy = snapshot.cloneNode(true);
   for (const style of copy.querySelectorAll?.('style') || []) style.remove();
-  if (copy.querySelector?.('tbody')) return [...copy.querySelectorAll('tbody tr')].map(row => [...row.children].map(cell => cell.textContent).join('\n')).join('\n');
+  if (copy.querySelector?.('tbody')) return [...copy.querySelectorAll('tbody tr')].map(row => [...row.children].map(cell => cell.textContent).filter((text, index) => index === 0 || text !== '').join('\n')).join('\n');
   return copy.textContent || [...copy.childNodes].map(node => node.textContent).join('');
 }

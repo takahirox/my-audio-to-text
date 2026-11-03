@@ -136,7 +136,7 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 Save a graph with whole-tab, selected-media and/or microphone Inputs and
 one or more outputs. Multiple independent ASRs and displays run concurrently;
 parked or unfinished Nodes remain saved but inactive. See the
-[execution and permission policy](extension-graph.md#stored-drafts-and-concurrent-execution). Live shows **Input and output targets** and separate target
+[execution and permission policy](extension-graph.md). Live shows **Input and output targets** and separate target
 status/errors. Connect `SpeechToTextReazonSpeech.final → FocusedInputTextOutputNode.text`
 or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
 strings can fan out to TTS and other consumers. For final-only output, select
@@ -165,9 +165,7 @@ are skipped, as are canceled `beforeinput` edits; a visible status explains the
 skip while other branches continue. Page navigation, closure or permission loss
 detaches the sink. Stop and invoke the page toolbar again to recover; a running
 session never retargets when another tab's action is invoked. Page targets are
-not persisted. Version 1/2 saved field graphs migrate through typed adapters or
-show a Reset-and-Save recovery error. Selected media selection remains supported.
-Stop drains new finals without replay; Cancel/closing Live discards queued work.
+not persisted. Unsupported saved field/display ports require Reset or Import of a current graph and an explicit Save.
 
 For selected media, play audio/video, discover in Live, then choose a labeled
 entry. Its `captureStream()` supplies that element's audio separately, never a
@@ -236,27 +234,7 @@ cross-browser extension support. No post-merge verification is required by #61.
 ## Optional OPUS-MT Japanese ↔ English (#69 / #71)
 
 Fresh installs default to a minimal transcription graph. Translation is an
-explicit graph addition. Earlier enablement/direction preferences migrate once
-when no graph is saved. The saved graph
-persists in extension-origin localStorage across window recreation/profile restart;
-transcripts are not saved. A new toolbar invocation uses the saved graph. See
-[the executable visual graph editor](extension-graph.md) for editing, recovery,
-validation and optional production Supertonic 3 / Kokoro audio paths.
-In Graph Editor, add the concrete OPUS-MT direction from **Add Node →
-Processors** and connect it to your desired display/output. Add **Text formatter** for source/translation labels and multiline composition.
-Use its Settings to add/remove numbered inputs and edit the template. **Save graph**
-stores valid drafts first, then prepares only the directions and voices required
-by saved Nodes, including parked Nodes. No global direction switch changes other
-branches. Japanese → English weights total 238,978,729 bytes (about 239 MB);
-English → Japanese weights total 252,634,769 bytes (about 253 MB), plus cache/write
-overhead. Graph Editor shows per-model verified readiness, byte progress, errors,
-cancellation and retry below the graph. Download failures leave saved graphs intact.
-**Models** retains diagnostics, retry and delete controls for missing, corrupt or
-evicted files. Preparation reuses verified complete files and may run while
-transcription remains active; Start/inference never downloads missing weights.
-Saved graph changes apply to the **next session**: live Pipeline graphs are
-immutable. Current/last session labels and retained final rows keep their captured
-source/target direction. The transcription-only mode needs neither translation cache.
+explicit graph addition. New/reset graphs use the current transcription path; translation is added explicitly in Graph Editor.
 
 The original ASR preview remains available while committed translations are queued.
 Translation publishes completed results only; no provisional translation or pending
@@ -273,7 +251,7 @@ on separate template lines. Every result appends once, including repeated phrase
 A direct group clears omitted formatter inputs, so failure cannot reuse an older
 translation. Independent branches have no implied pairing. Plain successful text
 also connects directly to display, field and TTS sinks. See
-[formatter controls and migration recovery](extension-graph.md#optional-bounded-formatting).
+[formatter controls and saved-graph recovery](extension-graph.md).
 
 The session-owned scheduler accepts plain committed strings into one FIFO and an
 owned inner graph: source.text → direction-specific OpusMtTranslationNode.text →
@@ -377,4 +355,4 @@ commands](translation-nodes.md#translategemma-in-the-extension-124) and
 [#124 validation evidence](evidence/translation-124.md). No translation-quality
 superiority to OPUS-MT is assumed.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, accumulate final TEXT with TextAccumulator and compose provisional TEXT through separate TextToDOM and DOMCombiner branches. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An unconnected side stays empty; either input update emits both latest values. An atomic group clears omitted siblings within that group only; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.

@@ -275,7 +275,7 @@ separate user evaluation. No post-merge-only check is introduced by #124.
 Both extension TranslateGemma Nodes accept optional `context: TEXT` from any
 TEXT producer, for example `Text.value → TranslateGemmaEnJa.context`. There is
 no prompt setting, new Node or model instance. OPUS-MT has no context port.
-Existing graphs remain v14: adding an optional input needs no migration, and
+Current graphs use version 15: adding an optional input needs no migration, and
 Save/reload preserves an explicitly connected context edge.
 
 With no context value, or with explicit `""`, inference uses the unchanged
@@ -367,10 +367,10 @@ is required by #173.
 [TextWindow and TranslationCommit](windowed-translation.md) provide bounded
 source batching and an opt-in preview/commit experiment in the extension graph.
 The four extension translators accept optional provisional TEXT from any
-compatible producer, independently of the committed text source and edge order. Their committed source/text/error and preview provisionalSource/provisionalText/provisionalError TEXT outputs form separate atomic families sharing one owned Worker. Direct text is safe for committed history or TTS even when provisional is connected. Route provisionalText to a separate replacement display; empty clears on final acceptance, Stop and Cancel. TranslationCommit remains optional for causal closed-window checks, not preview/final routing. Standalone web translator Nodes retain their behavior. Older preview-enabled graphs require the reviewed v14 repair and preserve original JSON; see the windowed-translation guide.
+compatible producer, independently of the committed text source and edge order. Their committed source/text/error and preview provisionalSource/provisionalText/provisionalError TEXT outputs form separate atomic families sharing one owned Worker. Direct text is safe for committed history or TTS even when provisional is connected. Route provisionalText to a separate replacement display; empty clears on final acceptance, Stop and Cancel. TranslationCommit remains optional for causal closed-window checks, not preview/final routing. Standalone web translator Nodes retain their behavior. Unsupported old graphs fail visibly; Reset or Import a current graph and Save explicitly.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, route committed text to TextAccumulator.append; previews use a separate replacement display. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An unconnected side stays empty; either input update emits both latest values. An atomic group clears omitted siblings within that group only; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
 
 For continuous bilingual ASR rows while translation is pending, use the
-[ID-bearing paired formatter and generic keyed DOM history](keyed-dom-history.md).
+[portable keyed pair history](display-items.md).
 The committed and provisional TEXT families remain independent.

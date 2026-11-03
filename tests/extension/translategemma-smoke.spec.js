@@ -1,4 +1,3 @@
-import { addDOMFormatters } from '../fixtures/dom-graph.js';
 import { test, expect, chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
@@ -49,7 +48,6 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
         textInURL: [...fixtures, ...Object.values(translationContextFixtures).flat()].some(f => decodeURIComponent(r.url()).includes(f.text)
           || (f.context && decodeURIComponent(r.url()).includes(f.context))) });
     });
-    await context.addInitScript(`window.addDOMFormatters = ${addDOMFormatters.toString()};`);
     const editor = await context.newPage(); editor.on('pageerror', e => errors.push(e.message));
     await editor.goto(`chrome-extension://${id}/extension/graph-editor.html`);
     capabilities = await editor.evaluate(async () => {
@@ -69,13 +67,13 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
     await editor.evaluate(async initial => {
       const { graphNode, edge, saveGraph } = await import('./graph.js');
       const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemmaEnJa', 'gemma'),
-        graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'paired'), graphNode('LiveTextDisplay', 'plain'),
-        graphNode('TranslateGemmaJaEn', 'parked'), graphNode('Text', 'independent'), graphNode('LiveTextDisplay', 'other')], edges: [
+        graphNode('TextFormatter', 'format'), graphNode('Display', 'paired'), graphNode('Display', 'plain'),
+        graphNode('TranslateGemmaJaEn', 'parked'), graphNode('Text', 'independent'), graphNode('Display', 'other')], edges: [
         edge('input', 'value', 'gemma', 'text'), edge('gemma', 'source', 'format', 'input1'), edge('gemma', 'text', 'format', 'input2'), edge('gemma', 'error', 'format', 'input3'),
-        edge('format', 'text', 'paired', 'content'), edge('gemma', 'text', 'plain', 'content'), edge('independent', 'value', 'other', 'content'),
+        edge('format', 'text', 'paired', 'input'), edge('gemma', 'text', 'plain', 'input'), edge('independent', 'value', 'other', 'input'),
       ] };
       graph.nodes[0].settings.value = initial; graph.nodes[2].settings.template = '{1}\n{2}{3}';
-      graph.nodes[6].settings.value = 'Independent branch'; saveGraph(localStorage, window.addDOMFormatters(graph));
+      graph.nodes[6].settings.value = 'Independent branch'; saveGraph(localStorage, (graph));
     }, fixtures[0].text);
     await editor.reload();
     const beforeSave = requests.length;
@@ -115,7 +113,7 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
           constructor(...args) { super(...args); workers.push(this); }
           terminate() { this.released = true; super.terminate(); }
         };
-        const built = buildGraph(window.addDOMFormatters(graph), { onDisplay: (id, state) => { displays[id] = state.textContent; }, onTranslationState: state => states.push(state) });
+        const built = buildGraph((graph), { onDisplay: (id, state) => { displays[id] = state.textContent; }, onTranslationState: state => states.push(state) });
         const translated = [], node = built.pipeline.entries.get('gemma').node, start = node.start.bind(node);
         node.start = context => start({ ...context, emitOutputs(values) {
           if (typeof values.text === 'string') translated.push(values.text);

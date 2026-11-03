@@ -15,10 +15,10 @@ test('KeyedTextCoalesce palette, independent wiring, Help, save/reload and runti
   await page.evaluate(async () => {
     const { graphNode, edge, saveGraph, GRAPH_VERSION } = await import('/extension/graph.js');
     const nodes = [graphNode('Number', 'key'), graphNode('Text', 'preferred', 20, 300), graphNode('Text', 'backup', 20, 600),
-      graphNode('PairedTextToDOM', 'pair', 650), graphNode('TextToDOM', 'plain', 650, 400),
-      graphNode('LiveTextDisplay', 'paired-display', 980), graphNode('LiveTextDisplay', 'plain-display', 980, 400)];
+      graphNode('KeyedTextPair', 'pair', 650),
+      graphNode('Display', 'paired-display', 980), graphNode('Display', 'plain-display', 980, 400)];
     nodes[0].settings.value = 10; nodes[1].settings.value = ''; nodes[2].settings.value = 'backup';
-    saveGraph(localStorage, { version: GRAPH_VERSION, nodes, edges: [edge('pair', 'dom', 'paired-display', 'dom'), edge('plain', 'dom', 'plain-display', 'dom')] });
+    saveGraph(localStorage, { version: GRAPH_VERSION, nodes, edges: [edge('pair', 'pair', 'paired-display', 'input')] });
     localStorage.setItem('processing-graph-before-v14', 'original backup');
   });
   await page.reload(); await openPalette(page);
@@ -37,9 +37,9 @@ test('KeyedTextCoalesce palette, independent wiring, Help, save/reload and runti
   await expect(port('keyedtextcoalesce input id1')).toBeDisabled();
   await port('keyedtextcoalesce input input1').click();
   await port('backup output value').click(); await port('keyedtextcoalesce input input2').click();
-  await port('keyedtextcoalesce output id').click(); await port('pair input id').click();
+  await port('keyedtextcoalesce output id').click(); await port('pair input id1').click();
   await port('keyedtextcoalesce output text').click(); await port('pair input input1').click();
-  await port('keyedtextcoalesce output text').click(); await port('plain input text').click();
+  await port('keyedtextcoalesce output text').click(); await port('plain-display input input').click();
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   await expect(page.locator('#graph-errors')).toBeEmpty();
   const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));

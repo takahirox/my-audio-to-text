@@ -17,7 +17,7 @@ function renderNotices(view) {
 }
 let graphError = '', graph, publishedState, closed = false;
 try { graph = readGraph(localStorage); }
-catch (error) { graphError = `Saved graph unavailable: ${error.message}${error.recoveryGraph ? ' Open Graph Editor to review and Save the migration draft.' : '. Reset and Save in Graph Editor to recover.'}`; graph = defaultGraph(); }
+catch (error) { graphError = `Saved graph unavailable: ${error.message}`; graph = defaultGraph(); }
 const audioURLs = new Set();
 function clearAudio() {
   for (const player of element('audio-outputs').querySelectorAll('audio')) { player.pause(); player.removeAttribute('src'); player.load(); }
@@ -70,7 +70,7 @@ element('diagnostics').ontoggle = () => renderNotices(session.view);
 session.update();
 function refreshSaved() {
   try { const next = readGraph(localStorage); graphError = ''; session.setGraph(next); return true; }
-  catch (error) { graphError = `Saved graph unavailable: ${error.message}${error.recoveryGraph ? ' Open Graph Editor to review and Save the migration draft.' : '. Reset and Save in Graph Editor to recover.'}`; session.update(); return false; }
+  catch (error) { graphError = `Saved graph unavailable: ${error.message}`; session.update(); return false; }
 }
 element('start').onclick = () => { clearAudio(); if (refreshSaved()) void session.start(session.view.tabId, { microphoneGesture: true, speakerGesture: true }); };
 element('enable-speaker').onclick = () => session.enableSpeakers();

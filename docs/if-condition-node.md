@@ -6,7 +6,7 @@ accepts `text: TEXT`, has one editable natural-language `condition`, and exposes
 to `IfCondition.text`, set `Is this a question?`, and connect the two outputs to
 separate Live text displays. Text, translators and other ordinary TEXT producers
 can use the same Node. Save/reload preserves each instance's independent condition
-and wires. Graph version remains **9**; defaults and migrations are unchanged.
+and wires. Current graphs use version **15**; unsupported old versions require explicit Reset or Import and Save.
 
 A successful nonempty input runs a real binary classifier in an owned module
 Worker, then emits the **original string unchanged** to exactly one port. The

@@ -46,7 +46,7 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   await expect(editor.locator('#graph-state')).toContainText('earlier graph');
   await page.evaluate(() => window.capture.emit('audio', new Float32Array(37).fill(.1)));
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  await expect(page.locator('.display-content')).toHaveText(['en: 96000', 'en: 37'].join('\n'));
+  await expect(page.locator('.display-content tr td:first-child')).toHaveText(['en: 96000', 'en: 37']);
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
   await startGraph(page); await page.evaluate(() => window.capture.emit('audio', new Float32Array(37).fill(.1)));
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
@@ -79,44 +79,13 @@ test('MV3 palette and help offer Whisper final and its ID; ReazonSpeech retains 
   await expect(editor.locator('.graph-inspector')).not.toContainText('Output provisional');
 });
 
-for (const unsafe of [false, true]) test(`MV3 v7 Whisper migration ${unsafe ? 'keeps an incomplete destination as a saved draft' : 'saves only the version and removal of dead edges'}`, async ({ graphExtension: f }) => {
-  const page = await openGraph(f), editor = page.editor;
-  const original = await page.evaluate(async unsafe => {
-    const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js');
-    const graph = defaultGraph(); graph.version = 7; graph.nodes[1].type = 'SpeechToTextWhisper';
-    graph.nodes[1].position = { x: 333, y: 111 }; graph.nodes[2].settings.label = 'Saved custom label';
-    if (unsafe) {
-      graph.nodes.push(graphNode('LiveTextDisplay', 'affected', 123, 456));
-      graph.edges.push(edge('speech', 'provisional', 'affected', 'replace'));
-    }
-    localStorage.setItem(GRAPH_KEY, JSON.stringify(graph)); return graph;
-  }, unsafe);
-  const raw = JSON.stringify(original), expected = structuredClone(original); expected.version = GRAPH_VERSION;
-  expected.edges = expected.edges.filter(route => route.from[1] !== 'provisional');
-  await editor.reload();
-  await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(0);
-  const saved = () => editor.evaluate(() => localStorage.getItem('processing-graph-v1'));
-  if (unsafe) {
-    await expect(editor.locator('#errors')).toContainText('requires review');
-    await expect(editor.locator('#graph-errors')).toBeEmpty();
-    await expect(editor.getByRole('button', { name: 'Select affected', exact: true })).toHaveCount(1);
-    await expect(editor.locator('[data-node="speech"]')).toHaveCSS('left', '333px');
-  }
-  await expect(editor.locator('#errors')).toContainText('requires review');
-  expect(await saved()).toBe(raw);
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  expect(JSON.parse(await saved())).toEqual(expected);
-  await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
-  expect(await saved()).toBe(JSON.stringify(expected));
-});
-
 test('MV3 Text literal and empty values round-trip and deliver once to an ordinary TEXT consumer', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
-  await disconnectWire(editor, 'speech.provisional to transcript-preview.text');
+  await disconnectWire(editor, 'speech.provisional to coalesce.input2');
   await openPalette(editor); await editor.locator('#graph-node-type').selectOption('Text'); await editor.locator('#graph-add').click();
   await editor.getByRole('button', { name: 'text output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
-  await editor.getByRole('button', { name: 'transcript-dom input text', exact: true }).click();
+  await editor.getByRole('button', { name: 'transcript input input', exact: true }).click();
   for (const value of ['<img src=x onerror=alert(1)> & "\n😀 {1}', '']) {
     await editor.getByLabel('text value', { exact: true }).fill(value); await editor.locator('#graph-save').click();
     await expect(editor.locator('#graph-save')).toBeEnabled();

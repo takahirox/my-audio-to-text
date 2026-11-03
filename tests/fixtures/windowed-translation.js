@@ -15,7 +15,7 @@ export const closedWindows = [
 ];
 
 export function windowGraph(mode = 'window', translator = 'TranslateGemmaEnJa') {
-  const nodes = [graphNode('Text', 'input'), graphNode(translator, 'translator'), graphNode('LiveTextDisplay', 'display')];
+  const nodes = [graphNode('Text', 'input'), graphNode(translator, 'translator'), graphNode('Display', 'display')];
   const edges = [];
   if (mode === 'baseline') edges.push(edge('input', 'value', 'translator', 'text'));
   else {
@@ -27,10 +27,10 @@ export function windowGraph(mode = 'window', translator = 'TranslateGemmaEnJa') 
     edges.push(edge('input', 'value', 'window', 'text'), edge('window', 'text', 'translator', 'text'));
   }
   if (mode === 'revisable') {
-    nodes.push(graphNode('TranslationCommit', 'commit'), graphNode('TextToDOM', 'preview-dom'), graphNode('LiveTextDisplay', 'preview-display'));
+    nodes.push(graphNode('TranslationCommit', 'commit'), graphNode('Display', 'preview-display'));
     edges.push(edge('window', 'text', 'commit', 'boundary'),
       ...['source', 'text', 'error'].map(port => edge('translator', port, 'commit', port)),
-      edge('translator', 'provisionalText', 'preview-dom', 'text'), edge('preview-dom', 'dom', 'preview-display', 'dom'),
+      edge('translator', 'provisionalText', 'preview-display', 'input'),
       edge('commit', 'final', 'display', 'append'));
   } else edges.push(edge('translator', 'text', 'display', 'append'));
   return accumulateDisplay({ version: GRAPH_VERSION, nodes, edges }, 'display');

@@ -103,7 +103,7 @@ Transcript/history → Topic extraction/analysis → Visualization
 Capture and transcription are executable today, and final text can connect
 directly to the independent translation, correction, TTS and text-output nodes.
 Committed TEXT can also feed the extension's meeting-summary Nodes directly;
-their complete summary snapshots feed TextToDOM.text → dom → LiveTextDisplay.dom. History
+their complete summary snapshots feed Display.input. History
 storage, article inputs and broader analysis connections remain future examples.
 In particular,
 `.provisional` is the SpeechToTextNode port for the existing core's `partial`
@@ -155,43 +155,9 @@ New portable text graphs use `TEXT → Display.input: ITEM`, or
 `KeyedTextPair.pair → KeyedPairedTextAccumulator.pair → pairs → Display.input`.
 The accumulator owns ordered keyed history; Display renders each complete
 TEXT/pair/list snapshot without history or selection. See the
-[ITEM contracts, exact wiring and compatibility path](display-items.md).
-The DOM compositions below remain supported for existing browser graphs.
-
-The extension separates producer, formatting and display responsibilities. Any
-TEXT producer can connect to `TextToDOM.text → dom → LiveTextDisplay.dom`; a bounded
-`TextFormatter` is optional. Live renders sink labels/output by active graph Node
-order, not ASR/translation identity. Translation exposes only grouped source/text/error
-primitives. Configurable TextFormatter composes latest values; TextAccumulator owns committed history. No status/index ports or model-specific formatter are needed.
-See [graph migration and exact display/formatting semantics](extension-graph.md).
-Independent streams update latest formatter values; only directly grouped
-`emitOutputs`/`receiveInputs` updates preserve one producer's association.
-
-Live displays accept only `dom: DOM` in Graph v11. Route complete TEXT snapshots
-through `TextToDOM.text → dom → LiveTextDisplay.dom`. For text history, explicitly
-use TextAccumulator.append upstream of TextToDOM. Compose provisional TEXT with
-a separate TextToDOM feeding DOMCombiner.second; committed DOM feeds first. PairedTextToDOM
-holds the latest input1/input2 TEXT, both initially empty, and emits a fresh pair
-on either update, including duplicates and empty clears. Either side may be
-unconnected. Independent producers can temporarily combine new and previous text;
-send both values atomically for exactly one consistent snapshot. Explicit groups
-clear omitted siblings within that group only. For translation, connect
-translator.source to input1 and translator.text to input2. Specific errors stay in
-translation diagnostics; no same-producer identity is required.
-
-These implemented compositions differ only through explicit wiring (node names
-abbreviate their compatible ports):
-
-```text
-TEXT inputs → PairedTextToDOM → LiveTextDisplay                   # latest pair only
-TEXT inputs → PairedTextToDOM → DOMAccumulator → LiveTextDisplay  # explicit history
-DOM history + latest provisional DOM → DOMCombiner → LiveTextDisplay
-```
-
-DOMCombiner uses `first` and `second` for the latest snapshots in that order;
-it adds no history or preview-specific policy. LiveTextDisplay replaces its
-supplied snapshot in every case; scroll-follow remains on the rendering surface.
-The v12 migration renames old paired inputs under review and preserves direct
-DOM display routes; it never inserts an accumulator.
-Saved TEXT display graphs require review and Save of a conversion draft; exact
-originals remain recoverable. See [DOM contracts, exact wiring and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+[ITEM contracts, exact wiring and recovery](display-items.md).
+For ordinary latest text, connect any TEXT producer directly to Display.input.
+TextFormatter composes literal templates, TextAccumulator retains committed TEXT,
+and keyed pair history belongs to KeyedPairedTextAccumulator. Live follows graph
+order and supports copy and independent scroll position. Unsupported saved Nodes
+and ports require an explicit Reset or current graph Import and Save.

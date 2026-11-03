@@ -5,7 +5,7 @@ Stage 1 batches short committed ASR fragments. Stage 2 optionally accepts previe
 TextWindow itself only emits completed batches. It does not provide
 conversation-wide context, conversation memory, or guaranteed translation
 accuracy improvements. Both processors are in Graph Editor's Processors palette.
-They require no model weights. Graph v15 uses append-only committed routing and a separate preview display. TextAccumulator holds committed history; TextToDOM converts TEXT for DOM-only LiveTextDisplay sinks.
+They require no model weights. Graph v15 uses append-only committed routing and a separate preview display. TextAccumulator holds committed history; Display.input directly accepts complete TEXT snapshots.
 
 ## Stage 1: batching without retranslation
 
@@ -15,7 +15,7 @@ Connect these named ports:
 ASR.final → TextWindow.text
 TextWindow.text → TranslateGemmaEnJa.text
 TranslateGemmaEnJa.text → TextAccumulator.append
-TextAccumulator.text → TextToDOM.text → dom → LiveTextDisplay.dom
+TextAccumulator.text → Display.input
 ```
 
 Any existing translator accepts this output; there is no model-specific
@@ -81,14 +81,13 @@ Explicit TEXT snapshots ──→ Translator.provisional (optional)
 Translator.source ────────→ TranslationCommit.source
 Translator.text ──────────→ TranslationCommit.text
 Translator.error ─────────→ TranslationCommit.error
-Translator.provisionalText ──→ PreviewTextToDOM.text → dom → PreviewDisplay.dom
+Translator.provisionalText ──→ PreviewDisplay.input
 TranslationCommit.final ──────→ TextAccumulator.append
-TextAccumulator.text ────────→ TextToDOM.text → dom → LiveTextDisplay.dom
+TextAccumulator.text ────────→ Display.input
 ```
 
 Translator means any of OpusMtEnJa, OpusMtJaEn, TranslateGemmaEnJa or
-TranslateGemmaJaEn. PreviewTextToDOM and PreviewDisplay are ordinary TextToDOM and
-LiveTextDisplay instances. All four translators expose the same explicit output
+TranslateGemmaJaEn. PreviewDisplay is an ordinary Display instance. All four translators expose the same explicit output
 families; standalone web translator Nodes retain their existing text-only behavior.
 TranslationCommit is optional for routing: committed translator.text can connect
 directly to append, fields or TTS. Retain the forward boundary edge when causal
@@ -129,17 +128,11 @@ sibling, without clearing the other family's inputs. Empty/whitespace input succ
 with empty translated text and its original source, without inference. Errors also reach
 existing translator diagnostics.
 
-Route committed text directly to append-only destinations. Route provisionalText to a
-separate TextToDOM → LiveTextDisplay replacement branch; its explicit empty-string
-events clear previews on final acceptance, Stop and Cancel. This needs no
-context.provisional inspection and no accumulator preview state. Preview-only
-TextFormatter formatting must stay on that separate branch; never append it to committed
-history. PairedTextToDOM formats provisional and committed atomic groups identically. For
-paired previews, wire provisionalSource/provisionalText to input1/input2 on a
-separate PairedTextToDOM → LiveTextDisplay replacement branch. Empty cleanup
-groups render blank cells; the producer owns when cleanup occurs. Keep source/text
-on a separate formatter branch for optional DOMAccumulator history. For a combined
-display, use DOMCombiner with committed history as first and preview DOM as second.
+Route committed text through TextAccumulator to Display.input. Route
+provisionalText to a separate Display.input; empty-string deliveries clear that
+preview on final acceptance, Stop and Cancel. Preview-only TextFormatter output
+stays on its own branch. For continuous bilingual ASR history, use the
+[ID-scoped pair path](display-items.md).
 
 | Event | Output and order |
 | --- | --- |
@@ -228,64 +221,10 @@ Measured results and limitations are recorded in
 [`docs/evidence/translation-128.md`](evidence/translation-128.md). No required
 check introduced by this experiment depends on a post-merge deployment.
 
-Live displays accept only `dom: DOM`. Route complete TEXT snapshots through `TextToDOM.text → dom → LiveTextDisplay.dom`. For history, route committed text to TextAccumulator.append. Keep previews on a separate replacement branch. For paired translation, explicitly wire `translator.source → PairedTextToDOM.input1` and `translator.text → PairedTextToDOM.input2`, then dom to the display for the latest pair only. An unconnected side stays empty; either input update emits both latest values. An atomic group clears omitted siblings within that group only; specific translation errors stay in translation diagnostics. For optional comparison history, insert DOMAccumulator between formatter and display. Graph v12 requires review and Save for old paired ports: source/text become input1/input2, and any former formatter error route is explicitly removed in the draft. Saved TEXT display graphs also require reviewed conversion; exact originals remain recoverable. See [DOM contracts and recovery](extension-graph.md#dom-formatters-and-display-ownership).
+Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
 
-## Saved graph review (#163)
+## Saved graphs
 
-Graph v14 audits all four shared-scheduler translators. Any older graph with a
-provisional translator input connected or a TranslationCommit Node requires an explicit
-review, including inactive drafts. Loading/executing the saved graph is blocked; the
-repair draft retains every route, Node and setting, while warning that source/text/error
-now carry committed results only. Reconnect deliberate previews to
-provisionalSource/provisionalText/provisionalError and include their empty clearing
-route. Old TranslationCommit compositions need a separate preview route. No preview
-branch is guessed or auto-committed.
-
-The original JSON remains untouched until Save, then is backed up byte-for-byte under
-processing-graph-before-v14 (numbered on collisions). Older copies remain available
-through Graph actions → Recovery, Copy JSON and Download JSON. V13 graphs without
-provisional translator input or TranslationCommit upgrade without changing their routes.
-Earlier display/paired-port review requirements still apply. This change does not alter
-TextAccumulator or add a preview manager; it is compatible with #162's append-only
-accumulator contract.
-
-## TextWindow saved graph review (#178)
-
-Graph v15 requires review for every older TextWindow, including inactive drafts
-and default-only nodes, because exact concatenation and punctuation behavior changed.
-The unsaved repair draft converts maxChars and maxWaitMs Settings to ordinary
-Number nodes wired to maxChars and maxWaitSeconds (milliseconds divided by 1,000).
-Generated IDs avoid collisions. sentenceBoundary is removed. Every removed
-TextWindow.provisional connection is named in the migration report; no alternative
-preview producer or port is guessed. Wire deliberate TEXT snapshots separately if
-previews are still wanted. Thresholds are never copied into new Settings.
-
-Loading and execution remain blocked until review and Save. Unsupported settings,
-unknown ports, invalid limits or simultaneous old settings/new threshold wiring
-require explicit repair. Original storage remains byte-for-byte intact until Save;
-Save retains it in the established processing-graph-before-v14 recovery namespace
-(numbered on collisions), alongside older backups. Graph actions → Recovery supports
-Copy JSON and Download JSON. Unrelated nodes, settings, positions and routes are
-preserved. Graphs without TextWindow only advance their version; existing earlier
-migration requirements continue to apply.
-
-### Issue #178 validation (2026-10-31)
-
-- `npm test`: **803 passed**, including exact concatenation, 2,000-unit windows,
-  fractional deadlines, independent/grouped numeric updates, invalid values,
-  never-supplied connected thresholds, Stop/Cancel, stale callbacks, v9–v14
-  migration and exact backup retention. The package test uses fixture assets.
-- `npx playwright test tests/browser/text-window.spec.js --workers=1`: **2 passed**
-  (Chromium and WebKit), exercising actual NUMBER port delivery, length/remainder
-  timers, fan-out, Stop and Cancel.
-- Controlled MV3 checks in `windowed-translation.spec.js`,
-  `primitive-composition.spec.js`, `graph.spec.js` and
-  `graph-interactions.spec.js`: **56 distinct tests passed**, including threshold
-  port UI/Save/reload, removed preview wiring, reviewed migration and recovery.
-  These used production source modules assembled in the extension layout with
-  the existing controlled-model harness; they do not establish real inference.
-- `git diff --check` passed. The updated real-model smoke test loads successfully
-  but was **skipped** without `WINDOW_TRANSLATION_SMOKE`.
-- `npm run build:extension` was **blocked** by missing local models in this
-  worktree (`Missing local models. Run npm run prepare:assets first.`).
-  Full asset-backed packaging and real-model inference were not validated here.
+Unsupported versions and ports require Reset or Import of a current graph and
+an explicit Save. Reading never rewrites stored JSON. See
+[Graph Editor recovery](extension-graph.md).

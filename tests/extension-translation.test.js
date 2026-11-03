@@ -1,4 +1,3 @@
-import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,10 +7,9 @@ import { TEXT, TextOutputNode, EnglishToJapaneseOpusMtTranslationNode, Translate
 import { OPUS_MT, OPUS_MT_EN_JA } from '../web/translation-models.js';
 import { TranslationSchedulerNode, TRANSLATION_OUTPUTS } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
-import { defaultGraph, graphNode, edge, NODE_TYPES, translationViewEdges, pairedTextEdges } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, NODE_TYPES } from '../extension/graph.js';
 import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
-import { TextAccumulatorNode, TextFormatterNode, LiveTextDisplayNode } from '../web/text-nodes.js';
-import { DOMAccumulatorNode, DOMCombinerNode, PairedTextToDOMNode, TextToDOMNode } from '../web/dom-nodes.js';
+import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function workerFixture({ holdLoad = false, failLoad = false, failTranslate = false, empty = false } = {}) {
@@ -52,72 +50,12 @@ async function schedulerGraph(options = {}) {
   }, connections: [edge('source', 'text', 'scheduler', 'text'), edge('source', 'provisional', 'scheduler', 'provisional'),
     ...(scheduler.acceptsContext ? [edge('source', 'context', 'scheduler', 'context')] : []),
     ...Object.keys(TRANSLATION_OUTPUTS).map(port => edge('scheduler', port, 'sink', port)),
-    ...translationViewEdges('scheduler', 'formatter').filter(route => options.includeError !== false || route.from[1] !== 'error'), edge('scheduler', 'text', 'plain', 'text'),
+    ...['source', 'text', 'error'].map((port, index) => edge('scheduler', port, 'formatter', `input${index + 1}`)).filter(route => options.includeError !== false || route.from[1] !== 'error'), edge('scheduler', 'text', 'plain', 'text'),
     edge('formatter', 'text', 'formatted', 'text')] });
   await pipeline.start();
   return { ...f, pipeline, scheduler, outputs, states, plain, formatted, send: text => emit('text', text), preview: text => emit('provisional', text),
     setContext: text => emit('context', text), emitOutputs };
 }
-
-for (const mode of ['success', 'empty', 'failure']) test(`committed paired consumer never receives scheduler ${mode} previews`, async () => {
-  const f = workerFixture(), pairs = new PairedTextToDOMNode(), plain = [], snapshots = []; let source;
-  const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory });
-  const pipeline = new Pipeline({ nodes: {
-    source: { outputs: { closed: TEXT, draft: TEXT }, start(c) { source = c; } }, scheduler, pairs,
-    snapshots: {inputs: {dom: pairs.outputs.dom}, receive(_,dom) {snapshots.push(dom);}},
-    plain: new TextOutputNode(value => plain.push(value)),
-  }, connections: [edge('source','closed','scheduler','text'),edge('source','draft','scheduler','provisional'),
-    ...pairedTextEdges('scheduler','pairs'),edge('scheduler','text','plain','text'),edge('pairs','dom','snapshots','dom')] });
-  await pipeline.start(); source.emit('closed','same'); await tick(); f.complete(0,'committed'); await tick();
-  source.emit('draft',mode === 'empty' ? '' : 'same'); await tick();
-  if (mode === 'success') f.complete(1,'preview');
-  if (mode === 'failure') f.requests[1].worker.reply({ id: f.requests[1].id, type: 'error', message: 'preview failed' });
-  await tick();
-  assert.deepEqual(snapshots.map(dom=>[...dom.querySelectorAll('td')].map(cell=>cell.textContent)),[['same','committed']]);
-  assert.deepEqual(pipeline.errors, []); assert.deepEqual(plain, ['committed']);
-  source.emit('closed',mode === 'failure' ? '' : 'later'); await tick();
-  if (mode !== 'failure') { f.complete(mode === 'empty' ? 1 : 2,'later committed'); await tick(); }
-  assert.equal(plain.at(-1),mode === 'failure' ? '' : 'later committed');
-  await pipeline.cancel(); assert.equal(snapshots.length,2); assert.ok(f.workers.every(worker => worker.terminated));
-});
-
-for (const TranslationNode of [EnglishToJapaneseTranslateGemmaTranslationNode, TranslateGemmaTranslationNode])
-  for (const lifecycle of ['stop','cancel']) test(`${TranslationNode.name}: paired previews replace independently of committed DOM history (${lifecycle})`, async () => {
-    const f = workerFixture(), preview = [], history = []; let source;
-    const scheduler = new TranslationSchedulerNode({ TranslationNode, workerFactory:f.workerFactory });
-    const pipeline = new Pipeline({ nodes: {
-      source:{outputs:{closed:TEXT,draft:TEXT},start(c){source=c;}}, scheduler,
-      committed:new PairedTextToDOMNode(), preview:new PairedTextToDOMNode(), history:new DOMAccumulatorNode(),
-      previewDisplay:new LiveTextDisplayNode(dom=>preview.push(dom)), historyDisplay:new LiveTextDisplayNode(dom=>history.push(dom)),
-    }, connections:[
-      edge('source','closed','scheduler','text'), edge('source','draft','scheduler','provisional'),
-      ...pairedTextEdges('scheduler','committed'),
-      edge('scheduler','provisionalSource','preview','input1'), edge('scheduler','provisionalText','preview','input2'),
-      edge('committed','dom','history','append'), edge('history','dom','historyDisplay','dom'),
-      edge('preview','dom','previewDisplay','dom'),
-    ] });
-    try {
-      await pipeline.start(); source.emit('closed','same'); await tick(); f.complete(0,'translated'); await tick();
-      for (const index of [1,2]) {
-        source.emit('draft','same'); await tick(); f.complete(index,'translated'); await tick();
-        assert.equal(domText(preview.at(-1)),'same\ntranslated');
-        assert.equal(preview.at(-1).querySelectorAll('tbody tr').length,1);
-        assert.equal(domText(history.at(-1)),'same\ntranslated');
-      }
-      assert.notEqual(preview.at(-1),preview.at(-2),'duplicate previews still emit independent snapshots');
-      source.emit('draft',''); await tick(); assert.equal(domText(preview.at(-1)),'\n');
-      source.emit('closed','same'); await tick(); f.complete(3,'translated'); await tick();
-      assert.equal(domText(history.at(-1)),'same\ntranslated\nsame\ntranslated');
-      source.emit('draft','pending'); await tick();
-      const closing = pipeline[lifecycle](); await tick();
-      if (lifecycle === 'stop') f.complete(4,'stale');
-      await closing; f.complete(4,'late'); await tick();
-      assert.equal(domText(preview.at(-1)),'\n');
-      assert.equal(history.at(-1).querySelectorAll('tbody tr').length,2,'previews and cleanup never append committed rows');
-      assert.deepEqual(pipeline.errors,[]);
-    } finally { await pipeline.dispose(); }
-    assert.ok(f.workers.every(worker=>worker.terminated));
-  });
 
 test('production pinned manifest includes all seven runtime files and reviewed bounded hashes', () => {
   const files = JSON.parse(readFileSync('extension/opus-mt-assets.json'));
@@ -209,43 +147,6 @@ function sessionFixture(translation = workerFixture()) {
 }
 
 const display = (f, id = 'transcript') => domText(f.session.view.displays[id]) || '';
-for (const direction of ['ja-en', 'en-ja']) for (const original of [false, true]) test(`${direction}: direct live formatting replaces repeated pairs, drains Stop and starts fresh (${original})`, async () => {
-  const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
-  if (!original) { graph.nodes = graph.nodes.filter(n => n.id !== 'transcript'); graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); }
-  graph.edges.reverse(); f.session.setGraph(addDOMFormatters(graph)); await f.session.start(42);
-  const speech = f.session.session.speechNodes.get('speech');
-  speech.receiveEvent({ type: 'partial', text: 'uncommitted', id: 0 }); await tick();
-  assert.equal(f.translation.requests.length, 0); assert.deepEqual(display(f, 'translated'), '');
-  speech.receiveEvent({ type: 'final', text: 'same', id: 0 }); speech.receiveEvent({ type: 'final', text: 'same', id: 1 }); await tick();
-  assert.deepEqual(display(f, 'translated'), [].join('\n'), 'pending is represented by runtime status, not history rows');
-  const stopping = f.session.stop(); await tick();
-  f.translation.complete(0, 'first'); await tick(); f.translation.complete(1, 'second'); await stopping;
-  assert.deepEqual(display(f, 'translated'), 'same\nsecond');
-  assert.deepEqual(display(f), original ? 'same\nsame' : ''); assert.ok(f.translation.workers.every(w => w.terminated));
-  await f.session.start(42); assert.deepEqual(display(f, 'translated'), [].join('\n'));
-  speech.receiveEvent({ type: 'final', text: 'old session', id: 5 }); f.translation.complete(1, 'late'); await tick();
-  assert.deepEqual(display(f, 'translated'), [].join('\n')); f.session.cancel();
-});
-
-for (const direction of ['ja-en', 'en-ja']) for (const port of ['content']) test(`${direction}: completed TEXT feeds a direct ${port} sink`, async () => {
-  const f = sessionFixture(), graph = defaultGraph({ enabled: true, direction });
-  graph.nodes = graph.nodes.filter(n => n.id !== 'translated-format'); graph.edges = graph.edges.filter(e => e.to[0] !== 'translated-format' && e.from[0] !== 'translated-format');
-  graph.edges = graph.edges.filter(e => e.to[0] !== 'translated'); graph.edges.push(edge('translation', 'text', 'translated', port)); f.session.setGraph(addDOMFormatters(graph)); await f.session.start(42);
-  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'source' }); await tick(); f.translation.complete(0, 'translated'); await tick();
-  assert.deepEqual(display(f, 'translated'), 'translated');
-  await f.session.stop(); await f.session.start(42); assert.deepEqual(display(f, 'translated'), ''); f.session.cancel();
-});
-
-test('Cancel adds no pending history; failed committed results remain readable and contain no stale translation', async () => {
-  const f = sessionFixture(); f.session.setGraph(defaultGraph({ enabled: true })); await f.session.start(42);
-  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'pending', id: 0 }); await tick();
-  f.session.cancel(); f.translation.complete(0, 'late'); await tick(); assert.deepEqual(display(f, 'translated'), [].join('\n'));
-  f.session.prepareTranslation = async () => { throw Error('cache unavailable'); }; await f.session.start(42);
-  f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'failed', id: 0 }); await tick(); await f.session.stop();
-  assert.deepEqual(display(f, 'translated'), ['failed\n'].join('\n'));
-  assert.deepEqual(display(f), ['failed'].join('\n'));
-});
-
 test('English → Japanese has a distinct pinned complete manifest and cache keys', () => {
   const files = JSON.parse(readFileSync('extension/opus-mt-en-ja-assets.json'));
   const set = defineAssetSet({ ...OPUS_MT_EN_JA, files });
@@ -279,15 +180,15 @@ test('scheduler accepts only TEXT and emits successful strings once to independe
 
 test('multiple translator runtime statuses retain each branch failure independently of Live labels', async () => {
   const f = sessionFixture(), graph = defaultGraph({ enabled: true });
-  graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('LiveTextDisplay', 'reverse-display'));
-  graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'content'));
+  graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('Display', 'reverse-display'));
+  graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'input'));
   f.session.prepareTranslation = async (signal, direction) => { if (direction === 'ja-en') throw Error('Forward cache unavailable'); };
-  f.session.setGraph(addDOMFormatters(graph)); await f.session.start(42); await tick();
+  f.session.setGraph((graph)); await f.session.start(42); await tick();
   assert.match(f.session.view.translationStatus, /translation: Translation unavailable: Forward cache unavailable/);
   assert.match(f.session.view.translationStatus, /reverse: Local OPUS-MT ready/);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
   f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
-  assert.equal(display(f, 'translated'), 'Hello\n');
+  assert.equal(display(f), 'Hello');
   assert.match(f.session.view.translationStatus, /Forward cache unavailable/);
   assert.deepEqual(display(f, 'reverse-display'), ['こんにちは'].join('\n'));
 });
@@ -304,15 +205,15 @@ test('saved label/direction changes apply only to fresh Nodes and keep the activ
   const f = sessionFixture(); f.session.setGraph(defaultGraph({ enabled: true, direction: 'en-ja' })); await f.session.start(42);
   const active = f.session.view.activeGraph;
   const next = defaultGraph({ enabled: true, direction: 'ja-en' });
-  next.nodes.find(n => n.id === 'translated').settings.label = 'New comparison'; f.session.setGraph(next);
+  next.nodes.find(n => n.id === 'transcript').position.x += 10; f.session.setGraph(next);
   assert.equal(f.session.view.activeGraph, active);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
   f.translation.complete(0, 'こんにちは'); await f.session.stop();
-  assert.deepEqual(display(f, 'translated'), ['Hello\nこんにちは'].join('\n'));
-  await f.session.start(42); assert.deepEqual(display(f, 'translated'), [].join('\n'));
+  assert.deepEqual(display(f), ['Hello\nこんにちは'].join('\n'));
+  await f.session.start(42); assert.deepEqual(display(f), [].join('\n'));
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: '日本語' }); await tick();
   f.translation.complete(1, 'Japanese'); await f.session.stop();
-  assert.deepEqual(display(f, 'translated'), ['日本語\nJapanese'].join('\n'));
+  assert.deepEqual(display(f), ['日本語\nJapanese'].join('\n'));
 });
 
 
@@ -325,32 +226,6 @@ test('optional error wire is not required to clear a previous translation in the
 });
 
 for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
-  test(`${direction}: Cancel clears the translated preview through DOMCombiner while preserving history`, async () => {
-    const f = workerFixture(), displays = []; let source;
-    const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory,
-      TranslationNode: { 'en-ja': EnglishToJapaneseOpusMtTranslationNode, 'gemma-en-ja': EnglishToJapaneseTranslateGemmaTranslationNode,
-        'gemma-ja-en': TranslateGemmaTranslationNode }[direction] });
-    const pipeline = new Pipeline({ nodes: {
-      source: { outputs: { final: TEXT, draft: TEXT }, start(c) { source = c; } }, scheduler,
-      history: new TextAccumulatorNode(), historyDOM: new TextToDOMNode(), previewDOM: new TextToDOMNode(),
-      combined: new DOMCombinerNode(), display: new LiveTextDisplayNode(dom => displays.push(domText(dom))),
-    }, connections: [edge('source', 'final', 'scheduler', 'text'), edge('source', 'draft', 'scheduler', 'provisional'),
-      edge('scheduler', 'text', 'history', 'append'), edge('history', 'text', 'historyDOM', 'text'),
-      edge('historyDOM', 'dom', 'combined', 'first'), edge('scheduler', 'provisionalText', 'previewDOM', 'text'),
-      edge('previewDOM', 'dom', 'combined', 'second'), edge('combined', 'dom', 'display', 'dom')] });
-    await pipeline.start(); source.emit('final', 'committed source'); await tick(); f.complete(0, 'history'); await tick();
-    source.emit('draft', 'shown draft'); await tick(); f.complete(1, 'preview'); await tick();
-    assert.equal(displays.at(-1), 'historypreview');
-    source.emit('draft', 'in flight'); await tick(); source.emit('draft', 'pending'); await tick();
-    const canceled = pipeline.cancel();
-    assert.equal(pipeline.cancel(), canceled);
-    await canceled;
-    assert.equal(displays.at(-1), 'history');
-    const retained = displays.slice(); f.complete(2, 'late preview'); source.emit('final', 'late final'); await tick();
-    assert.deepEqual(displays, retained); assert.equal(f.requests.length, 3);
-    assert.equal(pipeline.entries.get('history').node.count, 1);
-    assert.equal(f.workers.length, 1); assert.ok(f.workers[0].terminated); assert.deepEqual(pipeline.errors, []);
-  });
   test(`${direction}: explicit preview family replaces, clears on final acceptance, and shares one priority FIFO Worker`, async () => {
     const f = await schedulerGraph({ direction });
     f.preview('old'); await tick();

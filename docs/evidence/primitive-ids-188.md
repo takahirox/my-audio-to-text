@@ -7,7 +7,7 @@ keyed DOM history. The original #186 change was reviewed for other primitive
 producer checks; no new allowlists or connection modes remain. Legacy migration
 validation predating #187 is unchanged.
 
-The [input rules](../keyed-dom-history.md#independent-primitive-inputs-188) specify
+The [input rules](../display-items.md) specify
 ID-first, payload-first, missing IDs, ID changes, duplicate/empty payloads and
 optional atomic delivery. Translators snapshot the current ID or its absence per
 job; ID-only changes never replay accepted text. DOM consumers buffer only

@@ -16,9 +16,9 @@ test.beforeEach(async ({ page }) => {
 test('processor palette connects TEXT/NUMBER, saves, reloads and runs the rolling window without Settings', async ({ page }) => {
   await page.evaluate(async () => {
     const { graphNode, saveGraph, GRAPH_VERSION } = await import('/extension/graph.js');
-    const nodes = [graphNode('Text', 'source'), graphNode('Number', 'limit', 20, 300), graphNode('TextToDOM', 'format', 650), graphNode('LiveTextDisplay', 'display', 980)];
+    const nodes = [graphNode('Text', 'source'), graphNode('Number', 'limit', 20, 300), graphNode('Display', 'display', 980)];
     nodes[0].settings.value = 'old newest'; nodes[1].settings.value = 6;
-    saveGraph(localStorage, { version: GRAPH_VERSION, nodes, edges: [{ from: ['format', 'dom'], to: ['display', 'dom'] }] });
+    saveGraph(localStorage, { version: GRAPH_VERSION, nodes, edges: [] });
     localStorage.setItem('processing-graph-before-v14', 'original backup');
   });
   await page.reload(); await openPalette(page);
@@ -35,7 +35,7 @@ test('processor palette connects TEXT/NUMBER, saves, reloads and runs the rollin
   await port('source output value').click();
   await expect(port('textslidingwindow input maxChars')).toBeDisabled();
   await port('textslidingwindow input text').click();
-  await port('textslidingwindow output text').click(); await port('format input text').click();
+  await port('textslidingwindow output text').click(); await port('display input input').click();
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   await expect(page.locator('#graph-errors')).toBeEmpty();
   const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));

@@ -1,5 +1,4 @@
 import { accumulateDisplay } from './fixtures/text-accumulator.js';
-import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,8 +23,8 @@ for (const translator of translators) test(`${translator}: every TEXT producer c
       const graph = { version: GRAPH_VERSION, nodes: [graphNode(type, 'producer'), graphNode(translator, 'consumer')], edges: [] };
       for (const input of ports) {
         graph.edges.push(edge('producer', port, 'consumer', input));
-        assert.deepEqual(validateGraph(addDOMFormatters(graph)), [], `${type}.${port} → ${translator}.${input}`);
-        const storage = store(); saveGraph(storage, addDOMFormatters(graph)); assert.deepEqual(readGraph(storage), graph);
+        assert.deepEqual(validateGraph((graph)), [], `${type}.${port} → ${translator}.${input}`);
+        const storage = store(); saveGraph(storage, (graph)); assert.deepEqual(readGraph(storage), graph);
       }
     }
   }
@@ -36,7 +35,7 @@ test('TranslationCommit and startup settings accept every contract-compatible ed
     for (const [target, inputs] of [['TranslationCommit', ['boundary', 'source', 'text', 'error']], ['SpeechToTextWhisper', ['language']], ['SpeechToTextReazonSpeech', ['maxDuration']]]) {
       for (const input of inputs) if (NODE_TYPES[target].inputs[input] === contract) {
         const graph = { version: GRAPH_VERSION, nodes: [graphNode(type,'producer'),graphNode(target,'consumer')], edges:[edge('producer',port,'consumer',input)] };
-        assert.deepEqual(validateGraph(addDOMFormatters(graph)), [], `${type}.${port} → ${target}.${input}`);
+        assert.deepEqual(validateGraph((graph)), [], `${type}.${port} → ${target}.${input}`);
       }
     }
   }
@@ -58,10 +57,10 @@ function workers() {
 
 for (const translator of translators) test(`${translator}: direct ASR previews coalesce, finals stay FIFO and boundary matching survives equal text`, async () => {
   const f = workers(), displays = {};
-  const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TranslationCommit','commit'), graphNode('TextAccumulator','acc'),graphNode('LiveTextDisplay','translated'),graphNode('LiveTextDisplay','preview'));
+  const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TranslationCommit','commit'), graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),edge('speech','final','commit','boundary'),
-    ...['source','text','error'].map(p => edge('translator',p,'commit',p)),edge('translator','provisionalText','preview','content'),edge('commit','final','acc','append'),edge('acc','text','translated','content'));
-  const built = buildGraph(addDOMFormatters(graph), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
+    ...['source','text','error'].map(p => edge('translator',p,'commit',p)),edge('translator','provisionalText','preview','input'),edge('commit','final','acc','append'),edge('acc','text','translated','input'));
+  const built = buildGraph((graph), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
   try {
     await built.pipeline.start(); await built.translations[0].ready;
     const speech = built.speechNodes.get('speech');
@@ -121,9 +120,9 @@ for (const kind of ['number','language']) for (const finish of ['stop','overload
 
 test('an inactive configured producer never silently selects an ASR default', async () => {
   const graph=defaultGraph(); graph.nodes.push(graphNode('TextFormatter','unready'),graphNode('SpeechToTextWhisper','unready-asr'));
-  graph.nodes[1].type='SpeechToTextWhisper'; graph.edges=graph.edges.filter(e=>e.from[1]!=='provisional');
+  graph.nodes[1].type='SpeechToTextWhisper'; graph.edges=graph.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
   graph.edges.push(edge('unready-asr','final','unready','input1'),edge('unready','text','speech','language'));
-  const f=workers(), built=buildGraph(addDOMFormatters(graph),{whisperWorkerFactory:f.factory,sourceFactory:()=>({start(){},stop(){}})});
+  const f=workers(), built=buildGraph((graph),{whisperWorkerFactory:f.factory,sourceFactory:()=>({start(){},stop(){}})});
   await built.pipeline.start(); assert.equal(f.owned.length,0);
   await assert.rejects(built.pipeline.stop(),/unavailable/); await built.pipeline.dispose();
 });
@@ -134,7 +133,7 @@ test('Cancel retains committed formatter/fan-out snapshots while rejecting queue
     source:{outputs:{value:TEXT},start(c){source=c;}},acc,formatter:new TextFormatterNode({template:'[{1}]'}),
     direct:new TextSink(t=>{seen.direct=t;}),indirect:new TextSink(t=>{seen.indirect=t;}),
     ordinary:{inputs:{value:TEXT},receive(_,v){seen.ordinary=v;}},
-  },connections:[edge('source','value','acc','append'),edge('acc','text','direct','content'),edge('acc','text','formatter','input1'),edge('formatter','text','indirect','content'),edge('acc','text','ordinary','value')]});
+  },connections:[edge('source','value','acc','append'),edge('acc','text','direct','input'),edge('acc','text','formatter','input1'),edge('formatter','text','indirect','input'),edge('acc','text','ordinary','value')]});
   await pipeline.start();source.emit('value','committed');await tick();
   source.emit('value','queued before Cancel');const cancel=pipeline.cancel();source.emit('value','late');await cancel;
   assert.deepEqual(seen,{direct:'committed',indirect:'[committed]',ordinary:'committed'});assert.equal(acc.committed,'committed');
@@ -162,11 +161,11 @@ test('Cancel closes field side effects while retaining committed accumulator tex
 
 test('Text literals and formatter/accumulator snapshots execute as independent translator previews', async () => {
   for (const type of ['Text','TextFormatter','TextAccumulator']) {
-    const f=workers(),graph={version:GRAPH_VERSION,nodes:[graphNode('Text','final'),graphNode('Text','seed'),graphNode(type,'alternate'),graphNode('TranslateGemmaEnJa','translator'),graphNode('LiveTextDisplay','view'),graphNode('LiveTextDisplay','preview')],
-      edges:[edge('final','value','translator','text'),edge('translator','text','view','content'),edge('translator','provisionalText','preview','content')]};
+    const f=workers(),graph={version:GRAPH_VERSION,nodes:[graphNode('Text','final'),graphNode('Text','seed'),graphNode(type,'alternate'),graphNode('TranslateGemmaEnJa','translator'),graphNode('Display','view'),graphNode('Display','preview')],
+      edges:[edge('final','value','translator','text'),edge('translator','text','view','input'),edge('translator','provisionalText','preview','input')]};
     if(type!=='Text')graph.edges.push(edge('seed','value','alternate',type==='TextFormatter'?'input1':'append'));
     graph.edges.push(edge('alternate',type==='Text'?'value':'text','translator','provisional'));
-    let display,preview;const built=buildGraph(addDOMFormatters(graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='view')display=v;else preview=v;}});
+    let display,preview;const built=buildGraph((graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='view')display=v;else preview=v;}});
     await built.pipeline.start();await tick();
     built.pipeline.entries.get(type==='Text'?'alternate':'seed').context.emit('value','preview');await tick();f.complete(0);await tick();
     assert.equal(preview,type === 'TextAccumulator' ? 'translated:\npreview' : 'translated:preview',type); assert.equal(display,'',type);
@@ -178,9 +177,9 @@ test('Text literals and formatter/accumulator snapshots execute as independent t
 test('TranslationCommit final is an ordinary TEXT producer for another translator preview', async () => {
   const {windowGraph}=await import('./fixtures/windowed-translation.js');const f=workers(),graph=windowGraph('revisable');
   graph.nodes.find(n=>n.id==='window-chars').settings.value=6;
-  graph.nodes.push(graphNode('Text','independent'),graphNode('TranslateGemmaEnJa','second'),graphNode('LiveTextDisplay','second-view'));
-  graph.edges.push(edge('independent','value','second','text'),edge('commit','final','second','provisional'),edge('second','provisionalText','second-view','content'));
-  let display;const built=buildGraph(addDOMFormatters(graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='second-view')display=v;}});
+  graph.nodes.push(graphNode('Text','independent'),graphNode('TranslateGemmaEnJa','second'),graphNode('Display','second-view'));
+  graph.edges.push(edge('independent','value','second','text'),edge('commit','final','second','provisional'),edge('second','provisionalText','second-view','input'));
+  let display;const built=buildGraph((graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='second-view')display=v;}});
   await built.pipeline.start();await tick();built.pipeline.entries.get('input').context.emit('value','First.');await tick();f.complete(0);await tick();
   assert.equal(f.requests[1].text,'translated:First.');f.complete(1);await tick();assert.equal(display,'translated:translated:First.');
   await built.pipeline.stop();assert.deepEqual(built.pipeline.errors,[]);await built.pipeline.dispose();
@@ -188,7 +187,7 @@ test('TranslationCommit final is an ordinary TEXT producer for another translato
 
 test('session retains inactive configuration intent, shows waiting and loads no default model', async () => {
   const {TabSession}=await import('../extension/session.js');const f=workers(),graph=defaultGraph();
-  graph.nodes[1].type='SpeechToTextWhisper';graph.edges=graph.edges.filter(e=>e.from[1]!=='provisional');
+  graph.nodes[1].type='SpeechToTextWhisper';graph.edges=graph.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
   graph.nodes.push(graphNode('TextFormatter','unready'),graphNode('SpeechToTextWhisper','unready-asr'));
   graph.edges.push(edge('unready-asr','final','unready','input1'),edge('unready','text','speech','language'));
   const session=new TabSession(()=>{},{graph,whisperWorkerFactory:f.factory,sourceFactory:()=>({start(){},stop(){}})});
@@ -197,7 +196,7 @@ test('session retains inactive configuration intent, shows waiting and loads no 
 });
 
 class TextSink {
-  inputs = { content: TEXT }; outputs = {};
+  inputs = { input: TEXT }; outputs = {};
   constructor(callback) { this.callback = callback; }
   start() { this.callback(''); }
   receive(_, text, context) { if (!context.signal.aborted) this.callback(text); }

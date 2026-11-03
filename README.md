@@ -7,7 +7,7 @@ a small browser-local classifier. Save prepares its verified 14 MB model.
 The extension also has independent [LFM2.5 1.2B JP and Qwen3.5 2B meeting-summary
 draft processors](docs/meeting-summary-nodes.md). They incrementally update a
 Japanese or English note from committed TEXT, using Save-prepared local WebGPU
-models. Connect `summary → TextToDOM.text → dom → LiveTextDisplay.dom`. Read the recorded accuracy
+models. Connect `summary → Display.input`. Read the recorded accuracy
 limitations before relying on generated decisions, owners or task status.
 
 A local-first composable processing system that connects reusable input and processing capabilities into pipelines for useful derived information.
@@ -28,7 +28,7 @@ provisional / final transcript
 
 Capture helpers normalize audio to mono 16 kHz PCM before passing it to the [Local ASR Core](docs/local-asr-core.md). ReazonSpeech ja-en, sherpa-onnx, Silero VAD and the hayamimi-inspired simulated-streaming policy are the core's current implementation. This replaceable ASR baseline is one processing capability within the product vision.
 
-The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR or Text constants with optional OPUS-MT or TranslateGemma 4B (English → Japanese and Japanese → English) through the same scheduling adapter. TranslateGemma requires a 3.112 GB Save-time download, Worker WebGPU and several GB RAM/GPU memory; Google Gemma Terms and Prohibited Use Policy apply. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; the extension groups committed `source/text/error` and preview `provisionalSource/provisionalText/provisionalError` as separate TEXT families sharing one owned Worker. Committed `text` can feed history or TTS directly; `provisionalText` replaces a separate preview display and clears on final input, Stop and Cancel. Preview-enabled saved graphs require reviewed v14 repair with original JSON preserved. See the [contract audit](docs/port-contracts.md). The generic [TextWindow batcher](docs/windowed-translation.md) concatenates exact TEXT and emits only at a character/time threshold or Stop, with optional NUMBER inputs (defaults 600 characters / 1.5 seconds) and one TEXT output. Old TextWindow graphs require reviewed v15 repair with original JSON retained. The extension supports bounded incremental meeting-summary drafts; persistent history storage and broader summary/history composition remain future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
+The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR or Text constants with optional OPUS-MT or TranslateGemma 4B (English → Japanese and Japanese → English) through the same scheduling adapter. TranslateGemma requires a 3.112 GB Save-time download, Worker WebGPU and several GB RAM/GPU memory; Google Gemma Terms and Prohibited Use Policy apply. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; the extension groups committed `source/text/error` and preview `provisionalSource/provisionalText/provisionalError` as separate TEXT families sharing one owned Worker. Committed `text` can feed history or TTS directly; `provisionalText` replaces a separate preview display and clears on final input, Stop and Cancel. Unsupported saved Nodes/ports require Reset or Import of a current graph and an explicit Save. See the [contract audit](docs/port-contracts.md). The generic [TextWindow batcher](docs/windowed-translation.md) concatenates exact TEXT and emits only at a character/time threshold or Stop, with optional NUMBER inputs (defaults 600 characters / 1.5 seconds) and one TEXT output. Old TextWindow ports/settings are unsupported; use the current contract. The extension supports bounded incremental meeting-summary drafts; persistent history storage and broader summary/history composition remain future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
 
 ## Node Playground
 
@@ -57,7 +57,7 @@ PCM → Speaker · streaming, with explicit preparation and cache-only Start.
 flow/HiFT exports with the same stream and Speaker contracts. English/Japanese
 packaged Chrome evidence and hardware/resource limitations are recorded separately.
 
-The retained hayamimi-inspired path uses 0.8-second pre-roll, provisional recognition about every 0.5 seconds of active speech, a 0.35-second trailing-silence endpoint, and a 6-second default maximum audio segment including pre-roll. The extension's reusable Number source can configure a 1–12 second cap, including decimals, through optional SpeechToTextReazonSpeech.maxDuration before session startup; saved edits apply next session. Continuous speech splits without audio gaps. This is an audio cap, not final-result latency: mid-sentence cuts may reduce accuracy. See [configuration and validation limits](docs/extension-graph.md#maximum-speech-segment-duration). Stop finalizes active speech. Silero VAD and ASR run in separate workers; inference is serialized, superseded previews are coalesced, and pending audio is bounded at 30 seconds. ReazonSpeech uses the evidence-based one-thread default from [Issue #38](docs/evidence/reazon-38.md).
+The retained hayamimi-inspired path uses 0.8-second pre-roll, provisional recognition about every 0.5 seconds of active speech, a 0.35-second trailing-silence endpoint, and a 6-second default maximum audio segment including pre-roll. The extension's reusable Number source can configure a 1–12 second cap, including decimals, through optional SpeechToTextReazonSpeech.maxDuration before session startup; saved edits apply next session. Continuous speech splits without audio gaps. This is an audio cap, not final-result latency: mid-sentence cuts may reduce accuracy. See [configuration and validation limits](docs/extension-graph.md). Stop finalizes active speech. Silero VAD and ASR run in separate workers; inference is serialized, superseded previews are coalesced, and pending audio is bounded at 30 seconds. ReazonSpeech uses the evidence-based one-thread default from [Issue #38](docs/evidence/reazon-38.md).
 
 Microphone or browser-tab audio feeds normalized PCM into the documented [local ASR core boundary](docs/local-asr-core.md); capture/resampling stays outside recognition orchestration. For tab audio, use a desktop Chromium browser and choose a tab with “Share tab audio” enabled in the browser sharing picker.
 
@@ -86,13 +86,8 @@ The extension Graph Editor exposes **ReazonSpeech ja-en ASR**, **Whisper tiny
 (multilingual) ASR**, **Streaming Zipformer English ASR**, and a reusable **Text**
 constant. Whisper defaults to English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
 Japanese. Whisper exposes only `final: TEXT`; connect it to
-`TextAccumulator.append → text → TextToDOM.text → dom → LiveTextDisplay.dom` for completed segments. The default stays
-ChromeTabAudio → ReazonSpeech, with separate committed history and provisional
-TextToDOM branches combined by DOMCombiner → LiveTextDisplay. See [Whisper pins, setup,
-usage and real-model validation](docs/whisper-node.md). For real incremental English
-previews, opt into [English online Zipformer](docs/zipformer-node.md): connect
-`final → TextAccumulator.append → TextToDOM → DOMCombiner.first` and
-`provisional → TextToDOM → DOMCombiner.second`, then `DOMCombiner.dom → LiveTextDisplay.dom`.
+`final → TextAccumulator.append → text → Display.input` for completed segments.
+For provisional/final history, use the [keyed display path](docs/display-items.md).
 
 The extension also offers independent **Parakeet TDT 0.6B v3** (WebGPU, final
 TEXT only) and **Moonshine Medium Streaming English 245M** (CPU WASM, real
@@ -201,58 +196,25 @@ Separate issues should define and implement:
 
 See the [development flow](docs/development-flow.md) for workflow and language policy, the [test and CI principles](docs/development-flow.md#test-and-ci-principles) for validation scope and cost, and the [review guidelines](docs/review-guidelines.md) for review and merge criteria.
 
-The extension Live window renders graph-configured `LiveTextDisplay` sinks with
-custom labels. Fresh setup and Reset default to Chrome tab audio → SpeechToText →
-one display: provisional text replaces only the preview, and each final appends
-a committed item. Translation remains an explicit graph addition. Configurable
-`TextFormatter` Nodes compose primitive TEXT with editable multiline templates.
-Older paired views open a reviewed migration draft and keep a recovery copy.
+The extension Live window renders `Display.input: ITEM` sinks. Fresh setup and
+Reset use Chrome tab audio → ReazonSpeech → KeyedTextCoalesce → KeyedTextPair →
+KeyedPairedTextAccumulator → Display for continuous transcription. Translation
+is an explicit graph addition: branch ASR.finalId/final to translator.id/text,
+then translator.id/text to KeyedTextPair.id2/input2. Originals remain visible
+while translation is pending; late translation updates only its own ID.
 
-`KeyedTextCoalesce` selects the latest nonempty `input1`, otherwise `input2`,
-separately for each finite numeric ID. Connect independent `NUMBER` sources to
-`id1`/`id2` and `TEXT` sources to `input1`/`input2`; for example, one `Number.value`
-can key a preferred `Text.value` and a backup `Text.value`. Only `''` is empty;
-whitespace, duplicates and explicit empty updates count. Clearing input1 restores
-the latest fallback for that ID. Each text event emits `id` and `text` together.
-Each branch's ID selects subsequent text updates. Text before its first ID waits
-(latest value only); ID-only changes never relabel completed text or emit blanks.
-Grouped ID/text updates apply atomically; an omitted grouped ID waits for an ID
-rather than borrowing the old key. Start resets state; Stop/Cancel reject late
-updates. Route `text → Display.input` for latest plain text, or
-`id/text → KeyedTextPair.id1/input1` for a keyed two-column transcript.
+`KeyedTextPair` has four independent NUMBER/TEXT inputs and exactly one output:
+`pair: KEYED_PAIRED_TEXT`, an immutable `{ id, first, second }`. Each side keeps
+its own ID and values; missing sides are empty strings. KeyedTextCoalesce selects
+nonempty input1, otherwise input2, per ID. ID-only changes never replay completed
+text. The accumulator appends new IDs and replaces existing IDs in arrival order,
+emitting complete portable history. Display safely renders each whole TEXT,
+pair or pair-list snapshot without selection or history. Any TEXT processor,
+including meeting summaries, connects directly to Display.input.
 
-`PairedTextToDOM` emits one fresh DOM pair whenever either generic TEXT input updates,
-using the latest `input1` (left) and `input2` (right). Both start empty; an
-unconnected or never-supplied side stays empty. Duplicate and empty updates emit
-too. Independent producers may temporarily combine new text with the other side's
-previous value. Send both inputs atomically for exactly one consistent snapshot.
-Atomic producer snapshots clear omitted siblings within their group only.
-Direct display connections show only the latest pair. For translation, connect
-translator.source/text explicitly to input1/input2. For paired
-previews, use a separate formatter wired to provisionalSource/provisionalText
-and a replacement display; keep committed history on its own branch. Specific
-errors remain in translation diagnostics.
-Saved paired source/text/error wiring requires a v12 review draft and Save,
-with exact original JSON retained for recovery. For optional comparison
-history, explicitly connect `PairedTextToDOM.dom → DOMAccumulator.append → dom →
-LiveTextDisplay.dom`. For continuous ASR rows while translation is pending,
-use `ASR → KeyedTextCoalesce → KeyedTextPair → KeyedPairedTextAccumulator → Display`,
-with a separate `ASR.finalId/final → translator.id/text → KeyedTextPair.id2/input2`
-branch. `KeyedTextPair` emits an immutable `{ id, first, second }` pair while
-retaining its legacy primitive outputs. The accumulator appends new IDs and
-replaces existing IDs in place in arrival order, emitting complete ordered pair
-arrays. `Display.input: ITEM` accepts TEXT, KEYED_PAIRED_TEXT or
-KEYED_PAIRED_TEXT_LIST and renders each whole snapshot literally without history
-or selection. Any TEXT output connects directly for latest plain text; a pair
-connects directly for the latest pair. Empty strings and line breaks survive;
-HTML-like text is inert. Late translation A updates A while B remains visible.
-See the [ITEM contracts and exact wiring](docs/display-items.md),
-[importable graph](docs/evidence/item-198.json) and
-[executable fixture](tests/fixtures/item-graph.js). Saved VIEW displays open a
-reviewed compatibility draft preserving original graph data and recovery copies.
-Saved TextDisplay and older DOM paths keep their existing behavior.
-Existing ID-less append-only and separate-preview compositions remain supported.
-Each Live region follows incoming DOM while you are reading near the bottom;
-scrolling up keeps your position until you return to the bottom.
-Legacy DOM formatting, accumulation and combination remain available for other uses.
-See [Live display and migration semantics](docs/extension-graph.md).
+See [contracts and wiring](docs/display-items.md), the
+[importable graph](docs/evidence/item-198.json), and the
+[executable fixture](tests/fixtures/item-graph.js). Old display Nodes and ports
+are unsupported. Graph Editor reports them visibly and offers Reset or Import;
+Save explicitly replaces the stored graph. Each Live region follows updates
+when reading near the bottom and preserves scroll position when reading above it.

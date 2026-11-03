@@ -7,7 +7,7 @@ Both use real local inference with bounded, extractive note reconciliation.
 See the [current factual smoke and its boundaries](evidence/meeting-summary-130.md)
 before relying on model output.
 Connect `ASR.final`, `TextWindow.text` or `Text.value` to `text`, then `summary`
-directly to `TextToDOM.text → dom → LiveTextDisplay.dom`. Stop/Cancel retain the last successful note;
+directly to `Display.input`. Stop/Cancel retain the last successful note;
 no accumulator is needed for complete summary snapshots. Other TEXT
 consumers are compatible. Translation, ASR and transcript displays can fan out
 independently. There is no global model selection or preferred model.
@@ -15,7 +15,7 @@ independently. There is no global model selection or preferred model.
 The only setting is **language**: `ja` (Japanese) or `en` (English). The summary
 language need not match the transcript. Each session freezes settings; saving
 edits during a session changes the next session. These processors use the same Graph v10 content contract as other snapshot producers;
-saved v9 replace-only summary displays migrate directly without an accumulator.
+unsupported saved display graphs require explicit Reset or Import and Save.
 
 ## Incremental behavior
 

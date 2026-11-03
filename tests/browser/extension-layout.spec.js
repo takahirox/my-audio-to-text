@@ -175,7 +175,7 @@ test('returning from Fit retains the selected wire and its keyboard Disconnect a
   await loadZoomGraph(page);
   await page.getByRole('button', { name: 'literal-29 output value', exact: true }).press('Space');
   await page.locator('#graph-fit').press('Enter');
-  const wire = page.getByRole('button', { name: 'Select connection speech.final to transcript-accumulator.append', exact: true });
+  const wire = page.getByRole('button', { name: 'Select connection speech.final to coalesce.input1', exact: true });
   await wire.press('Enter');
   await page.locator('#graph-edit-scale').press('Enter');
   await expect(wire).toBeFocused(); await expect(wire).toHaveAttribute('aria-pressed', 'true');
@@ -230,10 +230,10 @@ for (const zoom of ['0.25', 'fit', '1.5']) {
     await loadZoomGraph(page);
     if (zoom === 'fit') await page.locator('#graph-fit').click(); else await page.locator('#graph-zoom').selectOption(zoom);
     await page.getByRole('button', { name: 'speech output final', exact: true }).click();
-    await page.getByRole('button', { name: 'transcript-preview input text', exact: true }).click();
-    const wire = page.getByRole('button', { name: 'Select connection speech.final to transcript-preview.text', exact: true });
+    await page.getByRole('button', { name: 'coalesce input input2', exact: true }).click();
+    const wire = page.getByRole('button', { name: 'Select connection speech.final to coalesce.input2', exact: true });
     await expect(wire).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Select connection speech.provisional to transcript-preview.text', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Select connection speech.provisional to coalesce.input2', exact: true })).toHaveCount(0);
     const point = await exposedWirePoint(wire); await page.mouse.click(point.x, point.y);
     await expect(page.locator('#graph-disconnect')).toBeVisible();
     await page.locator('#graph-disconnect').scrollIntoViewIfNeeded();
@@ -259,14 +259,14 @@ test('touch returns from an overview to connect typed ports, move a node and dis
   await page.route('**/*', serveExtension);
   await page.goto('/extension/graph-editor.html');
   await loadZoomGraph(page);
-  const wire = page.getByRole('button', { name: 'Select connection speech.provisional to transcript-preview.text', exact: true });
+  const wire = page.getByRole('button', { name: 'Select connection speech.provisional to coalesce.input2', exact: true });
   for (const zoom of ['0.25', 'fit']) {
     if (zoom === 'fit') await page.locator('#graph-fit').tap(); else await page.locator('#graph-zoom').selectOption(zoom);
     // Overview targets may be just 4px tall. The full-size action is the touch
     // route back to editing; edge semantics remain covered at low zoom above.
     await page.getByRole('button', { name: 'Edit at 100%', exact: true }).tap();
     await page.getByRole('button', { name: 'audio output audio', exact: true }).tap();
-    await expect(page.getByRole('button', { name: 'transcript-preview input text', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'coalesce input input2', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'audio output audio', exact: true }).tap();
     const point = await exposedWirePoint(wire);
     await page.touchscreen.tap(point.x, point.y);
@@ -275,11 +275,11 @@ test('touch returns from an overview to connect typed ports, move a node and dis
     expect((await disconnect.boundingBox()).height).toBeGreaterThanOrEqual(44);
     await disconnect.tap(); await expect(wire).toHaveCount(0);
     await page.getByRole('button', { name: 'speech output provisional', exact: true }).tap();
-    await page.getByRole('button', { name: 'transcript-preview input text', exact: true }).tap();
+    await page.getByRole('button', { name: 'coalesce input input2', exact: true }).tap();
     await expect(wire).toHaveCount(1);
     await page.locator('#graph-zoom').selectOption('0.25');
     await page.getByRole('button', { name: 'Edit at 100%', exact: true }).tap();
-    const input = page.getByRole('button', { name: 'transcript-preview input text', exact: true });
+    const input = page.getByRole('button', { name: 'coalesce input input2', exact: true });
     await expect(input).toBeFocused(); await expectInsideCanvas(input);
   }
   const heading = page.getByRole('button', { name: 'Select speech', exact: true });
@@ -362,14 +362,16 @@ for (const width of [390, 700]) {
   });
 }
 
-for (const action of ['Clear selection', 'Remove transcript']) {
+for (const action of ['Clear selection', 'Remove literal']) {
   test(`inspector text edits commit before a single ${action} click`, async ({ page }) => {
     const before = await page.evaluate(async () => {
-      const { readGraph } = await import('/extension/graph.js');
+      const { readGraph, graphNode, saveGraph } = await import('/extension/graph.js');
+      const graph = readGraph(localStorage); graph.nodes.push(graphNode('Text', 'literal')); saveGraph(localStorage, graph);
       return { graph: readGraph(localStorage), stored: localStorage.getItem('processing-graph-v1') };
     });
-    await page.getByRole('button', { name: 'Select transcript', exact: true }).click();
-    await page.getByLabel('transcript label', { exact: true }).fill('Edited output');
+    await page.reload();
+    await page.getByRole('button', { name: 'Select literal', exact: true }).click();
+    await page.getByLabel('literal value', { exact: true }).fill('Edited output');
     // Keep the field focused: the native click must commit its change on blur
     // without replacing the command between pointerdown and click.
     await page.getByRole('button', { name: action, exact: true }).click();
@@ -379,14 +381,14 @@ for (const action of ['Clear selection', 'Remove transcript']) {
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before.stored);
     const expected = structuredClone(before.graph);
     if (action === 'Clear selection') {
-      expected.nodes.find(node => node.id === 'transcript').settings.label = 'Edited output';
-      await page.getByRole('button', { name: 'Select transcript', exact: true }).click();
-      await expect(page.getByLabel('transcript label', { exact: true })).toHaveValue('Edited output');
+      expected.nodes.find(node => node.id === 'literal').settings.value = 'Edited output';
+      await page.getByRole('button', { name: 'Select literal', exact: true }).click();
+      await expect(page.getByLabel('literal value', { exact: true })).toHaveValue('Edited output');
       await expect(page.locator('#graph-errors')).toBeEmpty();
     } else {
-      expected.nodes = expected.nodes.filter(node => node.id !== 'transcript');
-      expected.edges = expected.edges.filter(edge => edge.from[0] !== 'transcript' && edge.to[0] !== 'transcript');
-      await expect(page.locator('[data-node="transcript"]')).toHaveCount(0);
+      expected.nodes = expected.nodes.filter(node => node.id !== 'literal');
+      expected.edges = expected.edges.filter(edge => edge.from[0] !== 'literal' && edge.to[0] !== 'literal');
+      await expect(page.locator('[data-node="literal"]')).toHaveCount(0);
       await expect(page.locator('.graph-node')).toHaveCount(expected.nodes.length);
       await expect(page.locator('.graph-wire')).toHaveCount(expected.edges.length);
       // An incomplete draft is saveable; Start selects only executable paths.
@@ -405,13 +407,10 @@ test('live regions replace safe DOM snapshots and copy verbatim at narrow widths
     const { defaultGraph, graphNode } = await import('/extension/graph.js');
     const { renderTextRegions } = await import('/extension/live-text-regions.js');
     const root = document.querySelector('#live-displays'), graph = defaultGraph();
-    graph.nodes.push(graphNode('LiveTextDisplay', 'value'));
-    const { TextToDOMNode } = await import('/web/dom-nodes.js');
-    const toDOM = text => {
-      let snapshot;
-      new TextToDOMNode().receive('text', text, { signal: new AbortController().signal, emit: (_, dom) => snapshot = dom });
-      return snapshot;
-    };
+    graph.nodes.push(graphNode('Display', 'value'));
+    const { DisplayNode } = await import('/web/display-node.js');
+    const context = { signal: new AbortController().signal };
+    const toDOM = text => { let snapshot; const node = new DisplayNode(dom => snapshot = dom); node.start(context); node.receive('input', text, context); return snapshot; };
     window.renderLayout = text => renderTextRegions(root, graph, { transcript: toDOM(text), value: toDOM('A current value') });
     window.renderLayout('<b>committed</b>'); window.firstText = root.querySelector('.display-content').firstChild;
     navigator.clipboard.writeText = async text => { window.copiedText = text; };
@@ -446,6 +445,6 @@ for (const width of [390, 1440]) {
 test('input-end dragging reconnects transactionally and cancellation preserves the wire', async ({ page }) => {
   await checkInputReconnect(page);
 });
-for (const kind of ['current', 'paired', 'invalid']) test(`Graph actions recovery preserves exact ${kind} originals and numbered backups`, async ({ page }) => {
+for (const kind of ['current', 'paired', 'invalid']) test(`Graph actions recovery preserves exact ${kind} originals before Reset and Save`, async ({ page }) => {
   await checkRecovery(page, kind);
 });

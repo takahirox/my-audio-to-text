@@ -7,9 +7,9 @@ test('Simple lays out 0, 1, 2 and 4 saved displays at narrow and wide sizes with
       const { graphNode, edge, saveGraph } = await import('./graph.js');
       const source = graphNode('Text', 'source'); source.settings.value = 'Long plain text '.repeat(2000);
       const displays = Array.from({ length: count }, (_, i) => {
-        const node = graphNode('LiveTextDisplay', `display-${i}`); node.settings.label = `Output ${i + 1}`; return node;
+        const node = graphNode('Display', `display-${i}`); return node;
       });
-      saveGraph(localStorage, window.addDOMFormatters({ version: 15, nodes: [source, ...displays], edges: displays.map(node => edge('source', 'value', node.id, 'content')) }));
+      saveGraph(localStorage, ({ version: 15, nodes: [source, ...displays], edges: displays.map(node => edge('source', 'value', node.id, 'input')) }));
     }, count);
     // A stopped session retains its output snapshot until the next Start/reload.
     await live.reload();
@@ -61,8 +61,7 @@ test('Simple hides routine details but keeps unknown diagnostics, recovery and n
     signal: 'speech: Waiting for startup language; model has not started.',
   }));
   for (const id of ['condition-status', 'summary-status', 'signal', 'model-recovery']) await expect(live.locator(`#${id}`)).toBeVisible();
-  await live.editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
-  await live.editor.getByLabel('transcript label', { exact: true }).fill('Next session output');
+  await live.editor.getByRole('button', { name: 'Select transcript', exact: true }).press('ArrowRight');
   await live.editor.locator('#graph-save').click();
   await expect(live.locator('#saved-state')).toBeVisible();
   await expect(live.locator('.display-label')).toHaveText('Text');
@@ -78,13 +77,13 @@ test('Simple exposes required media selection and retains permission and graph r
   await expect(live.locator('#start')).toBeDisabled(); // No toolbar capture tab.
   await live.editor.evaluate(async () => {
     const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
-    const graph = defaultGraph(); graph.nodes[0] = graphNode('SelectedPageMediaAudio', 'audio'); saveGraph(localStorage, window.addDOMFormatters(graph));
+    const graph = defaultGraph(); graph.nodes[0] = graphNode('SelectedPageMediaAudio', 'audio'); saveGraph(localStorage, (graph));
   });
   await expect(live.locator('#targets')).toHaveAttribute('open', '');
   await expect(live.getByRole('button', { name: 'Discover media in capture tab' })).toBeVisible();
   await live.editor.evaluate(async () => {
     const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
-    const graph = defaultGraph(); graph.nodes[0] = graphNode('MicrophoneAudio', 'audio'); saveGraph(localStorage, window.addDOMFormatters(graph));
+    const graph = defaultGraph(); graph.nodes[0] = graphNode('MicrophoneAudio', 'audio'); saveGraph(localStorage, (graph));
   });
   await live.evaluate(() => { window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }); });
   await expect(live.locator('#status')).toContainText('Press Start to request browser permission');
@@ -100,9 +99,9 @@ test('audio-only output keeps its player and download usable at narrow and wide 
   await expect(live.editor.locator('#graph-models .model-status')).toContainText('Ready');
   await live.editor.evaluate(async () => {
     const { readGraph, saveGraph } = await import('./graph.js');
-    const graph = readGraph(localStorage), displays = graph.nodes.filter(node => node.type === 'LiveTextDisplay').map(node => node.id);
+    const graph = readGraph(localStorage), displays = graph.nodes.filter(node => node.type === 'Display').map(node => node.id);
     graph.nodes = graph.nodes.filter(node => !displays.includes(node.id));
-    graph.edges = graph.edges.filter(route => !displays.includes(route.to[0])); saveGraph(localStorage, window.addDOMFormatters(graph));
+    graph.edges = graph.edges.filter(route => !displays.includes(route.to[0])); saveGraph(localStorage, (graph));
   });
   await startGraph(live); await emitFinal(live, 'Spoken output');
   await expect(live.locator('.live-text-region')).toHaveCount(0);

@@ -1,18 +1,10 @@
-import { defaultGraph, graphNode, edge, pairedTextEdges } from '../../extension/graph.js';
+import { defaultGraph } from '../../extension/graph.js';
 
 export function livePreviewGraph(audioType = 'ChromeTabAudio') {
-  const preview = graphNode('TextToDOM', 'preview');
-  preview.settings.className = 'paired-text-tail';
-  return { version: defaultGraph().version, nodes: [
-    graphNode(audioType, 'audio'), graphNode('SpeechToTextZipformerEn', 'speech'),
-    graphNode('OpusMtEnJa', 'translation'), graphNode('PairedTextToDOM', 'pairs'),
-    graphNode('DOMAccumulator', 'history'), preview,
-    graphNode('DOMCombiner', 'combined'), graphNode('LiveTextDisplay', 'live'),
-  ], edges: [
-    edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'translation', 'text'),
-    ...pairedTextEdges('translation', 'pairs'),
-    edge('pairs', 'dom', 'history', 'append'), edge('history', 'dom', 'combined', 'first'),
-    edge('speech', 'provisional', 'preview', 'text'), edge('preview', 'dom', 'combined', 'second'),
-    edge('combined', 'dom', 'live', 'dom'),
-  ] };
+  const graph = defaultGraph({ enabled: true, direction: 'en-ja' });
+  graph.nodes[0].type = audioType;
+  graph.nodes[1].type = 'SpeechToTextZipformerEn';
+  graph.nodes.find(node => node.id === 'transcript').id = 'live';
+  for (const route of graph.edges) if (route.to[0] === 'transcript') route.to[0] = 'live';
+  return graph;
 }

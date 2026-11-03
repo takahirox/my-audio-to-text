@@ -1,4 +1,3 @@
-import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,9 +7,9 @@ import { graphModelRequirements } from '../extension/graph-model-preparation.js'
 import { GraphEditor } from '../extension/graph-editor.js';
 
 function graph() {
-  const nodes = ['Text','IfCondition','LiveTextDisplay','LiveTextDisplay','LiveTextDisplay'].map((t,i) => graphNode(t,['source','condition','yes','no','peer'][i]));
+  const nodes = ['Text','IfCondition','Display','Display','Display'].map((t,i) => graphNode(t,['source','condition','yes','no','peer'][i]));
   nodes[0].settings.value = '  Same?\n';
-  return { version: 15, nodes, edges: [edge('source','value','condition','text'),edge('condition','yes','yes','content'),edge('condition','no','no','content'),edge('source','value','peer','content')] };
+  return { version: 15, nodes, edges: [edge('source','value','condition','text'),edge('condition','yes','yes','input'),edge('condition','no','no','input'),edge('source','value','peer','input')] };
 }
 function factory({ fail = false } = {}) {
   const workers = [];
@@ -24,24 +23,24 @@ function factory({ fail = false } = {}) {
 }
 
 test('v11 save/reload retains conditions, two output wires, fan-out and unrelated defaults; no version migration', () => {
-  const g = addDOMFormatters(graph()), saved = new Map(), storage = { getItem: k => saved.get(k) ?? null, setItem: (k,v) => saved.set(k,v), removeItem: k => saved.delete(k) };
-  assert.equal(GRAPH_VERSION,15); assert.deepEqual(validateGraph(addDOMFormatters(g)),[]);
-  saveGraph(storage, addDOMFormatters(g)); const raw = storage.getItem(GRAPH_KEY); assert.deepEqual(readGraph(storage),g); assert.equal(storage.getItem(GRAPH_KEY),raw);
+  const g = (graph()), saved = new Map(), storage = { getItem: k => saved.get(k) ?? null, setItem: (k,v) => saved.set(k,v), removeItem: k => saved.delete(k) };
+  assert.equal(GRAPH_VERSION,15); assert.deepEqual(validateGraph((g)),[]);
+  saveGraph(storage, (g)); const raw = storage.getItem(GRAPH_KEY); assert.deepEqual(readGraph(storage),g); assert.equal(storage.getItem(GRAPH_KEY),raw);
   assert.deepEqual(assertGraph(defaultGraph()),defaultGraph());
   const editor = Object.assign(Object.create(GraphEditor.prototype), { draft: structuredClone(g), draw() {}, canvas:{querySelector(){}} });
   editor.selected = { id:'condition',port:'no',contract:TEXT };
   // Reconnect only one input; the Yes path and source fan-out survive.
-  editor.connect('peer-text-dom','text',TEXT);
-  assert.deepEqual(editor.draft.edges.filter(e=>e.from[0]==='condition'), [edge('condition','yes','yes-text-dom','text'),edge('condition','no','no-text-dom','text'),edge('condition','no','peer-text-dom','text')]);
-  g.nodes[1].settings.condition=' '; assert.match(validateGraph(addDOMFormatters(g)).join(' '),/nonempty/);
-  g.nodes[1].settings.condition='x'.repeat(513); assert.match(validateGraph(addDOMFormatters(g)).join(' '),/condition/);
+  editor.connect('peer','input',TEXT);
+  assert.deepEqual(editor.draft.edges.filter(e=>e.from[0]==='condition'), [edge('condition','yes','yes','input'),edge('condition','no','no','input'),edge('condition','no','peer','input')]);
+  g.nodes[1].settings.condition=' '; assert.match(validateGraph((g)).join(' '),/nonempty/);
+  g.nodes[1].settings.condition='x'.repeat(513); assert.match(validateGraph((g)).join(' '),/condition/);
 });
 import { TEXT } from '../web/port-contracts.js';
 
 test('graph runtime loads only selected conditional instances and branch errors leave peer paths running', async () => {
   for (const fail of [false,true]) {
     const g=graph(), f=factory({fail}), displays={}, events=[];
-    const built=buildGraph(addDOMFormatters(g),{ifConditionWorkerFactory:f.workerFactory,onDisplay:(id,state)=>displays[id]=domText(state),onIfConditionEvent:(event,id)=>events.push([id,event])});
+    const built=buildGraph((g),{ifConditionWorkerFactory:f.workerFactory,onDisplay:(id,state)=>displays[id]=domText(state),onIfConditionEvent:(event,id)=>events.push([id,event])});
     await built.pipeline.start();
     if (fail) await assert.rejects(built.pipeline.stop(), AggregateError);
     else await built.pipeline.stop();

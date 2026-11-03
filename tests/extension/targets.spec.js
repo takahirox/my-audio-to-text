@@ -1,4 +1,3 @@
-import { addDOMFormatters } from '../fixtures/dom-graph.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -44,7 +43,6 @@ const test = base.extend({
       for (const name of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(root, 'web', name), `self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready',id:data.id});if(data.type==='translate')postMessage({type:'result',id:data.id,texts:['translated '+data.text]});if(data.type==='drain')postMessage({type:'drained',id:data.id});};`);
       context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: false,
         ignoreDefaultArgs: ['--disable-extensions', '--mute-audio'], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream'] });
-      await context.addInitScript(`window.addDOMFormatters = ${addDOMFormatters.toString()};`);
       const cdp = await context.browser().newBrowserCDPSession(), { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
       const page = await context.newPage(); await page.goto(`chrome-extension://${id}/extension/recorder.html`);
       await page.evaluate(async () => {
@@ -74,14 +72,14 @@ const test = base.extend({
           const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
           const graph = defaultGraph({ enabled: translation }); graph.nodes[0].type = source;
           if (!live) {
-            const views = graph.nodes.filter(node => ['LiveTextDisplay', 'TextFormatter'].includes(node.type)).map(node => node.id);
+            const views = graph.nodes.filter(node => ['Display', 'TextFormatter'].includes(node.type)).map(node => node.id);
             graph.nodes = graph.nodes.filter(node => !views.includes(node.id)); graph.edges = graph.edges.filter(edge => !views.includes(edge.to[0]) && !views.includes(edge.from[0]));
           }
           for (const [id, type, translated] of outputs) {
             graph.nodes.push(graphNode(type, id));
             graph.edges.push(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', id, 'text'));
           }
-          saveGraph(localStorage, window.addDOMFormatters(graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+          saveGraph(localStorage, (graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
         }, { source, outputs, translation, live });
       };
       await page.locator('#targets').evaluate(element => { element.open = true; });
@@ -368,11 +366,11 @@ test('native tab capture and permitted microphone run together; tab navigation d
   await t.page.evaluate(async () => {
     const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
     const graph = defaultGraph();
-    graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextReazonSpeech','local-asr'),graphNode('LiveTextDisplay','local'),
-      graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextReazonSpeech','copy-asr'),graphNode('LiveTextDisplay','copy-display'),graphNode('TextAccumulator','local-accumulator'),graphNode('TextAccumulator','copy-accumulator'));
-    graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local-accumulator','append'),edge('local-accumulator','text','local','content'),
-      edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-accumulator','append'),edge('copy-accumulator','text','copy-display','content'));
-    saveGraph(localStorage, window.addDOMFormatters(graph));window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));
+    graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextReazonSpeech','local-asr'),graphNode('Display','local'),
+      graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextReazonSpeech','copy-asr'),graphNode('Display','copy-display'),graphNode('TextAccumulator','local-accumulator'),graphNode('TextAccumulator','copy-accumulator'));
+    graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local-accumulator','append'),edge('local-accumulator','text','local','input'),
+      edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-accumulator','append'),edge('copy-accumulator','text','copy-display','input'));
+    saveGraph(localStorage, (graph));window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));
     const NativeWorker=Worker;window.concurrentWorkers=[];
     window.Worker=class extends NativeWorker {
       constructor(...args){super(...args);window.concurrentWorkers.push(this);}

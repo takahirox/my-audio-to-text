@@ -18,7 +18,7 @@ test('IfCondition palette/settings/wires persist; preparation verifies, cancels,
  await openPalette(editor);await editor.locator('#graph-node-type').selectOption('IfCondition');await editor.locator('#graph-add').click();
  await editor.getByLabel('ifcondition condition',{exact:true}).fill('Does this text mention an animal?');
  await editor.getByRole('button',{name:'speech output final',exact:true}).click();await editor.getByRole('button',{name:'ifcondition input text',exact:true}).click();
- await editor.getByRole('button',{name:'ifcondition output yes',exact:true}).click();await editor.getByRole('button',{name:'transcript-accumulator input append',exact:true}).click();
+ await editor.getByRole('button',{name:'ifcondition output yes',exact:true}).click();await editor.getByRole('button',{name:'transcript input input',exact:true}).click();
  f.mode('corrupt');await save(editor);await expect(card(editor)).toHaveAttribute('data-state','Error');
  await editor.reload();await editor.getByRole('button',{name:'Select ifcondition',exact:true}).click();
  await expect(editor.getByLabel('ifcondition condition',{exact:true})).toHaveValue('Does this text mention an animal?');

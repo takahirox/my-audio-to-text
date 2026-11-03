@@ -13,8 +13,8 @@ function graph(type) {
   nodes[0].settings.value = 'first';
   const edges = [edge('source', 'value', 'model', 'text'), edge('source', 'value', 'field', 'text')];
   function display(id, from, port) {
-    nodes.push(graphNode('TextAccumulator', id + '-history'), graphNode('TextToDOM', id + '-dom'), graphNode('LiveTextDisplay', id));
-    edges.push(edge(from, port, id + '-history', 'append'), edge(id + '-history', 'text', id + '-dom', 'text'), edge(id + '-dom', 'dom', id, 'dom'));
+    nodes.push(graphNode('TextAccumulator', id + '-history'), graphNode('Display', id));
+    edges.push(edge(from, port, id + '-history', 'append'), edge(id + '-history', 'text', id, 'input'));
   }
   display('model-output', 'model', type === 'IfCondition' ? 'yes' : 'summary');
   if (type === 'IfCondition') display('no-output', 'model', 'no');

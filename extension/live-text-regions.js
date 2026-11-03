@@ -1,5 +1,3 @@
-import { cloneDOM } from '../web/dom-nodes.js';
-
 const scrollStates = new WeakMap();
 const nearBottom = content => content.scrollHeight - content.clientHeight - content.scrollTop <= 24;
 function updateScrollIntent(content, state) {
@@ -33,7 +31,7 @@ function scrollState(content) {
 // The Live surface only mounts DOM snapshots. Processor
 // identity, translation status, formatting and row correlation stay in Nodes.
 export function renderTextRegions(root, graph, displays) {
-  const specs = graph?.nodes.filter(node => ['Display', 'LiveTextDisplay', 'TextDisplay'].includes(node.type)) || [];
+  const specs = graph?.nodes.filter(node => node.type === 'Display') || [];
   const existing = new Map(Array.from(root.children, region => [region.dataset.display, region]));
   for (const [index, spec] of specs.entries()) {
     let region = existing.get(spec.id);
@@ -50,9 +48,9 @@ export function renderTextRegions(root, graph, displays) {
       const header = document.createElement('div'); header.className = 'section-heading'; header.append(heading, copy);
       region.append(header, notice, content);
     }
-    const heading = region.querySelector('h2'), label = spec.settings.label ?? 'Text';
+    const heading = region.querySelector('h2'), label = 'Text';
     if (heading.textContent !== label) heading.textContent = label;
-    region.setAttribute('aria-label', label); region.lang = spec.settings.language ?? 'und';
+    region.setAttribute('aria-label', label); region.lang = 'und';
     // Mount new regions before measuring layout. Reattaching an existing region
     // unnecessarily would clear browser text selection.
     if (root.children[index] !== region) root.insertBefore(region, root.children[index] || null);
@@ -67,7 +65,7 @@ export function renderTextRegions(root, graph, displays) {
       // A block flow box measures their rendered height even when the scrolling
       // viewport is already capped and its own dimensions no longer change.
       const flow = document.createElement('div'); flow.className = 'display-flow';
-      if (snapshot !== null) flow.append(cloneDOM(snapshot));
+      if (snapshot !== null) flow.append(snapshot.cloneNode(true));
       content.replaceChildren(...(snapshot === null ? [] : [flow]));
       // Explicitly restore after replaceChildren and synchronous layout; browser
       // anchoring is disabled in CSS. Shorter content naturally clamps the offset.
@@ -76,10 +74,7 @@ export function renderTextRegions(root, graph, displays) {
       state.observer?.observe(content);
       if (snapshot !== null) state.observer?.observe(flow);
       region.displayDOM = snapshot;
-      // Styles are presentation, not part of the copyable document text.
-      const copy = content.cloneNode(true);
-      for (const style of copy.querySelectorAll('style')) style.remove();
-      region.displayText = copy.textContent;
+      region.displayText = content.textContent;
       region.querySelector('button').disabled = !region.displayText;
     }
     existing.delete(spec.id);

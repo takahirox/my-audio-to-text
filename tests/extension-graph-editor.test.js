@@ -29,7 +29,7 @@ test('type mismatch, self-connection, unknown ports, cycles preserve the prior e
   const e = editor(), before = structuredClone(e.draft.edges);
   connect(e, 'audio', 'audio', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'translation', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'translated', 'dom'); assert.deepEqual(e.draft.edges, before);
+  connect(e, 'speech', 'final', 'history', 'pair'); assert.deepEqual(e.draft.edges, before);
   e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToTextReazonSpeech.outputs.final };
   e.connect('translation', 'text', NODE_TYPES.OpusMtJaEn.inputs.text); assert.deepEqual(e.draft.edges, before);
   assert.match(e.error, /Unknown port/);
@@ -41,12 +41,12 @@ test('type mismatch, self-connection, unknown ports, cycles preserve the prior e
 });
 
 for (const ports of [['input1','input2'],['input2','input1']]) test(`paired editor accepts compatible alternate producers in ${ports.join('/')} order`, () => {
-  const graph = defaultGraph(); graph.nodes.push(graphNode('Text','literal'),graphNode('TextFormatter','alternate'),graphNode('PairedTextToDOM','pair'));
+  const graph = defaultGraph(); graph.nodes.push(graphNode('Text','literal'),graphNode('TextFormatter','alternate'),graphNode('KeyedTextPair','another-pair'));
   const e = editor(graph);
   for (const port of ports) {
     const [id,output] = port === 'input1' ? ['literal','value'] : ['alternate','text'];
-    connect(e,id,output,'pair',port);
-    assert.ok(e.draft.edges.some(route => JSON.stringify(route) === JSON.stringify(edge(id,output,'pair',port))));
+    connect(e,id,output,'another-pair',port);
+    assert.ok(e.draft.edges.some(route => JSON.stringify(route) === JSON.stringify(edge(id,output,'another-pair',port))));
     assert.deepEqual(validateGraph(e.draft),[]);
   }
 });
@@ -65,18 +65,18 @@ test('Number connects only to NUMBER; consumer value limits do not restrict edge
   assert.deepEqual(e.draft.edges.at(-1), edge('duration', 'value', 'speech', 'maxDuration'));
 });
 
-test('Whisper editor connections reject the removed output and accept final through TextToDOM; direct TEXT to DOM is rejected', () => {
+test('Whisper editor rejects provisional and accepts final directly into Display.input', () => {
   const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextWhisper';
-  graph.edges = graph.edges.filter(route => route.from[1] !== 'provisional');
+  graph.edges = graph.edges.filter(route => !['provisional', 'provisionalId'].includes(route.from[1]));
   graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript');
-  graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript-dom');
+  graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript');
   const e = editor(graph), before = structuredClone(graph.edges);
   e.selected = { id: 'speech', port: 'provisional', contract: NODE_TYPES.SpeechToTextWhisper.outputs.final };
-  e.connect('transcript-dom', 'text', NODE_TYPES.TextToDOM.inputs.text);
-  assert.match(e.error, /Unknown port: speech.provisional → transcript-dom.text/);
+  e.connect('transcript', 'input', NODE_TYPES.Display.inputs.input);
+  assert.match(e.error, /Unknown port: speech.provisional → transcript.input/);
   assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'transcript-dom', 'text');
-  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript-dom', 'text')]);
+  connect(e, 'speech', 'final', 'transcript', 'input');
+  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript', 'input')]);
 });
 
 
@@ -89,28 +89,11 @@ test('formatter Add/Remove changes only that instance and the removed last wire;
   assert.equal(Object.keys(nodeDefinition(a).inputs).length, 7);
   a.settings.template = '{7}\n{1}'; e.resizeFormatter(a, -1);
   assert.equal(a.settings.template, '{7}\n{1}'); assert.match(validateGraph(graph).join(' '), /Input \{7\} is not configured/);
-  assert.equal(graph.edges.length, 10, 'unaffected wires preserved');
+  assert.equal(graph.edges.length, 12, 'unaffected wires preserved');
   e.resizeFormatter(a, 1); assert.deepEqual(validateGraph(graph), []);
   for (let i = 0; i < 4; i++) e.resizeFormatter(a, -1);
   assert.equal(a.settings.inputCount, 3);
   assert.ok(graph.edges.some(route => route.to[0] === 'a' && route.to[1] === 'input1'));
   assert.ok(!graph.edges.some(route => route.to[0] === 'a' && route.to[1] === 'input4'));
   assert.ok(graph.edges.some(route => route.to[0] === 'b' && route.to[1] === 'input4'));
-});
-
-test('VIEW connections use type only, accept either builder and reject primitive/legacy DOM outputs', () => {
-  const graph = defaultGraph();
-  for (const [type, id] of [['ViewBuilder', 'one'], ['ViewBuilder', 'two'], ['Display', 'view-output'], ['Number', 'key']]) graph.nodes.push(graphNode(type, id));
-  graph.nodes.find(node => node.id === 'view-output').legacyView = true;
-  const e = editor(graph);
-  for (const source of ['one', 'two']) {
-    connect(e, source, 'view', 'view-output', 'view');
-    assert.deepEqual(e.draft.edges.filter(route => route.to[0] === 'view-output'), [edge(source, 'view', 'view-output', 'view')]);
-    assert.deepEqual(validateGraph(e.draft), []);
-  }
-  const before = structuredClone(e.draft.edges);
-  for (const [source, port] of [['speech', 'final'], ['key', 'value'], ['transcript-dom', 'dom']]) {
-    connect(e, source, port, 'view-output', 'view'); assert.deepEqual(e.draft.edges, before);
-  }
-  connect(e, 'two', 'view', 'one', 'input1'); assert.deepEqual(e.draft.edges, before);
 });

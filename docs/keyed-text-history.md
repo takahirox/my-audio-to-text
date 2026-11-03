@@ -1,36 +1,15 @@
-# Primitive transcript pairing and text output
+# ID-scoped text pairing
 
-For new graphs, use the [portable ITEM path](display-items.md):
-KeyedTextPair → KeyedPairedTextAccumulator → Display. This document records the #194
-TextDisplay compatibility path, retained for saved graphs. Original text appears before
-translation, with a blank right side. Final text replaces provisional text in one
-snapshot; a late translation for A updates A even while B receives ASR updates.
-
-| Producer outputs | Consumer inputs |
-| --- | --- |
-| ASR `finalId` / `final` | `KeyedTextCoalesce.id1` / `input1` |
-| ASR `provisionalId` / `provisional` | `KeyedTextCoalesce.id2` / `input2` |
-| ASR `finalId` / `final` | translator `id` / `text` (direct branch) |
-| `KeyedTextCoalesce.id` / `text` | `KeyedTextPair.id1` / `input1` |
-| translator `id` / `text` | `KeyedTextPair.id2` / `input2` |
-| `KeyedTextPair.id` / `input1` / `input2` | `TextDisplay.id` / `input1` / `input2` |
-
-The [saved graph JSON](evidence/keyed-text-194.json) can be imported in the editor.
-The [executable fixture](../tests/fixtures/keyed-text-graph.js) constructs these
-exact production Nodes and edges. It accepts either OPUS-MT direction, either
-TranslateGemma direction, or `null` for direct transcription. All edges after
-ASR are ordinary NUMBER/TEXT. The audio source still supplies the existing audio
-contract. ASR final and provisional clear travel together, so coalescing applies
-both before selecting the nonempty final. The legacy sink never chooses text priority.
+Use the [portable display path](display-items.md): KeyedTextPair →
+KeyedPairedTextAccumulator → Display. The [importable graph](evidence/item-198.json)
+shows the exact recommended ASR and translation connections.
 
 ## KeyedTextPair
 
 Inputs are `id1: NUMBER`, `input1: TEXT`, `id2: NUMBER`, `input2: TEXT`.
-Outputs include immutable `pair: KEYED_PAIRED_TEXT` plus the compatible
-`id: NUMBER`, `input1: TEXT`, `input2: TEXT` ports. Despite their shared
-names, the output ports are complete snapshots, not passthrough input events.
-Each text update emits the updated ID and both latest strings for that ID as
-one atomic group; a missing side is `''`. Explicit empty, duplicate and whitespace
+The only output is `pair: KEYED_PAIRED_TEXT`, an immutable `{ id, first, second }`.
+Each text update emits both latest strings for that ID in
+one pair; a missing side is `''`. Explicit empty, duplicate and whitespace
 strings are real updates. Both sides in a grouped delivery apply before one
 emission per affected ID.
 
@@ -51,54 +30,15 @@ must send a new ID before its text or deliver them together. No timing or conten
 matching can recover an absent correlation.
 
 This processor uses no DOM, browser API, presentation history, selection priority,
-Settings or custom port types. Start clears both maps and pending text. Stop,
+or Settings. Start clears both maps and pending text. Stop,
 Cancel, abort and dispose reject late work; a fresh Start rejects old contexts.
 
-## TextDisplay host boundary
+## History and rendering
 
-Inputs are optional `id: NUMBER`, `input1: TEXT`, `input2: TEXT`; at least one TEXT
-connection is needed to execute. There are no outputs or Settings. Connect one
-TEXT input for a plain view, both for two columns. With no ID connection, the
-latest snapshot replaces the display. With ID connected, unidentified text waits
-for its first ID. ID-only changes do not create rows or replay completed text.
+Connect pair → KeyedPairedTextAccumulator.pair → pairs → Display.input for
+continuous ordered history. The accumulator appends new IDs and replaces existing
+IDs in place, emitting the complete list. It has no priority or ASR-specific rule.
+Display renders the complete supplied TEXT, pair or list without accumulating.
+For latest plain text, connect any TEXT output directly to Display.input.
 
-For keyed snapshots, first sight of a key appends a visible row; subsequent
-snapshots replace that key's values without changing first-seen order. Distinct
-IDs keep distinct rows even for identical strings. Explicit empty strings clear
-the supplied side; independent partial updates retain the other side for that
-key. Grouped omitted TEXT siblings clear within their own delivery family.
-Connect all three `KeyedTextPair` outputs for complete snapshots.
-
-The browser sink creates inert elements and assigns `textContent`; strings such
-as `<script>` render literally. Its private host callback mounts browser DOM in
-Live; no DOM leaves through graph ports. Plain text preserves newlines; paired
-rows have two equal-width, wrapping columns with neutral accessible labels.
-Start clears visible history. Stop/Cancel preserve the last view and reject late
-work. History lives only in the current session and grows with its utterances.
-A future host can implement the same logical inputs using native UI while reusing
-both primitive processors and upstream wiring. A native implementation is out of
-scope.
-
-## Compatibility and checks
-
-Version 15 graphs round-trip without migration. Existing `TextToDOM`,
-`PairedTextToDOM`, `KeyedDOMAccumulator`, `DOMAccumulator`, `DOMCombiner` and
-`LiveTextDisplay` definitions, routes and recovery copies remain supported.
-See [legacy DOM history](keyed-dom-history.md) for those graphs.
-
-Regression commands:
-
-```sh
-npm test
-npx playwright test tests/browser/keyed-text.spec.js --workers=1
-npm run build:extension
-npm run test:extension -- tests/extension/keyed-text.spec.js
-```
-
-Runtime regressions exercise the production ASR/coalesce/pair/output graph and
-all four translation types with controlled Worker replies. Browser tests cover
-editor selection, independent wiring, Save/reload, literal rendering and reverse
-translation delivery. MV3 tests use controlled ASR/translation Workers and real
-extension pages, storage, runtime, Live mounting and lifecycle. These checks do
-not verify real model inference or a native renderer. See the
-[implementation verification record](evidence/keyed-text-194.md) for checks run.
+See [display item contracts and lifecycle](display-items.md).

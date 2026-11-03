@@ -37,10 +37,10 @@ export async function pipeline(id,model,options){
 export async function seedConditionGraph(editor) {
   await editor.evaluate(async()=>{
     const {defaultGraph,graphNode,edge,saveGraph}=await import('./graph.js');
-    const g=defaultGraph();g.nodes.push(graphNode('IfCondition','condition',500,300),graphNode('LiveTextDisplay','yes',850,300),graphNode('LiveTextDisplay','no',850,600),graphNode('TextAccumulator','yes-acc'),graphNode('TextAccumulator','no-acc'));
-    g.nodes.find(n=>n.id==='yes').settings.label='Yes';g.nodes.find(n=>n.id==='no').settings.label='No';
-    g.edges.push(edge('speech','final','condition','text'),edge('condition','yes','yes-acc','append'),edge('condition','no','no-acc','append'),edge('yes-acc','text','yes','content'),edge('no-acc','text','no','content'));
-    saveGraph(localStorage, window.addDOMFormatters(g));
+    const g=defaultGraph();g.nodes.push(graphNode('IfCondition','condition',500,300),graphNode('Display','yes',850,300),graphNode('Display','no',850,600),graphNode('TextAccumulator','yes-acc'),graphNode('TextAccumulator','no-acc'));
+
+    g.edges.push(edge('speech','final','condition','text'),edge('condition','yes','yes-acc','append'),edge('condition','no','no-acc','append'),edge('yes-acc','text','yes','input'),edge('no-acc','text','no','input'));
+    saveGraph(localStorage, (g));
   });
   await editor.reload();
 }

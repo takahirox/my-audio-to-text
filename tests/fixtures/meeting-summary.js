@@ -1,4 +1,3 @@
-import { addDOMFormatters } from './dom-graph.js';
 import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
 
 // Evidence deliberately includes proposals, a correction, repetition, a changed
@@ -11,10 +10,9 @@ export const meetingBatches = [
   'Mika: 招待状は送信済みです。Ken: 会場は承認済みではありません。アクセシビリティの確認担当者は不明です。Ken: 会場は承認済みではありません。',
 ];
 export function meetingGraph(type) {
-  const nodes = [graphNode('Text', 'input'), graphNode(type, 'summary'), graphNode('LiveTextDisplay', 'notes'), graphNode('LiveTextDisplay', 'transcript')];
+  const nodes = [graphNode('Text', 'input'), graphNode(type, 'summary'), graphNode('Display', 'notes'), graphNode('Display', 'transcript')];
   nodes[0].settings.value = meetingBatches[0];
-  nodes[2].settings = { label: 'Meeting notes', language: 'ja' };
-  return addDOMFormatters({ version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'content'), edge('input', 'value', 'transcript', 'content')] });
+  return ({ version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input'), edge('input', 'value', 'transcript', 'input')] });
 }
 
 // Objective regression checks for the recorded #130 failures, not a quality

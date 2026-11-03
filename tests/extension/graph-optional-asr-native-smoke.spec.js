@@ -1,4 +1,3 @@
-import { addDOMFormatters } from '../fixtures/dom-graph.js';
 import { test, expect, chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
@@ -28,7 +27,6 @@ test('real concurrent Parakeet v3 and Moonshine Medium: native tab capture, Live
   try {
     context = await chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true,
       ignoreDefaultArgs: ['--disable-extensions', '--mute-audio'], args: ['--enable-unsafe-extension-debugging'] });
-    await context.addInitScript(`window.addDOMFormatters = ${addDOMFormatters.toString()};`);
     const cdp = await context.browser().newBrowserCDPSession();
     const { id } = await cdp.send('Extensions.loadUnpacked', { path: path.resolve('dist/chrome-extension') });
     const resources = async () => {
@@ -58,12 +56,11 @@ test('real concurrent Parakeet v3 and Moonshine Medium: native tab capture, Live
         const view = await new ModelAssetCache(manifest).prepare(); if (view.state !== 'Ready') throw Error(JSON.stringify(view));
       }
       const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
-      const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextParakeetV3'; graph.edges = graph.edges.filter(e => e.from[1] !== 'provisional');
-      graph.nodes.push(graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('TextFormatter', 'format'), graphNode('LiveTextDisplay', 'medium'), graphNode('FocusedInputTextOutputNode', 'field'), graphNode('TextAccumulator', 'medium-accumulator'));
+      const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextParakeetV3'; graph.edges = graph.edges.filter(e => !['provisional', 'provisionalId'].includes(e.from[1]));
+      graph.nodes.push(graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('TextFormatter', 'format'), graphNode('Display', 'medium'), graphNode('FocusedInputTextOutputNode', 'field'), graphNode('TextAccumulator', 'medium-accumulator'));
       graph.nodes.find(n => n.id === 'format').settings.template = 'Moonshine: {1}';
-      graph.nodes.push(graphNode('TextToDOM', 'medium-history-dom'), graphNode('TextToDOM', 'medium-preview'), graphNode('DOMCombiner', 'medium-combined'));
-      graph.edges.push(edge('audio', 'audio', 'moonshine', 'audio'), edge('moonshine', 'final', 'format', 'input1'), edge('format', 'text', 'medium-accumulator', 'append'), edge('medium-accumulator', 'text', 'medium-history-dom', 'text'), edge('moonshine', 'provisional', 'medium-preview', 'text'), edge('medium-history-dom', 'dom', 'medium-combined', 'first'), edge('medium-preview', 'dom', 'medium-combined', 'second'), edge('medium-combined', 'dom', 'medium', 'dom'), edge('speech', 'final', 'field', 'text'));
-      saveGraph(localStorage, window.addDOMFormatters(graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+      graph.edges.push(edge('audio', 'audio', 'moonshine', 'audio'), edge('moonshine', 'final', 'format', 'input1'), edge('format', 'text', 'medium-accumulator', 'append'), edge('medium-accumulator', 'text', 'medium', 'input'), edge('speech', 'final', 'field', 'text'));
+      saveGraph(localStorage, (graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
       for (const [module, name] of [['parakeet-v3-node', 'SpeechToTextParakeetV3Node'], ['moonshine-medium-node', 'SpeechToTextMoonshineMediumEnNode']]) {
         const Node = (await import(`../web/${module}.js`))[name], receive = Node.prototype.receiveEvent;
         Node.prototype.receiveEvent = function(event) { window.events.push({ node: name, ...event, ms: performance.now() }); return receive.call(this, event); };

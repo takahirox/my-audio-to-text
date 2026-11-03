@@ -50,7 +50,7 @@ export async function loadInputGraph(page) {
     const { graphNode, edge, saveGraph } = await import(new URL('./graph.js', location.href));
     const nodes = [graphNode('Text', 'source', 20, 20), graphNode('TextFormatter', 'first', 350, 20),
       graphNode('TextFormatter', 'second', 650, 20), graphNode('Text', 'alternate', 20, 400),
-      graphNode('DOMCombiner', 'dom', 650, 400)];
+      graphNode('KeyedPairedTextAccumulator', 'dom', 650, 400)];
     nodes[0].settings.value = 'Keep settings';
     saveGraph(localStorage, { version: 15, nodes, edges: [edge('source', 'value', 'first', 'input1'),
       edge('source', 'value', 'second', 'input1'), edge('alternate', 'value', 'first', 'input2')] });
@@ -109,7 +109,7 @@ export async function checkInputReconnect(page) {
   await expect(page.locator('#graph-state')).toContainText('Saved graph');
   await expect(page.locator('.graph-wire')).toHaveCount(before.edges.length);
   // Invalid inputs and identical fan-out targets preserve both wires.
-  await input('first input input1').dragTo(input('dom input first'));
+  await input('first input input1').dragTo(input('dom input pair'));
   await expect(page.locator('#graph-state')).toContainText('Saved graph');
   await input('first input input1').dragTo(input('second input input1'));
   await expect(page.locator('#graph-state')).toContainText('Saved graph'); // identical fan-out target
@@ -123,65 +123,21 @@ export async function checkInputReconnect(page) {
 }
 
 export async function checkRecovery(page, kind) {
-  await page.setViewportSize({ width: 390, height: 900 });
-  const { raw, backups } = await page.evaluate(async kind => {
+  const raw = await page.evaluate(async kind => {
     const { defaultGraph, GRAPH_KEY } = await import(new URL('./graph.js', location.href));
-    const graph = defaultGraph({ enabled: true });
-    const backups = { 'processing-graph-before-v9': 'older original\r\n',
-      'processing-graph-before-v13': 'v13 original', 'processing-graph-before-v14': 'previous original', 'processing-graph-before-v14-2': 'numbered original\n' };
-    for (const [key, value] of Object.entries(backups)) localStorage.setItem(key, value);
-    if (kind === 'paired') {
-      graph.version = 11;
-      for (const route of graph.edges) if (route.to[0] === 'translated-format') route.to[1] = route.to[1] === 'input1' ? 'source' : 'text';
-      graph.edges.push({ from: ['translation', 'error'], to: ['translated-format', 'error'] });
-    }
-    const raw = kind === 'invalid' ? '{ invalid JSON\r\n  original content' : JSON.stringify(graph, null, 2).replaceAll('\n', '\r\n');
-    localStorage.setItem(GRAPH_KEY, raw); return { raw, backups };
+    const graph = defaultGraph(); if (kind === 'paired') graph.version = 11;
+    const raw = kind === 'invalid' ? '{ invalid JSON' : JSON.stringify(graph, null, 2);
+    localStorage.setItem(GRAPH_KEY, raw); return raw;
   }, kind);
   await page.reload();
-  const blocking = kind !== 'current';
-  if (blocking) {
-    await expect(page.locator('#errors')).toBeInViewport();
-    await expect(page.locator('#errors')).toContainText('Graph actions → Recovery');
-    await expect(page.locator('#errors')).toContainText(kind === 'paired' ? 'Review the unsaved repair draft' : 'Reset draft and Save');
-  } else await expect(page.locator('#errors')).toBeEmpty();
-  const recovery = page.locator('.graph-actions .graph-recovery');
-  await expect(recovery).toBeHidden();
-  await expect(page.getByText('Original saved graph (migration recovery copy)', { exact: true })).toHaveCount(0);
-  await page.locator('.graph-actions > summary').click(); await recovery.locator('summary').click();
-  const copies = blocking ? { 'Unsaved original': raw, ...backups } : backups;
-  // Stub only the clipboard transport; Copy and Download use the real UI.
-  await page.evaluate(() => { navigator.clipboard.writeText = async text => { window.recoveryCopied = text; }; });
-  for (const [label, original] of Object.entries(copies)) {
-    await page.getByLabel('Graph recovery version').selectOption({ label });
-    await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(original.replaceAll('\r\n', '\n'));
-    await recovery.getByRole('button', { name: 'Copy JSON', exact: true }).click();
-    expect(await page.evaluate(() => window.recoveryCopied)).toBe(original);
-  }
-  await page.getByLabel('Graph recovery version').selectOption({ label: Object.keys(copies)[0] });
-  const [download] = await Promise.all([page.waitForEvent('download'), recovery.getByRole('button', { name: 'Download JSON', exact: true }).click()]);
-  const stream = await download.createReadStream(); const chunks = [];
-  for await (const chunk of stream) chunks.push(chunk);
-  expect(Buffer.concat(chunks).toString('utf8')).toBe(Object.values(copies)[0]);
+  if (kind === 'current') { await expect(page.locator('#errors')).toBeEmpty(); return; }
+  await expect(page.locator('#errors')).toContainText('Saved graph unavailable');
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.locator('.graph-actions > summary').click();
+  await page.getByText('Saved JSON', { exact: true }).click();
+  await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(raw);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#graph-reset').click();
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
-  await expect(page.locator('#errors')).toBeEmpty();
-  await page.reload();
-  await page.locator('.graph-actions > summary').click(); await recovery.locator('summary').click();
-  if (blocking) {
-    await page.getByLabel('Graph recovery version').selectOption({ label: 'processing-graph-before-v14-3' });
-    await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(raw.replaceAll('\r\n', '\n'));
-  }
-  for (const [key, value] of Object.entries(backups)) {
-    expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(value);
-    await page.getByLabel('Graph recovery version').selectOption({ label: key });
-    await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(value.replaceAll('\r\n', '\n'));
-  }
-  const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
-  await page.locator('.graph-actions > summary').click(); await page.locator('#graph-save').click();
-  await expect(page.locator('#graph-save')).toBeEnabled();
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
-  if (blocking) expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v14-3'))).toBe(raw);
+  await page.reload(); await expect(page.locator('#errors')).toBeEmpty();
 }

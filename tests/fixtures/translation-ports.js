@@ -1,8 +1,7 @@
-import { GRAPH_VERSION } from '../../extension/graph.js';
 import { expect } from '@playwright/test';
 
 // Only inference is controlled. Real module Workers, runtime allocation,
-// scheduling, Pipeline, graph persistence and generic DOM composition execute.
+// scheduling, Pipeline, graph persistence and TEXT display rendering execute.
 export const translationPortWorker = `
   const pending = new Map();
   self.onmessage = ({data:m}) => {
@@ -19,23 +18,12 @@ export async function checkTranslationPorts(page, type, base = './') {
     const { buildGraph } = await import(new URL('graph-runtime.js', new URL(base, location.href)));
     const { graphNode, edge, GRAPH_VERSION, saveGraph, readGraph } = await import(new URL('graph.js', new URL(base, location.href)));
     const nodes = [graphNode('Text', 'final'), graphNode('Text', 'draft'), graphNode(type, 'translator'),
-      graphNode('TextAccumulator', 'history'), graphNode('TextToDOM', 'history-dom'), graphNode('LiveTextDisplay', 'committed'),
-      graphNode('TextToDOM', 'preview-dom'), graphNode('LiveTextDisplay', 'preview'),
-      graphNode('DOMCombiner', 'combined-dom'), graphNode('LiveTextDisplay', 'combined'),
-      graphNode('PairedTextToDOM', 'pair'), graphNode('LiveTextDisplay', 'comparison'),
-      graphNode('PairedTextToDOM', 'preview-pair'), graphNode('LiveTextDisplay', 'preview-comparison'),
-      graphNode('DOMAccumulator', 'pair-history'), graphNode('LiveTextDisplay', 'comparison-history')];
+      graphNode('TextAccumulator', 'history'), graphNode('Display', 'committed'), graphNode('Display', 'preview')];
     nodes[0].settings.value = 'seed';
     const graph = { version: GRAPH_VERSION, nodes, edges: [
       edge('final', 'value', 'translator', 'text'), edge('draft', 'value', 'translator', 'provisional'),
-      edge('translator', 'text', 'history', 'append'), edge('history', 'text', 'history-dom', 'text'), edge('history-dom', 'dom', 'committed', 'dom'),
-      edge('translator', 'provisionalText', 'preview-dom', 'text'), edge('preview-dom', 'dom', 'preview', 'dom'),
-      edge('history-dom', 'dom', 'combined-dom', 'first'), edge('preview-dom', 'dom', 'combined-dom', 'second'),
-      edge('combined-dom', 'dom', 'combined', 'dom'),
-      edge('translator', 'provisionalSource', 'preview-pair', 'input1'), edge('translator', 'provisionalText', 'preview-pair', 'input2'),
-      edge('preview-pair', 'dom', 'preview-comparison', 'dom'),
-      edge('pair', 'dom', 'pair-history', 'append'), edge('pair-history', 'dom', 'comparison-history', 'dom'),
-      edge('translator', 'source', 'pair', 'input1'), edge('translator', 'text', 'pair', 'input2'), edge('pair', 'dom', 'comparison', 'dom'),
+      edge('translator', 'text', 'history', 'append'), edge('history', 'text', 'committed', 'input'),
+      edge('translator', 'provisionalText', 'preview', 'input'),
     ] };
     saveGraph(localStorage, graph);
     const saved = localStorage.getItem('processing-graph-v1'), runs = [];
@@ -44,22 +32,21 @@ export async function checkTranslationPorts(page, type, base = './') {
       while (!predicate()) { if (Date.now() > deadline) throw Error('Translation port fixture timed out'); await new Promise(r => setTimeout(r, 5)); }
     };
     for (let run = 0; run < 2; run++) {
-      const requests = [], workers = [], displays = {}, events = [], pairRows = {};
+      const requests = [], workers = [], displays = {}, events = [];
       const factory = url => {
         const worker = new Worker(url, { type: 'module' }), post = worker.postMessage.bind(worker), terminate = worker.terminate.bind(worker);
         worker.postMessage = m => { if (m.type === 'translate') requests.push({ ...m, worker }); post(m); };
         worker.terminate = () => { worker.released = true; terminate(); }; workers.push(worker); return worker;
       };
       const built = buildGraph(readGraph(localStorage), { translationWorkerFactory: factory, prepareTranslation() {}, prepareTranslateGemma() {},
-        onDisplay(id, dom) { pairRows[id] = dom.querySelectorAll('tbody tr').length; const snapshot = dom.cloneNode(true); for (const style of snapshot.querySelectorAll('style')) style.remove(); displays[id] = snapshot.textContent; events.push({ id, text: snapshot.textContent }); } });
+        onDisplay(id, dom) { displays[id] = dom.textContent; events.push({ id, text: dom.textContent }); } });
       const send = (id, text) => built.pipeline.entries.get(id).context.emit('value', text);
       const complete = (i, text) => { const r = requests[i]; r.worker.postMessage({ type: 'fixture-complete', id: r.id, text }); };
       try {
         await built.pipeline.start(); await wait(() => requests.length === 1);
         complete(0, 'seed translation'); await wait(() => displays.committed === 'seed translation');
         send('draft', 'preview source'); await wait(() => requests.length === 2);
-        complete(1, 'preview translation'); await wait(() => displays.preview === 'preview translation' && displays['preview-comparison'] === 'preview sourcepreview translation' && displays['comparison-history'] === 'seedseed translation');
-        if (pairRows['preview-comparison'] !== 1 || pairRows['comparison-history'] !== 1) throw Error('Unexpected paired preview/history rows');
+        complete(1, 'preview translation'); await wait(() => displays.preview === 'preview translation');
         const previewState = { ...displays };
         send('draft', 'stale preview'); await wait(() => requests.length === 3);
         send('final', 'closed'); await wait(() => displays.preview === '');
@@ -68,9 +55,8 @@ export async function checkTranslationPorts(page, type, base = './') {
         complete(3, 'closed translation'); await wait(() => displays.committed === 'seed translation\nclosed translation');
         send('draft', 'cancel preview'); await wait(() => requests.length === 5);
         complete(4, 'cancel translation'); await wait(() => displays.preview === 'cancel translation');
-        await wait(() => displays.combined === 'seed translation\nclosed translationcancel translation');
         await built.pipeline.cancel(); complete(4, 'late after cancel');
-        runs.push({ previewState, clearBeforeCompletion, displays, events, pairRows, errors: built.pipeline.errors.map(e => e.message),
+        runs.push({ previewState, clearBeforeCompletion, displays, events, errors: built.pipeline.errors.map(e => e.message),
           workerCount: workers.length, released: workers.every(w => w.released), count: built.pipeline.entries.get('history').node.count,
           saved: localStorage.getItem('processing-graph-v1') === saved });
       } finally { await built.pipeline.dispose(); }
@@ -78,13 +64,10 @@ export async function checkTranslationPorts(page, type, base = './') {
     return runs;
   }, { type, base });
   for (const run of runs) {
-    expect(run.previewState).toEqual({ committed: 'seed translation', preview: 'preview translation', comparison: 'seedseed translation', 'preview-comparison': 'preview sourcepreview translation', 'comparison-history': 'seedseed translation', combined: 'seed translationpreview translation' });
-    expect(run.clearBeforeCompletion.preview).toBe(''); expect(run.clearBeforeCompletion['preview-comparison']).toBe(''); expect(run.clearBeforeCompletion.committed).toBe('seed translation');
-    expect(run.clearBeforeCompletion.combined).toBe('seed translation');
-    expect(run.displays).toEqual({ committed: 'seed translation\nclosed translation', preview: '', comparison: 'closedclosed translation', 'preview-comparison': '', 'comparison-history': 'seedseed translationclosedclosed translation', combined: 'seed translation\nclosed translation' });
+    expect(run.previewState).toEqual({ committed: 'seed translation', preview: 'preview translation' });
+    expect(run.clearBeforeCompletion).toEqual({ committed: 'seed translation', preview: '' });
+    expect(run.displays).toEqual({ committed: 'seed translation\nclosed translation', preview: 'cancel translation' });
     expect(run.events.some(e => e.text.includes('late'))).toBe(false);
-    expect(run.pairRows['preview-comparison']).toBe(1); expect(run.pairRows['comparison-history']).toBe(2);
-    expect(run.events.filter(e => e.id === 'comparison').map(e => e.text)).toEqual(['', 'seedseed translation', 'closedclosed translation']);
     expect(run.count).toBe(2); expect(run.workerCount).toBe(1); expect(run.released).toBe(true); expect(run.saved).toBe(true);
     expect(run.errors).toEqual([]);
   }
@@ -92,46 +75,16 @@ export async function checkTranslationPorts(page, type, base = './') {
 
 export async function checkTranslationPortRecovery(editor, type) {
   const raw = await editor.evaluate(async type => {
-    const { defaultGraph, graphNode, edge, GRAPH_KEY, GRAPH_RECOVERY_KEY } = await import(new URL('./graph.js', location.href));
+    const { defaultGraph, GRAPH_KEY } = await import(new URL('./graph.js', location.href));
     const graph = defaultGraph({ enabled: true }); graph.version = 13;
     graph.nodes.find(n => n.id === 'translation').type = type;
-    graph.nodes.push(graphNode('TextToDOM', 'preview-dom'), graphNode('LiveTextDisplay', 'preview'));
-    graph.edges.push(edge('speech', 'provisional', 'translation', 'provisional'),
-      edge('translation', 'text', 'preview-dom', 'text'), edge('preview-dom', 'dom', 'preview', 'dom'));
-    const raw = JSON.stringify(graph, null, 2).replaceAll('\n', '\r\n');
-    localStorage.setItem(GRAPH_KEY, raw); localStorage.setItem(GRAPH_RECOVERY_KEY, 'older recovery');
-    localStorage.setItem('processing-graph-before-v12', 'previous version'); localStorage.setItem('processing-graph-before-v13', 'v13 recovery'); return raw;
+    const raw = JSON.stringify(graph, null, 2); localStorage.setItem(GRAPH_KEY, raw); return raw;
   }, type);
-  await editor.reload();
-  await expect(editor.locator('#errors')).toContainText('Translation output graph v14 requires review');
-  await expect(editor.locator('#errors')).toContainText('provisionalText');
+  await editor.reload(); await expect(editor.locator('#errors')).toContainText('Expected version 15');
   expect(await editor.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
   await editor.locator('.graph-actions > summary').click();
-  await editor.locator('.graph-recovery > summary').click();
-  await editor.getByLabel('Graph recovery version').selectOption({ label: 'Unsaved original' });
-  await editor.evaluate(() => { navigator.clipboard.writeText = async text => { window.copiedRecovery = text; }; });
-  await editor.getByRole('button', { name: 'Copy JSON', exact: true }).click();
-  expect(await editor.evaluate(() => window.copiedRecovery)).toBe(raw);
-  const [download] = await Promise.all([editor.waitForEvent('download'), editor.getByRole('button', { name: 'Download JSON', exact: true }).click()]);
-  const stream = await download.createReadStream(), chunks = [];
-  for await (const chunk of stream) chunks.push(chunk);
-  expect(Buffer.concat(chunks).toString('utf8')).toBe(raw);
-  await editor.locator('.graph-actions > summary').click();
-  // Deliberately replace the old mixed-text route with the explicit preview
-  // route. The other committed routes must remain unchanged in the saved graph.
-  await editor.getByRole('button', { name: 'translation output provisionalText', exact: true }).press('Enter');
-  await editor.getByRole('button', { name: 'preview-dom input text', exact: true }).press('Enter');
+  editor.once('dialog', dialog => dialog.accept());
+  await editor.locator('#graph-reset').click();
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  await expect(editor.locator('#errors')).toBeEmpty();
-  const saved = await editor.evaluate(() => localStorage.getItem('processing-graph-v1'));
-  const graph = JSON.parse(saved), expected = JSON.parse(raw); expected.version = GRAPH_VERSION;
-  const replacement = expected.edges.find(e => e.to[0] === 'preview-dom');
-  expected.edges = expected.edges.filter(e => e !== replacement); replacement.from[1] = 'provisionalText'; expected.edges.push(replacement);
-  expect(graph).toEqual(expected);
   await editor.reload(); await expect(editor.locator('#errors')).toBeEmpty();
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-before-v14-2'))).toBe(raw);
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-before-v14'))).toBe('older recovery');
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-before-v12'))).toBe('previous version');
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-before-v13'))).toBe('v13 recovery');
 }

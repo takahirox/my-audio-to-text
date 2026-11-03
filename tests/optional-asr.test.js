@@ -1,5 +1,4 @@
 import { NUMBER } from '../web/port-contracts.js';
-import { addDOMFormatters } from './fixtures/dom-graph.js';
 import { domText } from './fixtures/dom.js';
 import { accumulateDisplay } from './fixtures/text-accumulator.js';
 import { test } from 'node:test';
@@ -10,7 +9,7 @@ import { SpeechToTextMoonshineMediumEnNode } from '../web/moonshine-medium-node.
 import { ParakeetV3Segments } from '../web/parakeet-v3-segments.js';
 import { OptionalAsrCore } from '../web/optional-asr-core.js';
 import { MONO_16KHZ_PCM, TEXT } from '../web/transcription-nodes.js';
-import { assertGraph, defaultGraph, graphNode, edge, executableGraph, migrateGraph, saveGraph, readGraph, ASR_TYPES } from '../extension/graph.js';
+import { assertGraph, defaultGraph, graphNode, edge, executableGraph, saveGraph, readGraph, ASR_TYPES } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { graphModelRequirements, GraphModelPreparation } from '../extension/graph-model-preparation.js';
 import { defineAssetSet } from '../extension/model-asset-cache.js';
@@ -28,8 +27,8 @@ class Worker {
   terminate() { this.released = true; }
 }
 const graph = () => {
-  const g = { version: 15, nodes: [graphNode('ChromeTabAudio', 'audio'), ...types.flatMap(([type], i) => [graphNode(type, `asr${i}`), graphNode('LiveTextDisplay', `out${i}`)])],
-    edges: types.flatMap(([, , , , partial], i) => [edge('audio', 'audio', `asr${i}`, 'audio'), edge(`asr${i}`, 'final', `out${i}`, 'append'), ...(partial ? [edge(`asr${i}`, 'provisional', `out${i}`, 'replace')] : [])]) };
+  const g = { version: 15, nodes: [graphNode('ChromeTabAudio', 'audio'), ...types.flatMap(([type], i) => [graphNode(type, `asr${i}`), graphNode('Display', `out${i}`)])],
+    edges: types.flatMap(([, , , , partial], i) => [edge('audio', 'audio', `asr${i}`, 'audio'), edge(`asr${i}`, 'final', `out${i}`, 'append')]) };
   for (let i = 0; i < types.length; i++) accumulateDisplay(g, `out${i}`);
   return g;
 };
@@ -119,13 +118,12 @@ for (const [type, Node, key, factoryKey, partial] of types) {
 
 test('new independent paths retain Graph v11/default/migrations, save/reload exactly, bind production types and fan out plain TEXT', () => {
   const original = defaultGraph(); assert.equal(original.version, 15); assert.deepEqual(graphModelRequirements(original), []);
-  assert.equal(migrateGraph(original), original);
   const description = graph(); description.nodes.push(graphNode('TextFormatter', 'format'), graphNode('OpusMtEnJa', 'translate'), graphNode('FocusedInputTextOutputNode', 'field'));
   description.edges.push(edge('asr0', 'final', 'format', 'input1'), edge('asr1', 'final', 'translate', 'text'), edge('asr0', 'final', 'field', 'text'));
   assertGraph(description);
   const store = new Map(), storage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) };
-  saveGraph(storage, addDOMFormatters(description)); assert.deepEqual(readGraph(storage), description);
-  const built = buildGraph(addDOMFormatters(description), {});
+  saveGraph(storage, (description)); assert.deepEqual(readGraph(storage), description);
+  const built = buildGraph((description), {});
   types.forEach(([type, Node], i) => { assert.equal(ASR_TYPES.includes(type), true); assert.ok(built.speechNodes.get(`asr${i}`) instanceof Node); });
   assert.equal(built.speechNodes.size, 2); assert.equal(built.audioSources.size, 1);
   assert.deepEqual(defaultGraph(), original);
@@ -173,7 +171,7 @@ test('session keeps healthy independent optional ASR path alive after peer load 
     return worker;
   };
   let audio, view;
-  const session = new TabSession(value => { view = value; }, { graph: addDOMFormatters(graph()), parakeetWorkerFactory: factory(true), moonshineWorkerFactory: factory(false), sourceFactory: (id, onAudio) => ({ start() { audio = onAudio; }, stop() {} }) });
+  const session = new TabSession(value => { view = value; }, { graph: (graph()), parakeetWorkerFactory: factory(true), moonshineWorkerFactory: factory(false), sourceFactory: (id, onAudio) => ({ start() { audio = onAudio; }, stop() {} }) });
   await session.start(42); assert.equal(view.state, 'running'); assert.match(view.error, /asr0.*assets missing/);
   audio(new Float32Array(1600)); await tick(); assert.deepEqual(domText(view.displays.out1), 'peer survived');
   await session.stop(); assert.equal(view.state, 'idle'); assert.equal(workers.every(w => w.released), true);

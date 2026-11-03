@@ -4,7 +4,7 @@ import { ZipformerSegments } from '../web/zipformer-segments.js';
 import { ZIPFORMER as C } from '../web/zipformer-config.js';
 import { SpeechToTextZipformerEnNode } from '../web/zipformer-node.js';
 import { MONO_16KHZ_PCM, TEXT } from '../web/transcription-nodes.js';
-import { defaultGraph, graphNode, edge, validateGraph, migrateGraph, readGraph, GRAPH_KEY, ASR_TYPES, NODE_TYPES } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, validateGraph, readGraph, GRAPH_KEY, ASR_TYPES, NODE_TYPES } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { Pipeline } from '../web/pipeline.js';
 
@@ -78,9 +78,9 @@ test('typed graph, opt-in definition and runtime assembly preserve v8 defaults, 
   const built = buildGraph(graph, {}); assert.ok(built.speechNodes.get('speech') instanceof SpeechToTextZipformerEnNode); await built.pipeline.dispose();
   for (const type of ASR_TYPES) {
     const saved = defaultGraph(); saved.nodes[1].type = type;
-    if (!Object.hasOwn(NODE_TYPES[type].outputs, 'provisional')) saved.edges = saved.edges.filter(e => e.from[1] !== 'provisional');
+    if (!Object.hasOwn(NODE_TYPES[type].outputs, 'provisional')) saved.edges = saved.edges.filter(e => !['provisional', 'provisionalId'].includes(e.from[1]));
     const raw = JSON.stringify(saved), storage = { getItem: key => key === GRAPH_KEY ? raw : null, setItem() { throw Error('v8 must not rewrite'); } };
-    assert.deepEqual(readGraph(storage), saved); assert.equal(migrateGraph(saved), saved);
+    assert.deepEqual(readGraph(storage), saved);
   }
   graph.nodes.push(graphNode('SpeechToTextWhisper', 'second')); assert.deepEqual(validateGraph(graph), []);
 });
