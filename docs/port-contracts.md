@@ -2,7 +2,7 @@
 
 Issues #91, #95, #99, #119 and #134 audit shared Nodes, the Node Playground, and the extension.
 Ordinary text uses shared `TEXT`; Number constants and speech duration use shared `NUMBER`
-from `web/port-contracts.js`; portable complete text-row snapshots use shared `VIEW`; legacy page-local rendered snapshots use shared `DOM`. No BOOLEAN value is consumed, so none is introduced.
+from `web/port-contracts.js`; portable keyed pairs/history use `KEYED_PAIRED_TEXT`/`KEYED_PAIRED_TEXT_LIST`; abstract `ITEM` accepts those concrete types and TEXT; legacy portable text rows use `VIEW`; legacy page-local rendered snapshots use shared `DOM`. No BOOLEAN value is consumed, so none is introduced.
 Contracts are identities; receiving Nodes validate their payloads. A compatible
 ordinary edge’s type compatibility never depends on producer type, output name,
 neighboring Nodes, or connection order. Correlated consumers validate delivery-local
@@ -25,7 +25,10 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
 | Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source/text/error` and `provisionalSource/provisionalText/provisionalError`: two atomic TEXT output families | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
 | ViewBuilder | optional id: NUMBER, input1/input2: TEXT → view: VIEW | Portable full text-row snapshots; optional keyed first-seen history, otherwise one latest row; no host APIs or Settings |
-| Display | view: VIEW only; no outputs | Render a complete snapshot in the host; no row accumulator or producer knowledge |
+| KeyedTextPair | independent id1/input1/id2/input2: NUMBER/TEXT → pair: KEYED_PAIRED_TEXT plus legacy id/input1/input2 | Complete immutable same-ID pair; no DOM or history accumulation |
+| KeyedPairedTextAccumulator | pair: KEYED_PAIRED_TEXT → pairs: KEYED_PAIRED_TEXT_LIST | Generic ordered append/replace, full owned history snapshots, arrival order |
+| Display | input: ITEM only; no outputs | Render latest TEXT, one pair or complete ordered pair history; no accumulation or selection |
+| Display (reviewed legacy mode) | view: VIEW only; no outputs | Existing VIEW rendering and original wiring retained after reviewed Save |
 | TextDisplay (legacy) | optional id: NUMBER, input1/input2: TEXT; no outputs | Saved #194 browser compatibility with existing keyed history |
 | LiveTextDisplay (legacy) | dom: DOM | Clone and mount the complete inert DOM snapshot |
 | TextToDOM | text: TEXT → dom: DOM | Safe literal text and visible whitespace |
@@ -41,7 +44,7 @@ migration of historical interfaces remain specialized. See the [#134 audit](evid
 | AudioOutput / playback and WAV adapter | `audio: SYNTHESIZED_AUDIO`, `{ samples: Float32Array, sampleRate: positive integer, channels: 1 }` | Playback URLs and cleanup |
 | Qwen3-TTS streaming / Speaker · streaming | [`stream: AUDIO_STREAM`](streaming-tts.md#public-port-limits-and-lifecycle), explicit start/chunk/end/abort events | Ordered utterance IDs, chunk sequences and native-rate PCM; distinct from a completed clip |
 
-The portable structured public values are **VIEW snapshots**, **synthesized audio**
+The portable structured public values include **keyed paired text**, **ordered pair lists**, **legacy VIEW snapshots**, **synthesized audio**
 and explicit **audio stream events**. VIEW is minimal serializable data with ordered
 rows of literal text cells and optional unique finite numeric IDs; see the
 [VIEW invariants and builder/sink boundary](view.md). DOM snapshots are native page objects, never Worker payloads. Samples,
@@ -52,6 +55,16 @@ produce different native rates. Captured audio instead has a fixed, agreed mono
 misinterpreting synthesis output as capture input; no blanket unification is needed.
 Observer events, worker RPCs, configuration, graph JSON and UI row objects are
 internal interfaces, not Node-to-Node port contracts.
+
+## Displayable ITEM compatibility
+
+The small shared `compatiblePorts` rule accepts identical contracts and exactly
+TEXT/KEYED_PAIRED_TEXT/KEYED_PAIRED_TEXT_LIST → ITEM. ITEM is an accepting union;
+it cannot feed a concrete subtype. Other primitive and structured edges stay
+strict. Editor gestures, graph validation, executable selection and Pipeline use
+the same directional rule. Pipeline snapshots structured values before queued
+fan-out and validates concrete TEXT values on ITEM routes. No producer identity
+participates. See [exact portable shapes, lifecycle and recovery](display-items.md).
 
 ## Correlated utterance IDs
 

@@ -2,21 +2,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { KeyedTextPairNode } from '../web/keyed-text-pair-node.js';
-import { NUMBER, TEXT } from '../web/port-contracts.js';
+import { NUMBER, TEXT, KEYED_PAIRED_TEXT } from '../web/port-contracts.js';
 import { NumberNode } from '../web/number-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { NODE_TYPES, graphNode, edge, graphWarnings, executableGraph, GRAPH_VERSION } from '../extension/graph.js';
 
 function fixture(node = new KeyedTextPairNode()) {
   const out = [], controller = new AbortController();
-  const context = { signal: controller.signal, emitOutputs: value => out.push(value) };
+  const context = { signal: controller.signal, emitOutputs: ({ pair, ...value }) => { assert.deepEqual(pair, { id: value.id, first: value.input1, second: value.input2 }); assert.ok(Object.isFrozen(pair)); out.push(value); } };
   node.start(context);
   return { node, out, context, controller, send: v => node.receiveInputs(v, context) };
 }
 test('generic primitive contracts, no settings, registered in the extension bundle', () => {
   const node = new KeyedTextPairNode();
   assert.deepEqual(node.inputs, { id1: NUMBER, input1: TEXT, id2: NUMBER, input2: TEXT });
-  assert.deepEqual(node.outputs, { id: NUMBER, input1: TEXT, input2: TEXT });
+  assert.deepEqual(node.outputs, { id: NUMBER, input1: TEXT, input2: TEXT, pair: KEYED_PAIRED_TEXT });
   assert.deepEqual(NODE_TYPES.KeyedTextPair.inputs, node.inputs);
   assert.deepEqual(NODE_TYPES.KeyedTextPair.outputs, node.outputs);
   assert.deepEqual(graphNode('KeyedTextPair', 'pair').settings, {});

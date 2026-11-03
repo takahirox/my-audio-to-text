@@ -109,8 +109,8 @@ test('field-only graph reports every unavailable destination without adding a fa
 });
 test('portable Display remains an active destination when a focused field is unavailable', async () => {
   const graph = fieldOutputs({ live: false });
-  graph.nodes.push(graphNode('ViewBuilder', 'view'), graphNode('Display', 'portable'));
-  graph.edges.push(edge('speech', 'final', 'view', 'input1'), edge('view', 'view', 'portable', 'view'));
+  graph.nodes.push(graphNode('Display', 'portable'));
+  graph.edges.push(edge('speech', 'final', 'portable', 'input'));
   const f = fixture({ graph, pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
   await f.session.start(42);
   assert.equal(f.session.view.state, 'running');

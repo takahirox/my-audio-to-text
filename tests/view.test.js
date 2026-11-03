@@ -8,7 +8,7 @@ import { DisplayNode } from '../web/display-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { NumberNode } from '../web/number-node.js';
 import { NUMBER, TEXT, VIEW, DOM } from '../web/port-contracts.js';
-import { NODE_TYPES, GRAPH_VERSION, graphNode, edge, validateGraph, graphWarnings, executableGraph } from '../extension/graph.js';
+import { NODE_TYPES, nodeDefinition, assertGraph, GRAPH_VERSION, graphNode, edge, validateGraph, graphWarnings, executableGraph } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { viewGraph } from './fixtures/view-graph.js';
 
@@ -38,12 +38,12 @@ test('VIEW is small data, cloneable/JSON-safe, owned and deeply immutable; IDs a
   assert.deepEqual(snapshotView(rows()), rows());
 });
 
-test('builder is portable, sink has only VIEW input, ordinary registration/packaging and no Settings', () => {
-  const builder = new ViewBuilderNode(), display = new DisplayNode();
+test('legacy builder is portable, reviewed sink has only VIEW input, ordinary registration/packaging and no Settings', () => {
+  const builder = new ViewBuilderNode(), display = new DisplayNode(undefined, { legacyView: true });
   assert.deepEqual(builder.inputs, { id: NUMBER, input1: TEXT, input2: TEXT });
   assert.deepEqual(builder.outputs, { view: VIEW }); assert.deepEqual(display.inputs, { view: VIEW }); assert.deepEqual(display.outputs, {});
   for (const [type, node] of [['ViewBuilder', builder], ['Display', display]]) {
-    assert.deepEqual(NODE_TYPES[type].inputs, node.inputs); assert.deepEqual(NODE_TYPES[type].outputs, node.outputs);
+    assert.deepEqual((type === 'Display' ? nodeDefinition({ type, legacyView: true }) : NODE_TYPES[type]).inputs, node.inputs); assert.deepEqual(NODE_TYPES[type].outputs, node.outputs);
     assert.deepEqual(graphNode(type, type).settings, {});
     for (const setting of ['settings', 'numberSettings', 'textSettings']) assert.equal(NODE_TYPES[type][setting], undefined);
   }
@@ -104,7 +104,7 @@ for (const close of ['stop', 'cancel', 'dispose', 'abort']) test(`builder ${clos
 });
 
 test('same Display renders one-cell and multi-cell snapshots literally, independently and with no keyed state', () => {
-  const out = [], node = new DisplayNode(dom => out.push(dom)), context = { signal: new AbortController().signal };
+  const out = [], node = new DisplayNode(dom => out.push(dom), { legacyView: true }), context = { signal: new AbortController().signal };
   node.start(context);
   node.receive('view', rows({ cells: ['<img src=x onerror=alert(1)>\n&'] }), context);
   assert.equal(out.at(-1).firstChild.textContent, '<img src=x onerror=alert(1)>\n&');
@@ -127,7 +127,7 @@ test('same Display renders one-cell and multi-cell snapshots literally, independ
 });
 
 for (const close of ['stop', 'cancel', 'dispose', 'abort']) test(`Display ${close} retains last rendering; Start clears and rejects old contexts`, () => {
-  const out = [], node = new DisplayNode(dom => out.push(dom)), controller = new AbortController();
+  const out = [], node = new DisplayNode(dom => out.push(dom), { legacyView: true }), controller = new AbortController();
   const c = { signal: controller.signal }; node.start(c); node.receive('view', rows({ cells: ['kept'] }), c);
   if (close === 'abort') controller.abort(); else node[close]();
   node.receive('view', rows(), c); assert.equal(out.length, 2); assert.equal(out.at(-1).firstChild.textContent, 'kept');
@@ -142,7 +142,7 @@ for (const reverse of [false, true]) test(`independent NUMBER/TEXT producers, at
   const pipeline = new Pipeline({ nodes: {
     key: new NumberNode({ value: 1 }), text: { outputs: { arbitrary: TEXT }, start(c) { text = c; } }, builder: new ViewBuilderNode(),
     observer: { inputs: { any: VIEW }, receive(_, view) { assert.throws(() => { view.rows.push({ cells: ['mutation'] }); }, TypeError); snapshots.push(view); } },
-    host: new DisplayNode(dom => rendered.push(dom)), other: new DisplayNode(dom => second.push(dom)),
+    host: new DisplayNode(dom => rendered.push(dom), { legacyView: true }), other: new DisplayNode(dom => second.push(dom), { legacyView: true }),
   }, connections: reverse ? connections.reverse() : connections });
   await pipeline.start(); text.emit('arbitrary', 'same'); text.emit('arbitrary', 'same'); text.emit('arbitrary', ''); await pipeline.stop();
   assert.deepEqual(snapshots, [rows(), rows(row(1, 'same')), rows(row(1, 'same')), rows(row(1, ''))]);
@@ -152,14 +152,14 @@ for (const reverse of [false, true]) test(`independent NUMBER/TEXT producers, at
 
 test('any VIEW producer/name can render; mismatched TEXT/NUMBER/DOM contracts cannot connect', async () => {
   const out = []; let emitter;
-  const pipeline = new Pipeline({ nodes: { arbitrary: { outputs: { other: VIEW }, start(c) { emitter = c; } }, sink: new DisplayNode(dom => out.push(dom)) }, connections: [edge('arbitrary', 'other', 'sink', 'view')] });
+  const pipeline = new Pipeline({ nodes: { arbitrary: { outputs: { other: VIEW }, start(c) { emitter = c; } }, sink: new DisplayNode(dom => out.push(dom), { legacyView: true }) }, connections: [edge('arbitrary', 'other', 'sink', 'view')] });
   await pipeline.start(); emitter.emit('other', rows({ cells: ['arbitrary'] })); await pipeline.stop();
   assert.equal(out.at(-1).firstChild.textContent, 'arbitrary'); assert.deepEqual(pipeline.errors, []); await pipeline.dispose();
-  for (const contract of [TEXT, NUMBER, DOM]) assert.throws(() => new Pipeline({ nodes: { arbitrary: { outputs: { other: contract } }, sink: new DisplayNode() }, connections: [edge('arbitrary', 'other', 'sink', 'view')] }), /Incompatible/);
+  for (const contract of [TEXT, NUMBER, DOM]) assert.throws(() => new Pipeline({ nodes: { arbitrary: { outputs: { other: contract } }, sink: new DisplayNode(undefined, { legacyView: true }) }, connections: [edge('arbitrary', 'other', 'sink', 'view')] }), /Incompatible/);
 });
 
 test('unfinished builders remain saveable, require text for execution and use the production plain path', async () => {
-  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode('ViewBuilder', 'builder'), graphNode('Display', 'display')], edges: [edge('builder', 'view', 'display', 'view')] };
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode('ViewBuilder', 'builder'), { ...graphNode('Display', 'display'), legacyView: true }], edges: [edge('builder', 'view', 'display', 'view')] };
   assert.deepEqual(validateGraph(graph), []); assert.match(graphWarnings(graph).join(), /builder needs at least one TEXT/);
   assert.equal(executableGraph(graph).nodes.length, 0);
   graph.nodes[0].settings.value = 'plain'; graph.edges.push(edge('text', 'value', 'builder', 'input2'));
@@ -168,10 +168,12 @@ test('unfinished builders remain saveable, require text for execution and use th
   await pipeline.start(); await pipeline.stop(); assert.equal(out.at(-1).firstChild.textContent, 'plain'); await pipeline.dispose();
 });
 
-test('importable recommended graph matches executable fixture and contains no processing DOM edges', () => {
+test('historical VIEW graph has a reviewed compatible executable fixture and contains no processing DOM edges', () => {
   const graph = JSON.parse(readFileSync(new URL('../docs/evidence/view-196.json', import.meta.url), 'utf8'));
-  assert.deepEqual(graph, viewGraph()); assert.deepEqual(graphWarnings(graph), []);
-  assert.deepEqual(executableGraph(graph), graph);
+  let draft; assert.throws(() => assertGraph(graph), error => { draft = error.recoveryGraph; return /requires review/.test(error.message); });
+  assert.deepEqual(draft, viewGraph()); assert.deepEqual(graphWarnings(draft), []);
+  assert.deepEqual(executableGraph(draft), draft);
+  assert.equal(graph.nodes.find(node => node.id === 'display').legacyView, undefined);
   for (const route of graph.edges) {
     const source = graph.nodes.find(node => node.id === route.from[0]);
     assert.notEqual(NODE_TYPES[source.type].outputs[route.from[1]], DOM);

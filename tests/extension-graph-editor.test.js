@@ -101,6 +101,7 @@ test('formatter Add/Remove changes only that instance and the removed last wire;
 test('VIEW connections use type only, accept either builder and reject primitive/legacy DOM outputs', () => {
   const graph = defaultGraph();
   for (const [type, id] of [['ViewBuilder', 'one'], ['ViewBuilder', 'two'], ['Display', 'view-output'], ['Number', 'key']]) graph.nodes.push(graphNode(type, id));
+  graph.nodes.find(node => node.id === 'view-output').legacyView = true;
   const e = editor(graph);
   for (const source of ['one', 'two']) {
     connect(e, source, 'view', 'view-output', 'view');

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { openPalette } from '../extension/ui-controls.js';
 
-test('portable view builder and rendering sink palette, independent editor connections, Help, save/reload and executable output', async ({ page }) => {
+test('portable pair accumulator and ITEM sink palette, independent editor connections, Help, save/reload and executable output', async ({ page }) => {
   await page.route('**/*', async route => {
     const pathname = new URL(route.request().url()).pathname;
     if (!/^\/(extension|web)\/[\w.-]+\.(js|html|css)$/.test(pathname)) return route.continue();
@@ -19,7 +19,7 @@ test('portable view builder and rendering sink palette, independent editor conne
     localStorage.setItem('processing-graph-before-v14', 'original recovery');
   });
   await page.reload();
-  for (const [type, category] of [['KeyedTextPair', 'Processors'], ['ViewBuilder', 'Processors'], ['Display', 'Outputs']]) {
+  for (const [type, category] of [['KeyedTextPair', 'Processors'], ['KeyedPairedTextAccumulator', 'Processors'], ['Display', 'Outputs']]) {
     await openPalette(page); await page.getByLabel('Node category', { exact: true }).selectOption(category);
     await page.getByLabel('Search nodes').fill(type);
     await page.locator('#graph-node-type').selectOption(type); await page.locator('#graph-add').click();
@@ -31,25 +31,33 @@ test('portable view builder and rendering sink palette, independent editor conne
   for (const [source, output, target, input] of [
     ['key', 'value', 'keyedtextpair', 'id1'], ['key', 'value', 'keyedtextpair', 'id2'],
     ['left', 'value', 'keyedtextpair', 'input1'], ['right', 'value', 'keyedtextpair', 'input2'],
-    ...['id', 'input1', 'input2'].map(p => ['keyedtextpair', p, 'viewbuilder', p]),
-    ['viewbuilder', 'view', 'display', 'view'],
+    ['keyedtextpair', 'pair', 'keyedpairedtextaccumulator', 'pair'],
+    ['keyedpairedtextaccumulator', 'pairs', 'display', 'input'],
   ]) {
     await port(`${source} output ${output}`).press('Enter');
     if (source === 'key') await expect(port('keyedtextpair input input1')).toBeDisabled();
-    if (source === 'viewbuilder') {
+    if (source === 'keyedpairedtextaccumulator') {
       await expect(port('keyedtextpair input input1')).toBeDisabled();
       await expect(port('keyedtextpair input id1')).toBeDisabled();
-      await expect(port('display input view')).toBeEnabled();
+      await expect(port('display input input')).toBeEnabled();
     }
     await port(`${target} input ${input}`).press('Enter');
   }
+  await port('keyedtextpair output pair').press('Enter');
+  await expect(port('display input input')).toBeEnabled();
+  await expect(port('keyedpairedtextaccumulator input pair')).toBeEnabled();
+  await port('keyedtextpair output pair').press('Enter');
+  await port('left output value').press('Enter');
+  await expect(port('display input input')).toBeEnabled();
+  await expect(port('keyedpairedtextaccumulator input pair')).toBeDisabled();
+  await port('left output value').press('Enter');
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   await expect(page.locator('#graph-errors')).toBeEmpty();
   const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
   await page.reload();
-  await expect(port('keyedtextpair input id2')).toBeAttached(); await expect(port('display input view')).toBeAttached();
+  await expect(port('keyedtextpair input id2')).toBeAttached(); await expect(port('display input input')).toBeAttached();
   await page.locator('#graph-help').click();
-  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Display only renders VIEW snapshots');
+  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Display has one input: ITEM');
   await page.keyboard.press('Escape');
   const result = await page.evaluate(async () => {
     const { readGraph, graphNode, edge, GRAPH_VERSION } = await import('/extension/graph.js');
@@ -65,8 +73,8 @@ test('portable view builder and rendering sink palette, independent editor conne
       tds.every(td => getComputedStyle(td).whiteSpace === 'pre-wrap' && td.tabIndex === 0 && td.hasAttribute('aria-label')) &&
       root.querySelector('[aria-live="polite"]') !== null;
     await pipeline.dispose();
-    const plainGraph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode('ViewBuilder', 'view'), graphNode('Display', 'plain')],
-      edges: [edge('text', 'value', 'view', 'input1'), edge('view', 'view', 'plain', 'view')] };
+    const plainGraph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode('Display', 'plain')],
+      edges: [edge('text', 'value', 'plain', 'input')] };
     plainGraph.nodes[0].settings.value = '<b>plain</b>\nnext';
     const plain = buildGraph(plainGraph, { onDisplay(id, dom) { renderTextRegions(root, plainGraph, { [id]: dom }); } });
     await plain.pipeline.start(); await plain.pipeline.stop();
@@ -79,14 +87,14 @@ test('portable view builder and rendering sink palette, independent editor conne
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v14'))).toBe('original recovery');
 });
 
-test('browser portable VIEW transcript flow preserves rows across delayed reverse translation, clears, Cancel and restart', async ({ page }) => {
+test('browser portable ITEM transcript flow preserves rows across delayed reverse translation, clears, Cancel and restart', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
     const { Pipeline } = await import('/pipeline.js'), { NUMBER, TEXT } = await import('/port-contracts.js');
     const { KeyedTextCoalesceNode } = await import('/keyed-text-coalesce-node.js');
     const { KeyedTextPairNode } = await import('/keyed-text-pair-node.js');
     const { DisplayNode } = await import('/display-node.js');
-    const { ViewBuilderNode } = await import('/view-builder-node.js');
+    const { KeyedPairedTextAccumulatorNode } = await import('/keyed-paired-text-accumulator-node.js');
     let asr, translation;
     const snapshots = [], mount = document.createElement('section'); document.body.append(mount);
     const display = new DisplayNode(dom => {
@@ -97,12 +105,12 @@ test('browser portable VIEW transcript flow preserves rows across delayed revers
     const pipeline = new Pipeline({ nodes: {
       asr: { outputs: { finalId: NUMBER, final: TEXT, provisionalId: NUMBER, provisional: TEXT }, start(c) { asr = c; } },
       translation: { outputs: { id: NUMBER, text: TEXT }, start(c) { translation = c; } },
-      coalesce: new KeyedTextCoalesceNode(), pair: new KeyedTextPairNode(), builder: new ViewBuilderNode(), display,
+      coalesce: new KeyedTextCoalesceNode(), pair: new KeyedTextPairNode(), history: new KeyedPairedTextAccumulatorNode(), display,
     }, connections: [edge('asr', 'finalId', 'coalesce', 'id1'), edge('asr', 'final', 'coalesce', 'input1'),
       edge('asr', 'provisionalId', 'coalesce', 'id2'), edge('asr', 'provisional', 'coalesce', 'input2'),
       edge('coalesce', 'id', 'pair', 'id1'), edge('coalesce', 'text', 'pair', 'input1'),
       edge('translation', 'id', 'pair', 'id2'), edge('translation', 'text', 'pair', 'input2'),
-      ...['id', 'input1', 'input2'].map(p => edge('pair', p, 'builder', p)), edge('builder', 'view', 'display', 'view')] });
+      edge('pair', 'pair', 'history', 'pair'), edge('history', 'pairs', 'display', 'input')] });
     const tick = () => new Promise(r => setTimeout(r, 0));
     await pipeline.start();
     asr.emitOutputs({ provisionalId: 1, provisional: 'draft A' }); await tick();
@@ -111,6 +119,8 @@ test('browser portable VIEW transcript flow preserves rows across delayed revers
     translation.emitOutputs({ id: 2, text: 'translated B' }); await tick();
     translation.emitOutputs({ id: 1, text: 'translated A' }); await tick();
     translation.emitOutputs({ id: 1, text: '' }); await tick();
+    translation.emitOutputs({ id: 1, text: '' }); await tick();
+    asr.emitOutputs({ finalId: 1, final: '', provisionalId: 1, provisional: '' }); await tick();
     const safe = mount.querySelector('b') === null;
     await pipeline.cancel(); const count = snapshots.length;
     translation.emitOutputs({ id: 1, text: 'late' }); await tick();
@@ -121,6 +131,7 @@ test('browser portable VIEW transcript flow preserves rows across delayed revers
   });
   expect(result).toEqual({ snapshots: [[], [], [['draft A', '']], [['<b>A</b>', '']],
     [['<b>A</b>', ''], ['B', '']], [['<b>A</b>', ''], ['B', 'translated B']],
-    [['<b>A</b>', 'translated A'], ['B', 'translated B']], [['<b>A</b>', ''], ['B', 'translated B']], []],
+    [['<b>A</b>', 'translated A'], ['B', 'translated B']], [['<b>A</b>', ''], ['B', 'translated B']],
+    [['<b>A</b>', ''], ['B', 'translated B']], [['', ''], ['B', 'translated B']], []],
     safe: true, lateRejected: true, errors: [] });
 });
