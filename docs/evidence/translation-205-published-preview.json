@@ -1,0 +1,27 @@
+{
+  "base_url": "https://takahirox.github.io/my-audio-to-text/",
+  "inference": "controlled native Worker replies; real-model inference unverified",
+  "adapter": "reviewed local extension source; shared web modules fetched from Pages",
+  "results": [
+    {
+      "type": "TranslateGemmaEnJa",
+      "result": "passed",
+      "checks": "committed history; separate previews; final clears before completion; stale results suppressed; Stop/Cancel clear; restart; saved JSON preserved; Workers released"
+    },
+    {
+      "type": "TranslateGemmaJaEn",
+      "result": "passed",
+      "checks": "committed history; separate previews; final clears before completion; stale results suppressed; Stop/Cancel clear; restart; saved JSON preserved; Workers released"
+    },
+    {
+      "type": "OpusMtEnJa",
+      "result": "passed",
+      "checks": "committed history; separate previews; final clears before completion; stale results suppressed; Stop/Cancel clear; restart; saved JSON preserved; Workers released"
+    },
+    {
+      "type": "OpusMtJaEn",
+      "result": "passed",
+      "checks": "committed history; separate previews; final clears before completion; stale results suppressed; Stop/Cancel clear; restart; saved JSON preserved; Workers released"
+    }
+  ]
+}
