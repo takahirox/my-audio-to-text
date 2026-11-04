@@ -4,10 +4,10 @@ import { cacheOnlyMeetingSummaryRuntime } from '../extension/meeting-summary-cac
 
 let model, tokenizer, queue = Promise.resolve();
 async function load(type) {
-  if (model) throw new Error('Meeting summary Worker already loaded.');
+  if (model) throw new Error('Text summary Worker already loaded.');
   const spec = meetingSummaryModel(type);
   const adapter = await self.navigator.gpu?.requestAdapter();
-  if (!adapter?.features.has('shader-f16')) throw new Error('Meeting summary requires Worker WebGPU with shader-f16. Check Chrome hardware acceleration and available GPU memory.');
+  if (!adapter?.features.has('shader-f16')) throw new Error('Text summary requires Worker WebGPU with shader-f16. Check Chrome hardware acceleration and available GPU memory.');
   const { PreTrainedTokenizer, AutoModelForCausalLM, env } = await import('./vendor/meeting-summary/transformers.js');
   await cacheOnlyMeetingSummaryRuntime(env, type);
   env.backends.onnx.wasm.numThreads = 1; env.backends.onnx.wasm.proxy = false;
@@ -25,8 +25,8 @@ async function load(type) {
     await (await env.customCache.match(base + 'tokenizer_config.json')).json());
   model = await AutoModelForCausalLM.from_pretrained(spec.id, options);
 }
-async function summarize({ id, text, language }) {
-  if (!model) throw new Error('Meeting summary model is not ready.');
+async function summarize({ id, text, language, prompt = '' }) {
+  if (!model) throw new Error('Text summary model is not ready.');
   const started = performance.now();
   const attempts = [];
   let firstTokenMs;
@@ -36,7 +36,7 @@ async function summarize({ id, text, language }) {
     });
     const inputs = tokenizer(formatted, { add_special_tokens: false, truncation: false });
     const promptTokens = inputs.input_ids.dims.at(-1);
-    if (promptTokens + MAX_NEW_TOKENS > MAX_PROMPT_TOKENS) throw new RangeError('Meeting summary exceeds the 8192-token runtime budget. No evidence was truncated.');
+    if (promptTokens + MAX_NEW_TOKENS > MAX_PROMPT_TOKENS) throw new RangeError('Text summary exceeds the 8192-token runtime budget. No evidence was truncated.');
     // Generation caches live only for this request; there is no Worker-owned history.
     let prompt = true;
     const streamer = { put() {
@@ -49,11 +49,11 @@ async function summarize({ id, text, language }) {
     const output = await model.generate({ ...inputs, max_new_tokens: MAX_NEW_TOKENS, do_sample: false, streamer });
     const tokens = output.tolist()[0].slice(promptTokens);
     const eos = [model.generation_config?.eos_token_id ?? model.config.eos_token_id].flat().map(Number);
-    if (tokens.length === MAX_NEW_TOKENS && !eos.includes(Number(tokens.at(-1)))) throw new Error('Meeting summary reached its output token limit; incomplete snapshot was not published.');
+    if (tokens.length === MAX_NEW_TOKENS && !eos.includes(Number(tokens.at(-1)))) throw new Error('Text summary reached its output token limit; incomplete snapshot was not published.');
     const generated = summaryText(tokenizer.decode(tokens, { skip_special_tokens: true }));
     attempts.push({ promptTokens, outputTokens: tokens.length });
     return generated;
-  }, text, language);
+  }, text, language, prompt);
   return { summary, metrics: { firstTokenMs, promptTokens: attempts.reduce((n, a) => n + a.promptTokens, 0), outputTokens: attempts.reduce((n, a) => n + a.outputTokens, 0), attempts, generationMs: performance.now() - started } };
 }
 self.onmessage = ({ data }) => {
