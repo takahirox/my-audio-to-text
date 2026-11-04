@@ -60,6 +60,45 @@ See [portable display items](display-items.md) for contracts, exact wiring,
 snapshot ownership and lifecycle, and [ID-scoped pairing](keyed-text-history.md)
 for independent ID/TEXT arrival semantics.
 
+## Automatic wire routing
+
+Connections use rounded orthogonal paths around measured node cards, including
+all port labels and controls. Routing updates on node moves, card/port resizing,
+port additions/removals, load/import/reset and graph edits. Zoom, Fit and pan
+keep paths attached to their ports. The visible path and its 16-screen-pixel hit
+area share the same geometry, behind node controls. Existing pointer/touch,
+keyboard selection, input-end reconnect/detach and inspector Disconnect apply
+along the detours.
+
+`extension/graph-wire-router.js` is a dependency-free visual module. It does
+not change stored positions, graph edges, typed contracts or session execution.
+It builds a rectilinear visibility grid from expanded card boundaries and port
+escape points, and uses deterministic A* with Manhattan distance and a bend
+penalty. Cards expand by 12 canvas pixels; quadratic corners have a maximum
+6-pixel radius, retaining clearance from the visible bodies. Only the first and
+last attachment segments may enter their own cards.
+
+Each geometry snapshot shares visibility checks across edges; identical geometry
+reuses routes across selection and zoom redraws. Pointer movement coalesces into
+animation frames. During a node drag, clear routes with unchanged endpoints stay
+in place; routes affected by the moving obstacle or ports recompute. Releasing
+the node optimizes all paths again. ResizeObserver watches cards and ports, and
+font readiness also schedules measurement. Geometry-only updates retain wire
+DOM/focus. The scrollable surface includes actual card sizes and detours.
+
+Routing is bounded to 60,000 grid intersections, 12,000 expanded search states
+per edge and 100,000 per snapshot. Blocked ports, overlapping cards, a lack of
+space at the top/left canvas boundary, or exhausted budgets produce an amber
+dashed cubic fallback plus a visible status message. These wires remain
+selectable and connected; move cards apart to recover automatic avoidance.
+There is no automatic node repositioning. Routes prioritize node avoidance and
+few bends; they do not allocate separate lanes or optimize wire crossings, so
+fan-out and dense graphs can share segments. At a shared hit area the uppermost
+wire receives pointer input; every connection remains keyboard-focusable.
+
+See [routing validation and screenshots](evidence/graph-204.md) for fixtures,
+executed checks and build limitations.
+
 ## Supported graph and ports
 
 Port compatibility depends only on shared contract identity. `ITEM` additionally

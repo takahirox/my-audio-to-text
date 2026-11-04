@@ -1,3 +1,4 @@
+import { createWireRouter, reusableWireRoute } from './graph-wire-router.js';
 import { compatiblePorts } from '../web/port-contracts.js';
 import { NODE_TYPES, nodeDefinition, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
 
@@ -145,7 +146,16 @@ export class GraphEditor {
         event.preventDefault(); event.stopPropagation(); this.disconnect(this.draft.edges[Number(wire.dataset.edge)]); this.scroll.focus({ preventScroll: true });
       }
     });
+    this.routingNotice = el('p', undefined, 'graph-routing-notice');
+    this.routingNotice.setAttribute('role', 'status'); this.routingNotice.hidden = true;
+    viewport.append(this.routingNotice);
+    if (typeof ResizeObserver !== 'undefined') this.geometryObserver = new ResizeObserver(() => this.scheduleWires());
+    document.fonts?.ready.then(() => this.scheduleWires());
     this.draw();
+  }
+  scheduleWires() {
+    if (this.wireFrame) return;
+    this.wireFrame = requestAnimationFrame(() => { this.wireFrame = null; this.drawWires(); });
   }
   diagnostics(includeWarnings = this.warningPreference?.checked) {
     return [...validateGraph(this.draft).map(message => `Error: ${message}`),
@@ -347,6 +357,7 @@ export class GraphEditor {
     this.selected = null; this.selectedNode = null; this.draw();
   }
   draw() {
+    this.geometryObserver?.disconnect();
     if (!this.draft.edges.includes(this.selectedEdge)) this.selectedEdge = null;
     this.editScaleButton.hidden = this.zoom >= 1;
     this.canvas.replaceChildren(this.svg); this.svg.replaceChildren();
@@ -374,11 +385,11 @@ export class GraphEditor {
         const x = event.clientX, y = event.clientY, origin = { ...node.position }; let moved = false;
         heading.onpointermove = move => {
           if (Math.abs(move.clientX - x) + Math.abs(move.clientY - y) < 3) return;
-          moved = true;
+          moved = true; this.draggingNode = node.id;
           node.position.x = Math.max(0, origin.x + (move.clientX - x) / this.zoom); node.position.y = Math.max(0, origin.y + (move.clientY - y) / this.zoom);
-          card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`; this.drawWires();
+          card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`; this.scheduleWires();
         };
-        const done = () => { heading.onpointermove = null; heading.onpointerup = heading.onpointercancel = null; if (moved) this.draw(); };
+        const done = () => { this.draggingNode = null; heading.onpointermove = null; heading.onpointerup = heading.onpointercancel = null; if (moved) this.draw(); };
         heading.onpointerup = heading.onpointercancel = done;
       };
       card.append(heading);
@@ -427,7 +438,7 @@ export class GraphEditor {
                   if (!moved) this.selectDetails(null, connection);
                   moved = true;
                   this.detaching = { connection, x: move.clientX, y: move.clientY };
-                  this.canvas.classList.add('detaching'); this.drawWires();
+                  this.canvas.classList.add('detaching'); this.scheduleWires();
                 };
                 const done = up => {
                   control.onpointermove = control.onpointerup = control.onpointercancel = control.onlostpointercapture = null;
@@ -466,23 +477,63 @@ export class GraphEditor {
     const renderedHeight = Math.max(height, ...Array.from(this.canvas.querySelectorAll('.graph-node'), card => card.offsetTop + card.offsetHeight + 20));
     this.canvas.style.height = `${renderedHeight}px`;
     this.extent.style.height = `${renderedHeight * this.zoom}px`;
+    for (const element of this.canvas.querySelectorAll('.graph-node, .graph-ports button')) this.geometryObserver?.observe(element);
     this.drawWires(); this.onDraft(structuredClone(this.draft));
   }
   drawWires() {
-    this.svg.replaceChildren(); const origin = this.canvas.getBoundingClientRect();
+    if (this.wireFrame) { cancelAnimationFrame(this.wireFrame); this.wireFrame = null; }
+    const origin = this.canvas.getBoundingClientRect();
+    // Quantization removes subpixel transform noise across zoom/pan changes.
+    const local = value => Math.round(value / this.zoom * 100) / 100;
+    const cards = [], ports = new Map();
+    for (const card of this.canvas.querySelectorAll('.graph-node')) {
+      const r = card.getBoundingClientRect(), id = card.dataset.node;
+      cards.push({ id, left: local(r.left - origin.left), right: local(r.right - origin.left),
+        top: local(r.top - origin.top), bottom: local(r.bottom - origin.top) });
+      for (const port of card.querySelectorAll('[data-side]')) {
+        const r = port.getBoundingClientRect();
+        ports.set(JSON.stringify([id, port.dataset.side, port.dataset.port]), {
+          x: local((port.dataset.side === 'output' ? r.right : r.left) - origin.left),
+          y: local(r.top + r.height / 2 - origin.top),
+        });
+      }
+    }
+    const connections = this.draft.edges.map(connection => ({
+      start: ports.get(JSON.stringify([connection.from[0], 'output', connection.from[1]])),
+      end: this.detaching?.connection === connection
+        ? { x: local(this.detaching.x - origin.left), y: local(this.detaching.y - origin.top) }
+        : ports.get(JSON.stringify([connection.to[0], 'input', connection.to[1]])),
+      from: connection.from[0], to: this.detaching?.connection === connection ? null : connection.to[0],
+    }));
+    const signature = JSON.stringify([cards, connections, !!this.draggingNode]);
+    if (signature !== this.routeSignature) {
+      const valid = connections.map(c => c.start && c.end ? c : { ...c, start: { x: 0, y: 0 }, end: { x: 0, y: 0 } });
+      const router = createWireRouter(cards, valid);
+      this.wireRoutes = valid.map((connection, index) => this.draggingNode
+        && reusableWireRoute(this.wireRoutes?.[index], this.routeConnections?.[index], connection, cards)
+        ? this.wireRoutes[index] : router.route(index));
+      this.routeConnections = connections; this.routeSignature = signature;
+    }
+    const existing = new Map([...this.svg.children].map(wire => [wire.connection, wire]));
     for (const [index, connection] of this.draft.edges.entries()) {
-      const { from, to } = connection;
-      const port = (pair, side) => this.canvas.querySelector(`[data-node="${pair[0]}"] [data-side="${side}"][data-port="${pair[1]}"]`);
-      const a = port(from, 'output')?.getBoundingClientRect(), b = port(to, 'input')?.getBoundingClientRect();
-      if (!a || !b) continue;
-      const end = this.detaching?.connection === connection ? this.detaching : { x: b.left, y: b.top + b.height / 2 };
-      const x1 = (a.right - origin.left) / this.zoom, y1 = (a.top + a.height / 2 - origin.top) / this.zoom, x2 = (end.x - origin.left) / this.zoom, y2 = (end.y - origin.top) / this.zoom;
+      const { from, to } = connection, route = this.wireRoutes[index];
+      if (!connections[index].start || !connections[index].end) continue;
+      const previous = existing.get(connection);
+      if (previous) {
+        previous.querySelector('.wire-line').setAttribute('d', route.d);
+        previous.querySelector('.wire-hit').setAttribute('d', route.d);
+        previous.querySelector('.wire-hit').style.strokeWidth = `${16 / this.zoom}px`;
+        previous.classList.toggle('routing-fallback', !!route.fallback);
+        previous.dataset.routing = route.fallback || 'clear';
+        existing.delete(connection); continue;
+      }
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', `M${x1},${y1} C${x1 + 60},${y1} ${x2 - 60},${y2} ${x2},${y2}`);
+      path.setAttribute('d', route.d);
       path.classList.add('wire-line');
       const hit = path.cloneNode(); hit.classList.remove('wire-line'); hit.classList.add('wire-hit');
       hit.style.strokeWidth = `${16 / this.zoom}px`;
-      const wire = document.createElementNS('http://www.w3.org/2000/svg', 'g'); wire.classList.add('graph-wire'); wire.dataset.edge = index;
+      const wire = document.createElementNS('http://www.w3.org/2000/svg', 'g'); wire.classList.add('graph-wire'); wire.dataset.edge = index; wire.connection = connection;
+      wire.classList.toggle('routing-fallback', !!route.fallback); wire.dataset.routing = route.fallback || 'clear';
       wire.setAttribute('tabindex', '0'); wire.setAttribute('role', 'button');
       wire.setAttribute('aria-label', `Select connection ${from.join('.')} to ${to.join('.')}`);
       wire.setAttribute('aria-pressed', String(this.selectedEdge === connection));
@@ -502,5 +553,16 @@ export class GraphEditor {
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${from.join('.')} → ${to.join('.')}. Select, then use Disconnect or Delete/Backspace.`;
       wire.append(title, path, hit); this.svg.append(wire);
     }
+    for (const wire of existing.values()) wire.remove();
+    const failures = this.wireRoutes.filter(route => route.fallback).length;
+    this.routingNotice.hidden = !failures;
+    const notice = failures ? `${failures} connection${failures === 1 ? '' : 's'} could not avoid cards (overlap or routing limit). Dashed wires show these routes. Move cards apart to clear them.` : '';
+    if (this.routingNotice.textContent !== notice) this.routingNotice.textContent = notice;
+    // Include detours and actual card sizes in the scrollable surface, including during drag.
+    const points = this.wireRoutes.flatMap(route => route.points);
+    const width = Math.max(1100, ...cards.map(r => r.right + 32), ...points.map(p => p.x + 32));
+    const height = Math.max(700, ...cards.map(r => r.bottom + 32), ...points.map(p => p.y + 32));
+    this.canvas.style.width = `${width}px`; this.canvas.style.height = `${height}px`;
+    this.extent.style.width = `${width * this.zoom}px`; this.extent.style.height = `${height * this.zoom}px`;
   }
 }
