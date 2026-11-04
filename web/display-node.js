@@ -11,7 +11,10 @@ export class DisplayNode {
     this.render([]);
   }
   receiveInputs(values, context) {
-    if (this.closed || context.signal.aborted || context.signal !== this.signal) return;
+    if (this.closed || context.signal.aborted) return;
+    // Cancel aborts ordinary work before routing cleanup with a fresh signal.
+    // A new running lifecycle still rejects contexts from earlier sessions.
+    if (context.signal !== this.signal && !this.signal.aborted) return;
     if (Object.keys(values).some(key => key !== 'input')) throw TypeError('Display accepts only input.');
     if (Object.hasOwn(values, 'input')) this.render(snapshotItem(values.input));
   }

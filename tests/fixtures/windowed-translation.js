@@ -26,12 +26,6 @@ export function windowGraph(mode = 'window', translator = 'TranslateGemmaEnJa') 
     edges.push(edge(chars.id, 'value', window.id, 'maxChars'), edge(wait.id, 'value', window.id, 'maxWaitSeconds'));
     edges.push(edge('input', 'value', 'window', 'text'), edge('window', 'text', 'translator', 'text'));
   }
-  if (mode === 'revisable') {
-    nodes.push(graphNode('TranslationCommit', 'commit'), graphNode('Display', 'preview-display'));
-    edges.push(edge('window', 'text', 'commit', 'boundary'),
-      ...['source', 'text', 'error'].map(port => edge('translator', port, 'commit', port)),
-      edge('translator', 'provisionalText', 'preview-display', 'input'),
-      edge('commit', 'final', 'display', 'append'));
-  } else edges.push(edge('translator', 'text', 'display', 'append'));
+  edges.push(edge('translator', 'text', 'display', 'append'));
   return accumulateDisplay({ version: GRAPH_VERSION, nodes, edges }, 'display');
 }

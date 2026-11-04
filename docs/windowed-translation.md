@@ -1,13 +1,11 @@
-# Windowed translation experiment (#128)
+# Windowed translation
 
-This experiment composes existing local translators with two text processors.
-Stage 1 batches short committed ASR fragments. Stage 2 optionally accepts previews from an explicitly wired TEXT snapshot source.
-TextWindow itself only emits completed batches. It does not provide
-conversation-wide context, conversation memory, or guaranteed translation
-accuracy improvements. Both processors are in Graph Editor's Processors palette.
-They require no model weights. Graph v15 uses append-only committed routing and a separate preview display. TextAccumulator holds committed history; Display.input directly accepts complete TEXT snapshots.
+TextWindow batches short committed TEXT fragments before sending them to any
+text consumer, including the local OPUS-MT and TranslateGemma translators. It
+requires no model weights. Batching does not provide conversation-wide context,
+conversation memory, or guaranteed translation accuracy improvements.
 
-## Stage 1: batching without retranslation
+## Committed translation
 
 Connect these named ports:
 
@@ -18,15 +16,23 @@ TranslateGemmaEnJa.text → TextAccumulator.append
 TextAccumulator.text → Display.input
 ```
 
-Any existing translator accepts this output; there is no model-specific
-formatter or preset. Optional bilingual formatting still uses grouped
-translator source/text/error → TextFormatter inputs → TextAccumulator.append. Other ASR
-final consumers can continue independently, including an original transcript
-display. TextWindow expects committed fragments; ASR provisional snapshots instead route
-to translator.provisional. This is a value-semantics distinction: TextWindow inputs
-are already committed source segments.
+Any existing translator accepts TextWindow.text. To translate each ASR segment
+without batching, connect ASR.final directly to Translator.text. To show only the
+latest translation, connect Translator.text directly to Display.input.
+TextAccumulator is the explicit history processor; Display renders complete
+snapshots without retaining history itself.
 
-TextWindow is a generic text batcher with no threshold Settings and one output:
+For bilingual formatting, connect grouped translator source/text/error directly
+to TextFormatter inputs, then TextFormatter.text → TextAccumulator.append. A
+failed translation emits source/error without text; a formatter can show that
+source and error. A direct text-only display or accumulator receives nothing for
+that failed job and retains its previous successful output. For continuous
+ID-scoped bilingual ASR history, use the [portable keyed pair path](display-items.md):
+KeyedTextCoalesce / KeyedTextPair / KeyedPairedTextAccumulator.
+
+## TextWindow ports and batching
+
+TextWindow has no threshold Settings and one output:
 
 | Port | Contract | Default / rule |
 | --- | --- | --- |
@@ -60,171 +66,108 @@ whitespace-only text is retained. Unknown ports, non-TEXT text and individual te
 inputs over **32,768** code units fail visibly before being accepted. Split larger
 source events first. After processing, pending text is shorter than maxChars;
 TextWindow retains no emitted history or background input FIFO. Consumers retain
-their own limits: translators and TranslationCommit still require chunks of at
-most 1,000 units, so choose maxChars for the connected consumer. Larger batches
-are available for other text consumers.
+their own limits: translators require chunks of at most **1,000** units, so choose
+maxChars for the connected consumer. Larger batches are available for other text
+consumers.
 
 Stop cancels the timer, emits the pending tail exactly once, and lets the
 translator drain before the sink closes. Repeated Stop cannot duplicate it.
 Cancel/dispose cancels timers and discards pending source. Late callbacks emit
 nothing. Each instance owns its buffer, timer and lifecycle.
 
-## Stage 2: bounded retranslation with immutable commits
+## Optional provisional previews
 
-Use one translator for both committed windows and replaceable previews:
+Use one translator for both committed text and replaceable previews:
 
 ```text
-ASR.final → TextWindow.text
-TextWindow.text ───────────→ Translator.text
-               └──────────→ TranslationCommit.boundary
-Explicit TEXT snapshots ──→ Translator.provisional (optional)
-Translator.source ────────→ TranslationCommit.source
-Translator.text ──────────→ TranslationCommit.text
-Translator.error ─────────→ TranslationCommit.error
-Translator.provisionalText ──→ PreviewDisplay.input
-TranslationCommit.final ──────→ TextAccumulator.append
-TextAccumulator.text ────────→ Display.input
+ASR.final → TextWindow.text → Translator.text → TextAccumulator.append
+TextAccumulator.text → Display.input
+ASR.provisional (or explicit TEXT snapshots) → Translator.provisional
+Translator.provisionalText → PreviewDisplay.input
 ```
 
-Translator means any of OpusMtEnJa, OpusMtJaEn, TranslateGemmaEnJa or
-TranslateGemmaJaEn. PreviewDisplay is an ordinary Display instance. All four translators expose the same explicit output
-families; standalone web translator Nodes retain their existing text-only behavior.
-TranslationCommit is optional for routing: committed translator.text can connect
-directly to append, fields or TTS. Retain the forward boundary edge when causal
-window-commit verification and visible failed-source fallback are needed without a
-feedback cycle, payload wrapper, public request IDs or status ports. Graph validation
-accepts any compatible TEXT producer on any input, in either connection order, including
-direct ASR.provisional → Translator.provisional and ASR.final → Translator.text.
-TextWindow is one batching option. No source type or neighboring Node enables a feature
-mode.
+Translator means OpusMtEnJa, OpusMtJaEn, TranslateGemmaEnJa or TranslateGemmaJaEn.
+PreviewDisplay is an ordinary separate Display instance. Any compatible TEXT
+producer can supply provisional snapshots independently of the committed source
+and edge order. TextWindow emits only completed batches and creates no previews.
+Standalone web translator Nodes retain their existing text-only behavior.
 
-TranslationCommit treats `boundary` as a declaration of a closed source event. Fan out
-that same event to a processor's text input and boundary; equal text from independent
-emissions is insufficient. The processor must return atomic grouped source/text/error
-using its received context (retain it with asynchronous work). The commit Node checks
-the result's causal delivery against the oldest boundary, as well as exact source text.
-It never joins split groups or unrelated equal strings. A mismatch fails visibly without
-appending. With no pending boundary, a result fails visibly; previews bypass
-TranslationCommit entirely. Its retained provisional output carries only empty
-boundary/final clears for existing compositions, never preview translations. Unresolved
-boundaries fail on Stop. Arbitrary processors may satisfy these data semantics; an
-intermediary which emits a fresh result without preserving the immediate source delivery
-cannot fabricate correlation. No public metadata ports, producer registry, payload
-wrappers or graph pairing checks are added.
+The extension translators expose two independent atomic TEXT output families:
+**source/text/error** for committed input and
+**provisionalSource/provisionalText/provisionalError** for previews. A failed group
+omits its family's translated text; connected generic formatters clear that
+omitted sibling without clearing the other family's inputs. Empty/whitespace
+input succeeds with empty translated text and its original source, without
+inference. Errors also reach the translator diagnostics.
 
-Every translator accepts one running inference, one latest pending provisional
-snapshot, and a bounded FIFO of closed windows. New
-snapshots replace pending previews. Closed text invalidates prior previews and
-always takes priority over pending previews. A running obsolete inference may
-finish, but its result is suppressed. Closed work is never coalesced. Final
-inference intentionally runs again even if a matching preview succeeded: there
-is no speculative translated-prefix stabilization or implicit cached commit.
-Stage 1 creates no preview inference.
+Each translator accepts one running inference, one latest pending preview, and
+a bounded FIFO of committed inputs. New snapshots replace pending previews.
+Committed input invalidates prior previews and takes priority over pending
+previews. An obsolete inference may finish, but its result is suppressed.
+Committed work is never coalesced, even for repeated equal phrases. Final
+inference runs again even if a matching preview succeeded.
 
-The two atomic TEXT output families are **source/text/error** for committed input and
-**provisionalSource/provisionalText/provisionalError** for preview input. A failed group
-omits its family's translated text; connected generic formatters clear that omitted
-sibling, without clearing the other family's inputs. Empty/whitespace input succeeds
-with empty translated text and its original source, without inference. Errors also reach
-existing translator diagnostics.
-
-Route committed text through TextAccumulator to Display.input. Route
-provisionalText to a separate Display.input; empty-string deliveries clear that
-preview on final acceptance, Stop and Cancel. Preview-only TextFormatter output
-stays on its own branch. For continuous bilingual ASR history, use the
-[ID-scoped pair path](display-items.md).
-
-| Event | Output and order |
+| Event | Behavior |
 | --- | --- |
-| Source grows while open | Translate the latest snapshot when available; no final. The most recent successful preview remains until replaced or the source closes. Superseded in-flight results emit nothing. |
-| Latest open translation succeeds | Translator emits its grouped provisional family; provisionalText replaces only the explicit preview display. |
-| Source closes by cap, deadline or Stop | Boundary arrives before its async final result. Translator emits all three provisional ports as `''` immediately to clear the obsolete preview, even while stale inference is running. Commit queues the source boundary exactly once. |
-| Closed translation succeeds | Match the oldest boundary by causal delivery and source text in FIFO order; Commit emits final translation and error `''` (with its legacy empty clear). The committed history appends once; previews remain on their separate branch. |
-| Open translation fails | Emit provisionalSource and provisionalError without provisionalText; no committed output or final item. A grouped preview formatter clears omitted translated text. A direct provisionalText-only display keeps its previous snapshot until replacement or an explicit clear. Existing translator model failures remain terminal for that translator instance. |
-| Closed translation fails | Emit grouped provisional `''`, final `[Translation failed: MESSAGE]\nSOURCE`, error MESSAGE. This visibly retains source instead of inventing a translation; prior committed items remain immutable. |
-| Stop | TextWindow flushes tail; translator suppresses previews and drains closed work; commit verifies all boundaries resolved, and the explicit preview family clears its display. |
-| Cancel | Pipeline invalidates emissions first; buffers, pending work and Workers are disposed. Previously committed accumulator text remains, while a cleanup emission clears the preview display and late replies are discarded. Bare dispose emits nothing and retains the last display snapshot. |
-
-The scheduler does not emit previews ahead of queued closed results. A closed
-window is the sole commit rule; similarity between Japanese strings is never
-used. Already committed source is removed from the processing buffers and never
-included in subsequent translation requests.
+| Latest preview succeeds | The provisional family replaces only the explicit preview branch. |
+| Committed input arrives | All three provisional TEXT ports emit empty strings to clear previews immediately, even while stale inference is running. Committed translation enters the FIFO. |
+| Committed translation succeeds | The committed source/text/error group emits; direct text consumers receive the translation once. |
+| Preview fails | The provisional source/error group emits without provisionalText. A grouped formatter clears omitted text; a text-only preview display retains its snapshot until replacement or an explicit clear. |
+| Committed translation fails | The committed source/error group emits without text. Existing successful history remains. Wire source/error to a formatter if failed-source visibility is needed. |
+| Stop | TextWindow flushes its tail; the translator clears previews and drains committed work before downstream consumers close. |
+| Cancel | Pending work is discarded, Workers terminate, and cleanup clears explicit previews. Accumulated committed text remains; late replies are ignored. Bare dispose emits nothing and retains the last display snapshot. |
 
 ## Bounds, errors and independent branches
 
-Every translator, regardless of source and preview use, has a bounded
-closed-work FIFO: at most **32 waiting windows / 32,768 waiting code units** plus
-one active request. Stage 2 additionally has one pending preview of at most
-1000 units. TranslationCommit admits at most **32 unresolved boundaries /
-32,768 units**, counting the active closed window. This is intentionally a
-conservative overload cap, not unlimited catch-up. Its cap may be reached before
-the scheduler's cap. Sustained inference slower than speech eventually reports
-a visible error and fails that path; stop and start again with a slower source.
-It does not silently skip or truncate text and pretend the transcript completed.
-Unfinished work on a failed path is not claimed as a successful transcript.
-Keep an independent original-ASR display when source retention across overload
-is needed. These bounds and failure decisions belong to the consumers.
+Every translator has a FIFO of at most **32 waiting inputs / 32,768 waiting code
+units**, plus one active request. Its one pending preview accepts at most **1,000**
+units. Sustained input faster than inference eventually reports a visible error
+and fails that path; start a fresh session with a slower source. It does not
+silently skip or truncate text and claim a complete transcript. Keep an independent
+original-ASR display when source retention across overload is needed.
 
-Every Node failure is reported in Live without canceling independent capture
-or outputs; this policy does not depend on neighbors. Model failures
-still produce grouped source/error per closed request. Stop reports any failed
-drain; Cancel remains available. A missing or mismatched result fails visibly;
-it cannot commit an unrelated source. Each branch uses its own instances,
-queues, correlation and Worker. Ending one source drains its ancestors and
-downstream path in topological order while independent branches continue.
-Display history alone intentionally grows; these processors retain no committed
-source/translation history.
+Node failures appear in Live while independent branches continue. Model failures
+produce grouped source/error for committed requests. Stop reports failed drains;
+Cancel remains available. Each branch owns its instances, queues and Worker.
+Ending one source drains its ancestors and downstream path while independent
+branches continue. TextAccumulator intentionally retains history; TextWindow and
+the scheduler remove completed source from their processing buffers.
 
-Save still persists the graph before preparing only referenced model weights.
-The text processors add none. TranslateGemma keeps its pinned **3.112 GB q4**
-weights and WebGPU requirement (allow **7 GB storage** and several GB free
-RAM/GPU memory per active translator); there is no recording-time download,
-cloud inference or automatic model fallback. See [model terms and preparation
-details](translation-nodes.md#translategemma-in-the-extension-124).
+Save persists the graph before preparing only referenced model weights.
+TextWindow adds none. TranslateGemma retains its pinned **3.112 GB q4** weights
+and WebGPU requirement (allow **7 GB storage** and several GB free RAM/GPU memory
+per active translator). See [model terms and preparation](translation-nodes.md#translategemma-in-the-extension-124).
 
-## Reproduction and evidence
+## Validation
 
-Pinned inputs and graph descriptions are in
-[`tests/fixtures/windowed-translation.js`](../tests/fixtures/windowed-translation.js).
-They split meeting/time and two different meanings of “bank” across ASR events,
-repeat “Please wait.” as separate utterances, and end with unpunctuated speech.
-The graphs wire Number.value inputs for maxChars 160 and maxWaitSeconds 0.8.
-Source fragments include their own spaces. The fixtures compare the per-segment
-path, completed batching and optional closed-window commit verification. They
-never connect the removed TextWindow.provisional port. Direct-ASR preview
-coverage wires ASR.provisional separately to Translator.provisional.
+[`tests/fixtures/windowed-translation.js`](../tests/fixtures/windowed-translation.js)
+compares direct per-segment translation and completed batching. Its fixed
+transcript repeats phrases, splits two meanings of “bank” across fragments, and
+ends with an unpunctuated Stop tail. Number inputs set maxChars 160 and
+maxWaitSeconds 0.8. Separate tests cover explicit ASR previews, coalescing,
+failures, Unicode splits, overload, long sessions, Stop/Cancel and independent
+branch drain order. Controlled inference establishes routing and lifecycle,
+not translation quality.
 
 ```sh
-npm ci
 npm run setup:extension
 npm test
-npx playwright test tests/browser/text-window.spec.js tests/browser/text-contracts.spec.js tests/browser/display-items.spec.js tests/browser/translation.spec.js
-npm run test:extension -- tests/extension/windowed-translation.spec.js
+npx playwright test tests/browser/text-window.spec.js tests/browser/text-contracts.spec.js tests/browser/display-items.spec.js tests/browser/translation-ports.spec.js
+npm run test:extension -- tests/extension/windowed-translation.spec.js tests/extension/translation-ports.spec.js tests/extension/primitive-composition.spec.js
 WINDOW_TRANSLATION_SMOKE=1 npx playwright test --config playwright.extension.config.js tests/extension/windowed-translation-smoke.spec.js
 ```
 
-The opt-in real-model check uses the actual packaged MV3 graph, unmodified
-public weight URLs, Save preparation and real TranslateGemma Workers. Each path
-starts a fresh Worker and runs offline after preparation, with fixtures 150 ms
-apart. The real-model comparison wires a 30-second wait limit so the fixed
-160-unit length/Stop boundaries remain comparable; controlled checks exercise
-the shorter deadline independently. Its JSON attachment records inputs, model results, source correlation,
-display events, inference count, request timings, load time and Stop/drain time.
-The packaged deterministic suite separately exercises ASR.final composition
-with controlled recognition and inference. It is not real speech-recognition
-quality evidence. Unit tests cover slow inference, coalescing, repeat strings,
-failures, deadline-only flush, Unicode splits, overflow, long sessions,
-independent branch drain order, Cancel and saved-graph compatibility. Mock
-translations demonstrate lifecycle and ordering only.
-
-Measured results and limitations are recorded in
-[`docs/evidence/translation-128.md`](evidence/translation-128.md). No required
-check introduced by this experiment depends on a post-merge deployment.
-
-Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+The opt-in real-model test uses the packaged MV3 graph, Save preparation and real
+TranslateGemma Workers offline after preparation. Direct, batched and direct-ASR
+preview paths each use a fresh Worker. Fixed batching uses a 30-second wait limit
+for comparable length/Stop splits; deterministic checks exercise deadlines.
+Its JSON attachment records model results, inputs, display events, inference
+counts, request timings and Stop/drain time. Historical experiment measurements
+remain in [the #128 evidence record](evidence/translation-128.md).
 
 ## Saved graphs
 
-Unsupported versions and ports require Reset or Import of a current graph and
-an explicit Save. Reading never rewrites stored JSON. See
+Unsupported Nodes, versions and ports require Reset or Import of a current graph
+and an explicit Save. Reading never rewrites stored JSON. The original JSON
+remains inspectable through Graph actions → Saved JSON. See
 [Graph Editor recovery](extension-graph.md).

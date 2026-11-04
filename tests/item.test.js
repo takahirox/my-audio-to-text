@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { document } from './fixtures/dom.js';
+import { document, domText } from './fixtures/dom.js';
+import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
 import { snapshotPairedText, snapshotPairedTextList, snapshotItem } from '../web/paired-text.js';
 import { TEXT, NUMBER, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST, compatiblePorts } from '../web/port-contracts.js';
 import { Pipeline, portContract } from '../web/pipeline.js';
@@ -170,4 +171,26 @@ test('importable ITEM graph matches the exact independently keyed ASR/translatio
   const graph = JSON.parse(readFileSync(new URL('../docs/evidence/item-198.json', import.meta.url), 'utf8'));
   assert.deepEqual(graph, itemGraph()); assert.deepEqual(executableGraph(graph), graph);
   assert.deepEqual(assertGraph(graph), graph);
+});
+
+for (const formatted of [false, true]) test(`Cancel routes cleanup snapshots to Display while preserving committed history (formatter: ${formatted})`, async () => {
+  let source; const seen = {};
+  const pipeline = new Pipeline({ nodes: {
+    source: { outputs: { committed: TEXT, preview: TEXT }, start(context) { source = context; }, cancel(context) { context.emit('preview', ''); } },
+    history: new TextAccumulatorNode(), format: new TextFormatterNode(),
+    committed: new DisplayNode(dom => { seen.committed = domText(dom); }),
+    preview: new DisplayNode(dom => { seen.preview = domText(dom); }),
+  }, connections: [
+    edge('source', 'committed', 'history', 'append'), edge('history', 'text', 'committed', 'input'),
+    ...(formatted ? [edge('source', 'preview', 'format', 'input1'), edge('format', 'text', 'preview', 'input')]
+      : [edge('source', 'preview', 'preview', 'input')]),
+  ] });
+  await pipeline.start(); source.emitOutputs({ committed: 'keep', preview: 'replace me' });
+  await pipeline.entries.get('history').queue; await pipeline.entries.get('format').queue;
+  await pipeline.entries.get('committed').queue; await pipeline.entries.get('preview').queue;
+  assert.deepEqual(seen, { committed: 'keep', preview: 'replace me' });
+  source.emit('committed', 'queued before Cancel');
+  await pipeline.cancel(); source.emit('preview', 'late');
+  assert.deepEqual(seen, { committed: 'keep', preview: '' });
+  assert.deepEqual(pipeline.errors, []);
 });

@@ -126,6 +126,7 @@ export async function checkRecovery(page, kind) {
   const raw = await page.evaluate(async kind => {
     const { defaultGraph, GRAPH_KEY } = await import(new URL('./graph.js', location.href));
     const graph = defaultGraph(); if (kind === 'paired') graph.version = 11;
+    if (kind === 'unsupported') graph.nodes.push({ id: 'retired', type: 'RetiredProcessor', settings: {}, position: { x: 0, y: 0 } });
     const raw = kind === 'invalid' ? '{ invalid JSON' : JSON.stringify(graph, null, 2);
     localStorage.setItem(GRAPH_KEY, raw); return raw;
   }, kind);
