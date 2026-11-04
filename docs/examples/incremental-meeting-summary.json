@@ -5,7 +5,7 @@
       "id": "input",
       "type": "Text",
       "settings": {
-        "value": "Mika: The venue approval is pending. The owner is unknown."
+        "value": "A short article about the benefits and challenges of renewable energy."
       },
       "position": {
         "x": 20,
@@ -55,7 +55,7 @@
       "type": "TextFormatter",
       "settings": {
         "inputCount": 2,
-        "template": "Previous summary:\n{1}\n\nNew transcript:\n{2}"
+        "template": "Previous summary:\n{1}\n\nNew text:\n{2}"
       },
       "position": {
         "x": 660,
