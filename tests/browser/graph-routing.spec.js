@@ -92,14 +92,33 @@ test('blocked ports show a dashed selectable fallback and recover when cards mov
 test('before/after obstacle screenshots', async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium', 'one evidence image per state');
   await page.setViewportSize({ width: 1600, height: 1000 }); await loadRoutingGraph(page);
+  await assertRoutingGeometry(page);
   await mkdir('docs/evidence', { recursive: true });
   const current = await page.locator('.wire-line').getAttribute('d');
   // Reproduce the previous endpoint-only cubic on the identical fixture.
-  await page.locator('.graph-wire').evaluate(wire => {
+  const legacy = await page.evaluate(async () => {
+    const { GraphEditor } = await import('/extension/graph-editor.js');
+    const drawWires = GraphEditor.prototype.drawWires;
+    // ResizeObserver/font callbacks can otherwise restore the routed path while
+    // Playwright waits for a screenshot frame. Freeze only this evidence capture.
+    GraphEditor.prototype.drawWires = () => {};
+    window.restoreRoutingDrawing = () => { GraphEditor.prototype.drawWires = drawWires; };
+    const wire = document.querySelector('.graph-wire');
     const path = wire.querySelector('.wire-line'), a = path.getPointAtLength(0), b = path.getPointAtLength(path.getTotalLength());
-    for (const path of wire.querySelectorAll('path')) path.setAttribute('d', `M${a.x},${a.y} C${a.x+60},${a.y} ${b.x-60},${b.y} ${b.x},${b.y}`);
+    const d = `M${a.x},${a.y} C${a.x+60},${a.y} ${b.x-60},${b.y} ${b.x},${b.y}`;
+    for (const path of wire.querySelectorAll('path')) path.setAttribute('d', d);
+    return d;
   });
-  await page.screenshot({ path: evidencePath('graph-204-before.png') });
-  await page.locator('.graph-wire path').evaluateAll((paths, d) => paths.forEach(path => path.setAttribute('d', d)), current);
+  try {
+    expect(legacy).not.toBe(current);
+    await expect(page.locator('.wire-line')).toHaveAttribute('d', legacy);
+    await expect(page.locator('.wire-hit')).toHaveAttribute('d', legacy);
+    await page.screenshot({ path: evidencePath('graph-204-before.png') });
+    await expect(page.locator('.wire-line')).toHaveAttribute('d', legacy);
+    await expect(page.locator('.wire-hit')).toHaveAttribute('d', legacy);
+  } finally {
+    await page.evaluate(() => { window.restoreRoutingDrawing(); delete window.restoreRoutingDrawing; });
+    await page.locator('.graph-wire path').evaluateAll((paths, d) => paths.forEach(path => path.setAttribute('d', d)), current);
+  }
   await assertRoutingGeometry(page); await page.screenshot({ path: evidencePath('graph-204-after.png') });
 });
