@@ -93,14 +93,24 @@ export class TranslationSchedulerNode {
     const snapshot = { ...(id === undefined ? {} : { id }), ...(this.acceptsContext ? { translationContext: this.translationContext } : {}) };
     // One replaceable pending preview, and at most one running inference.
     // Committed input invalidates every older preview regardless of producer.
-    this.preview = port === 'provisional' ? { source, provisional: true, revision: this.revision, context, ...snapshot } : null;
-    if (port === 'provisional') { this.previewId = id; this.hasPreview = true; this.pump(); return; }
+    this.preview?.complete();
+    this.preview = null;
+    const own = () => {
+      // Admission stays responsive. Each accepted job owns its eventual output,
+      // including when its producer's sampled feedback turn has already ended.
+      const work = context.defer();
+      return { source, ...snapshot, context: work.context, complete: work.complete };
+    };
+    if (port === 'provisional') {
+      this.preview = { ...own(), provisional: true, revision: this.revision };
+      this.previewId = id; this.hasPreview = true; this.pump(); return;
+    }
     this.clearPreview(context);
     // Bound closed work too. Overflow is an explicit branch failure, never a
     // silently dropped utterance; the existing default FIFO remains unchanged.
     if (this.finals.length >= 32 || this.queuedChars + source.length > 32768) throw Error('Translation backlog limit exceeded (32 windows / 32,768 characters).');
     // Empty utterances still have a position in the FIFO; they need no inference.
-    this.finals.push({ source, context, ...snapshot });
+    this.finals.push(own());
     this.queuedChars += source.length;
     this.pump();
   }
@@ -116,19 +126,19 @@ export class TranslationSchedulerNode {
       const job = this.finals.length ? this.finals.shift() : this.preview;
       if (job.provisional) this.preview = null;
       else this.queuedChars -= job.source.length;
-      if (!job.source.trim()) { this.emit(job, ''); continue; }
-      if (this.error) { this.emit(job, undefined, this.error); continue; }
-      if (job.source.length > 1000) {
-        this.emit(job, undefined, `${this.modelName} accepts at most 1,000 characters per utterance.`); continue;
-      }
       try {
+        if (!job.source.trim()) { this.emit(job, ''); continue; }
+        if (this.error) { this.emit(job, undefined, this.error); continue; }
+        if (job.source.length > 1000) {
+          this.emit(job, undefined, `${this.modelName} accepts at most 1,000 characters per utterance.`); continue;
+        }
         const text = await new Promise((resolve, reject) => {
           this.active = { job, resolve, reject };
           this.send(job.source);
         });
         this.emit(job, text);
       } catch (error) { if (!this.disposed) this.emit(job, undefined, error?.message || String(error)); }
-      finally { this.active = null; }
+      finally { this.active = null; job.complete(); }
     }
   }
   failure(error) {
@@ -139,6 +149,7 @@ export class TranslationSchedulerNode {
     void this.translation?.dispose().catch(() => {});
   }
   async stop() {
+    this.preview?.complete();
     this.preview = null; this.revision++;
     this.clearPreview();
     await this.ready;
@@ -157,7 +168,10 @@ export class TranslationSchedulerNode {
   }
   dispose() {
     this.context?.signal.removeEventListener('abort', this.abort);
-    this.disposed = true; this.finals = []; this.preview = null; this.queuedChars = 0;
+    this.disposed = true;
+    for (const job of this.finals) job.complete();
+    this.preview?.complete(); this.active?.job.complete();
+    this.finals = []; this.preview = null; this.queuedChars = 0;
     this.translationContext = '';
     this.active?.reject(new DOMException('Translation canceled.', 'AbortError'));
     return this.translation?.dispose();

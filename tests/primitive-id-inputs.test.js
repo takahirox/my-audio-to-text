@@ -5,7 +5,8 @@ import { TranslationSchedulerNode } from '../extension/translation-scheduler.js'
 import { NODE_TYPES, GRAPH_VERSION, graphNode, edge, validateGraph } from '../extension/graph.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
-const context = extra => ({ signal: new AbortController().signal, ...extra });
+const context = extra => ({ signal: new AbortController().signal,
+  defer() { return { context: this, complete() {} }; }, ...extra });
 
 function workers() {
   const requests = []; let worker;
