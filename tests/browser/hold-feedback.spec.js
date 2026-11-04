@@ -38,3 +38,39 @@ test('browser held TEXT samples FIFO through async completion; Stop and Cancel/r
   expect(result.requests).toEqual(['/A', 'S1/B', 'same/C', '/cancel', '/fresh']);
   expect(result.outputs).toEqual(['S1', 'same', 'same', 'S1']);
 });
+
+test('independent owned async output drains after feedback FIFO without delaying the next window', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { Pipeline } = await import('/pipeline.js');
+    const { HoldNode } = await import('/hold-node.js');
+    const { TextFormatterNode } = await import('/text-nodes.js');
+    const { TEXT } = await import('/port-contracts.js');
+    const held = new HoldNode(), requests = [], jobs = [], outputs = [];
+    let send;
+    const p = new Pipeline({ nodes: {
+      source: { outputs: { text: TEXT }, start(c) { send = text => c.emit('text', text); } }, held,
+      formatter: new TextFormatterNode({ inputCount: 2, template: '{1}/{2}' }),
+      update: { inputs: { text: TEXT }, outputs: { text: TEXT }, receive(_, text, c) { requests.push(text); c.emit('text', 'S' + requests.length); } },
+      async: { inputs: { text: TEXT }, outputs: { text: TEXT }, receive(_, text, c) { jobs.push({ text, work: c.defer() }); } },
+      sink: { inputs: { text: TEXT }, receive(_, text) { outputs.push(text); } },
+    }, connections: [
+      { from: ['source', 'text'], to: ['formatter', 'input2'] }, { from: ['held', 'value'], to: ['formatter', 'input1'] },
+      { from: ['formatter', 'text'], to: ['update', 'text'] }, { from: ['update', 'text'], to: ['held', 'input'] },
+      { from: ['update', 'text'], to: ['async', 'text'] }, { from: ['async', 'text'], to: ['sink', 'text'] },
+    ] });
+    try {
+      await p.start(); send('A'); send('B'); send('C'); await new Promise(resolve => setTimeout(resolve, 0));
+      const before = { requests: [...requests], held: held.value, outputs: [...outputs] };
+      let stopped = false; const stopping = p.stop().then(() => { stopped = true; });
+      await new Promise(resolve => setTimeout(resolve, 0)); const waiting = !stopped;
+      for (const { text, work } of jobs) { work.context.emit('text', 'T:' + text); work.complete(); }
+      await stopping;
+      return { before, waiting, outputs, errors: p.errors.map(e => e.message) };
+    } finally { await p.dispose(); }
+  });
+  expect(result.before).toEqual({ requests: ['/A', 'S1/B', 'S2/C'], held: 'S3', outputs: [] });
+  expect(result.waiting).toBe(true);
+  expect(result.outputs).toEqual(['T:S1', 'T:S2', 'T:S3']);
+  expect(result.errors).toEqual([]);
+});
