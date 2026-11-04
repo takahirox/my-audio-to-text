@@ -99,3 +99,25 @@ Real TranslateGemma/OPUS-MT translation, real LFM2.5/Qwen3.5 summarization,
 live ASR/microphone/tab capture, GPU memory/latency, and a complete distribution
 with pinned model/runtime assets were not exercised. Prepare assets and run the
 existing opt-in real-model suites before making claims about those cases.
+
+## Review follow-up: independent branch descendants
+
+The review found that a synchronous relay discarded the independent branch's
+receive-lifetime requirement along with its feedback-turn membership. Before
+the follow-up fix, the new one- and two-relay late-emission regressions failed:
+an expired receive context emitted without an owned job and no error appeared.
+The direct branch correctly rejected the same operation.
+
+Pipeline now carries the receive-lifetime requirement on downstream deliveries
+separately from the feedback turn. Descendants must await output or acquire
+`context.defer()`, including after relays and owned emissions. The branch still
+leaves the feedback FIFO. Regressions cover zero, one and two relays, both emit
+APIs, expired-context rejection, and Stop waiting for every owned job while Hold
+has already completed both summary updates.
+
+Follow-up checks on 2026-11-04: `npm ci` passed; `npm test` passed **740 tests**;
+the same five browser suites listed above passed **30 tests** across Chromium
+and WebKit; the two MV3 suites passed **3 tests**; `git diff --check` passed.
+Browser checks used `ASR_BASE_URL` with an ephemeral localhost Python server.
+No real WebGPU models or complete model-bearing distribution were exercised in
+this follow-up; the earlier asset-related build limitation still applies.

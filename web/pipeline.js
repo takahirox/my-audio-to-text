@@ -103,8 +103,8 @@ export class Pipeline {
     // Observer failures cannot break delivery to another branch.
     try { this.onError(error, entry.id); } catch { /* errors remain available */ }
   }
-  emit(entry, port, value, cause, cleanup = false, provisional = false, turn) { this.emitOutputs(entry, { [port]: value }, false, cause, cleanup, provisional, turn); }
-  emitOutputs(entry, values, grouped = true, cause, cleanup = false, provisional = false, turn) {
+  emit(entry, port, value, cause, cleanup = false, provisional = false, turn, receiveScoped = false) { this.emitOutputs(entry, { [port]: value }, false, cause, cleanup, provisional, turn, receiveScoped); }
+  emitOutputs(entry, values, grouped = true, cause, cleanup = false, provisional = false, turn, receiveScoped = false) {
     if (turn?.closed) {
       if (!entry.controller.signal.aborted) this.fail(entry, Error('Sampled work emitted after its receive promise completed.'));
       return;
@@ -152,13 +152,17 @@ export class Pipeline {
       // without splitting the atomic delivery or interpreting port names.
       const unfinished = provisional || outputs.filter(([port]) => (entry.routes.get(port) || []).some(route => route.entry === target))
         .every(([port]) => entry.provisionalOutputs.has(port));
-      this.enqueue(target, inputs, { groupInputs, delivery, cause, provisional: unfinished, cleanup }, turn);
+      this.enqueue(target, inputs, { groupInputs, delivery, cause, provisional: unfinished, cleanup, receiveScoped }, turn);
     }
   }
   enqueue(target, inputs, event, parent) {
     // Only paths capable of storing this turn's feedback belong to its FIFO.
     // Independent branches retain delivery provenance, but own their lifecycle.
     const independent = parent?.required.size && ![...parent.required].some(state => target.reachable.has(state));
+    // Leaving a feedback turn releases its FIFO obligation, not the receive
+    // lifetime requirement. Carry that requirement through every descendant,
+    // including synchronous relays and emissions from explicitly owned work.
+    const receiveScoped = event.receiveScoped || !!independent;
     if (independent) parent = undefined;
     if (target.failed || target.closed) {
       if (parent) parent.error ||= Error(`Sampled work cannot reach ${target.id}.`);
@@ -199,12 +203,12 @@ export class Pipeline {
         }
         let receiving = true;
         const emissions = {
-          emit: (port, value) => this.emit(target, port, value, event.delivery, event.cleanup, event.provisional, turn),
-          emitOutputs: (outputs, options) => this.emitOutputs(target, outputs, true, event.delivery, event.cleanup, event.provisional || options?.provisional === true, turn),
+          emit: (port, value) => this.emit(target, port, value, event.delivery, event.cleanup, event.provisional, turn, receiveScoped),
+          emitOutputs: (outputs, options) => this.emitOutputs(target, outputs, true, event.delivery, event.cleanup, event.provisional || options?.provisional === true, turn, receiveScoped),
         };
         const emit = callback => {
           if (!live()) return;
-          if (independent && !receiving) { this.fail(target, Error('Async branch emitted after its receive promise completed; use context.defer().')); return; }
+          if (receiveScoped && !receiving) { this.fail(target, Error('Async branch emitted after its receive promise completed; use context.defer().')); return; }
           callback();
         };
         const context = Object.freeze({ ...target.context,

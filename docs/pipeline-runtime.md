@@ -214,10 +214,12 @@ state writes, including inherited obligations of nested sampled consumers. An
 independent fan-out branch retains delivery provenance but leaves that turn.
 Its awaited receives and owned background jobs drain separately at Stop, and its
 failure does not cancel the feedback path. Late output on such a branch must
-use an explicit work handle, rather than an expired receive context. For sampled
-consumers without a reachable feedback write, the existing conservative behavior
-still waits for all causal downstream work. Reachability is structural across
-all emitting ports; no producer, node ID, TEXT contents or port name grants an
+use an explicit work handle, rather than an expired receive context. This
+requirement follows every downstream delivery, including synchronous relays
+and owned background emissions, independently of feedback-turn membership.
+For sampled consumers without a reachable feedback write, the existing
+conservative behavior still waits for all causal downstream work. Reachability
+is structural across all emitting ports; no producer, node ID, TEXT contents or port name grants an
 exception. A branch with any route back to the required state remains part of
 the turn, even if a particular job emits only to a display port.
 

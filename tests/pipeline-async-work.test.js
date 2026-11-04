@@ -7,7 +7,7 @@ import { TEXT } from '../web/port-contracts.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const edge = (a, b, c, d) => ({ from: [a, b], to: [c, d] });
 
-function feedback({ onPath = false, leased = true, nested = false } = {}) {
+function feedback({ onPath = false, leased = true, nested = false, relays = 0 } = {}) {
   let source; const jobs = [], seen = [];
   const hold = new HoldNode();
   const nodes = {
@@ -18,8 +18,16 @@ function feedback({ onPath = false, leased = true, nested = false } = {}) {
     sink: { inputs: { text: TEXT }, receive(_, text) { seen.push(text); } },
   };
   const connections = [edge('source', 'text', 'formatter', 'input2'), edge('hold', 'value', 'formatter', 'input1'),
-    edge('formatter', 'text', nested ? 'second' : 'update', nested ? 'input2' : 'text'), edge('update', 'text', 'async', 'text'),
+    edge('formatter', 'text', nested ? 'second' : 'update', nested ? 'input2' : 'text'),
     edge('async', 'text', 'sink', 'text'), edge(onPath ? 'async' : 'update', 'text', 'hold', 'input')];
+  let previous = 'update';
+  for (let i = 0; i < relays; i++) {
+    const id = `relay${i}`;
+    nodes[id] = { inputs: { text: TEXT }, outputs: { text: TEXT }, receive(_, text, c) { c.emitOutputs({ text }); } };
+    connections.push(edge(previous, 'text', id, 'text'));
+    previous = id;
+  }
+  connections.push(edge(previous, 'text', 'async', 'text'));
   if (nested) {
     nodes.other = new HoldNode(); nodes.second = new TextFormatterNode({ inputCount: 2, template: '{1}|{2}' });
     connections.push(edge('other', 'value', 'second', 'input1'), edge('second', 'text', 'update', 'text'));
@@ -45,23 +53,31 @@ test('completing owned feedback work without storing state remains an error', as
   await assert.rejects(f.pipeline.stop(), /without storing feedback/); assert.equal(f.jobs.length, 1);
 });
 
-test('an independent branch needs explicit ownership for late output', async t => {
-  const f = feedback({ leased: false }); t.after(() => f.pipeline.dispose()); await f.pipeline.start();
+for (const relays of [0, 1, 2]) test(`an independent branch needs explicit ownership for late output (${relays} relays)`, async t => {
+  const f = feedback({ leased: false, relays }); t.after(() => f.pipeline.dispose()); await f.pipeline.start();
   f.send('A'); f.send('B'); await tick(); assert.equal(f.hold.value, '/A/B');
-  f.jobs[0].work.context.emit('text', 'unowned');
+  assert.equal(f.pipeline.entries.get('async').work.size, 0);
+  if (relays === 1) f.jobs[0].work.context.emitOutputs({ text: 'unowned' });
+  else f.jobs[0].work.context.emit('text', 'unowned');
+  assert.equal(f.pipeline.errors.length, 1);
   assert.match(f.pipeline.errors[0].message, /use context.defer/); assert.deepEqual(f.seen, []);
   await assert.rejects(f.pipeline.stop());
 });
 
-test('Stop owns deferred output even without a custom stop hook; completed contexts cannot emit or create work', async t => {
-  const f = feedback(); t.after(() => f.pipeline.dispose()); await f.pipeline.start();
+for (const relays of [0, 1, 2]) test(`Stop drains owned work through ${relays} relays; expired contexts cannot create work`, async t => {
+  const f = feedback({ relays }); t.after(() => f.pipeline.dispose()); await f.pipeline.start();
   f.send('A'); f.send('B'); await tick(); assert.equal(f.jobs.length, 2);
+  assert.equal(f.hold.value, '/A/B');
+  assert.equal(f.pipeline.entries.get('async').work.size, 2);
   assert.throws(() => f.jobs[0].original.defer(), /live receive/);
   let stopped = false; const stopping = f.pipeline.stop().then(() => { stopped = true; });
   await tick(); assert.equal(stopped, false);
-  for (const { work, text } of f.jobs) { work.context.emit('text', text); work.complete(); work.complete(); }
+  const first = f.jobs[0]; first.work.context.emitOutputs({ text: first.text }); first.work.complete(); first.work.complete();
+  await tick(); assert.equal(stopped, false);
+  const second = f.jobs[1]; second.work.context.emit('text', second.text); second.work.complete();
   await stopping; assert.deepEqual(f.seen, ['/A', '/A/B']);
   assert.equal(f.pipeline.entries.get('async').work.size, 0);
+  assert.deepEqual(f.pipeline.errors, []);
 });
 
 test('emitting through completed work fails visibly while live; abort retires work and suppresses late output', async t => {
