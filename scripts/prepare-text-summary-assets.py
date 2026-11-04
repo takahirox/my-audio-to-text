@@ -22,21 +22,21 @@ PACKAGES = [
 
 def main():
     target = ROOT / 'web/vendor/meeting-summary'
-    specification = json.loads((ROOT / 'scripts/meeting-summary-runtime.json').read_text())
+    specification = json.loads((ROOT / 'scripts/text-summary-runtime.json').read_text())
     staged = {}
     for name, url, digest, members in PACKAGES:
         archive = ROOT / '.cache/meeting-summary' / (name + '.tgz')
         archive.parent.mkdir(parents=True, exist_ok=True)
         data = archive.read_bytes() if archive.exists() else urllib.request.urlopen(url, timeout=180).read()
         if hashlib.sha256(data).hexdigest() != digest:
-            raise RuntimeError('Meeting summary runtime archive checksum mismatch: ' + name)
+            raise RuntimeError('Text summary runtime archive checksum mismatch: ' + name)
         archive.write_bytes(data)
         with tarfile.open(fileobj=io.BytesIO(data)) as package:
             for source, destination in members.items():
                 content = package.extractfile('package/' + source).read()
                 pin = next(f for f in specification['files'] if f['path'] == destination)
                 if len(content) != pin['bytes'] or hashlib.sha256(content).hexdigest() != pin['sha256']:
-                    raise RuntimeError('Meeting summary runtime member checksum mismatch: ' + destination)
+                    raise RuntimeError('Text summary runtime member checksum mismatch: ' + destination)
                 staged[destination] = content
     if target.exists():
         shutil.rmtree(target)

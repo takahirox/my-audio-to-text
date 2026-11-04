@@ -458,4 +458,4 @@ and cancels queued work. Each sampled update has a four-minute deadline; abort
 also invalidates its downstream contexts. Stop uses the event topological order,
 so source tails enter the FIFO before downstream nodes close. Cancel and dispose
 abort immediately. Fresh Pipeline/node instances are required for Start.
-See the [importable example and lifecycle details](meeting-summary-nodes.md).
+See the [importable example and lifecycle details](text-summary-nodes.md).

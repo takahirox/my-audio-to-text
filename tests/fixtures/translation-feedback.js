@@ -2,7 +2,7 @@ import { Pipeline } from '../../web/pipeline.js';
 import { HoldNode } from '../../web/hold-node.js';
 import { TextFormatterNode } from '../../web/text-nodes.js';
 import { TextWindowNode } from '../../web/text-window-node.js';
-import { MeetingSummaryNode } from '../../web/meeting-summary-node.js';
+import { TextSummaryNode } from '../../web/text-summary-node.js';
 import { TEXT } from '../../web/port-contracts.js';
 import { EnglishToJapaneseTranslateGemmaTranslationNode } from '../../web/translation-nodes.js';
 import { TranslationSchedulerNode, TRANSLATION_OUTPUTS } from '../../extension/translation-scheduler.js';
@@ -17,7 +17,7 @@ export async function translationFeedback({ TranslationNode = EnglishToJapaneseT
     const worker = workerFactory ? workerFactory(url) : {
       postMessage(data) {
         if (data.type === 'load') queueMicrotask(() => this.reply({ id: data.id,
-          type: failLoad && !url.pathname.endsWith('meeting-summary-worker.js') ? 'error' : 'ready', message: 'model failed' }));
+          type: failLoad && !url.pathname.endsWith('text-summary-worker.js') ? 'error' : 'ready', message: 'model failed' }));
         if (data.type === 'summarize') queueMicrotask(() => this.reply({ id: data.id, type: 'result', summary: summaryResult(summaries.length) }));
         if (data.type === 'drain') queueMicrotask(() => this.reply({ id: data.id, type: 'drained' }));
       }, reply(data) { this.onmessage?.({ data }); }, terminate() { this.released = true; },
@@ -41,7 +41,7 @@ export async function translationFeedback({ TranslationNode = EnglishToJapaneseT
   const nodes = {
     source: { outputs: { text: TEXT, final: TEXT }, start(c) { source = c; } }, window, hold,
     formatter: new TextFormatterNode({ inputCount: 2, template: '{1}/{2}' }),
-    summary: new MeetingSummaryNode({ type: 'MeetingSummaryLfm2', workerFactory: factory }),
+    summary: new TextSummaryNode({ type: 'TextSummaryLfm2', workerFactory: factory }),
     translator: scheduler,
     sink: { inputs: TRANSLATION_OUTPUTS, receiveInputs(values, context) { outputs.push({ values, provisional: context.provisional }); } },
   };

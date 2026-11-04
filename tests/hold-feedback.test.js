@@ -138,7 +138,7 @@ test('event cycles and wrong primitive connections remain rejected; only non-emi
   const node = () => ({ inputs: { text: TEXT }, outputs: { text: TEXT }, receive() {} });
   assert.throws(() => new Pipeline({ nodes: { a: node(), b: node() }, connections: [edge('a', 'text', 'b', 'text'), edge('b', 'text', 'a', 'text')] }), /acyclic/);
   assert.throws(() => new Pipeline({ nodes: { a: { outputs: { n: NUMBER } }, h: new HoldNode() }, connections: [edge('a', 'n', 'h', 'input')] }), /Incompatible/);
-  const g = { version: GRAPH_VERSION, nodes: ['Text', 'Hold', 'TextFormatter', 'MeetingSummaryLfm2', 'Display'].map((type, i) => graphNode(type, 'n' + i)), edges: [
+  const g = { version: GRAPH_VERSION, nodes: ['Text', 'Hold', 'TextFormatter', 'TextSummaryLfm2', 'Display'].map((type, i) => graphNode(type, 'n' + i)), edges: [
     edge('n0', 'value', 'n2', 'input2'), edge('n1', 'value', 'n2', 'input1'), edge('n2', 'text', 'n3', 'text'), edge('n3', 'summary', 'n1', 'input'), edge('n3', 'summary', 'n4', 'input')] };
   assert.deepEqual(validateGraph(g), []); assert.equal(executableGraph(g).nodes.length, 5);
   const storage = new Map(), adapter = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };

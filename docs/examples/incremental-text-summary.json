@@ -5,7 +5,7 @@
       "id": "input",
       "type": "Text",
       "settings": {
-        "value": "Mika: The venue approval is pending. The owner is unknown."
+        "value": "The prototype uses a local model. Initial tests measured 12 ms latency."
       },
       "position": {
         "x": 20,
@@ -14,9 +14,10 @@
     },
     {
       "id": "summary",
-      "type": "MeetingSummaryLfm2",
+      "type": "TextSummaryLfm2",
       "settings": {
-        "language": "ja"
+        "language": "ja",
+        "prompt": "Update the previous summary using the new text. Preserve still-relevant facts and explicit corrections. Return the complete updated summary."
       },
       "position": {
         "x": 1000,
@@ -55,7 +56,7 @@
       "type": "TextFormatter",
       "settings": {
         "inputCount": 2,
-        "template": "Previous summary:\n{1}\n\nNew transcript:\n{2}"
+        "template": "Previous summary:\n{1}\n\nNew text:\n{2}"
       },
       "position": {
         "x": 660,

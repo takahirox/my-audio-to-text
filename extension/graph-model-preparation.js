@@ -1,5 +1,5 @@
-import { meetingSummaryManifest } from './meeting-summary-cache.js';
-import { MEETING_SUMMARY_TYPES, meetingSummaryModel } from '../web/meeting-summary-models.js';
+import { textSummaryManifest } from './text-summary-cache.js';
+import { TEXT_SUMMARY_TYPES, textSummaryModel } from '../web/text-summary-models.js';
 import { ModelAssetCache } from './model-asset-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
@@ -16,11 +16,11 @@ export function graphModelRequirements(graph) {
   const requirements = new Map();
   for (const node of graph.nodes) {
     let requirement;
-    if (MEETING_SUMMARY_TYPES.includes(node.type)) {
-      const model = meetingSummaryModel(node.type), type = node.type;
-      requirement = { key: model.key, id: model.key, title: model.label + (type === 'MeetingSummaryLfm2'
+    if (TEXT_SUMMARY_TYPES.includes(node.type)) {
+      const model = textSummaryModel(node.type), type = node.type;
+      requirement = { key: model.key, id: model.key, title: model.label + (type === 'TextSummaryLfm2'
         ? ' · 749 MB · allow 2 GB storage, 4 GB free RAM/GPU per Node (estimate) · WebGPU shader-f16 · LFM 1.0 terms apply (Models)'
-        : ' · 1.403 GB · allow 3 GB storage, 6 GB free RAM/GPU per Node (estimate) · WebGPU shader-f16 · Apache 2.0 (Models)'), manifest: () => meetingSummaryManifest(type) };
+        : ' · 1.403 GB · allow 3 GB storage, 6 GB free RAM/GPU per Node (estimate) · WebGPU shader-f16 · Apache 2.0 (Models)'), manifest: () => textSummaryManifest(type) };
     }
     else if (node.type === 'IfCondition') requirement = { key: 'if-condition', id: 'if-condition', title: 'IfCondition · XtremeDistil · 14 MB · CPU WASM · allow 250 MB RAM per Node', manifest: ifConditionManifest };
     else if (node.type === 'OpusMtJaEn') requirement = { key: 'opus-ja-en', id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', manifest: opusMtManifest };

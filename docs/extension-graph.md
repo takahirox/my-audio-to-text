@@ -14,7 +14,8 @@ for details or Disconnect. Canvas zoom and Fit graph support large graphs.
 Settings, essential port names and accessibility labels remain visible.
 
 Graph actions provides Validate draft, Load saved, Reset draft to default, and
-Import graph JSON. Import validates before replacing the draft. Save is required
+Import or Export graph JSON. Export downloads the validated current draft,
+including multiline settings. Import validates before replacing the draft. Save is required
 to apply an import or Reset. Save prepares the selected model assets, including
 parked model Nodes; opening or loading a graph does not download weights. Models
 provides preparation, retry, cache verification and license/terms information.
@@ -54,7 +55,7 @@ uses arrival order alone, with no stage or model-specific priority.
 
 Final-only ASRs omit the provisional branch. For append-only plain text, use
 `ASR.final → TextAccumulator.append → text → Display.input`. Any complete TEXT
-snapshot, including `MeetingSummary.summary`, can connect directly to Display.
+snapshot, including `TextSummary.summary`, can connect directly to Display.
 
 See [portable display items](display-items.md) for contracts, exact wiring,
 snapshot ownership and lifecycle, and [ID-scoped pairing](keyed-text-history.md)
@@ -83,7 +84,7 @@ payloads, startup configuration and correlation.
 | TextFormatter | Configurable numbered TEXT inputs and literal multiline template → TEXT |
 | TextSlidingWindow, TextWindow | Generic bounded TEXT processing; see their documentation |
 | OPUS-MT and TranslateGemma in either direction | Independent committed and provisional translation families |
-| MeetingSummaryLfm2, MeetingSummaryQwen35 | Complete summary: TEXT snapshots |
+| TextSummaryLfm2, TextSummaryQwen35 | Complete summary: TEXT snapshots |
 | IfCondition | TEXT → exactly one yes/no TEXT branch |
 | FocusedInputTextOutputNode | Append TEXT to the user-focused editable field |
 | Supertonic3, Kokoro | Committed TEXT → completed synthesized audio |
@@ -123,7 +124,7 @@ private to the host rendering boundary and never travels through graph ports.
 - [Chrome extension setup and permissions](chrome-extension.md)
 - [Whisper](whisper-node.md), [Zipformer](zipformer-node.md), [optional ASRs](optional-asr-nodes.md)
 - [Translation](translation-nodes.md), [windowed translation](windowed-translation.md)
-- [Text sliding windows](text-sliding-window.md), [meeting summaries](meeting-summary-nodes.md), [IfCondition](if-condition-node.md)
+- [Text sliding windows](text-sliding-window.md), [text summaries](text-summary-nodes.md), [IfCondition](if-condition-node.md)
 - [TTS and streaming playback](streaming-tts.md)
 
 Run `npm test`, relevant Playwright browser/extension suites, and
@@ -137,4 +138,4 @@ documented with each feature.
 Hold is available under **Constants / utilities**. Connect its readable value
 to a formatter alongside TextWindow, then route the summary back to Hold.input.
 Only TextWindow triggers the next update. [Importable example, limits and Stop /
-Cancel behavior](meeting-summary-nodes.md). Ordinary event cycles remain invalid.
+Cancel behavior](text-summary-nodes.md). Ordinary event cycles remain invalid.
