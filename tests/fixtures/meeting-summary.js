@@ -19,7 +19,7 @@ export function meetingGraph(type) {
 export function meetingFeedbackGraph(type = 'MeetingSummaryLfm2') {
   const graph = meetingGraph(type);
   const formatter = graphNode('TextFormatter', 'format');
-  formatter.settings = { inputCount: 2, template: 'Previous summary:\n{1}\n\nNew transcript:\n{2}' };
+  formatter.settings = { inputCount: 2, template: 'Previous summary:\n{1}\n\nNew text:\n{2}' };
   graph.nodes.push(graphNode('Hold', 'previous'), graphNode('TextWindow', 'window'), formatter, graphNode('TextAccumulator', 'transcript-history'));
   graph.edges = [edge('input', 'value', 'window', 'text'), edge('window', 'text', 'format', 'input2'),
     edge('previous', 'value', 'format', 'input1'), edge('format', 'text', 'summary', 'text'),
