@@ -15,6 +15,19 @@ export function meetingGraph(type) {
   return ({ version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input'), edge('input', 'value', 'transcript', 'input')] });
 }
 
+// Generic sampled feedback example; the model has no private summary history.
+export function meetingFeedbackGraph(type = 'MeetingSummaryLfm2') {
+  const graph = meetingGraph(type);
+  const formatter = graphNode('TextFormatter', 'format');
+  formatter.settings = { inputCount: 2, template: 'Previous summary:\n{1}\n\nNew transcript:\n{2}' };
+  graph.nodes.push(graphNode('Hold', 'previous'), graphNode('TextWindow', 'window'), formatter, graphNode('TextAccumulator', 'transcript-history'));
+  graph.edges = [edge('input', 'value', 'window', 'text'), edge('window', 'text', 'format', 'input2'),
+    edge('previous', 'value', 'format', 'input1'), edge('format', 'text', 'summary', 'text'),
+    edge('summary', 'summary', 'previous', 'input'), edge('summary', 'summary', 'notes', 'input'),
+    edge('input', 'value', 'transcript-history', 'append'), edge('transcript-history', 'text', 'transcript', 'input')];
+  return graph;
+}
+
 // Objective regression checks for the recorded #130 failures, not a quality
 // score. Accept spelling/spacing variants and the original three-section format.
 export function meetingFactChecks(summary, batch) {

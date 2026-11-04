@@ -132,3 +132,10 @@ Run `npm test`, relevant Playwright browser/extension suites, and
 verify composition, safe rendering, persistence and lifecycle; they do not
 establish real inference quality. Real-model checks and setup requirements are
 documented with each feature.
+
+## Incremental summaries with Hold
+
+Hold is available under **Constants / utilities**. Connect its readable value
+to a formatter alongside TextWindow, then route the summary back to Hold.input.
+Only TextWindow triggers the next update. [Importable example, limits and Stop /
+Cancel behavior](meeting-summary-nodes.md). Ordinary event cycles remain invalid.

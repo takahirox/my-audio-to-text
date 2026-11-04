@@ -1,113 +1,103 @@
 # Local live meeting summaries
 
-Issue #130 adds two independent processors under **Add node → Processors**:
-**Meeting Summary · LFM2.5 1.2B JP** and **Meeting Summary · Qwen3.5 2B**.
-Each accepts committed `text: TEXT` and emits one complete `summary: TEXT`.
-Both use real local inference with bounded, extractive note reconciliation.
-See the [current factual smoke and its boundaries](evidence/meeting-summary-130.md)
-before relying on model output.
-Connect `ASR.final`, `TextWindow.text` or `Text.value` to `text`, then `summary`
-directly to `Display.input`. Stop/Cancel retain the last successful note;
-no accumulator is needed for complete summary snapshots. Other TEXT
-consumers are compatible. Translation, ASR and transcript displays can fan out
-independently. There is no global model selection or preferred model.
+**Meeting Summary · LFM2.5 1.2B JP** and **Meeting Summary · Qwen3.5 2B**
+accept one `text: TEXT` and emit one complete `summary: TEXT` per successful
+input, even when the result is unchanged. They own no prior-summary history,
+window timer, batching, or evidence reconciliation. Each input makes one local
+update request and one generation. Their only setting is `language` (`ja` or
+`en`), frozen for the session.
 
-The only setting is **language**: `ja` (Japanese) or `en` (English). The summary
-language need not match the transcript. Each session freezes settings; saving
-edits during a session changes the next session. These processors use the same Graph v10 content contract as other snapshot producers;
-unsupported saved display graphs require explicit Reset or Import and Save.
+## Incremental example with Hold
 
-## Incremental behavior
+[Import this minimal graph](examples/incremental-meeting-summary.json) in Graph
+Editor. It contains a Text constant as a small, repeatable demonstration; Start
+begins with empty previous summary. TextWindow emits the text after its normal
+1.5-second deadline (or on Stop). Save prepares the selected summary model.
+For a live meeting, replace Text with your ASR's `final: TEXT` output. Leave the
+other connections unchanged:
 
-The first pending committed fragment starts a 30-second timer. At 2,000 UTF-16
-code units, or when the timer expires, the Node sends **only the previous
-successful summary and the new batch**. The 2,000-code-unit size is a trigger
-and packing target: batches keep committed fragments whole so that negation or
-conditions cannot be separated from their claims. A single oversized fragment
-is processed intact within the 32,768-code-unit backlog cap; the Worker divides
-it only at sentence/speaker boundaries, retaining continuation context. An
-excerpt exceeding the prompt, output or note budget fails explicitly without
-truncating evidence or publishing a partial snapshot. Fragments retain order
-and repeats; adjacent fragments get a newline. Empty/whitespace-only inputs do
-nothing. Input is committed evidence:
-successive input values are new fragments, not edits to a previously submitted
-transcript. Do not connect a revising provisional stream to this port.
+```text
+ASR.final → TextWindow.text → TextFormatter.input2
+Hold.value                → TextFormatter.input1
+TextFormatter.text        → MeetingSummary.text
+MeetingSummary.summary    → Hold.input
+MeetingSummary.summary    → Display.input
+```
 
-Each instance owns one Worker, one generation and bounded pending text. Update
-triggers coalesce while inference runs, but unseen text is retained. Pending
-plus active evidence is capped at 32,768 code units. Overflow explicitly rejects
-the new fragment, closes acceptance and drains previously accepted text. Its
-Live status reports this; independent branches keep running. Start a fresh
-session after reducing input rate. No unbounded transcript or inference FIFO
-is retained. Memory also includes the model's temporary tensors and caches.
+Set the formatter to two inputs and this template (literal newlines):
 
-During generation the previous snapshot remains visible. A successful nonempty
-changed result replaces it atomically. Equal results emit nothing. Stop closes
-acceptance, drains every accepted batch including the tail, then terminates the
-Worker. Cancel/teardown terminates it immediately, clears pending context and
-invalidates late replies. A new session starts with an empty note and no prior
-context. Initialization/inference failure, empty/oversized output, GPU loss or
-a timeout or exhausted output token budget leaves the last successful display intact and stops only this model
-branch. There is no retry with a different checkpoint, CPU or cloud backend.
-Start again after resolving the visible error. Load and generation each have
-a three-minute deadline; Cancel can interrupt either.
-The Live status identifies updated notes as AI drafts and asks users to verify
-facts, decisions and owners against the transcript.
+```text
+Previous summary:
+{1}
 
-The Worker keeps the previous successful note as at most **32 evidence-linked
-records**, with a **12,000-code-unit** total for source anchors, rendered text and
-speaker labels, and a **6,000-code-unit** visible snapshot. It splits only the
-new batch into short excerpts (at most 32 model calls before repairs). The local
-model renders these excerpts in the requested language; it never rewrites the
-whole old note. Source speaker labels are preserved separately from model text
-and identify the speaker, not an inferred task owner. Explicit unknown ownership
-and pending approval remain visible. Sections are assembled in code, including
-completed work when reported. No fixture-specific content or canned summaries
-are used.
+New transcript:
+{2}
+```
 
-Conservative English/Japanese source cues distinguish proposals, explicit
-decisions, open work, questions and reported completion. Negation (including
-English contractions and Japanese copular negatives such as `承認済みではありません`)
-and conditional language prevent promotion to a confirmed
-decision or completed task. Compatible records with unambiguous matching subject
-words are updated; unrelated or tied matches are retained separately. Explicit
-withdrawals and corrections can move a former decision or completion back to open
-work. Clear same-subject approval/completion assertions also replace the previous
-status without a correction keyword. Without an explicit correction, questions
-and conditions stay separate; matching distinguishes approving a draft from
-sending it. Subject matching checks both keyword sets, so a report and its
-appendix remain separate. Shorter reaffirmations with omitted scope also stay
-separate, retaining the earlier dated, budgeted decision. Different or missing
-speaker labels retain separate records for reaffirmations, corrections and
-status transitions, so one person's action cannot overwrite another's. Changed
-unlabelled first-person statements also stay separate because their actor is
-unknown; exact repetitions can still deduplicate.
-Labels must match exactly across languages: `Mika` and `ミカ` are retained as
-separate speakers because transliteration alone does not establish identity.
+Hold has ordinary typed `input: TEXT` and `value: TEXT` ports. `value` starts
+as `''`. Its input **stores** the latest value without emitting. The runtime
+**samples** value together with the next ordinary delivery at the connected
+consumer. Updating Hold alone never formats text or generates a summary.
+No source identities, special data types, edge flags or separate loop manager
+are involved. Hold works with any TEXT producer/consumer.
 
-An explicit numerical correction patches only an identified quantity in both
-the source and its rendering, preserving unrelated equal numbers and dates.
-If the correction also changes approval/completion or makes it uncertain, the
-new status evidence replaces the old sentence rather than inheriting its status.
-Ambiguous targets retain the evidence with a visible **Correction target unclear**
-label (Japanese: **訂正対象不明**); a matched record with an ambiguous correction
-moves to discussion rather than remaining confirmed. A completed task replaces
-its matching open item without overwriting a decision about the same object.
-New records and replacements are committed only after the entire batch succeeds.
+A new TextWindow event produces exactly one formatted string. While its summary
+is generating, later windows wait FIFO **before** reading Hold. For concurrent
+A/B/C windows, the requests are `S1=f('',A)`, `S2=f(S1,B)`, `S3=f(S2,C)`.
+There is only one request in flight on this path. The runtime awaits receive
+promises and all causally forwarded deliveries, including storage in Hold.
+Unchanged results still complete; unrelated TEXT events cannot release waiting
+work. A feedback path that finishes without storing a causal result fails
+visibly, rather than continuing on stale context. Async processors used on this
+path must await their work and emit through their supplied receive context;
+background/timer emissions from a startup context cannot signal completion.
 
-Evidence is a separate user message with escaped chat delimiters. Short rendering
-instructions differ for the two models based on actual-model checks; Qwen uses
-an English instruction for Japanese terminology. These are not instructions from
-the transcript. They do not guarantee obedience or resistance to prompt injection.
+Only non-emitting sampled edges break cycle validation. Every ordinary event
+cycle remains invalid in both the editor and Pipeline. Hold connections save and
+reload as normal graph edges. Existing graph version 15 and strict primitive
+port compatibility remain unchanged. Previously saved direct MeetingSummary
+graphs still load, but now summarize each input independently; add this explicit
+Hold/formatter composition when incremental history is desired. Original saved
+JSON is retained until you choose to edit and Save.
 
-This is **lossy history compression**, not semantic verification. Source-cue and
-lexical matching can miss paraphrases, combine overly similar topics, leave stale
-or duplicate items, misclassify unfamiliar phrasing, or lose a fact in translation.
-When memory is full, older discussion/completed items are evicted first, then
-older remaining items; the Live status reports the omission count. Earlier facts
-cannot be recovered from this bounded note. Keep an independent transcript when
-exact evidence matters and verify decisions and owners against it. Passing the
-recorded fixtures is not a general factual-accuracy or quality guarantee.
+## Bounds and session lifecycle
+
+TextWindow controls window boundaries; configure its existing NUMBER thresholds
+to choose a cadence suitable for inference speed. Default thresholds are 600
+UTF-16 code units or 1.5 seconds. Each sampled consumer permits at most **32
+accepted deliveries and 32,768 ordinary-input characters**, including its active
+update. Overflow rejects the new delivery and visibly stops that branch,
+canceling its accepted waiting work; it does not silently coalesce windows.
+A sampled update has a **four-minute** deadline. Failed, missing, or timed-out
+completion stops the branch and reports an error. Independent paths remain
+usable. Reduce input rate and Start a new session after fixing the cause.
+
+MeetingSummary accepts a nonempty formatted input of at most **32,768 code
+units**; empty or oversized input fails explicitly. It never splits or truncates
+evidence. Prompt plus output must fit the **8,192-token** runtime budget, with
+up to **1,024 new tokens** and a **6,000-code-unit** nonempty result. A too-large
+prompt, exhausted generation budget, malformed result, model/Worker error or
+GPU loss publishes no replacement. Loading and generation each have a
+three-minute deadline. Conservative grounding checks reject invented
+attribution, unreported completion and explicitly superseded numbers; rejected
+results fail visibly without a repair generation or fabricated summary.
+These checks cannot prove factual accuracy or completeness.
+
+Stop flushes TextWindow's remaining tail, drains accepted FIFO updates through
+Hold and Display, then releases the model Worker. Stop may report an explicit
+branch failure; it does not discard successful displayed work. Cancel/abort and
+disposal immediately invalidate pending updates and late replies and release
+Workers; they discard waiting windows and TextWindow tails. Cancel retains the
+last successful display. Fresh Start creates fresh nodes, empty Hold state and
+no model history. Calling Start again on the same Pipeline is rejected.
+
+The prompt requests a refreshed summary from the entire formatted evidence,
+preserving uncertainty, corrections, names, numbers and unknown ownership.
+Evidence is a quoted user message with escaped chat delimiters. Input commands
+are data, but prompt-injection resistance and model quality are not guaranteed.
+Summaries compress history and can omit, invent or distort facts. Keep an
+independent transcript and verify decisions, owners and dates. The prior #130
+extractive-reconciliation evidence does **not** validate this changed prompt.
 
 ## Pinned models, runtime and terms
 
@@ -129,26 +119,16 @@ Both use q4f16, Worker WebGPU and `shader-f16`; no CPU fallback. LFM loads
 encoder/processor are unnecessary. Both pinned tokenizers, configs, generation
 configs and chat templates are included. Chat templates come from tokenizer
 metadata; Qwen thinking is disabled. Generation is greedy, without heading
-prefill or a repetition penalty. Each excerpt allows up to 1,024 new tokens;
+prefill or a repetition penalty. Each update allows up to 1,024 new tokens;
 exhausted output budgets are errors, never successful truncated snapshots.
 Prompt plus output is checked against an 8,192-token application budget without
 silently truncating evidence. LFM's published card specifies 32,768 context
 (its config says 128,000); Qwen config specifies 262,144. Temporary generation
-caches are released after each excerpt; only the bounded note records persist.
+caches are released after each update; the Worker stores no meeting history.
 
-Before accepting an excerpt, lexical checks reject unsupported speaker-style
-labels, explicitly superseded numbers and unreported completion claims. Numeric
-values and named weekdays must survive rendering without omission, introduction
-or scale changes. Calendar translation hints preserve weekdays; equivalent
-Japanese-unit spellings and English month names are recognized. These
-checks can conservatively reject legitimate number-word or unit conversions.
-A rejected excerpt permits at most two repair generations with unchanged evidence
-and repair instructions in the system message. All excerpts and repairs share the
-same 180-second request deadline and bounded pending-text queue. A failed excerpt
-publishes no partial batch and leaves the previous note intact. Metrics record
-per-call/total token counts, first decoded-token time, total inference time and
-history omissions. The first-token progress event is internal Worker telemetry,
-not a public graph Port.
+Grounding checks are conservative lexical guards, not entailment validation.
+The single request records prompt/output tokens, first-token time and total
+generation time; progress is internal telemetry rather than a public port.
 
 The isolated packaged runtime is Transformers.js **4.2.0** with its exact
 `onnxruntime-web` **1.26.0-dev.20260416-b7804b056c** dependency. Runtime archives
@@ -200,33 +180,22 @@ downloads contact the model host; those requests contain no meeting content.
 
 ```sh
 npm ci
-# Run the existing asset preparation steps; prepare:assets clears vendor/.
-npm run prepare:assets
-npm run prepare:translation-assets
-npm run prepare:whisper-assets
-npm run prepare:zipformer-assets
-npm run prepare:optional-asr-assets
-npm run prepare:tts-assets
-npm run prepare:meeting-summary-assets
-python3 scripts/review-meeting-summary-assets.py
-npm run build:extension
 npm test
-npm run test:meeting-summary-real
-# Installed Google Chrome instead of Playwright Chromium:
-MEETING_SUMMARY_CHANNEL=chrome npm run test:meeting-summary-real
+npm run test:browser -- tests/browser/hold-feedback.spec.js
+npm run test:extension -- tests/extension/graph-hold-feedback.spec.js
+# Full asset-backed package (see chrome-extension.md for other prerequisites):
+npm run prepare:meeting-summary-assets
+npm run build:extension
+MEETING_SUMMARY_SMOKE=1 npm run test:extension -- tests/extension/graph-meeting-summary-smoke.spec.js
 ```
 
-The review script downloads the exact selected files into `.cache`, checks
-upstream LFS whole-file hashes and reproduces committed chunk manifests. Review
-diffs before changing pins. The smoke serves these unchanged files over loopback
-for Save, then makes Chrome offline before Start. Production graph, Worker,
-runtime, cache and Live display are used; only the committed TEXT producer is
-controllable. Fixtures in `tests/fixtures/meeting-summary.js` cover sequential
-English/Japanese evidence, a proposal becoming a decision, corrected money,
-completed invitations, repeated statements, pending venue approval and unknown
-ownership. Deterministic tests validate state/lifecycle/port invariants separately
-using Worker replies; those do not establish model quality.
-
-See [Issue #130 evidence](evidence/meeting-summary-130.md) for actual measured
-results and remaining validation boundaries. Subjective comparison and model
-preference remain the user's later evaluation; there is no automatic winner.
+The deterministic browser/MV3 checks use controlled model replies with the
+production Hold, Pipeline, formatter and MeetingSummary node. The MV3 feedback
+test packages source in an isolated fixture extension; it does not assert that
+the complete model-bearing distribution builds. Unit tests separately cover
+bounds, missing/failed/unrelated completion, cancellation and typed graph
+validation. The opt-in real-model test uses the same explicit feedback graph,
+real pinned runtime/models and offline inference; it must be run separately to
+assess this prompt. See [Issue #202 validation](evidence/hold-feedback-202.md) for
+actual results and unperformed checks. Old [#130 model evidence](evidence/meeting-summary-130.md)
+remains historical and must not be reported as verification of this change.

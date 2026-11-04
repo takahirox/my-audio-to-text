@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { MEETING_SUMMARY_TYPES, meetingSummaryModel } from '../../web/meeting-summary-models.js';
-import { meetingBatches, meetingGraph, meetingFactChecks } from '../fixtures/meeting-summary.js';
+import { meetingBatches, meetingFeedbackGraph as meetingGraph, meetingFactChecks } from '../fixtures/meeting-summary.js';
 
 // No inference/model/runtime mocks. Only a controllable committed TEXT producer.
 // Loopback serves exact pinned bytes to Save; Start and inference are offline.
@@ -110,7 +110,7 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     for (let index = 0; index < meetingBatches.length; index++) {
       const before = Date.now();
       if (index) await page.evaluate(text => window.emitCommittedText(text), meetingBatches[index]);
-      if (index === 2) await page.locator('#stop').click(); // Last batch drains without the timer.
+      if (index === 2) await page.locator('#stop').click(); // Stop flushes the last TextWindow tail.
       await page.waitForFunction(count => window.summaryEvidence.some(e => e.type === 'error') || window.summaryEvidence.filter(e => e.type === 'result').length === count, index + 1, { timeout: 180000 });
       const reply = await page.evaluate(() => window.summaryEvidence.at(-1));
       expect(reply.type, reply.message).toBe('result');
@@ -121,7 +121,7 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
       expect(output.trim()).not.toMatch(/^\{/);
       if (index === 1) expect(output).not.toBe(runs[0].output);
       const facts = meetingFactChecks(output, index);
-      runs.push({ batch: index + 1, latencyIncludingBatchWaitMs: Date.now() - before, output, facts });
+      runs.push({ batch: index + 1, latencyIncludingWindowWaitMs: Date.now() - before, output, facts });
       console.log(`${type}: batch ${index + 1} emitted ${output.length} characters`);
       await observe(`batch-${index + 1}`);
     }

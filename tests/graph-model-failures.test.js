@@ -61,7 +61,7 @@ function fixture(type) {
   session.outputTarget = { tabId: 42, documentId: 'document', label: 'Target' };
   const display = id => domText(session.view.displays[id]);
   const send = async text => { session.session.pipeline.entries.get('source').context.emit('value', text); await turn(); };
-  const flush = async () => { await turn(); await session.session.pipeline.entries.get('model').node.flush?.(); await turn(); };
+  const flush = async () => { await turn(); await turn(); };
   return { session, model, translations, inserted, display, send, flush };
 }
 
@@ -95,8 +95,8 @@ for (const type of types) {
         assert.equal(f.inserted.at(-1), 'surviving input');
         assert.equal(f.session.view.state, 'running');
       }
-      // A pending short summary fails during Stop. IfCondition's Stop-time
-      // failure is its Worker drain reply, after all accepted decisions finish.
+      // Model failures leave the independent paths drainable. IfCondition's
+      // Stop-time failure is its Worker drain reply.
       await f.session[end]();
       assert.equal(f.session.view.state, 'idle');
       assert.equal(pipeline.state, 'disposed');
@@ -125,7 +125,7 @@ for (const type of types) {
     const starting = f.session.start(42); await turn();
     if (pending !== 'load') {
       await starting;
-      if (type !== 'IfCondition') { f.session.session.pipeline.entries.get('model').node.flush(); await turn(); }
+      await turn();
     }
     let stopping;
     if (pending === 'stop') {
@@ -160,17 +160,16 @@ for (const type of types) {
   });
 }
 
-for (const type of types.filter(type => type !== 'IfCondition')) test(`${type}: backlog diagnostic drains accepted evidence without reporting a processor failure`, async t => {
+for (const type of types.filter(type => type !== 'IfCondition')) test(`${type}: oversized input fails visibly while independent paths survive`, async t => {
   const f = fixture(type); t.after(() => f.session.cancel());
-  await f.session.start(42);
+  await f.session.start(42); await f.flush();
   const pipeline = f.session.session.pipeline, node = pipeline.entries.get('model').node;
-  // The first short fragment is still pending when the overflowing one arrives.
-  await f.send('x'.repeat(32768)); await f.flush();
-  assert.match(f.session.view.summaryStatus, /overflowing fragment was rejected/);
+  await f.send('x'.repeat(32769)); await f.flush();
+  assert.match(f.session.view.summaryStatus, /32,768/);
   assert.equal(f.display('model-output'), 'committed summary');
   assert.deepEqual(f.model.all[0].messages.filter(m => m.type === 'summarize').map(m => m.text), ['first']);
-  assert.equal(node.disposed, true); assert.equal(pipeline.entries.get('model').failed, false);
-  assert.deepEqual(pipeline.errors, []);
+  assert.equal(node.disposed, true); assert.equal(pipeline.entries.get('model').failed, true);
+  assert.equal(pipeline.errors.filter(e => e.message.startsWith('Node model:')).length, 1);
   await f.send('peer survives'); assert.equal(f.display('peer').split('\n').at(-1), 'peer survives');
   await f.session.stop(); assert.equal(f.session.view.status, 'Stopped. Outputs are ready.');
 });

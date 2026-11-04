@@ -36,7 +36,7 @@ schema matching. Tokens impose no fields on payloads and do not validate values
 at delivery time. Nodes own validation of their data contracts. Unknown nodes,
 unknown ports, incompatible tokens, duplicate connections, multiple incoming
 edges per input, duplicate node instances and cycles fail during construction. Unknown output emissions report
-a node error. Graphs are fixed acyclic graphs for this minimal implementation.
+a node error. Ordinary event routes form a fixed acyclic graph; non-emitting sampled outputs may close feedback through held state.
 
 ```js
 const pipeline = new Pipeline({
@@ -387,3 +387,32 @@ as the names of its unfinished output family. A consumer receiving only those
 outputs retains `context.provisional`; a consumer receiving committed outputs in
 the same delivery sees a committed group. Forwarding retains the flag across
 async processing. See [keyed utterance history](display-items.md).
+
+## Sampled state and feedback (#202)
+
+`HoldNode` declares `sampledOutputs = ['value']` and `readOutput(port)`, alongside
+ordinary TEXT input/output contracts. This is a node capability, not an edge
+option or producer identity rule. Pipeline never routes an event from a sampled
+output; attempting to emit it fails. Connections still undergo normal port,
+duplicate and single-incoming validation. Topological sorting considers only
+emitting routes, so an emitting cycle remains invalid.
+
+On an ordinary delivery to a consumer with sampled inputs, Pipeline waits for
+already queued state writes and adds the current readable values to that one
+input map. `receiveInputs` sees one atomic delivery. Each sampled consumer's
+FIFO waits for its receive promise and all downstream deliveries emitted through
+that context before processing the next input. Delivery-scoped bookkeeping,
+never string equality or an arbitrary output event, detects completion. If the
+forward event path reaches a sampled state source, that state must be updated
+by this work; missing storage is a visible failure. Async nodes must return a
+promise spanning their work and emit through their receive context. Detached
+session-context events do not complete feedback work. Nested sampled deliveries
+retain their parent's completion obligation.
+
+The active delivery counts toward the per-consumer limit of 32 deliveries /
+32,768 ordinary-input string characters; overflow visibly fails that branch
+and cancels queued work. Each sampled update has a four-minute deadline; abort
+also invalidates its downstream contexts. Stop uses the event topological order,
+so source tails enter the FIFO before downstream nodes close. Cancel and dispose
+abort immediately. Fresh Pipeline/node instances are required for Start.
+See the [importable example and lifecycle details](meeting-summary-nodes.md).

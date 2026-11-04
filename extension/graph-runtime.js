@@ -1,3 +1,4 @@
+import { HoldNode } from '../web/hold-node.js';
 import { MeetingSummaryNode } from '../web/meeting-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
@@ -121,6 +122,7 @@ export function buildGraph(graph, options) {
   for (const spec of description.nodes) {
     let node;
     switch (spec.type) {
+      case 'Hold': node = new HoldNode(); break;
       case 'Text': node = new TextNode(spec.settings); break;
       case 'MeetingSummaryLfm2': case 'MeetingSummaryQwen35':
         node = new MeetingSummaryNode({ ...spec.settings, type: spec.type, workerFactory: options.meetingSummaryWorkerFactory,

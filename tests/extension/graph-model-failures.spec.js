@@ -30,15 +30,15 @@ async function setup(f, type, phase) {
   }, type);
   return page;
 }
-const flush = page => page.evaluate(() => window.modelPipeline.entries.get('summary').node.flush());
+const settle = page => page.evaluate(() => window.modelPipeline.entries.get('summary').queue);
 const state = page => page.evaluate(() => ({ failed:window.modelPipeline.entries.get('summary').failed, errors:window.modelPipeline.errors.map(e=>e.message), state:window.modelPipeline.state }));
 
 for (const type of ['MeetingSummaryLfm2', 'MeetingSummaryQwen35']) {
   for (const phase of ['load', 'inference']) test(`${type}: ${phase} failure is tracked once; transcription survives Stop and restart`, async ({ graphExtension: f }) => {
     const page = await setup(f, type, phase); await startGraph(page);
     if (phase === 'inference') {
-      await emitFinal(page, 'first'); await flush(page); await expect(notes(page)).toHaveText('committed notes');
-      await emitFinal(page, 'fail'); await flush(page);
+      await emitFinal(page, 'first'); await settle(page); await expect(notes(page)).toHaveText('committed notes');
+      await emitFinal(page, 'fail'); await settle(page);
     }
     await expect(page.locator('#summary-status')).toContainText(phase === 'load' ? 'Controlled model load failure' : 'Controlled inference failure');
     expect(await state(page)).toMatchObject({ failed:true, state:'running' });
@@ -53,7 +53,7 @@ for (const type of ['MeetingSummaryLfm2', 'MeetingSummaryQwen35']) {
     expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
     await startGraph(page); await emitFinal(page, 'fresh');
-    if (phase === 'inference') { await flush(page); await expect(notes(page)).toHaveText('committed notes'); }
+    if (phase === 'inference') { await settle(page); await expect(notes(page)).toHaveText('committed notes'); }
     await expect(transcript(page)).toHaveText('fresh');
     await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
     expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);
@@ -61,12 +61,12 @@ for (const type of ['MeetingSummaryLfm2', 'MeetingSummaryQwen35']) {
 
   test(`${type}: Cancel interrupts Stop inference and a restart rejects stale output`, async ({ graphExtension: f }) => {
     const page = await setup(f, type, 'inference'); await startGraph(page);
-    await emitFinal(page, 'first'); await flush(page); await expect(notes(page)).toHaveText('committed notes');
+    await emitFinal(page, 'first'); await settle(page); await expect(notes(page)).toHaveText('committed notes');
     await emitFinal(page, 'slow'); await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Finalizing');
     await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
     await expect(notes(page)).toHaveText('committed notes');
     expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);
-    await startGraph(page); await emitFinal(page, 'fresh'); await flush(page);
+    await startGraph(page); await emitFinal(page, 'fresh'); await settle(page);
     await page.waitForTimeout(1600); await expect(notes(page)).toHaveText('committed notes'); await expect(transcript(page)).toHaveText('fresh');
     await page.locator('#stop').click(); await expect(page.locator('#status')).toHaveText('Stopped. Outputs are ready.');
   });
