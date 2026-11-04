@@ -52,6 +52,31 @@ Without that environment variable screenshots go to Playwright's output folder.
   interactions, active/saved session isolation and controlled Worker execution.
 - `git diff --check`: passed.
 
+## Continuation validation (2026-11-04)
+
+Integrated main `9b8e8c6` (including #205, #207 and #210) without conflicts.
+The SVG geometry helper now measures each path's total length once per
+assertion. Clearance sampling remains every 2 pixels, the geometry assertion
+timeout remains 2000 ms, and the dense drag/redraw budgets are unchanged.
+The earlier standalone **13 passed, 1 skipped** routing result was inherited;
+the following checks were freshly executed on the integrated source:
+
+- `npm test`: **750 passed**.
+- `npx playwright test tests/browser/graph-routing.spec.js tests/browser/extension-layout.spec.js --grep-invert 'live regions render safe snapshots' --workers=2`:
+  **77 passed, 1 skipped** across Chromium/WebKit, including all routing cases.
+  Dense dragging recorded **21 redraws, maximum 4.2 ms** in Chromium and
+  **3 redraws, maximum 5.0 ms** in WebKit. Screenshots went to ignored test
+  output; the corrected committed before/after evidence was preserved.
+- `npx playwright test --config playwright.extension.config.js tests/extension/graph-routing.spec.js tests/extension/graph-interactions.spec.js tests/extension/graph.spec.js`:
+  **34 passed**, using an ignored source-only MV3 fixture package made from
+  this worktree and the builder's current shared-file list. Workers/assets
+  remain controlled fixtures, not real model inference.
+- `git diff --check`: passed. Runtime, pipeline, typed contracts and canonical
+  example graphs match integrated main exactly; only visual editor code,
+  routing tests and routing documentation/evidence differ from main.
+- `npm run build:extension`: freshly attempted; stopped at the missing local
+  models check. Production packaging and real inference remain unverified.
+
 ## Limitations
 
 `npm run build:extension` was attempted and stops at “Missing local models.
