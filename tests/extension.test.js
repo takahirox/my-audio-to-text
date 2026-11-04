@@ -447,6 +447,40 @@ test('a shared formatter stays live after one input path ends', async () => {
   assert.match(domText(f.session.view.displays.combined), /peer/); await f.session.stop();
 });
 
+for (const mode of ['stop', 'cancel']) test(`held state survives its source ending until session ${mode}; restart clears it`, async () => {
+  const graph = concurrentGraph();
+  graph.nodes.push(graphNode('Hold', 'held'), graphNode('TextFormatter', 'shared'), graphNode('Display', 'combined'));
+  graph.nodes.at(-2).settings.template = '{1}/{2}';
+  graph.edges.push(edge('speech', 'final', 'held', 'input'), edge('held', 'value', 'shared', 'input1'),
+    edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'input'));
+  const f = fixture({ graph }); await f.session.start(42); const active = f.session.session;
+  const held = active.pipeline.entries.get('held');
+  active.speechNodes.get('speech').receiveEvent({ type: 'final', id: 100, text: 'retained' });
+  await drain();
+  assert.equal(domText(f.session.view.displays.combined), '', 'updating Hold does not trigger its consumer');
+  active.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 100, text: 'before' });
+  await drain(); assert.equal(domText(f.session.view.displays.combined), 'retained/before');
+
+  active.audioSources.get('audio').end(); await active.branchDrain;
+  assert.equal(active.pipeline.entries.get('speech').closed, true);
+  assert.equal(f.workers.filter(worker => worker.terminated).length, 2, 'ended source processors are released');
+  assert.equal(held.closed, true, 'the ended state input is drained');
+  assert.equal(held.node.readOutput('value'), 'retained');
+  active.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 101, text: 'after' });
+  await drain(); assert.equal(domText(f.session.view.displays.combined), 'retained/after');
+  assert.equal(f.session.view.state, 'running'); assert.equal(f.session.view.error, '');
+
+  await f.session[mode]();
+  assert.equal(held.node.readOutput('value'), '', 'full-session cleanup releases retained state');
+  assert.ok(f.workers.every(worker => worker.terminated));
+  await f.session.start(42);
+  const next = f.session.session;
+  assert.equal(next.pipeline.entries.get('held').node.readOutput('value'), '');
+  next.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 100, text: 'fresh' });
+  await drain(); assert.equal(domText(f.session.view.displays.combined), '/fresh');
+  await f.session.cancel();
+});
+
 test('active microphone permission requires a gesture; Cancel releases a late grant before models load', async () => {
   const graph = defaultGraph(); graph.nodes[0].type = 'MicrophoneAudio';
   const original = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
