@@ -1,6 +1,6 @@
 import { TEXT } from './port-contracts.js';
 import { meetingSummaryModel } from './meeting-summary-models.js';
-import { MAX_PENDING_CHARS, summaryLanguage, summaryText } from './meeting-summary-policy.js';
+import { MAX_PENDING_CHARS, summaryLanguage, summaryText, summaryInstruction } from './meeting-summary-policy.js';
 
 // One awaited update per input; previous summary and windowing are graph-owned.
 export class MeetingSummaryNode {
@@ -8,15 +8,16 @@ export class MeetingSummaryNode {
   outputs = { summary: TEXT };
   // Admission happens before Pipeline retains deliveries behind inference.
   inputQueueLimits = { deliveries: 32, chars: MAX_PENDING_CHARS };
-  constructor({ type, language = 'ja', onEvent = () => {}, workerFactory = url => new Worker(url, { type: 'module' }),
+  constructor({ type, language = 'ja', prompt = '', onEvent = () => {}, workerFactory = url => new Worker(url, { type: 'module' }),
     loadTimeoutMs = 180000, generationTimeoutMs = 180000 } = {}) {
     this.model = meetingSummaryModel(type);
-    Object.assign(this, { type, language: summaryLanguage(language), onEvent, workerFactory, loadTimeoutMs, generationTimeoutMs });
+    Object.assign(this, { type, language: summaryLanguage(language), prompt, onEvent, workerFactory, loadTimeoutMs, generationTimeoutMs });
+    summaryInstruction(prompt, language); // Validate user settings before model loading.
     this.sequence = 0; this.pending = new Map();
   }
   event(event) { try { this.onEvent(event); } catch { /* observer only */ } }
   async start(context) {
-    if (this.started || this.disposed) throw new Error('Meeting summary requires a fresh session instance.');
+    if (this.started || this.disposed) throw new Error('Text summary requires a fresh session instance.');
     this.started = true; this.context = context;
     context.signal.throwIfAborted();
     this.abort = () => {
@@ -40,7 +41,7 @@ export class MeetingSummaryNode {
         else pending.reject(new Error('Unexpected meeting summary Worker reply.'));
       };
       worker.onerror = worker.onmessageerror = event => {
-        event.preventDefault?.(); this.failure(new Error(event.message || 'Meeting summary Worker communication failed.'));
+        event.preventDefault?.(); this.failure(new Error(event.message || 'Text summary Worker communication failed.'));
       };
       await this.request('load', 'ready', { processor: this.type }, this.loadTimeoutMs);
       this.event({ type: 'ready', message: `${this.model.label} ready · ${this.language} · local` });
@@ -48,11 +49,11 @@ export class MeetingSummaryNode {
     await this.ready;
   }
   request(type, reply, payload, timeout = this.generationTimeoutMs) {
-    if (this.disposed) return Promise.reject(new DOMException('Meeting summary canceled.', 'AbortError'));
+    if (this.disposed) return Promise.reject(new DOMException('Text summary canceled.', 'AbortError'));
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pending.delete(id); reject(new Error(`Meeting summary ${type} timed out. Check free RAM/GPU memory, then Start again.`));
+        this.pending.delete(id); reject(new Error(`Text summary ${type} timed out. Check free RAM/GPU memory, then Start again.`));
       }, timeout);
       this.pending.set(id, { resolve, reject, reply, timer });
       try { this.worker.postMessage({ type, id, ...payload }); }
@@ -60,24 +61,24 @@ export class MeetingSummaryNode {
     });
   }
   async receive(port, text, context = this.context) {
-    if (this.disposed || this.stopping) throw new DOMException('Meeting summary session closed.', 'AbortError');
+    if (this.disposed || this.stopping) throw new DOMException('Text summary session closed.', 'AbortError');
     const abort = () => this.dispose();
     context.signal.addEventListener('abort', abort, { once: true });
     try {
       context.signal.throwIfAborted();
-      if (!this.started || port !== 'text' || typeof text !== 'string') throw new TypeError('Meeting summary requires text: TEXT after Start.');
-      if (!text.trim() || text.length > MAX_PENDING_CHARS) throw new RangeError('Meeting summary needs nonempty input of at most 32,768 characters; no evidence was truncated.');
-      if (this.generating) throw new Error('Meeting summary receive calls must be awaited.');
+      if (!this.started || port !== 'text' || typeof text !== 'string') throw new TypeError('Text summary requires text: TEXT after Start.');
+      if (!text.trim() || text.length > MAX_PENDING_CHARS) throw new RangeError('Text summary needs nonempty input of at most 32,768 characters; no evidence was truncated.');
+      if (this.generating) throw new Error('Text summary receive calls must be awaited.');
       this.generating = true;
       this.event({ type: 'generating', message: `${this.model.label}: updating summary…` });
-      const result = await this.request('summarize', 'result', { text, language: this.language });
+      const result = await this.request('summarize', 'result', { text, language: this.language, prompt: this.prompt });
       context.signal.throwIfAborted();
-      if (this.disposed) throw new DOMException('Meeting summary canceled.', 'AbortError');
+      if (this.disposed) throw new DOMException('Text summary canceled.', 'AbortError');
       // Equality is a successful completion too. Retain delivery identity across
       // inference, never emit from the session's unrelated startup context.
       const summary = summaryText(result.summary);
       context.emit('summary', summary);
-      this.event({ type: 'updated', message: `${this.model.label}: AI draft updated · verify facts, decisions and owners against the transcript`, metrics: result.metrics });
+      this.event({ type: 'updated', message: `${this.model.label}: AI draft updated · verify against the source text`, metrics: result.metrics });
       return summary;
     } catch (error) {
       if (!this.disposed) this.failure(error, context);
@@ -98,7 +99,7 @@ export class MeetingSummaryNode {
       this.worker.onmessage = this.worker.onerror = this.worker.onmessageerror = null;
       this.worker.terminate(); this.worker = null;
     }
-    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new DOMException('Meeting summary canceled.', 'AbortError')); }
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new DOMException('Text summary canceled.', 'AbortError')); }
     this.pending.clear();
   }
 }
