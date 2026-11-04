@@ -54,7 +54,7 @@ uses arrival order alone, with no stage or model-specific priority.
 
 Final-only ASRs omit the provisional branch. For append-only plain text, use
 `ASR.final → TextAccumulator.append → text → Display.input`. Any complete TEXT
-snapshot, including `MeetingSummary.summary`, can connect directly to Display.
+snapshot, including `Text Summary.summary`, can connect directly to Display.
 
 See [portable display items](display-items.md) for contracts, exact wiring,
 snapshot ownership and lifecycle, and [ID-scoped pairing](keyed-text-history.md)
@@ -84,7 +84,7 @@ payloads, startup configuration and correlation.
 | TextSlidingWindow, TextWindow | Generic bounded TEXT processing; see their documentation |
 | TranslationCommit | Explicit closed-window/translation association; see windowed translation |
 | OPUS-MT and TranslateGemma in either direction | Independent committed and provisional translation families |
-| MeetingSummaryLfm2, MeetingSummaryQwen35 | Complete summary: TEXT snapshots |
+| Text Summary · LFM2.5 / Qwen3.5 (saved types: `MeetingSummaryLfm2`, `MeetingSummaryQwen35`) | Generic TEXT → summary: TEXT, with editable Settings prompt |
 | IfCondition | TEXT → exactly one yes/no TEXT branch |
 | FocusedInputTextOutputNode | Append TEXT to the user-focused editable field |
 | Supertonic3, Kokoro | Committed TEXT → completed synthesized audio |
@@ -124,7 +124,7 @@ private to the host rendering boundary and never travels through graph ports.
 - [Chrome extension setup and permissions](chrome-extension.md)
 - [Whisper](whisper-node.md), [Zipformer](zipformer-node.md), [optional ASRs](optional-asr-nodes.md)
 - [Translation](translation-nodes.md), [windowed translation](windowed-translation.md)
-- [Text sliding windows](text-sliding-window.md), [meeting summaries](meeting-summary-nodes.md), [IfCondition](if-condition-node.md)
+- [Text sliding windows](text-sliding-window.md), [text summarization](meeting-summary-nodes.md), [IfCondition](if-condition-node.md)
 - [TTS and streaming playback](streaming-tts.md)
 
 Run `npm test`, relevant Playwright browser/extension suites, and
@@ -133,7 +133,7 @@ verify composition, safe rendering, persistence and lifecycle; they do not
 establish real inference quality. Real-model checks and setup requirements are
 documented with each feature.
 
-## Incremental summaries with Hold
+## Incremental text summaries with Hold
 
 Hold is available under **Constants / utilities**. Connect its readable value
 to a formatter alongside TextWindow, then route the summary back to Hold.input.
