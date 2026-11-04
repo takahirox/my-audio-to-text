@@ -17,15 +17,18 @@ test('both meeting processors: parked Save persists, independent settings, cance
     await openPalette(editor); await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'Processors' });
     await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
     await expect(editor.getByLabel(type.toLowerCase() + ' language', { exact: true })).toHaveValue('ja');
+    await expect(editor.getByLabel(type.toLowerCase() + ' prompt', { exact: true })).toHaveValue('');
   }
   await editor.getByLabel('meetingsummaryqwen35 language', { exact: true }).selectOption('en');
+  await editor.getByLabel('meetingsummaryqwen35 prompt', { exact: true }).fill('Summarize a technical article as bullet points.');
+  await editor.getByLabel('meetingsummaryqwen35 prompt', { exact: true }).blur();
   const cards = editor.locator('#graph-models .model-card');
   const save = async () => { await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled(); };
   f.mode('corrupt'); await save();
   await expect(cards).toHaveCount(2);
   for (const card of await cards.all()) await expect(card).toHaveAttribute('data-state', 'Error');
   await editor.reload();
-  expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.filter(n => n.type.startsWith('MeetingSummary')).map(n => n.settings.language))).toEqual(['ja', 'en']);
+  expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.filter(n => n.type.startsWith('MeetingSummary')).map(n => [n.settings.language, n.settings.prompt]))).toEqual([['ja', ''], ['en', 'Summarize a technical article as bullet points.']]);
   f.mode('hold'); await save(); await expect(cards).toHaveCount(2);
   for (const card of await cards.all()) {
     await expect(card).toHaveAttribute('data-state', 'Downloading');
