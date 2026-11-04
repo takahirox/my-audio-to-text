@@ -31,7 +31,7 @@ for (const type of MEETING_SUMMARY_TYPES) {
   test(`${type}: exactly one awaited request per input, without history or batching; equal results emit`, async t => {
     const f = fixture(type, { hold: true }); t.after(() => f.node.dispose()); await f.node.start(f.context);
     assert.deepEqual(f.node.inputs, { text: TEXT }); assert.deepEqual(f.node.outputs, { summary: TEXT });
-    for (const text of ['Previous summary: \nNew transcript: A', 'Previous summary: same\nNew transcript: B']) {
+    for (const text of ['Previous summary: \nNew text: A', 'Previous summary: same\nNew text: B']) {
       const work = f.node.receive('text', text, f.context); await turn();
       const request = f.messages.at(-1); assert.equal(request.text, text); assert.equal(request.previous, undefined); assert.equal(request.prompt, '');
       f.worker.reply(request.id + 999, 'result', { summary: 'unrelated' }); assert.equal(f.outputs.length, f.messages.length - 2);
@@ -230,11 +230,11 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: production graph preser
   };
   await flush(); await flush('B'); await flush('C');
   assert.equal(f.messages.filter(m => m.type === 'summarize').length, 1);
-  assert.equal(f.messages.at(-1).text, `Previous summary:\n\n\nNew transcript:\n${meetingBatches[0]}`);
+  assert.equal(f.messages.at(-1).text, `Previous summary:\n\n\nNew text:\n${meetingBatches[0]}`);
   f.worker.reply(f.messages.at(-1).id, 'result', { summary: 'same' }); await turn();
-  assert.equal(f.messages.at(-1).text, 'Previous summary:\nsame\n\nNew transcript:\nB');
+  assert.equal(f.messages.at(-1).text, 'Previous summary:\nsame\n\nNew text:\nB');
   f.worker.reply(f.messages.at(-1).id, 'result', { summary: 'same' }); await turn();
-  assert.equal(f.messages.at(-1).text, 'Previous summary:\nsame\n\nNew transcript:\nC');
+  assert.equal(f.messages.at(-1).text, 'Previous summary:\nsame\n\nNew text:\nC');
   const stop = pipeline.stop(); f.worker.reply(f.messages.at(-1).id, 'result', { summary: 'same' }); await stop;
   assert.equal(pipeline.entries.get('previous').node.value, 'same');
   assert.deepEqual(displays, ['', 'same', 'same', 'same']); assert.equal(pipeline.errors.length, 0);
