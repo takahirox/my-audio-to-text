@@ -1,124 +1,105 @@
-# Local live meeting summaries
+# Local text summarization
 
-**Meeting Summary · LFM2.5 1.2B JP** and **Meeting Summary · Qwen3.5 2B**
-accept one `text: TEXT` and emit one complete `summary: TEXT` per successful
-input, even when the result is unchanged. They own no prior-summary history,
-window timer, batching, or evidence reconciliation. Each input makes one local
-update request and one generation. Their only setting is `language` (`ja` or
-`en`), frozen for the session.
+The two **Text Summary** processor nodes use the existing LFM2.5 1.2B JP and
+Qwen3.5 2B local WebGPU models. They accept `text: TEXT` and emit
+`summary: TEXT`. The input may be an article, notes, ASR transcript, or any
+other text; neither the model nor the graph requires meeting-specific fields.
 
-## Incremental example with Hold
+## Settings: language and prompt
 
-[Import this minimal graph](examples/incremental-meeting-summary.json) in Graph
-Editor. It contains a Text constant as a small, repeatable demonstration; Start
-begins with empty previous summary. TextWindow emits the text after its normal
-1.5-second deadline (or on Stop). Save prepares the selected summary model.
-For a live meeting, replace Text with your ASR's `final: TEXT` output. Leave the
-other connections unchanged:
+Each Text Summary node exposes these independent settings:
+
+- `language`: `ja` or `en` (the language of the **minimal default prompt**).
+- `prompt`: an editable multiline instruction, up to 4,096 characters.
+  **A nonempty custom prompt completely replaces** the default; it is not
+  supplemented with meeting-specific instructions, mandatory sections,
+  speaker attribution requirements, decision/status classification or hidden
+  content rules. An empty prompt uses only `次の文章を要約してください。`
+  (Japanese) or `Summarize the following text.` (English).
+
+The prompt is a plain **instruction**, not a placeholder template. It is sent
+as the system message, while the complete incoming `text` is sent separately
+as the user message. Write your desired format, language, length, focus or
+incremental-update rules into this prompt if you want them. A custom prompt
+can request either language regardless of the `language` setting.
+
+Graph Editor → select the Text Summary node → Settings → `prompt`. Changes are
+saved with the graph and apply on the next Start. Older graphs without `prompt`
+continue to use the minimal default, without migration. The internal saved
+node-type identifiers (`MeetingSummaryLfm2`/`MeetingSummaryQwen35`) and
+model-asset keys stay unchanged for graph/cache compatibility; the user-facing
+nodes are named **Text Summary**.
+
+Inputs/outputs are unchanged. Each received nonempty TEXT starts one generation;
+there is no implicit batching, state, previous summary or formatting. Existing
+runtime bounds remain: input at most 32,768 UTF-16 units, output at most 6,000,
+prompt plus output at most 8,192 tokens with up to 1,024 new tokens. Exceeding
+a bound is a visible failure, never silent truncation. Blank/oversized model
+results fail visibly. No fixed meeting-specific content validation or result
+rejection remains. Generated summaries can still be incomplete or inaccurate;
+the user's prompt and the model determine content.
+
+## Examples
+
+Simple one-shot summary:
 
 ```text
-ASR.final → TextWindow.text → TextFormatter.input2
-Hold.value                → TextFormatter.input1
-TextFormatter.text        → MeetingSummary.text
-MeetingSummary.summary    → Hold.input
-MeetingSummary.summary    → Display.input
+Text.value / ASR.final / other TEXT → Text Summary.text → Display.input
 ```
 
-Set the formatter to two inputs and this template (literal newlines):
+For incremental summarization, connect a TextWindow and a Hold using TextFormatter.
+The example [importable graph](examples/incremental-meeting-summary.json) contains
+a Text constant for repeatability; substitute any other TEXT source.
+
+```text
+Source.text → TextWindow.text → TextFormatter.input2
+Hold.value                 → TextFormatter.input1
+TextFormatter.text         → Text Summary.text
+Text Summary.summary       → Hold.input
+Text Summary.summary       → Display.input
+```
+
+Set TextFormatter to two inputs and this template (literal newlines):
 
 ```text
 Previous summary:
 {1}
 
-New transcript:
+New text:
 {2}
 ```
 
-Hold has ordinary typed `input: TEXT` and `value: TEXT` ports. `value` starts
-as `''`. Its input **stores** the latest value without emitting. The runtime
-**samples** value together with the next ordinary delivery at the connected
-consumer. Updating Hold alone never formats text or generates a summary.
-No source identities, special data types, edge flags or separate loop manager
-are involved. Hold works with any TEXT producer/consumer.
-
-A new TextWindow event produces exactly one formatted string. While its summary
-is generating, later windows wait FIFO **before** reading Hold. For concurrent
-A/B/C windows, the requests are `S1=f('',A)`, `S2=f(S1,B)`, `S3=f(S2,C)`.
-There is only one request in flight on this path. The runtime awaits receive
-promises and causally forwarded deliveries on the path to storage in Hold.
-Unchanged results still complete; unrelated TEXT events cannot release waiting
-work. A feedback path that finishes without storing a causal result fails
-visibly, rather than continuing on stale context. Async processors used on this
-path must await their work and emit through their supplied receive context, or
-retain that obligation with an explicit `context.defer()` work handle;
-background/timer emissions from a startup context cannot signal completion.
-
-An independent translation/display branch is supported:
+With this configuration, `Hold.value` starts empty. Each new TextWindow event
+samples the latest completed summary; storing a summary does not trigger another
+round. The runtime processes feedback updates in FIFO order before sampling
+Hold for the next update. **The Text Summary node does not implicitly interpret
+"Previous summary" and "New text":** for incremental behavior, explicitly
+describe how you want the previous summary revised in the node's `prompt`,
+for example:
 
 ```text
-MeetingSummary.summary ──┬──→ Hold.input
-                        └──→ TranslateGemmaEnJa.text → Display.input
+Update the previous summary using the new text. Keep it concise and
+retain useful earlier information unless the new text changes it.
+Return only the updated summary.
 ```
 
-Hold stores the original completed summary. When S1 has been stored, the next
-window may summarize using S1 while translation T1 is still running. The same
-behavior applies to OPUS-MT and other independent consumers. Feedback stays
-serial; translation keeps its own bounded committed FIFO and replaceable
-preview. Translation errors remain visible without replacing or corrupting the
-original held summary. An overloaded translation branch stops visibly while
-healthy summary updates continue. Stop still drains accepted translations;
-Cancel/disposal suppress late replies and release Workers. New runs start fresh.
-If translation is instead placed on the path **back into Hold**, its completion
-necessarily precedes the next summary. The runtime uses ordinary graph
-reachability and [explicit async ownership](pipeline-runtime.md#queued-asynchronous-work-207),
-without changing TEXT ports, graph versions or Save/Load.
+TextWindow controls cadence (default 600 characters or 1.5 seconds); use
+Number outputs on `maxChars` and `maxWaitSeconds` to adjust. Any downstream
+translation branch can run separately while Hold stores the original summary.
+Stop flushes the TextWindow tail and drains accepted work; Cancel discards
+pending work and late replies. Fresh Start clears Hold. A sampled feedback
+consumer is bounded to 32 accepted deliveries / 32,768 ordinary-input
+characters, with a four-minute update deadline. Errors are visible and do not
+fabricate a replacement summary. See [runtime feedback](pipeline-runtime.md).
 
-Only non-emitting sampled edges break cycle validation. Every ordinary event
-cycle remains invalid in both the editor and Pipeline. Hold connections save and
-reload as normal graph edges. Existing graph version 15 and strict primitive
-port compatibility remain unchanged. Previously saved direct MeetingSummary
-graphs still load, but now summarize each input independently; add this explicit
-Hold/formatter composition when incremental history is desired. Original saved
-JSON is retained until you choose to edit and Save.
+## Safeguards and limitations
 
-## Bounds and session lifecycle
-
-TextWindow controls window boundaries; configure its existing NUMBER thresholds
-to choose a cadence suitable for inference speed. Default thresholds are 600
-UTF-16 code units or 1.5 seconds. Each sampled consumer permits at most **32
-accepted deliveries and 32,768 ordinary-input characters**, including its active
-update. Overflow rejects the new delivery and visibly stops that branch,
-canceling its accepted waiting work; it does not silently coalesce windows.
-A sampled update has a **four-minute** deadline. Failed, missing, or timed-out
-completion stops the branch and reports an error. Independent paths remain
-usable. Reduce input rate and Start a new session after fixing the cause.
-
-MeetingSummary accepts a nonempty formatted input of at most **32,768 code
-units**; empty or oversized input fails explicitly. It never splits or truncates
-evidence. Prompt plus output must fit the **8,192-token** runtime budget, with
-up to **1,024 new tokens** and a **6,000-code-unit** nonempty result. A too-large
-prompt, exhausted generation budget, malformed result, model/Worker error or
-GPU loss publishes no replacement. Loading and generation each have a
-three-minute deadline. Conservative grounding checks reject invented
-attribution, unreported completion and explicitly superseded numbers; rejected
-results fail visibly without a repair generation or fabricated summary.
-These checks cannot prove factual accuracy or completeness.
-
-Stop flushes TextWindow's remaining tail, drains accepted FIFO updates through
-Hold and Display, then releases the model Worker. Stop may report an explicit
-branch failure; it does not discard successful displayed work. Cancel/abort and
-disposal immediately invalidate pending updates and late replies and release
-Workers; they discard waiting windows and TextWindow tails. Cancel retains the
-last successful display. Fresh Start creates fresh nodes, empty Hold state and
-no model history. Calling Start again on the same Pipeline is rejected.
-
-The prompt requests a refreshed summary from the entire formatted evidence,
-preserving uncertainty, corrections, names, numbers and unknown ownership.
-Evidence is a quoted user message with escaped chat delimiters. Input commands
-are data, but prompt-injection resistance and model quality are not guaranteed.
-Summaries compress history and can omit, invent or distort facts. Keep an
-independent transcript and verify decisions, owners and dates. The prior #130
-extractive-reconciliation evidence does **not** validate this changed prompt.
+The input is passed as quoted JSON text to separate it from the configured
+system instruction and escape chat-delimiter characters. This reduces accidental
+instruction mixing but does not guarantee prompt-injection resistance. The
+runtime still checks input/output size, model failures, and session lifecycle;
+**it does not add content-specific rules or overwrite the custom prompt**.
+Always review important summaries against the original text.
 
 ## Pinned models, runtime and terms
 
@@ -145,9 +126,8 @@ exhausted output budgets are errors, never successful truncated snapshots.
 Prompt plus output is checked against an 8,192-token application budget without
 silently truncating evidence. LFM's published card specifies 32,768 context
 (its config says 128,000); Qwen config specifies 262,144. Temporary generation
-caches are released after each update; the Worker stores no meeting history.
+caches are released after each update; the Worker stores no history.
 
-Grounding checks are conservative lexical guards, not entailment validation.
 The single request records prompt/output tokens, first-token time and total
 generation time; progress is internal telemetry rather than a public port.
 
@@ -194,8 +174,8 @@ downloads missing files. Preparation across windows is serialized by Web Locks.
 Start re-verifies the entire required cached set. Missing/evicted/corrupt data
 is an explicit branch-local error. Only canonical allowlisted cached model
 URLs can be loaded; optional lookups get local misses. No model downloads after
-Start and no transcript or summary leaves the browser for inference. Save-time
-downloads contact the model host; those requests contain no meeting content.
+Start and no source text or summary leaves the browser for inference. Save-time
+downloads contact the model host; those requests contain no source text.
 
 ## Reproduction and test boundaries
 
@@ -215,8 +195,8 @@ production Hold, Pipeline, formatter and MeetingSummary node. The MV3 feedback
 test packages source in an isolated fixture extension; it does not assert that
 the complete model-bearing distribution builds. Unit tests separately cover
 bounds, missing/failed/unrelated completion, cancellation and typed graph
-validation. The opt-in real-model test uses the same explicit feedback graph,
-real pinned runtime/models and offline inference; it must be run separately to
-assess this prompt. See [Issue #202 validation](evidence/hold-feedback-202.md) for
-actual results and unperformed checks. Old [#130 model evidence](evidence/meeting-summary-130.md)
+validation. The opt-in real-model test uses an explicit feedback graph and real pinned
+runtime/models with offline inference; run it separately to assess output quality
+for the chosen prompt and input domain. See [Issue #202 validation](evidence/hold-feedback-202.md) for
+actual results and unperformed checks. Historical meeting-specific [#130 model evidence](evidence/meeting-summary-130.md)
 remains historical and must not be reported as verification of this change.
