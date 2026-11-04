@@ -9,6 +9,7 @@ export { portContract } from './port-contracts.js';
  * start(context), receive(port, value, context), stop(context), cancel(context), dispose().
  * context provides emit(port, value), emitOutputs(values, { provisional }), fail(error), and an AbortSignal.
  * Optional receiveInputs(values, context) receives one emission mapped to input names.
+ * Optional inputQueueLimits { deliveries, chars } bounds active + queued deliveries before retention.
  * Delivery contexts include opaque delivery/cause identity; cancel hooks emit cleanup snapshots.
  */
 export class Pipeline {
@@ -157,13 +158,17 @@ export class Pipeline {
       return;
     }
     const sampled = target.samples.length > 0 && !event.cleanup;
+    const limits = event.cleanup ? undefined : target.node.inputQueueLimits;
+    const bounded = sampled || !!limits;
+    const maxPending = Math.min(sampled ? MAX_SAMPLED_PENDING : Infinity, limits?.deliveries ?? Infinity);
+    const maxChars = Math.min(sampled ? MAX_SAMPLED_CHARS : Infinity, limits?.chars ?? Infinity);
     const chars = Object.values(inputs).reduce((sum, value) => sum + (typeof value === 'string' ? value.length : 0), 0);
-    if (sampled && (target.pendingCount >= MAX_SAMPLED_PENDING || target.pendingChars + chars > MAX_SAMPLED_CHARS)) {
-      const error = Error(`Sampled input backlog exceeded ${MAX_SAMPLED_PENDING} deliveries or ${MAX_SAMPLED_CHARS} characters; branch stopped, queued work canceled. Start a fresh session at a lower input rate.`);
+    if (bounded && (target.pendingCount >= maxPending || target.pendingChars + chars > maxChars)) {
+      const error = Error(`${sampled ? 'Sampled input' : 'Input'} backlog exceeded ${maxPending} deliveries or ${maxChars.toLocaleString('en-US')} characters; branch stopped, queued work canceled. Start a fresh session at a lower input rate.`);
       if (parent) parent.error ||= error;
       this.fail(target, error); return;
     }
-    if (sampled) { target.pendingCount++; target.pendingChars += chars; }
+    if (bounded) { target.pendingCount++; target.pendingChars += chars; }
     if (parent) { parent.pending++; parent.entries.add(target); }
     target.queue = target.queue.then(async () => {
       let turn = parent, owned;
@@ -217,7 +222,7 @@ export class Pipeline {
             this.fail(target, owned.error);
           }
         }
-        if (sampled) { target.pendingCount--; target.pendingChars -= chars; }
+        if (bounded) { target.pendingCount--; target.pendingChars -= chars; }
         if (parent) this.releaseTurn(parent);
       }
     }).catch(error => this.fail(target, error));

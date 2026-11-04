@@ -46,6 +46,52 @@ for (const type of MEETING_SUMMARY_TYPES) {
     await assert.rejects(f.node.receive('text', 'x'.repeat(MAX_PENDING_CHARS + 1)), /32,768/);
     assert.equal(f.messages.length, 1); assert.equal(f.errors.length, 1); assert.deepEqual(f.outputs, []); assert.ok(f.worker.terminated);
   });
+  for (const bound of ['chars', 'deliveries']) test(`${type}: direct graph bounds ${bound} while inference is pending`, async t => {
+    const f = fixture(type, { hold: true }), graph = meetingGraph(type), displays = {};
+    graph.nodes[0].settings.value = 'A';
+    const { pipeline } = buildGraph(graph, { meetingSummaryWorkerFactory: () => f.worker,
+      onMeetingSummaryEvent: event => f.events.push(event),
+      onDisplay: (id, state) => displays[id] = domText(state) });
+    t.after(() => pipeline.dispose()); await pipeline.start(); await turn();
+    const source = pipeline.entries.get('input').context, summary = pipeline.entries.get('summary');
+    assert.equal(summary.samples.length, 0);
+    assert.equal(f.messages.filter(m => m.type === 'summarize').length, 1);
+    if (bound === 'chars') source.emit('value', 'B'.repeat(MAX_PENDING_CHARS - 1));
+    else for (let i = 1; i < 32; i++) source.emit('value', 'B');
+    assert.equal(pipeline.errors.length, 0, 'the exact admission limit is accepted');
+    assert.equal(summary.pendingChars, bound === 'chars' ? MAX_PENDING_CHARS : 32);
+    assert.equal(summary.pendingCount, bound === 'chars' ? 2 : 32);
+    // Reproduce sustained input faster than inference, without resolving A.
+    for (let i = 0; i < 1000; i++) source.emit('value', 'C'.repeat(1000));
+    assert.equal(pipeline.errors.length, 1);
+    assert.match(pipeline.errors[0].message, /Node summary: Input backlog exceeded 32 deliveries or 32,768 characters/);
+    assert.equal(f.events.filter(e => e.type === 'error').length, 1);
+    assert.match(f.events.at(-1).message, /backlog exceeded/);
+    assert.equal(summary.failed, true); assert.ok(f.worker.terminated);
+    await assert.rejects(pipeline.stop(), /backlog exceeded/); await turn();
+    assert.equal(f.messages.filter(m => m.type === 'summarize').length, 1, 'queued work is explicitly canceled on overflow');
+    assert.equal(summary.pendingCount, 0); assert.equal(summary.pendingChars, 0);
+    assert.equal(displays.notes, '', 'no replacement summary is fabricated');
+    assert.equal(displays.transcript, 'C'.repeat(1000), 'an independent branch remains live');
+  });
+  test(`${type}: direct graph releases admission budget and drains each accepted input in FIFO order`, async t => {
+    const f = fixture(type, { hold: true }), graph = meetingGraph(type);
+    graph.nodes[0].settings.value = 'A'.repeat(MAX_PENDING_CHARS);
+    const { pipeline } = buildGraph(graph, { meetingSummaryWorkerFactory: () => f.worker });
+    t.after(() => pipeline.dispose()); await pipeline.start(); await turn();
+    const source = pipeline.entries.get('input').context, summary = pipeline.entries.get('summary');
+    f.worker.reply(f.messages.at(-1).id, 'result', { summary: 'same' }); await turn();
+    assert.equal(summary.pendingChars, 0); assert.equal(summary.pendingCount, 0);
+    source.emit('value', 'B'.repeat(MAX_PENDING_CHARS - 1)); source.emit('value', 'C'); await turn();
+    const stop = pipeline.stop(); await turn(); assert.equal(pipeline.state, 'stopping');
+    assert.equal(f.messages.at(-1).text, 'B'.repeat(MAX_PENDING_CHARS - 1));
+    f.worker.reply(f.messages.at(-1).id, 'result', { summary: 'same' }); await turn();
+    assert.equal(f.messages.at(-1).text, 'C');
+    f.worker.reply(f.messages.at(-1).id, 'result', { summary: 'same' }); await stop;
+    assert.equal(f.messages.filter(m => m.type === 'summarize').length, 3);
+    assert.equal(summary.pendingCount, 0); assert.equal(summary.pendingChars, 0);
+    assert.equal(pipeline.errors.length, 0); assert.ok(f.worker.terminated);
+  });
   test(`${type}: graph Save/reload, independent branches and missing model isolation`, async () => {
     const g = meetingGraph(type), values = new Map(), storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), removeItem: k => values.delete(k) };
     assert.deepEqual(validateGraph((g)), []); saveGraph(storage, (g)); assert.deepEqual(readGraph(storage), g);

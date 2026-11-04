@@ -6,6 +6,8 @@ import { MAX_PENDING_CHARS, summaryLanguage, summaryText } from './meeting-summa
 export class MeetingSummaryNode {
   inputs = { text: TEXT };
   outputs = { summary: TEXT };
+  // Admission happens before Pipeline retains deliveries behind inference.
+  inputQueueLimits = { deliveries: 32, chars: MAX_PENDING_CHARS };
   constructor({ type, language = 'ja', onEvent = () => {}, workerFactory = url => new Worker(url, { type: 'module' }),
     loadTimeoutMs = 180000, generationTimeoutMs = 180000 } = {}) {
     this.model = meetingSummaryModel(type);
@@ -17,7 +19,11 @@ export class MeetingSummaryNode {
     if (this.started || this.disposed) throw new Error('Meeting summary requires a fresh session instance.');
     this.started = true; this.context = context;
     context.signal.throwIfAborted();
-    this.abort = () => this.dispose();
+    this.abort = () => {
+      // Runtime admission failures abort before receive() can report them.
+      if (context.signal.reason?.name !== 'AbortError') this.failure(context.signal.reason);
+      else this.dispose();
+    };
     context.signal.addEventListener('abort', this.abort, { once: true });
     this.event({ type: 'loading', message: `Loading ${this.model.label} locally…` });
     this.ready = Promise.resolve().then(async () => {
