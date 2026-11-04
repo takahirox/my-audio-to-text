@@ -107,4 +107,4 @@ Hold uses ordinary `input: TEXT` and readable `value: TEXT` contracts. Its value
 connection is sampled during an ordinary input delivery to a consumer; storing
 text never emits or triggers that consumer. It starts empty on each session.
 This node capability breaks feedback without adding edge flags or changing
-primitive compatibility. [Feedback example and limits](meeting-summary-nodes.md).
+primitive compatibility. [Feedback example and limits](text-summary-nodes.md).

@@ -26,7 +26,7 @@ for (const type of ['EnglishToJapaneseTranslateGemmaTranslationNode', 'EnglishTo
           if (data.type === 'drain') postMessage({ type: 'drained', id: data.id });
         };
       `;
-      for (const name of ['meeting-summary-worker.js', 'translategemma-worker.js', 'opus-mt-en-ja-worker.js']) {
+      for (const name of ['text-summary-worker.js', 'translategemma-worker.js', 'opus-mt-en-ja-worker.js']) {
         await writeFile(path.join(root, 'web', name), worker);
       }
       browser = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,

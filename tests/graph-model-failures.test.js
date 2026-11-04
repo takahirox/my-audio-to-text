@@ -6,7 +6,7 @@ import { graphNode, edge, GRAPH_VERSION } from '../extension/graph.js';
 import { domText } from './fixtures/dom.js';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
-const types = ['MeetingSummaryLfm2', 'MeetingSummaryQwen35', 'IfCondition'];
+const types = ['TextSummaryLfm2', 'TextSummaryQwen35', 'IfCondition'];
 
 function graph(type) {
   const nodes = [graphNode('Text', 'source'), graphNode(type, 'model'), graphNode('FocusedInputTextOutputNode', 'field')];
@@ -49,7 +49,7 @@ function workers() {
 function fixture(type) {
   const model = workers(), translations = [], inserted = [];
   const session = new TabSession(() => {}, { graph: graph(type),
-    meetingSummaryWorkerFactory: model.factory, ifConditionWorkerFactory: model.factory,
+    textSummaryWorkerFactory: model.factory, ifConditionWorkerFactory: model.factory,
     prepareTranslation: async () => {}, translationWorkerFactory: () => {
       const worker = { postMessage(data) {
         queueMicrotask(() => this.onmessage?.({ data: { id: data.id, type: { load: 'ready', translate: 'result', drain: 'drained' }[data.type], texts: ['translated ' + data.text] } }));
@@ -153,7 +153,7 @@ for (const type of types) {
     const g = graph(type); g.nodes = g.nodes.filter(node => ['source', 'model'].includes(node.id) || node.id.startsWith('model-output'));
     g.edges = g.edges.filter(route => g.nodes.some(node => node.id === route.from[0]) && g.nodes.some(node => node.id === route.to[0]));
     const f = workers(); f.controls.phase = 'load'; const errors = [];
-    const { pipeline } = buildGraph(g, { meetingSummaryWorkerFactory: f.factory, ifConditionWorkerFactory: f.factory, onError: error => errors.push(error) });
+    const { pipeline } = buildGraph(g, { textSummaryWorkerFactory: f.factory, ifConditionWorkerFactory: f.factory, onError: error => errors.push(error) });
     await assert.rejects(pipeline.start(), /Controlled model failure/);
     assert.equal(pipeline.state, 'disposed'); assert.equal(pipeline.entries.get('model').failed, true);
     assert.equal(errors.length, 1); assert.equal(f.all[0].released, true);

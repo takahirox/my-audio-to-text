@@ -1,5 +1,5 @@
 import { HoldNode } from '../web/hold-node.js';
-import { MeetingSummaryNode } from '../web/meeting-summary-node.js';
+import { TextSummaryNode } from '../web/text-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
@@ -124,9 +124,9 @@ export function buildGraph(graph, options) {
     switch (spec.type) {
       case 'Hold': node = new HoldNode(); break;
       case 'Text': node = new TextNode(spec.settings); break;
-      case 'MeetingSummaryLfm2': case 'MeetingSummaryQwen35':
-        node = new MeetingSummaryNode({ ...spec.settings, type: spec.type, workerFactory: options.meetingSummaryWorkerFactory,
-          onEvent: event => options.onMeetingSummaryEvent?.(event, spec.id) }); break;
+      case 'TextSummaryLfm2': case 'TextSummaryQwen35':
+        node = new TextSummaryNode({ ...spec.settings, type: spec.type, workerFactory: options.textSummaryWorkerFactory,
+          onEvent: event => options.onTextSummaryEvent?.(event, spec.id) }); break;
       case 'IfCondition':
         node = new IfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,
           onEvent: event => options.onIfConditionEvent?.(event, spec.id) }); break;

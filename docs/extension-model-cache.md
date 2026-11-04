@@ -1,6 +1,6 @@
 # Extension Models and model-asset cache (#67 / #77)
 
-[Meeting Summary · LFM2.5 1.2B JP and Qwen3.5 2B](meeting-summary-nodes.md)
+[Text Summary · LFM2.5 1.2B JP and Qwen3.5 2B](text-summary-nodes.md)
 have independent Save-time preparation and Models cards (749 MB / 1.403 GB),
 including parked Nodes. Both require WebGPU shader-f16 and several GB of free
 RAM/GPU memory per active Node. LFM 1.0 commercial-use conditions apply; see the

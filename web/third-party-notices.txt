@@ -143,7 +143,7 @@ IfCondition zero-shot classifier
   ./licenses/if-condition-model.txt
   Weights are prepared and integrity-verified after Save, never packaged code.
 
-Local meeting summary processors (Issue #130)
+Local text summary processors (Issue #130)
   Liquid AI: LFM2.5-1.2B-JP-202606-ONNX, q4f16
   Revision 01b5a0a33d22253d5ee52b367d2375eeb113b7cd
   LFM Open License 1.0, including commercial-use revenue conditions and
@@ -157,7 +157,7 @@ Local meeting summary processors (Issue #130)
   vendor/meeting-summary/transformers-LICENSE) and ONNX Runtime Web
   1.26.0-dev.20260416-b7804b056c (Microsoft, MIT;
   ./licenses/onnxruntime-translation.txt). Runtime archives/files are pinned in
-  scripts/meeting-summary-runtime.json. Executable JS/WASM is packaged;
+  scripts/text-summary-runtime.json. Executable JS/WASM is packaged;
   unmodified model data is prepared after Save, not during inference.
   Details, provenance limits, memory guidance and evidence:
-  docs/meeting-summary-nodes.md
+  docs/text-summary-nodes.md

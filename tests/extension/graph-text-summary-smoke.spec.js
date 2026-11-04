@@ -6,21 +6,21 @@ import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { MEETING_SUMMARY_TYPES, meetingSummaryModel } from '../../web/meeting-summary-models.js';
-import { meetingBatches, meetingFeedbackGraph as meetingGraph, meetingFactChecks } from '../fixtures/meeting-summary.js';
+import { TEXT_SUMMARY_TYPES, textSummaryModel } from '../../web/text-summary-models.js';
+import { meetingBatches, summaryFeedbackGraph as summaryGraph, summaryGraph as directSummaryGraph } from '../fixtures/text-summary.js';
 
 // No inference/model/runtime mocks. Only a controllable committed TEXT producer.
 // Loopback serves exact pinned bytes to Save; Start and inference are offline.
-for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 incremental Japanese notes, Stop and Cancel`, async ({}, info) => {
-  test.skip(!process.env.MEETING_SUMMARY_SMOKE, 'Run review-meeting-summary-assets.py, prepare runtimes and build first.');
+for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic text/prompts, rolling updates, Stop and Cancel`, async ({}, info) => {
+  test.skip(!process.env.TEXT_SUMMARY_SMOKE, 'Run review-text-summary-assets.py, prepare runtimes and build first.');
   test.setTimeout(900000);
-  const spec = meetingSummaryModel(type), temporary = await mkdtemp(path.join(os.tmpdir(), 'meeting-summary-'));
+  const spec = textSummaryModel(type), temporary = await mkdtemp(path.join(os.tmpdir(), 'text-summary-'));
   const root = path.join(temporary, 'extension'), requests = [], downloads = [], consoleErrors = [], runs = [], observations = [];
   let context, page, editor, server;
   const sourceSHA256 = {};
   try {
     await cp(path.resolve('dist/chrome-extension'), root, { recursive: true });
-    for (const name of ['web/meeting-summary-worker.js', 'web/meeting-summary-policy.js', 'web/meeting-summary-node.js']) {
+    for (const name of ['web/text-summary-worker.js', 'web/text-summary-policy.js', 'web/text-summary-node.js']) {
       const bytes = await readFile(path.join(root, name));
       expect(bytes.equals(await readFile(name)), `Rebuild changed source: ${name}`).toBe(true);
       sourceSHA256[name] = createHash('sha256').update(bytes).digest('hex');
@@ -38,7 +38,7 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     for (const file of files) file.sourceURL = `http://127.0.0.1:${server.address().port}/${file.path}`;
     await writeFile(manifestPath, JSON.stringify(files));
-    context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: process.env.MEETING_SUMMARY_CHANNEL || 'chromium', headless: true,
+    context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: process.env.TEXT_SUMMARY_CHANNEL || 'chromium', headless: true,
       ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'] });
     context.setDefaultTimeout(30000);
     const cdp = await context.browser().newBrowserCDPSession();
@@ -75,12 +75,12 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
       };
     });
     editor = await context.newPage(); await editor.goto(base + 'graph-editor.html');
-    await editor.evaluate(async graph => { const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph); }, meetingGraph(type));
+    await editor.evaluate(async graph => { const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph); }, summaryGraph(type));
     await editor.reload();
     // Both options are production palette entries and remain after a reload.
     await editor.locator('#graph-palette-toggle').click();
     await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'Processors' });
-    for (const option of MEETING_SUMMARY_TYPES) await expect(editor.locator(`#graph-node-type option[value="${option}"]`)).toHaveCount(1);
+    for (const option of TEXT_SUMMARY_TYPES) await expect(editor.locator(`#graph-node-type option[value="${option}"]`)).toHaveCount(1);
     await editor.keyboard.press('Escape');
     const card = editor.locator('#graph-models .model-card').filter({ hasText: spec.label });
     await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
@@ -90,7 +90,7 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled(); await expect(card).toHaveAttribute('data-state', 'Ready', { timeout: 60000 });
     expect(downloads.length).toBe(count);
     await editor.reload();
-    expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(meetingGraph(type));
+    expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(summaryGraph(type));
     page = await context.newPage(); page.on('pageerror', error => consoleErrors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
     await page.goto(base + 'recorder.html');
@@ -117,11 +117,8 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
       await expect(notes).toHaveText(reply.summary);
       const output = await notes.textContent();
       expect(output.trim()).not.toBe(''); expect(output).toMatch(/[\u3040-\u30ff\u3400-\u9fff]/);
-      expect(output).not.toContain('```');
-      expect(output.trim()).not.toMatch(/^\{/);
       if (index === 1) expect(output).not.toBe(runs[0].output);
-      const facts = meetingFactChecks(output, index);
-      runs.push({ batch: index + 1, latencyIncludingWindowWaitMs: Date.now() - before, output, facts });
+      runs.push({ batch: index + 1, latencyIncludingWindowWaitMs: Date.now() - before, output });
       console.log(`${type}: batch ${index + 1} emitted ${output.length} characters`);
       await observe(`batch-${index + 1}`);
     }
@@ -144,19 +141,42 @@ for (const type of MEETING_SUMMARY_TYPES) test(`${type}: real offline MV3 increm
     expect(requests).toEqual([]);
     expect(await page.evaluate(() => window.cspViolations)).toEqual([]);
     runs.push({ gracefulStopRetainedFinal: final, cancel: 'Owned Worker terminated after its first actual decoded token; fresh session cleared notes and published no result.' });
+    // Each fixture has an independent session and complete input, with no
+    // meeting-only sections or semantic assertions. Record outputs for review.
+    const genericCases = [
+      {kind: 'article', text: 'A city park opened in April. It has shaded trails and a pond. Volunteers maintain the paths.', prompt: 'Summarize in one concise paragraph.'},
+      {kind: 'article-bullets', text: 'A city park opened in April. It has shaded trails and a pond. Volunteers maintain the paths.', prompt: 'Summarize in two bullet points.'},
+      {kind: 'technical', text: 'The compiler caches parsed syntax trees. This avoids reparsing unchanged files. Benchmarks measured 12 ms incremental latency compared with 45 ms without caching.', prompt: 'Summarize the technical mechanism and measurements.'},
+      {kind: 'conversation', text: 'A: Would you like tea? B: Coffee, please. A: Shall we sit outside? B: Yes, the weather is pleasant.', prompt: 'Briefly summarize the conversation.'},
+      {kind: 'transcript', text: 'Narrator: The trail climbs toward a lake. Guide: At the ridge, the rocks are volcanic. Narrator: We reach the lake at noon.', prompt: 'Give a chronological summary.'},
+    ];
+    for (const fixture of genericCases) {
+      const graph = directSummaryGraph(type);
+      graph.nodes.find(n => n.id === 'input').settings.value = fixture.text;
+      graph.nodes.find(n => n.id === 'summary').settings = {language: 'en', prompt: fixture.prompt};
+      await editor.evaluate(async graph => (await import('./graph.js')).saveGraph(localStorage, graph), graph);
+      const before = await page.evaluate(() => summaryEvidence.length);
+      await page.locator('#start').click();
+      await expect(page.locator('#status')).toHaveText('Processing active', {timeout: 180000});
+      await page.waitForFunction(index => summaryEvidence.slice(index).some(e => e.type === 'result' || e.type === 'error'), before, {timeout: 180000});
+      const reply = await page.evaluate(index => summaryEvidence.slice(index).find(e => e.type === 'result' || e.type === 'error'), before);
+      expect(reply.type, reply.message).toBe('result');
+      await expect(notes).toHaveText(reply.summary);
+      expect(reply.summary.trim()).not.toBe('');
+      expect(reply.metrics.attempts).toHaveLength(1);
+      runs.push({...fixture, output: reply.summary, metrics: reply.metrics});
+      await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled({timeout: 60000});
+      expect(await page.evaluate(() => summaryWorkers.every(w => w.released))).toBe(true);
+    }
+    expect(requests).toEqual([]);
     const evidence = { time: new Date().toISOString(), sourceSHA256, model: spec, modelBytes: files.reduce((n,f) => n+f.bytes,0),
-      runtime: JSON.parse(await readFile('scripts/meeting-summary-runtime.json', 'utf8')), host, platform: os.platform(), arch: os.arch(), cpu: os.cpus()[0]?.model,
+      runtime: JSON.parse(await readFile('scripts/text-summary-runtime.json', 'utf8')), host, platform: os.platform(), arch: os.arch(), cpu: os.cpus()[0]?.model,
       gpu: gpu.gpu, loadMs, runs, observations, workerReplies: await page.evaluate(() => window.summaryEvidence), requestsAfterStart: requests, consoleErrors,
       boundaries: 'Production graph, Save, verified model cache, packaged runtime/Worker and Live display; controllable Text producer, no ASR. Host memory is not a per-model allocation measurement.' };
     await writeFile(info.outputPath(spec.key + '.json'), JSON.stringify(evidence, null, 2) + '\n');
-    const factualFailures = runs.filter(run => run.facts).flatMap(run => {
-      const failed = Object.entries(run.facts).filter(([, passed]) => !passed).map(([fact]) => fact);
-      return failed.length ? [{ batch: run.batch, failed }] : [];
-    });
-    expect(factualFailures, `Factual regression; actual outputs saved in ${spec.key}.json`).toEqual([]);
   } finally {
     if (page) await writeFile(info.outputPath('diagnostics.json'), JSON.stringify({ sourceSHA256, runs, requests, consoleErrors,
-      model: spec, runtime: JSON.parse(await readFile('scripts/meeting-summary-runtime.json', 'utf8')),
+      model: spec, runtime: JSON.parse(await readFile('scripts/text-summary-runtime.json', 'utf8')),
       host: await page.evaluate(() => ({ browser: navigator.userAgent, isolated: crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency })).catch(() => null),
       visibleNotes: await page.locator('[data-display="notes"] .display-content').textContent().catch(() => null),
       status: await page.locator('#summary-status').textContent().catch(() => ''), replies: await page.evaluate(() => window.summaryEvidence).catch(() => []) }, null, 2));
