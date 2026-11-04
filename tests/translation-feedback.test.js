@@ -14,7 +14,7 @@ for (const TranslationNode of [EnglishToJapaneseTranslateGemmaTranslationNode, E
     assert.deepEqual(f.pipeline.errors.map(e => e.message), []);
     assert.deepEqual(f.outputs.map(o => o.values), [{ source: 'S1', text: 'T1', error: '' }]);
     f.complete(1); await f.pipeline.stop();
-    assert.equal(f.outputs[0].cause, f.accepted[0]);
+    assert.equal(f.outputs[0].values.source, f.accepted[0]);
   });
   for (const reverse of [false, true]) test(`${TranslationNode.name}: A/B/C feedback finishes while T1 is still running (${reverse})`, async t => {
     const f = await translationFeedback({ TranslationNode, reverse }); t.after(() => f.pipeline.dispose());
@@ -26,7 +26,7 @@ for (const TranslationNode of [EnglishToJapaneseTranslateGemmaTranslationNode, E
     for (let i = 0; i < 3; i++) { f.complete(i); await tick(); }
     await stopping;
     assert.deepEqual(f.outputs.map(o => o.values), [1, 2, 3].map(i => ({ source: 'S' + i, text: 'T' + i, error: '' })));
-    assert.deepEqual(f.outputs.map(o => o.cause), f.accepted);
+    assert.deepEqual(f.outputs.map(o => o.values.source), f.accepted);
     assert.deepEqual(f.pipeline.errors, []);
   });
 }

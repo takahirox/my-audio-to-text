@@ -82,7 +82,6 @@ payloads, startup configuration and correlation.
 | TextAccumulator | append: TEXT → complete newline-separated TEXT history |
 | TextFormatter | Configurable numbered TEXT inputs and literal multiline template → TEXT |
 | TextSlidingWindow, TextWindow | Generic bounded TEXT processing; see their documentation |
-| TranslationCommit | Explicit closed-window/translation association; see windowed translation |
 | OPUS-MT and TranslateGemma in either direction | Independent committed and provisional translation families |
 | MeetingSummaryLfm2, MeetingSummaryQwen35 | Complete summary: TEXT snapshots |
 | IfCondition | TEXT → exactly one yes/no TEXT branch |

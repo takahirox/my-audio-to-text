@@ -34,7 +34,7 @@ export async function translationFeedback({ TranslationNode = EnglishToJapaneseT
   const scheduler = new TranslationSchedulerNode({ TranslationNode, workerFactory: factory, onState: state => states.push(state) });
   const receive = scheduler.receiveInputs.bind(scheduler);
   scheduler.receiveInputs = (values, context) => {
-    accepted.push(context.delivery);
+    accepted.push(values.text ?? values.provisional);
     return receive(values, context);
   };
   let source;
@@ -43,7 +43,7 @@ export async function translationFeedback({ TranslationNode = EnglishToJapaneseT
     formatter: new TextFormatterNode({ inputCount: 2, template: '{1}/{2}' }),
     summary: new MeetingSummaryNode({ type: 'MeetingSummaryLfm2', workerFactory: factory }),
     translator: scheduler,
-    sink: { inputs: TRANSLATION_OUTPUTS, receiveInputs(values, context) { outputs.push({ values, cause: context.cause, provisional: context.provisional }); } },
+    sink: { inputs: TRANSLATION_OUTPUTS, receiveInputs(values, context) { outputs.push({ values, provisional: context.provisional }); } },
   };
   const edge = (a, b, c, d) => ({ from: [a, b], to: [c, d] });
   const connections = [edge('source', 'text', 'window', 'text'), edge('window', 'text', 'formatter', 'input2'),

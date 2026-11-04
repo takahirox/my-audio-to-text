@@ -1,4 +1,3 @@
-import { accumulateDisplay } from './fixtures/text-accumulator.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,7 +5,6 @@ import { Pipeline } from '../web/pipeline.js';
 import { TEXT, NUMBER } from '../web/port-contracts.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
-import { TranslationCommitNode } from '../web/translation-commit-node.js';
 import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { NODE_TYPES, GRAPH_VERSION, graphNode, edge, validateGraph, saveGraph, readGraph, defaultGraph } from '../extension/graph.js';
@@ -15,7 +13,7 @@ const translators = ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaEnJa', 'Translat
 const store = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k,v) => m.set(k,v), removeItem: k => m.delete(k) }; };
 
 // Exhaust all current TEXT producer ports, including ASR, summaries, formatters,
-// accumulators and commit outputs. Missing required inputs are saveable drafts.
+// accumulator outputs. Missing required inputs are saveable drafts.
 for (const translator of translators) test(`${translator}: every TEXT producer connects in either order and reloads as a draft`, () => {
   for (const [type, definition] of Object.entries(NODE_TYPES)) for (const [port, contract] of Object.entries(definition.outputs)) {
     if (contract !== TEXT) continue;
@@ -30,9 +28,9 @@ for (const translator of translators) test(`${translator}: every TEXT producer c
   }
 });
 
-test('TranslationCommit and startup settings accept every contract-compatible edge in incomplete drafts', () => {
+test('Startup settings accept every contract-compatible edge in incomplete drafts', () => {
   for (const [type, definition] of Object.entries(NODE_TYPES)) for (const [port, contract] of Object.entries(definition.outputs)) {
-    for (const [target, inputs] of [['TranslationCommit', ['boundary', 'source', 'text', 'error']], ['SpeechToTextWhisper', ['language']], ['SpeechToTextReazonSpeech', ['maxDuration']]]) {
+    for (const [target, inputs] of [['SpeechToTextWhisper', ['language']], ['SpeechToTextReazonSpeech', ['maxDuration']]]) {
       for (const input of inputs) if (NODE_TYPES[target].inputs[input] === contract) {
         const graph = { version: GRAPH_VERSION, nodes: [graphNode(type,'producer'),graphNode(target,'consumer')], edges:[edge('producer',port,'consumer',input)] };
         assert.deepEqual(validateGraph((graph)), [], `${type}.${port} → ${target}.${input}`);
@@ -55,11 +53,11 @@ function workers() {
   return { factory, requests, complete, owned };
 }
 
-for (const translator of translators) test(`${translator}: direct ASR previews coalesce, finals stay FIFO and boundary matching survives equal text`, async () => {
+for (const translator of translators) test(`${translator}: direct ASR previews coalesce, finals stay FIFO including repeated equal text`, async () => {
   const f = workers(), displays = {};
-  const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TranslationCommit','commit'), graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
-  graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),edge('speech','final','commit','boundary'),
-    ...['source','text','error'].map(p => edge('translator',p,'commit',p)),edge('translator','provisionalText','preview','input'),edge('commit','final','acc','append'),edge('acc','text','translated','input'));
+  const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
+  graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),
+    edge('translator','provisionalText','preview','input'),edge('translator','text','acc','append'),edge('acc','text','translated','input'));
   const built = buildGraph((graph), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
   try {
     await built.pipeline.start(); await built.translations[0].ready;
@@ -73,22 +71,6 @@ for (const translator of translators) test(`${translator}: direct ASR previews c
     assert.equal(displays.translated,'translated:same\ntranslated:same'); assert.deepEqual(built.pipeline.errors,[]);
   } finally { await built.pipeline.dispose(); }
   assert.ok(f.owned.every(w=>w.terminated));
-});
-
-for (const mismatch of ['equal independent event', 'different value', 'split atomic result']) test(`TranslationCommit visibly rejects ${mismatch}`, async () => {
-  let a,b; const results=[];
-  const commit = new TranslationCommitNode();
-  const pipeline = new Pipeline({nodes:{
-    a:{outputs:{value:TEXT},start(c){a=c;}}, b:{outputs:{value:TEXT},start(c){b=c;}},
-    processor:{inputs:{value:TEXT},outputs:{s:TEXT,t:TEXT,e:TEXT},receive(_,value,c){
-      if(mismatch==='split atomic result'){ c.emit('s',value); c.emit('t','translation'); c.emit('e',''); }
-      else c.emitOutputs({s:mismatch==='different value'?'other':value,t:'translation',e:''});
-    }},commit, sink:{inputs:{value:TEXT},receive(_,v){results.push(v);}},
-  },connections:[edge('a','value','commit','boundary'),edge(mismatch==='equal independent event'?'b':'a','value','processor','value'),
-    edge('processor','s','commit','source'),edge('processor','t','commit','text'),edge('processor','e','commit','error'),edge('commit','final','sink','value')]});
-  await pipeline.start(); a.emit('value','same'); if(mismatch==='equal independent event')b.emit('value','same'); await tick();
-  assert.equal(pipeline.errors.length,1); assert.match(pipeline.errors[0].message,/does not match|grouped/); assert.deepEqual(results,[]);
-  await pipeline.dispose();
 });
 
 for (const kind of ['number','language']) test(`${kind}: arbitrary startup producer, bounded wait, consumer validation and late value rejection`, async () => {
@@ -142,9 +124,9 @@ test('Cancel retains committed formatter/fan-out snapshots while rejecting queue
 for (const order of ['preview-first','final-first']) test(`grouped translator input ${order} commits only the final, including empty previews`, async () => {
   const {TranslationSchedulerNode}=await import('../extension/translation-scheduler.js');
   const f=workers(), results=[];let source;
-  const pipeline=new Pipeline({nodes:{source:{outputs:{p:TEXT,f:TEXT},start(c){source=c;}},translator:new TranslationSchedulerNode({workerFactory:f.factory}),commit:new TranslationCommitNode(),sink:{inputs:{text:TEXT},receive(_,text){results.push(text);}}},
-    connections:[edge('source','p','translator','provisional'),edge('source','f','translator','text'),edge('source','f','commit','boundary'),
-      ...['source','text','error'].map(p=>edge('translator',p,'commit',p)),edge('commit','final','sink','text')]});
+  const pipeline=new Pipeline({nodes:{source:{outputs:{p:TEXT,f:TEXT},start(c){source=c;}},translator:new TranslationSchedulerNode({workerFactory:f.factory}),sink:{inputs:{text:TEXT},receive(_,text){results.push(text);}}},
+    connections:[edge('source','p','translator','provisional'),edge('source','f','translator','text'),
+      edge('translator','text','sink','text')]});
   await pipeline.start();source.emitOutputs(order==='preview-first'?{p:'',f:'final'}:{f:'final',p:''});await tick();
   assert.deepEqual(results,[]);assert.equal(f.requests.length,1);assert.equal(f.requests[0].text,'final');
   f.complete(0);await pipeline.stop();assert.deepEqual(results,['translated:final']);await pipeline.dispose();
@@ -174,11 +156,11 @@ test('Text literals and formatter/accumulator snapshots execute as independent t
   }
 });
 
-test('TranslationCommit final is an ordinary TEXT producer for another translator preview', async () => {
-  const {windowGraph}=await import('./fixtures/windowed-translation.js');const f=workers(),graph=windowGraph('revisable');
+test('Committed translator text is an ordinary TEXT producer for another translator preview', async () => {
+  const {windowGraph}=await import('./fixtures/windowed-translation.js');const f=workers(),graph=windowGraph('window');
   graph.nodes.find(n=>n.id==='window-chars').settings.value=6;
   graph.nodes.push(graphNode('Text','independent'),graphNode('TranslateGemmaEnJa','second'),graphNode('Display','second-view'));
-  graph.edges.push(edge('independent','value','second','text'),edge('commit','final','second','provisional'),edge('second','provisionalText','second-view','input'));
+  graph.edges.push(edge('independent','value','second','text'),edge('translator','text','second','provisional'),edge('second','provisionalText','second-view','input'));
   let display;const built=buildGraph((graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='second-view')display=v;}});
   await built.pipeline.start();await tick();built.pipeline.entries.get('input').context.emit('value','First.');await tick();f.complete(0);await tick();
   assert.equal(f.requests[1].text,'translated:First.');f.complete(1);await tick();assert.equal(display,'translated:translated:First.');

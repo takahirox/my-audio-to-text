@@ -5,7 +5,7 @@ import path from 'node:path';
 import { windowGraph, windowTranscript, closedWindows } from '../fixtures/windowed-translation.js';
 import { TRANSLATE_GEMMA } from '../../web/translation-models.js';
 
-test('real packaged TranslateGemma: baseline, bounded batches and revisable windows on the same transcript', async ({}, info) => {
+test('real packaged TranslateGemma: direct translation, bounded batches and ASR previews on the same transcript', async ({}, info) => {
   test.skip(!process.env.WINDOW_TRANSLATION_SMOKE, 'WINDOW_TRANSLATION_SMOKE=1: real WebGPU, 3.112 GB download, several GB RAM/GPU and 7 GB storage.');
   test.setTimeout(1800000);
   const temporary = await mkdtemp(path.join(tmpdir(), 'window-translation-'));
@@ -26,7 +26,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
       return { adapter: !!a, gpu: a ? { vendor: a.info.vendor, architecture: a.info.architecture } : null, isolated: crossOriginIsolated, userAgent: navigator.userAgent };
     });
     expect(evidence.capabilities.adapter, 'A missing GPU is a missing real-model check, not a passed experiment.').toBe(true);
-    await editor.evaluate(async graph => { const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph); }, windowGraph('revisable'));
+    await editor.evaluate(async graph => { const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph); }, windowGraph('window'));
     await editor.reload(); await editor.locator('#graph-save').click();
     const card = editor.locator('#graph-models .model-card');
     await expect(card).toHaveCount(1);
@@ -34,7 +34,7 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
     evidence.preparation = { status: await card.locator('.model-status').textContent(), error: await card.locator('.model-error').textContent() };
     expect(evidence.preparation.status, evidence.preparation.error).toContain('Ready');
     await context.setOffline(true);
-    for (const mode of ['baseline', 'window', 'revisable', 'direct-asr']) {
+    for (const mode of ['baseline', 'window', 'direct-asr']) {
       const page = await context.newPage(); page.on('pageerror', e => evidence.errors.push(e.message));
       await page.goto(`chrome-extension://${id}/extension/recorder.html`);
       const first = evidence.requests.length;
@@ -92,13 +92,15 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
           if (workers.length !== 1 || !workers.every(w => w.released)) throw Error('Translator Worker ownership violation.');
         }
       }, { graph: (() => {
-        const graph = windowGraph(mode === 'direct-asr' ? 'revisable' : mode);
+        const graph = windowGraph(mode === 'direct-asr' ? 'window' : mode);
         // Keep the real-model comparison on fixed length/Stop boundaries;
         // deadline behavior is covered by controlled and browser checks.
         if (mode !== 'baseline') graph.nodes.find(n => n.id === 'window-wait').settings.value = 30;
         if (mode === 'direct-asr') {
           graph.nodes = graph.nodes.filter(n => !['window', 'window-chars', 'window-wait'].includes(n.id));
           Object.assign(graph.nodes.find(n => n.id === 'input'), { type: 'SpeechToTextReazonSpeech', settings: {} });
+          graph.nodes.push({ id: 'preview-display', type: 'Display', settings: {}, position: { x: 0, y: 0 } });
+          graph.edges.push({ from: ['translator', 'provisionalText'], to: ['preview-display', 'input'] });
           graph.nodes.push({ id: 'audio', type: 'ChromeTabAudio', settings: {}, position: { x: 0, y: 0 } });
           graph.edges = graph.edges.filter(e => e.to[0] !== 'window');
           for (const e of graph.edges) if (e.from[0] === 'window') e.from = ['input', e.from[1] === 'text' ? 'final' : 'provisional'];
@@ -123,8 +125,6 @@ test('real packaged TranslateGemma: baseline, bounded batches and revisable wind
     }
     expect(evidence.errors).toEqual([]);
     expect(evidence.requests.every(r => r.method === 'GET' && !r.hasBody)).toBe(true);
-    const batched = evidence.runs[1].display, revisable = evidence.runs[2].display;
-    expect(revisable).toEqual(batched);
   } finally {
     const file = info.outputPath('window-translation-evidence.json'); await writeFile(file, JSON.stringify(evidence, null, 2) + '\n');
     await info.attach('window-translation-evidence', { path: file, contentType: 'application/json' });

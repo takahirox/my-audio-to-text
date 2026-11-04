@@ -1,4 +1,3 @@
-import { accumulateDisplay } from '../fixtures/text-accumulator.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { graphNode, edge, defaultGraph } from '../../extension/graph.js';
 import { writeFile } from 'node:fs/promises';
@@ -23,7 +22,7 @@ for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa'
   }
 });
 
-test('MV3 direct ASR → TranslateGemma provisional/final uses production scheduler and atomic commit',async({graphExtension:f})=>{
+test('MV3 direct ASR → TranslateGemma provisional/final uses production scheduler and direct committed history',async({graphExtension:f})=>{
   await writeFile(path.join(f.root,'web/translategemma-worker.js'),`
     self.onmessage=({data:m})=>{
       if(m.type==='load')postMessage({id:m.id,type:'ready'});
@@ -31,9 +30,9 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
       if(m.type==='translate')setTimeout(()=>postMessage({id:m.id,type:'result',texts:['translated:'+m.text]}),20);
     };`);
   const live=await openGraph(f);
-  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TranslationCommit','commit'),graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
-  graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),edge('speech','final','commit','boundary'),
-    ...['source','text','error'].map(p=>edge('translator',p,'commit',p)),edge('commit','final','acc','append'),edge('translator','provisionalText','preview','input'),edge('acc','text','translated','input'));
+  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
+  graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),
+    edge('translator','text','acc','append'),edge('translator','provisionalText','preview','input'),edge('acc','text','translated','input'));
   const result=await live.evaluate(async graph=>{
     const {buildGraph}=await import('./graph-runtime.js');const displays={},events=[];
     const built=buildGraph((graph),{tabId:42,prepareTranslateGemma(){},onDisplay(id,dom){const text=dom.textContent;displays[id]=text;events.push({id,text});}});

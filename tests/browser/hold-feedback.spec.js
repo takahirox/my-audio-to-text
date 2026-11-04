@@ -52,8 +52,8 @@ test('independent owned async output drains after feedback FIFO without delaying
       source: { outputs: { text: TEXT }, start(c) { send = text => c.emit('text', text); } }, held,
       formatter: new TextFormatterNode({ inputCount: 2, template: '{1}/{2}' }),
       update: { inputs: { text: TEXT }, outputs: { text: TEXT }, receive(_, text, c) { requests.push(text); c.emit('text', 'S' + requests.length); } },
-      async: { inputs: { text: TEXT }, outputs: { text: TEXT }, receive(_, text, c) { jobs.push({ text, work: c.defer(), delivery: c.delivery }); } },
-      sink: { inputs: { text: TEXT }, receive(_, text, c) { outputs.push({ text, paired: c.cause === jobs[outputs.length].delivery }); } },
+      async: { inputs: { text: TEXT }, outputs: { text: TEXT }, receive(_, text, c) { jobs.push({ text, work: c.defer() }); } },
+      sink: { inputs: { text: TEXT }, receive(_, text) { outputs.push(text); } },
     }, connections: [
       { from: ['source', 'text'], to: ['formatter', 'input2'] }, { from: ['held', 'value'], to: ['formatter', 'input1'] },
       { from: ['formatter', 'text'], to: ['update', 'text'] }, { from: ['update', 'text'], to: ['held', 'input'] },
@@ -71,6 +71,6 @@ test('independent owned async output drains after feedback FIFO without delaying
   });
   expect(result.before).toEqual({ requests: ['/A', 'S1/B', 'S2/C'], held: 'S3', outputs: [] });
   expect(result.waiting).toBe(true);
-  expect(result.outputs).toEqual(['S1', 'S2', 'S3'].map(s => ({ text: 'T:' + s, paired: true })));
+  expect(result.outputs).toEqual(['T:S1', 'T:S2', 'T:S3']);
   expect(result.errors).toEqual([]);
 });

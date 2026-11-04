@@ -63,7 +63,7 @@ for (const type of ['EnglishToJapaneseTranslateGemmaTranslationNode', 'EnglishTo
       }
       await page.evaluate(() => stopping);
       expect(await page.evaluate(() => f.outputs.map(o => o.values))).toEqual([1, 2, 3].map(i => ({ source: 'S' + i, text: 'T' + i, error: '' })));
-      expect(await page.evaluate(() => f.outputs.every((o, i) => o.cause === f.accepted[i]))).toBe(true);
+      expect(await page.evaluate(() => f.outputs.every((o, i) => o.values.source === f.accepted[i]))).toBe(true);
       expect(await page.evaluate(() => f.pipeline.errors.map(e => e.message))).toEqual([]);
       await page.evaluate(async () => { await f.pipeline.dispose(); await fresh(); await f.send('cancel'); await f.send('queued'); });
       await expect.poll(() => page.evaluate(() => f.hold.value)).toBe('S2');

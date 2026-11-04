@@ -101,9 +101,8 @@ rather than asking consumers to compare source text.
 Correlation is supported between ports emitted together by **one producer and connected
 directly to one receiver**. Separate processor branches are not joined: the runtime does
 not merge groups, wait for missing ports, or synchronize independent consumers. A
-forwarding context retains only immediate delivery causality, which a consumer may
-validate without joining unrelated streams. A processor may explicitly publish a new
-group, but has to own its association. For an explicit `emitOutputs()` delivery,
+processor may explicitly publish a new group, but has to own its association.
+For an explicit `emitOutputs()` delivery,
 `context.groupInputs` is a frozen list of receiver inputs wired directly from that
 producer, including omitted siblings. A Node may declare independent atomic output
 families with `outputGroups: [['source', 'text', 'error'], ['provisionalSource',
@@ -123,14 +122,6 @@ invalidates queued groups and late outputs immediately, and running hooks must
 observe their signal for external side effects. Graceful Stop drains whole queue
 items and includes groups emitted by upstream Stop hooks before closing consumers.
 These are local delivery guarantees, not transactions or distributed synchronization.
-
-A delivery context also carries opaque `delivery` identity and `cause` (the
-immediate incoming delivery of a forwarding emission). Values remain primitive.
-Using the supplied receive context to emit a result preserves its causal link;
-asynchronous processors retain that context with the job. These tokens contain
-no Node names, port names or public IDs, and are never joined by text equality.
-TranslationCommit uses them to verify that a grouped result derives from its
-next boundary event, while generic delivery infers no translation semantics.
 
 Producers can mark unfinished results with
 `context.emitOutputs(values, { provisional: true })`. The receiver sees immutable

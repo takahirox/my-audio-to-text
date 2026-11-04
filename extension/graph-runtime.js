@@ -30,7 +30,6 @@ import { KeyedTextPairNode } from '../web/keyed-text-pair-node.js';
 import { KeyedTextCoalesceNode } from '../web/keyed-text-coalesce-node.js';
 import { TextSlidingWindowNode } from '../web/text-sliding-window-node.js';
 import { TextWindowNode } from '../web/text-window-node.js';
-import { TranslationCommitNode } from '../web/translation-commit-node.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
 // assets, initialization or synthesis failure must leave transcription usable.
@@ -155,7 +154,6 @@ export function buildGraph(graph, options) {
       case 'TextAccumulator': node = new TextAccumulatorNode(); break;
       case 'TextSlidingWindow': node = new TextSlidingWindowNode(); break;
       case 'TextWindow': node = new TextWindowNode(); break;
-      case 'TranslationCommit': node = new TranslationCommitNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
       case 'KeyedTextCoalesce': node = new KeyedTextCoalesceNode(); break;
       case 'TranslateGemmaEnJa': case 'TranslateGemmaJaEn':

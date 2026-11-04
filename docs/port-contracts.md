@@ -74,7 +74,7 @@ Cancel discards pending jobs, terminates the Worker and suppresses late replies.
 A new session uses fresh Nodes. Provisional inputs coalesce to one pending
 preview; newer inputs suppress stale preview results. Committed input wins if
 both arrive in one group. Finals retain FIFO order. The same bounded queue
-policy applies to every producer. Committed results use source/text/error only; preview results use provisionalSource/provisionalText/provisionalError only. Final acceptance, Stop and Cancel publish an empty preview family to clear explicit replacement routes. TranslationCommit validates causal closed windows, while ordinary wiring separates previews from commits; see [correlation semantics](windowed-translation.md#stage-2-bounded-retranslation-with-immutable-commits).
+policy applies to every producer. Committed results use source/text/error only; preview results use provisionalSource/provisionalText/provisionalError only. Final acceptance, Stop and Cancel publish an empty preview family to clear explicit replacement routes. Route committed text directly to a display or through TextAccumulator for history; keep provisionalText on its own replacement display. See [windowed translation and previews](windowed-translation.md#optional-provisional-previews).
 
 Direct `TextFormatter` inputs consume one coherent group. An explicit group is a
 snapshot of the emitted output family's connected formatter inputs; omitted siblings clear within that family only.

@@ -1,11 +1,6 @@
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TranslationCommitNode } from '../web/translation-commit-node.js';
-import { Pipeline } from '../web/pipeline.js';
-import { TEXT } from '../web/port-contracts.js';
-import { TextAccumulatorNode } from '../web/text-nodes.js';
-import { DisplayNode } from '../web/display-node.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { validateGraph, graphNode, edge, readGraph, saveGraph, defaultGraph, GRAPH_VERSION } from '../extension/graph.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
@@ -27,13 +22,14 @@ function workers() {
   };
   return { requests, owned, workerFactory, complete };
 }
-async function graph(mode = 'revisable', limits = {}) {
+async function graph(mode = 'window', limits = {}) {
   const f = workers(), displays = [], previews = [], description = windowGraph(mode);
   for (const [port, value] of Object.entries(limits)) {
     const id = port === 'maxChars' ? 'window-chars' : 'window-wait';
     description.nodes.find(n => n.id === id).settings.value = value;
   }
-  const preview = graphNode('Text', 'preview-input'); description.nodes.push(preview);
+  const preview = graphNode('Text', 'preview-input'); description.nodes.push(preview, graphNode('Display', 'preview-display'));
+  description.edges.push(edge('translator', 'provisionalText', 'preview-display', 'input'));
   description.edges.push(edge(preview.id, 'value', 'translator', 'provisional'));
   const built = buildGraph((description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory,
     onDisplay: (id, state) => { if (id === 'display') displays.push(domText(state)); else previews.push(domText(state)); } });
@@ -51,7 +47,7 @@ async function drain(f) {
   await stopping; if (failure) throw failure;
 }
 
-for (const mode of ['baseline', 'window', 'revisable']) test(`${mode}: exact fixture order, source retention and Stop drain`, async () => {
+for (const mode of ['baseline', 'window']) test(`${mode}: exact fixture order, source retention and Stop drain`, async () => {
   const f = await graph(mode);
   for (const text of windowTranscript) f.send(text);
   await drain(f);
@@ -63,7 +59,7 @@ for (const mode of ['baseline', 'window', 'revisable']) test(`${mode}: exact fix
 });
 
 test('explicit preview source coalesces snapshots independently of exact committed windows', async () => {
-  const f = await graph('revisable', { maxChars: 6 });
+  const f = await graph('window', { maxChars: 6 });
   f.sendPreview('First'); await tick();
   f.sendPreview('First growing'); f.sendPreview('latest'); await tick();
   assert.equal(f.requests.length, 1); assert.equal(f.translations[0].preview.source, 'latest');
@@ -75,7 +71,7 @@ test('explicit preview source coalesces snapshots independently of exact committ
 });
 
 for (const when of ['running', 'stopping']) test(`Cancel while ${when} suppresses late replies and discards the pending window`, async () => {
-  const f = await graph('revisable', { maxChars: 6 });
+  const f = await graph('window', { maxChars: 6 });
   f.send('First.'); await tick(); f.complete(0); await tick();
   f.send('tail'); await tick();
   const stopping = when === 'stopping' ? f.pipeline.stop() : null;
@@ -84,51 +80,19 @@ for (const when of ['running', 'stopping']) test(`Cancel while ${when} suppresse
   assert.ok(f.owned.every(w => w.terminated)); assert.equal(f.pipeline.entries.get('window').node.timer, null);
 });
 
-for (const operation of ['stop', 'cancel']) {
-  test(`TranslationCommit input failure emits its compatibility clear before ${operation} and retains committed history`, async () => {
-    const results = [], clears = [], displays = {}, accumulator = new TextAccumulatorNode();
-    const pipeline = new Pipeline({ nodes: {
-      input: { outputs: { boundary: TEXT, provisional: TEXT } },
-      translator: { inputs: { text: TEXT, provisional: TEXT }, outputs: { source: TEXT, text: TEXT, error: TEXT, provisionalText: TEXT },
-        receive(port, source, context) { results.push(() => context.emitOutputs(port === 'provisional' ? { provisionalText: `訳:${source}` } : { source, text: `訳:${source}`, error: '' })); } },
-      commit: new TranslationCommitNode(), clears: { inputs: { text: TEXT }, receive(_, value) { clears.push(value); } }, accumulator,
-      one: new DisplayNode(dom => displays.one = domText(dom)), two: new DisplayNode(dom => displays.two = domText(dom)),
-    }, connections: [
-      edge('input', 'boundary', 'commit', 'boundary'), edge('input', 'boundary', 'translator', 'text'), edge('input', 'provisional', 'translator', 'provisional'),
-      ...['source', 'text', 'error'].map(port => edge('translator', port, 'commit', port)),
-      edge('commit', 'final', 'accumulator', 'append'), edge('commit', 'provisional', 'clears', 'text'),
-      edge('accumulator', 'text', 'one', 'input'), edge('accumulator', 'text', 'two', 'input'),
-    ] });
-    try {
-      await pipeline.start();
-      const input = pipeline.entries.get('input').context;
-      input.emit('boundary', 'First.'); await tick(); results[0](); await tick();
-      const clearCount = clears.length;
-      assert.deepEqual(displays, { one: '訳:First.', two: '訳:First.' });
-      input.emit('boundary', 'x'.repeat(1001)); await tick();
-      assert.equal(pipeline.entries.get('commit').failed, true);
-      assert.equal(pipeline.errors.length, 1); assert.match(pipeline.errors[0].message, /backlog limit/);
-      assert.equal(clears.length, clearCount + 1); assert.equal(clears.at(-1), '');
-      assert.deepEqual(displays, { one: '訳:First.', two: '訳:First.' });
-      results[0](); results[1](); await tick();
-      assert.deepEqual(displays, { one: '訳:First.', two: '訳:First.' });
-      if (operation === 'stop') await assert.rejects(pipeline.stop(), AggregateError);
-      else await pipeline.cancel();
-      results[0](); results[1](); await tick();
-      assert.deepEqual(displays, { one: '訳:First.', two: '訳:First.' });
-      assert.equal(accumulator.committed, '訳:First.'); assert.equal(accumulator.count, 1);
-    } finally { await pipeline.dispose(); }
-  });
-}
-
-test('failed explicit previews append nothing; failed closed windows retain source and previous commits', async () => {
-  const f = await graph('revisable', { maxChars: 6 });
+test('failed explicit previews append nothing; failed windows preserve previous commits and expose source/error', async () => {
+  const f = await graph('window', { maxChars: 6 });
   f.send('First.'); await tick(); f.complete(0); await tick();
   f.pipeline.entries.get('window-chars').context.emit('value', 1000);
   f.send('unfinished '); f.sendPreview('unfinished'); await tick(); f.complete(1, true); await tick();
   assert.equal(f.display(), '訳:First.'); assert.equal(f.preview(), '');
+  const errors = [];
+  const scheduler = f.translations[0], emit = scheduler.emit.bind(scheduler);
+  scheduler.emit = (job, text, error) => { if (!job.provisional) errors.push({ source: job.source, text, error }); emit(job, text, error); };
   f.send('tail.'); await f.pipeline.stop();
-  assert.equal(f.display(), '訳:First.\n[Translation failed: controlled failure]\nunfinished tail.'); await f.pipeline.dispose();
+  assert.equal(f.display(), '訳:First.');
+  assert.deepEqual(errors, [{ source: 'unfinished tail.', text: undefined, error: 'controlled failure' }]);
+  await f.pipeline.dispose();
 });
 
 test('bare dispose retains an explicit preview snapshot without committing pending text', async () => {
@@ -138,7 +102,7 @@ test('bare dispose retains an explicit preview snapshot without committing pendi
 });
 
 test('Live reports a buffer failure while independent TEXT delivery continues', async () => {
-  const description = windowGraph('revisable'); description.nodes.find(n => n.id === 'window-chars').settings.value = 6;
+  const description = windowGraph('window'); description.nodes.find(n => n.id === 'window-chars').settings.value = 6;
   description.nodes.push(graphNode('Display', 'peer')); description.edges.push(edge('input', 'value', 'peer', 'input'));
   const f = workers();
   const session = new TabSession(() => {}, { graph: (description), prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory });
@@ -151,7 +115,7 @@ test('Live reports a buffer failure while independent TEXT delivery continues', 
 });
 
 test('large input creates bounded finals with an exact remainder and no implicit previews', async () => {
-  const f = await graph('revisable', { maxChars: 1000 });
+  const f = await graph('window', { maxChars: 1000 });
   f.send('x'.repeat(12017)); await tick();
   assert.equal(f.requests.length, 1); assert.equal(f.translations[0].finals.length, 11);
   assert.equal(f.translations[0].preview, null); assert.equal(f.pipeline.entries.get('window').node.pending.length, 17);
@@ -167,19 +131,19 @@ test('NUMBER wait input alone flushes pending text through the real scheduler', 
   f.complete(0); await f.pipeline.stop(); assert.equal(f.display(), '訳:no punctuation'); await f.pipeline.dispose();
 });
 
-test('long sessions remove committed text from window, scheduler and commit buffers', async () => {
-  const f = await graph('revisable', { maxChars: 6 });
+test('long sessions remove committed text from window and scheduler buffers', async () => {
+  const f = await graph('window', { maxChars: 6 });
   for (let i = 0; i < 100; i++) {
     f.send('Again.'); await tick(); f.complete(i); await tick();
     assert.equal(f.pipeline.entries.get('window').node.pending, '');
-    assert.equal(f.translations[0].finals.length, 0); assert.equal(f.pipeline.entries.get('commit').node.boundaries.length, 0);
+    assert.equal(f.translations[0].finals.length, 0);
   }
   await f.pipeline.stop(); assert.equal(f.display(), Array(100).fill('訳:Again.').join('\n')); await f.pipeline.dispose();
 });
 
 for (const reverse of [false, true]) test(`independent windows drain separately (reverse order: ${reverse})`, async () => {
   const descriptions = ['a', 'b'].map(suffix => {
-    const g = windowGraph('revisable');
+    const g = windowGraph('window');
     g.nodes.forEach(n => { n.id += suffix; }); g.edges.forEach(e => { e.from[0] += suffix; e.to[0] += suffix; }); return g;
   });
   const description = { version: GRAPH_VERSION, nodes: descriptions.flatMap(g => g.nodes), edges: descriptions.flatMap(g => g.edges) };
@@ -197,7 +161,7 @@ for (const reverse of [false, true]) test(`independent windows drain separately 
 });
 
 test('32-window overload is visible and leaves an independent TEXT branch running', async () => {
-  const description = windowGraph('revisable'); description.nodes.find(n => n.id === 'window-chars').settings.value = 5;
+  const description = windowGraph('window'); description.nodes.find(n => n.id === 'window-chars').settings.value = 5;
   description.nodes.push(graphNode('Display', 'independent')); description.edges.push(edge('input', 'value', 'independent', 'input'));
   const f = workers(), displays = {};
   const built = buildGraph((description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => displays[id] = domText(s) });
@@ -205,27 +169,16 @@ test('32-window overload is visible and leaves an independent TEXT branch runnin
   for (let i = 0; i < 50; i++) built.pipeline.entries.get('input').context.emit('value', 'Wait.');
   await tick(); assert.equal(displays.independent, 'Wait.');
   assert.match(built.pipeline.errors.map(e => e.message).join(' '), /backlog limit/);
-  assert.ok(built.translations[0].finals.length <= 32); assert.ok(built.pipeline.entries.get('commit').node.boundaries.length <= 32); await built.pipeline.dispose();
+  assert.ok(built.translations[0].finals.length <= 32); await built.pipeline.dispose();
 });
 
-test('graphs save/reload with explicit NUMBER wiring, no new weights and generic commit validation', () => {
+test('default and translation graphs save/reload with explicit NUMBER wiring and no extra weights', () => {
   const values = new Map(), storage = { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: k => values.delete(k) };
-  for (const mode of ['window', 'revisable']) {
-    const g = windowGraph(mode); assert.deepEqual(validateGraph((g)), []);
+  for (const g of [defaultGraph(), windowGraph('baseline'), windowGraph('window')]) {
+    assert.deepEqual(validateGraph(g), []);
     saveGraph(storage, g); assert.deepEqual(readGraph(storage), g);
-    assert.deepEqual(graphModelRequirements(g).map(r => r.id), ['translategemma']);
-    assert.ok(!g.edges.some(e => e.from[0] === 'window' && e.from[1] === 'provisional'));
+    assert.deepEqual(graphModelRequirements(g).map(r => r.id), !g.nodes.some(n => n.id === 'translator') ? [] : ['translategemma']);
   }
-  const g = windowGraph('revisable'); g.nodes.push(graphNode('TextWindow', 'other'));
-  g.edges.find(e => e.to[0] === 'commit' && e.to[1] === 'boundary').from[0] = 'other'; assert.deepEqual(validateGraph((g)), []);
-  assert.deepEqual(graphModelRequirements({ nodes: [graphNode('TextWindow', 'w'), graphNode('TranslationCommit', 'c')] }), []);
+  assert.deepEqual(graphModelRequirements({ nodes: [graphNode('TextWindow', 'w')] }), []);
   assert.equal(defaultGraph().version, GRAPH_VERSION);
-});
-
-test('TranslationCommit rejects independent/malformed results and detects an undrained boundary', () => {
-  const node = new TranslationCommitNode(), c = { signal: new AbortController().signal, emit() {}, emitOutputs() {} };
-  node.start(c); assert.throws(() => node.receiveInputs({ source: 'x', text: 'y', error: '' }, c), /causal|grouped/);
-  node.receiveInputs({ boundary: 'x' }, { ...c, delivery: {} });
-  assert.throws(() => node.receiveInputs({ source: 'other', text: 'y', error: '' }, { ...c, cause: {}, groupInputs: ['source', 'text', 'error'] }), /does not match/);
-  assert.throws(() => node.stop(), /untranslated/);
 });

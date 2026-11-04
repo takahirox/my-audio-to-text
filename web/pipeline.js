@@ -10,7 +10,7 @@ export { portContract } from './port-contracts.js';
  * context provides emit(port, value), emitOutputs(values, { provisional }), fail(error), and an AbortSignal.
  * Optional receiveInputs(values, context) receives one emission mapped to input names.
  * Optional inputQueueLimits { deliveries, chars } bounds active + queued deliveries before retention.
- * Delivery contexts include opaque delivery/cause identity; cancel hooks emit cleanup snapshots.
+ * Cancel hooks emit cleanup snapshots.
  * receive context.defer() owns queued async work separately from input admission;
  * emit through work.context and call work.complete() after its last output.
  */
@@ -87,7 +87,7 @@ export class Pipeline {
         signal: entry.controller.signal,
         connectedInputs: Object.freeze(connections.filter(route => route.to[0] === entry.id).map(route => route.to[1])),
         emit: (port, value) => this.emit(entry, port, value),
-        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, false, options?.provisional === true),
+        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, false, options?.provisional === true),
         fail: error => this.fail(entry, error),
       });
     }
@@ -103,8 +103,8 @@ export class Pipeline {
     // Observer failures cannot break delivery to another branch.
     try { this.onError(error, entry.id); } catch { /* errors remain available */ }
   }
-  emit(entry, port, value, cause, cleanup = false, provisional = false, turn, receiveScoped = false) { this.emitOutputs(entry, { [port]: value }, false, cause, cleanup, provisional, turn, receiveScoped); }
-  emitOutputs(entry, values, grouped = true, cause, cleanup = false, provisional = false, turn, receiveScoped = false) {
+  emit(entry, port, value, cleanup = false, provisional = false, turn, receiveScoped = false) { this.emitOutputs(entry, { [port]: value }, false, cleanup, provisional, turn, receiveScoped); }
+  emitOutputs(entry, values, grouped = true, cleanup = false, provisional = false, turn, receiveScoped = false) {
     if (turn?.closed) {
       if (!entry.controller.signal.aborted) this.fail(entry, Error('Sampled work emitted after its receive promise completed.'));
       return;
@@ -137,14 +137,10 @@ export class Pipeline {
         Object.defineProperty(deliveries.get(target), input, { value, enumerable: true });
       }
     }
-    const delivery = Object.freeze({});
     for (const [target, inputs] of deliveries) {
       // Delivery-local provenance, never payload metadata or cross-branch matching.
       const groupInputs = grouped ? Object.freeze([...new Set([...entry.routes].filter(([port]) => groupOutputs.has(port)).flatMap(([, routes]) => routes)
         .filter(route => route.entry === target).map(route => route.port))]) : undefined;
-      // A forwarding emission gets a fresh identity with its incoming event as
-      // cause. Async processors retain this context with their accepted work.
-      // No Node types, output names or payload equality participate in identity.
       // Producers can mark unfinished results without changing primitive ports.
       // Retaining a receive context also retains this flag across async forwarding.
       // A simultaneous final/preview-clear group can route unfinished outputs
@@ -152,7 +148,7 @@ export class Pipeline {
       // without splitting the atomic delivery or interpreting port names.
       const unfinished = provisional || outputs.filter(([port]) => (entry.routes.get(port) || []).some(route => route.entry === target))
         .every(([port]) => entry.provisionalOutputs.has(port));
-      this.enqueue(target, inputs, { groupInputs, delivery, cause, provisional: unfinished, cleanup, receiveScoped }, turn);
+      this.enqueue(target, inputs, { groupInputs, provisional: unfinished, cleanup, receiveScoped }, turn);
     }
   }
   enqueue(target, inputs, event, parent) {
@@ -203,8 +199,8 @@ export class Pipeline {
         }
         let receiving = true;
         const emissions = {
-          emit: (port, value) => this.emit(target, port, value, event.delivery, event.cleanup, event.provisional, turn, receiveScoped),
-          emitOutputs: (outputs, options) => this.emitOutputs(target, outputs, true, event.delivery, event.cleanup, event.provisional || options?.provisional === true, turn, receiveScoped),
+          emit: (port, value) => this.emit(target, port, value, event.cleanup, event.provisional, turn, receiveScoped),
+          emitOutputs: (outputs, options) => this.emitOutputs(target, outputs, true, event.cleanup, event.provisional || options?.provisional === true, turn, receiveScoped),
         };
         const emit = callback => {
           if (!live()) return;
@@ -212,7 +208,7 @@ export class Pipeline {
           callback();
         };
         const context = Object.freeze({ ...target.context,
-          groupInputs: event.groupInputs, delivery: event.delivery, cause: event.cause, provisional: event.provisional,
+          groupInputs: event.groupInputs, provisional: event.provisional,
           signal: event.cleanup ? this.cleanupController.signal : target.controller.signal,
           fail: error => { if (turn) turn.error ||= error; this.fail(target, error); },
           emit: (port, value) => emit(() => emissions.emit(port, value)),
@@ -414,8 +410,8 @@ export class Pipeline {
       if (this.state === 'disposed') return this.dispose();
       if (!entry.active || entry.closed || entry.failed) continue;
       const context = Object.freeze({ ...entry.context, signal: this.cleanupController.signal,
-        emit: (port, value) => this.emit(entry, port, value, undefined, true),
-        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, true, options?.provisional === true),
+        emit: (port, value) => this.emit(entry, port, value, true),
+        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, true, options?.provisional === true),
       });
       try { await entry.node.cancel?.(context); } catch (error) { this.fail(entry, error); }
     }
