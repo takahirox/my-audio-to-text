@@ -292,6 +292,6 @@ test('native touch drags an occupied input to blank canvas without changing its 
 test('MV3 input-end dragging reconnects transactionally and cancellation preserves the wire', async ({ graphExtension: f }) => {
   const live = await openGraph(f); await checkInputReconnect(live.editor);
 });
-for (const kind of ['current', 'paired', 'invalid']) test(`MV3 Graph actions recovery preserves exact ${kind} originals before Reset and Save`, async ({ graphExtension: f }) => {
+for (const kind of ['current', 'paired', 'invalid', 'unsupported']) test(`MV3 Graph actions recovery preserves exact ${kind} originals before Reset and Save`, async ({ graphExtension: f }) => {
   const live = await openGraph(f); await checkRecovery(live.editor, kind);
 });

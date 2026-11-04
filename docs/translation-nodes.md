@@ -362,12 +362,13 @@ prompt construction, not translation quality. See [implementation evidence](evid
 for performed checks and any real-inference blockers. No post-merge-only check
 is required by #173.
 
-## Windowed source text and optional retranslation (#128)
+## Windowed source text and optional previews
 
-[TextWindow and TranslationCommit](windowed-translation.md) provide bounded
-source batching and an opt-in preview/commit experiment in the extension graph.
+[TextWindow](windowed-translation.md) batches committed source text before translation.
+Connect its text output to a translator, then translator.text directly to
+Display.input or through TextAccumulator.append for history.
 The four extension translators accept optional provisional TEXT from any
-compatible producer, independently of the committed text source and edge order. Their committed source/text/error and preview provisionalSource/provisionalText/provisionalError TEXT outputs form separate atomic families sharing one owned Worker. Direct text is safe for committed history or TTS even when provisional is connected. Route provisionalText to a separate replacement display; empty clears on final acceptance, Stop and Cancel. TranslationCommit remains optional for causal closed-window checks, not preview/final routing. Standalone web translator Nodes retain their behavior. Unsupported old graphs fail visibly; Reset or Import a current graph and Save explicitly.
+compatible producer, independently of the committed text source and edge order. Their committed source/text/error and preview provisionalSource/provisionalText/provisionalError TEXT outputs form separate atomic families sharing one owned Worker. Direct text is safe for committed history or TTS even when provisional is connected. Route provisionalText to a separate replacement display; empty clears on final acceptance, Stop and Cancel. Standalone web translator Nodes retain their behavior. Unsupported old graphs fail visibly; Reset or Import a current graph and Save explicitly.
 
 Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
 

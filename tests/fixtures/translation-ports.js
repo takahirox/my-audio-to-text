@@ -53,9 +53,10 @@ export async function checkTranslationPorts(page, type, base = './') {
         const clearBeforeCompletion = { ...displays };
         complete(2, 'late stale result'); await wait(() => requests.length === 4);
         complete(3, 'closed translation'); await wait(() => displays.committed === 'seed translation\nclosed translation');
-        send('draft', 'cancel preview'); await wait(() => requests.length === 5);
-        complete(4, 'cancel translation'); await wait(() => displays.preview === 'cancel translation');
-        await built.pipeline.cancel(); complete(4, 'late after cancel');
+        send('draft', 'ending preview'); await wait(() => requests.length === 5);
+        complete(4, 'ending translation'); await wait(() => displays.preview === 'ending translation');
+        await built.pipeline[run === 0 ? 'stop' : 'cancel'](); complete(4, 'late after ending');
+        await built.pipeline.dispose();
         runs.push({ previewState, clearBeforeCompletion, displays, events, errors: built.pipeline.errors.map(e => e.message),
           workerCount: workers.length, released: workers.every(w => w.released), count: built.pipeline.entries.get('history').node.count,
           saved: localStorage.getItem('processing-graph-v1') === saved });
@@ -66,7 +67,7 @@ export async function checkTranslationPorts(page, type, base = './') {
   for (const run of runs) {
     expect(run.previewState).toEqual({ committed: 'seed translation', preview: 'preview translation' });
     expect(run.clearBeforeCompletion).toEqual({ committed: 'seed translation', preview: '' });
-    expect(run.displays).toEqual({ committed: 'seed translation\nclosed translation', preview: 'cancel translation' });
+    expect(run.displays).toEqual({ committed: 'seed translation\nclosed translation', preview: '' });
     expect(run.events.some(e => e.text.includes('late'))).toBe(false);
     expect(run.count).toBe(2); expect(run.workerCount).toBe(1); expect(run.released).toBe(true); expect(run.saved).toBe(true);
     expect(run.errors).toEqual([]);

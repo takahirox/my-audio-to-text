@@ -1,5 +1,5 @@
 import { HoldNode } from '../web/hold-node.js';
-import { MeetingSummaryNode } from '../web/meeting-summary-node.js';
+import { TextSummaryNode } from '../web/text-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
@@ -30,7 +30,6 @@ import { KeyedTextPairNode } from '../web/keyed-text-pair-node.js';
 import { KeyedTextCoalesceNode } from '../web/keyed-text-coalesce-node.js';
 import { TextSlidingWindowNode } from '../web/text-sliding-window-node.js';
 import { TextWindowNode } from '../web/text-window-node.js';
-import { TranslationCommitNode } from '../web/translation-commit-node.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
 // assets, initialization or synthesis failure must leave transcription usable.
@@ -124,9 +123,9 @@ export function buildGraph(graph, options) {
     switch (spec.type) {
       case 'Hold': node = new HoldNode(); break;
       case 'Text': node = new TextNode(spec.settings); break;
-      case 'MeetingSummaryLfm2': case 'MeetingSummaryQwen35':
-        node = new MeetingSummaryNode({ ...spec.settings, type: spec.type, workerFactory: options.meetingSummaryWorkerFactory,
-          onEvent: event => options.onMeetingSummaryEvent?.(event, spec.id) }); break;
+      case 'TextSummaryLfm2': case 'TextSummaryQwen35':
+        node = new TextSummaryNode({ ...spec.settings, type: spec.type, workerFactory: options.textSummaryWorkerFactory,
+          onEvent: event => options.onTextSummaryEvent?.(event, spec.id) }); break;
       case 'IfCondition':
         node = new IfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,
           onEvent: event => options.onIfConditionEvent?.(event, spec.id) }); break;
@@ -155,7 +154,6 @@ export function buildGraph(graph, options) {
       case 'TextAccumulator': node = new TextAccumulatorNode(); break;
       case 'TextSlidingWindow': node = new TextSlidingWindowNode(); break;
       case 'TextWindow': node = new TextWindowNode(); break;
-      case 'TranslationCommit': node = new TranslationCommitNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
       case 'KeyedTextCoalesce': node = new KeyedTextCoalesceNode(); break;
       case 'TranslateGemmaEnJa': case 'TranslateGemmaJaEn':

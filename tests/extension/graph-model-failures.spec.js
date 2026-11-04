@@ -8,7 +8,7 @@ const transcript = page => page.locator('[data-display="transcript"] .display-co
 async function setup(f, type, phase) {
   // Only the model Worker protocol is deterministic here. The production Node,
   // shared Pipeline, session, Live UI and Worker ownership remain unchanged.
-  await writeFile(path.join(f.root, 'web/meeting-summary-worker.js'), `
+  await writeFile(path.join(f.root, 'web/text-summary-worker.js'), `
     self.onmessage = ({data}) => {
       if (data.type === 'load') postMessage({id:data.id, type:${JSON.stringify(phase === 'load' ? 'error' : 'ready')}, message:'Controlled model load failure'});
       if (data.type === 'summarize') {
@@ -33,7 +33,7 @@ async function setup(f, type, phase) {
 const settle = page => page.evaluate(() => window.modelPipeline.entries.get('summary').queue);
 const state = page => page.evaluate(() => ({ failed:window.modelPipeline.entries.get('summary').failed, errors:window.modelPipeline.errors.map(e=>e.message), state:window.modelPipeline.state }));
 
-for (const type of ['MeetingSummaryLfm2', 'MeetingSummaryQwen35']) {
+for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
   for (const phase of ['load', 'inference']) test(`${type}: ${phase} failure is tracked once; transcription survives Stop and restart`, async ({ graphExtension: f }) => {
     const page = await setup(f, type, phase); await startGraph(page);
     if (phase === 'inference') {

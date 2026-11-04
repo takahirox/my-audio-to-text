@@ -5,7 +5,7 @@ import { installLiveScrollFixture, checkLiveScrolling, checkLiveTextFlowScrollin
 const region = (page, id) => page.locator(`[data-display="${id}"]`);
 
 test('MV3 summary TEXT snapshots render literally through Display.input, retain committed output on Cancel and drain Stop', async ({ graphExtension: f }) => {
-  await writeFile(path.join(f.root,'web/meeting-summary-worker.js'), `self.onmessage=({data})=>{
+  await writeFile(path.join(f.root,'web/text-summary-worker.js'), `self.onmessage=({data})=>{
     if(data.type==='load')postMessage({type:'ready',id:data.id});
     if(data.type==='summarize')setTimeout(()=>postMessage({type:'result',id:data.id,summary:data.text}),data.text==='slow'?1500:10);
   };`);
@@ -13,7 +13,7 @@ test('MV3 summary TEXT snapshots render literally through Display.input, retain 
   await live.evaluate(async literal=>{
     const {graphNode,edge,saveGraph}=await import('./graph.js');
     const source=graphNode('Text','source');source.settings.value=literal;
-    saveGraph(localStorage,{version:15,nodes:[source,graphNode('MeetingSummaryLfm2','summary'),graphNode('Display','notes')],
+    saveGraph(localStorage,{version:15,nodes:[source,graphNode('TextSummaryLfm2','summary'),graphNode('Display','notes')],
       edges:[edge('source','value','summary','text'),edge('summary', 'summary', 'notes', 'input')]});
     window.dispatchEvent(new StorageEvent('storage',{key:'processing-graph-v1'}));
     const {TabSession}=await import('./session.js'), start=TabSession.prototype.start;

@@ -101,9 +101,8 @@ rather than asking consumers to compare source text.
 Correlation is supported between ports emitted together by **one producer and connected
 directly to one receiver**. Separate processor branches are not joined: the runtime does
 not merge groups, wait for missing ports, or synchronize independent consumers. A
-forwarding context retains only immediate delivery causality, which a consumer may
-validate without joining unrelated streams. A processor may explicitly publish a new
-group, but has to own its association. For an explicit `emitOutputs()` delivery,
+processor may explicitly publish a new group, but has to own its association.
+For an explicit `emitOutputs()` delivery,
 `context.groupInputs` is a frozen list of receiver inputs wired directly from that
 producer, including omitted siblings. A Node may declare independent atomic output
 families with `outputGroups: [['source', 'text', 'error'], ['provisionalSource',
@@ -124,14 +123,6 @@ observe their signal for external side effects. Graceful Stop drains whole queue
 items and includes groups emitted by upstream Stop hooks before closing consumers.
 These are local delivery guarantees, not transactions or distributed synchronization.
 
-A delivery context also carries opaque `delivery` identity and `cause` (the
-immediate incoming delivery of a forwarding emission). Values remain primitive.
-Using the supplied receive context to emit a result preserves its causal link;
-asynchronous processors retain that context with the job. These tokens contain
-no Node names, port names or public IDs, and are never joined by text equality.
-TranslationCommit uses them to verify that a grouped result derives from its
-next boundary event, while generic delivery infers no translation semantics.
-
 Producers can mark unfinished results with
 `context.emitOutputs(values, { provisional: true })`. The receiver sees immutable
 `context.provisional` provenance, separate from primitive payloads and port names.
@@ -150,6 +141,8 @@ do not inherit it. The translation scheduler marks preview jobs this way.
   outputs before stopping. Emissions after a node's stop has resolved are ignored.
   Stop is idempotent. A Stop during startup waits for startup; use Dispose to
   interrupt pending loading/permission or other work immediately.
+  After a node's Stop hook, it also waits for that node's explicitly owned async
+  work before closing its emitter and draining downstream consumers.
 - `await pipeline.dispose()` immediately closes every emitter, aborts all node
   signals and skips queued inputs, then waits only for resource cleanup hooks.
   It does not wait for pending input/start/stop work. Running input code must
@@ -177,6 +170,55 @@ stopped`, with Dispose allowed at any point. Construct fresh node instances for
 a new run. Old context closures cannot feed a replacement graph. Graceful Stop
 does not itself dispose model resources. Restarting/rewiring graphs and sharing
 node instances between graphs are outside this contract.
+
+### Queued asynchronous work (#207)
+
+A receive promise normally spans processing and output. A node with its own
+scheduler can instead accept a job promptly and acquire an explicit work handle
+**during** its receive hook:
+
+```js
+receiveInputs(values, context) {
+  const work = context.defer();
+  this.queue.push({ values, work }); // enforce the node's queue bounds first
+  this.pump();
+}
+// Later, in the node-owned scheduler:
+try { job.work.context.emitOutputs(await process(job.values)); }
+catch (error) { job.work.context.fail(error); }
+finally { job.work.complete(); }
+```
+
+`work.context` preserves the accepted delivery's identity, cause, group inputs,
+provisional flag and node signal. It is valid until the idempotent `complete()`;
+it cannot create further work handles. Completing work retires its emitter;
+attempted output afterward fails visibly while the node is live. Acquiring work
+from an expired receive context is invalid. Node abort retires all its handles
+and suppresses late output. Nodes still own Worker cancellation/resource cleanup,
+queue limits, error reporting, and completion of replaced or discarded jobs.
+Stop waits for owned work; a lost handle can stall Stop just like an unresolved
+receive promise. Use Cancel/dispose to interrupt it. Existing sampled-turn
+deadlines still apply to work on a feedback path.
+
+Feedback turns track only emitting paths that can reach their required sampled
+state writes, including inherited obligations of nested sampled consumers. An
+independent fan-out branch retains delivery provenance but leaves that turn.
+Its awaited receives and owned background jobs drain separately at Stop, and its
+failure does not cancel the feedback path. Late output on such a branch must
+use an explicit work handle, rather than an expired receive context. This
+requirement follows every downstream delivery, including synchronous relays
+and owned background emissions, independently of feedback-turn membership.
+For sampled consumers without a reachable feedback write, the existing
+conservative behavior still waits for all causal downstream work. Reachability
+is structural across all emitting ports; no producer, node ID, TEXT contents or port name grants an
+exception. A branch with any route back to the required state remains part of
+the turn, even if a particular job emits only to a display port.
+
+The extension translation scheduler uses one handle per committed or preview
+job. Admission stays responsive; completion/output is separately owned. Pending
+preview replacement, Stop, cancellation and disposal retire discarded handles;
+committed jobs retain FIFO order, IDs, context snapshots and their output family.
+This adds no payload fields or graph/editor persistence changes.
 
 ## Node Playground speech page integration
 
@@ -400,12 +442,13 @@ emitting routes, so an emitting cycle remains invalid.
 On an ordinary delivery to a consumer with sampled inputs, Pipeline waits for
 already queued state writes and adds the current readable values to that one
 input map. `receiveInputs` sees one atomic delivery. Each sampled consumer's
-FIFO waits for its receive promise and all downstream deliveries emitted through
-that context before processing the next input. Delivery-scoped bookkeeping,
+FIFO waits for its receive promise and downstream deliveries on paths capable of
+writing its feedback before processing the next input. Delivery-scoped bookkeeping,
 never string equality or an arbitrary output event, detects completion. If the
 forward event path reaches a sampled state source, that state must be updated
 by this work; missing storage is a visible failure. Async nodes must return a
-promise spanning their work and emit through their receive context. Detached
+promise spanning their work or explicitly own it with `context.defer()`; owned
+work on a feedback path retains that completion obligation. Detached
 session-context events do not complete feedback work. Nested sampled deliveries
 retain their parent's completion obligation.
 
@@ -415,4 +458,4 @@ and cancels queued work. Each sampled update has a four-minute deadline; abort
 also invalidates its downstream contexts. Stop uses the event topological order,
 so source tails enter the FIFO before downstream nodes close. Cancel and dispose
 abort immediately. Fresh Pipeline/node instances are required for Start.
-See the [importable example and lifecycle details](meeting-summary-nodes.md).
+See the [importable example and lifecycle details](text-summary-nodes.md).

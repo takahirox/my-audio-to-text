@@ -11,9 +11,9 @@ SHARED_FILES = (
     "moonshine-medium-node.js", "moonshine-medium-worker.js", "moonshine-medium-stream.js",
     "zipformer-node.js", "zipformer-worker.js", "zipformer-core.js", "zipformer-segments.js", "zipformer-config.js",
     "whisper-node.js", "whisper-worker.js", "whisper-config.js", "text-constant-node.js",
-    "meeting-summary-models.js", "meeting-summary-node.js", "meeting-summary-policy.js", "meeting-summary-worker.js",
+    "text-summary-models.js", "text-summary-node.js", "text-summary-policy.js", "text-summary-worker.js",
     "if-condition-model.js", "if-condition-node.js", "if-condition-policy.js", "if-condition-worker.js",
-    "text-sliding-window-node.js", "text-window-node.js", "translation-commit-node.js", "keyed-text-coalesce-node.js", "keyed-text-pair-node.js", "paired-text.js", "keyed-paired-text-accumulator-node.js", "display-node.js", "hold-node.js", "pipeline.js", "port-contracts.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
+    "text-sliding-window-node.js", "text-window-node.js", "keyed-text-coalesce-node.js", "keyed-text-pair-node.js", "paired-text.js", "keyed-paired-text-accumulator-node.js", "display-node.js", "hold-node.js", "pipeline.js", "port-contracts.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
     "tts-nodes.js", "tts-worker.js", "synthesized-audio.js", "speaker-output.js", "supertonic3-worker.js", "supertonic3-runtime.js",
     "audio-stream.js", "qwen3-tts-node.js", "qwen3-tts-worker.js", "qwen3-tts-runtime.js",
     "streaming-tts-node.js", "cosyvoice3-node.js", "cosyvoice3-worker.js", "cosyvoice3-runtime.js", "cosyvoice3-onnx.js",
@@ -38,11 +38,11 @@ def main():
         asset = vendor / "translation" / entry["path"]
         if not asset.is_file() or asset.stat().st_size != entry["bytes"] or hashlib.sha256(asset.read_bytes()).hexdigest() != entry["sha256"]:
             raise SystemExit("Invalid pinned IfCondition runtime. Run npm run prepare:translation-assets.")
-    summary_runtime = json.loads((ROOT / "scripts/meeting-summary-runtime.json").read_text())
+    summary_runtime = json.loads((ROOT / "scripts/text-summary-runtime.json").read_text())
     for entry in summary_runtime["files"]:
         asset = vendor / "meeting-summary" / entry["path"]
         if not asset.is_file() or asset.stat().st_size != entry["bytes"] or hashlib.sha256(asset.read_bytes()).hexdigest() != entry["sha256"]:
-            raise SystemExit("Missing or invalid meeting summary runtime. Run npm run prepare:meeting-summary-assets.")
+            raise SystemExit("Missing or invalid text summary runtime. Run npm run prepare:text-summary-assets.")
     whisper = json.loads((ROOT / "scripts" / "whisper-assets.json").read_text())
     for entry in whisper["files"]:
         asset = vendor / "whisper" / "tiny" / entry["path"]

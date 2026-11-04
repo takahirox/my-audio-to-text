@@ -29,7 +29,7 @@ same runtime and speech node with its own tab source and UI. OPUS-MT and
 TranslateGemma provide separate local Japanese → English text nodes and test
 pages. The extension implements ASR-to-translation graph integration with generic
 DOM-only Live sinks and optional bounded text formatting. The extension also implements
-two [bounded incremental meeting-summary draft processors](meeting-summary-nodes.md)
+two [bounded incremental text-summary processors](text-summary-nodes.md)
 with recorded accuracy limitations. Topic processing, persistent history and
 personalized ASR remain future capabilities.
 
@@ -102,7 +102,7 @@ Transcript/history → Topic extraction/analysis → Visualization
 
 Capture and transcription are executable today, and final text can connect
 directly to the independent translation, correction, TTS and text-output nodes.
-Committed TEXT can also feed the extension's meeting-summary Nodes directly;
+Committed TEXT can also feed the extension's text-summary Nodes directly;
 their complete summary snapshots feed Display.input. History
 storage, article inputs and broader analysis connections remain future examples.
 In particular,

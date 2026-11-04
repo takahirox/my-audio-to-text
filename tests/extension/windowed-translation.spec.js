@@ -26,7 +26,7 @@ test('palette exposes NUMBER threshold inputs, one TEXT output, no threshold Set
   await editor.reload(); expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
 });
 
-for (const mode of ['baseline', 'window', 'revisable']) test(`packaged ${mode}: committed ASR TEXT routing, deterministic inference, deadline, Stop and repeat`, async ({ graphExtension: f }) => {
+for (const mode of ['baseline', 'window']) test(`packaged ${mode}: committed ASR TEXT routing, deterministic inference, deadline, Stop and repeat`, async ({ graphExtension: f }) => {
   // Only model inference is controlled. Real module Worker, production
   // scheduler, graph, grouping, timers, formatter/display and cleanup execute.
   await writeFile(path.join(f.root, 'web/opus-mt-en-ja-worker.js'), `
@@ -45,10 +45,12 @@ for (const mode of ['baseline', 'window', 'revisable']) test(`packaged ${mode}: 
   graph.edges.push({ from: ['audio', 'audio'], to: ['input', 'audio'] });
   const runs = await live.evaluate(async ({ graph, texts }) => {
     const { buildGraph } = await import('./graph-runtime.js');
+    const { saveGraph, readGraph } = await import('./graph.js');
+    saveGraph(localStorage, graph);
     const runs = [];
     for (let run = 0; run < 2; run++) {
       let display; const events = [];
-      const built = buildGraph((graph), { tabId: 42, prepareTranslation() {}, onDisplay: (_, s) => { display = s.textContent; events.push(s.textContent); } });
+      const built = buildGraph(readGraph(localStorage), { tabId: 42, prepareTranslation() {}, onDisplay: (_, s) => { display = s.textContent; events.push(s.textContent); } });
       try {
         await built.pipeline.start(); await built.translations[0].ready;
         for (const text of texts) built.speechNodes.get('input').receiveEvent({ type: 'final', text });

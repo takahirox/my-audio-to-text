@@ -11,11 +11,11 @@ export class TabSession {
     sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph({ enabled: false }),
-    meetingSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, onSynthesizedAudio = () => {}, speakerContextFactory,
+    textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, onSynthesizedAudio = () => {}, speakerContextFactory,
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
   } = {}) {
-    this.meetingSummaryWorkerFactory = meetingSummaryWorkerFactory;
+    this.textSummaryWorkerFactory = textSummaryWorkerFactory;
     this.ifConditionWorkerFactory = ifConditionWorkerFactory;
     this.parakeetWorkerFactory = parakeetWorkerFactory; this.moonshineWorkerFactory = moonshineWorkerFactory;
     this.whisperWorkerFactory = whisperWorkerFactory; this.zipformerWorkerFactory = zipformerWorkerFactory;
@@ -93,8 +93,8 @@ export class TabSession {
         },
         workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, zipformerWorkerFactory: this.zipformerWorkerFactory, parakeetWorkerFactory: this.parakeetWorkerFactory, moonshineWorkerFactory: this.moonshineWorkerFactory, sourceFactory: this.sourceFactory,
         translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
-        meetingSummaryWorkerFactory: this.meetingSummaryWorkerFactory,
-        onMeetingSummaryEvent: (event, id) => {
+        textSummaryWorkerFactory: this.textSummaryWorkerFactory,
+        onTextSummaryEvent: (event, id) => {
           if (this.session !== session) return;
           session.summaryStates ||= {}; session.summaryStates[id] = event.message || event.type;
           this.update({ summaryStatus: Object.entries(session.summaryStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
@@ -144,7 +144,7 @@ export class TabSession {
           // before disposing and calling fail(). Keep the Pipeline record, but
           // do not repeat that same failure in the general error area.
           const node = session.pipeline.entries.get(id).node;
-          if (node.disposed && ['MeetingSummaryLfm2', 'MeetingSummaryQwen35', 'IfCondition'].includes(graph.nodes.find(spec => spec.id === id)?.type)) return;
+          if (node.disposed && ['TextSummaryLfm2', 'TextSummaryQwen35', 'IfCondition'].includes(graph.nodes.find(spec => spec.id === id)?.type)) return;
           this.update({ error: [this.view.error, error.message].filter(Boolean).join('\n'), signal: this.sourceStatus(session) });
         },
       }));

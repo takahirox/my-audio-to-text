@@ -9,15 +9,16 @@ export const meetingBatches = [
   'Mika: Correction: the proposed budget is 250,000 yen, not 300,000. Ken: Approved. We have decided to launch the pilot on November 12 with a 250,000 yen budget. Mika: I will send the invitations by Friday. Ken: We still need approval for the venue, not for the pilot.',
   'Mika: 招待状は送信済みです。Ken: 会場は承認済みではありません。アクセシビリティの確認担当者は不明です。Ken: 会場は承認済みではありません。',
 ];
-export function meetingGraph(type) {
+export function summaryGraph(type) {
   const nodes = [graphNode('Text', 'input'), graphNode(type, 'summary'), graphNode('Display', 'notes'), graphNode('Display', 'transcript')];
   nodes[0].settings.value = meetingBatches[0];
   return ({ version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input'), edge('input', 'value', 'transcript', 'input')] });
 }
 
 // Generic sampled feedback example; the model has no private summary history.
-export function meetingFeedbackGraph(type = 'MeetingSummaryLfm2') {
-  const graph = meetingGraph(type);
+export function summaryFeedbackGraph(type = 'TextSummaryLfm2') {
+  const graph = summaryGraph(type);
+  graph.nodes.find(n => n.id === 'summary').settings.prompt = 'Update the previous summary using the new text. Preserve still-relevant facts and explicit corrections. Return the complete updated summary.';
   const formatter = graphNode('TextFormatter', 'format');
   formatter.settings = { inputCount: 2, template: 'Previous summary:\n{1}\n\nNew transcript:\n{2}' };
   graph.nodes.push(graphNode('Hold', 'previous'), graphNode('TextWindow', 'window'), formatter, graphNode('TextAccumulator', 'transcript-history'));

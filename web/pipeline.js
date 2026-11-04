@@ -10,7 +10,9 @@ export { portContract } from './port-contracts.js';
  * context provides emit(port, value), emitOutputs(values, { provisional }), fail(error), and an AbortSignal.
  * Optional receiveInputs(values, context) receives one emission mapped to input names.
  * Optional inputQueueLimits { deliveries, chars } bounds active + queued deliveries before retention.
- * Delivery contexts include opaque delivery/cause identity; cancel hooks emit cleanup snapshots.
+ * Cancel hooks emit cleanup snapshots.
+ * receive context.defer() owns queued async work separately from input admission;
+ * emit through work.context and call work.complete() after its last output.
  */
 export class Pipeline {
   constructor({ nodes, connections = [], onError = () => {} }) {
@@ -23,7 +25,7 @@ export class Pipeline {
       provisionalOutputs: new Set(node.provisionalOutputs || []),
       outputGroups: (node.outputGroups || [Object.keys(node.outputs || {})]).map(ports => [...ports]),
       sampledOutputs: new Set(node.sampledOutputs || []), samples: [], pendingCount: 0, pendingChars: 0,
-      dependents: new Set(), routes: new Map(), queue: Promise.resolve(), controller: new AbortController(),
+      dependents: new Set(), routes: new Map(), queue: Promise.resolve(), controller: new AbortController(), work: new Set(),
       active: false, closed: false, failed: false,
     }]));
     if (!this.entries.size) throw new Error('A pipeline needs at least one node.');
@@ -79,12 +81,13 @@ export class Pipeline {
         for (const routes of current.routes.values()) for (const route of routes) visit(route.entry);
       };
       visit(entry);
+      entry.reachable = reachable;
       entry.feedback = new Set(entry.samples.map(sample => sample.entry).filter(source => reachable.has(source)));
       entry.context = Object.freeze({
         signal: entry.controller.signal,
         connectedInputs: Object.freeze(connections.filter(route => route.to[0] === entry.id).map(route => route.to[1])),
         emit: (port, value) => this.emit(entry, port, value),
-        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, false, options?.provisional === true),
+        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, false, options?.provisional === true),
         fail: error => this.fail(entry, error),
       });
     }
@@ -100,8 +103,8 @@ export class Pipeline {
     // Observer failures cannot break delivery to another branch.
     try { this.onError(error, entry.id); } catch { /* errors remain available */ }
   }
-  emit(entry, port, value, cause, cleanup = false, provisional = false, turn) { this.emitOutputs(entry, { [port]: value }, false, cause, cleanup, provisional, turn); }
-  emitOutputs(entry, values, grouped = true, cause, cleanup = false, provisional = false, turn) {
+  emit(entry, port, value, cleanup = false, provisional = false, turn, receiveScoped = false) { this.emitOutputs(entry, { [port]: value }, false, cleanup, provisional, turn, receiveScoped); }
+  emitOutputs(entry, values, grouped = true, cleanup = false, provisional = false, turn, receiveScoped = false) {
     if (turn?.closed) {
       if (!entry.controller.signal.aborted) this.fail(entry, Error('Sampled work emitted after its receive promise completed.'));
       return;
@@ -134,14 +137,10 @@ export class Pipeline {
         Object.defineProperty(deliveries.get(target), input, { value, enumerable: true });
       }
     }
-    const delivery = Object.freeze({});
     for (const [target, inputs] of deliveries) {
       // Delivery-local provenance, never payload metadata or cross-branch matching.
       const groupInputs = grouped ? Object.freeze([...new Set([...entry.routes].filter(([port]) => groupOutputs.has(port)).flatMap(([, routes]) => routes)
         .filter(route => route.entry === target).map(route => route.port))]) : undefined;
-      // A forwarding emission gets a fresh identity with its incoming event as
-      // cause. Async processors retain this context with their accepted work.
-      // No Node types, output names or payload equality participate in identity.
       // Producers can mark unfinished results without changing primitive ports.
       // Retaining a receive context also retains this flag across async forwarding.
       // A simultaneous final/preview-clear group can route unfinished outputs
@@ -149,10 +148,18 @@ export class Pipeline {
       // without splitting the atomic delivery or interpreting port names.
       const unfinished = provisional || outputs.filter(([port]) => (entry.routes.get(port) || []).some(route => route.entry === target))
         .every(([port]) => entry.provisionalOutputs.has(port));
-      this.enqueue(target, inputs, { groupInputs, delivery, cause, provisional: unfinished, cleanup }, turn);
+      this.enqueue(target, inputs, { groupInputs, provisional: unfinished, cleanup, receiveScoped }, turn);
     }
   }
   enqueue(target, inputs, event, parent) {
+    // Only paths capable of storing this turn's feedback belong to its FIFO.
+    // Independent branches retain delivery provenance, but own their lifecycle.
+    const independent = parent?.required.size && ![...parent.required].some(state => target.reachable.has(state));
+    // Leaving a feedback turn releases its FIFO obligation, not the receive
+    // lifetime requirement. Carry that requirement through every descendant,
+    // including synchronous relays and emissions from explicitly owned work.
+    const receiveScoped = event.receiveScoped || !!independent;
+    if (independent) parent = undefined;
     if (target.failed || target.closed) {
       if (parent) parent.error ||= Error(`Sampled work cannot reach ${target.id}.`);
       return;
@@ -190,12 +197,26 @@ export class Pipeline {
             values[sample.input] = snapshotPortValue(sample.entry.outputs[sample.output], sample.entry.node.readOutput(sample.output));
           }
         }
+        let receiving = true;
+        const emissions = {
+          emit: (port, value) => this.emit(target, port, value, event.cleanup, event.provisional, turn, receiveScoped),
+          emitOutputs: (outputs, options) => this.emitOutputs(target, outputs, true, event.cleanup, event.provisional || options?.provisional === true, turn, receiveScoped),
+        };
+        const emit = callback => {
+          if (!live()) return;
+          if (receiveScoped && !receiving) { this.fail(target, Error('Async branch emitted after its receive promise completed; use context.defer().')); return; }
+          callback();
+        };
         const context = Object.freeze({ ...target.context,
-          groupInputs: event.groupInputs, delivery: event.delivery, cause: event.cause, provisional: event.provisional,
+          groupInputs: event.groupInputs, provisional: event.provisional,
           signal: event.cleanup ? this.cleanupController.signal : target.controller.signal,
           fail: error => { if (turn) turn.error ||= error; this.fail(target, error); },
-          emit: (port, value) => this.emit(target, port, value, event.delivery, event.cleanup, event.provisional, turn),
-          emitOutputs: (outputs, options) => this.emitOutputs(target, outputs, true, event.delivery, event.cleanup, event.provisional || options?.provisional === true, turn),
+          emit: (port, value) => emit(() => emissions.emit(port, value)),
+          emitOutputs: (outputs, options) => emit(() => emissions.emitOutputs(outputs, options)),
+          defer: () => {
+            if (!receiving || !live() || turn?.closed || turn?.signal.aborted) throw Error('Async work must be owned during a live receive hook.');
+            return this.defer(target, { ...context, ...emissions }, turn);
+          },
         });
         Object.freeze(values);
         const receive = async () => {
@@ -205,7 +226,8 @@ export class Pipeline {
             await target.node.receive(input, value, context);
           }
         };
-        await (event.cleanup ? receive() : this.wait(target, receive(), turn?.signal));
+        try { await (event.cleanup ? receive() : this.wait(target, receive(), turn?.signal)); }
+        finally { receiving = false; }
         if (turn && !target.failed) turn.writes.add(target);
       } catch (error) {
         if (turn) turn.error ||= error;
@@ -227,8 +249,36 @@ export class Pipeline {
       }
     }).catch(error => this.fail(target, error));
   }
+  defer(entry, context, turn) {
+    // An owned emitter keeps provenance and cancellation, without serializing
+    // input admission. On a feedback path it also retains that turn's obligation.
+    let closed = false, resolve;
+    const work = { done: new Promise(done => { resolve = done; }) };
+    if (turn) turn.pending++;
+    const complete = () => {
+      if (closed) return;
+      closed = true; entry.work.delete(work);
+      entry.controller.signal.removeEventListener('abort', complete);
+      if (turn) this.releaseTurn(turn);
+      resolve();
+    };
+    const emit = callback => {
+      if (entry.controller.signal.aborted) return;
+      if (closed) { this.fail(entry, Error('Async work emitted after completion.')); return; }
+      callback();
+    };
+    work.complete = complete;
+    work.context = Object.freeze({ ...context, defer: undefined,
+      emit: (port, value) => emit(() => context.emit(port, value)),
+      emitOutputs: (values, options) => emit(() => context.emitOutputs(values, options)),
+    });
+    entry.work.add(work);
+    entry.controller.signal.addEventListener('abort', complete, { once: true });
+    return Object.freeze(work);
+  }
   newTurn(owner, parent) {
     const turn = { owner, pending: 1, entries: new Set([owner]), writes: new Set(), controller: new AbortController() };
+    turn.required = new Set([...owner.feedback, ...(parent?.required || [])]);
     turn.signal = parent ? AbortSignal.any([turn.controller.signal, parent.signal]) : turn.controller.signal;
     turn.done = new Promise(resolve => { turn.resolve = resolve; });
     turn.timer = setTimeout(() => {
@@ -331,6 +381,7 @@ export class Pipeline {
             entry.controller.signal.throwIfAborted();
             return entry.node.stop?.(entry.context);
           }));
+          await this.wait(entry, Promise.all([...entry.work].map(work => work.done)));
         }
       } catch (error) {
         if (['canceling', 'disposed'].includes(this.state)) return;
@@ -359,8 +410,8 @@ export class Pipeline {
       if (this.state === 'disposed') return this.dispose();
       if (!entry.active || entry.closed || entry.failed) continue;
       const context = Object.freeze({ ...entry.context, signal: this.cleanupController.signal,
-        emit: (port, value) => this.emit(entry, port, value, undefined, true),
-        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, undefined, true, options?.provisional === true),
+        emit: (port, value) => this.emit(entry, port, value, true),
+        emitOutputs: (values, options) => this.emitOutputs(entry, values, true, true, options?.provisional === true),
       });
       try { await entry.node.cancel?.(context); } catch (error) { this.fail(entry, error); }
     }
