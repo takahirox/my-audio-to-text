@@ -150,9 +150,9 @@ test('an independent startup failure does not deactivate held state on a viable 
   const f = fixture({ startupError: true, receive: (_, c) => c.emit('text', 'ok') });
   await f.pipeline.start(); assert.equal(f.pipeline.entries.get('held').active, true);
   f.send('A'); f.send('B'); await assert.rejects(f.pipeline.stop(), /Independent startup failure/);
-  // A routed failed branch is itself an explicit failure of this update. Held
-  // state is nevertheless initialized; it must not be skipped as a dead end.
-  assert.equal(f.pipeline.entries.get('held').node.readOutput('value'), '');
+  // A failed independent branch remains visible without canceling feedback.
+  assert.equal(f.pipeline.entries.get('held').node.readOutput('value'), 'ok');
+  assert.equal(f.requests.length, 2);
   await f.pipeline.dispose();
 });
 

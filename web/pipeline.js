@@ -11,6 +11,8 @@ export { portContract } from './port-contracts.js';
  * Optional receiveInputs(values, context) receives one emission mapped to input names.
  * Optional inputQueueLimits { deliveries, chars } bounds active + queued deliveries before retention.
  * Delivery contexts include opaque delivery/cause identity; cancel hooks emit cleanup snapshots.
+ * receive context.defer() owns queued async work separately from input admission;
+ * emit through work.context and call work.complete() after its last output.
  */
 export class Pipeline {
   constructor({ nodes, connections = [], onError = () => {} }) {
@@ -23,7 +25,7 @@ export class Pipeline {
       provisionalOutputs: new Set(node.provisionalOutputs || []),
       outputGroups: (node.outputGroups || [Object.keys(node.outputs || {})]).map(ports => [...ports]),
       sampledOutputs: new Set(node.sampledOutputs || []), samples: [], pendingCount: 0, pendingChars: 0,
-      dependents: new Set(), routes: new Map(), queue: Promise.resolve(), controller: new AbortController(),
+      dependents: new Set(), routes: new Map(), queue: Promise.resolve(), controller: new AbortController(), work: new Set(),
       active: false, closed: false, failed: false,
     }]));
     if (!this.entries.size) throw new Error('A pipeline needs at least one node.');
@@ -79,6 +81,7 @@ export class Pipeline {
         for (const routes of current.routes.values()) for (const route of routes) visit(route.entry);
       };
       visit(entry);
+      entry.reachable = reachable;
       entry.feedback = new Set(entry.samples.map(sample => sample.entry).filter(source => reachable.has(source)));
       entry.context = Object.freeze({
         signal: entry.controller.signal,
@@ -153,6 +156,10 @@ export class Pipeline {
     }
   }
   enqueue(target, inputs, event, parent) {
+    // Only paths capable of storing this turn's feedback belong to its FIFO.
+    // Independent branches retain delivery provenance, but own their lifecycle.
+    const independent = parent?.required.size && ![...parent.required].some(state => target.reachable.has(state));
+    if (independent) parent = undefined;
     if (target.failed || target.closed) {
       if (parent) parent.error ||= Error(`Sampled work cannot reach ${target.id}.`);
       return;
@@ -190,12 +197,26 @@ export class Pipeline {
             values[sample.input] = snapshotPortValue(sample.entry.outputs[sample.output], sample.entry.node.readOutput(sample.output));
           }
         }
+        let receiving = true;
+        const emissions = {
+          emit: (port, value) => this.emit(target, port, value, event.delivery, event.cleanup, event.provisional, turn),
+          emitOutputs: (outputs, options) => this.emitOutputs(target, outputs, true, event.delivery, event.cleanup, event.provisional || options?.provisional === true, turn),
+        };
+        const emit = callback => {
+          if (!live()) return;
+          if (independent && !receiving) { this.fail(target, Error('Async branch emitted after its receive promise completed; use context.defer().')); return; }
+          callback();
+        };
         const context = Object.freeze({ ...target.context,
           groupInputs: event.groupInputs, delivery: event.delivery, cause: event.cause, provisional: event.provisional,
           signal: event.cleanup ? this.cleanupController.signal : target.controller.signal,
           fail: error => { if (turn) turn.error ||= error; this.fail(target, error); },
-          emit: (port, value) => this.emit(target, port, value, event.delivery, event.cleanup, event.provisional, turn),
-          emitOutputs: (outputs, options) => this.emitOutputs(target, outputs, true, event.delivery, event.cleanup, event.provisional || options?.provisional === true, turn),
+          emit: (port, value) => emit(() => emissions.emit(port, value)),
+          emitOutputs: (outputs, options) => emit(() => emissions.emitOutputs(outputs, options)),
+          defer: () => {
+            if (!receiving || !live() || turn?.closed || turn?.signal.aborted) throw Error('Async work must be owned during a live receive hook.');
+            return this.defer(target, { ...context, ...emissions }, turn);
+          },
         });
         Object.freeze(values);
         const receive = async () => {
@@ -205,7 +226,8 @@ export class Pipeline {
             await target.node.receive(input, value, context);
           }
         };
-        await (event.cleanup ? receive() : this.wait(target, receive(), turn?.signal));
+        try { await (event.cleanup ? receive() : this.wait(target, receive(), turn?.signal)); }
+        finally { receiving = false; }
         if (turn && !target.failed) turn.writes.add(target);
       } catch (error) {
         if (turn) turn.error ||= error;
@@ -227,8 +249,36 @@ export class Pipeline {
       }
     }).catch(error => this.fail(target, error));
   }
+  defer(entry, context, turn) {
+    // An owned emitter keeps provenance and cancellation, without serializing
+    // input admission. On a feedback path it also retains that turn's obligation.
+    let closed = false, resolve;
+    const work = { done: new Promise(done => { resolve = done; }) };
+    if (turn) turn.pending++;
+    const complete = () => {
+      if (closed) return;
+      closed = true; entry.work.delete(work);
+      entry.controller.signal.removeEventListener('abort', complete);
+      if (turn) this.releaseTurn(turn);
+      resolve();
+    };
+    const emit = callback => {
+      if (entry.controller.signal.aborted) return;
+      if (closed) { this.fail(entry, Error('Async work emitted after completion.')); return; }
+      callback();
+    };
+    work.complete = complete;
+    work.context = Object.freeze({ ...context, defer: undefined,
+      emit: (port, value) => emit(() => context.emit(port, value)),
+      emitOutputs: (values, options) => emit(() => context.emitOutputs(values, options)),
+    });
+    entry.work.add(work);
+    entry.controller.signal.addEventListener('abort', complete, { once: true });
+    return Object.freeze(work);
+  }
   newTurn(owner, parent) {
     const turn = { owner, pending: 1, entries: new Set([owner]), writes: new Set(), controller: new AbortController() };
+    turn.required = new Set([...owner.feedback, ...(parent?.required || [])]);
     turn.signal = parent ? AbortSignal.any([turn.controller.signal, parent.signal]) : turn.controller.signal;
     turn.done = new Promise(resolve => { turn.resolve = resolve; });
     turn.timer = setTimeout(() => {
@@ -331,6 +381,7 @@ export class Pipeline {
             entry.controller.signal.throwIfAborted();
             return entry.node.stop?.(entry.context);
           }));
+          await this.wait(entry, Promise.all([...entry.work].map(work => work.done)));
         }
       } catch (error) {
         if (['canceling', 'disposed'].includes(this.state)) return;

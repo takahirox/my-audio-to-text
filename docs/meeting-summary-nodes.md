@@ -45,12 +45,33 @@ A new TextWindow event produces exactly one formatted string. While its summary
 is generating, later windows wait FIFO **before** reading Hold. For concurrent
 A/B/C windows, the requests are `S1=f('',A)`, `S2=f(S1,B)`, `S3=f(S2,C)`.
 There is only one request in flight on this path. The runtime awaits receive
-promises and all causally forwarded deliveries, including storage in Hold.
+promises and causally forwarded deliveries on the path to storage in Hold.
 Unchanged results still complete; unrelated TEXT events cannot release waiting
 work. A feedback path that finishes without storing a causal result fails
 visibly, rather than continuing on stale context. Async processors used on this
-path must await their work and emit through their supplied receive context;
+path must await their work and emit through their supplied receive context, or
+retain that obligation with an explicit `context.defer()` work handle;
 background/timer emissions from a startup context cannot signal completion.
+
+An independent translation/display branch is supported:
+
+```text
+MeetingSummary.summary ──┬──→ Hold.input
+                        └──→ TranslateGemmaEnJa.text → Display.input
+```
+
+Hold stores the original completed summary. When S1 has been stored, the next
+window may summarize using S1 while translation T1 is still running. The same
+behavior applies to OPUS-MT and other independent consumers. Feedback stays
+serial; translation keeps its own bounded committed FIFO and replaceable
+preview. Translation errors remain visible without replacing or corrupting the
+original held summary. An overloaded translation branch stops visibly while
+healthy summary updates continue. Stop still drains accepted translations;
+Cancel/disposal suppress late replies and release Workers. New runs start fresh.
+If translation is instead placed on the path **back into Hold**, its completion
+necessarily precedes the next summary. The runtime uses ordinary graph
+reachability and [explicit async ownership](pipeline-runtime.md#queued-asynchronous-work-207),
+without changing TEXT ports, graph versions or Save/Load.
 
 Only non-emitting sampled edges break cycle validation. Every ordinary event
 cycle remains invalid in both the editor and Pipeline. Hold connections save and
