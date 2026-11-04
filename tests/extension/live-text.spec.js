@@ -20,16 +20,13 @@ test('MV3 summary TEXT snapshots render literally through Display.input, retain 
     TabSession.prototype.start=function(...args){window.summarySession=this;return start.apply(this,args);};
   },literal);
   await live.locator('#start').click();await expect(live.locator('#status')).toHaveText('Processing active');
-  const content=region(live,'notes').locator('.display-content');await expect(content).toBeEmpty();
-  await live.evaluate(()=>window.summarySession.session.pipeline.entries.get('summary').node.flush());await expect(content).toHaveText(literal);
+  const content=region(live,'notes').locator('.display-content');await expect(content).toHaveText(literal);
   await expect(content.locator('script')).toHaveCount(0);
-  await live.evaluate(async()=>{
-    const pipeline=window.summarySession.session.pipeline;pipeline.entries.get('source').context.emit('value','slow');
-    await pipeline.entries.get('summary').queue;void pipeline.entries.get('summary').node.flush();
-  });
+  await live.evaluate(()=>window.summarySession.session.pipeline.entries.get('source').context.emit('value','slow'));
+  await expect.poll(()=>live.evaluate(()=>window.graphWorkers.some(worker=>worker.messages.some(message=>message.type==='summarize'&&message.text==='slow')))).toBe(true);
   await live.locator('#cancel-session').click();await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText(literal);
   expect(await live.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
-  await live.locator('#start').click();await expect(live.locator('#status')).toHaveText('Processing active');await expect(content).toBeEmpty();
+  await live.locator('#start').click();await expect(live.locator('#status')).toHaveText('Processing active');
   await live.locator('#stop').click();await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText(literal);
 });
 

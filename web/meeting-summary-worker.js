@@ -1,12 +1,11 @@
 import { meetingSummaryModel } from './meeting-summary-models.js';
-import { summaryText, reconciledSummary, MAX_PROMPT_TOKENS, MAX_NEW_TOKENS } from './meeting-summary-policy.js';
+import { summaryText, refreshedSummary, MAX_PROMPT_TOKENS, MAX_NEW_TOKENS } from './meeting-summary-policy.js';
 import { cacheOnlyMeetingSummaryRuntime } from '../extension/meeting-summary-cache.js';
 
-let records = [], lastSummary = '';
-let model, tokenizer, processorType, queue = Promise.resolve();
+let model, tokenizer, queue = Promise.resolve();
 async function load(type) {
   if (model) throw new Error('Meeting summary Worker already loaded.');
-  const spec = meetingSummaryModel(type); processorType = type;
+  const spec = meetingSummaryModel(type);
   const adapter = await self.navigator.gpu?.requestAdapter();
   if (!adapter?.features.has('shader-f16')) throw new Error('Meeting summary requires Worker WebGPU with shader-f16. Check Chrome hardware acceleration and available GPU memory.');
   const { PreTrainedTokenizer, AutoModelForCausalLM, env } = await import('./vendor/meeting-summary/transformers.js');
@@ -26,20 +25,19 @@ async function load(type) {
     await (await env.customCache.match(base + 'tokenizer_config.json')).json());
   model = await AutoModelForCausalLM.from_pretrained(spec.id, options);
 }
-async function summarize({ id, previous, text, language }) {
+async function summarize({ id, text, language }) {
   if (!model) throw new Error('Meeting summary model is not ready.');
   const started = performance.now();
   const attempts = [];
   let firstTokenMs;
-  if (previous !== lastSummary) throw new Error('Meeting summary history does not match this session.');
-  const result = await reconciledSummary(async messages => {
+  const summary = await refreshedSummary(async messages => {
     const formatted = tokenizer.apply_chat_template(messages, {
       tokenize: false, add_generation_prompt: true, enable_thinking: false,
     });
     const inputs = tokenizer(formatted, { add_special_tokens: false, truncation: false });
     const promptTokens = inputs.input_ids.dims.at(-1);
     if (promptTokens + MAX_NEW_TOKENS > MAX_PROMPT_TOKENS) throw new RangeError('Meeting summary exceeds the 8192-token runtime budget. No evidence was truncated.');
-    // Generation caches live only for this request; the note is the sole history.
+    // Generation caches live only for this request; there is no Worker-owned history.
     let prompt = true;
     const streamer = { put() {
       if (prompt) { prompt = false; return; }
@@ -55,9 +53,8 @@ async function summarize({ id, previous, text, language }) {
     const generated = summaryText(tokenizer.decode(tokens, { skip_special_tokens: true }));
     attempts.push({ promptTokens, outputTokens: tokens.length });
     return generated;
-  }, records, text, language, processorType);
-  records = result.records; lastSummary = result.summary;
-  return { summary: result.summary, metrics: { firstTokenMs, compressedRecords: result.compressedRecords, promptTokens: attempts.reduce((n, a) => n + a.promptTokens, 0), outputTokens: attempts.reduce((n, a) => n + a.outputTokens, 0), attempts, generationMs: performance.now() - started } };
+  }, text, language);
+  return { summary, metrics: { firstTokenMs, promptTokens: attempts.reduce((n, a) => n + a.promptTokens, 0), outputTokens: attempts.reduce((n, a) => n + a.outputTokens, 0), attempts, generationMs: performance.now() - started } };
 }
 self.onmessage = ({ data }) => {
   queue = queue.then(async () => {

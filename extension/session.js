@@ -193,8 +193,14 @@ export class TabSession {
       await session.started;
       if (this.session !== session) return;
       await session.pipeline.drain(finished);
+      // A drained state input can still be sampled by a live consumer. Keep
+      // that readable state until full-session cleanup; its producers can be
+      // released now without clearing the consumer's last completed value.
+      const retained = new Set(session.pipeline.order.filter(entry => live.has(entry.id))
+        .flatMap(entry => entry.samples.map(sample => sample.entry)));
       for (const nodeId of finished) {
         const entry = session.pipeline.entries.get(nodeId);
+        if (retained.has(entry)) continue;
         if (entry.node.finish) entry.node.finish();
         await entry.node.dispose?.();
       }

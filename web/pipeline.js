@@ -1,4 +1,7 @@
 import { compatiblePorts, snapshotPortValue, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST } from './port-contracts.js';
+export const MAX_SAMPLED_PENDING = 32;
+export const MAX_SAMPLED_CHARS = 32768;
+export const SAMPLED_TIMEOUT_MS = 240000;
 export { portContract } from './port-contracts.js';
 
 /**
@@ -6,6 +9,7 @@ export { portContract } from './port-contracts.js';
  * start(context), receive(port, value, context), stop(context), cancel(context), dispose().
  * context provides emit(port, value), emitOutputs(values, { provisional }), fail(error), and an AbortSignal.
  * Optional receiveInputs(values, context) receives one emission mapped to input names.
+ * Optional inputQueueLimits { deliveries, chars } bounds active + queued deliveries before retention.
  * Delivery contexts include opaque delivery/cause identity; cancel hooks emit cleanup snapshots.
  */
 export class Pipeline {
@@ -13,16 +17,21 @@ export class Pipeline {
     this.state = 'idle';
     this.onError = onError;
     this.errors = [];
+    this.turns = new Set();
     this.entries = new Map(Object.entries(nodes).map(([id, node]) => [id, {
       id, node, inputs: { ...node.inputs }, outputs: { ...node.outputs },
       provisionalOutputs: new Set(node.provisionalOutputs || []),
       outputGroups: (node.outputGroups || [Object.keys(node.outputs || {})]).map(ports => [...ports]),
-      routes: new Map(), queue: Promise.resolve(), controller: new AbortController(),
+      sampledOutputs: new Set(node.sampledOutputs || []), samples: [], pendingCount: 0, pendingChars: 0,
+      dependents: new Set(), routes: new Map(), queue: Promise.resolve(), controller: new AbortController(),
       active: false, closed: false, failed: false,
     }]));
     if (!this.entries.size) throw new Error('A pipeline needs at least one node.');
     if (new Set([...this.entries.values()].map(e => e.node)).size !== this.entries.size) {
       throw new Error('A node instance can occur only once in a pipeline.');
+    }
+    for (const entry of this.entries.values()) for (const port of entry.sampledOutputs) {
+      if (!Object.hasOwn(entry.outputs, port) || typeof entry.node.readOutput !== 'function') throw Error('Sampled outputs need a declared port and readOutput().');
     }
     const indegree = new Map([...this.entries.keys()].map(id => [id, 0]));
     const edges = new Map([...this.entries.keys()].map(id => [id, []]));
@@ -42,10 +51,15 @@ export class Pipeline {
       const destination = JSON.stringify([target, input]);
       if (incoming.has(destination)) throw new Error(`Only one connection allowed to ${target}.${input}`);
       incoming.add(destination);
+      a.dependents.add(b);
       if (!a.routes.has(output)) a.routes.set(output, []);
-      a.routes.get(output).push({ entry: b, port: input });
-      edges.get(source).push(target);
-      indegree.set(target, indegree.get(target) + 1);
+      if (a.sampledOutputs.has(output)) {
+        b.samples.push({ entry: a, output, input });
+      } else {
+        a.routes.get(output).push({ entry: b, port: input });
+        edges.get(source).push(target);
+        indegree.set(target, indegree.get(target) + 1);
+      }
     }
     const ready = [...indegree.keys()].filter(id => indegree.get(id) === 0);
     this.order = [];
@@ -58,6 +72,14 @@ export class Pipeline {
     }
     if (this.order.length !== this.entries.size) throw new Error('Pipeline connections must be acyclic.');
     for (const entry of this.order) {
+      const reachable = new Set();
+      const visit = current => {
+        if (reachable.has(current)) return;
+        reachable.add(current);
+        for (const routes of current.routes.values()) for (const route of routes) visit(route.entry);
+      };
+      visit(entry);
+      entry.feedback = new Set(entry.samples.map(sample => sample.entry).filter(source => reachable.has(source)));
       entry.context = Object.freeze({
         signal: entry.controller.signal,
         connectedInputs: Object.freeze(connections.filter(route => route.to[0] === entry.id).map(route => route.to[1])),
@@ -71,19 +93,27 @@ export class Pipeline {
     if (entry.failed || entry.closed || ['canceling', 'disposed'].includes(this.state)) return;
     const error = new Error(`Node ${entry.id}: ${cause?.message || cause}`, { cause });
     entry.failed = true; entry.controller.abort(error);
+    for (const turn of this.turns) if (turn.entries.has(entry)) {
+      turn.error ||= error; turn.controller.abort(error);
+    }
     this.errors.push(error);
     // Observer failures cannot break delivery to another branch.
     try { this.onError(error, entry.id); } catch { /* errors remain available */ }
   }
-  emit(entry, port, value, cause, cleanup = false, provisional = false) { this.emitOutputs(entry, { [port]: value }, false, cause, cleanup, provisional); }
-  emitOutputs(entry, values, grouped = true, cause, cleanup = false, provisional = false) {
+  emit(entry, port, value, cause, cleanup = false, provisional = false, turn) { this.emitOutputs(entry, { [port]: value }, false, cause, cleanup, provisional, turn); }
+  emitOutputs(entry, values, grouped = true, cause, cleanup = false, provisional = false, turn) {
+    if (turn?.closed) {
+      if (!entry.controller.signal.aborted) this.fail(entry, Error('Sampled work emitted after its receive promise completed.'));
+      return;
+    }
+    if (turn?.error || turn?.signal.aborted) return;
     if (!entry.active || entry.closed || entry.failed || this.state === 'disposed' || (this.state === 'canceling' && !cleanup)) return;
     if (!values || typeof values !== 'object' || Array.isArray(values)) {
       this.fail(entry, new TypeError('emitOutputs needs a named output map.')); return;
     }
     // Snapshot and validate the entire group before enqueueing any branch.
     let outputs = Object.entries(values);
-    for (const [port] of outputs) if (!Object.hasOwn(entry.outputs, port)) {
+    for (const [port] of outputs) if (!Object.hasOwn(entry.outputs, port) || entry.sampledOutputs.has(port)) {
       this.fail(entry, new Error(`Unknown output port: ${entry.id}.${port}`)); return;
     }
     try {
@@ -119,27 +149,104 @@ export class Pipeline {
       // without splitting the atomic delivery or interpreting port names.
       const unfinished = provisional || outputs.filter(([port]) => (entry.routes.get(port) || []).some(route => route.entry === target))
         .every(([port]) => entry.provisionalOutputs.has(port));
-      const context = Object.freeze({ ...target.context, groupInputs, delivery, cause, provisional: unfinished,
-        ...(cleanup ? { signal: this.cleanupController.signal } : {}),
-        emit: (port, value) => this.emit(target, port, value, delivery, cleanup, unfinished),
-        emitOutputs: (values, options) => this.emitOutputs(target, values, true, delivery, cleanup, unfinished || options?.provisional === true),
-      });
-      Object.freeze(inputs);
-      // One queue item per target: no interleaving while an async hook runs.
-      target.queue = target.queue.then(async () => {
-        const live = () => target.active && !target.closed && !target.failed && this.state !== 'disposed' && (this.state !== 'canceling' || cleanup);
-        if (!live()) return;
-        if (typeof target.node.receiveInputs === 'function') {
-          await target.node.receiveInputs(inputs, context);
-        } else for (const [input, value] of Object.entries(inputs)) {
-          if (!live()) return;
-          await target.node.receive(input, value, context);
-        }
-      }).catch(error => this.fail(target, error));
+      this.enqueue(target, inputs, { groupInputs, delivery, cause, provisional: unfinished, cleanup }, turn);
     }
   }
-  async wait(entry, work) {
-    const signal = entry.controller.signal;
+  enqueue(target, inputs, event, parent) {
+    if (target.failed || target.closed) {
+      if (parent) parent.error ||= Error(`Sampled work cannot reach ${target.id}.`);
+      return;
+    }
+    const sampled = target.samples.length > 0 && !event.cleanup;
+    const limits = event.cleanup ? undefined : target.node.inputQueueLimits;
+    const bounded = sampled || !!limits;
+    const maxPending = Math.min(sampled ? MAX_SAMPLED_PENDING : Infinity, limits?.deliveries ?? Infinity);
+    const maxChars = Math.min(sampled ? MAX_SAMPLED_CHARS : Infinity, limits?.chars ?? Infinity);
+    const chars = Object.values(inputs).reduce((sum, value) => sum + (typeof value === 'string' ? value.length : 0), 0);
+    if (bounded && (target.pendingCount >= maxPending || target.pendingChars + chars > maxChars)) {
+      const error = Error(`${sampled ? 'Sampled input' : 'Input'} backlog exceeded ${maxPending} deliveries or ${maxChars.toLocaleString('en-US')} characters; branch stopped, queued work canceled. Start a fresh session at a lower input rate.`);
+      if (parent) parent.error ||= error;
+      this.fail(target, error); return;
+    }
+    if (bounded) { target.pendingCount++; target.pendingChars += chars; }
+    if (parent) { parent.pending++; parent.entries.add(target); }
+    target.queue = target.queue.then(async () => {
+      let turn = parent, owned;
+      const live = () => target.active && !target.closed && !target.failed && this.state !== 'disposed' && (this.state !== 'canceling' || event.cleanup);
+      try {
+        if (!live() || parent?.error) {
+          if (parent) parent.error ||= Error(`Sampled work canceled at ${target.id}.`);
+          return;
+        }
+        let values = { ...inputs };
+        if (sampled) {
+          owned = turn = this.newTurn(target, parent);
+          // Apply already queued independent state writes before reading, even
+          // when the producer listed its consumer edge before its state edge.
+          for (const sample of target.samples) await this.wait(target, sample.entry.queue, turn.signal);
+          target.controller.signal.throwIfAborted();
+          for (const sample of target.samples) {
+            if (sample.entry.failed) throw Error(`Held state ${sample.entry.id} failed.`);
+            values[sample.input] = snapshotPortValue(sample.entry.outputs[sample.output], sample.entry.node.readOutput(sample.output));
+          }
+        }
+        const context = Object.freeze({ ...target.context,
+          groupInputs: event.groupInputs, delivery: event.delivery, cause: event.cause, provisional: event.provisional,
+          signal: event.cleanup ? this.cleanupController.signal : target.controller.signal,
+          fail: error => { if (turn) turn.error ||= error; this.fail(target, error); },
+          emit: (port, value) => this.emit(target, port, value, event.delivery, event.cleanup, event.provisional, turn),
+          emitOutputs: (outputs, options) => this.emitOutputs(target, outputs, true, event.delivery, event.cleanup, event.provisional || options?.provisional === true, turn),
+        });
+        Object.freeze(values);
+        const receive = async () => {
+          if (typeof target.node.receiveInputs === 'function') await target.node.receiveInputs(values, context);
+          else for (const [input, value] of Object.entries(values)) {
+            if (!live()) return;
+            await target.node.receive(input, value, context);
+          }
+        };
+        await (event.cleanup ? receive() : this.wait(target, receive(), turn?.signal));
+        if (turn && !target.failed) turn.writes.add(target);
+      } catch (error) {
+        if (turn) turn.error ||= error;
+        this.fail(target, error);
+      } finally {
+        if (owned) {
+          this.releaseTurn(owned);
+          try { await this.wait(target, owned.done, owned.signal); }
+          catch (error) { owned.error ||= error; }
+          owned.closed = true; clearTimeout(owned.timer); this.turns.delete(owned);
+          if (parent) for (const entry of owned.writes) parent.writes.add(entry);
+          if (owned.error) {
+            if (parent) parent.error ||= owned.error;
+            this.fail(target, owned.error);
+          }
+        }
+        if (bounded) { target.pendingCount--; target.pendingChars -= chars; }
+        if (parent) this.releaseTurn(parent);
+      }
+    }).catch(error => this.fail(target, error));
+  }
+  newTurn(owner, parent) {
+    const turn = { owner, pending: 1, entries: new Set([owner]), writes: new Set(), controller: new AbortController() };
+    turn.signal = parent ? AbortSignal.any([turn.controller.signal, parent.signal]) : turn.controller.signal;
+    turn.done = new Promise(resolve => { turn.resolve = resolve; });
+    turn.timer = setTimeout(() => {
+      turn.error ||= Error('Sampled update timed out; branch stopped. Cancel or Start a fresh session.');
+      this.fail(owner, turn.error); turn.resolve();
+    }, SAMPLED_TIMEOUT_MS);
+    this.turns.add(turn);
+    return turn;
+  }
+  releaseTurn(turn) {
+    if (--turn.pending) return;
+    for (const state of turn.owner.feedback) if (!turn.writes.has(state)) {
+      turn.error ||= Error(`Sampled update completed without storing feedback in ${state.id}. Async receive hooks must await their work and emit through their delivery context.`);
+    }
+    turn.resolve();
+  }
+  async wait(entry, work, extraSignal) {
+    const signal = extraSignal ? AbortSignal.any([entry.controller.signal, extraSignal]) : entry.controller.signal;
     if (signal.aborted) {
       // Work may already be scheduled; still observe its eventual rejection.
       void Promise.resolve(work).catch(() => {});
@@ -163,8 +270,11 @@ export class Pipeline {
       // Consumers are ready before producers can emit, including inside start.
       for (const entry of [...this.order].reverse()) {
         if (['canceling', 'disposed'].includes(this.state)) throw new DOMException('Pipeline disposed.', 'AbortError');
-        const reachesOutput = current => !current.failed && (!Object.keys(current.outputs).length ||
-          [...current.routes.values()].flat().some(route => reachesOutput(route.entry)));
+        const reachesOutput = (current, visited = new Set()) => {
+          if (current.failed || visited.has(current)) return false;
+          visited.add(current);
+          return !Object.keys(current.outputs).length || [...current.dependents].some(target => reachesOutput(target, visited));
+        };
         if (this.errors.length && !reachesOutput(entry)) continue;
         entry.active = true;
         try {
@@ -237,6 +347,7 @@ export class Pipeline {
     if (this.state === 'disposed') return this.dispose();
     this.state = 'canceling';
     this.cleanupController = new AbortController();
+    for (const turn of this.turns) { turn.closed = true; turn.controller.abort(); clearTimeout(turn.timer); turn.resolve(); }
     for (const entry of this.order) { entry.controller.abort(); entry.queue = Promise.resolve(); }
     return this.canceling = this.cancelNodes();
   }
@@ -259,6 +370,8 @@ export class Pipeline {
     if (this.disposing) return this.disposing;
     this.state = 'disposed';
     this.cleanupController?.abort();
+    for (const turn of this.turns) { turn.closed = true; turn.controller.abort(); clearTimeout(turn.timer); turn.resolve(); }
+    this.turns.clear();
     // Invalidate every emitter and queued input before starting async cleanup.
     for (const entry of this.order) { entry.closed = true; entry.controller.abort(); }
     return this.disposing = Promise.allSettled(this.order.map(entry => {
