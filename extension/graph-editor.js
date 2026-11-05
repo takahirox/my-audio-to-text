@@ -523,7 +523,7 @@ export class GraphEditor {
       const router = createWireRouter(cards, valid);
       this.wireRoutes = valid.map((connection, index) => this.draggingNode
         && reusableWireRoute(this.wireRoutes?.[index], this.routeConnections?.[index], connection, cards)
-        ? this.wireRoutes[index] : router.route(index));
+        ? router.reuse(this.wireRoutes[index]) : router.route(index));
       this.routeConnections = connections; this.routeSignature = signature;
     }
     const existing = new Map([...this.svg.children].map(wire => [wire.connection, wire]));
@@ -532,7 +532,7 @@ export class GraphEditor {
       if (!connections[index].start || !connections[index].end) continue;
       const previous = existing.get(connection);
       if (previous) {
-        previous.querySelector('.wire-line').setAttribute('d', route.d);
+        previous.querySelector('.wire-line').setAttribute('d', route.visualD || route.d);
         previous.querySelector('.wire-hit').setAttribute('d', route.d);
         previous.querySelector('.wire-hit').style.strokeWidth = `${16 / this.zoom}px`;
         previous.classList.toggle('routing-fallback', !!route.fallback);
@@ -540,7 +540,7 @@ export class GraphEditor {
         existing.delete(connection); continue;
       }
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', route.d);
+      path.setAttribute('d', route.visualD || route.d);
       path.classList.add('wire-line');
       const hit = path.cloneNode(); hit.classList.remove('wire-line'); hit.classList.add('wire-hit');
       hit.style.strokeWidth = `${16 / this.zoom}px`;
