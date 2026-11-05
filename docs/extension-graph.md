@@ -204,15 +204,18 @@ and TextSummary.summary to Display.input3 on **one Display**. Import the
 tabs using literal Text sources, then connect your preferred upstream processors.
 Every delivery replaces only that input's complete snapshot. No inference,
 accumulation, merging or coalescing happens in Display. Disconnected inputs remain
-empty, with Copy disabled; a Display needs at least one executable input branch.
+empty; a Display needs at least one executable input branch.
 
 Tabs support pointer/touch, Left/Right arrows (wrapping), Home/End, and visible
 keyboard focus. Switching affects presentation only: all graph processing and
 hidden snapshots keep updating. Panels remain mounted, preserving scroll position
 and near-bottom following intent through hidden updates. Unchanged snapshots retain
-their DOM and text selection during unrelated input updates. Each input has
-Copy text; inactive panels disable live announcements. Different inputs never
-appear side-by-side or stacked, including in narrow windows. Any future composed
+their DOM and text selection during unrelated input updates. Panes show only
+content, without a repeated input heading, Copy text control or copy-status row.
+Use native browser selection/copy. A single-input Display omits the tab strip
+and retains its input label as an accessible name. Inactive panels disable live
+announcements. Different inputs never appear side-by-side or stacked, including
+in narrow windows. Any future composed
 layout belongs upstream. Literal strings preserve whitespace and wrap; a keyed
 pair/list uses an equal-width two-cell table *within its own panel*. Browser DOM
 stays private to the host rendering boundary and never travels through graph ports.

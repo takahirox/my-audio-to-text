@@ -1,6 +1,6 @@
 import { test, expect, openGraph } from './graph-fixture.js';
 import { checkDisplayTabs } from '../fixtures/display-tabs.js';
-test('MV3 Display tabs keep processing and independent panes through switching, copy, layout and restart', async ({ graphExtension: f }) => {
+test('MV3 Display tabs show only content and keep independent panes through switching, layout and restart', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
   await checkDisplayTabs(live, expect, true);
 });
@@ -136,7 +136,7 @@ test('MV3 label/count edits apply next session; duplicate/blank labels and disco
   }
   await live.getByRole('tab', { name: 'Input 4', exact: true }).click();
   await expect(live.locator('.live-text-region:visible .display-content')).toBeEmpty();
-  await expect(live.getByRole('button', { name: 'Copy Input 4 text', exact: true })).toBeDisabled();
+  await expect(live.locator('.live-text-region button, .live-text-region [role="status"]')).toHaveCount(0);
   const saved = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
   expect(saved.edges).toEqual(graph.edges);
   const { clickGraphAction } = await import('./ui-controls.js');

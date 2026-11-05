@@ -451,9 +451,6 @@ test('Live navigation opens separate extension pages without stopping or retarge
     await opened.close();
   }
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await released(page);
-  await page.locator('[data-display="transcript"] button').click(); await expect(page.locator('[data-display="transcript"] [role="status"]')).toContainText('copied');
-  // Test-only read grant; the product needs no clipboard permission to copy
-  // during a user gesture and does not read the clipboard.
-  await extension.context.grantPermissions(['clipboard-read']);
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('extension transcript');
+  await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
+  await expect(page.locator('.live-text-region h2, .live-text-region button, .live-text-region [role="status"]')).toHaveCount(0);
 });

@@ -98,7 +98,8 @@ is required.
 The browser sink uses `textContent` and code-owned styles to create inert DOM.
 Text preserves whitespace and wraps; pairs use equal-width table columns,
 keyboard-focusable cells and accessible labels. Live mounts the whole snapshot
-in its existing polite region and supports Copy text. Start clears; Stop/Cancel
+in its existing polite region. Panes contain only content; use native browser
+selection/copy. Start clears; Stop/Cancel
 retain the last rendering and reject late work. A future native host can render
 these same portable values in native UI without changing upstream Nodes. Native
 implementation is outside this Issue.

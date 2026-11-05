@@ -108,9 +108,14 @@ test('ports create tabs within one Display; duplicate/empty labels and separate 
   const tabs = output.querySelectorAll('[role="tab"]'), panes = output.querySelectorAll('[data-port]');
   assert.equal(tabs.length, 3); assert.deepEqual([...tabs].map(t => t.textContent), ['Same', 'Same', 'Input 3']);
   assert.equal(other.querySelector('[role="tablist"]'), null); assert.equal(other.hidden, false);
+  assert.equal(other.querySelector('[data-port]').getAttribute('aria-label'), 'Input 1');
+  for (const pane of root.querySelectorAll('[data-port]')) {
+    assert.equal(pane.children.length, 1);
+    assert.equal(pane.firstChild.className, 'display-content');
+    assert.equal(pane.querySelector('h2, button, [role="status"], .section-heading'), null);
+  }
   assert.deepEqual([...panes].map(p => p.hidden), [false, true, true]);
   assert.equal(panes[1].querySelector('.display-content').getAttribute('aria-live'), 'off');
-  assert.equal(panes[1].querySelector('[role="status"]').getAttribute('aria-live'), 'off');
   const existing = panes[0].querySelector('.display-content').firstChild; tabs[1].click();
   assert.deepEqual([...panes].map(p => p.hidden), [true, false, true]);
   states.main.input1 = dom('hidden update'); renderTextRegions(root, g, states);
@@ -118,7 +123,13 @@ test('ports create tabs within one Display; duplicate/empty labels and separate 
   tabs[0].click(); assert.equal(panes[0].querySelector('.display-content').textContent, 'hidden update');
   tabs[2].click(); main.settings.inputLabels.input3 = 'Changed'; renderTextRegions(root, g, states);
   assert.equal(panes[2].hidden, false); assert.equal(tabs[2].textContent, 'Changed');
-  assert.equal(panes[2].querySelector('button').getAttribute('aria-label'), 'Copy Changed text');
+  assert.equal(panes[2].getAttribute('aria-label'), 'Changed');
+  assert.equal(panes[2].getAttribute('aria-labelledby'), tabs[2].id);
+  assert.equal(tabs[2].getAttribute('aria-controls'), panes[2].id);
+  states.main.input2 = null; states.main.input3 = document.createDocumentFragment();
+  renderTextRegions(root, g, states);
+  assert.equal(panes[1].querySelector('.display-content').children.length, 0);
+  assert.equal(panes[2].querySelector('.display-content').textContent, '');
   assert.equal(other.querySelector('.display-content').getAttribute('aria-live'), 'polite');
   assert.notEqual(panes[0].querySelector('.display-content').firstChild, existing);
   // Removing the active last port selects the first remaining port without remounting it.
@@ -127,6 +138,9 @@ test('ports create tabs within one Display; duplicate/empty labels and separate 
   main.settings.inputCount = 1; delete main.settings.inputLabels.input2; renderTextRegions(root, g, states);
   assert.equal(output.querySelector('[role="tablist"]'), null);
   assert.equal(output.querySelector('[data-port]'), panes[0]); assert.equal(panes[0].getAttribute('role'), 'group');
+  assert.equal(panes[0].getAttribute('aria-labelledby'), null);
+  main.settings.inputLabels.input1 = 'Solo'; renderTextRegions(root, g, states);
+  assert.equal(panes[0].getAttribute('aria-label'), 'Solo');
   renderTextRegions(root, { nodes: [] }, {}); assert.equal(root.children.length, 0);
 });
 

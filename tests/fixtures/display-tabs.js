@@ -1,5 +1,7 @@
 // Shared acceptance checks against browser-served source and unpacked MV3.
 export async function checkDisplayTabs(page, expect, packaged = false) {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
   await page.evaluate(async packaged => {
     const base = packaged ? './' : '/extension/';
     const { graphNode, edge, GRAPH_VERSION } = await import(base + 'graph.js');
@@ -14,8 +16,7 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
       edge('a', 'value', 'main', 'input1'), edge('b', 'value', 'main', 'input2'),
       edge('a', 'value', 'processor', 'text'), edge('processor', 'summary', 'main', 'input3'),
     ] };
-    window.summaryRequests = []; window.copiedTexts = [];
-    navigator.clipboard.writeText = async text => copiedTexts.push(text);
+    window.summaryRequests = [];
     const session = new TabSession(view => {
       renderTextRegions(document.querySelector('#live-displays'), view.activeGraph || view.savedGraph, view.displays);
     }, { graph, textSummaryWorkerFactory: () => {
@@ -32,6 +33,10 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
       send(id, text) { session.session.pipeline.entries.get(id).context.emit('value', text); },
       start() { return session.start(); },
       end(method) { return session[method](); },
+      render(settings, displays = session.view.displays) {
+        renderTextRegions(document.querySelector('#live-displays'), { ...graph, nodes: graph.nodes.map(node =>
+          node.id === 'main' ? { ...node, settings: { ...main.settings, ...settings } } : node) }, displays);
+      },
       long(prefix, count = 120) { return Array.from({ length: count }, (_, i) => `${prefix} ${i}`).join('\n'); },
     };
     await session.start();
@@ -43,6 +48,10 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
   const bottom = content => content.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop);
   await expect(page.locator('.live-display')).toHaveCount(1);
   await expect(page.getByRole('tab')).toHaveText(['Transcript', 'Translation', 'Summary']);
+  await expect(main.locator('.display-label, h2, .section-heading, [role="status"], [data-port] button')).toHaveCount(0);
+  expect(await main.locator('[data-port]').evaluateAll(panes => panes.every(pane =>
+    pane.children.length === 1 && pane.firstElementChild.classList.contains('display-content')))).toBe(true);
+  await expect(pane('input1')).toHaveAccessibleName('Transcript');
   await expect(tab('Transcript')).toHaveAttribute('aria-selected', 'true');
   await expect(tab('Transcript')).toHaveAttribute('tabindex', '0'); await expect(tab('Summary')).toHaveAttribute('tabindex', '-1');
   expect(await tab('Transcript').getAttribute('aria-controls')).toBe(await pane('input1').getAttribute('id'));
@@ -87,16 +96,22 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
   await tab('Transcript').press('ArrowLeft'); await expect(tab('Summary')).toBeFocused();
   await tab('Translation').click(); await expect(right).toBeVisible();
   await expect.poll(() => bottom(right)).toBeLessThanOrEqual(1);
-  await pane('input2').getByRole('button').click();
-  expect((await page.evaluate(() => copiedTexts.at(-1))).startsWith('background translation')).toBe(true);
-  await tab('Summary').click(); await pane('input3').getByRole('button').click();
-  expect((await page.evaluate(() => copiedTexts.at(-1))).startsWith('hidden summary')).toBe(true);
+  await tab('Summary').click(); await expect(notes).toBeVisible();
   for (const width of [1440, 390, 280]) {
     await page.setViewportSize({ width, height: 900 });
     for (const [i, name] of ['Transcript', 'Translation', 'Summary'].entries()) {
       await tab(name).click();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await expect(main.locator('.live-text-region:visible')).toHaveCount(1);
+      await expect(pane(`input${i + 1}`)).toHaveAccessibleName(name);
+      expect(await pane(`input${i + 1}`).getAttribute('aria-labelledby')).toBe(await tab(name).getAttribute('id'));
+      // Only a small reading inset separates the tab strip and content.
+      const spacing = await pane(`input${i + 1}`).evaluate(el => {
+        const top = el.querySelector('.display-content').getBoundingClientRect().top;
+        return { inset: top - el.getBoundingClientRect().top,
+          belowTabs: top - el.parentNode.querySelector('.display-tabs').getBoundingClientRect().bottom };
+      });
+      expect(spacing.inset).toBeLessThanOrEqual(9); expect(spacing.belowTabs).toBeLessThanOrEqual(18);
       const boxes = await main.locator('.live-text-region').evaluateAll(panes => panes.map(el => {
         const r = el.getBoundingClientRect(); return { x: r.x, width: r.width, right: r.right, height: r.height };
       }));
@@ -119,7 +134,7 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
     n.node.receive('input2', '', n.context);
   });
   await expect(left.locator('tr')).toHaveCount(1); await tab('Translation').click();
-  await expect(right).toBeEmpty(); await expect(pane('input2').getByRole('button')).toBeDisabled();
+  await expect(right).toBeEmpty(); await expect(pane('input2').locator('button, [role="status"]')).toHaveCount(0);
   for (const ending of ['stop', 'cancel']) {
     const retained = await left.textContent();
     await page.evaluate(ending => tabsFixture.end(ending), ending);
@@ -128,4 +143,27 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
     await expect(left).toContainText('Source 99'); await expect(right).toContainText('Translation 99');
   }
   await page.evaluate(() => tabsFixture.end('cancel'));
+  // Runtime relabeling retains the tab/panel association, DOM and focus.
+  const panelId = await pane('input2').getAttribute('id');
+  await tab('Translation').focus();
+  await page.evaluate(() => tabsFixture.render({ inputLabels: { input1: 'Transcript', input2: 'Updated translation', input3: 'Summary' } }));
+  await expect(tab('Updated translation')).toBeFocused();
+  await expect(pane('input2')).toHaveAccessibleName('Updated translation');
+  expect(await pane('input2').getAttribute('id')).toBe(panelId);
+  expect(await left.evaluate(el => el === savedContent)).toBe(true);
+  // Null snapshots clear active and hidden panes, including before a switch.
+  await page.evaluate(() => tabsFixture.render({}, { main: {} }));
+  await expect(right).toBeEmpty(); await tab('Translation').press('Home'); await expect(left).toBeEmpty();
+  await page.evaluate(() => tabsFixture.render({ inputCount: 1, inputLabels: { input1: 'Live transcript' } }, {}));
+  await expect(main.getByRole('tablist')).toHaveCount(0);
+  await expect(pane('input1')).toHaveAttribute('role', 'group');
+  await expect(pane('input1')).toHaveAccessibleName('Live transcript');
+  await expect(pane('input1')).not.toHaveAttribute('aria-labelledby');
+  await expect(left).toBeFocused(); await expect(left).toBeEmpty();
+  await expect(main.locator('.display-label, h2, .section-heading, button, [role="status"]')).toHaveCount(0);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await left.evaluate(el => el.getBoundingClientRect().top - el.parentNode.getBoundingClientRect().top)).toBeLessThanOrEqual(9);
+  }
+  expect(errors).toEqual([]);
 }
