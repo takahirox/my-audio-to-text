@@ -70,41 +70,65 @@ for independent ID/TEXT arrival semantics.
 ## Automatic wire routing
 
 Connections use rounded orthogonal paths around measured node cards, including
-all port labels and controls. Routing updates on node moves, card/port resizing,
-port additions/removals, load/import/reset and graph edits. Zoom, Fit and pan
-keep paths attached to their ports. The visible path and its 16-screen-pixel hit
-area share the same geometry, behind node controls. Existing pointer/touch,
-keyboard selection, input-end reconnect/detach and inspector Disconnect apply
-along the detours.
+all port labels and controls. Distinct connections prefer lanes 10 canvas pixels
+apart. A narrow canvas-colored outline on every wire creates a gap in any wire
+passing underneath it: the continuous line is the overpass, not a junction.
+These conventions work in the normal, unselected view. Stable light colors
+supplement the geometry; colors can repeat and do not represent port types.
+Short shared stems at a single output represent real fan-out. Beyond those
+stems the router separates the outgoing connections, including backward and
+Hold feedback edges. It never moves cards automatically.
 
 `extension/graph-wire-router.js` is a dependency-free visual module. It does
 not change stored positions, graph edges, typed contracts or session execution.
-It builds a rectilinear visibility grid from expanded card boundaries and port
-escape points, and uses deterministic A* with Manhattan distance and a bend
-penalty. Cards expand by 12 canvas pixels; quadratic corners have a maximum
-6-pixel radius, retaining clearance from the visible bodies. Only the first and
-last attachment segments may enter their own cards.
+It builds a rectilinear visibility grid from expanded card boundaries, port
+escapes and additional lane lines. Cards expand by 12 canvas pixels; quadratic
+corners have a maximum 6-pixel radius, retaining clearance from visible bodies.
+Only the first and last attachment segments may enter their own cards. Fan-out
+turns are staggered by up to six 10-pixel steps and clamped to the available
+corridor; attachment paths cannot double back over a port.
 
-Each geometry snapshot shares visibility checks across edges; identical geometry
-reuses routes across selection and zoom redraws. Pointer movement coalesces into
-animation frames. During a node drag, clear routes with unchanged endpoints stay
-in place; routes affected by the moving obstacle or ports recompute. Releasing
-the node optimizes all paths again. ResizeObserver watches cards and ports, and
-font readiness also schedules measurement. Geometry-only updates retain wire
-DOM/focus. The scrollable surface includes actual card sizes and detours.
+For each geometry snapshot the router first finds node-clear baselines with
+Manhattan A* and a bend penalty. In stable connection-key order it reserves
+accepted paths and searches for alternatives with a strong cost for prolonged
+parallel overlap or close spacing. Perpendicular intersections remain possible
+and use the crossing convention above. An alternative's length outside port
+attachments cannot exceed 1.6 times its baseline plus 160 canvas pixels. This is
+a bounded, greedy visual heuristic, not a guarantee of globally optimal lanes.
 
-Routing is bounded to 60,000 grid intersections, 12,000 expanded search states
-per edge and 100,000 per snapshot. Blocked ports, overlapping cards, a lack of
-space at the top/left canvas boundary, or exhausted budgets produce an amber
-dashed cubic fallback plus a visible status message. These wires remain
-selectable and connected; move cards apart to recover automatic avoidance.
-There is no automatic node repositioning. Routes prioritize node avoidance and
-few bends; they do not allocate separate lanes or optimize wire crossings, so
-fan-out and dense graphs can share segments. At a shared hit area the uppermost
-wire receives pointer input; every connection remains keyboard-focusable.
+Routing updates on node moves, card/port resizing, port additions/removals,
+load/import/reset and graph edits. Geometry snapshots share visibility checks;
+identical geometry reuses routes across selection, zoom and pan. Pointer moves
+coalesce into animation frames. During a drag, node-clear routes with unchanged
+endpoints stay in place and are reserved before affected connections reroute.
+Releasing the node optimizes all paths again. ResizeObserver watches cards and
+ports, and font readiness schedules measurement. Geometry-only updates retain
+wire DOM/focus. The scrollable surface includes card sizes and detours.
 
-See [routing validation and screenshots](evidence/graph-204.md) for fixtures,
-executed checks and build limitations.
+The visible stroke, background outline and transparent 16-screen-pixel hit
+path have identical, continuous geometry. Crossing gaps introduce no dead hit
+areas. Where broad hit targets overlap, pointer/touch selection chooses the
+closest path; a subpixel tie belongs to the visible overpass. Each connection
+also remains independently keyboard-focusable. Existing inspector Disconnect,
+Delete/Backspace, reconnect and input-end detach gestures operate on the actual
+logical connection.
+
+Work is bounded to 60,000 grid intersections, 12,000 expanded search states per
+edge, 400,000 per snapshot and 100,000 nearby-segment diagnostic comparisons.
+Optional lane lines are reduced before declaring the grid too large. Baselines
+are established before spending remaining search work on separation. Overlap
+longer than 24 pixels with less than 7 pixels of separation (excluding the
+bounded stem at the same output), or an exhausted diagnostic budget, marks
+crowded wires with dots and a visible notice. If ports/cards overlap or baseline
+routing exceeds its budget, an amber dashed cubic and notice preserve the
+connection visibly. These degraded routes can remain ambiguous; inspect their
+endpoint names with keyboard focus and move cards apart to restore room.
+Normal, uncrowded routes require no selection or hover to follow. At very low
+zoom, lanes and crossing gaps shrink with the canvas; Fit is an overview, and
+zooming in restores their normal reading scale.
+
+See [dense routing evidence and executed checks](evidence/graph-215.md) and the
+[original obstacle-avoidance evidence](evidence/graph-204.md).
 
 ## Supported graph and ports
 

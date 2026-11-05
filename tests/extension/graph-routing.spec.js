@@ -45,3 +45,29 @@ test('import, Save, Load saved and reset retain logical graph data independently
   await expect(page.locator('.graph-wire')).toHaveCount(1); await assertRoutingGeometry(page);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(imported);
 });
+
+// Same dense topology as the browser evidence, inside the packaged MV3 page.
+test('native touch resolves a crossing gap, disconnects its actual edge and reconnects only that input', async ({ graphExtension: f }) => {
+  const { loadTraceabilityGraph, assertTraceability, checkCrossingSelection, traceabilityGraph } = await import('../fixtures/graph-traceability.js');
+  const live=await openGraph(f), page=live.editor;
+  await page.setViewportSize({width:1600,height:1500});await loadTraceabilityGraph(page);
+  await assertRoutingGeometry(page);
+  const session=await page.context().newCDPSession(page);
+  const tap=async point=>{
+    await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+    await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  };
+  const under=await checkCrossingSelection(page,tap), removed=traceabilityGraph.edges[under];
+  const box=await page.locator('#graph-disconnect').boundingBox();
+  await tap({x:box.x+box.width/2,y:box.y+box.height/2});await session.detach();
+  await expect(page.locator('.graph-wire')).toHaveCount(traceabilityGraph.edges.length-1);
+  await page.locator('#graph-save').click();await expect(page.locator('#graph-save')).toBeEnabled();
+  const remaining=traceabilityGraph.edges.filter((_,i)=>i!==under);
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual({...traceabilityGraph,edges:remaining});
+  await page.reload();
+  await page.getByRole('button',{name:`${removed.from[0]} output ${removed.from[1]}`,exact:true}).dragTo(page.getByRole('button',{name:`${removed.to[0]} input ${removed.to[1]}`,exact:true}));
+  await expect(page.locator('.graph-wire')).toHaveCount(traceabilityGraph.edges.length);
+  await assertTraceability(page);await assertRoutingGeometry(page);
+  await page.locator('#graph-save').click();await expect(page.locator('#graph-save')).toBeEnabled();
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual({...traceabilityGraph,edges:[...remaining,removed]});
+});

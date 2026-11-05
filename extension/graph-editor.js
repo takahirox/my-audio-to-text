@@ -1,5 +1,5 @@
 import { MAX_DISPLAY_INPUTS } from '../web/display-node.js';
-import { createWireRouter, reusableWireRoute } from './graph-wire-router.js';
+import { createWireRouter, reusableWireRoute, wireColor, wireDistance } from './graph-wire-router.js';
 import { compatiblePorts } from '../web/port-contracts.js';
 import { NODE_TYPES, nodeDefinition, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
 
@@ -87,6 +87,7 @@ export class GraphEditor {
       el('p', 'Add nodes using search and categories. Select a node heading for settings and optional node help. Drag a heading or use arrow keys to move it.'),
       el('p', 'Connect by clicking an output then a matching input, or drag from an output to an input. Reconnecting replaces only that input’s wire. Drag a connected input into blank canvas to detach its wire, or to a matching input to move it. Select a wire for connection details and Disconnect in the inspector. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape, Clear selection or blank canvas clears selection.'),
       el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
+      el('p', 'Wires use separate lanes and crossing gaps. At a crossing, the continuous line passes over the interrupted line; this is not a junction. Short shared branches at one output are fan-out. Dotted wires and a notice indicate crowded lanes that could not be separated. Move cards apart to give them more room.'),
       el('p', 'Display renders each complete input snapshot safely. Connect any TEXT output directly to Display.input1. TextAccumulator retains exact completed segments; TextFormatter builds text snapshots. Hold stores TEXT without emitting; its value is sampled with the next ordinary input. Compose TextWindow → TextFormatter → Text Summary → Hold, with Hold.value → a second formatter input, for serialized incremental summaries. Set the rolling-update instruction explicitly in Text Summary Settings.prompt; its default simply summarizes each input. language supplies a default that an explicit prompt language can override. Save prepares required model weights; Models provides asset recovery.'),
       el('p', 'For continuous ASR/translation rows, connect ASR finalId/final → KeyedTextCoalesce.id1/input1 and provisionalId/provisional → id2/input2. Also connect ASR finalId/final directly to translator.id/text. Connect coalesce.id/text → KeyedTextPair.id1/input1 and translator.id/text → KeyedTextPair.id2/input2, then KeyedTextPair.pair → KeyedPairedTextAccumulator.pair, then pairs → Display.input1. Originals appear immediately; late translations replace their own row. KeyedTextPair pairs only by numeric ID. KeyedPairedTextAccumulator owns portable ordered pair history, replacing each ID in arrival order. Each Display is one tabbed view: its input ports are switchable tabs accepting TEXT, KEYED_PAIRED_TEXT or KEYED_PAIRED_TEXT_LIST from any producer. Only the selected input is visible; hidden inputs keep their latest snapshots. Set per-input tab labels and Add input / Remove last input in Settings. For plain text, connect any TEXT output directly to Display.input1.'),
       el('p', 'KeyedTextCoalesce selects nonempty input1, otherwise input2, separately for each numeric ID. Connect Number.value to id1/id2 and independent preferred/backup TEXT sources to input1/input2, then text → Display.input1. Only the exact empty string is empty. Each branch uses its latest ID; text before the first ID waits. ID-only changes never replay old text. Grouped ID/text updates stay atomic, and each selection emits id/text together.'),
@@ -520,6 +521,7 @@ export class GraphEditor {
       }
     }
     const connections = this.draft.edges.map(connection => ({
+      key: JSON.stringify([connection.from, connection.to]),
       start: ports.get(JSON.stringify([connection.from[0], 'output', connection.from[1]])),
       end: this.detaching?.connection === connection
         ? { x: local(this.detaching.x - origin.left), y: local(this.detaching.y - origin.top) }
@@ -530,9 +532,10 @@ export class GraphEditor {
     if (signature !== this.routeSignature) {
       const valid = connections.map(c => c.start && c.end ? c : { ...c, start: { x: 0, y: 0 }, end: { x: 0, y: 0 } });
       const router = createWireRouter(cards, valid);
-      this.wireRoutes = valid.map((connection, index) => this.draggingNode
+      const reused = valid.map((connection, index) => this.draggingNode
         && reusableWireRoute(this.wireRoutes?.[index], this.routeConnections?.[index], connection, cards)
-        ? this.wireRoutes[index] : router.route(index));
+        ? this.wireRoutes[index] : null);
+      this.wireRoutes = router.routeAll(reused);
       this.routeConnections = connections; this.routeSignature = signature;
     }
     const existing = new Map([...this.svg.children].map(wire => [wire.connection, wire]));
@@ -541,27 +544,53 @@ export class GraphEditor {
       if (!connections[index].start || !connections[index].end) continue;
       const previous = existing.get(connection);
       if (previous) {
+        previous.querySelector('.wire-casing').setAttribute('d', route.d);
         previous.querySelector('.wire-line').setAttribute('d', route.d);
         previous.querySelector('.wire-hit').setAttribute('d', route.d);
         previous.querySelector('.wire-hit').style.strokeWidth = `${16 / this.zoom}px`;
         previous.classList.toggle('routing-fallback', !!route.fallback);
+        previous.classList.toggle('routing-crowded', !!route.crowded);
         previous.dataset.routing = route.fallback || 'clear';
         existing.delete(connection); continue;
       }
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', route.d);
       path.classList.add('wire-line');
+      const casing = path.cloneNode(); casing.classList.remove('wire-line'); casing.classList.add('wire-casing');
       const hit = path.cloneNode(); hit.classList.remove('wire-line'); hit.classList.add('wire-hit');
       hit.style.strokeWidth = `${16 / this.zoom}px`;
       const wire = document.createElementNS('http://www.w3.org/2000/svg', 'g'); wire.classList.add('graph-wire'); wire.dataset.edge = index; wire.connection = connection;
+      wire.style.setProperty('--wire-color', wireColor(JSON.stringify([from, to])));
       wire.classList.toggle('routing-fallback', !!route.fallback); wire.dataset.routing = route.fallback || 'clear';
+      wire.classList.toggle('routing-crowded', !!route.crowded);
       wire.setAttribute('tabindex', '0'); wire.setAttribute('role', 'button');
       wire.setAttribute('aria-label', `Select connection ${from.join('.')} to ${to.join('.')}`);
       wire.setAttribute('aria-pressed', String(this.selectedEdge === connection));
       wire.classList.toggle('selected-wire', this.selectedEdge === connection);
       const select = event => {
-        event.preventDefault(); event.stopPropagation(); this.selectDetails(null, connection);
-        wire.focus({ preventScroll: true });
+        // Wide touch targets overlap in a lane. Choose the closest actual path;
+        // exact crossings belong to the visible overpass (later SVG sibling).
+        let target = wire;
+        if (event.type === 'click' && event.detail && !this.wireRoutes[Number(wire.dataset.edge)].fallback) {
+          const rect = this.canvas.getBoundingClientRect();
+          const point = { x: (event.clientX - rect.left) / this.zoom, y: (event.clientY - rect.top) / this.zoom };
+          let best = Infinity;
+          for (const candidate of this.svg.children) {
+            if (this.detaching?.connection === candidate.connection) continue;
+            const candidateRoute = this.wireRoutes[Number(candidate.dataset.edge)];
+            // Cubic fallbacks retain native SVG hit testing.
+            if (candidateRoute.fallback) continue;
+            const distance = wireDistance(candidateRoute.points, point);
+            // Native mouse/touch coordinates can round fractional SVG pixels.
+            // Treat subpixel ties as the visible overpass, without letting
+            // successive ties drift away from the nearest path.
+            if (distance <= 8 / this.zoom + 2 && distance <= best + .75 / this.zoom) {
+              target = candidate; best = Math.min(best, distance);
+            }
+          }
+        }
+        event.preventDefault(); event.stopPropagation(); this.selectDetails(null, target.connection);
+        target.focus({ preventScroll: true });
       };
       wire.onclick = select;
       wire.onpointerdown = event => event.stopPropagation();
@@ -572,12 +601,15 @@ export class GraphEditor {
         }
       };
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${from.join('.')} → ${to.join('.')}. Select, then use Disconnect or Delete/Backspace.`;
-      wire.append(title, path, hit); this.svg.append(wire);
+      wire.append(title, casing, path, hit); this.svg.append(wire);
     }
     for (const wire of existing.values()) wire.remove();
     const failures = this.wireRoutes.filter(route => route.fallback).length;
-    this.routingNotice.hidden = !failures;
-    const notice = failures ? `${failures} connection${failures === 1 ? '' : 's'} could not avoid cards (overlap or routing limit). Dashed wires show these routes. Move cards apart to clear them.` : '';
+    const crowded = this.wireRoutes.filter(route => route.crowded).length;
+    this.routingNotice.hidden = !failures && !crowded;
+    const notice = [failures ? `${failures} connection${failures === 1 ? '' : 's'} could not avoid cards (overlap or routing limit). Dashed amber wires show these routes.` : '',
+      crowded ? `${crowded} connection${crowded === 1 ? '' : 's'} could not get separate lanes (space or routing limit). Dotted wires may overlap; use connection details to confirm endpoints.` : '',
+      failures || crowded ? 'Move cards apart to clear them.' : ''].filter(Boolean).join(' ');
     if (this.routingNotice.textContent !== notice) this.routingNotice.textContent = notice;
     // Include detours and actual card sizes in the scrollable surface, including during drag.
     const points = this.wireRoutes.flatMap(route => route.points);

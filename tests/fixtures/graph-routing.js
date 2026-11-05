@@ -18,7 +18,7 @@ export async function assertRoutingGeometry(page) {
     const cards = [...canvas.querySelectorAll('.graph-node')].map(card => ({ id: card.dataset.node, r: card.getBoundingClientRect() }));
     for (const wire of canvas.querySelectorAll('.graph-wire')) {
       const path = wire.querySelector('.wire-line'), hit = wire.querySelector('.wire-hit'), matrix = path.getScreenCTM();
-      if (path.getAttribute('d') !== hit.getAttribute('d')) errors.push('hit target differs');
+      if (path.getAttribute('d') !== hit.getAttribute('d') || path.getAttribute('d') !== wire.querySelector('.wire-casing').getAttribute('d')) errors.push('hit/casing geometry differs');
       if (wire.dataset.routing !== 'clear') { errors.push(wire.dataset.routing); continue; }
       const { from, to } = wire.connection;
       const port = (pair, side) => [...canvas.querySelectorAll('.graph-ports button')].find(p => p.closest('.graph-node').dataset.node === pair[0] && p.dataset.side === side && p.dataset.port === pair[1]).getBoundingClientRect();
@@ -30,8 +30,25 @@ export async function assertRoutingGeometry(page) {
       const first = screen(start), last = screen(end);
       if (Math.abs(first.x - a.right) > .05 || Math.abs(first.y - a.top - a.height / 2) > .05
         || Math.abs(last.x - b.left) > .05 || Math.abs(last.y - b.top - b.height / 2) > .05) errors.push('port attachment');
-      for (let length = 0; length <= totalLength; length += 2) {
-        const p = screen(path.getPointAtLength(length));
+      // Sample the actual SVG commands analytically. WebKit's repeated
+      // getPointAtLength calls become very expensive on the additional lane
+      // bends. Control-polygon length bounds every step to at most 2px.
+      const tokens = path.getAttribute('d').match(/[MLQ]|-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi);
+      const samples = []; let current;
+      for (let i = 0; i < tokens.length;) {
+        const command = tokens[i++], point = () => ({ x: Number(tokens[i++]), y: Number(tokens[i++]) });
+        if (command === 'M') { current = point(); samples.push(current); continue; }
+        const control = point(), end = command === 'Q' ? point() : control;
+        const steps = Math.max(1, Math.ceil((Math.hypot(control.x-current.x,control.y-current.y) + (command === 'Q' ? Math.hypot(end.x-control.x,end.y-control.y) : 0)) / 2));
+        for (let n = 1; n <= steps; n++) {
+          const t = n / steps, u = 1-t;
+          samples.push(command === 'Q' ? { x:u*u*current.x+2*u*t*control.x+t*t*end.x, y:u*u*current.y+2*u*t*control.y+t*t*end.y }
+            : { x:current.x+t*(end.x-current.x), y:current.y+t*(end.y-current.y) });
+        }
+        current = end;
+      }
+      for (const sample of samples) {
+        const p = screen(sample);
         for (const { id, r } of cards) {
           if (id === from[0] || id === to[0]) continue;
           // At least 5px of canvas-space clearance, including rounded corners.
