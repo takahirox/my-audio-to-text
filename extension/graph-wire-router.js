@@ -117,25 +117,32 @@ export function createWireRouter(cards, connections, { maxVisits = MAX_VISITS, m
     return points.slice(1).map((b, i) => ({ a: points[i], b })).filter(({ a, b }) =>
       a.x === b.x || a.y === b.y);
   }
-  // A* routing cost includes already accepted paths: shared/nearby long runs
-  // are much less readable than a few additional bends or crossings.
+  // Index accepted lanes by coordinate: A* examines thousands of candidate
+  // segments, so scanning every previous edge for each neighbor is too slow.
+  const horizontalByY = new Map(), verticalByX = new Map();
+  const nearYs = new Map(ys.map(y => [y, ys.filter(other => Math.abs(y - other) <= 12)]));
+  const nearXs = new Map(xs.map(x => [x, xs.filter(other => Math.abs(x - other) <= 12)]));
   function trafficCost(a, b) {
-    const horizontal = a.y === b.y;
+    const horizontal = a.y === b.y, coordinate = horizontal ? a.y : a.x;
+    const lanes = horizontal ? horizontalByY : verticalByX;
     let cost = 0;
-    for (const seg of earlierSegments) {
-      const otherHorizontal = seg.a.y === seg.b.y;
-      if (horizontal === otherHorizontal) {
-        const separation = Math.abs(horizontal ? a.y - seg.a.y : a.x - seg.a.x);
-        if (separation > 12) continue;
+    for (const near of (horizontal ? nearYs : nearXs).get(coordinate) || []) {
+      for (const seg of lanes.get(near) || []) {
         const lo = horizontal ? Math.max(Math.min(a.x, b.x), Math.min(seg.a.x, seg.b.x))
           : Math.max(Math.min(a.y, b.y), Math.min(seg.a.y, seg.b.y));
         const hi = horizontal ? Math.min(Math.max(a.x, b.x), Math.max(seg.a.x, seg.b.x))
           : Math.min(Math.max(a.y, b.y), Math.max(seg.a.y, seg.b.y));
-        if (hi > lo + EPS) cost += (hi - lo) * (separation < EPS ? 4 : 0.65);
-      } else {
-        const h = horizontal ? { a, b } : seg, v = horizontal ? seg : { a, b };
-        if (between(v.a.x, h.a.x, h.b.x) && between(h.a.y, v.a.y, v.b.y)) cost += 34;
+        if (hi > lo + EPS) cost += (hi - lo) * (Math.abs(near - coordinate) < EPS ? 4 : 0.65);
       }
+    }
+    // Paths may intersect at visibility-grid vertices. Penalize passing
+    // through a pre-existing straight run even when the grid has no
+    // intermediate point to identify a crossing in the single candidate step.
+    if (horizontal) for (const x of [a.x, b.x]) {
+      for (const v of verticalByX.get(x) || []) if (between(a.y, v.a.y, v.b.y, 8)) cost += 17;
+    }
+    else for (const y of [a.y, b.y]) {
+      for (const h of horizontalByY.get(y) || []) if (between(a.x, h.a.x, h.b.x, 8)) cost += 17;
     }
     return cost;
   }
@@ -159,7 +166,13 @@ export function createWireRouter(cards, connections, { maxVisits = MAX_VISITS, m
   function reserve(route) {
     if (route.fallback) return route;
     const visualD = roundedWirePath(route.points, crossingGaps(route.points));
-    earlierSegments.push(...segments(route.points));
+    for (const seg of segments(route.points)) {
+      earlierSegments.push(seg);
+      const horizontal = seg.a.y === seg.b.y, coordinate = horizontal ? seg.a.y : seg.a.x;
+      const lanes = horizontal ? horizontalByY : verticalByX;
+      if (!lanes.has(coordinate)) lanes.set(coordinate, []);
+      lanes.get(coordinate).push(seg);
+    }
     return { ...route, visualD };
   }
   function visible(a, b, horizontal) {
