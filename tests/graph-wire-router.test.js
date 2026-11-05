@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createWireRouter, crossesRectangle, reusableWireRoute, WIRE_GAP } from '../extension/graph-wire-router.js';
+import { createWireRouter, crossesRectangle, reusableWireRoute, roundedWirePath, WIRE_GAP } from '../extension/graph-wire-router.js';
 
 const card = (id, left, top, width = 200, height = 160) => ({ id, left, top, right: left + width, bottom: top + height });
 function connection(cards, from = 'a', to = 'b', y1 = 80, y2 = 80) {
@@ -81,4 +81,43 @@ test('drag cache reuses clear paths, invalidates new collisions and changed atta
   assert.equal(reusableWireRoute(route, c, c, cards), false);
   assert.equal(reusableWireRoute(route, c, { ...c, end: { ...c.end, y: c.end.y + 10 } }, cards), false);
   assert.equal(reusableWireRoute({ ...route, fallback: 'limit' }, c, c, cards), false);
+});
+
+test('parallel connections use distinct visible lanes rather than drawing over each other', () => {
+  const cards = [card('a', 20, 100), card('b', 800, 100)];
+  const c = connection(cards), router = createWireRouter(cards, [c, c, c]);
+  const paths = [0, 1, 2].map(i => router.route(i));
+  for (const path of paths) clearRoute(cards, c, path);
+  // Shared port stubs are unavoidable; the long center runs should separate.
+  const longRuns = paths.map(path => path.points.slice(1).filter((point, i) =>
+    Math.abs(point.x - path.points[i].x) > 300).map(point => point.y));
+  assert.equal(new Set(longRuns.flat()).size, 3);
+  assert.equal(new Set(paths.map(path => path.d)).size, 3);
+  // Paths are deterministic given the same ordered set of edges.
+  const repeat = createWireRouter(cards, [c, c, c]);
+  assert.deepEqual([0, 1, 2].map(i => repeat.route(i).d), paths.map(path => path.d));
+});
+
+test('crossings show a permanent visual gap but the full wire remains selectable', () => {
+  const cards = [card('a', 20, 20, 150, 100), card('b', 870, 140, 150, 100),
+    card('c', 20, 340, 150, 100), card('d', 870, 20, 150, 100)];
+  const a = connection(cards, 'a', 'b', 50, 50);
+  const b = connection(cards, 'c', 'd', 50, 50);
+  const router = createWireRouter(cards, [a, b]), first = router.route(0), second = router.route(1);
+  clearRoute(cards, a, first); clearRoute(cards, b, second);
+  assert.equal(first.visualD, first.d);
+  assert.match(second.visualD, / M/);
+  assert.doesNotMatch(second.d, / M/);
+  assert.ok(second.visualD.length > second.d.length);
+  // Cached drag routes must rebuild the visible crossing treatment in order.
+  const cached = createWireRouter(cards, [a, b]);
+  cached.reuse(first);
+  assert.equal(cached.reuse(second).visualD, second.visualD);
+});
+
+test('rounded wire gaps never change the port endpoints', () => {
+  const p = [{ x: 0, y: 0 }, { x: 100, y: 0 }];
+  const visible = roundedWirePath(p, new Map([[0, [50]]]));
+  assert.equal(visible, 'M0,0 L44,0 M56,0 L100,0');
+  assert.equal(roundedWirePath(p), 'M0,0 L100,0');
 });
