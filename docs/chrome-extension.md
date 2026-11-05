@@ -26,15 +26,19 @@ the shared speech node owns the existing ASR core and workers.
 
 The extension keeps its own toolbar/transcript UI and packaging; it is not a Node Playground page.
 
-The extension has three screens with a consistent dark appearance:
+The extension has three screens. Live uses a light reading surface; Graph Editor
+and Models keep their dark appearance:
 
 - **Live** puts graph-configured text displays and generated audio first. It
   supports zero, one or multiple independently labeled text regions, committed
   items and distinct Preview/Current value blocks. Each Display input is a
   switchable tab whose pane shows only content, without a repeated heading or
   Copy text control. Select and copy text using the browser's native commands. A compact
-  recording panel retains Start/Stop/Cancel, capture target, errors, progress and
-  model recovery. Optional input/output targeting is collapsed until requested.
+  recording panel retains Start/Stop/Cancel and an accurate session-state pill.
+  Graph-configured Button sources appear in a separate Graph Actions band when
+  present. Errors, target authorization, graph-change warnings and model recovery
+  remain visible; a compact bottom strip shows session progress and expandable
+  details. Optional input/output targeting is collapsed until requested.
 - **Graph Editor** opens a separate wide tab dominated by the typed-port canvas.
   **Add Node** opens search and categories; node settings appear only on
   selection. Zoom and Fit graph stay visible, Save is primary, and Graph actions
