@@ -1,3 +1,4 @@
+import { ButtonNode } from '../web/button-node.js';
 import { HoldNode } from '../web/hold-node.js';
 import { TextSummaryNode } from '../web/text-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
@@ -111,6 +112,20 @@ function sharedTabCapture(factory, stopping) {
 export function buildGraph(graph, options) {
   const description = executableGraph(graph);
   if (!description.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
+  // Defer summary resources on event-gated paths. Ordinary graphs retain
+  // their startup/preflight behavior, including startup failure reporting.
+  const gatedAncestor = id => {
+    const pending = [id], visited = new Set();
+    while (pending.length) {
+      const current = pending.pop();
+      if (visited.has(current)) continue;
+      visited.add(current);
+      if (description.nodes.some(node => node.id === current && node.type === 'Hold') &&
+        description.edges.some(route => route.to[0] === current && route.to[1] === 'trigger')) return true;
+      for (const route of description.edges) if (route.to[0] === current) pending.push(route.from[0]);
+    }
+    return false;
+  };
   let pipeline;
   const nodes = {}, resources = { translations: [], audioSources: new Map(), speechNodes: new Map() };
   const tabSources = description.nodes.filter(spec => spec.type === 'ChromeTabAudio');
@@ -121,10 +136,11 @@ export function buildGraph(graph, options) {
   for (const spec of description.nodes) {
     let node;
     switch (spec.type) {
-      case 'Hold': node = new HoldNode(); break;
+      case 'Button': node = new ButtonNode(); break;
+      case 'Hold': node = new HoldNode({ onState: state => options.onHoldState?.(state, spec.id) }); break;
       case 'Text': node = new TextNode(spec.settings); break;
       case 'TextSummaryLfm2': case 'TextSummaryQwen35':
-        node = new TextSummaryNode({ ...spec.settings, type: spec.type, workerFactory: options.textSummaryWorkerFactory,
+        node = new TextSummaryNode({ ...spec.settings, lazy: gatedAncestor(spec.id), type: spec.type, workerFactory: options.textSummaryWorkerFactory,
           onEvent: event => options.onTextSummaryEvent?.(event, spec.id) }); break;
       case 'IfCondition':
         node = new IfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,

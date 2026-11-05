@@ -9,9 +9,9 @@ export class TextSummaryNode {
   // Admission happens before Pipeline retains deliveries behind inference.
   inputQueueLimits = { deliveries: 32, chars: MAX_PENDING_CHARS };
   constructor({ type, language = 'ja', prompt, onEvent = () => {}, workerFactory = url => new Worker(url, { type: 'module' }),
-    loadTimeoutMs = 180000, generationTimeoutMs = 180000 } = {}) {
+    lazy = false, loadTimeoutMs = 180000, generationTimeoutMs = 180000 } = {}) {
     this.model = textSummaryModel(type);
-    Object.assign(this, { type, language: summaryLanguage(language), prompt: summaryPrompt(prompt), onEvent, workerFactory, loadTimeoutMs, generationTimeoutMs });
+    Object.assign(this, { type, language: summaryLanguage(language), prompt: summaryPrompt(prompt), onEvent, workerFactory, lazy, loadTimeoutMs, generationTimeoutMs });
     this.sequence = 0; this.pending = new Map();
   }
   event(event) { try { this.onEvent(event); } catch { /* observer only */ } }
@@ -25,6 +25,12 @@ export class TextSummaryNode {
       else this.dispose();
     };
     context.signal.addEventListener('abort', this.abort, { once: true });
+    if (this.lazy) { this.event({ type: 'waiting', message: `${this.model.label}: waiting for TEXT; model loads on first request.` }); return; }
+    await this.load();
+  }
+  load() {
+    if (this.ready) return this.ready;
+    const context = this.context;
     this.event({ type: 'loading', message: `Loading ${this.model.label} locally…` });
     this.ready = Promise.resolve().then(async () => {
       context.signal.throwIfAborted();
@@ -45,7 +51,7 @@ export class TextSummaryNode {
       await this.request('load', 'ready', { processor: this.type }, this.loadTimeoutMs);
       this.event({ type: 'ready', message: `${this.model.label} ready · ${this.language} · local` });
     }).catch(error => { if (!this.disposed) this.failure(error); });
-    await this.ready;
+    return this.ready;
   }
   request(type, reply, payload, timeout = this.generationTimeoutMs) {
     if (this.disposed) return Promise.reject(new DOMException('Text summary canceled.', 'AbortError'));
@@ -69,6 +75,9 @@ export class TextSummaryNode {
       if (!text.trim() || text.length > MAX_PENDING_CHARS) throw new RangeError('Text summary needs nonempty input of at most 32,768 characters; no evidence was truncated.');
       if (this.generating) throw new Error('Text summary receive calls must be awaited.');
       this.generating = true;
+      await this.load();
+      context.signal.throwIfAborted();
+      if (this.disposed) throw new DOMException('Text summary unavailable.', 'AbortError');
       this.event({ type: 'generating', message: `${this.model.label}: summarizing text…` });
       const result = await this.request('summarize', 'result', { text, language: this.language, prompt: this.prompt });
       context.signal.throwIfAborted();

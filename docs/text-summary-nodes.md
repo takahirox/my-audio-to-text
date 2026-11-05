@@ -67,7 +67,8 @@ Update the previous summary using the new text. Preserve still-relevant facts an
 That instruction belongs to the saved graph; the implementation does not
 interpret the formatter's labels or assume a transcript.
 
-Hold has ordinary typed `input: TEXT` and `value: TEXT` ports. `value` starts
+In this feedback example, leave the optional `Hold.trigger: ANY` disconnected.
+Hold has typed `input: TEXT` and sole `value: TEXT` ports. Sampled `value` starts
 as `''`. Its input **stores** the latest value without emitting. The runtime
 **samples** value together with the next ordinary delivery at the connected
 consumer. Updating Hold alone never formats text or generates a summary.
@@ -239,7 +240,10 @@ Quota failure does not undo Save. Free storage or delete unused cache entries,
 then Retry preparation. Cancellation preserves complete verified files; retry
 downloads missing files. Preparation across windows is serialized by Web Locks.
 
-Start re-verifies the entire required cached set. Missing/evicted/corrupt data
+Ordinary ungated session Start re-verifies the entire required cached set.
+On paths downstream of a triggered Hold, this verification, Worker creation and
+model initialization wait until the first TEXT request; inference runs only on
+delivery. See [manual Graph Actions](graph-actions.md). Missing/evicted/corrupt data
 is an explicit branch-local error. Only canonical allowlisted cached model
 URLs can be loaded; optional lookups get local misses. No model downloads after
 Start and no transcript or summary leaves the browser for inference. Save-time
@@ -269,3 +273,13 @@ assess this prompt. See [Issue #210 validation](evidence/text-summary-210.md) fo
 and unperformed checks, and [Issue #202](evidence/hold-feedback-202.md) for
 historical feedback validation. Old [#130 model evidence](evidence/meeting-summary-130.md)
 remains historical and must not be reported as verification of this change.
+
+## Manual on-demand summaries
+
+Import [manual-text-summary.json](examples/manual-text-summary.json) for continuous
+transcription with a **Generate summary** Button. Hold silently retains the
+accumulator text and emits one snapshot only on each accepted Button trigger.
+Transcription and summaries occupy separate Display tabs. Model initialization
+is deferred on this path until the first request; UI actions have bounded visible
+busy handling. The 32,768-character input cap still rejects oversized recordings
+without truncation. See [Graph Actions](graph-actions.md) for full contracts and lifecycle.

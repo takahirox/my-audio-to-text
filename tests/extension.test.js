@@ -529,3 +529,22 @@ test('one source ending during concurrent model preload waits for startup before
   assert.equal(active.pipeline.entries.get('second-speech').closed, false); assert.equal(f.sources.length, 1);
   f.session.cancel(); await drain(); assert.ok(f.workers.every(worker => worker.terminated));
 });
+
+
+test('Button paths survive one audio source ending; startup constants do not prevent that ASR branch draining', async () => {
+  const graph = concurrentGraph();
+  graph.nodes.push(graphNode('Number', 'duration'), graphNode('Button', 'action'), graphNode('Hold', 'manual'), graphNode('Display', 'manual-display'));
+  graph.edges.push(edge('duration', 'value', 'speech', 'maxDuration'), edge('speech', 'final', 'manual', 'input'),
+    edge('action', 'trigger', 'manual', 'trigger'), edge('manual', 'value', 'manual-display', 'input1'));
+  const f = fixture({ graph }); await f.session.start(42); const active = f.session.session;
+  active.speechNodes.get('speech').receiveEvent({ type: 'final', id: 0, text: 'retained snapshot' }); await drain();
+  active.audioSources.get('audio').end(); await active.branchDrain;
+  assert.equal(active.pipeline.entries.get('speech').closed, true, 'Number startup configuration cannot keep ASR open');
+  assert.equal(active.pipeline.entries.get('action').closed, false);
+  assert.equal(active.pipeline.entries.get('manual').closed, false);
+  assert.equal(f.session.view.state, 'running');
+  assert.equal(await f.session.pressButton('action'), true);
+  assert.equal(domText(f.session.view.displays['manual-display']), 'retained snapshot');
+  active.speechNodes.get('second-speech').receiveEvent({ type: 'final', id: 0, text: 'still live' }); await drain();
+  assert.equal(domText(f.session.view.displays['second-display']), 'still live'); await f.session.stop();
+});

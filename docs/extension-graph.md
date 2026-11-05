@@ -242,6 +242,16 @@ verify composition, safe rendering, persistence and lifecycle; they do not
 establish real inference quality. Real-model checks and setup requirements are
 documented with each feature.
 
+## Manual Graph Actions
+
+Add **Button** from **Sources / inputs**, edit its caption and connect its ordinary
+NUMBER output to any compatible consumer. Live renders active buttons by Node ID
+near Start/Stop/Cancel, with keyboard/touch access and bounded busy handling.
+For manual summaries, connect Button.trigger → Hold.trigger, accumulated text →
+Hold.input and Hold.value → TextSummary.text. A connected trigger makes value an
+ordinary emitted output; without it the original sampled feedback mode remains.
+See [Graph Actions](graph-actions.md) and the [example graph](examples/manual-text-summary.json).
+
 ## Incremental summaries with Hold
 
 Hold is available under **Constants / utilities**. Connect its readable value

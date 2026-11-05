@@ -15,6 +15,8 @@ runtime allocation remain specialized. See the [#134 audit](evidence/composition
 | Boundary | Public ports and values | Internal or observer bookkeeping |
 | --- | --- | --- |
 | Capture sources: microphone, browser tab, extension tab/selected media | `audio: MONO_16KHZ_PCM`, normalized mono 16 kHz Float32Array | Target, permission, resampler and diagnostics |
+| Button | `trigger: NUMBER` (1), no inputs | One ordinary emission per accepted Live Graph Action; caption and session ownership stay in UI |
+| Hold | `input: TEXT`, optional sink-only `trigger: ANY`; sole `value: TEXT` output | Silent storage; sampled when trigger disconnected, ordinary emission on each trigger when connected |
 | Text | `value: TEXT`, any literal string, including empty | One ordinary emission at session start |
 | SpeechToTextWhisper | `audio: PCM`, optional startup `language: TEXT` (en/ja; default en); `final: TEXT` only | Multilingual tiny q8, Silero, fixed 6 s segments; Stop drains / Cancel releases |
 | SpeechToTextParakeetV3 | `audio: PCM → final: TEXT` only | Exact v3 ONNX; GPU encoder/CPU decoder; quiet/12 s chunks; Stop drains / Cancel releases |
@@ -50,6 +52,16 @@ strict. Editor gestures, graph validation, executable selection and Pipeline use
 the same directional rule. Pipeline snapshots structured values before queued
 fan-out and validates concrete TEXT values on ITEM routes. No producer identity
 participates. See [exact portable shapes, lifecycle and recovery](display-items.md).
+
+## Arrival-only ANY inputs
+
+`ANY` is an input-only wildcard for event arrivals, independent of ITEM. Every
+existing concrete output contract can connect; ANY outputs (including ANY → ANY)
+are invalid. Receivers use own-property presence, never payload truthiness.
+Pipeline discards ANY payloads before queue retention and skips copying when all
+routes are arrival-only; concrete sibling routes preserve normal validation and
+snapshots. Sampled reads cannot produce ANY arrivals. See [Graph Actions](graph-actions.md)
+for Hold modes, ordering and lifecycle.
 
 ## Correlated utterance IDs
 

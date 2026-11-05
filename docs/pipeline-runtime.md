@@ -31,7 +31,7 @@ node's `stop()` promise. Implementations should observe `signal` and release
 background resources in `dispose()`; for example, pass it to `fetch()`.
 
 `portContract(name)` creates a small shared identity. Both endpoints must declare
-the **same token**, including agreement on payload format (for example PCM sample rate). Names are descriptive, not structural
+the **same token** (apart from the explicit ITEM union and input-only ANY wildcard), including agreement on payload format (for example PCM sample rate). Names are descriptive, not structural
 schema matching. Tokens impose no fields on payloads and do not validate values
 at delivery time. Nodes own validation of their data contracts. Unknown nodes,
 unknown ports, incompatible tokens, duplicate connections, multiple incoming
@@ -441,8 +441,8 @@ async processing. See [keyed utterance history](display-items.md).
 
 ## Sampled state and feedback (#202)
 
-`HoldNode` declares `sampledOutputs = ['value']` and `readOutput(port)`, alongside
-ordinary TEXT input/output contracts. This is a node capability, not an edge
+With trigger disconnected, `HoldNode` resolves `sampledOutputs = ['value']`
+and declares `readOutput(port)`, alongside its TEXT input/output contracts. This is a node capability, not an edge
 option or producer identity rule. Pipeline never routes an event from a sampled
 output; attempting to emit it fails. Connections still undergo normal port,
 duplicate and single-incoming validation. Topological sorting considers only
@@ -468,3 +468,13 @@ also invalidates its downstream contexts. Stop uses the event topological order,
 so source tails enter the FIFO before downstream nodes close. Cancel and dispose
 abort immediately. Fresh Pipeline/node instances are required for Start.
 See the [importable example and lifecycle details](text-summary-nodes.md).
+
+## Connection-dependent sampled outputs
+
+A Node may implement `sampledOutputsForInputs(connectedInputs)` to resolve its
+sampled outputs during construction, before routes, topology and feedback
+reachability are built. Hold uses this to keep its sole value output sampled
+only when trigger is disconnected. With trigger connected, normal event cycle
+checks apply. ANY inputs represent arrivals: payloads are discarded before
+retention, and sampled outputs do not inject values into ANY inputs. See
+[Graph Actions](graph-actions.md) for ordering, UI admission and session ownership.

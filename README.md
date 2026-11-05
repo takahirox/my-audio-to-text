@@ -8,7 +8,7 @@ The extension also has independent [LFM2.5 1.2B JP and Qwen3.5 2B text-summary
 processors](docs/text-summary-nodes.md). Summarize arbitrary TEXT with a
 multiline prompt in Settings, using the existing Save-prepared local WebGPU
 models. Compose rolling updates explicitly with TextWindow, TextFormatter and
-Hold. Connect `summary → Display.input1`. Read the recorded accuracy
+Hold. For manual on-demand requests, use a [Live Button and triggered Hold](docs/graph-actions.md). Connect `summary → Display.input1`. Read the recorded accuracy
 limitations before relying on generated facts.
 
 A local-first composable processing system that connects reusable input and processing capabilities into pipelines for useful derived information.
