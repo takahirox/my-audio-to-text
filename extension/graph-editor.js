@@ -88,7 +88,7 @@ export class GraphEditor {
       el('p', 'Connect by clicking an output then a matching input, or drag from an output to an input. Reconnecting replaces only that input’s wire. Drag a connected input into blank canvas to detach its wire, or to a matching input to move it. Select a wire for connection details and Disconnect in the inspector. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape, Clear selection or blank canvas clears selection.'),
       el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
       el('p', 'Wires use separate lanes and crossing gaps. At a crossing, the continuous line passes over the interrupted line; this is not a junction. Short shared branches at one output are fan-out. Dotted wires and a notice indicate crowded lanes that could not be separated. Move cards apart to give them more room.'),
-      el('p', 'Display renders each complete input snapshot safely. Connect any TEXT output directly to Display.input1. TextAccumulator retains exact completed segments; TextFormatter builds text snapshots. Hold stores TEXT without emitting; its value is sampled with the next ordinary input. Compose TextWindow → TextFormatter → Text Summary → Hold, with Hold.value → a second formatter input, for serialized incremental summaries. Set the rolling-update instruction explicitly in Text Summary Settings.prompt; its default simply summarizes each input. language supplies a default that an explicit prompt language can override. Save prepares required model weights; Models provides asset recovery.'),
+      el('p', 'Display renders each complete input snapshot safely. Connect any TEXT output directly to Display.input1. TextAccumulator retains exact completed segments; TextFormatter builds text snapshots. Hold stores TEXT silently. With trigger disconnected, value is sampled with the next ordinary input. Connect Button.trigger → Hold.trigger for on-demand emission of the latest TEXT through value. Live Graph Actions uses each Button caption and disables overlapping work while busy; no audio source is required. Compose TextWindow → TextFormatter → Text Summary → Hold, with Hold.value → a second formatter input, for serialized incremental summaries. Set the rolling-update instruction explicitly in Text Summary Settings.prompt; its default simply summarizes each input. language supplies a default that an explicit prompt language can override. Save prepares required model weights; Models provides asset recovery.'),
       el('p', 'For continuous ASR/translation rows, connect ASR finalId/final → KeyedTextCoalesce.id1/input1 and provisionalId/provisional → id2/input2. Also connect ASR finalId/final directly to translator.id/text. Connect coalesce.id/text → KeyedTextPair.id1/input1 and translator.id/text → KeyedTextPair.id2/input2, then KeyedTextPair.pair → KeyedPairedTextAccumulator.pair, then pairs → Display.input1. Originals appear immediately; late translations replace their own row. KeyedTextPair pairs only by numeric ID. KeyedPairedTextAccumulator owns portable ordered pair history, replacing each ID in arrival order. Each Display is one tabbed view: its input ports are switchable tabs accepting TEXT, KEYED_PAIRED_TEXT or KEYED_PAIRED_TEXT_LIST from any producer. Only the selected input is visible; hidden inputs keep their latest snapshots. Set per-input tab labels and Add input / Remove last input in Settings. For plain text, connect any TEXT output directly to Display.input1.'),
       el('p', 'KeyedTextCoalesce selects nonempty input1, otherwise input2, separately for each numeric ID. Connect Number.value to id1/id2 and independent preferred/backup TEXT sources to input1/input2, then text → Display.input1. Only the exact empty string is empty. Each branch uses its latest ID; text before the first ID waits. ID-only changes never replay old text. Grouped ID/text updates stay atomic, and each selection emits id/text together.'),
       el('p', 'TextWindow batches exact incoming TEXT for any consumer. Optional maxChars and maxWaitSeconds NUMBER inputs default to 600 and 1.5 seconds. Connect ASR.final → TextWindow.text → translator.text → TextAccumulator.append, then TextAccumulator.text → Display.input1. Translator.text can also feed Display.input1 directly. For optional previews, connect a deliberate TEXT snapshot source → translator.provisional and translator.provisionalText → a separate Display.input1; previews clear on final input, Stop and Cancel. For ID-scoped bilingual history, use KeyedTextCoalesce / KeyedTextPair / KeyedPairedTextAccumulator. Batching does not retain conversation-wide context.'),
@@ -321,7 +321,7 @@ export class GraphEditor {
       return;
     }
     this.inspector.append(clear);
-    const definition = nodeDefinition(node); this.inspector.append(el('h3', definition.label), el('p', `Node: ${node.id}`));
+    const definition = nodeDefinition(node, this.draft); this.inspector.append(el('h3', definition.label), el('p', `Node: ${node.id}`));
     for (const [key, values] of Object.entries(definition.settings || {})) {
       const label = el('label', key + ' '), select = el('select'); select.setAttribute('aria-label', `${node.id} ${key}`);
       for (const value of values) { const option = el('option', value); option.value = value; select.append(option); }
@@ -389,7 +389,7 @@ export class GraphEditor {
     this.canvas.style.width = `${width}px`; this.canvas.style.height = `${height}px`; this.canvas.style.transform = `scale(${this.zoom})`;
     this.extent.style.width = `${width * this.zoom}px`; this.extent.style.height = `${height * this.zoom}px`;
     for (const node of this.draft.nodes) {
-      const definition = nodeDefinition(node), card = el('section', undefined, 'graph-node'); card.dataset.node = node.id;
+      const definition = nodeDefinition(node, this.draft), card = el('section', undefined, 'graph-node'); card.dataset.node = node.id;
       card.classList.toggle('selected-node', this.selectedNode === node.id);
       card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`;
       const heading = el('button', definition.label, 'graph-heading'); heading.type = 'button';
@@ -440,7 +440,7 @@ export class GraphEditor {
               this.selected = { id: node.id, port, contract }; event.dataTransfer.setData('text/plain', `${node.id}.${port}`);
               for (const input of this.canvas.querySelectorAll('[data-side="input"]')) {
                 const target = this.draft.nodes.find(n => n.id === input.closest('[data-node]').dataset.node);
-                input.disabled = target.id === node.id || !compatiblePorts(contract, nodeDefinition(target).inputs[input.dataset.port]);
+                input.disabled = target.id === node.id || !compatiblePorts(contract, nodeDefinition(target, this.draft).inputs[input.dataset.port]);
               }
             };
             control.ondragend = () => { this.selected = null; this.draw(); };
@@ -478,8 +478,8 @@ export class GraphEditor {
                     if (input && this.canvas.contains(input)) {
                       const id = input.closest('[data-node]').dataset.node;
                       const source = this.draft.nodes.find(n => n.id === connection.from[0]);
-                      this.selected = { id: source.id, port: connection.from[1], contract: nodeDefinition(source).outputs[connection.from[1]] };
-                      this.connect(id, input.dataset.port, nodeDefinition(this.draft.nodes.find(n => n.id === id)).inputs[input.dataset.port], connection);
+                      this.selected = { id: source.id, port: connection.from[1], contract: nodeDefinition(source, this.draft).outputs[connection.from[1]] };
+                      this.connect(id, input.dataset.port, nodeDefinition(this.draft.nodes.find(n => n.id === id), this.draft).inputs[input.dataset.port], connection);
                     } else this.drawWires();
                   }
                 };

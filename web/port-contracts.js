@@ -7,8 +7,10 @@ export const KEYED_PAIRED_TEXT = portContract('keyed_paired_text');
 export const KEYED_PAIRED_TEXT_LIST = portContract('keyed_paired_text_list');
 // Accepting union only: concrete consumers never accept ITEM implicitly.
 export const ITEM = portContract('item');
+// Sink-only arrival contract; never a legal output contract.
+export const ANY = portContract('any');
 export const compatiblePorts = (output, input) => !!output &&
-  (output === input || (input === ITEM && [TEXT, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST].includes(output)));
+  output !== ANY && (input === ANY || output === input || (input === ITEM && [TEXT, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST].includes(output)));
 
 // Snapshot the new structured contracts before queueing or fan-out. For an ITEM
 // edge, validate the declared concrete source too (TEXT cannot carry a pair).

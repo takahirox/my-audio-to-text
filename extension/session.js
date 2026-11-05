@@ -1,3 +1,4 @@
+import { buttonLabel } from '../web/button-node.js';
 import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
 import { assertGraph, executableGraph, defaultGraph, graphPreferences, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
@@ -25,10 +26,55 @@ export class TabSession {
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
     this.speakerContextFactory = speakerContextFactory;
     const preferences = graphPreferences(this.graph);
-    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, summaryStatus: '', conditionStatus: '', targetStatus: '', translationStatus: 'Translation off' };
+    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', targetStatus: '', translationStatus: 'Translation off' };
     this.update();
   }
-  update(values = {}) { Object.assign(this.view, values); this.render({ ...this.view }); }
+  update(values = {}) {
+    Object.assign(this.view, values);
+    this.view.graphActions = this.graphActions();
+    this.render({ ...this.view });
+  }
+  graphActions() {
+    const owner = this.session || null;
+    const graph = owner?.description || (this.view.state === 'idle' ? executableGraph(this.graph) : this.view.activeGraph);
+    return (graph?.nodes || []).filter(node => node.type === 'Button').sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).map(spec => {
+      const entry = owner?.pipeline?.entries.get(spec.id);
+      const reachable = entry?.reachable || new Set();
+      const busy = [...(owner?.actions?.values() || [])].some(action => [...reachable].some(target => action.has(target)));
+      const failed = [...reachable].some(target => target.failed);
+      const reason = this.view.state !== 'running' || owner?.pipeline?.state !== 'running' ? 'Start a session to use graph actions.'
+        : failed ? 'Action path unavailable; start a fresh session.' : busy ? 'Action busy; waiting for downstream work.' : '';
+      // Capture the exact session in each callback. Old DOM handlers cannot
+      // acquire the context of a replacement session that reused this Node ID.
+      return { id: spec.id, label: buttonLabel(spec.settings.label), disabled: !!reason, reason,
+        invoke: () => this.pressButton(spec.id, owner) };
+    });
+  }
+  async pressButton(id, owner = this.session) {
+    if (!owner || this.session !== owner || this.view.state !== 'running' || owner.pipeline?.state !== 'running') return false;
+    const entry = owner.pipeline.entries.get(id);
+    if (owner.description.nodes.find(node => node.id === id)?.type !== 'Button' || !entry?.active || entry.closed || entry.failed) return false;
+    owner.actions ||= new Map();
+    if ([...entry.reachable].some(target => target.failed) || [...owner.actions.values()].some(action => [...entry.reachable].some(target => action.has(target)))) return false;
+    owner.actions.set(id, entry.reachable);
+    this.update();
+    try {
+      entry.node.press(); // one ordinary context.emit('trigger', 1)
+      // Observe the existing queues and owned async work until this path settles.
+      // UI admission is bounded to one action per overlapping downstream path.
+      let previous;
+      while (this.session === owner && owner.pipeline.state !== 'disposed') {
+        const queues = [...entry.reachable].flatMap(target => [target.queue, ...[...target.work].map(work => work.done)]);
+        if (previous && queues.length === previous.length && queues.every((queue, i) => queue === previous[i])) break;
+        previous = queues;
+        await Promise.allSettled(queues);
+      }
+      return true;
+    } finally {
+      owner.actions.delete(id);
+      if (this.session === owner) this.update();
+    }
+  }
   async start(tabId, { microphoneGesture = false, speakerGesture = false } = {}) {
     if (this.session) return; // A second invocation never retargets live capture.
     let graph, snapshot;
@@ -56,7 +102,7 @@ export class TabSession {
     const session = { speakers: new Map(), speakerStates: Object.create(null), microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
     session.started = new Promise(resolve => { session.markStarted = resolve; });
     this.session = session;
-    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, summaryStatus: '', conditionStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Preparing local translation…' : 'Translation off', status: graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
+    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Preparing local translation…' : 'Translation off', status: graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
     try {
       for (const spec of speakers) {
         const Speaker = spec.type === 'StreamingSpeakerOutput' ? StreamingSpeakerOutputNode : SpeakerOutputNode;
@@ -93,6 +139,11 @@ export class TabSession {
         },
         workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, zipformerWorkerFactory: this.zipformerWorkerFactory, parakeetWorkerFactory: this.parakeetWorkerFactory, moonshineWorkerFactory: this.moonshineWorkerFactory, sourceFactory: this.sourceFactory,
         translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
+        onHoldState: (state, id) => {
+          if (this.session !== session) return;
+          session.holdStates ||= {}; session.holdStates[id] = state;
+          this.update({ holdStatus: Object.entries(session.holdStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
+        },
         textSummaryWorkerFactory: this.textSummaryWorkerFactory,
         onTextSummaryEvent: (event, id) => {
           if (this.session !== session) return;
@@ -144,7 +195,7 @@ export class TabSession {
           // before disposing and calling fail(). Keep the Pipeline record, but
           // do not repeat that same failure in the general error area.
           const node = session.pipeline.entries.get(id).node;
-          if (node.disposed && ['TextSummaryLfm2', 'TextSummaryQwen35', 'IfCondition'].includes(graph.nodes.find(spec => spec.id === id)?.type)) return;
+          if (node.disposed && ['TextSummaryLfm2', 'TextSummaryQwen35', 'IfCondition'].includes(graph.nodes.find(spec => spec.id === id)?.type)) { this.update(); return; }
           this.update({ error: [this.view.error, error.message].filter(Boolean).join('\n'), signal: this.sourceStatus(session) });
         },
       }));
@@ -185,6 +236,9 @@ export class TabSession {
     // Drain only Nodes with no remaining live source ancestor. A formatter with
     // another live input stays open; one-source fan-out drains all its branches.
     const live = new Set([...session.audioSources.keys()].filter(source => !session.endedSources.has(source)));
+    // Buttons remain live event producers. Startup-only Text/Number constants
+    // must not keep an ended audio branch open through configuration edges.
+    for (const node of session.description.nodes) if (node.type === 'Button') live.add(node.id);
     for (const entry of session.pipeline.order) {
       if (session.description.edges.some(route => route.to[0] === entry.id && live.has(route.from[0]))) live.add(entry.id);
     }

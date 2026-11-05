@@ -24,8 +24,27 @@ function clearAudio() {
   for (const url of audioURLs) URL.revokeObjectURL(url);
   audioURLs.clear(); element('audio-outputs').replaceChildren();
 }
+function renderGraphActions(view) {
+  const container = element('graph-action-buttons'), actions = view.graphActions || [];
+  element('graph-action-area').hidden = !actions.length;
+  const byId = new Map([...container.children].map(button => [button.dataset.nodeId, button]));
+  for (const [index, action] of actions.entries()) {
+    let button = byId.get(action.id);
+    if (!button) { button = document.createElement('button'); button.type = 'button'; button.dataset.nodeId = action.id; }
+    button.textContent = action.label; button.disabled = action.disabled;
+    button.title = `${action.id}${action.reason ? ': ' + action.reason : ''}`;
+    button.setAttribute('aria-describedby', 'graph-action-status hold-status');
+    button.onclick = () => { void action.invoke(); };
+    if (container.children[index] !== button) container.insertBefore(button, container.children[index] || null);
+    byId.delete(action.id);
+  }
+  for (const button of byId.values()) button.remove();
+  element('graph-action-status').textContent = [...new Set(actions.map(action => action.reason).filter(Boolean))].join(' ');
+  element('hold-status').textContent = view.holdStatus;
+}
 function graphState(view) { return { graph: view.activeSavedGraph, state: view.state, tabId: view.tabId }; }
 const session = new TabSession(view => {
+  renderGraphActions(view);
   element('status').textContent = view.status;
   element('errors').textContent = graphError || view.error;
   const inputs = (view.state !== 'idle' ? view.activeGraph : view.savedGraph)?.nodes.filter(node => INPUT_TYPES.includes(node.type)) || [];

@@ -152,3 +152,7 @@ button, summary, nav a { min-height: 44px; }
 .live-display { min-width: 0; margin-bottom: 1rem; }
 .live-text-region[hidden] { display: none !important; }
 .live-text-region { min-width: 0; max-width: 100%; }
+
+#graph-action-buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
+#graph-action-buttons button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+#graph-action-area h2 { font-size: 1rem; margin: .75rem 0 .5rem; }

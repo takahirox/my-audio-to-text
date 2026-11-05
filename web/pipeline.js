@@ -1,4 +1,4 @@
-import { compatiblePorts, snapshotPortValue, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST } from './port-contracts.js';
+import { compatiblePorts, snapshotPortValue, ANY, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST } from './port-contracts.js';
 export const MAX_SAMPLED_PENDING = 32;
 export const MAX_SAMPLED_CHARS = 32768;
 export const SAMPLED_TIMEOUT_MS = 240000;
@@ -24,13 +24,16 @@ export class Pipeline {
       id, node, inputs: { ...node.inputs }, outputs: { ...node.outputs },
       provisionalOutputs: new Set(node.provisionalOutputs || []),
       outputGroups: (node.outputGroups || [Object.keys(node.outputs || {})]).map(ports => [...ports]),
-      sampledOutputs: new Set(node.sampledOutputs || []), samples: [], pendingCount: 0, pendingChars: 0,
+      sampledOutputs: new Set(node.sampledOutputsForInputs?.(connections.filter(route => route.to[0] === id).map(route => route.to[1])) ?? node.sampledOutputs ?? []), samples: [], pendingCount: 0, pendingChars: 0,
       dependents: new Set(), routes: new Map(), queue: Promise.resolve(), controller: new AbortController(), work: new Set(),
       active: false, closed: false, failed: false,
     }]));
     if (!this.entries.size) throw new Error('A pipeline needs at least one node.');
     if (new Set([...this.entries.values()].map(e => e.node)).size !== this.entries.size) {
       throw new Error('A node instance can occur only once in a pipeline.');
+    }
+    for (const entry of this.entries.values()) {
+      if (Object.values(entry.outputs).includes(ANY)) throw Error('ANY is an input-only contract.');
     }
     for (const entry of this.entries.values()) for (const port of entry.sampledOutputs) {
       if (!Object.hasOwn(entry.outputs, port) || typeof entry.node.readOutput !== 'function') throw Error('Sampled outputs need a declared port and readOutput().');
@@ -56,7 +59,9 @@ export class Pipeline {
       a.dependents.add(b);
       if (!a.routes.has(output)) a.routes.set(output, []);
       if (a.sampledOutputs.has(output)) {
-        b.samples.push({ entry: a, output, input });
+        // Arrival-only inputs must never turn a sampled read into an event.
+        // A sampled producer has no emissions, so this edge remains silent.
+        if (b.inputs[input] !== ANY) b.samples.push({ entry: a, output, input });
       } else {
         a.routes.get(output).push({ entry: b, port: input });
         edges.get(source).push(target);
@@ -122,6 +127,10 @@ export class Pipeline {
     try {
       outputs = outputs.map(([port, value]) => {
         const contract = entry.outputs[port];
+        const routes = entry.routes.get(port) || [];
+        // Arrival-only sinks retain no payload. Concrete sibling routes still
+        // receive the normal validated immutable snapshot.
+        if (routes.length && routes.every(route => route.entry.inputs[route.port] === ANY)) return [port, undefined];
         const portable = [ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST].includes(contract) ||
           (entry.routes.get(port) || []).some(route => route.entry.inputs[route.port] === ITEM);
         return [port, portable ? snapshotPortValue(contract, value) : value];
@@ -134,7 +143,7 @@ export class Pipeline {
     for (const [port, value] of outputs) {
       for (const { entry: target, port: input } of entry.routes.get(port) || []) {
         if (!deliveries.has(target)) deliveries.set(target, {});
-        Object.defineProperty(deliveries.get(target), input, { value, enumerable: true });
+        Object.defineProperty(deliveries.get(target), input, { value: target.inputs[input] === ANY ? undefined : value, enumerable: true });
       }
     }
     for (const [target, inputs] of deliveries) {
