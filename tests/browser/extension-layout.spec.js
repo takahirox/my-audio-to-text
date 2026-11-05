@@ -400,7 +400,7 @@ for (const action of ['Clear selection', 'Remove literal']) {
   });
 }
 
-test('live regions replace safe DOM snapshots and copy verbatim at narrow widths', async ({ page }) => {
+test('live regions replace safe DOM snapshots without pane controls at narrow widths', async ({ page }) => {
   const html = await readFile('extension/recorder.html', 'utf8');
   await page.setContent(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''));
   await page.evaluate(async () => {
@@ -413,7 +413,6 @@ test('live regions replace safe DOM snapshots and copy verbatim at narrow widths
     const toDOM = text => { let snapshot; const node = new DisplayNode(dom => snapshot = dom); node.start(context); node.receive('input1', text, context); return snapshot; };
     window.renderLayout = text => renderTextRegions(root, graph, { transcript: toDOM(text), value: toDOM('A current value') });
     window.renderLayout('<b>committed</b>'); window.firstText = root.querySelector('.display-content').firstChild;
-    navigator.clipboard.writeText = async text => { window.copiedText = text; };
     window.clearRegions = () => renderTextRegions(root, { nodes: [], edges: [] }, {});
   });
   await expect(page.locator('.live-text-region')).toHaveCount(2);
@@ -423,8 +422,9 @@ test('live regions replace safe DOM snapshots and copy verbatim at narrow widths
   await expect(page.locator('#live-displays b')).toHaveCount(0);
   await page.evaluate(() => window.renderLayout('<b>committed</b>\nsecond\nnew preview'));
   expect(await page.evaluate(() => window.firstText === document.querySelector('#live-displays .display-content').firstChild)).toBe(false);
-  await transcript.getByRole('button', { name: 'Copy Input 1 text' }).click();
-  expect(await page.evaluate(() => window.copiedText)).toBe('<b>committed</b>\nsecond\nnew preview');
+  await expect(transcript.getByLabel('Content', { exact: true })).toHaveText('<b>committed</b>\nsecond\nnew preview');
+  await expect(page.locator('.live-text-region h2, .live-text-region button, .live-text-region [role="status"]')).toHaveCount(0);
+  await expect(transcript.locator('[data-port]')).toHaveAccessibleName('Input 1');
   const output = await page.locator('#live-displays').boundingBox(), controls = await page.locator('.capture-panel').boundingBox();
   expect(controls.y).toBeLessThan(output.y);
   for (const width of [390, 700]) {

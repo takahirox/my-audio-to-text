@@ -64,7 +64,8 @@ test('Simple hides routine details but keeps unknown diagnostics, recovery and n
   await live.editor.getByRole('button', { name: 'Select transcript', exact: true }).press('ArrowRight');
   await live.editor.locator('#graph-save').click();
   await expect(live.locator('#saved-state')).toBeVisible();
-  await expect(live.locator('.display-label')).toHaveText('Input 1');
+  await expect(live.locator('.live-text-region')).toHaveAccessibleName('Input 1');
+  await expect(live.locator('.display-label, .live-text-region button, .live-text-region [role="status"]')).toHaveCount(0);
   await expect(live.locator('#stop')).toBeEnabled();
   await expect(live.locator('#start')).toBeDisabled();
   await live.locator('#cancel-session').click();

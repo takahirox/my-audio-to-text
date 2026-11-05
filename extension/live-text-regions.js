@@ -51,25 +51,17 @@ function activate(surface, id, focus = false) {
         state.top = content.scrollTop;
       }
     }
-    region.querySelector('[role="status"]')?.setAttribute('aria-live', selected ? 'polite' : 'off');
     const tab = surface.tabs.get(key);
     if (tab) { tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1; }
   }
   if (focus) surface.tabs.get(id)?.focus({ preventScroll: true });
 }
-function paneFor(port, label) {
+function paneFor(port) {
   const pane = document.createElement('section'); pane.className = 'panel live-text-region'; pane.dataset.port = port;
-  const heading = document.createElement('h2'), copy = document.createElement('button'), notice = document.createElement('p'), content = document.createElement('div');
-  heading.className = 'display-label'; heading.textContent = label; content.className = 'display-content';
-  pane.setAttribute('aria-label', label); pane.lang = 'und';
-  content.tabIndex = 0; content.setAttribute('aria-label', 'Content'); notice.setAttribute('role', 'status');
-  copy.textContent = 'Copy text'; copy.setAttribute('aria-label', `Copy ${label} text`); copy.disabled = true;
-  copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(content.innerText); notice.textContent = 'Text copied.'; }
-    catch { notice.textContent = 'Clipboard unavailable. Select and copy the text in this region.'; }
-  };
-  const header = document.createElement('div'); header.className = 'section-heading'; header.append(heading, copy);
-  pane.append(header, notice, content); return pane;
+  const content = document.createElement('div'); content.className = 'display-content';
+  pane.lang = 'und';
+  content.tabIndex = 0; content.setAttribute('aria-label', 'Content');
+  pane.append(content); return pane;
 }
 function mountSnapshot(pane, snapshot, hidden) {
   if (pane.displayDOM === snapshot) return;
@@ -88,7 +80,6 @@ function mountSnapshot(pane, snapshot, hidden) {
   state.observer?.observe(content);
   if (snapshot !== null) state.observer?.observe(flow);
   pane.displayDOM = snapshot;
-  pane.querySelector('button').disabled = !content.textContent;
 }
 function release(region) {
   for (const content of contents(region)) scrollStates.get(content)?.observer?.disconnect();
@@ -118,9 +109,6 @@ function createDisplay(id) {
 }
 function labelPane(pane, label) {
   pane.setAttribute('aria-label', label);
-  const heading = pane.querySelector('.display-label');
-  if (heading.textContent !== label) heading.textContent = label;
-  pane.querySelector('button').setAttribute('aria-label', `Copy ${label} text`);
 }
 export function renderTextRegions(root, graph, displays) {
   const specs = graph?.nodes.filter(node => node.type === 'Display') || [];
@@ -153,7 +141,7 @@ export function renderTextRegions(root, graph, displays) {
       const label = spec.settings?.inputLabels?.[port]?.trim() || `Input ${i + 1}`;
       let pane = surface.regions.get(port), tab = surface.tabs.get(port);
       if (!pane) {
-        pane = paneFor(port, label); pane.id = `${surface.prefix}-panel-${port}`;
+        pane = paneFor(port); pane.id = `${surface.prefix}-panel-${port}`;
         pane.hidden = port !== surface.active; surface.regions.set(port, pane);
         tab = document.createElement('button'); tab.type = 'button'; tab.dataset.tab = port;
         tab.id = `${surface.prefix}-tab-${port}`; tab.setAttribute('role', 'tab');

@@ -24,7 +24,6 @@ nav .secondary-link { border-color: transparent; font-size: .85rem; }
 footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 pre { font-family: inherit; font-size: 1rem; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; margin: .5rem 0 1rem; }
 #errors, #graph-errors, .model-error { color: #ffb7b7; overflow-wrap: anywhere; }
-.display-label { overflow-wrap: anywhere; }
 .graph-inspector input, .graph-inspector textarea { width: 100%; }
 .graph-inspector textarea { min-height: 7rem; }
 .section-heading { justify-content: space-between; }
@@ -107,10 +106,7 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .graph-ports [data-side="output"] { text-align: right; border-right: 3px solid var(--accent); }
 .graph-ports [data-side="input"] { border-left: 3px solid #a6dfc6; }
 #live-displays { display: block; }
-.live-text-region { margin: 0; min-width: 0; min-height: 16rem; padding: 1.25rem 1.5rem; }
-.live-text-region h2 { margin: 0; font-size: 1rem; color: var(--muted); }
-.live-text-region .section-heading { margin-bottom: 1rem; flex-wrap: nowrap; }
-.live-text-region .section-heading button { flex-shrink: 0; }
+.live-text-region { margin: 0; min-width: 0; min-height: 16rem; padding: .5rem 1.5rem .75rem; }
 .live-text-region .display-content { font-size: 1.1rem; line-height: 1.75; }
 .capture-panel { margin-top: 0; margin-bottom: 1rem; padding: .75rem 1rem; }
 .recording-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .25rem 1rem; }
@@ -137,8 +133,7 @@ button, summary, nav a { min-height: 44px; }
   .graph-actions { position: static; }
   .graph-palette { display: grid; }
   .graph-command-list { left: 0; right: auto; }
-  .live-text-region { padding: 1rem; }
-  .live-text-region .section-heading { align-items: flex-start; }
+  .live-text-region { padding: .5rem 1rem .75rem; }
 }
 
 #audio-outputs { padding: 0; list-style: none; }
@@ -146,7 +141,7 @@ button, summary, nav a { min-height: 44px; }
 .display-flow { display: flow-root; }
 
 /* Each Display owns input tabs and shows exactly one panel at any width. */
-.display-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; min-width: 0; }
+.display-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; min-width: 0; }
 .display-tabs button { min-height: 44px; max-width: 100%; overflow-wrap: anywhere; }
 .display-tabs button[aria-selected="true"] { background: #a7c6ff; color: #10213a; font-weight: 650; }
 .live-display { min-width: 0; margin-bottom: 1rem; }

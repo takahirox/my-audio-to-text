@@ -30,7 +30,9 @@ The extension has three screens with a consistent dark appearance:
 
 - **Live** puts graph-configured text displays and generated audio first. It
   supports zero, one or multiple independently labeled text regions, committed
-  items, distinct Preview/Current value blocks and **Copy text**. A compact
+  items and distinct Preview/Current value blocks. Each Display input is a
+  switchable tab whose pane shows only content, without a repeated heading or
+  Copy text control. Select and copy text using the browser's native commands. A compact
   recording panel retains Start/Stop/Cancel, capture target, errors, progress and
   model recovery. Optional input/output targeting is collapsed until requested.
 - **Graph Editor** opens a separate wide tab dominated by the typed-port canvas.
