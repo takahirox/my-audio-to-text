@@ -35,17 +35,33 @@ function simplify(points) {
   }
   return result;
 }
-export function roundedWirePath(points) {
+// A crossing is drawn as a short interruption in the *later* wire, not a
+// junction. Hit testing retains the full continuous path in GraphEditor.
+export function roundedWirePath(points, gaps = new Map()) {
+  const radius = i => i > 0 && i < points.length - 1
+    ? Math.min(6, Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y) / 2,
+      Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y) / 2) : 0;
   let d = `M${points[0].x},${points[0].y}`;
-  for (let i = 1; i < points.length - 1; i++) {
-    const a = points[i - 1], b = points[i], c = points[i + 1];
-    const before = Math.hypot(b.x - a.x, b.y - a.y), after = Math.hypot(c.x - b.x, c.y - b.y);
-    const radius = Math.min(6, before / 2, after / 2);
-    const p = { x: b.x + (a.x - b.x) * radius / before, y: b.y + (a.y - b.y) * radius / before };
-    const q = { x: b.x + (c.x - b.x) * radius / after, y: b.y + (c.y - b.y) * radius / after };
-    d += ` L${p.x},${p.y} Q${b.x},${b.y} ${q.x},${q.y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i], b = points[i + 1], length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (!length) continue;
+    const ux = (b.x - a.x) / length, uy = (b.y - a.y) / length;
+    const at = t => `${a.x + ux * t},${a.y + uy * t}`;
+    const end = length - radius(i + 1);
+    let cursor = radius(i);
+    for (const location of [...(gaps.get(i) || [])].sort((x, y) => x - y)) {
+      const before = location - 6, after = location + 6;
+      if (before <= cursor + 1 || after >= end - 1) continue;
+      d += ` L${at(before)} M${at(after)}`; cursor = after;
+    }
+    d += ` L${at(end)}`;
+    if (i < points.length - 2) {
+      const next = points[i + 2], nextLength = Math.hypot(next.x - b.x, next.y - b.y);
+      const r = radius(i + 1);
+      d += ` Q${b.x},${b.y} ${b.x + (next.x - b.x) * r / nextLength},${b.y + (next.y - b.y) * r / nextLength}`;
+    }
   }
-  return d + ` L${points.at(-1).x},${points.at(-1).y}`;
+  return d;
 }
 class MinHeap {
   items = [];
@@ -83,13 +99,69 @@ export function createWireRouter(cards, connections, { maxVisits = MAX_VISITS, m
   const sorted = values => [...new Set(values.filter(v => v >= 0))].sort((a, b) => a - b);
   const xs = sorted([0, ...obstacles.flatMap(r => [r.left, r.right]), ...terminals.flatMap(t => [t.start.x, t.end.x]),
     Math.max(0, ...obstacles.map(r => r.right), ...terminals.map(t => t.end.x)) + 32]);
-  const ys = sorted([0, ...obstacles.flatMap(r => [r.top, r.bottom]), ...terminals.flatMap(t => [t.start.y, t.end.y]),
+  // Give parallel wires distinct horizontal lanes without moving cards. If
+  // additional lanes would exceed the original search budget, use the base grid.
+  const baseYs = sorted([0, ...obstacles.flatMap(r => [r.top, r.bottom]), ...terminals.flatMap(t => [t.start.y, t.end.y]),
     Math.max(0, ...obstacles.map(r => r.bottom), ...terminals.map(t => t.end.y)) + 32]);
+  const extraYs = sorted([...baseYs, ...terminals.flatMap(t => [t.start.y - 16, t.start.y + 16, t.end.y - 16, t.end.y + 16])]);
+  const ys = xs.length * extraYs.length <= MAX_GRID ? extraYs : baseYs;
   const size = xs.length * ys.length, bounded = size <= MAX_GRID;
   const rows = bounded ? ys.map(y => obstacles.filter(r => y > r.top && y < r.bottom)) : [];
   const columns = bounded ? xs.map(x => obstacles.filter(r => x > r.left && x < r.right)) : [];
   const visibility = bounded ? new Map() : null;
   let totalVisits = 0;
+  const earlierSegments = [];
+  const EPS = 0.01;
+  const between = (v, a, b, margin = 0) => v > Math.min(a, b) + margin && v < Math.max(a, b) - margin;
+  function segments(points) {
+    return points.slice(1).map((b, i) => ({ a: points[i], b })).filter(({ a, b }) =>
+      a.x === b.x || a.y === b.y);
+  }
+  // A* routing cost includes already accepted paths: shared/nearby long runs
+  // are much less readable than a few additional bends or crossings.
+  function trafficCost(a, b) {
+    const horizontal = a.y === b.y;
+    let cost = 0;
+    for (const seg of earlierSegments) {
+      const otherHorizontal = seg.a.y === seg.b.y;
+      if (horizontal === otherHorizontal) {
+        const separation = Math.abs(horizontal ? a.y - seg.a.y : a.x - seg.a.x);
+        if (separation > 12) continue;
+        const lo = horizontal ? Math.max(Math.min(a.x, b.x), Math.min(seg.a.x, seg.b.x))
+          : Math.max(Math.min(a.y, b.y), Math.min(seg.a.y, seg.b.y));
+        const hi = horizontal ? Math.min(Math.max(a.x, b.x), Math.max(seg.a.x, seg.b.x))
+          : Math.min(Math.max(a.y, b.y), Math.max(seg.a.y, seg.b.y));
+        if (hi > lo + EPS) cost += (hi - lo) * (separation < EPS ? 4 : 0.65);
+      } else {
+        const h = horizontal ? { a, b } : seg, v = horizontal ? seg : { a, b };
+        if (between(v.a.x, h.a.x, h.b.x) && between(h.a.y, v.a.y, v.b.y)) cost += 34;
+      }
+    }
+    return cost;
+  }
+  // Intersections are acceptable, but never draw a crossing as a junction:
+  // the later wire has a visible break while the earlier wire stays continuous.
+  function crossingGaps(points) {
+    const gaps = new Map();
+    segments(points).forEach(({ a, b }, i) => {
+      for (const other of earlierSegments) {
+        if ((a.y === b.y) === (other.a.y === other.b.y)) continue;
+        const h = a.y === b.y ? { a, b } : other, v = a.x === b.x ? { a, b } : other;
+        if (!between(v.a.x, h.a.x, h.b.x, 8) || !between(h.a.y, v.a.y, v.b.y, 8)) continue;
+        const point = { x: v.a.x, y: h.a.y };
+        const distance = Math.hypot(point.x - a.x, point.y - a.y);
+        if (!gaps.has(i)) gaps.set(i, []);
+        gaps.get(i).push(distance);
+      }
+    });
+    return gaps;
+  }
+  function reserve(route) {
+    if (route.fallback) return route;
+    const visualD = roundedWirePath(route.points, crossingGaps(route.points));
+    earlierSegments.push(...segments(route.points));
+    return { ...route, visualD };
+  }
   function visible(a, b, horizontal) {
     const key = Math.min(a, b) * 2 + (horizontal ? 0 : 1);
     if (visibility.has(key)) return visibility.get(key);
@@ -99,6 +171,7 @@ export function createWireRouter(cards, connections, { maxVisits = MAX_VISITS, m
     visibility.set(key, clear); return clear;
   }
   return {
+    reuse(route) { return reserve(route); },
     route(index) {
       const { start, end, from, to } = connections[index], t = terminals[index];
       const fallback = reason => ({ fallback: reason, points: [start, end],
@@ -127,7 +200,7 @@ export function createWireRouter(cards, connections, { maxVisits = MAX_VISITS, m
           }
           points.push(start); points.reverse();
           const simplified = simplify(points);
-          return { points: simplified, d: roundedWirePath(simplified), fallback: null };
+          return reserve({ points: simplified, d: roundedWirePath(simplified), fallback: null });
         }
         const x = id % xs.length, y = Math.floor(id / xs.length);
         for (const [next, direction] of [[x + 1 < xs.length ? id + 1 : -1, 0], [y + 1 < ys.length ? id + xs.length : -1, 1],
@@ -135,7 +208,8 @@ export function createWireRouter(cards, connections, { maxVisits = MAX_VISITS, m
           if (next < 0 || !visible(id, next, direction === 0)) continue;
           const state = next * 2 + direction;
           const cost = current.cost + (direction === 0 ? Math.abs(xs[next % xs.length] - xs[x]) : Math.abs(ys[Math.floor(next / xs.length)] - ys[y]))
-            + (direction === dir ? 0 : BEND_COST);
+            + (direction === dir ? 0 : BEND_COST)
+            + trafficCost({ x: xs[x], y: ys[y] }, { x: xs[next % xs.length], y: ys[Math.floor(next / xs.length)] });
           if (cost >= (distance.get(state) ?? Infinity)) continue;
           distance.set(state, cost); previous.set(state, current.state);
           queue.push({ state, cost, score: cost + estimate(next) });
