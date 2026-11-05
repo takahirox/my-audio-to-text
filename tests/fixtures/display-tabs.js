@@ -8,11 +8,11 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
     const a = graphNode('Text', 'a'), b = graphNode('Text', 'b');
     a.settings.value = Array.from({ length: 100 }, (_, i) => `Source ${i}`).join('\n');
     b.settings.value = a.settings.value.replaceAll('Source', 'Translation');
-    const main = graphNode('Display', 'main'), summary = graphNode('Display', 'summary');
-    main.settings = { title: 'Main', inputCount: 2 }; summary.settings.title = 'Summary';
-    const graph = { version: GRAPH_VERSION, nodes: [a, b, main, graphNode('TextSummaryLfm2', 'processor'), summary], edges: [
+    const main = graphNode('Display', 'main');
+    main.settings = { title: 'Main', inputCount: 3, inputLabels: { input1: 'Transcript', input2: 'Translation', input3: 'Summary' } };
+    const graph = { version: GRAPH_VERSION, nodes: [a, b, main, graphNode('TextSummaryLfm2', 'processor')], edges: [
       edge('a', 'value', 'main', 'input1'), edge('b', 'value', 'main', 'input2'),
-      edge('a', 'value', 'processor', 'text'), edge('processor', 'summary', 'summary', 'input1'),
+      edge('a', 'value', 'processor', 'text'), edge('processor', 'summary', 'main', 'input3'),
     ] };
     window.summaryRequests = []; window.copiedTexts = [];
     navigator.clipboard.writeText = async text => copiedTexts.push(text);
@@ -36,32 +36,37 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
     };
     await session.start();
   }, packaged);
-  const main = page.locator('[data-display="main"]'), summary = page.locator('[data-display="summary"]');
-  const left = main.locator('[data-port="input1"] .display-content'), right = main.locator('[data-port="input2"] .display-content');
-  const notes = summary.locator('.display-content'), tab = name => page.getByRole('tab', { name, exact: true });
+  const main = page.locator('[data-display="main"]');
+  const pane = port => main.locator(`[data-port="${port}"]`);
+  const left = pane('input1').locator('.display-content'), right = pane('input2').locator('.display-content');
+  const notes = pane('input3').locator('.display-content'), tab = name => main.getByRole('tab', { name, exact: true });
   const bottom = content => content.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop);
-  await expect(page.getByRole('tab')).toHaveCount(2); await expect(tab('Main')).toHaveAttribute('aria-selected', 'true');
-  await expect(tab('Main')).toHaveAttribute('tabindex', '0'); await expect(tab('Summary')).toHaveAttribute('tabindex', '-1');
-  expect(await tab('Main').getAttribute('aria-controls')).toBe(await main.getAttribute('id'));
-  await expect(main.getByRole('heading')).toHaveText(['Input 1', 'Input 2']);
-  await expect(summary).toBeHidden(); await expect(notes).toHaveAttribute('aria-live', 'off');
+  await expect(page.locator('.live-display')).toHaveCount(1);
+  await expect(page.getByRole('tab')).toHaveText(['Transcript', 'Translation', 'Summary']);
+  await expect(tab('Transcript')).toHaveAttribute('aria-selected', 'true');
+  await expect(tab('Transcript')).toHaveAttribute('tabindex', '0'); await expect(tab('Summary')).toHaveAttribute('tabindex', '-1');
+  expect(await tab('Transcript').getAttribute('aria-controls')).toBe(await pane('input1').getAttribute('id'));
+  await expect(pane('input2')).toBeHidden(); await expect(pane('input3')).toBeHidden();
+  await expect(notes).toHaveAttribute('aria-live', 'off');
   await expect(left).toContainText('Source 99'); await expect(right).toContainText('Translation 99');
   await expect(notes).toContainText('Source 99');
-  // Stable DOM, selection and focus survive unrelated pane updates.
+  // Stable DOM, selection and focus survive unrelated hidden input updates.
   await left.evaluate(el => {
     window.savedFlow = el.firstChild; window.savedContent = el; el.focus();
     const range = document.createRange(); range.selectNodeContents(el.firstChild);
     const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    window.savedPipeline = tabsFixture.session.session.pipeline;
   });
   await page.evaluate(() => tabsFixture.send('b', tabsFixture.long('new translation')));
   await expect(right).toContainText('new translation 119'); await expect(left).toBeFocused();
   expect(await left.evaluate(el => el === savedContent && el.firstChild === savedFlow && getSelection().toString().includes('Source 99'))).toBe(true);
-  // Establish independent intent in each tab, then update it while hidden.
   await left.evaluate(el => { getSelection().removeAllRanges(); el.scrollTop = 123; el.dispatchEvent(new Event('scroll')); });
-  await tab('Main').focus(); await tab('Main').press('ArrowRight');
-  await expect(tab('Summary')).toBeFocused();
+  await tab('Transcript').focus(); await tab('Transcript').press('ArrowRight');
+  await expect(tab('Translation')).toBeFocused(); await expect(right).toBeVisible();
+  await expect.poll(() => bottom(right)).toBeLessThanOrEqual(1);
+  await tab('Translation').press('End'); await expect(tab('Summary')).toBeFocused();
   expect(await tab('Summary').evaluate(el => getComputedStyle(el).outlineStyle !== 'none')).toBe(true);
-  await expect(summary).toBeVisible(); await expect(main).toBeHidden();
+  await expect(notes).toBeVisible(); await expect(left).toBeHidden();
   await expect(notes).toHaveAttribute('aria-live', 'polite');
   await expect.poll(() => bottom(notes)).toBeLessThanOrEqual(1);
   await notes.evaluate(el => { el.scrollTop = 87; el.dispatchEvent(new Event('scroll')); });
@@ -71,41 +76,50 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
   });
   await expect(left).toContainText('background source 149'); await expect(notes).toContainText('background source 149');
   const requests = await page.evaluate(() => summaryRequests.length);
-  await tab('Summary').press('Home'); await expect(tab('Main')).toBeFocused();
+  await tab('Summary').press('Home'); await expect(tab('Transcript')).toBeFocused();
   await expect.poll(() => left.evaluate(el => el.scrollTop)).toBeCloseTo(123, 0);
-  await expect.poll(() => bottom(right)).toBeLessThanOrEqual(1);
   await page.evaluate(() => tabsFixture.send('a', tabsFixture.long('hidden summary', 180)));
   await expect(notes).toContainText('hidden summary 179');
-  await tab('Main').press('End');
+  await tab('Transcript').press('End');
   await expect.poll(() => notes.evaluate(el => el.scrollTop)).toBeCloseTo(87, 0);
   expect(await page.evaluate(() => summaryRequests.length)).toBe(requests + 1);
-  // Clicking/touch-style selection is also presentation-only; wrap navigation.
-  await tab('Summary').press('ArrowRight'); await expect(tab('Main')).toBeFocused();
-  await main.locator('[data-port="input2"] button').click();
+  await tab('Summary').press('ArrowRight'); await expect(tab('Transcript')).toBeFocused();
+  await tab('Transcript').press('ArrowLeft'); await expect(tab('Summary')).toBeFocused();
+  await tab('Translation').click(); await expect(right).toBeVisible();
+  await expect.poll(() => bottom(right)).toBeLessThanOrEqual(1);
+  await pane('input2').getByRole('button').click();
   expect((await page.evaluate(() => copiedTexts.at(-1))).startsWith('background translation')).toBe(true);
-  await tab('Summary').click(); await summary.locator('button').click();
+  await tab('Summary').click(); await pane('input3').getByRole('button').click();
   expect((await page.evaluate(() => copiedTexts.at(-1))).startsWith('hidden summary')).toBe(true);
-  await tab('Main').click();
   for (const width of [1440, 390, 280]) {
     await page.setViewportSize({ width, height: 900 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    const boxes = await main.locator('.live-text-region').evaluateAll(panes => panes.map(el => {
-      const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right };
-    }));
-    expect(boxes[1].y === boxes[0].y).toBe(width === 1440);
-    expect(boxes.every(box => box.x >= 0 && box.right <= width)).toBe(true);
+    for (const [i, name] of ['Transcript', 'Translation', 'Summary'].entries()) {
+      await tab(name).click();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await expect(main.locator('.live-text-region:visible')).toHaveCount(1);
+      const boxes = await main.locator('.live-text-region').evaluateAll(panes => panes.map(el => {
+        const r = el.getBoundingClientRect(); return { x: r.x, width: r.width, right: r.right, height: r.height };
+      }));
+      expect(boxes[i].width).toBeGreaterThan(0); expect(boxes[i].x).toBeGreaterThanOrEqual(0); expect(boxes[i].right).toBeLessThanOrEqual(width);
+      expect(boxes.filter((_, index) => index !== i).every(box => box.width === 0 && box.height === 0)).toBe(true);
+    }
   }
-  // Literal safe data, one pair, a whole list and empty replacement stay local.
+  expect(await page.evaluate(() => tabsFixture.session.session.pipeline === savedPipeline)).toBe(true);
+  expect(await page.evaluate(() => summaryRequests.length)).toBe(requests + 1);
+  // Literal safe variants and empty replacements update only their own port.
   await page.evaluate(() => {
-    const pipeline = tabsFixture.session.session.pipeline, node = pipeline.entries.get('main');
+    const node = tabsFixture.session.session.pipeline.entries.get('main');
     node.node.receive('input1', [{ id: 2, first: '<img src=x>', second: '訳' }, { id: 1, first: 'B', second: '' }], node.context);
   });
+  await tab('Transcript').click();
   await expect(left.locator('td')).toHaveText(['<img src=x>', '訳', 'B', '']); await expect(main.locator('img')).toHaveCount(0);
   await page.evaluate(() => {
     const n = tabsFixture.session.session.pipeline.entries.get('main');
     n.node.receive('input1', { id: 1, first: 'only', second: '' }, n.context);
+    n.node.receive('input2', '', n.context);
   });
-  await expect(left.locator('tr')).toHaveCount(1);
+  await expect(left.locator('tr')).toHaveCount(1); await tab('Translation').click();
+  await expect(right).toBeEmpty(); await expect(pane('input2').getByRole('button')).toBeDisabled();
   for (const ending of ['stop', 'cancel']) {
     const retained = await left.textContent();
     await page.evaluate(ending => tabsFixture.end(ending), ending);

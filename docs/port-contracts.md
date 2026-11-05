@@ -26,7 +26,7 @@ runtime allocation remain specialized. See the [#134 audit](evidence/composition
 | Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source/text/error` and `provisionalSource/provisionalText/provisionalError`: two atomic TEXT output families | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
 | KeyedTextPair | independent id1/input1/id2/input2: NUMBER/TEXT → pair: KEYED_PAIRED_TEXT | Complete immutable same-ID pair; no DOM or history accumulation |
 | KeyedPairedTextAccumulator | pair: KEYED_PAIRED_TEXT → pairs: KEYED_PAIRED_TEXT_LIST | Generic ordered append/replace, full owned history snapshots, arrival order |
-| Display | Configurable input1…inputN: ITEM; no outputs | One Live tab with independent latest TEXT/pair/list panes; no accumulation or processing |
+| Display | Configurable input1…inputN: ITEM; no outputs | One Live view with a switchable tab per input, independent latest TEXT/pair/list snapshots, and only one visible panel; no accumulation or processing |
 | TextWindow | text: TEXT; optional maxChars: NUMBER, maxWaitSeconds: NUMBER → text: TEXT | Exact generic batching; independent defaults 600 / 1.5 s; length/time/Stop only; Stop flushes once, Cancel discards; no threshold Settings or preview output |
 | TextAccumulator | append: TEXT → text: TEXT | Exact newline-separated committed segments |
 | [TextSlidingWindow](text-sliding-window.md) | text: TEXT, optional maxChars: NUMBER → text: TEXT | Rolling bounded history; sentence/word eviction, code-point-safe suffix fallback; limit updates emit nothing |

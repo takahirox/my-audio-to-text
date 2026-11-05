@@ -1,7 +1,7 @@
 # Portable display items (#198)
 
 Use `Display.input1`, `input2`, … ITEM sinks for independently updating latest
-text, keyed pairs, or complete ordered pair histories within a Display tab. Processing and accumulation use portable data; browser
+text, keyed pairs, or complete ordered pair histories within an input tab of a Display view. Processing and accumulation use portable data; browser
 rendering belongs inside Display.
 
 | Concrete contract | Value |
@@ -115,3 +115,9 @@ legacy mode or accumulating display variant.
 Validation uses unit contracts, editor/runtime tests, browser rendering and
 controlled module Workers. These checks cover composition and lifecycle, without
 claiming real model inference or a native host renderer.
+
+Display has one switchable tab per `input1…inputN` port, showing only the selected
+input at any width. Edit each tab label in Settings; blank labels use `Input N`.
+Pair-table cells belong to one input snapshot, not to separate Display inputs.
+See [Display input tabs](extension-graph.md) and the
+[three-tab example](examples/display-tabs.json).
