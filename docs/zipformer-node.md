@@ -18,7 +18,7 @@ SpeechToTextZipformerEn.finalId/final → KeyedTextCoalesce.id1/input1
 SpeechToTextZipformerEn.provisionalId/provisional → KeyedTextCoalesce.id2/input2
 KeyedTextCoalesce.id/text → KeyedTextPair.id1/input1
 KeyedTextPair.pair → KeyedPairedTextAccumulator.pair
-KeyedPairedTextAccumulator.pairs → Display.input
+KeyedPairedTextAccumulator.pairs → Display.input1
 ```
 
 Save, then Start in Live. Selected media and microphone sources provide the same
@@ -166,4 +166,4 @@ snapshot** decoding and its Number-configured cap. Whisper still exposes
 online acoustic/decoder state between incoming blocks within each capped segment;
 its provisional output comes from that real incremental inference.
 
-Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.

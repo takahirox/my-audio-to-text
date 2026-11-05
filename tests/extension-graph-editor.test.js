@@ -72,11 +72,11 @@ test('Whisper editor rejects provisional and accepts final directly into Display
   graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript');
   const e = editor(graph), before = structuredClone(graph.edges);
   e.selected = { id: 'speech', port: 'provisional', contract: NODE_TYPES.SpeechToTextWhisper.outputs.final };
-  e.connect('transcript', 'input', NODE_TYPES.Display.inputs.input);
+  e.connect('transcript', 'input1', NODE_TYPES.Display.inputs.input1);
   assert.match(e.error, /Unknown port: speech.provisional → transcript.input/);
   assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'transcript', 'input');
-  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript', 'input')]);
+  connect(e, 'speech', 'final', 'transcript', 'input1');
+  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript', 'input1')]);
 });
 
 
@@ -84,14 +84,14 @@ test('formatter Add/Remove changes only that instance and the removed last wire;
   const graph = defaultGraph(); graph.nodes.push(graphNode('TextFormatter', 'a'), graphNode('TextFormatter', 'b'));
   graph.edges.push(edge('speech', 'final', 'a', 'input1'), edge('speech', 'final', 'a', 'input4'), edge('speech', 'final', 'b', 'input4'));
   const e = editor(graph), a = graph.nodes.at(-2), b = graph.nodes.at(-1);
-  for (let i = 0; i < 3; i++) e.resizeFormatter(a, 1);
+  for (let i = 0; i < 3; i++) e.resizeInputs(a, 1);
   assert.equal(a.settings.inputCount, 7); assert.equal(b.settings.inputCount, 4);
   assert.equal(Object.keys(nodeDefinition(a).inputs).length, 7);
-  a.settings.template = '{7}\n{1}'; e.resizeFormatter(a, -1);
+  a.settings.template = '{7}\n{1}'; e.resizeInputs(a, -1);
   assert.equal(a.settings.template, '{7}\n{1}'); assert.match(validateGraph(graph).join(' '), /Input \{7\} is not configured/);
   assert.equal(graph.edges.length, 12, 'unaffected wires preserved');
-  e.resizeFormatter(a, 1); assert.deepEqual(validateGraph(graph), []);
-  for (let i = 0; i < 4; i++) e.resizeFormatter(a, -1);
+  e.resizeInputs(a, 1); assert.deepEqual(validateGraph(graph), []);
+  for (let i = 0; i < 4; i++) e.resizeInputs(a, -1);
   assert.equal(a.settings.inputCount, 3);
   assert.ok(graph.edges.some(route => route.to[0] === 'a' && route.to[1] === 'input1'));
   assert.ok(!graph.edges.some(route => route.to[0] === 'a' && route.to[1] === 'input4'));

@@ -22,8 +22,8 @@ export async function checkTranslationPorts(page, type, base = './') {
     nodes[0].settings.value = 'seed';
     const graph = { version: GRAPH_VERSION, nodes, edges: [
       edge('final', 'value', 'translator', 'text'), edge('draft', 'value', 'translator', 'provisional'),
-      edge('translator', 'text', 'history', 'append'), edge('history', 'text', 'committed', 'input'),
-      edge('translator', 'provisionalText', 'preview', 'input'),
+      edge('translator', 'text', 'history', 'append'), edge('history', 'text', 'committed', 'input1'),
+      edge('translator', 'provisionalText', 'preview', 'input1'),
     ] };
     saveGraph(localStorage, graph);
     const saved = localStorage.getItem('processing-graph-v1'), runs = [];

@@ -368,8 +368,8 @@ test('native tab capture and permitted microphone run together; tab navigation d
     const graph = defaultGraph();
     graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextReazonSpeech','local-asr'),graphNode('Display','local'),
       graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextReazonSpeech','copy-asr'),graphNode('Display','copy-display'),graphNode('TextAccumulator','local-accumulator'),graphNode('TextAccumulator','copy-accumulator'));
-    graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local-accumulator','append'),edge('local-accumulator','text','local','input'),
-      edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-accumulator','append'),edge('copy-accumulator','text','copy-display','input'));
+    graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local-accumulator','append'),edge('local-accumulator','text','local','input1'),
+      edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-accumulator','append'),edge('copy-accumulator','text','copy-display','input1'));
     saveGraph(localStorage, (graph));window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));
     const NativeWorker=Worker;window.concurrentWorkers=[];
     window.Worker=class extends NativeWorker {

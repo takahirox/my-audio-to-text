@@ -91,7 +91,7 @@ for (const reverse of [false, true]) test(`independent NUMBER/TEXT sources and g
 });
 test('unfinished branches stay saveable; either complete branch is executable', () => {
   const graph = { version: GRAPH_VERSION, nodes: [graphNode('Number', 'id'), graphNode('Text', 'text'), graphNode('KeyedTextPair', 'pair'), graphNode('Display', 'display')],
-    edges: [edge('id', 'value', 'pair', 'id1'), edge('pair', 'pair', 'display', 'input')] };
+    edges: [edge('id', 'value', 'pair', 'id1'), edge('pair', 'pair', 'display', 'input1')] };
   assert.match(graphWarnings(graph).join(), /pair needs an ID\/TEXT pair/);
   assert.equal(executableGraph(graph).nodes.length, 0);
   graph.edges.push(edge('text', 'value', 'pair', 'input1'));

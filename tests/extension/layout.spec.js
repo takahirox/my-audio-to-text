@@ -48,7 +48,7 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
     const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode('Display', 'value'), graphNode('OpusMtJaEn', 'forward'), graphNode('OpusMtEnJa', 'reverse'), graphNode('Display', 'forward-output'), graphNode('Display', 'reverse-output'));
-    graph.edges.push(edge('speech', 'final', 'value', 'input'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'input'), edge('reverse', 'text', 'reverse-output', 'input'));
+    graph.edges.push(edge('speech', 'final', 'value', 'input1'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'input1'), edge('reverse', 'text', 'reverse-output', 'input1'));
     saveGraph(localStorage, (graph));
   });
   await editor.reload();
@@ -57,12 +57,13 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
   await expect(editor.locator('#graph-translation')).toHaveCount(0);
   await startGraph(live); await emitFinal(live, '<em>committed</em>');
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'pending' }));
-  await expect(live.locator('[data-display="transcript"]').getByLabel('Content', { exact: true })).toHaveText('<em>committed</em>\npending');
+  await expect(live.locator('[data-display="transcript"] tr td:first-child')).toHaveText(['<em>committed</em>', 'pending']);
   await expect(live.locator('[data-display="value"]').getByLabel('Content', { exact: true })).toHaveText('<em>committed</em>');
   await expect(live.locator('#live-displays em')).toHaveCount(0);
   expect(await live.locator('#live-displays').evaluate(root => !!(document.querySelector('.capture-panel').compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   await expect(live.locator('#targets')).not.toHaveAttribute('open', '');
   await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
   await live.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(live.locator('[data-display="transcript"] .display-content')).toHaveText('<em>committed</em>');
+  // Cancel retains the latest complete keyed history, including its last preview row.
+  await expect(live.locator('[data-display="transcript"] tr td:first-child')).toHaveText(['<em>committed</em>', 'pending']);
 });

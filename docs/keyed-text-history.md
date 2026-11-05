@@ -35,10 +35,10 @@ Cancel, abort and dispose reject late work; a fresh Start rejects old contexts.
 
 ## History and rendering
 
-Connect pair → KeyedPairedTextAccumulator.pair → pairs → Display.input for
+Connect pair → KeyedPairedTextAccumulator.pair → pairs → Display.input1 for
 continuous ordered history. The accumulator appends new IDs and replaces existing
 IDs in place, emitting the complete list. It has no priority or ASR-specific rule.
 Display renders the complete supplied TEXT, pair or list without accumulating.
-For latest plain text, connect any TEXT output directly to Display.input.
+For latest plain text, connect any TEXT output directly to Display.input1.
 
 See [display item contracts and lifecycle](display-items.md).

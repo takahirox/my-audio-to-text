@@ -78,7 +78,7 @@ test('Display accepts TEXT and pair snapshots literally and replaces complete hi
     const graph = { nodes: [{ id: 'text', type: 'Display', settings: {} }] }, root = document.querySelector('#live-displays');
     const context = { signal: new AbortController().signal };
     window.display = new DisplayNode(dom => renderTextRegions(root, graph, { text: dom })); display.start(context);
-    window.renderItem = value => display.receive('input', value, context);
+    window.renderItem = value => display.receive('input1', value, context);
   });
   const content = page.locator('.display-content');
   await page.evaluate(() => renderItem('<b>literal</b>\n日本語')); await expect(content).toHaveText('<b>literal</b>\n日本語');

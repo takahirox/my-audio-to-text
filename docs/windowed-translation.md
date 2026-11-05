@@ -13,12 +13,12 @@ Connect these named ports:
 ASR.final → TextWindow.text
 TextWindow.text → TranslateGemmaEnJa.text
 TranslateGemmaEnJa.text → TextAccumulator.append
-TextAccumulator.text → Display.input
+TextAccumulator.text → Display.input1
 ```
 
 Any existing translator accepts TextWindow.text. To translate each ASR segment
 without batching, connect ASR.final directly to Translator.text. To show only the
-latest translation, connect Translator.text directly to Display.input.
+latest translation, connect Translator.text directly to Display.input1.
 TextAccumulator is the explicit history processor; Display renders complete
 snapshots without retaining history itself.
 
@@ -81,9 +81,9 @@ Use one translator for both committed text and replaceable previews:
 
 ```text
 ASR.final → TextWindow.text → Translator.text → TextAccumulator.append
-TextAccumulator.text → Display.input
+TextAccumulator.text → Display.input1
 ASR.provisional (or explicit TEXT snapshots) → Translator.provisional
-Translator.provisionalText → PreviewDisplay.input
+Translator.provisionalText → PreviewDisplay.input1
 ```
 
 Translator means OpusMtEnJa, OpusMtJaEn, TranslateGemmaEnJa or TranslateGemmaJaEn.

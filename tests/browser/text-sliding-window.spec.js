@@ -35,7 +35,7 @@ test('processor palette connects TEXT/NUMBER, saves, reloads and runs the rollin
   await port('source output value').click();
   await expect(port('textslidingwindow input maxChars')).toBeDisabled();
   await port('textslidingwindow input text').click();
-  await port('textslidingwindow output text').click(); await port('display input input').click();
+  await port('textslidingwindow output text').click(); await port('display input input1').click();
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   await expect(page.locator('#graph-errors')).toBeEmpty();
   const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));

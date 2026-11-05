@@ -25,7 +25,7 @@ async function setup(f, type, phase) {
     const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode(type, 'summary'), graphNode('Display', 'notes'));
-    graph.edges.push(edge('speech', 'final', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input'));
+    graph.edges.push(edge('speech', 'final', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input1'));
     saveGraph(localStorage, graph);
   }, type);
   return page;

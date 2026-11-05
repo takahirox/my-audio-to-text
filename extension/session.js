@@ -120,8 +120,8 @@ export class TabSession {
           else if (['progress', 'ready'].includes(event.type) && this.view.state === 'running') this.update({ signal: this.sourceStatus(session) });
           else if (event.type === 'error' && session.pipeline?.state === 'idle') this.update({ error: [this.view.error, `${id}: ${event.message}`].filter(Boolean).join('\n') });
         },
-        onDisplay: (id, state) => {
-          if (this.session === session || (!this.session && this.canceling === session)) this.update({ displays: { ...this.view.displays, [id]: state } });
+        onDisplay: (id, state, port) => {
+          if (this.session === session || (!this.session && this.canceling === session)) this.update({ displays: { ...this.view.displays, [id]: { ...this.view.displays[id], [port]: state } } });
         },
         onCapturedAudio: (pcm, id) => {
           if (this.session !== session) return;

@@ -39,7 +39,7 @@ export async function seedConditionGraph(editor) {
     const {defaultGraph,graphNode,edge,saveGraph}=await import('./graph.js');
     const g=defaultGraph();g.nodes.push(graphNode('IfCondition','condition',500,300),graphNode('Display','yes',850,300),graphNode('Display','no',850,600),graphNode('TextAccumulator','yes-acc'),graphNode('TextAccumulator','no-acc'));
 
-    g.edges.push(edge('speech','final','condition','text'),edge('condition','yes','yes-acc','append'),edge('condition','no','no-acc','append'),edge('yes-acc','text','yes','input'),edge('no-acc','text','no','input'));
+    g.edges.push(edge('speech','final','condition','text'),edge('condition','yes','yes-acc','append'),edge('condition','no','no-acc','append'),edge('yes-acc','text','yes','input1'),edge('no-acc','text','no','input1'));
     saveGraph(localStorage, (g));
   });
   await editor.reload();

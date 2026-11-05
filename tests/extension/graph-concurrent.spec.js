@@ -9,7 +9,7 @@ async function saveConcurrent(page) {
     const graph = defaultGraph();
     graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextWhisper', 'local'), graphNode('Display', 'local-display'),
       graphNode('MicrophoneAudio', 'parked-mic'), graphNode('Kokoro', 'parked-tts'), graphNode('SpeechToTextWhisper', 'unfinished-model'));
-    graph.edges.push(edge('mic', 'audio', 'local', 'audio'), edge('local', 'final', 'local-display', 'input'));
+    graph.edges.push(edge('mic', 'audio', 'local', 'audio'), edge('local', 'final', 'local-display', 'input1'));
     saveGraph(localStorage, (graph)); return graph;
   });
 }
@@ -138,7 +138,7 @@ test('MV3 TEXT-only path starts without a toolbar tab or microphone permission',
   await page.evaluate(async () => {
     const { graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
     const text = graphNode('Text', 'text'); text.settings.value = 'Independent text path';
-    saveGraph(localStorage, ({ version: 15, nodes: [text, graphNode('Display', 'display')], edges: [edge('text', 'value', 'display', 'input')] }));
+    saveGraph(localStorage, ({ version: 15, nodes: [text, graphNode('Display', 'display')], edges: [edge('text', 'value', 'display', 'input1')] }));
     window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
     navigator.mediaDevices.getUserMedia = () => { throw Error('No microphone permission should be requested'); };
   });

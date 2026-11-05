@@ -53,7 +53,7 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   await editor.getByLabel('number value', { exact: true }).fill('1.25');
   await editor.getByRole('button', { name: 'number output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
-  await expect(editor.getByRole('button', { name: 'transcript input input', exact: true })).toBeDisabled();
+  await expect(editor.getByRole('button', { name: 'transcript input input1', exact: true })).toBeDisabled();
   await editor.getByRole('button', { name: 'speech input maxDuration', exact: true }).click();
   await expect(editor.locator('#graph-errors')).toBeEmpty(); await save(editor);
   await editor.reload(); await editor.getByRole('button', { name: 'Select number', exact: true }).click();
@@ -70,10 +70,10 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   await editor.getByLabel('number value', { exact: true }).fill('2.5'); await save(editor);
   await expect(editor.locator('#graph-state')).toContainText('earlier graph');
   await feed(page, 36000, .06);
-  await expect(page.locator('.display-content')).toHaveText(['segment 1: 20000', 'segment 2: 20000'].join('\n'));
+  await expect(page.locator('.display-content tr td:first-child')).toHaveText(['segment 1: 20000', 'segment 2: 20000']);
 
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  await expect(page.locator('.display-content')).toHaveText(['segment 1: 20000', 'segment 2: 20000', 'segment 3: 4037'].join('\n'));
+  await expect(page.locator('.display-content tr td:first-child')).toHaveText(['segment 1: 20000', 'segment 2: 20000', 'segment 3: 4037']);
   const finals = await page.evaluate(() => window.decodeRequests.filter(m => m.final));
   expect(finals.map(m => m.id)).toEqual([1, 2, 3]);
   const samples = finals.flatMap(m => m.audio);

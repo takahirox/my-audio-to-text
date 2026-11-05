@@ -18,7 +18,7 @@ test('IfCondition palette/settings/wires persist; preparation verifies, cancels,
  await openPalette(editor);await editor.locator('#graph-node-type').selectOption('IfCondition');await editor.locator('#graph-add').click();
  await editor.getByLabel('ifcondition condition',{exact:true}).fill('Does this text mention an animal?');
  await editor.getByRole('button',{name:'speech output final',exact:true}).click();await editor.getByRole('button',{name:'ifcondition input text',exact:true}).click();
- await editor.getByRole('button',{name:'ifcondition output yes',exact:true}).click();await editor.getByRole('button',{name:'transcript input input',exact:true}).click();
+ await editor.getByRole('button',{name:'ifcondition output yes',exact:true}).click();await editor.getByRole('button',{name:'transcript input input1',exact:true}).click();
  f.mode('corrupt');await save(editor);await expect(card(editor)).toHaveAttribute('data-state','Error');
  await editor.reload();await editor.getByRole('button',{name:'Select ifcondition',exact:true}).click();
  await expect(editor.getByLabel('ifcondition condition',{exact:true})).toHaveValue('Does this text mention an animal?');
@@ -44,7 +44,7 @@ for(const text of ['uncertain-fixture','error-fixture','long-token-fixture'])tes
  await conditionAssets(f);const page=await openGraph(f);await trackPipeline(page);await seedConditionGraph(page.editor);await save(page.editor);await expect(card(page.editor)).toHaveAttribute('data-state','Ready');await startGraph(page);
  await emitFinal(page,text);await expect(page.locator('#condition-status')).toContainText('unavailable');await expect(items(page,'yes')).toBeEmpty();await expect(items(page,'no')).toBeEmpty();
  await expectFailure(page);
- await emitFinal(page,'peer still alive');await expect(items(page,'transcript')).toHaveText([text,'peer still alive'].join('\n'));await expect(page.locator('#status')).toHaveText('Transcription active');
+ await emitFinal(page,'peer still alive');await expect(items(page,'transcript').locator('tr td:first-child')).toHaveText([text,'peer still alive']);await expect(page.locator('#status')).toHaveText('Transcription active');
  await page.locator(text==='error-fixture'?'#stop':'#cancel-session').click();await expect(page.locator('#start')).toBeEnabled();
  if(text==='error-fixture')await expect(page.locator('#status')).toHaveText('Stopped. Outputs are ready.');
  expect(await page.evaluate(()=>window.graphWorkers.every(w=>w.released))).toBe(true);

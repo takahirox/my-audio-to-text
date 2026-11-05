@@ -77,7 +77,7 @@ for (const mode of ['normal', 'missing-gpu', 'no-adapter', 'inference-error', 'c
     const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemmaEnJa', 'gemma'),
       graphNode('TextFormatter', 'format'), graphNode('Display', 'paired'), graphNode('Display', 'plain')], edges: [
       edge('input', 'value', 'gemma', 'text'), edge('gemma', 'source', 'format', 'input1'), edge('gemma', 'text', 'format', 'input2'), edge('gemma', 'error', 'format', 'input3'),
-      edge('format', 'text', 'paired', 'input'), edge('gemma', 'text', 'plain', 'input'),
+      edge('format', 'text', 'paired', 'input1'), edge('gemma', 'text', 'plain', 'input1'),
     ] };
     graph.nodes[0].settings.value = mode === 'inference-error' ? 'fail' : mode === 'cancel' ? 'slow' : 'Hello';
     graph.nodes[2].settings.template = '{1}|{2}|{3}';
@@ -115,7 +115,7 @@ for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']) test(`${type}: 
   const result = await live.evaluate(async type => {
     const { graphNode, edge } = await import('./graph.js'); const { buildGraph } = await import('./graph-runtime.js');
     const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'gemma'), graphNode('Display', 'out')],
-      edges: [edge('input', 'value', 'gemma', 'text'), edge('context', 'value', 'gemma', 'context'), edge('gemma', 'text', 'out', 'input')] };
+      edges: [edge('input', 'value', 'gemma', 'text'), edge('context', 'value', 'gemma', 'context'), edge('gemma', 'text', 'out', 'input1')] };
     const outputs = [], built = buildGraph(graph, { onDisplay: (_, dom) => outputs.push(dom.textContent) });
     try {
       await built.pipeline.start(); await built.translations[0].ready;

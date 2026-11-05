@@ -89,7 +89,7 @@ test('Text is generic, literal, empty-safe and round-trips; ordinary consumers r
   for (const value of ['', 'en', 'ja', '<script>&"\n😀 {1}']) {
     const graph = defaultGraph(); graph.nodes.push(graphNode('Text', 'literal'));
     graph.nodes.at(-1).settings.value = value;
-    graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); graph.edges.push(edge('literal', 'value', 'transcript', 'input'));
+    graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript'); graph.edges.push(edge('literal', 'value', 'transcript', 'input1'));
     const storage = store(); saveGraph(storage, (graph)); assert.deepEqual(readGraph(storage), graph);
     const received = []; const node = new TextNode(readGraph(storage).nodes.find(node => node.id === 'literal').settings);
     assert.equal(node.outputs.value, TEXT); node.start({ emit: (port, text) => received.push([port, text]) });

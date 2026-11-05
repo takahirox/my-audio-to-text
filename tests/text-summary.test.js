@@ -231,7 +231,7 @@ test('concurrent processors own independent Workers, languages and notes while s
   const g = summaryGraph('TextSummaryLfm2'), second = graphNode('TextSummaryQwen35', 'second');
   second.settings.language = 'en';
   g.nodes.push(second, graphNode('Display', 'english'));
-  g.edges.push({ from: ['input', 'value'], to: ['second', 'text'] }, { from: ['second', 'summary'], to: ['english', 'input'] });
+  g.edges.push({ from: ['input', 'value'], to: ['second', 'text'] }, { from: ['second', 'summary'], to: ['english', 'input1'] });
   const workers = [], displays = {};
   const built = buildGraph((g), { textSummaryWorkerFactory: () => {
     const f = fixture(workers.length ? 'TextSummaryQwen35' : 'TextSummaryLfm2'); workers.push(f); return f.worker;

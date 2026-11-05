@@ -13,7 +13,7 @@ before model loading with instructions to correct the value or disconnect the co
 Remove ReazonSpeech, add Whisper, connect the audio source's `audio` to Whisper's
 `audio`, and connect `final → TextAccumulator.append` only. Multiple independent ASRs are
 allowed. Whisper's final text can also feed the existing TextFormatter, OPUS-MT, focused-field output or TTS
-ports directly. You can deliberately connect final to `Display.input`
+ports directly. You can deliberately connect final to `Display.input1`
 for latest-value replacement instead of committed history. No translator is
 required. Remove any old maxDuration edge and unused Number Node when replacing ReazonSpeech; Whisper has a fixed 6-second
 cap. Defaults/reset still use ReazonSpeech.
@@ -131,4 +131,4 @@ supported here in desktop Chrome MV3; WebKit cannot load this extension and has
 no Whisper support claim. Real fixtures and models must be prepared before the
 opt-in check; otherwise its explicit skip is not evidence of passing inference.
 
-Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.

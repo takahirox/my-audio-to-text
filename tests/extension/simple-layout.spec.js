@@ -1,6 +1,6 @@
 import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './graph-fixture.js';
 
-test('Simple lays out 0, 1, 2 and 4 saved displays at narrow and wide sizes with keyboard scrolling', async ({ graphExtension: f }) => {
+test('Simple shows 0, 1, 2 and 4 Display tabs at narrow and wide sizes with keyboard scrolling', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
   for (const count of [0, 1, 2, 4]) {
     await live.editor.evaluate(async count => {
@@ -30,8 +30,8 @@ test('Simple lays out 0, 1, 2 and 4 saved displays at narrow and wide sizes with
         await content.focus(); await content.press('ArrowDown');
         await expect.poll(() => content.evaluate(root => root.scrollTop)).toBeGreaterThan(0);
         expect(await content.evaluate(root => root.scrollWidth <= root.clientWidth)).toBe(true);
-        const boxes = await live.locator('.live-text-region').evaluateAll(regions => regions.map(root => ({ x: root.offsetLeft, y: root.offsetTop })));
-        if (count > 1) expect(boxes[1].y === boxes[0].y).toBe(width === 1440);
+        await expect(live.locator('.live-text-region:visible')).toHaveCount(1);
+        await expect(live.getByRole('tab')).toHaveCount(count > 1 ? count : 0);
         // Inspect the normal compact header/control area, not a page scrolled to its output.
         await live.evaluate(() => scrollTo(0, 0));
       }
@@ -64,7 +64,7 @@ test('Simple hides routine details but keeps unknown diagnostics, recovery and n
   await live.editor.getByRole('button', { name: 'Select transcript', exact: true }).press('ArrowRight');
   await live.editor.locator('#graph-save').click();
   await expect(live.locator('#saved-state')).toBeVisible();
-  await expect(live.locator('.display-label')).toHaveText('Text');
+  await expect(live.locator('.display-label')).toHaveText('Input 1');
   await expect(live.locator('#stop')).toBeEnabled();
   await expect(live.locator('#start')).toBeDisabled();
   await live.locator('#cancel-session').click();

@@ -18,7 +18,7 @@ test('KeyedTextCoalesce palette, independent wiring, Help, save/reload and runti
       graphNode('KeyedTextPair', 'pair', 650),
       graphNode('Display', 'paired-display', 980), graphNode('Display', 'plain-display', 980, 400)];
     nodes[0].settings.value = 10; nodes[1].settings.value = ''; nodes[2].settings.value = 'backup';
-    saveGraph(localStorage, { version: GRAPH_VERSION, nodes, edges: [edge('pair', 'pair', 'paired-display', 'input')] });
+    saveGraph(localStorage, { version: GRAPH_VERSION, nodes, edges: [edge('pair', 'pair', 'paired-display', 'input1')] });
     localStorage.setItem('processing-graph-before-v14', 'original backup');
   });
   await page.reload(); await openPalette(page);
@@ -39,7 +39,7 @@ test('KeyedTextCoalesce palette, independent wiring, Help, save/reload and runti
   await port('backup output value').click(); await port('keyedtextcoalesce input input2').click();
   await port('keyedtextcoalesce output id').click(); await port('pair input id1').click();
   await port('keyedtextcoalesce output text').click(); await port('pair input input1').click();
-  await port('keyedtextcoalesce output text').click(); await port('plain-display input input').click();
+  await port('keyedtextcoalesce output text').click(); await port('plain-display input input1').click();
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   await expect(page.locator('#graph-errors')).toBeEmpty();
   const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));

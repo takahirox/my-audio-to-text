@@ -106,7 +106,8 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await editor.locator('#graph-palette-toggle').click();
   await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
   await expect(editor.getByRole('complementary', { name: 'Graph details inspector' })).toContainText('Display');
-  await expect(editor.locator('.graph-inspector')).toContainText('This Node has no configurable settings.');
+  await expect(editor.getByLabel('transcript title', { exact: true })).toHaveValue('');
+  await expect(editor.getByLabel('transcript Add input', { exact: true })).toBeEnabled();
   await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toContainText('text');
   await disconnectWire(editor, 'audio.audio to speech.audio');
   const output = editor.getByRole('button', { name: 'audio output audio', exact: true });
@@ -146,7 +147,7 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'Current fixture utterance…' }));
   await expect(live.locator('[data-display="transcript"] .display-content')).toHaveCount(1);
   await expect(live.locator('[data-display="transcript"] .display-content')).toHaveText('Completed fixture utterance.Current fixture utterance…');
-  await expect(live.getByRole('heading', { name: 'Text', exact: true })).toBeVisible();
+  await expect(live.getByRole('heading', { name: 'Input 1', exact: true })).toBeVisible();
   await live.setViewportSize({ width: 620, height: 900 });
   await live.editor.setViewportSize({ width: 1440, height: 1000 });
   await live.models.setViewportSize({ width: 1200, height: 1000 });

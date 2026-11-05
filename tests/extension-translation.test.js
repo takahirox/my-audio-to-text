@@ -181,7 +181,7 @@ test('scheduler accepts only TEXT and emits successful strings once to independe
 test('multiple translator runtime statuses retain each branch failure independently of Live labels', async () => {
   const f = sessionFixture(), graph = defaultGraph({ enabled: true });
   graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('Display', 'reverse-display'));
-  graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'input'));
+  graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'input1'));
   f.session.prepareTranslation = async (signal, direction) => { if (direction === 'ja-en') throw Error('Forward cache unavailable'); };
   f.session.setGraph((graph)); await f.session.start(42); await tick();
   assert.match(f.session.view.translationStatus, /translation: Translation unavailable: Forward cache unavailable/);
