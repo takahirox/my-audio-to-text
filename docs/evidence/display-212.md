@@ -1,4 +1,9 @@
-# Display tabs and ITEM columns (#212)
+# Historical Display tabs and ITEM columns (#212)
+
+**Superseded by [#216](display-216.md).** The node-to-tab and input-to-column
+presentation recorded below was incorrect. Current Display tabs come from input
+ports; the updated example and test fixtures implement that corrected contract.
+These screenshots and test counts are historical, not evidence of current UX.
 
 Validated on 2026-11-05 with Playwright 1.63.0, Chromium 153.0.8010.12 and
 WebKit 26.6 on macOS. All checks below were local; nothing was pushed or published.

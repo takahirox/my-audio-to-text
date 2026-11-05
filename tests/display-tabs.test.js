@@ -52,7 +52,7 @@ test('Display conversion preserves IDs, unrelated Hold.input, settings, source d
   assert.match(validateGraph(invalid).join(), /Unknown port/);
 });
 
-test('Add/Remove changes only the last Display input wire and its instance; disconnected columns do not park ready paths', () => {
+test('Add/Remove changes only the last Display input wire and its instance; disconnected tabs do not park ready paths', () => {
   const g = graph(), main = g.nodes[2], editor = Object.assign(Object.create(GraphEditor.prototype), { draft: g, draw() {} });
   const original = structuredClone(g.edges);
   const partial = structuredClone(g); partial.edges = [edge('b', 'value', 'main', 'input2')];
@@ -98,32 +98,59 @@ for (const ending of ['stop', 'cancel']) test(`session ${ending}/restart keeps p
   await session.cancel();
 });
 
-test('tab identity follows node IDs and graph order, duplicate/empty titles stay separate, inactive live regions are quiet', () => {
-  const g = graph(), root = document.createElement('div'); g.nodes[3].settings.title = 'Main';
+test('ports create tabs within one Display; duplicate/empty labels and separate Displays keep state independent', () => {
+  const g = graph(), root = document.createElement('div'), main = g.nodes[2];
+  main.settings.inputCount = 3; main.settings.inputLabels = { input1: 'Same', input2: 'Same', input3: ' ' };
   const dom = text => { const el = document.createElement('div'); el.textContent = text; return el; };
-  const states = { main: { input1: dom('left'), input2: dom('right') }, summary: { input1: dom('summary') } };
+  const states = { main: { input1: dom('left'), input2: dom('right'), input3: dom('third') }, summary: { input1: dom('summary') } };
   renderTextRegions(root, g, states);
-  const tabs = root.querySelectorAll('[role="tab"]'), panes = root.querySelectorAll('.display-content');
-  assert.equal(tabs.length, 2); assert.deepEqual([...tabs].map(t => t.textContent), ['Main', 'Main']);
-  assert.equal(panes.length, 3); assert.equal(panes[2].getAttribute('aria-live'), 'off');
-  const existing = panes[0].firstChild; tabs[1].click();
-  assert.equal(root.querySelector('[data-display="main"]').hidden, true);
-  assert.equal(root.querySelector('[data-display="summary"]').hidden, false);
-  states.main.input2 = dom('hidden update'); renderTextRegions(root, g, states); tabs[0].click();
-  assert.equal(panes[0].firstChild, existing); assert.equal(panes[1].textContent, 'hidden update');
-  assert.equal(panes[0].getAttribute('aria-live'), 'polite');
-  g.nodes.splice(3, 1); g.nodes[2].settings.title = ''; renderTextRegions(root, g, states);
-  assert.equal(root.querySelector('[role="tablist"]'), null); assert.equal(root.firstChild.getAttribute('aria-label'), 'Display main');
+  const output = root.querySelector('[data-display="main"]'), other = root.querySelector('[data-display="summary"]');
+  const tabs = output.querySelectorAll('[role="tab"]'), panes = output.querySelectorAll('[data-port]');
+  assert.equal(tabs.length, 3); assert.deepEqual([...tabs].map(t => t.textContent), ['Same', 'Same', 'Input 3']);
+  assert.equal(other.querySelector('[role="tablist"]'), null); assert.equal(other.hidden, false);
+  assert.deepEqual([...panes].map(p => p.hidden), [false, true, true]);
+  assert.equal(panes[1].querySelector('.display-content').getAttribute('aria-live'), 'off');
+  assert.equal(panes[1].querySelector('[role="status"]').getAttribute('aria-live'), 'off');
+  const existing = panes[0].querySelector('.display-content').firstChild; tabs[1].click();
+  assert.deepEqual([...panes].map(p => p.hidden), [true, false, true]);
+  states.main.input1 = dom('hidden update'); renderTextRegions(root, g, states);
+  assert.equal(panes[1].querySelector('.display-content').textContent, 'right');
+  tabs[0].click(); assert.equal(panes[0].querySelector('.display-content').textContent, 'hidden update');
+  tabs[2].click(); main.settings.inputLabels.input3 = 'Changed'; renderTextRegions(root, g, states);
+  assert.equal(panes[2].hidden, false); assert.equal(tabs[2].textContent, 'Changed');
+  assert.equal(panes[2].querySelector('button').getAttribute('aria-label'), 'Copy Changed text');
+  assert.equal(other.querySelector('.display-content').getAttribute('aria-live'), 'polite');
+  assert.notEqual(panes[0].querySelector('.display-content').firstChild, existing);
+  // Removing the active last port selects the first remaining port without remounting it.
+  main.settings.inputCount = 2; delete main.settings.inputLabels.input3; renderTextRegions(root, g, states);
+  assert.equal(panes[0].hidden, false); assert.equal(panes[2].parentNode, null);
+  main.settings.inputCount = 1; delete main.settings.inputLabels.input2; renderTextRegions(root, g, states);
+  assert.equal(output.querySelector('[role="tablist"]'), null);
+  assert.equal(output.querySelector('[data-port]'), panes[0]); assert.equal(panes[0].getAttribute('role'), 'group');
   renderTextRegions(root, { nodes: [] }, {}); assert.equal(root.children.length, 0);
 });
 
-
-test('tab order follows graph order after a graph edit while preserving pane identity', () => {
-  const g = graph(), root = document.createElement('div');
-  renderTextRegions(root, g, {});
-  const main = root.querySelector('[data-display="main"]');
-  [g.nodes[2], g.nodes[3]] = [g.nodes[3], g.nodes[2]];
-  renderTextRegions(root, g, {});
-  assert.deepEqual([...root.querySelectorAll('[role="tab"]')].map(tab => tab.dataset.tab), ['summary', 'main']);
+test('Display order follows graph order and input tabs preserve DOM identity across edits', () => {
+  const g = graph(), root = document.createElement('div'); renderTextRegions(root, g, {});
+  const main = root.querySelector('[data-display="main"]'), pane = main.querySelector('[data-port="input1"]');
+  [g.nodes[2], g.nodes[3]] = [g.nodes[3], g.nodes[2]]; renderTextRegions(root, g, {});
+  assert.deepEqual([...root.children].map(output => output.dataset.display), ['summary', 'main']);
+  assert.deepEqual([...root.querySelectorAll('[role="tab"]')].map(tab => tab.dataset.tab), ['input1', 'input2']);
   assert.equal(root.querySelector('[data-display="main"]'), main);
+  assert.equal(main.querySelector('[data-port="input1"]'), pane);
+});
+
+test('editable per-port labels validate, persist, and removing an input deletes only its label and wire', () => {
+  const g = graph(), main = g.nodes[2], editor = Object.assign(Object.create(GraphEditor.prototype), { draft: g, draw() {} });
+  for (const inputLabels of [null, [], 'bad', { input0: 'bad' }, { input3: 'bad' }, { input1: null }, { input1: 3 }, { input1: 'x'.repeat(121) }]) {
+    main.settings.inputLabels = inputLabels; assert.match(validateGraph(g).join(), /inputLabels/);
+  }
+  main.settings.inputLabels = { input1: 'Same', input2: 'Same' };
+  assert.deepEqual(validateGraph(g), []);
+  const store = storage(); saveGraph(store, g); assert.deepEqual(readGraph(store), g);
+  assert.deepEqual(assertGraph(JSON.parse(JSON.stringify(g))), g);
+  const firstWire = structuredClone(g.edges[0]); editor.resizeInputs(main, -1);
+  assert.deepEqual(main.settings.inputLabels, { input1: 'Same' }); assert.deepEqual(g.edges[0], firstWire);
+  editor.resizeInputs(main, 1); assert.equal(main.settings.inputLabels.input2, undefined);
+  main.settings.inputLabels.input2 = ''; assert.deepEqual(validateGraph(g), []);
 });

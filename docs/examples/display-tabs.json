@@ -5,7 +5,7 @@
       "id": "transcript",
       "type": "Text",
       "settings": {
-        "value": "Transcript snapshot\nNew snapshots replace only this column."
+        "value": "Transcript snapshot\nNew snapshots replace only this input."
       },
       "position": {
         "x": 20,
@@ -16,7 +16,7 @@
       "id": "translation",
       "type": "Text",
       "settings": {
-        "value": "Translation snapshot\nThis column updates independently."
+        "value": "Translation snapshot\nThis input updates even while its tab is hidden."
       },
       "position": {
         "x": 20,
@@ -27,7 +27,7 @@
       "id": "summary-text",
       "type": "Text",
       "settings": {
-        "value": "Summary snapshot\nThis tab has one full-width pane."
+        "value": "Summary snapshot\nSelect a tab to show only that input."
       },
       "position": {
         "x": 20,
@@ -38,24 +38,17 @@
       "id": "main",
       "type": "Display",
       "settings": {
-        "inputCount": 2,
-        "title": "Main"
+        "inputCount": 3,
+        "title": "Live text",
+        "inputLabels": {
+          "input1": "Transcript",
+          "input2": "Translation",
+          "input3": "Summary"
+        }
       },
       "position": {
         "x": 400,
         "y": 20
-      }
-    },
-    {
-      "id": "summary",
-      "type": "Display",
-      "settings": {
-        "title": "Summary",
-        "inputCount": 1
-      },
-      "position": {
-        "x": 400,
-        "y": 400
       }
     }
   ],
@@ -86,8 +79,8 @@
         "value"
       ],
       "to": [
-        "summary",
-        "input1"
+        "main",
+        "input3"
       ]
     }
   ]

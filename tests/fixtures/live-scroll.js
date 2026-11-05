@@ -12,8 +12,8 @@ export async function installLiveScrollFixture(page, packaged = false) {
     const { renderTextRegions } = await import(packaged ? './live-text-regions.js' : '/live-text-regions.js');
     const { DisplayNode } = await import(packaged ? '../web/display-node.js' : '/display-node.js');
     const root = document.createElement('div'); root.id = 'scroll-fixture'; document.body.append(root);
-    const graph = { nodes: [{ id: 'columns', type: 'Display', settings: { inputCount: 2 } }] };
-    const displays = { columns: {} }, histories = {}, sinks = {};
+    const graph = { nodes: ['a', 'b'].map(id => ({ id, type: 'Display', settings: { inputCount: 1 } })) };
+    const displays = { a: {}, b: {} }, histories = {}, sinks = {};
     const context = { signal: new AbortController().signal };
     window.scrollFixture = {
       pair(id, source = 'original', translated = 'translation') {
@@ -23,19 +23,19 @@ export async function installLiveScrollFixture(page, packaged = false) {
       update(id, text = '') { sinks[id].receive('input1', [...histories[id], ...(text ? [{ id: -1, first: text, second: '' }] : [])], context); },
       resize(width) { root.style.width = `${width}px`; },
       clear(id) { histories[id] = []; this.update(id); },
-      snapshot(id, dom) { displays.columns[id === 'a' ? 'input1' : 'input2'] = dom; this.render(); },
+      snapshot(id, dom) { displays[id].input1 = dom; this.render(); },
       render() { renderTextRegions(root, graph, displays); },
     };
     for (const id of ['a', 'b']) {
       histories[id] = [];
-      sinks[id] = new DisplayNode(dom => { displays.columns[id === 'a' ? 'input1' : 'input2'] = dom; scrollFixture.render(); }); sinks[id].start(context);
+      sinks[id] = new DisplayNode(dom => { displays[id].input1 = dom; scrollFixture.render(); }); sinks[id].start(context);
       for (let i = 0; i < 20; i++) scrollFixture.pair(id, `original ${i} ` + 'words '.repeat(8), `translation ${i} ` + '日本語 '.repeat(8));
     }
   }, packaged);
 }
 
 export async function checkLiveTextFlowScrolling(page, expect, rootType) {
-  const content = id => page.locator(`#scroll-fixture [data-port="input${id === 'a' ? 1 : 2}"] .display-content`);
+  const content = id => page.locator(`#scroll-fixture [data-display="${id}"] .display-content`);
   const bottomGap = id => content(id).evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop);
   await page.evaluate(rootType => {
     scrollFixture.resize(320);
@@ -81,7 +81,7 @@ export async function checkLiveTextFlowScrolling(page, expect, rootType) {
 }
 
 export async function checkLiveScrolling(page, expect) {
-  const content = id => page.locator(`#scroll-fixture [data-port="input${id === 'a' ? 1 : 2}"] .display-content`);
+  const content = id => page.locator(`#scroll-fixture [data-display="${id}"] .display-content`);
   const bottomGap = id => content(id).evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop);
   for (const id of ['a', 'b']) {
     expect(await content(id).evaluate(el => el.scrollHeight > el.clientHeight + 300)).toBe(true);

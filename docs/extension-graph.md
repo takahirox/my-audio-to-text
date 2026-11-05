@@ -124,7 +124,7 @@ payloads, startup configuration and correlation.
 | KeyedTextCoalesce | Independent id1/input1/id2/input2 → id/text; per-ID nonempty preference |
 | KeyedTextPair | Same four independent inputs → pair only; complete `{ id, first, second }` |
 | KeyedPairedTextAccumulator | pair → complete ordered pairs; append/replace by ID |
-| Display | Configurable input1…inputN: ITEM → independent Live columns in one tab; title/inputCount Settings, no outputs or processing |
+| Display | Configurable input1…inputN: ITEM → switchable input tabs in one Live view; title/inputCount/inputLabels Settings, no outputs or processing |
 | TextAccumulator | append: TEXT → complete newline-separated TEXT history |
 | TextFormatter | Configurable numbered TEXT inputs and literal multiline template → TEXT |
 | TextSlidingWindow, TextWindow | Generic bounded TEXT processing; see their documentation |
@@ -157,36 +157,51 @@ and suppresses late replies while retaining the last display. A fresh Start uses
 fresh state and rejects stale contexts. Display renders supplied snapshots only;
 stream selection belongs to explicit processors upstream.
 
-Each executable Display is one Live tab, ordered by its position in the graph's
-Node array and identified by its Node ID. Settings.title supplies the visible tab
-label (duplicate titles are allowed); empty titles use `Display <Node ID>`. A
-single Display shows its panes without tabs. No executable Displays retains the
-empty-output message.
+Each executable Display is an independent tabbed Live view. Its numbered input
+ports create the tabs: a single Display with `inputCount: 3` has three alternative
+views, with exactly one input visible at a time at every window width. Multiple
+Display nodes remain independent outputs; the collection of nodes is never a tab
+strip. A single-input Display omits tab navigation. No executable Displays retains
+the empty-output message.
 
 In Settings use **Add input** / **Remove last input** for 1–32 `ITEM` inputs
-(default 1). Removing the last input explicitly deletes only its connected wire;
-remaining ports keep their names. Each pane has a stable `Input 1`, `Input 2`, …
-heading. Disconnected panes stay empty; a Display needs at least one executable
-input branch. Save applies title/count changes on the next session.
+(default 1). Removing the last input deletes only its label and connected wire;
+remaining ports keep their names and labels. Each input has an editable **tab
+label**, stored in `settings.inputLabels` by port name, for example
+`{"input1":"Transcript","input2":"Translation","input3":"Summary"}`. Labels
+are optional strings up to 120 characters; blank/missing labels use `Input 1`,
+`Input 2`, etc. Duplicate labels remain separate tabs because identity belongs to
+`inputN`, not the label. `settings.title` names the display group for accessibility
+(blank uses `Display <Node ID>`). Save applies settings changes next session.
 
-For example, title Display A `Main` and add a second input. Connect transcript
-history to A.input1 and translated history to A.input2. Title Display B `Summary`
-and connect TextSummary.summary to B.input1. Main shows two columns; Summary shows
-one full-width pane. Import the [model-free example](examples/display-tabs.json)
-to try this layout with three literal Text sources, then connect your preferred
-upstream processors. Every delivery replaces only that input's complete snapshot.
-No inference, accumulation or coalescing happens in Display.
+Connect transcript history to Display.input1, translated text to Display.input2,
+and TextSummary.summary to Display.input3 on **one Display**. Import the
+[model-free example](examples/display-tabs.json) to try these three switchable
+tabs using literal Text sources, then connect your preferred upstream processors.
+Every delivery replaces only that input's complete snapshot. No inference,
+accumulation, merging or coalescing happens in Display. Disconnected inputs remain
+empty, with Copy disabled; a Display needs at least one executable input branch.
 
 Tabs support pointer/touch, Left/Right arrows (wrapping), Home/End, and visible
-keyboard focus. Switching tabs only changes presentation: all graph processing
-and hidden snapshots keep updating. Panes remain mounted, preserving each pane's
-scroll position and near-bottom following intent through hidden updates. Each has
-Copy text; inactive tabs disable live announcements. Columns wrap/stack to fit
-narrow windows. Literal strings preserve whitespace and wrap; a keyed pair/list
-uses an equal-width two-cell table *within its own pane*. Browser DOM stays
-private to the host rendering boundary and never travels through graph ports.
+keyboard focus. Switching affects presentation only: all graph processing and
+hidden snapshots keep updating. Panels remain mounted, preserving scroll position
+and near-bottom following intent through hidden updates. Unchanged snapshots retain
+their DOM and text selection during unrelated input updates. Each input has
+Copy text; inactive panels disable live announcements. Different inputs never
+appear side-by-side or stacked, including in narrow windows. Any future composed
+layout belongs upstream. Literal strings preserve whitespace and wrap; a keyed
+pair/list uses an equal-width two-cell table *within its own panel*. Browser DOM
+stays private to the host rendering boundary and never travels through graph ports.
 
-See [Display tabs validation](evidence/display-212.md) for checks and limitations.
+Existing #212 graphs retain their `input1…inputN` connections and now show input
+tabs without rewiring; missing labels use the numbered fallback. Version 15 and
+legacy `Display.input` → `input1` migration are unchanged. Reading retains original
+storage; Save/Export canonicalize it. Unsupported older schemas/types still use
+the documented Saved JSON / Reset / Import recovery.
+
+See [corrected Display tabs validation](evidence/display-216.md) for checks,
+screenshots of actual switching, and limits. The [#212 evidence](evidence/display-212.md)
+records the superseded node-tab/column presentation.
 
 ## Feature setup and validation
 

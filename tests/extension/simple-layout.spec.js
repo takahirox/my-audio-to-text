@@ -1,6 +1,6 @@
 import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './graph-fixture.js';
 
-test('Simple shows 0, 1, 2 and 4 Display tabs at narrow and wide sizes with keyboard scrolling', async ({ graphExtension: f }) => {
+test('Simple shows 0, 1, 2 and 4 independent single-input Displays at narrow and wide sizes with keyboard scrolling', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
   for (const count of [0, 1, 2, 4]) {
     await live.editor.evaluate(async count => {
@@ -30,8 +30,8 @@ test('Simple shows 0, 1, 2 and 4 Display tabs at narrow and wide sizes with keyb
         await content.focus(); await content.press('ArrowDown');
         await expect.poll(() => content.evaluate(root => root.scrollTop)).toBeGreaterThan(0);
         expect(await content.evaluate(root => root.scrollWidth <= root.clientWidth)).toBe(true);
-        await expect(live.locator('.live-text-region:visible')).toHaveCount(1);
-        await expect(live.getByRole('tab')).toHaveCount(count > 1 ? count : 0);
+        await expect(live.locator('.live-text-region:visible')).toHaveCount(count);
+        await expect(live.getByRole('tab')).toHaveCount(0);
         // Inspect the normal compact header/control area, not a page scrolled to its output.
         await live.evaluate(() => scrollTo(0, 0));
       }

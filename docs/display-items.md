@@ -1,7 +1,7 @@
 # Portable display items (#198)
 
 Use `Display.input1`, `input2`, … ITEM sinks for independently updating latest
-text, keyed pairs, or complete ordered pair histories within a Display tab. Processing and accumulation use portable data; browser
+text, keyed pairs, or complete ordered pair histories within an input tab of a Display view. Processing and accumulation use portable data; browser
 rendering belongs inside Display.
 
 | Concrete contract | Value |
@@ -75,13 +75,20 @@ under distinct IDs remain distinct rows.
 
 ## Display and the host boundary
 
-Display has **1–32 numbered ITEM inputs**, no outputs, and `inputCount`/`title`
-Settings. Each delivery replaces only its pane: TEXT shows latest plain text, a
-pair shows one two-cell row, and a list shows its complete ordered history.
+Display has **1–32 numbered ITEM inputs**, no outputs, and
+`inputCount`/`title`/`inputLabels` Settings. Each delivery replaces only its input's
+snapshot: TEXT shows latest plain text, a pair shows one two-cell row, and a list
+shows its complete ordered history.
 Missing rows are removed. Other input snapshots stay intact, including omitted
 siblings in grouped deliveries. Display neither accumulates nor processes text.
 Each input accepts one incoming edge from any compatible producer. One Display is
-one Live tab; see [tab and column composition](extension-graph.md).
+one independent Live view with a switchable tab per input port and exactly one
+input panel visible at a time, at any window width. Edit each tab label in
+Settings; blank labels use `Input N`, and duplicate labels keep separate port
+identities. `title` names the Display view. A single-input Display omits tab
+navigation. Hidden inputs keep receiving snapshots; switching tabs shows the
+latest snapshot without restarting processing. See the
+[Display input-tab guide](extension-graph.md).
 
 Connect any TEXT output directly to Display.input1 for plain latest text.
 Connect KeyedTextPair.pair directly for the latest pair without history, or add
@@ -115,3 +122,7 @@ legacy mode or accumulating display variant.
 Validation uses unit contracts, editor/runtime tests, browser rendering and
 controlled module Workers. These checks cover composition and lifecycle, without
 claiming real model inference or a native host renderer.
+
+Pair-table cells belong to one input snapshot, not to separate Display inputs.
+See [Display input tabs](extension-graph.md) and the
+[three-tab example](examples/display-tabs.json).

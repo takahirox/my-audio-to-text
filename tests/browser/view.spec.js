@@ -62,7 +62,7 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
   await page.reload();
   await expect(port('keyedtextpair input id2')).toBeAttached(); await expect(port('display input input1')).toBeAttached();
   await page.locator('#graph-help').click();
-  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Each Display tab has configurable independent ITEM columns');
+  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Each Display is one tabbed view: its input ports are switchable tabs');
   await page.keyboard.press('Escape');
   const result = await page.evaluate(async () => {
     const { readGraph, graphNode, edge, GRAPH_VERSION } = await import('/extension/graph.js');

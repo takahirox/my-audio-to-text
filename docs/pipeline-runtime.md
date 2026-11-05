@@ -399,10 +399,14 @@ Portable text graphs use KEYED_PAIRED_TEXT and KEYED_PAIRED_TEXT_LIST snapshots.
 KeyedTextPair emits a complete immutable pair; KeyedPairedTextAccumulator emits
 ordered append/replace histories. Display receives configurable input1…inputN:
 ITEM, accepting TEXT, one pair or a full pair list per input. Each delivery
-replaces only its pane; omitted grouped inputs keep their snapshots. Each
-Display is one Live tab, with presentation independent of processing. Ordinary
-type-only routing, atomic
-deliveries and fan-out apply without runtime special cases. See the
+replaces only that input's snapshot; omitted grouped inputs keep their snapshots.
+Each Display is an independent Live view with one switchable tab per input port
+and exactly one input panel visible at a time, at any window width. Display
+Settings provide editable input tab labels (`inputLabels`); blank labels use
+`Input N`, and duplicate labels do not change port identity. A single-input
+Display omits tab navigation. Hidden inputs keep updating, and switching tabs
+shows their latest snapshots without restarting processing. Ordinary type-only
+routing, atomic deliveries and fan-out apply without runtime special cases. See the
 [ITEM contracts](display-items.md).
 
 ## Optional transcript correction

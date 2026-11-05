@@ -51,6 +51,7 @@ function activate(surface, id, focus = false) {
         state.top = content.scrollTop;
       }
     }
+    region.querySelector('[role="status"]')?.setAttribute('aria-live', selected ? 'polite' : 'off');
     const tab = surface.tabs.get(key);
     if (tab) { tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1; }
   }
@@ -94,65 +95,84 @@ function release(region) {
   region.remove();
 }
 
-// Tabs change presentation only. Every pane stays mounted, including hidden
-// panes, and receives only its own complete DOM snapshot from the runtime.
+// Each Display is an independent output. Only its numbered input ports form
+// tabs; every panel stays mounted and receives its own complete snapshot.
+function createDisplay(id) {
+  const surface = { prefix: `live-${++nextSurface}`, active: 'input1', regions: new Map(), tabs: new Map() };
+  surface.container = document.createElement('div');
+  surface.container.className = 'live-display'; surface.container.dataset.display = id;
+  surface.container.setAttribute('role', 'group');
+  surface.strip = document.createElement('div'); surface.strip.className = 'display-tabs';
+  surface.strip.setAttribute('role', 'tablist');
+  surface.strip.addEventListener('keydown', event => {
+    const ids = surface.order, index = ids.indexOf(event.target.dataset.tab);
+    if (index < 0) return;
+    let next;
+    if (event.key === 'ArrowRight') next = (index + 1) % ids.length;
+    if (event.key === 'ArrowLeft') next = (index + ids.length - 1) % ids.length;
+    if (event.key === 'Home') next = 0;
+    if (event.key === 'End') next = ids.length - 1;
+    if (next !== undefined) { event.preventDefault(); activate(surface, ids[next], true); }
+  });
+  return surface;
+}
+function labelPane(pane, label) {
+  pane.setAttribute('aria-label', label);
+  const heading = pane.querySelector('.display-label');
+  if (heading.textContent !== label) heading.textContent = label;
+  pane.querySelector('button').setAttribute('aria-label', `Copy ${label} text`);
+}
 export function renderTextRegions(root, graph, displays) {
   const specs = graph?.nodes.filter(node => node.type === 'Display') || [];
-  let surface = surfaces.get(root);
-  if (!surface) {
-    surface = { prefix: `live-${++nextSurface}`, active: null, regions: new Map(), tabs: new Map() };
-    surface.strip = document.createElement('div'); surface.strip.className = 'display-tabs';
-    surface.strip.setAttribute('role', 'tablist'); surface.strip.setAttribute('aria-label', 'Live displays');
-    surface.strip.addEventListener('keydown', event => {
-      const ids = surface.order, index = ids.indexOf(event.target.dataset.tab);
-      if (index < 0) return;
-      let next;
-      if (event.key === 'ArrowRight') next = (index + 1) % ids.length;
-      if (event.key === 'ArrowLeft') next = (index + ids.length - 1) % ids.length;
-      if (event.key === 'Home') next = 0;
-      if (event.key === 'End') next = ids.length - 1;
-      if (next !== undefined) { event.preventDefault(); activate(surface, ids[next], true); }
-    });
-    surfaces.set(root, surface);
+  let outputs = surfaces.get(root);
+  if (!outputs) { outputs = new Map(); surfaces.set(root, outputs); }
+  const ids = new Set(specs.map(spec => spec.id));
+  for (const [id, surface] of outputs) if (!ids.has(id)) {
+    release(surface.container); outputs.delete(id);
   }
-  surface.order = specs.map(spec => spec.id);
-  const ids = new Set(surface.order), multiple = specs.length > 1;
-  for (const [id, region] of surface.regions) if (!ids.has(id)) {
-    release(region); surface.regions.delete(id); surface.tabs.get(id)?.remove(); surface.tabs.delete(id);
-  }
-  if (!ids.has(surface.active)) surface.active = specs[0]?.id ?? null;
-  if (multiple) { if (root.firstChild !== surface.strip) root.prepend(surface.strip); }
-  else surface.strip.remove();
   for (const [index, spec] of specs.entries()) {
-    const label = spec.settings?.title?.trim() || `Display ${spec.id}`;
-    let region = surface.regions.get(spec.id), tab = surface.tabs.get(spec.id);
-    if (!region) {
-      region = document.createElement('div'); region.className = 'live-display'; region.dataset.display = spec.id;
-      region.id = `${surface.prefix}-panel-${spec.id}`; region.hidden = spec.id !== surface.active;
-      surface.regions.set(spec.id, region);
-      tab = document.createElement('button'); tab.type = 'button'; tab.dataset.tab = spec.id;
-      tab.id = `${surface.prefix}-tab-${spec.id}`; tab.setAttribute('role', 'tab');
-      tab.setAttribute('aria-controls', region.id); tab.onclick = () => activate(surface, spec.id);
-      surface.tabs.set(spec.id, tab);
+    let surface = outputs.get(spec.id);
+    if (!surface) { surface = createDisplay(spec.id); outputs.set(spec.id, surface); }
+    const { container, strip } = surface;
+    const title = spec.settings?.title?.trim() || `Display ${spec.id}`;
+    container.setAttribute('aria-label', title); strip.setAttribute('aria-label', `${title} inputs`);
+    if (root.children[index] !== container) root.insertBefore(container, root.children[index] || null);
+    const count = spec.settings?.inputCount ?? 1, multiple = count > 1;
+    surface.order = Array.from({ length: count }, (_, i) => `input${i + 1}`);
+    const ports = new Set(surface.order);
+    const removedFocus = (!multiple && strip.contains(document.activeElement))
+      || [...surface.tabs].some(([port, tab]) => !ports.has(port) && document.activeElement === tab)
+      || [...surface.regions].some(([port, pane]) => !ports.has(port) && pane.contains(document.activeElement));
+    for (const [port, pane] of surface.regions) if (!ports.has(port)) {
+      release(pane); surface.regions.delete(port); surface.tabs.get(port)?.remove(); surface.tabs.delete(port);
     }
-    if (tab.textContent !== label) tab.textContent = label;
-    region.setAttribute('aria-label', label);
-    if (multiple) { region.setAttribute('role', 'tabpanel'); region.setAttribute('aria-labelledby', tab.id); }
-    else { region.setAttribute('role', 'group'); region.removeAttribute('aria-labelledby'); }
-    if (multiple && surface.strip.children[index] !== tab) surface.strip.insertBefore(tab, surface.strip.children[index] || null);
-    const offset = multiple ? 1 : 0;
-    if (root.children[index + offset] !== region) root.insertBefore(region, root.children[index + offset] || null);
-    const count = spec.settings?.inputCount ?? 1;
-    const ports = new Set(Array.from({ length: count }, (_, i) => `input${i + 1}`));
-    for (const pane of [...region.children]) if (!ports.has(pane.dataset.port)) release(pane);
-    for (const [i, port] of [...ports].entries()) {
-      let pane = region.children[i];
-      if (!pane) { pane = paneFor(port, `Input ${i + 1}`); region.append(pane); }
+    if (!ports.has(surface.active)) surface.active = surface.order[0];
+    if (multiple) { if (container.firstChild !== strip) container.prepend(strip); }
+    else strip.remove();
+    for (const [i, port] of surface.order.entries()) {
+      const label = spec.settings?.inputLabels?.[port]?.trim() || `Input ${i + 1}`;
+      let pane = surface.regions.get(port), tab = surface.tabs.get(port);
+      if (!pane) {
+        pane = paneFor(port, label); pane.id = `${surface.prefix}-panel-${port}`;
+        pane.hidden = port !== surface.active; surface.regions.set(port, pane);
+        tab = document.createElement('button'); tab.type = 'button'; tab.dataset.tab = port;
+        tab.id = `${surface.prefix}-tab-${port}`; tab.setAttribute('role', 'tab');
+        tab.setAttribute('aria-controls', pane.id); tab.onclick = () => activate(surface, port);
+        surface.tabs.set(port, tab);
+      }
+      labelPane(pane, label);
+      if (tab.textContent !== label) tab.textContent = label;
+      if (multiple) { pane.setAttribute('role', 'tabpanel'); pane.setAttribute('aria-labelledby', tab.id); }
+      else { pane.setAttribute('role', 'group'); pane.removeAttribute('aria-labelledby'); }
+      if (multiple && strip.children[i] !== tab) strip.insertBefore(tab, strip.children[i] || null);
+      const offset = multiple ? 1 : 0;
+      if (container.children[i + offset] !== pane) container.insertBefore(pane, container.children[i + offset] || null);
       const nodeSnapshots = displays[spec.id];
       // Accept old host adapters' single DOM snapshot during integration too.
       const snapshot = nodeSnapshots?.nodeType ? (i === 0 ? nodeSnapshots : null) : nodeSnapshots?.[port] ?? null;
-      mountSnapshot(pane, snapshot, region.hidden);
+      mountSnapshot(pane, snapshot, pane.hidden);
     }
+    activate(surface, surface.active, removedFocus && multiple);
+    if (removedFocus && !multiple) surface.regions.get(surface.active)?.querySelector('.display-content').focus();
   }
-  activate(surface, surface.active);
 }
