@@ -1,7 +1,7 @@
 # Portable display items (#198)
 
-Use one `Display.input: ITEM` sink for latest text, one keyed pair, or complete
-ordered pair history. Processing and accumulation use portable data; browser
+Use `Display.input1`, `input2`, … ITEM sinks for independently updating latest
+text, keyed pairs, or complete ordered pair histories within a Display tab. Processing and accumulation use portable data; browser
 rendering belongs inside Display.
 
 | Concrete contract | Value |
@@ -44,7 +44,7 @@ runtime validation checks value shape against the declared concrete type.
 | `KeyedTextCoalesce.id / text` | `KeyedTextPair.id1 / input1` |
 | translator `id / text` | `KeyedTextPair.id2 / input2` |
 | `KeyedTextPair.pair` | `KeyedPairedTextAccumulator.pair` |
-| `KeyedPairedTextAccumulator.pairs` | `Display.input` |
+| `KeyedPairedTextAccumulator.pairs` | `Display.input1` |
 
 Import the [example graph](evidence/item-198.json) in Graph Editor. The
 [executable fixture](../tests/fixtures/item-graph.js) also accepts either OPUS-MT
@@ -75,13 +75,15 @@ under distinct IDs remain distinct rows.
 
 ## Display and the host boundary
 
-Display has **one input `input: ITEM`, no outputs and no Settings**. Each delivery
-replaces its complete output: TEXT shows latest plain text, a pair shows one
-two-column row, and a list shows its complete ordered history. Missing rows are
-removed. Display neither stores keyed history nor selects stages nor mutates
-inputs. One incoming edge is allowed; choose one concrete stream explicitly.
+Display has **1–32 numbered ITEM inputs**, no outputs, and `inputCount`/`title`
+Settings. Each delivery replaces only its pane: TEXT shows latest plain text, a
+pair shows one two-cell row, and a list shows its complete ordered history.
+Missing rows are removed. Other input snapshots stay intact, including omitted
+siblings in grouped deliveries. Display neither accumulates nor processes text.
+Each input accepts one incoming edge from any compatible producer. One Display is
+one Live tab; see [tab and column composition](extension-graph.md).
 
-Connect any TEXT output directly to Display.input for plain latest text.
+Connect any TEXT output directly to Display.input1 for plain latest text.
 Connect KeyedTextPair.pair directly for the latest pair without history, or add
 the accumulator explicitly for history. No builder or specialized display Node
 is required.
@@ -96,8 +98,11 @@ implementation is outside this Issue.
 
 ## Saved graphs and recovery
 
-Graph version remains 15. Removed display Nodes and ports are unsupported,
-including older display routes saved with that version. Validation reports the
+Graph version remains 15. Existing Display.input routes convert only to
+Display.input1 and missing title/inputCount settings receive defaults. Load and
+Import preserve Node IDs and other data; Save/Export write numbered ports.
+Reading leaves stored JSON unchanged. Removed display Node types and their
+ports are still unsupported. Validation reports the
 unknown Node/port explicitly; Live disables Start and links to Graph Editor.
 The editor opens a valid current default draft and shows the original saved JSON
 under Graph actions → Saved JSON. Reading never rewrites stored data.

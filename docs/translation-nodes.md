@@ -366,11 +366,11 @@ is required by #173.
 
 [TextWindow](windowed-translation.md) batches committed source text before translation.
 Connect its text output to a translator, then translator.text directly to
-Display.input or through TextAccumulator.append for history.
+Display.input1 or through TextAccumulator.append for history.
 The four extension translators accept optional provisional TEXT from any
 compatible producer, independently of the committed text source and edge order. Their committed source/text/error and preview provisionalSource/provisionalText/provisionalError TEXT outputs form separate atomic families sharing one owned Worker. Direct text is safe for committed history or TTS even when provisional is connected. Route provisionalText to a separate replacement display; empty clears on final acceptance, Stop and Cancel. Standalone web translator Nodes retain their behavior. Unsupported old graphs fail visibly; Reset or Import a current graph and Save explicitly.
 
-Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
 
 For continuous bilingual ASR rows while translation is pending, use the
 [portable keyed pair history](display-items.md).

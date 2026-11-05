@@ -12,7 +12,7 @@ export const meetingBatches = [
 export function summaryGraph(type) {
   const nodes = [graphNode('Text', 'input'), graphNode(type, 'summary'), graphNode('Display', 'notes'), graphNode('Display', 'transcript')];
   nodes[0].settings.value = meetingBatches[0];
-  return ({ version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input'), edge('input', 'value', 'transcript', 'input')] });
+  return ({ version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input1'), edge('input', 'value', 'transcript', 'input1')] });
 }
 
 // Generic sampled feedback example; the model has no private summary history.
@@ -24,8 +24,8 @@ export function summaryFeedbackGraph(type = 'TextSummaryLfm2') {
   graph.nodes.push(graphNode('Hold', 'previous'), graphNode('TextWindow', 'window'), formatter, graphNode('TextAccumulator', 'transcript-history'));
   graph.edges = [edge('input', 'value', 'window', 'text'), edge('window', 'text', 'format', 'input2'),
     edge('previous', 'value', 'format', 'input1'), edge('format', 'text', 'summary', 'text'),
-    edge('summary', 'summary', 'previous', 'input'), edge('summary', 'summary', 'notes', 'input'),
-    edge('input', 'value', 'transcript-history', 'append'), edge('transcript-history', 'text', 'transcript', 'input')];
+    edge('summary', 'summary', 'previous', 'input'), edge('summary', 'summary', 'notes', 'input1'),
+    edge('input', 'value', 'transcript-history', 'append'), edge('transcript-history', 'text', 'transcript', 'input1')];
   return graph;
 }
 

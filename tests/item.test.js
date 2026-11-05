@@ -71,40 +71,40 @@ test('accumulator appends/replaces in arrival order, emits duplicates and empty 
 
 for (const close of ['stop', 'cancel', 'dispose', 'abort']) test(`accumulator and Display ${close} retain state, reject late work and clear on restart`, () => {
   const f = fixture(), out = [], display = new DisplayNode(dom => out.push(dom)); display.start(f.context);
-  f.send(pair(1, 'kept')); display.receive('input', f.out.at(-1), f.context);
+  f.send(pair(1, 'kept')); display.receive('input1', f.out.at(-1), f.context);
   if (close === 'abort') {
     // The same lifecycle rule applies to an aborted context even without close.
     const aborted = { ...f.context, signal: AbortSignal.abort() };
-    f.node.receive('pair', pair(2), aborted); display.receive('input', '', aborted);
-  } else { f.node[close](); display[close](); f.send(pair(2)); display.receive('input', '', f.context); }
+    f.node.receive('pair', pair(2), aborted); display.receive('input1', '', aborted);
+  } else { f.node[close](); display[close](); f.send(pair(2)); display.receive('input1', '', f.context); }
   assert.deepEqual(f.out.at(-1), [pair(1, 'kept')]); assert.deepEqual(cells(out.at(-1)), [['kept', '']]);
   const next = fixture(f.node); display.start(next.context);
-  f.send(pair(3)); display.receive('input', 'stale', f.context);
+  f.send(pair(3)); display.receive('input1', 'stale', f.context);
   assert.deepEqual(next.out, [[]]); assert.equal(out.at(-1).childNodes.length, 0);
 });
 
-test('Display has one ITEM input, renders literal TEXT/pair/list and never accumulates or mutates values', () => {
+test('Display defaults to one ITEM input, renders literal TEXT/pair/list and never accumulates or mutates values', () => {
   const out = [], node = new DisplayNode(dom => out.push(dom)), context = { signal: new AbortController().signal };
-  assert.deepEqual(node.inputs, { input: ITEM }); assert.deepEqual(node.outputs, {});
+  assert.deepEqual(node.inputs, { input1: ITEM }); assert.deepEqual(node.outputs, {});
   node.start(context); const input = [pair(1, '<img src=x onerror=alert(1)>\n&', ''), pair(2, 'B', '<script>')];
-  const original = structuredClone(input); node.receive('input', input, context);
+  const original = structuredClone(input); node.receive('input1', input, context);
   assert.deepEqual(cells(out.at(-1)), input.map(p => [p.first, p.second]));
   assert.equal(out.at(-1).querySelector('img,script'), null); assert.deepEqual(input, original);
   out.at(-1).querySelector('td').textContent = 'mutated DOM';
-  node.receive('input', pair(2, 'only B'), context); assert.deepEqual(cells(out.at(-1)), [['only B', '']]);
-  node.receive('input', '<b>latest</b>\ntext', context); assert.equal(out.at(-1).firstChild.textContent, '<b>latest</b>\ntext');
+  node.receive('input1', pair(2, 'only B'), context); assert.deepEqual(cells(out.at(-1)), [['only B', '']]);
+  node.receive('input1', '<b>latest</b>\ntext', context); assert.equal(out.at(-1).firstChild.textContent, '<b>latest</b>\ntext');
   assert.equal(out.at(-1).querySelector('b,table'), null);
-  node.receive('input', '', context); assert.equal(out.at(-1).firstChild.textContent, '');
-  node.receive('input', [], context); assert.equal(out.at(-1).childNodes.length, 0);
+  node.receive('input1', '', context); assert.equal(out.at(-1).firstChild.textContent, '');
+  node.receive('input1', [], context); assert.equal(out.at(-1).childNodes.length, 0);
   assert.equal(Object.hasOwn(node, 'pairs'), false); assert.equal(Object.hasOwn(node, 'rows'), false);
-  for (const invalid of [1, {}, { rows: [] }, document.createElement('div')]) assert.throws(() => node.receive('input', invalid, context), TypeError);
+  for (const invalid of [1, {}, { rows: [] }, document.createElement('div')]) assert.throws(() => node.receive('input1', invalid, context), TypeError);
   assert.throws(() => node.receive('view', { rows: [] }, context), TypeError);
 });
 
 for (const reverse of [false, true]) test(`arbitrary output names/types, immutable fan-out and type validation before queued dispatch (${reverse})`, async () => {
   for (const [contract, value] of [[TEXT, 'literal'], [KEYED_PAIRED_TEXT, pair(1, 'A')], [KEYED_PAIRED_TEXT_LIST, [pair(1, 'A')]], [ITEM, pair(2)]]) {
     let source; const received = [], outputs = [];
-    const connections = [edge('any', 'arbitrary', 'observer', 'value'), edge('any', 'arbitrary', 'display', 'input')];
+    const connections = [edge('any', 'arbitrary', 'observer', 'value'), edge('any', 'arbitrary', 'display', 'input1')];
     const pipeline = new Pipeline({ nodes: {
       any: { outputs: { arbitrary: contract }, start(c) { source = c; } },
       observer: { inputs: { value: ITEM }, receive(_, v) { received.push(v); if (typeof v === 'object') assert.throws(() => { v.id = 10; }, TypeError); } },
@@ -117,7 +117,7 @@ for (const reverse of [false, true]) test(`arbitrary output names/types, immutab
   }
   for (const contract of [NUMBER, portContract('other')]) assert.throws(() => new Pipeline({ nodes: {
     any: { outputs: { arbitrary: contract } }, display: new DisplayNode(),
-  }, connections: [edge('any', 'arbitrary', 'display', 'input')] }), /Incompatible/);
+  }, connections: [edge('any', 'arbitrary', 'display', 'input1')] }), /Incompatible/);
 });
 
 test('runtime rejects values contradicting declared concrete types without any fan-out delivery', async () => {
@@ -136,20 +136,20 @@ test('editor, saved validation and executable selection accept concrete ITEM str
   const editor = Object.assign(Object.create(GraphEditor.prototype), { draft: graph, draw() {}, canvas: { querySelector() {} } });
   for (const [source, port] of [['text', 'value'], ['pair', 'pair'], ['history', 'pairs'], ['text', 'value']]) {
     editor.selected = { id: source, port, contract: NODE_TYPES[graph.nodes.find(n => n.id === source).type].outputs[port] };
-    editor.connect('display', 'input', ITEM);
-    assert.deepEqual(graph.edges, [edge(source, port, 'display', 'input')]); assert.deepEqual(validateGraph(graph), []);
+    editor.connect('display', 'input1', ITEM);
+    assert.deepEqual(graph.edges, [edge(source, port, 'display', 'input1')]); assert.deepEqual(validateGraph(graph), []);
     const store = storage(null); saveGraph(store, graph); assert.deepEqual(readGraph(store), graph);
   }
   assert.deepEqual(executableGraph(graph).nodes.map(n => n.id), ['text', 'display']);
   for (const [source, port] of [['number', 'value']]) {
-    const invalid = { ...graph, edges: [edge(source, port, 'display', 'input')] };
+    const invalid = { ...graph, edges: [edge(source, port, 'display', 'input1')] };
     assert.match(validateGraph(invalid).join(), /Incompatible/); assert.throws(() => executableGraph(invalid), /Incompatible/);
     assert.throws(() => saveGraph(storage(null), invalid), /Incompatible/);
     editor.selected = { id: source, port, contract: NODE_TYPES[graph.nodes.find(n => n.id === source).type].outputs[port] };
-    editor.connect('display', 'input', ITEM); assert.deepEqual(graph.edges, [edge('text', 'value', 'display', 'input')]);
+    editor.connect('display', 'input1', ITEM); assert.deepEqual(graph.edges, [edge('text', 'value', 'display', 'input1')]);
   }
   assert.match(validateGraph({ ...graph, edges: [edge('text', 'value', 'history', 'pair')] }).join(), /Incompatible/);
-  assert.match(validateGraph({ ...graph, edges: [edge('text', 'value', 'display', 'input'), edge('pair', 'pair', 'display', 'input')] }).join(), /Only one/);
+  assert.match(validateGraph({ ...graph, edges: [edge('text', 'value', 'display', 'input1'), edge('pair', 'pair', 'display', 'input1')] }).join(), /Only one/);
   graph.nodes[0].settings.value = 'direct'; const out = [], built = buildGraph(graph, { onDisplay: (_, dom) => out.push(dom) });
   await built.pipeline.start(); await built.pipeline.stop(); assert.equal(out.at(-1).firstChild.textContent, 'direct'); await built.pipeline.dispose();
 });
@@ -161,7 +161,7 @@ test('pair snapshots remain independent across same-ID changes; new accumulator 
   assert.notEqual(out[0].pair, out[1].pair);
   for (const [type, instance] of [['KeyedPairedTextAccumulator', new KeyedPairedTextAccumulatorNode()], ['Display', new DisplayNode()]]) {
     assert.deepEqual(NODE_TYPES[type].inputs, instance.inputs); assert.deepEqual(NODE_TYPES[type].outputs, instance.outputs);
-    assert.deepEqual(graphNode(type, type).settings, {});
+    assert.deepEqual(graphNode(type, type).settings, type === 'Display' ? { inputCount: 1, title: '' } : {});
   }
   const bundle = readFileSync(new URL('../scripts/build-extension.py', import.meta.url), 'utf8');
   for (const name of ['paired-text.js', 'keyed-paired-text-accumulator-node.js', 'display-node.js']) assert.ok(bundle.includes(`"${name}"`));
@@ -169,8 +169,7 @@ test('pair snapshots remain independent across same-ID changes; new accumulator 
 
 test('importable ITEM graph matches the exact independently keyed ASR/translation fixture', () => {
   const graph = JSON.parse(readFileSync(new URL('../docs/evidence/item-198.json', import.meta.url), 'utf8'));
-  assert.deepEqual(graph, itemGraph()); assert.deepEqual(executableGraph(graph), graph);
-  assert.deepEqual(assertGraph(graph), graph);
+  assert.deepEqual(assertGraph(graph), itemGraph()); assert.deepEqual(executableGraph(graph), itemGraph());
 });
 
 for (const formatted of [false, true]) test(`Cancel routes cleanup snapshots to Display while preserving committed history (formatter: ${formatted})`, async () => {
@@ -181,9 +180,9 @@ for (const formatted of [false, true]) test(`Cancel routes cleanup snapshots to 
     committed: new DisplayNode(dom => { seen.committed = domText(dom); }),
     preview: new DisplayNode(dom => { seen.preview = domText(dom); }),
   }, connections: [
-    edge('source', 'committed', 'history', 'append'), edge('history', 'text', 'committed', 'input'),
-    ...(formatted ? [edge('source', 'preview', 'format', 'input1'), edge('format', 'text', 'preview', 'input')]
-      : [edge('source', 'preview', 'preview', 'input')]),
+    edge('source', 'committed', 'history', 'append'), edge('history', 'text', 'committed', 'input1'),
+    ...(formatted ? [edge('source', 'preview', 'format', 'input1'), edge('format', 'text', 'preview', 'input1')]
+      : [edge('source', 'preview', 'preview', 'input1')]),
   ] });
   await pipeline.start(); source.emitOutputs({ committed: 'keep', preview: 'replace me' });
   await pipeline.entries.get('history').queue; await pipeline.entries.get('format').queue;

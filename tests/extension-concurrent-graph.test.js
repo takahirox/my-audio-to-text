@@ -10,7 +10,7 @@ test('large current drafts retain every Node, route, setting and position beyond
   const graph = defaultGraph();
   for (let index = 0; index < 100; index++) {
     graph.nodes.push(graphNode('Display', `display-${index}`, 4500 + index * 300, 5000));
-    graph.edges.push(edge('speech', 'final', `display-${index}`, 'input'));
+    graph.edges.push(edge('speech', 'final', `display-${index}`, 'input1'));
   }
   const storage = store(); saveGraph(storage, (graph));
   assert.deepEqual(readGraph(storage), graph); assert.deepEqual(executableGraph((graph)), graph);
@@ -35,7 +35,7 @@ test('saveable incomplete paths do not contaminate a complete sibling, while eit
 });
 
 test('constant text roots execute without audio or ASR, while drafts with no sink stay saveable', async () => {
-  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text','text'), graphNode('Display','display')], edges: [edge('text','value','display','input')] };
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text','text'), graphNode('Display','display')], edges: [edge('text','value','display','input1')] };
   graph.nodes[0].settings.value = 'independent text';
   const states = [], built = buildGraph((graph), { onDisplay: (id, state) => states.push(domText(state)) });
   assert.equal(built.speechNodes.size, 0); assert.equal(built.audioSources.size, 0);
@@ -52,7 +52,7 @@ test('consumer-specific startup values stay saveable and are validated by the ex
     const graph = defaultGraph();
     graph.nodes.push(graphNode(constant,'configuration'),graphNode(consumer,'unfinished'),graphNode('Display','unfinished-display'));
     graph.nodes.at(-3).settings.value = value;
-    graph.edges.push(edge('configuration','value','unfinished',input),edge('unfinished','final','unfinished-display','input'));
+    graph.edges.push(edge('configuration','value','unfinished',input),edge('unfinished','final','unfinished-display','input1'));
     const storage = store(); saveGraph(storage, (graph)); assert.deepEqual(readGraph(storage),graph);
     assert.match(graphWarnings(graph).join(' '), /Inactive Node: unfinished/);
     assert.deepEqual(executableGraph((graph)).nodes.map(node=>node.id),['audio', 'speech', 'coalesce', 'pair', 'history', 'transcript']);

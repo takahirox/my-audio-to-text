@@ -85,7 +85,7 @@ test('MV3 Text literal and empty values round-trip and deliver once to an ordina
   await openPalette(editor); await editor.locator('#graph-node-type').selectOption('Text'); await editor.locator('#graph-add').click();
   await editor.getByRole('button', { name: 'text output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
-  await editor.getByRole('button', { name: 'transcript input input', exact: true }).click();
+  await editor.getByRole('button', { name: 'transcript input input1', exact: true }).click();
   for (const value of ['<img src=x onerror=alert(1)> & "\n😀 {1}', '']) {
     await editor.getByLabel('text value', { exact: true }).fill(value); await editor.locator('#graph-save').click();
     await expect(editor.locator('#graph-save')).toBeEnabled();

@@ -150,7 +150,7 @@ export function buildGraph(graph, options) {
         node = new SpeechToTextNode({ configurationConnected: graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'maxDuration'), workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'KeyedTextPair': node = new KeyedTextPairNode(); break;
       case 'KeyedPairedTextAccumulator': node = new KeyedPairedTextAccumulatorNode(); break;
-      case 'Display': node = new DisplayNode(dom => options.onDisplay?.(spec.id, dom)); break;
+      case 'Display': node = new DisplayNode((dom, port) => options.onDisplay?.(spec.id, dom, port), spec.settings); break;
       case 'TextAccumulator': node = new TextAccumulatorNode(); break;
       case 'TextSlidingWindow': node = new TextSlidingWindowNode(); break;
       case 'TextWindow': node = new TextWindowNode(); break;

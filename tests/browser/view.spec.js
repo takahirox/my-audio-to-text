@@ -24,40 +24,45 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
     await page.getByLabel('Search nodes').fill(type);
     await page.locator('#graph-node-type').selectOption(type); await page.locator('#graph-add').click();
     await page.locator('#graph-palette-toggle').click();
-    await expect(page.locator('.graph-inspector')).toContainText('This Node has no configurable settings.');
-    await expect(page.locator('.graph-inspector input, .graph-inspector select, .graph-inspector textarea')).toHaveCount(0);
+    if (type === 'Display') {
+      await expect(page.getByLabel('display title', { exact: true })).toHaveValue('');
+      await expect(page.getByLabel('display Add input', { exact: true })).toBeEnabled();
+    } else {
+      await expect(page.locator('.graph-inspector')).toContainText('This Node has no configurable settings.');
+      await expect(page.locator('.graph-inspector input, .graph-inspector select, .graph-inspector textarea')).toHaveCount(0);
+    }
   }
   const port = name => page.getByRole('button', { name, exact: true });
   for (const [source, output, target, input] of [
     ['key', 'value', 'keyedtextpair', 'id1'], ['key', 'value', 'keyedtextpair', 'id2'],
     ['left', 'value', 'keyedtextpair', 'input1'], ['right', 'value', 'keyedtextpair', 'input2'],
     ['keyedtextpair', 'pair', 'keyedpairedtextaccumulator', 'pair'],
-    ['keyedpairedtextaccumulator', 'pairs', 'display', 'input'],
+    ['keyedpairedtextaccumulator', 'pairs', 'display', 'input1'],
   ]) {
     await port(`${source} output ${output}`).press('Enter');
     if (source === 'key') await expect(port('keyedtextpair input input1')).toBeDisabled();
     if (source === 'keyedpairedtextaccumulator') {
       await expect(port('keyedtextpair input input1')).toBeDisabled();
       await expect(port('keyedtextpair input id1')).toBeDisabled();
-      await expect(port('display input input')).toBeEnabled();
+      await expect(port('display input input1')).toBeEnabled();
     }
     await port(`${target} input ${input}`).press('Enter');
   }
   await port('keyedtextpair output pair').press('Enter');
-  await expect(port('display input input')).toBeEnabled();
+  await expect(port('display input input1')).toBeEnabled();
   await expect(port('keyedpairedtextaccumulator input pair')).toBeEnabled();
   await port('keyedtextpair output pair').press('Enter');
   await port('left output value').press('Enter');
-  await expect(port('display input input')).toBeEnabled();
+  await expect(port('display input input1')).toBeEnabled();
   await expect(port('keyedpairedtextaccumulator input pair')).toBeDisabled();
   await port('left output value').press('Enter');
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   await expect(page.locator('#graph-errors')).toBeEmpty();
   const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
   await page.reload();
-  await expect(port('keyedtextpair input id2')).toBeAttached(); await expect(port('display input input')).toBeAttached();
+  await expect(port('keyedtextpair input id2')).toBeAttached(); await expect(port('display input input1')).toBeAttached();
   await page.locator('#graph-help').click();
-  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Display has one input: ITEM');
+  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Each Display tab has configurable independent ITEM columns');
   await page.keyboard.press('Escape');
   const result = await page.evaluate(async () => {
     const { readGraph, graphNode, edge, GRAPH_VERSION } = await import('/extension/graph.js');
@@ -74,7 +79,7 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
       root.querySelector('[aria-live="polite"]') !== null;
     await pipeline.dispose();
     const plainGraph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode('Display', 'plain')],
-      edges: [edge('text', 'value', 'plain', 'input')] };
+      edges: [edge('text', 'value', 'plain', 'input1')] };
     plainGraph.nodes[0].settings.value = '<b>plain</b>\nnext';
     const plain = buildGraph(plainGraph, { onDisplay(id, dom) { renderTextRegions(root, plainGraph, { [id]: dom }); } });
     await plain.pipeline.start(); await plain.pipeline.stop();
@@ -110,7 +115,7 @@ test('browser portable ITEM transcript flow preserves rows across delayed revers
       edge('asr', 'provisionalId', 'coalesce', 'id2'), edge('asr', 'provisional', 'coalesce', 'input2'),
       edge('coalesce', 'id', 'pair', 'id1'), edge('coalesce', 'text', 'pair', 'input1'),
       edge('translation', 'id', 'pair', 'id2'), edge('translation', 'text', 'pair', 'input2'),
-      edge('pair', 'pair', 'history', 'pair'), edge('history', 'pairs', 'display', 'input')] });
+      edge('pair', 'pair', 'history', 'pair'), edge('history', 'pairs', 'display', 'input1')] });
     const tick = () => new Promise(r => setTimeout(r, 0));
     await pipeline.start();
     asr.emitOutputs({ provisionalId: 1, provisional: 'draft A' }); await tick();

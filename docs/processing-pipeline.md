@@ -103,7 +103,7 @@ Transcript/history → Topic extraction/analysis → Visualization
 Capture and transcription are executable today, and final text can connect
 directly to the independent translation, correction, TTS and text-output nodes.
 Committed TEXT can also feed the extension's text-summary Nodes directly;
-their complete summary snapshots feed Display.input. History
+their complete summary snapshots feed Display.input1. History
 storage, article inputs and broader analysis connections remain future examples.
 In particular,
 `.provisional` is the SpeechToTextNode port for the existing core's `partial`
@@ -151,12 +151,12 @@ orchestration only when real implementations demonstrate a need.
 Apply the [design principles](../README.md#design-principles): formatting,
 history, composition and rendering have explicit contracts and graph connections.
 
-New portable text graphs use `TEXT → Display.input: ITEM`, or
-`KeyedTextPair.pair → KeyedPairedTextAccumulator.pair → pairs → Display.input`.
+New portable text graphs use `TEXT → Display.input1: ITEM`, or
+`KeyedTextPair.pair → KeyedPairedTextAccumulator.pair → pairs → Display.input1`.
 The accumulator owns ordered keyed history; Display renders each complete
 TEXT/pair/list snapshot without history or selection. See the
 [ITEM contracts, exact wiring and recovery](display-items.md).
-For ordinary latest text, connect any TEXT producer directly to Display.input.
+For ordinary latest text, connect any TEXT producer directly to Display.input1.
 TextFormatter composes literal templates, TextAccumulator retains committed TEXT,
 and keyed pair history belongs to KeyedPairedTextAccumulator. Live follows graph
 order and supports copy and independent scroll position. Unsupported saved Nodes

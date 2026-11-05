@@ -102,7 +102,7 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .graph-ports button { min-height: 44px; border-color: #647693; }
 .graph-ports [data-side="output"] { text-align: right; border-right: 3px solid var(--accent); }
 .graph-ports [data-side="input"] { border-left: 3px solid #a6dfc6; }
-#live-displays { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 1rem; }
+#live-displays { display: block; }
 .live-text-region { margin: 0; min-width: 0; min-height: 16rem; padding: 1.25rem 1.5rem; }
 .live-text-region h2 { margin: 0; font-size: 1rem; color: var(--muted); }
 .live-text-region .section-heading { margin-bottom: 1rem; flex-wrap: nowrap; }
@@ -140,3 +140,10 @@ button, summary, nav a { min-height: 44px; }
 #audio-outputs { padding: 0; list-style: none; }
 .display-content { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch; max-height: 52dvh; overflow: auto; overflow-anchor: none; scrollbar-gutter: stable; }
 .display-flow { display: flow-root; }
+
+/* A Display owns a tab; its numbered inputs share the available width. */
+.display-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; min-width: 0; }
+.display-tabs button { min-height: 44px; max-width: 100%; overflow-wrap: anywhere; }
+.display-tabs button[aria-selected="true"] { background: #a7c6ff; color: #10213a; font-weight: 650; }
+.live-display { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; min-width: 0; }
+.live-text-region { min-width: 0; max-width: 100%; }

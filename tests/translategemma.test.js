@@ -31,7 +31,7 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
     assert.deepEqual(NODE_TYPES[type].optionalInputs, ['provisional', 'id', 'provisionalId', 'context']);
     assert.deepEqual(graphNode(type, 'translation').settings, {});
     const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'translation'), graphNode('Display', 'out')],
-      edges: [edge('input', 'value', 'translation', 'text'), edge('translation', 'text', 'out', 'input')] };
+      edges: [edge('input', 'value', 'translation', 'text'), edge('translation', 'text', 'out', 'input1')] };
     const entries = new Map(), storage = { getItem: key => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value), removeItem: key => entries.delete(key) };
     saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph);
     graph.edges.push(edge('context', 'value', 'translation', 'context'));
@@ -45,8 +45,8 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
       graphNode('Text', 'independent'), graphNode('Display', 'other'), graphNode(type, 'parked')], edges: [
       edge('input', 'value', 'translation', 'text'), edge('translation', 'source', 'format', 'input1'),
       edge('translation', 'text', 'format', 'input2'), edge('translation', 'error', 'format', 'input3'),
-      edge('format', 'text', 'paired', 'input'), edge('translation', 'text', 'plain', 'input'),
-      edge('independent', 'value', 'other', 'input'),
+      edge('format', 'text', 'paired', 'input1'), edge('translation', 'text', 'plain', 'input1'),
+      edge('independent', 'value', 'other', 'input1'),
     ] };
     graph.nodes[0].settings.value = 'Original source'; graph.nodes[2].settings.template = '{1}|{2}|{3}';
     graph.nodes[5].settings.value = 'Other branch';

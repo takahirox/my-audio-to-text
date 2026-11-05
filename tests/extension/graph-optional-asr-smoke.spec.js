@@ -69,7 +69,7 @@ for (const [key, type, module, className, partials] of [
         terminate() { this.released = true; super.terminate(); }
       };
       const graph = assertGraph({ version: 15, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode(type, 'speech'), graphNode('TextAccumulator','acc'), graphNode('Display', 'out')],
-        edges: [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'acc', 'append'), edge('acc', 'text', 'out', 'input')] });
+        edges: [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'acc', 'append'), edge('acc', 'text', 'out', 'input1')] });
       window.session = new TabSession(view => { window.view = view; }, { graph,
         sourceFactory: (tabId, onAudio) => ({ start() { window.feed = onAudio; }, stop() {} }) });
       window.events = [];
@@ -89,7 +89,7 @@ for (const [key, type, module, className, partials] of [
       }, { pcm, paced: partials });
       const stopAt = await page.evaluate(() => performance.now());
       await page.evaluate(async () => { await window.session.stop(); if (window.view.error) throw Error(window.view.error); });
-      const result = await page.evaluate(() => ({ events: window.events, displays: Object.fromEntries(Object.entries(window.view.displays).map(([id,dom])=>[id,dom.textContent])), workersReleased: window.workers.every(w => w.released), end: performance.now() }));
+      const result = await page.evaluate(() => ({ events: window.events, displays: Object.fromEntries(Object.entries(window.view.displays).map(([id,ports])=>[id,ports.input1.textContent])), workersReleased: window.workers.every(w => w.released), end: performance.now() }));
       const finals = result.events.filter(e => e.type === 'final');
       runs.push({ fixture, loadMs, feedAt, stopAt, ...result });
       console.log(key, fixture, JSON.stringify({ loadMs, finals, partials: result.events.filter(e => e.type === 'partial').length, drainMs: result.end - stopAt }));

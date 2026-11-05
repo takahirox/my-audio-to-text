@@ -24,8 +24,14 @@ Storage uses `processing-graph-v1`; the current schema version is 15. Unsupporte
 Nodes, ports and versions fail explicitly. Live disables Start and links to Graph
 Editor. The editor shows the error and a current default draft. Graph actions →
 Saved JSON exposes the rejected original for inspection before Save replaces it.
-There is no automatic migration, silent rewiring or executable legacy display
-mode. Current [example JSON](evidence/item-198.json) can be imported directly.
+Existing version-15 `Display.input` edges are deliberately converted to
+`Display.input1`, with missing `settings.inputCount` initialized to 1 and
+`settings.title` to an empty string. IDs, positions, other settings and unrelated
+ports (including `Hold.input`) stay unchanged. Load, Import, validation and runtime
+selection use the same conversion; reading leaves stored JSON untouched. Save and
+Export write the canonical numbered ports. Conflicting `input`/`input1` connections
+fail validation instead of replacing an edge. Removed display Node types and
+older schema versions still fail explicitly. Current [example JSON](evidence/item-198.json) can be imported directly.
 
 ## Default transcription and translated history
 
@@ -37,7 +43,7 @@ ASR.finalId/final → KeyedTextCoalesce.id1/input1
 ASR.provisionalId/provisional → KeyedTextCoalesce.id2/input2
 KeyedTextCoalesce.id/text → KeyedTextPair.id1/input1
 KeyedTextPair.pair → KeyedPairedTextAccumulator.pair
-KeyedPairedTextAccumulator.pairs → Display.input
+KeyedPairedTextAccumulator.pairs → Display.input1
 ```
 
 Translation is an explicit addition:
@@ -54,7 +60,7 @@ visible. Equal strings under distinct IDs remain distinct rows. The accumulator
 uses arrival order alone, with no stage or model-specific priority.
 
 Final-only ASRs omit the provisional branch. For append-only plain text, use
-`ASR.final → TextAccumulator.append → text → Display.input`. Any complete TEXT
+`ASR.final → TextAccumulator.append → text → Display.input1`. Any complete TEXT
 snapshot, including `TextSummary.summary`, can connect directly to Display.
 
 See [portable display items](display-items.md) for contracts, exact wiring,
@@ -118,7 +124,7 @@ payloads, startup configuration and correlation.
 | KeyedTextCoalesce | Independent id1/input1/id2/input2 → id/text; per-ID nonempty preference |
 | KeyedTextPair | Same four independent inputs → pair only; complete `{ id, first, second }` |
 | KeyedPairedTextAccumulator | pair → complete ordered pairs; append/replace by ID |
-| Display | input: ITEM → safe host rendering; no outputs, Settings, accumulation or selection |
+| Display | Configurable input1…inputN: ITEM → independent Live columns in one tab; title/inputCount Settings, no outputs or processing |
 | TextAccumulator | append: TEXT → complete newline-separated TEXT history |
 | TextFormatter | Configurable numbered TEXT inputs and literal multiline template → TEXT |
 | TextSlidingWindow, TextWindow | Generic bounded TEXT processing; see their documentation |
@@ -151,11 +157,36 @@ and suppresses late replies while retaining the last display. A fresh Start uses
 fresh state and rejects stale contexts. Display renders supplied snapshots only;
 stream selection belongs to explicit processors upstream.
 
-Live renders Display regions in graph order with Copy text and polite accessible
-content. Literal strings preserve whitespace and wrap; paired history uses two
-columns. Each region follows updates while reading near the bottom; scrolling
-up preserves the reader's position until returning to the bottom. Browser DOM is
+Each executable Display is one Live tab, ordered by its position in the graph's
+Node array and identified by its Node ID. Settings.title supplies the visible tab
+label (duplicate titles are allowed); empty titles use `Display <Node ID>`. A
+single Display shows its panes without tabs. No executable Displays retains the
+empty-output message.
+
+In Settings use **Add input** / **Remove last input** for 1–32 `ITEM` inputs
+(default 1). Removing the last input explicitly deletes only its connected wire;
+remaining ports keep their names. Each pane has a stable `Input 1`, `Input 2`, …
+heading. Disconnected panes stay empty; a Display needs at least one executable
+input branch. Save applies title/count changes on the next session.
+
+For example, title Display A `Main` and add a second input. Connect transcript
+history to A.input1 and translated history to A.input2. Title Display B `Summary`
+and connect TextSummary.summary to B.input1. Main shows two columns; Summary shows
+one full-width pane. Import the [model-free example](examples/display-tabs.json)
+to try this layout with three literal Text sources, then connect your preferred
+upstream processors. Every delivery replaces only that input's complete snapshot.
+No inference, accumulation or coalescing happens in Display.
+
+Tabs support pointer/touch, Left/Right arrows (wrapping), Home/End, and visible
+keyboard focus. Switching tabs only changes presentation: all graph processing
+and hidden snapshots keep updating. Panes remain mounted, preserving each pane's
+scroll position and near-bottom following intent through hidden updates. Each has
+Copy text; inactive tabs disable live announcements. Columns wrap/stack to fit
+narrow windows. Literal strings preserve whitespace and wrap; a keyed pair/list
+uses an equal-width two-cell table *within its own pane*. Browser DOM stays
 private to the host rendering boundary and never travels through graph ports.
+
+See [Display tabs validation](evidence/display-212.md) for checks and limitations.
 
 ## Feature setup and validation
 

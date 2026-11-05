@@ -109,7 +109,7 @@ test('field-only graph reports every unavailable destination without adding a fa
 test('portable Display remains an active destination when a focused field is unavailable', async () => {
   const graph = fieldOutputs({ live: false });
   graph.nodes.push(graphNode('Display', 'portable'));
-  graph.edges.push(edge('speech', 'final', 'portable', 'input'));
+  graph.edges.push(edge('speech', 'final', 'portable', 'input1'));
   const f = fixture({ graph, pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
   await f.session.start(42);
   assert.equal(f.session.view.state, 'running');
@@ -145,7 +145,7 @@ test('extension session emits provisional/final output, flushes once and clears 
   assert.equal(graph.entries.get('audio').outputs.audio, MONO_16KHZ_PCM);
   assert.equal(graph.entries.get('speech').inputs.audio, MONO_16KHZ_PCM);
   assert.equal(graph.entries.get('coalesce').inputs.input2, TEXT);
-  assert.equal(graph.entries.get('transcript').inputs.input, ITEM);
+  assert.equal(graph.entries.get('transcript').inputs.input1, ITEM);
   sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain();
   assert.equal((domText(session.view.displays.transcript) || ''), 'provisional text');
   await session.start(99); assert.equal(sources.length, 1, 'live capture cannot be retargeted');
@@ -425,7 +425,7 @@ test('fan-out uses one capture with independent same-type model processors and s
 test('parked and incomplete nodes do not load models, request microphone permission or capture', async () => {
   const graph = defaultGraph();
   for (const [type, id] of [['MicrophoneAudio', 'parked-mic'], ['SpeechToTextWhisper', 'parked-model'], ['TextFormatter', 'unfinished'], ['Kokoro', 'parked-tts'], ['Display', 'parked-output']]) graph.nodes.push(graphNode(type, id));
-  graph.edges.push(edge('parked-model', 'final', 'unfinished', 'input1'), edge('unfinished', 'text', 'parked-output', 'input'));
+  graph.edges.push(edge('parked-model', 'final', 'unfinished', 'input1'), edge('unfinished', 'text', 'parked-output', 'input1'));
   const f = fixture({ graph }); await f.session.start(42);
   assert.equal(f.session.view.state, 'running'); assert.equal(f.workers.length, 2); assert.equal(f.sources.length, 1);
   assert.deepEqual([...f.session.session.pipeline.entries.keys()], ['audio', 'speech', 'coalesce', 'pair', 'history', 'transcript']);
@@ -439,7 +439,7 @@ test('parked and incomplete nodes do not load models, request microphone permiss
 test('a shared formatter stays live after one input path ends', async () => {
   const graph = concurrentGraph(); graph.nodes.push(graphNode('TextFormatter', 'shared'), graphNode('Display', 'combined'));
   graph.nodes.at(-2).settings.template = '{1}/{2}';
-  graph.edges.push(edge('speech', 'final', 'shared', 'input1'), edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'input'));
+  graph.edges.push(edge('speech', 'final', 'shared', 'input1'), edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'input1'));
   const f = fixture({ graph }); await f.session.start(42); const active = f.session.session;
   active.audioSources.get('audio').end(); await active.branchDrain;
   assert.equal(active.pipeline.entries.get('shared').closed, false);
@@ -452,7 +452,7 @@ for (const mode of ['stop', 'cancel']) test(`held state survives its source endi
   graph.nodes.push(graphNode('Hold', 'held'), graphNode('TextFormatter', 'shared'), graphNode('Display', 'combined'));
   graph.nodes.at(-2).settings.template = '{1}/{2}';
   graph.edges.push(edge('speech', 'final', 'held', 'input'), edge('held', 'value', 'shared', 'input1'),
-    edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'input'));
+    edge('second-speech', 'final', 'shared', 'input2'), edge('shared', 'text', 'combined', 'input1'));
   const f = fixture({ graph }); await f.session.start(42); const active = f.session.session;
   const held = active.pipeline.entries.get('held');
   active.speechNodes.get('speech').receiveEvent({ type: 'final', id: 100, text: 'retained' });

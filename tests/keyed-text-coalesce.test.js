@@ -182,7 +182,7 @@ function savedGraph() {
     edge('key', 'value', 'select', 'id1'), edge('preferred', 'value', 'select', 'input1'),
     edge('key', 'value', 'select', 'id2'), edge('backup', 'value', 'select', 'input2'),
     edge('select', 'id', 'pair', 'id1'), edge('select', 'text', 'pair', 'input1'),
-     edge('pair', 'pair', 'paired-display', 'input'), edge('select', 'text', 'plain-display', 'input'),
+     edge('pair', 'pair', 'paired-display', 'input1'), edge('select', 'text', 'plain-display', 'input1'),
   ] };
   graph.nodes[0].settings.value = -2.5; graph.nodes[1].settings.value = ''; graph.nodes[2].settings.value = 'backup';
   return graph;

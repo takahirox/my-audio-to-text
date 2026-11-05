@@ -57,7 +57,7 @@ for (const translator of translators) test(`${translator}: direct ASR previews c
   const f = workers(), displays = {};
   const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),
-    edge('translator','provisionalText','preview','input'),edge('translator','text','acc','append'),edge('acc','text','translated','input'));
+    edge('translator','provisionalText','preview','input1'),edge('translator','text','acc','append'),edge('acc','text','translated','input1'));
   const built = buildGraph((graph), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
   try {
     await built.pipeline.start(); await built.translations[0].ready;
@@ -144,7 +144,7 @@ test('Cancel closes field side effects while retaining committed accumulator tex
 test('Text literals and formatter/accumulator snapshots execute as independent translator previews', async () => {
   for (const type of ['Text','TextFormatter','TextAccumulator']) {
     const f=workers(),graph={version:GRAPH_VERSION,nodes:[graphNode('Text','final'),graphNode('Text','seed'),graphNode(type,'alternate'),graphNode('TranslateGemmaEnJa','translator'),graphNode('Display','view'),graphNode('Display','preview')],
-      edges:[edge('final','value','translator','text'),edge('translator','text','view','input'),edge('translator','provisionalText','preview','input')]};
+      edges:[edge('final','value','translator','text'),edge('translator','text','view','input1'),edge('translator','provisionalText','preview','input1')]};
     if(type!=='Text')graph.edges.push(edge('seed','value','alternate',type==='TextFormatter'?'input1':'append'));
     graph.edges.push(edge('alternate',type==='Text'?'value':'text','translator','provisional'));
     let display,preview;const built=buildGraph((graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='view')display=v;else preview=v;}});
@@ -160,7 +160,7 @@ test('Committed translator text is an ordinary TEXT producer for another transla
   const {windowGraph}=await import('./fixtures/windowed-translation.js');const f=workers(),graph=windowGraph('window');
   graph.nodes.find(n=>n.id==='window-chars').settings.value=6;
   graph.nodes.push(graphNode('Text','independent'),graphNode('TranslateGemmaEnJa','second'),graphNode('Display','second-view'));
-  graph.edges.push(edge('independent','value','second','text'),edge('translator','text','second','provisional'),edge('second','provisionalText','second-view','input'));
+  graph.edges.push(edge('independent','value','second','text'),edge('translator','text','second','provisional'),edge('second','provisionalText','second-view','input1'));
   let display;const built=buildGraph((graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='second-view')display=v;}});
   await built.pipeline.start();await tick();built.pipeline.entries.get('input').context.emit('value','First.');await tick();f.complete(0);await tick();
   assert.equal(f.requests[1].text,'translated:First.');f.complete(1);await tick();assert.equal(display,'translated:translated:First.');

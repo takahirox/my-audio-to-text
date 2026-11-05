@@ -390,13 +390,18 @@ The [extension graph editor](extension-graph.md) saves a version 15 description
 with explicit production Nodes and named-port edges. The builder constructs this
 Pipeline at each session boundary. Processing uses portable TEXT and keyed pairs;
 Display privately renders the supplied whole item. Unknown Nodes/ports fail
-visibly with explicit Reset/Import recovery and no automatic migration. The
+visibly with explicit Reset/Import recovery. Existing version-15 Display.input
+routes have a narrow [numbered-port conversion](extension-graph.md); other
+unsupported Nodes/ports are not migrated. The
 Pipeline itself owns no model selection, editor or persistence policy.
 
 Portable text graphs use KEYED_PAIRED_TEXT and KEYED_PAIRED_TEXT_LIST snapshots.
 KeyedTextPair emits a complete immutable pair; KeyedPairedTextAccumulator emits
-ordered append/replace histories. Display receives only input: ITEM, accepting
-TEXT, one pair or a full pair list, and renders each whole snapshot in the host. Ordinary type-only routing, atomic
+ordered append/replace histories. Display receives configurable input1…inputN:
+ITEM, accepting TEXT, one pair or a full pair list per input. Each delivery
+replaces only its pane; omitted grouped inputs keep their snapshots. Each
+Display is one Live tab, with presentation independent of processing. Ordinary
+type-only routing, atomic
 deliveries and fan-out apply without runtime special cases. See the
 [ITEM contracts](display-items.md).
 

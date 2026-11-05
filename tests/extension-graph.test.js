@@ -16,7 +16,7 @@ test('default/reset and explicit translated history graphs use only current cont
     const graph = defaultGraph({ enabled, direction });
     assert.deepEqual(validateGraph(graph), []);
     assert.deepEqual(NODE_TYPES.KeyedTextPair.outputs, { pair: KEYED_PAIRED_TEXT });
-    assert.deepEqual(NODE_TYPES.Display.inputs, { input: ITEM });
+    assert.deepEqual(NODE_TYPES.Display.inputs, { input1: ITEM });
     const store = storage(); saveGraph(store, graph); const raw = store.getItem(GRAPH_KEY);
     assert.deepEqual(readGraph(store), graph); assert.equal(store.getItem(GRAPH_KEY), raw);
     const built = buildGraph(graph, {}); assert.ok(built.pipeline instanceof Pipeline);
@@ -48,7 +48,7 @@ for (const type of removed) test(`removed ${type} is unsupported in validation, 
 });
 
 for (const output of ['id', 'input1', 'input2']) test(`removed KeyedTextPair.${output} fails visibly without rewiring or modifying storage`, () => {
-  const graph = defaultGraph(); graph.edges.push(edge('pair', output, 'transcript', 'input'));
+  const graph = defaultGraph(); graph.edges.push(edge('pair', output, 'transcript', 'input1'));
   const store = storage(), raw = JSON.stringify(graph); store.setItem(GRAPH_KEY, raw);
   assert.throws(() => readGraph(store), /Unknown port: pair/); assert.equal(store.getItem(GRAPH_KEY), raw);
   assert.throws(() => saveGraph(store, graph), /Unknown port: pair/);
@@ -85,7 +85,7 @@ for (const [name, edit, pattern] of [
 
 test('every supported concrete TEXT/pair/list producer can reach Display by type, with no source restrictions', () => {
   for (const [type, definition] of Object.entries(NODE_TYPES)) for (const [port, contract] of Object.entries(definition.outputs)) {
-    const graph = { version: GRAPH_VERSION, nodes: [graphNode(type, 'source'), graphNode('Display', 'sink')], edges: [edge('source', port, 'sink', 'input')] };
+    const graph = { version: GRAPH_VERSION, nodes: [graphNode(type, 'source'), graphNode('Display', 'sink')], edges: [edge('source', port, 'sink', 'input1')] };
     if ([TEXT, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST].includes(contract)) assert.deepEqual(validateGraph(graph), []);
     else assert.match(validateGraph(graph).join(), /Incompatible/);
   }
@@ -95,7 +95,7 @@ test('every supported concrete TEXT/pair/list producer can reach Display by type
 test('TEXT processors retain literal rendering and fan-out without audio or ASR', async () => {
   const source = graphNode('Text', 'literal'); source.settings.value = '<script>\n日本語';
   const graph = { version: GRAPH_VERSION, nodes: [source, graphNode('TextFormatter', 'format'), graphNode('TextAccumulator', 'acc'), graphNode('Display', 'direct'), graphNode('Display', 'processed')],
-    edges: [edge('literal', 'value', 'direct', 'input'), edge('literal', 'value', 'format', 'input1'), edge('format', 'text', 'acc', 'append'), edge('acc', 'text', 'processed', 'input')] };
+    edges: [edge('literal', 'value', 'direct', 'input1'), edge('literal', 'value', 'format', 'input1'), edge('format', 'text', 'acc', 'append'), edge('acc', 'text', 'processed', 'input1')] };
   const seen = {}, built = buildGraph(graph, { onDisplay(id, dom) { seen[id] = domText(dom); assert.equal(dom.querySelector('script'), null); } });
   await built.pipeline.start(); await built.pipeline.stop(); assert.equal(seen.direct, source.settings.value); assert.equal(seen.processed, source.settings.value);
   assert.deepEqual(built.pipeline.errors, []); await built.pipeline.dispose();

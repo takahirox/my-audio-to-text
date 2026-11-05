@@ -8,7 +8,7 @@ The extension also has independent [LFM2.5 1.2B JP and Qwen3.5 2B text-summary
 processors](docs/text-summary-nodes.md). Summarize arbitrary TEXT with a
 multiline prompt in Settings, using the existing Save-prepared local WebGPU
 models. Compose rolling updates explicitly with TextWindow, TextFormatter and
-Hold. Connect `summary → Display.input`. Read the recorded accuracy
+Hold. Connect `summary → Display.input1`. Read the recorded accuracy
 limitations before relying on generated facts.
 
 A local-first composable processing system that connects reusable input and processing capabilities into pipelines for useful derived information.
@@ -87,7 +87,7 @@ The extension Graph Editor exposes **ReazonSpeech ja-en ASR**, **Whisper tiny
 (multilingual) ASR**, **Streaming Zipformer English ASR**, and a reusable **Text**
 constant. Whisper defaults to English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
 Japanese. Whisper exposes only `final: TEXT`; connect it to
-`final → TextAccumulator.append → text → Display.input` for completed segments.
+`final → TextAccumulator.append → text → Display.input1` for completed segments.
 For provisional/final history, use the [keyed display path](docs/display-items.md).
 
 The extension also offers independent **Parakeet TDT 0.6B v3** (WebGPU, final
@@ -197,7 +197,9 @@ Separate issues should define and implement:
 
 See the [development flow](docs/development-flow.md) for workflow and language policy, the [test and CI principles](docs/development-flow.md#test-and-ci-principles) for validation scope and cost, and the [review guidelines](docs/review-guidelines.md) for review and merge criteria.
 
-The extension Live window renders `Display.input: ITEM` sinks. Fresh setup and
+The extension Live window shows one tab per Display, with configurable
+`input1`, `input2`, … ITEM columns and an editable tab title. See the
+[tab/column guide](docs/extension-graph.md). Fresh setup and
 Reset use Chrome tab audio → ReazonSpeech → KeyedTextCoalesce → KeyedTextPair →
 KeyedPairedTextAccumulator → Display for continuous transcription. Translation
 is an explicit graph addition: branch ASR.finalId/final to translator.id/text,
@@ -211,11 +213,12 @@ nonempty input1, otherwise input2, per ID. ID-only changes never replay complete
 text. The accumulator appends new IDs and replaces existing IDs in arrival order,
 emitting complete portable history. Display safely renders each whole TEXT,
 pair or pair-list snapshot without selection or history. Any TEXT processor,
-including text summaries, connects directly to Display.input.
+including text summaries, connects directly to Display.input1.
 
 See [contracts and wiring](docs/display-items.md), the
 [importable graph](docs/evidence/item-198.json), and the
-[executable fixture](tests/fixtures/item-graph.js). Old display Nodes and ports
-are unsupported. Graph Editor reports them visibly and offers Reset or Import;
+[executable fixture](tests/fixtures/item-graph.js). Legacy `Display.input` edges
+convert to `input1` on Load/Import; Save writes the numbered form. Other removed
+display Nodes and ports are unsupported. Graph Editor reports them visibly and offers Reset or Import;
 Save explicitly replaces the stored graph. Each Live region follows updates
 when reading near the bottom and preserves scroll position when reading above it.

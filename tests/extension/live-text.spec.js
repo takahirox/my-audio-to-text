@@ -14,7 +14,7 @@ test('MV3 summary TEXT snapshots render literally through Display.input, retain 
     const {graphNode,edge,saveGraph}=await import('./graph.js');
     const source=graphNode('Text','source');source.settings.value=literal;
     saveGraph(localStorage,{version:15,nodes:[source,graphNode('TextSummaryLfm2','summary'),graphNode('Display','notes')],
-      edges:[edge('source','value','summary','text'),edge('summary', 'summary', 'notes', 'input')]});
+      edges:[edge('source','value','summary','text'),edge('summary', 'summary', 'notes', 'input1')]});
     window.dispatchEvent(new StorageEvent('storage',{key:'processing-graph-v1'}));
     const {TabSession}=await import('./session.js'), start=TabSession.prototype.start;
     TabSession.prototype.start=function(...args){window.summarySession=this;return start.apply(this,args);};

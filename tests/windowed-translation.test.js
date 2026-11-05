@@ -29,7 +29,7 @@ async function graph(mode = 'window', limits = {}) {
     description.nodes.find(n => n.id === id).settings.value = value;
   }
   const preview = graphNode('Text', 'preview-input'); description.nodes.push(preview, graphNode('Display', 'preview-display'));
-  description.edges.push(edge('translator', 'provisionalText', 'preview-display', 'input'));
+  description.edges.push(edge('translator', 'provisionalText', 'preview-display', 'input1'));
   description.edges.push(edge(preview.id, 'value', 'translator', 'provisional'));
   const built = buildGraph((description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory,
     onDisplay: (id, state) => { if (id === 'display') displays.push(domText(state)); else previews.push(domText(state)); } });
@@ -103,7 +103,7 @@ test('bare dispose retains an explicit preview snapshot without committing pendi
 
 test('Live reports a buffer failure while independent TEXT delivery continues', async () => {
   const description = windowGraph('window'); description.nodes.find(n => n.id === 'window-chars').settings.value = 6;
-  description.nodes.push(graphNode('Display', 'peer')); description.edges.push(edge('input', 'value', 'peer', 'input'));
+  description.nodes.push(graphNode('Display', 'peer')); description.edges.push(edge('input', 'value', 'peer', 'input1'));
   const f = workers();
   const session = new TabSession(() => {}, { graph: (description), prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory });
   await session.start(); await session.session.translations[0].ready;
@@ -162,7 +162,7 @@ for (const reverse of [false, true]) test(`independent windows drain separately 
 
 test('32-window overload is visible and leaves an independent TEXT branch running', async () => {
   const description = windowGraph('window'); description.nodes.find(n => n.id === 'window-chars').settings.value = 5;
-  description.nodes.push(graphNode('Display', 'independent')); description.edges.push(edge('input', 'value', 'independent', 'input'));
+  description.nodes.push(graphNode('Display', 'independent')); description.edges.push(edge('input', 'value', 'independent', 'input1'));
   const f = workers(), displays = {};
   const built = buildGraph((description), { prepareTranslateGemma() {}, translationWorkerFactory: f.workerFactory, onDisplay: (id, s) => displays[id] = domText(s) });
   await built.pipeline.start(); await built.translations[0].ready;

@@ -410,7 +410,7 @@ test('live regions replace safe DOM snapshots and copy verbatim at narrow widths
     graph.nodes.push(graphNode('Display', 'value'));
     const { DisplayNode } = await import('/web/display-node.js');
     const context = { signal: new AbortController().signal };
-    const toDOM = text => { let snapshot; const node = new DisplayNode(dom => snapshot = dom); node.start(context); node.receive('input', text, context); return snapshot; };
+    const toDOM = text => { let snapshot; const node = new DisplayNode(dom => snapshot = dom); node.start(context); node.receive('input1', text, context); return snapshot; };
     window.renderLayout = text => renderTextRegions(root, graph, { transcript: toDOM(text), value: toDOM('A current value') });
     window.renderLayout('<b>committed</b>'); window.firstText = root.querySelector('.display-content').firstChild;
     navigator.clipboard.writeText = async text => { window.copiedText = text; };
@@ -423,7 +423,7 @@ test('live regions replace safe DOM snapshots and copy verbatim at narrow widths
   await expect(page.locator('#live-displays b')).toHaveCount(0);
   await page.evaluate(() => window.renderLayout('<b>committed</b>\nsecond\nnew preview'));
   expect(await page.evaluate(() => window.firstText === document.querySelector('#live-displays .display-content').firstChild)).toBe(false);
-  await transcript.getByRole('button', { name: 'Copy text' }).click();
+  await transcript.getByRole('button', { name: 'Copy Input 1 text' }).click();
   expect(await page.evaluate(() => window.copiedText)).toBe('<b>committed</b>\nsecond\nnew preview');
   const output = await page.locator('#live-displays').boundingBox(), controls = await page.locator('.capture-panel').boundingBox();
   expect(controls.y).toBeLessThan(output.y);

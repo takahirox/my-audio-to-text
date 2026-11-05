@@ -44,7 +44,7 @@ ASR.final → TextWindow.text → TextFormatter.input2
 Hold.value                → TextFormatter.input1
 TextFormatter.text        → TextSummary.text
 TextSummary.summary    → Hold.input
-TextSummary.summary    → Display.input
+TextSummary.summary    → Display.input1
 ```
 
 Set the formatter to two inputs and this template (literal newlines):
@@ -90,7 +90,7 @@ An independent translation/display branch is supported:
 
 ```text
 TextSummary.summary ──┬──→ Hold.input
-                        └──→ TranslateGemmaEnJa.text → Display.input
+                        └──→ TranslateGemmaEnJa.text → Display.input1
 ```
 
 Hold stores the original completed summary. When S1 has been stored, the next

@@ -9,7 +9,7 @@ import { GraphEditor } from '../extension/graph-editor.js';
 function graph() {
   const nodes = ['Text','IfCondition','Display','Display','Display'].map((t,i) => graphNode(t,['source','condition','yes','no','peer'][i]));
   nodes[0].settings.value = '  Same?\n';
-  return { version: 15, nodes, edges: [edge('source','value','condition','text'),edge('condition','yes','yes','input'),edge('condition','no','no','input'),edge('source','value','peer','input')] };
+  return { version: 15, nodes, edges: [edge('source','value','condition','text'),edge('condition','yes','yes','input1'),edge('condition','no','no','input1'),edge('source','value','peer','input1')] };
 }
 function factory({ fail = false } = {}) {
   const workers = [];
@@ -30,8 +30,8 @@ test('v11 save/reload retains conditions, two output wires, fan-out and unrelate
   const editor = Object.assign(Object.create(GraphEditor.prototype), { draft: structuredClone(g), draw() {}, canvas:{querySelector(){}} });
   editor.selected = { id:'condition',port:'no',contract:TEXT };
   // Reconnect only one input; the Yes path and source fan-out survive.
-  editor.connect('peer','input',TEXT);
-  assert.deepEqual(editor.draft.edges.filter(e=>e.from[0]==='condition'), [edge('condition','yes','yes','input'),edge('condition','no','no','input'),edge('condition','no','peer','input')]);
+  editor.connect('peer','input1',TEXT);
+  assert.deepEqual(editor.draft.edges.filter(e=>e.from[0]==='condition'), [edge('condition','yes','yes','input1'),edge('condition','no','no','input1'),edge('condition','no','peer','input1')]);
   g.nodes[1].settings.condition=' '; assert.match(validateGraph((g)).join(' '),/nonempty/);
   g.nodes[1].settings.condition='x'.repeat(513); assert.match(validateGraph((g)).join(' '),/condition/);
 });

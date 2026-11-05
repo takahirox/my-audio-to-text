@@ -70,7 +70,7 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
         graphNode('TextFormatter', 'format'), graphNode('Display', 'paired'), graphNode('Display', 'plain'),
         graphNode('TranslateGemmaJaEn', 'parked'), graphNode('Text', 'independent'), graphNode('Display', 'other')], edges: [
         edge('input', 'value', 'gemma', 'text'), edge('gemma', 'source', 'format', 'input1'), edge('gemma', 'text', 'format', 'input2'), edge('gemma', 'error', 'format', 'input3'),
-        edge('format', 'text', 'paired', 'input'), edge('gemma', 'text', 'plain', 'input'), edge('independent', 'value', 'other', 'input'),
+        edge('format', 'text', 'paired', 'input1'), edge('gemma', 'text', 'plain', 'input1'), edge('independent', 'value', 'other', 'input1'),
       ] };
       graph.nodes[0].settings.value = initial; graph.nodes[2].settings.template = '{1}\n{2}{3}';
       graph.nodes[6].settings.value = 'Independent branch'; saveGraph(localStorage, (graph));

@@ -32,7 +32,7 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
   const live=await openGraph(f);
   const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),
-    edge('translator','text','acc','append'),edge('translator','provisionalText','preview','input'),edge('acc','text','translated','input'));
+    edge('translator','text','acc','append'),edge('translator','provisionalText','preview','input1'),edge('acc','text','translated','input1'));
   const result=await live.evaluate(async graph=>{
     const {buildGraph}=await import('./graph-runtime.js');const displays={},events=[];
     const built=buildGraph((graph),{tabId:42,prepareTranslateGemma(){},onDisplay(id,dom){const text=dom.textContent;displays[id]=text;events.push({id,text});}});
@@ -53,7 +53,7 @@ test('MV3 formatter startup configuration is delivered before Whisper loads, and
   await writeFile(path.join(f.root,'web/whisper-worker.js'),`self.onmessage=({data:m})=>{if(m.type==='load')postMessage({type:'ready'});};`);
   const live=await openGraph(f),graph=defaultGraph();graph.nodes[1].type='SpeechToTextWhisper';graph.edges=graph.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
   graph.nodes.push(graphNode('Text','language'),graphNode('TextFormatter','format'),graphNode('Display','peer'));graph.nodes.at(-3).settings.value='ja';
-  graph.edges.push(edge('language','value','format','input1'),edge('format','text','speech','language'),edge('language','value','peer','input'));
+  graph.edges.push(edge('language','value','format','input1'),edge('format','text','speech','language'),edge('language','value','peer','input1'));
   const result=await live.evaluate(async graph=>{
     const {buildGraph}=await import('./graph-runtime.js');const displays={};
     const built=buildGraph((graph),{tabId:42,onDisplay:(id,t)=>{displays[id]=t.textContent;}});
@@ -75,7 +75,7 @@ test('MV3 Cancel retains committed snapshots on direct and formatted paths',asyn
     const {TextAccumulatorNode,TextFormatterNode}=await import('../web/text-nodes.js');let source;const states={};
     const acc=new TextAccumulatorNode(),pipeline=new Pipeline({nodes:{source:{outputs:{text:TEXT},start(c){source=c;}},acc,format:new TextFormatterNode({template:'[{1}]'}),
       direct:new DisplayNode(t=>{states.direct=t.textContent;}),indirect:new DisplayNode(t=>{states.indirect=t.textContent;})},connections:[
-      {from:['source','text'],to:['acc','append']},{from:['acc','text'],to:['direct','input']},{from:['acc','text'],to:['format','input1']},{from:['format','text'],to:['indirect','input']}]});
+      {from:['source','text'],to:['acc','append']},{from:['acc','text'],to:['direct','input1']},{from:['acc','text'],to:['format','input1']},{from:['format','text'],to:['indirect','input1']}]});
     await pipeline.start();source.emit('text','keep');await pipeline.entries.get('acc').queue;
     await pipeline.entries.get('format').queue;
     source.emit('text','queued');await pipeline.cancel();source.emit('text','late');return states;

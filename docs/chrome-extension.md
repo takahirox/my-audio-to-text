@@ -355,4 +355,4 @@ commands](translation-nodes.md#translategemma-in-the-extension-124) and
 [#124 validation evidence](evidence/translation-124.md). No translation-quality
 superiority to OPUS-MT is assumed.
 
-Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.

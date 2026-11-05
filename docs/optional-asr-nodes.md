@@ -26,7 +26,7 @@ selected-media capture. Capture and resampling use the existing helpers.
 | Node | Outputs | Suggested wiring |
 | --- | --- | --- |
 | `SpeechToTextParakeetV3` | `final: TEXT` only | final → TextAccumulator.append |
-| `SpeechToTextMoonshineMediumEn` | `provisional: TEXT`, `final: TEXT` | finalId/final and provisionalId/provisional → KeyedTextCoalesce → KeyedTextPair → KeyedPairedTextAccumulator → Display.input |
+| `SpeechToTextMoonshineMediumEn` | `provisional: TEXT`, `final: TEXT` | finalId/final and provisionalId/provisional → KeyedTextCoalesce → KeyedTextPair → KeyedPairedTextAccumulator → Display.input1 |
 
 Finals are ordinary committed strings. Fan out independently to TextFormatter,
 OPUS-MT.text, focused text output or other TEXT consumers. Each Node owns a
@@ -209,4 +209,4 @@ inference. Physical microphone, meeting audio, other devices, comparative
 accuracy and user acceptance remain untested/out of scope. There is no required
 post-merge verification for this Issue.
 
-Connect complete TEXT snapshots directly to `Display.input`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.

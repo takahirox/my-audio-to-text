@@ -59,7 +59,7 @@ test('real concurrent Parakeet v3 and Moonshine Medium: native tab capture, Live
       const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextParakeetV3'; graph.edges = graph.edges.filter(e => !['provisional', 'provisionalId'].includes(e.from[1]));
       graph.nodes.push(graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('TextFormatter', 'format'), graphNode('Display', 'medium'), graphNode('FocusedInputTextOutputNode', 'field'), graphNode('TextAccumulator', 'medium-accumulator'));
       graph.nodes.find(n => n.id === 'format').settings.template = 'Moonshine: {1}';
-      graph.edges.push(edge('audio', 'audio', 'moonshine', 'audio'), edge('moonshine', 'final', 'format', 'input1'), edge('format', 'text', 'medium-accumulator', 'append'), edge('medium-accumulator', 'text', 'medium', 'input'), edge('speech', 'final', 'field', 'text'));
+      graph.edges.push(edge('audio', 'audio', 'moonshine', 'audio'), edge('moonshine', 'final', 'format', 'input1'), edge('format', 'text', 'medium-accumulator', 'append'), edge('medium-accumulator', 'text', 'medium', 'input1'), edge('speech', 'final', 'field', 'text'));
       saveGraph(localStorage, (graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
       for (const [module, name] of [['parakeet-v3-node', 'SpeechToTextParakeetV3Node'], ['moonshine-medium-node', 'SpeechToTextMoonshineMediumEnNode']]) {
         const Node = (await import(`../web/${module}.js`))[name], receive = Node.prototype.receiveEvent;
