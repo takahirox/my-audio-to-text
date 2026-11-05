@@ -197,9 +197,11 @@ Separate issues should define and implement:
 
 See the [development flow](docs/development-flow.md) for workflow and language policy, the [test and CI principles](docs/development-flow.md#test-and-ci-principles) for validation scope and cost, and the [review guidelines](docs/review-guidelines.md) for review and merge criteria.
 
-The extension Live window shows one tab per Display, with configurable
-`input1`, `input2`, … ITEM columns and an editable tab title. See the
-[tab/column guide](docs/extension-graph.md). Fresh setup and
+The extension Live window shows each Display as an independent view with one
+switchable tab per `input1`, `input2`, … ITEM port and exactly one input panel
+visible at a time. Edit input tab labels in Display Settings; blank labels use
+`Input N`. A single-input Display omits tab navigation. See the
+[Display input-tab guide](docs/extension-graph.md). Fresh setup and
 Reset use Chrome tab audio → ReazonSpeech → KeyedTextCoalesce → KeyedTextPair →
 KeyedPairedTextAccumulator → Display for continuous transcription. Translation
 is an explicit graph addition: branch ASR.finalId/final to translator.id/text,
@@ -212,7 +214,7 @@ its own ID and values; missing sides are empty strings. KeyedTextCoalesce select
 nonempty input1, otherwise input2, per ID. ID-only changes never replay completed
 text. The accumulator appends new IDs and replaces existing IDs in arrival order,
 emitting complete portable history. Display safely renders each whole TEXT,
-pair or pair-list snapshot without selection or history. Any TEXT processor,
+pair or pair-list snapshot without accumulating history. Any TEXT processor,
 including text summaries, connects directly to Display.input1.
 
 See [contracts and wiring](docs/display-items.md), the
