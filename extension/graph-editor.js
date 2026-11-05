@@ -543,6 +543,8 @@ export class GraphEditor {
       path.setAttribute('d', route.visualD || route.d);
       path.classList.add('wire-line');
       const hit = path.cloneNode(); hit.classList.remove('wire-line'); hit.classList.add('wire-hit');
+      // A visible crossing gap must not create a dead zone for selecting a wire.
+      hit.setAttribute('d', route.d);
       hit.style.strokeWidth = `${16 / this.zoom}px`;
       const wire = document.createElementNS('http://www.w3.org/2000/svg', 'g'); wire.classList.add('graph-wire'); wire.dataset.edge = index; wire.connection = connection;
       wire.classList.toggle('routing-fallback', !!route.fallback); wire.dataset.routing = route.fallback || 'clear';
