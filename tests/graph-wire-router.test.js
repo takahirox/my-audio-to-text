@@ -82,3 +82,60 @@ test('drag cache reuses clear paths, invalidates new collisions and changed atta
   assert.equal(reusableWireRoute(route, c, { ...c, end: { ...c.end, y: c.end.y + 10 } }, cards), false);
   assert.equal(reusableWireRoute({ ...route, fallback: 'limit' }, c, c, cards), false);
 });
+
+function parallelFixture(fanout = false) {
+  const cards = [card('a', 20, 100), card('b', 800, 100), card('obstacle', 390, 100)];
+  const connections = Array.from({ length: 4 }, (_, i) => ({ ...connection(cards, 'a', 'b', fanout ? 50 : 50+i*10, 50+i*20), key: `e${i}` }));
+  return { cards, connections };
+}
+function longSharedSegments(routes, connections) {
+  const shared = [];
+  for (let i=0;i<routes.length;i++) for (let j=i+1;j<routes.length;j++) {
+    for (let n=1;n<routes[i].points.length;n++) for (let m=1;m<routes[j].points.length;m++) {
+      const a=routes[i].points[n-1], b=routes[i].points[n], c=routes[j].points[m-1], d=routes[j].points[m];
+      const horizontal=a.y===b.y;
+      if(horizontal !== (c.y===d.y) || Math.abs((horizontal?a.y:a.x)-(horizontal?c.y:c.x))>=7) continue;
+      const length=Math.min(Math.max(horizontal?a.x:a.y,horizontal?b.x:b.y),Math.max(horizontal?c.x:c.y,horizontal?d.x:d.y))
+        -Math.max(Math.min(horizontal?a.x:a.y,horizontal?b.x:b.y),Math.min(horizontal?c.x:c.y,horizontal?d.x:d.y));
+      if(length<=24) continue;
+      // Legitimate branching is confined to the short escape of one output.
+      if(horizontal && connections[i].start.y===connections[j].start.y && length<=80 && n===1 && m===1) continue;
+      shared.push({i,j,length});
+    }
+  }
+  return shared;
+}
+for (const fanout of [false,true]) test(`separates ${fanout?'fan-out':'nearby ports'} into clear lanes around a shared obstacle`, () => {
+  const {cards,connections}=parallelFixture(fanout), before=structuredClone({cards,connections});
+  const routes=createWireRouter(cards,connections).routeAll();
+  routes.forEach((route,i)=>{clearRoute(cards,connections[i],route);assert.equal(route.crowded,false);});
+  assert.deepEqual(longSharedSegments(routes,connections),[]);
+  assert.equal(new Set(routes.map(r=>r.d)).size,4);
+  assert.deepEqual(createWireRouter(cards,connections).routeAll(),routes);
+  const reversed=[...connections].reverse();
+  assert.deepEqual(createWireRouter(cards,reversed).routeAll().reverse(),routes,'input edge order cannot change lanes');
+  assert.deepEqual({cards,connections},before);
+});
+test('bounded lane search preserves all node-clear baselines and visibly reports residual overlap', () => {
+  const {cards,connections}=parallelFixture();
+  const routes=createWireRouter(cards,connections,{maxTotalVisits:1500}).routeAll();
+  routes.forEach((r,i)=>clearRoute(cards,connections[i],r));
+  assert.ok(routes.some(r=>r.crowded));
+  assert.ok(longSharedSegments(routes,connections).length);
+  const shortest=connections.map(c=>createWireRouter(cards,[c]).route(0));
+  routes.forEach((r,i)=>assert.ok(r.length<=shortest[i].length*1.6+160));
+});
+test('drag routes are reserved before changed connections, without mutating cached routes', () => {
+  const {cards,connections}=parallelFixture();
+  const previous=createWireRouter(cards,connections).routeAll(), before=structuredClone(previous);
+  const routes=createWireRouter(cards,connections).routeAll([null,previous[1],previous[2],previous[3]]);
+  assert.deepEqual(routes.slice(1).map(r=>r.d),previous.slice(1).map(r=>r.d));
+  assert.deepEqual(longSharedSegments(routes,connections),[]);
+  assert.deepEqual(previous,before);
+});
+test('fan-out escapes clamp to the available corridor without introducing a blocked-port fallback', () => {
+  const cards=[card('a',20,100),card('b',260,100)];
+  const connections=Array.from({length:8},(_,i)=>({...connection(cards,'a','b',50,20+i*15),key:`e${i}`}));
+  const routes=createWireRouter(cards,connections).routeAll();
+  routes.forEach((r,i)=>clearRoute(cards,connections[i],r));
+});
