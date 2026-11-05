@@ -45,6 +45,13 @@ function renderGraphActions(view) {
 function graphState(view) { return { graph: view.activeSavedGraph, state: view.state, tabId: view.tabId }; }
 const session = new TabSession(view => {
   renderGraphActions(view);
+  // Use the existing lifecycle and terminal status; never infer recording from
+  // the presence of text or a configured model. Errors can coexist with capture.
+  const state = graphError || view.error ? 'error' : view.state === 'idle'
+    ? (/^Canceled\./.test(view.status) ? 'canceled' : /^Stopped[. ]/.test(view.status) ? 'completed' : 'idle') : view.state;
+  const labels = { idle: 'Idle', loading: 'Loading', starting: 'Starting', running: view.status === 'Transcription active' ? 'Recording' : 'Running', stopping: 'Stopping', completed: 'Completed', canceled: 'Canceled', error: 'Error' };
+  element('session-state').textContent = labels[state];
+  element('session-state').dataset.state = state;
   element('status').textContent = view.status;
   element('errors').textContent = graphError || view.error;
   const inputs = (view.state !== 'idle' ? view.activeGraph : view.savedGraph)?.nodes.filter(node => INPUT_TYPES.includes(node.type)) || [];

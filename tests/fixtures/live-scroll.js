@@ -12,6 +12,9 @@ export async function installLiveScrollFixture(page, packaged = false) {
     const { renderTextRegions } = await import(packaged ? './live-text-regions.js' : '/live-text-regions.js');
     const { DisplayNode } = await import(packaged ? '../web/display-node.js' : '/display-node.js');
     const root = document.createElement('div'); root.id = 'scroll-fixture'; document.body.append(root);
+    // Match Live's flex parent: its panes use flex-basis rather than a fixed
+    // max-height so the common single Display can fill the available window.
+    if (packaged) { root.style.display = 'flex'; root.style.flexDirection = 'column'; }
     const graph = { nodes: ['a', 'b'].map(id => ({ id, type: 'Display', settings: { inputCount: 1 } })) };
     const displays = { a: {}, b: {} }, histories = {}, sinks = {};
     const context = { signal: new AbortController().signal };
