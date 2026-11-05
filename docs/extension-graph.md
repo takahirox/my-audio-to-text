@@ -72,10 +72,10 @@ for independent ID/TEXT arrival semantics.
 Connections use rounded orthogonal paths around measured node cards, including
 all port labels and controls. Routing updates on node moves, card/port resizing,
 port additions/removals, load/import/reset and graph edits. Zoom, Fit and pan
-keep paths attached to their ports. The visible path and its 16-screen-pixel hit
-area share the same geometry, behind node controls. Existing pointer/touch,
-keyboard selection, input-end reconnect/detach and inspector Disconnect apply
-along the detours.
+keep paths attached to their ports. Wires render behind node controls. A 16-screen-pixel hit path follows the
+full continuous connection even where its visible stroke has a crossing gap.
+Existing pointer/touch, keyboard selection, input-end reconnect/detach and
+inspector Disconnect apply along the detours.
 
 `extension/graph-wire-router.js` is a dependency-free visual module. It does
 not change stored positions, graph edges, typed contracts or session execution.
@@ -98,10 +98,17 @@ per edge and 100,000 per snapshot. Blocked ports, overlapping cards, a lack of
 space at the top/left canvas boundary, or exhausted budgets produce an amber
 dashed cubic fallback plus a visible status message. These wires remain
 selectable and connected; move cards apart to recover automatic avoidance.
-There is no automatic node repositioning. Routes prioritize node avoidance and
-few bends; they do not allocate separate lanes or optimize wire crossings, so
-fan-out and dense graphs can share segments. At a shared hit area the uppermost
-wire receives pointer input; every connection remains keyboard-focusable.
+There is no automatic node repositioning. Wire paths are routed in stable
+connection order. The router discourages reuse of the same or nearby long
+segments (and unnecessary crossings) using an indexed traffic cost, creating
+parallel lanes where the available layout permits. Distinct wire paths can still
+cross when avoiding crossings would require an excessive detour. In that case,
+the later wire has a short, persistent visual gap at the intersection, while its
+hit path stays continuous. This distinguishes a crossing from a junction
+without requiring hover or selection. Shared stubs near a single output port
+may remain unavoidable, and nonrectilinear dashed fallbacks are not gap-marked.
+At a shared hit area the uppermost wire receives pointer input; every
+connection remains keyboard-focusable.
 
 See [routing validation and screenshots](evidence/graph-204.md) for fixtures,
 executed checks and build limitations.
