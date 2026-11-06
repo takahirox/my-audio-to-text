@@ -10,10 +10,23 @@ export async function seedQuickAdd(page, large = false) {
   await page.reload();
 }
 const search = page => page.getByRole('combobox', { name: 'Search nodes' });
+async function expectPaletteSelection(page, option = null) {
+  // Raw locators also check that closing clears selection in the hidden menu.
+  const input = page.locator('#graph-palette input');
+  await expect(page.locator('#graph-node-type [role="option"][aria-selected="true"]')).toHaveCount(option ? 1 : 0);
+  if (option) {
+    await expect(option).toHaveAttribute('aria-selected', 'true');
+    await expect(input).toHaveAttribute('aria-activedescendant', await option.getAttribute('id'));
+  } else {
+    await expect(page.locator('#graph-node-type [role="option"]:not([aria-selected="false"])')).toHaveCount(0);
+    await expect(input).not.toHaveAttribute('aria-activedescendant');
+  }
+}
 export async function openQuickAdd(page, touch = false) {
   await page.locator('#graph-palette-toggle')[touch ? 'tap' : 'click']();
   await expect(search(page)).toBeFocused();
   await expect(page.locator('#graph-palette-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expectPaletteSelection(page);
   const geometry = await page.locator('#graph-palette').evaluate(menu => {
     const box = menu.getBoundingClientRect(), anchor = document.querySelector('#graph-palette-toggle').getBoundingClientRect();
     return { x: box.x, y: box.y, right: box.right, bottom: box.bottom, width: innerWidth, height: innerHeight,
@@ -34,11 +47,25 @@ export async function checkQuickAddInteraction(page) {
   await expect(page.getByRole('group', { name: 'Sources / inputs' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Constants / utilities' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add selected node' })).toHaveCount(0);
+  const options = page.getByRole('listbox', { name: 'Node types' }).getByRole('option');
+  const initial = await snapshot(page);
+  await search(page).press('Enter');
+  await expect(page.locator('#graph-palette')).toBeVisible();
+  expect(await snapshot(page)).toEqual(initial);
+  await options.first().hover();
+  await expectPaletteSelection(page);
+  await search(page).hover();
+  await expectPaletteSelection(page);
+  await search(page).fill('text');
+  await expectPaletteSelection(page, options.first());
   await search(page).fill('no-such-node');
   await expect(page.getByRole('listbox', { name: 'Node types' }).getByRole('option')).toHaveCount(0);
   await expect(page.locator('#graph-palette')).toContainText('No matching nodes');
-  await search(page).press('Enter'); await expect(page.locator('.graph-node')).toHaveCount(0);
+  for (const key of ['ArrowDown', 'ArrowUp', 'Enter']) await search(page).press(key);
+  await expectPaletteSelection(page);
+  await expect(page.locator('.graph-node')).toHaveCount(0);
   await search(page).fill('text');
+  await expectPaletteSelection(page, options.first());
   const ids = await page.getByRole('listbox', { name: 'Node types' }).getByRole('option').evaluateAll(options => options.map(option => option.id));
   const first = await search(page).getAttribute('aria-activedescendant');
   await search(page).press('ArrowDown');
@@ -47,8 +74,16 @@ export async function checkQuickAddInteraction(page) {
   await expect(page.locator(`[id="${second}"]`)).toHaveAttribute('aria-selected', 'true');
   await search(page).press('ArrowUp'); await expect(search(page)).toHaveAttribute('aria-activedescendant', first);
   await search(page).fill('');
+  await expectPaletteSelection(page);
+  await search(page).press('Enter'); await expect(page.locator('.graph-node')).toHaveCount(0);
+  await search(page).press('ArrowDown'); await expectPaletteSelection(page, options.first());
+  await search(page).press('ArrowUp'); await expectPaletteSelection(page, options.last());
+  await search(page).press('ArrowDown'); await expectPaletteSelection(page, options.first());
+  await search(page).fill('text'); await search(page).fill('   ');
+  await expectPaletteSelection(page);
   const beforeNavigation = await snapshot(page);
   await search(page).press('ArrowUp'); // Wrap to a result beyond the initial list view.
+  await expectPaletteSelection(page, options.last());
   const highlighted = await search(page).getAttribute('aria-activedescendant');
   const visible = await page.locator(`[id="${highlighted}"]`).evaluate(option => {
     const box = option.getBoundingClientRect(), list = option.closest('[role="listbox"]').getBoundingClientRect();
@@ -59,16 +94,30 @@ export async function checkQuickAddInteraction(page) {
   expect(await snapshot(page)).toEqual(beforeNavigation);
   await search(page).press('Escape');
   await expect(page.locator('#graph-palette')).toBeHidden();
+  await expectPaletteSelection(page);
   await expect(page.locator('#graph-palette-toggle')).toBeFocused();
   await openQuickAdd(page);
+  await search(page).press('ArrowDown');
   await page.locator('.page-header h1').click();
   await expect(page.locator('#graph-palette')).toBeHidden();
+  await expectPaletteSelection(page);
   await expect(page.locator('.graph-node')).toHaveCount(0);
   await openQuickAdd(page);
   await search(page).press('Shift+Tab');
   await expect(page.locator('#graph-palette')).toBeHidden();
   await openQuickAdd(page);
   await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
+  await expectPaletteSelection(page);
+  await search(page).press('ArrowDown');
+  await expectPaletteSelection(page, options.first());
+  await page.getByLabel('Node category', { exact: true }).selectOption('Outputs');
+  await expectPaletteSelection(page);
+  await search(page).press('Enter'); await expect(page.locator('.graph-node')).toHaveCount(0);
+  await search(page).fill('number');
+  await expect(options).toHaveCount(0); await expectPaletteSelection(page);
+  await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
+  await expect(options).toHaveCount(1); await expectPaletteSelection(page);
+  await search(page).press('Enter'); await expect(page.locator('.graph-node')).toHaveCount(0);
   await search(page).fill('Number');
   await expect(page.getByRole('listbox', { name: 'Node types' }).getByRole('option')).toHaveCount(1);
   await search(page).press('Enter');
@@ -88,6 +137,15 @@ export async function checkQuickAddInteraction(page) {
   expect(saved.nodes.map(node => node.type)).toEqual(['Number', 'Hold']);
   await page.reload();
   await expect(page.locator('.graph-node')).toHaveCount(2);
+  await openQuickAdd(page);
+  await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
+  await search(page).press('ArrowDown');
+  await expectPaletteSelection(page, options.filter({ hasText: /^Number$/ }));
+  await search(page).press('Enter');
+  await expect(page.locator('.graph-node')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Select number-1', exact: true })).toBeFocused();
+  await expect(page.locator('#graph-palette')).toBeHidden();
+  await expectPaletteSelection(page);
 }
 async function snapshot(page) {
   return page.locator('.graph-scroll').evaluate(scroll => ({
@@ -145,6 +203,7 @@ export async function checkQuickAddTouch(page) {
   await openQuickAdd(page, true);
   const hold = page.getByRole('listbox', { name: 'Node types' }).getByRole('option', { name: 'Hold', exact: true });
   expect((await hold.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await expect(hold).toHaveAttribute('aria-selected', 'false');
   await hold.tap();
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Select hold', exact: true })).toBeFocused();

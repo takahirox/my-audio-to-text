@@ -111,7 +111,12 @@ export class GraphEditor {
     this.types = el('div', undefined, 'graph-node-list'); this.types.id = 'graph-node-type';
     this.types.setAttribute('role', 'listbox'); this.types.setAttribute('aria-label', 'Node types');
     this.paletteStatus = el('p', undefined, 'muted'); this.paletteStatus.setAttribute('role', 'status');
-    this.search.oninput = this.category.onchange = () => { this.filterPalette(); this.positionPalette(); };
+    this.search.oninput = () => {
+      this.filterPalette();
+      if (this.search.value.trim()) this.highlightPalette(this.types.querySelector('[role="option"]')?.dataset.type);
+      this.positionPalette();
+    };
+    this.category.onchange = () => { this.filterPalette(); this.positionPalette(); };
     this.search.onkeydown = event => {
       if (event.isComposing) return;
       const options = [...this.types.querySelectorAll('[role="option"]')];
@@ -119,7 +124,9 @@ export class GraphEditor {
         event.preventDefault();
         if (!options.length) return;
         const index = options.findIndex(option => option.dataset.type === this.paletteType);
-        this.highlightPalette(options[(index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length].dataset.type, true);
+        const next = index < 0 ? (event.key === 'ArrowDown' ? 0 : options.length - 1)
+          : (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+        this.highlightPalette(options[next].dataset.type, true);
       } else if (event.key === 'Enter') {
         event.preventDefault(); if (this.paletteType) this.addNode(this.paletteType);
       }
@@ -208,6 +215,7 @@ export class GraphEditor {
       window.visualViewport?.addEventListener('scroll', this.paletteGeometry);
       this.search.focus({ preventScroll: true });
     } else {
+      this.highlightPalette();
       document.removeEventListener('pointerdown', this.paletteOutside, true);
       document.removeEventListener('focusin', this.paletteOutside);
       window.removeEventListener('resize', this.paletteGeometry);
@@ -231,10 +239,12 @@ export class GraphEditor {
     this.palette.style.left = `${Math.max(left, Math.min(anchor.right - box.width, right - box.width))}px`;
     this.palette.style.top = `${Math.max(top, Math.min(bottom - box.height, flip ? anchor.top - box.height - 6 : anchor.bottom + 6))}px`;
   }
-  highlightPalette(type, reveal = false) {
-    this.paletteType = type;
-    for (const option of this.types.querySelectorAll('[role="option"]')) {
-      const active = option.dataset.type === type;
+  highlightPalette(type = null, reveal = false) {
+    const options = [...this.types.querySelectorAll('[role="option"]')];
+    this.paletteType = options.find(option => option.dataset.type === type)?.dataset.type ?? null;
+    this.search.removeAttribute('aria-activedescendant');
+    for (const option of options) {
+      const active = option.dataset.type === this.paletteType;
       option.setAttribute('aria-selected', String(active));
       if (active) {
         this.search.setAttribute('aria-activedescendant', option.id);
@@ -246,7 +256,6 @@ export class GraphEditor {
         }
       }
     }
-    if (!type) this.search.removeAttribute('aria-activedescendant');
   }
   filterPalette() {
     const query = this.search.value.trim().toLowerCase(); this.types.replaceChildren();
@@ -268,7 +277,8 @@ export class GraphEditor {
       option.onclick = () => this.addNode(type);
       groups.get(category).append(option); matches.push(type);
     }
-    this.highlightPalette(matches[0]);
+    // Rendering results never selects one; search and arrow navigation do so explicitly.
+    this.highlightPalette();
     this.types.scrollTop = 0;
     this.paletteStatus.textContent = matches.length ? `${matches.length} node type${matches.length === 1 ? '' : 's'}` : 'No matching nodes';
   }
