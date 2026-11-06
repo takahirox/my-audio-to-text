@@ -1,3 +1,4 @@
+import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { clickGraphAction } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
@@ -29,12 +30,13 @@ test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauth
     return graph;
   });
   await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+  await startReadyLive(page);
   await expect(page.locator('#status')).toHaveText('Transcription active');
   expect(await page.evaluate(() => window.pageAllocations)).toEqual([]);
   await expect(page.locator('#output-status')).toBeEmpty();
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
-  expect(await page.evaluate(() => window.graphWorkers.every(worker => worker.released))).toBe(true);
+  await expectPreparedIdle(page);
 });
 
 test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop, Cancel and repeat', async ({ graphExtension: f }) => {
@@ -77,7 +79,7 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
   await expect(page.editor.locator('#graph-errors')).toBeEmpty();
   for (const mode of ['branch-end', 'stop', 'cancel']) {
     await page.evaluate(() => window.graphInvoke({type:'invoke',tabId:42},{id:chrome.runtime.id}));
-    await expect(page.locator('#status')).toContainText('Press Start');
+    await expect(page.locator('#model-status')).toHaveText('Ready');
     // No auto-permission request and no active resources from the toolbar invocation.
     const before = await page.evaluate(() => window.mediaRequests.length);
     await page.locator('#start').click(); await expect(page.locator('#status')).toHaveText('Transcription active');
@@ -104,7 +106,7 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
       await expect(page.locator('[data-display="transcript"] .display-content')).toContainText('remote');
       await expect(page.locator('[data-display="local-display"] .display-content')).toContainText('local');
     }
-    expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+    await expectPreparedIdle(page);
     expect(await page.evaluate(() => window.captureStreams.every(record => record.stopped && record.context.state==='closed'))).toBe(true);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
   }
@@ -130,7 +132,7 @@ test('MV3 drafts save/reload, optional warnings default off and persist, empty e
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await page.evaluate(() => window.graphInvoke({type:'invoke',tabId:42},{id:chrome.runtime.id}));
   await expect(page.locator('#errors')).toContainText('No executable path');
-  expect(await page.evaluate(() => window.graphWorkers.length)).toBe(0);
+  expect(await page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(0);
 });
 
 
@@ -146,7 +148,7 @@ test('MV3 TEXT-only path starts without a toolbar tab or microphone permission',
   await expect(page.locator('#start')).toBeEnabled(); await page.locator('#start').click();
   await expect(page.locator('#status')).toHaveText('Processing active');
   await expect(page.locator('.display-content')).toHaveText(['Independent text path'].join('\n'));
-  expect(await page.evaluate(() => window.graphWorkers.length)).toBe(0);
+  expect(await page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(0);
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await expect(page.locator('#errors')).toBeEmpty();
 });

@@ -49,9 +49,9 @@ export class TabSession {
     if (this.prepared?.key === key && ['preparing', 'ready'].includes(this.view.modelState)) return this.preparing;
     const previous = this.prepared;
     this.prepared = null;
-    // A Save/retry can arrive while Cancel still owns asynchronous cleanup.
-    // Do not overlap the replacement's GPU allocations with that old runtime.
-    const released = Promise.allSettled([this.releasing, previous?.pipeline?.dispose()]);
+    // Retain the teardown barrier even when an intervening owner has not built
+    // a pipeline yet. Successive Saves and close must await all older GPU owners.
+    const released = this.releasing = Promise.allSettled([this.releasing, previous?.pipeline?.dispose()]);
     const preferences = graphPreferences(snapshot);
     const owner = this.prepared = { key, snapshot, speakers: new Map(), speakerStates: Object.create(null),
       microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null),
@@ -87,7 +87,7 @@ export class TabSession {
     const owner = this.prepared;
     this.prepared = null;
     this.update({ modelState: 'closed', modelStatus: '' });
-    await Promise.allSettled([owner?.pipeline?.dispose(), this.cancel(), this.preparing]);
+    await Promise.allSettled([owner?.pipeline?.dispose(), this.cancel(), this.preparing, this.releasing]);
   }
   nodeEvent(event, id) {
     // Unknown event types are diagnostics by default, including future Nodes.

@@ -1,3 +1,4 @@
+import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, emitFinal } from './graph-fixture.js';
 import { openPalette, loadTranslationFixture } from './ui-controls.js';
 import { observeSpeaker } from '../fixtures/speaker-observer.js';
@@ -33,9 +34,8 @@ async function speakerGraph(f, type = 'Supertonic3') {
 }
 async function startSpeaker(page) {
   await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
-  await expect(page.locator('#status')).toContainText('Press Start');
   expect(await page.evaluate(() => window.speakerContexts.length)).toBe(0);
-  await page.locator('#start').click(); await expect(page.locator('#status')).toHaveText('Transcription active');
+  await startReadyLive(page); await expect(page.locator('#status')).toHaveText('Transcription active');
 }
 for (const type of ['Supertonic3', 'Kokoro']) {
   test(`MV3 ${type} → Speaker saves/reloads, plays consecutive TTS clips and drains on Stop`, async ({ graphExtension: f }) => {
@@ -49,7 +49,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     await expect(page.locator('#audio-outputs audio')).toHaveCount(0);
     await expect(page.locator('#audio-outputs a')).toHaveCount(0);
     await expect(page.locator('#speaker-hint')).toContainText('Keep this Live window open');
-    expect(await page.evaluate(() => window.graphWorkers.every(worker => worker.released))).toBe(true);
+    await expectPreparedIdle(page);
     expect(await page.evaluate(() => window.graphWorkers.flatMap(worker => worker.messages)
       .filter(message => message.type === 'generate').map(message => message.text))).toEqual(['First', 'Second', 'Third']);
     expect(errors).toEqual([]);
@@ -124,8 +124,8 @@ test('MV3 internal cancellation, repeated Start and closing Live release audio a
   await page.evaluate(() => window.graphSession.cancel());
   await expect(page.locator('#start')).toBeEnabled();
   expect(await page.evaluate(() => window.speakerContexts.map(context => context.state))).toEqual(['closed']);
-  expect(await page.evaluate(() => window.graphWorkers.every(worker => worker.released))).toBe(true);
-  await page.locator('#start').click(); await expect(page.locator('#status')).toHaveText('Transcription active');
+  await expectPreparedIdle(page);
+  await startReadyLive(page); await expect(page.locator('#status')).toHaveText('Transcription active');
   await emitFinal(page, 'Fresh');
   await expect.poll(() => page.evaluate(() => window.speakerEvents.filter(event => event.type === 'start').length)).toBe(2);
   await page.evaluate(() => {

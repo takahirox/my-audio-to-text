@@ -33,6 +33,8 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and the same-ta
     const website = await context.newPage(); await website.goto(`http://127.0.0.1:${server.address().port}/`);
     const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
     await cdp.send('Extensions.triggerAction', { id, targetId: targetInfos.find(target => target.url === website.url()).targetId });
+    await expect(live.locator('#model-status')).toHaveText('Ready', { timeout: 120000 });
+    await live.locator('#start').click();
     await expect(live.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
     await expect(live.locator('#errors')).toBeEmpty();
     await expect(live.locator('#output-status')).toContainText('connected and authorized');

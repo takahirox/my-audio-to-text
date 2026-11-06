@@ -5,7 +5,7 @@ import path from 'node:path';
 
 for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa','OpusMtJaEn']) test(`${translator}: MV3 editor connects ASR previews and window text in either order and saves incomplete drafts`, async ({ graphExtension:f }) => {
   test.setTimeout(90000);
-  const live=await openGraph(f), editor=live.editor;
+  const live=await openGraph(f, { live: false }), editor=live.editor;
   for(const source of ['speech','window']) for(const ports of [['provisional','text'],['text','provisional']]) {
     const graph=defaultGraph(); graph.nodes.push(graphNode(translator,'translator',600,400),graphNode('TextWindow','window',300,400));
     await editor.evaluate(async graph=>{const {saveGraph}=await import('./graph.js');saveGraph(localStorage, (graph));},graph);await editor.reload();
@@ -29,7 +29,7 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
       if(m.type==='drain')postMessage({id:m.id,type:'drained'});
       if(m.type==='translate')setTimeout(()=>postMessage({id:m.id,type:'result',texts:['translated:'+m.text]}),20);
     };`);
-  const live=await openGraph(f);
+  const live=await openGraph(f, { live: false });
   const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),
     edge('translator','text','acc','append'),edge('translator','provisionalText','preview','input1'),edge('acc','text','translated','input1'));
@@ -51,7 +51,7 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
 
 test('MV3 formatter startup configuration is delivered before Whisper loads, and late values fail locally',async({graphExtension:f})=>{
   await writeFile(path.join(f.root,'web/whisper-worker.js'),`self.onmessage=({data:m})=>{if(m.type==='load')postMessage({type:'ready'});};`);
-  const live=await openGraph(f),graph=defaultGraph();graph.nodes[1].type='SpeechToTextWhisper';graph.edges=graph.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
+  const live=await openGraph(f, { live: false }),graph=defaultGraph();graph.nodes[1].type='SpeechToTextWhisper';graph.edges=graph.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
   graph.nodes.push(graphNode('Text','language'),graphNode('TextFormatter','format'),graphNode('Display','peer'));graph.nodes.at(-3).settings.value='ja';
   graph.edges.push(edge('language','value','format','input1'),edge('format','text','speech','language'),edge('language','value','peer','input1'));
   const result=await live.evaluate(async graph=>{
@@ -68,7 +68,7 @@ test('MV3 formatter startup configuration is delivered before Whisper loads, and
 });
 
 test('MV3 Cancel retains committed snapshots on direct and formatted paths',async({graphExtension:f})=>{
-  const live=await openGraph(f);
+  const live=await openGraph(f, { live: false });
   const result=await live.evaluate(async()=>{
     const {Pipeline}=await import('../web/pipeline.js');const {TEXT}=await import('../web/port-contracts.js');
     const {DisplayNode}=await import('../web/display-node.js');
@@ -84,7 +84,7 @@ test('MV3 Cancel retains committed snapshots on direct and formatted paths',asyn
 });
 
 test('MV3 session waits for inactive startup sources and rejects invalid values before creating model Workers',async({graphExtension:f})=>{
-  const live=await openGraph(f),missing=defaultGraph();missing.nodes[1].type='SpeechToTextWhisper';missing.edges=missing.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
+  const live=await openGraph(f, { live: false }),missing=defaultGraph();missing.nodes[1].type='SpeechToTextWhisper';missing.edges=missing.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
   missing.nodes.push(graphNode('TextFormatter','unready'),graphNode('SpeechToTextWhisper','unready-asr'));
   missing.edges.push(edge('unready-asr','final','unready','input1'),edge('unready','text','speech','language'));
   const invalid=defaultGraph();invalid.nodes.push(graphNode('Number','cap'));invalid.edges.push(edge('cap','value','speech','maxDuration'));
@@ -104,7 +104,7 @@ test('MV3 session waits for inactive startup sources and rejects invalid values 
 });
 
 test('MV3 arbitrary NUMBER producer configures ReazonSpeech through ordinary ports',async({graphExtension:f})=>{
-  const live=await openGraph(f);
+  const live=await openGraph(f, { live: false });
   const result=await live.evaluate(async()=>{
     const {Pipeline}=await import('../web/pipeline.js');const {NUMBER,TEXT}=await import('../web/port-contracts.js');
     const {SpeechToTextNode,MONO_16KHZ_PCM}=await import('../web/transcription-nodes.js');

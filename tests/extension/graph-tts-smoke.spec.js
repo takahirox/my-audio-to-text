@@ -1,3 +1,4 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './graph-fixture.js';
 import { writeFile } from 'node:fs/promises';
 import { cpus, platform, arch } from 'node:os';
@@ -29,7 +30,6 @@ for (const type of ['Supertonic3', 'Kokoro']) {
         await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Ready', { timeout: 600000 });
         const begin = Date.now(), before = requests.length;
         await startGraph(page, 300000);
-        await expect(page.locator('#tts-status')).toContainText('ready (local)', { timeout: 300000 });
         const loaded = Date.now(); await emitFinal(page, texts[language]);
         await expect(page.locator('#audio-outputs audio')).toHaveCount(1, { timeout: 300000 });
         const generated = Date.now();
@@ -48,7 +48,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
         expect(waveform.finite).toBe(true); expect(waveform.rms).toBeGreaterThan(.00001); expect(waveform.duration).toBeGreaterThan(.25); expect(waveform.duration).toBeLessThan(30);
         expect(requests.slice(before)).toEqual([]);
         await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-        expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+        await expectPreparedIdle(page, { timeout: 300000 });
         runs.push({ language, loadMs: loaded - begin, generationMs: generated - loaded, waveform });
         console.log(JSON.stringify({ type, language, ...runs.at(-1) }));
       }

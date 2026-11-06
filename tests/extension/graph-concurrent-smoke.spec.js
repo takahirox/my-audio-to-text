@@ -1,3 +1,4 @@
+import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
@@ -48,7 +49,7 @@ test('real packaged concurrent Zipformer and Whisper: independent results, resou
   try {
     for(let repeat=0;repeat<2;repeat++) {
       await page.evaluate(()=>window.graphInvoke({type:'invoke',tabId:42},{id:chrome.runtime.id}));
-      const start=Date.now();await page.locator('#start').click();
+      const start=Date.now();await startReadyLive(page, { timeout: 120000 });
       await expect(page.locator('#status')).toHaveText('Transcription active',{timeout:120000});const loaded=Date.now();
       expect(await page.evaluate(()=>window.graphWorkers.filter(worker=>!worker.released).length)).toBe(3);
       const baseline=await resources(), samples=[baseline];
@@ -65,7 +66,7 @@ test('real packaged concurrent Zipformer and Whisper: independent results, resou
       const remote=(await page.locator('[data-display="transcript"] .display-content').textContent()).split('\n').filter(Boolean);
       const local=(await page.locator('[data-display="local"] .display-content').textContent()).split('\n').filter(Boolean);
       expect(remote.join(' ')).toMatch(/yellow lamps/i);expect(local.join(' ')).toMatch(/yellow lamps/i);
-      expect(await page.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
+      await expectPreparedIdle(page, { timeout: 300000 });
       const timing=await page.evaluate(()=>({feedStart:window.feedStart,events:window.modelEvents}));
       runs.push({repeat, samples:pcm.length, audioSeconds:pcm.length/16000, loadMs:loaded-start, stopDrainMs:Date.now()-stop,
         elapsedMs:Date.now()-loaded, cpuSeconds:samples.at(-1).cpuSeconds-baseline.cpuSeconds,
@@ -73,9 +74,9 @@ test('real packaged concurrent Zipformer and Whisper: independent results, resou
         firstOutputMs:Object.fromEntries(['SpeechToTextZipformerEnNode','SpeechToTextWhisperNode'].map(node=>[node,timing.events.find(event=>event.node===node&&event.text)?.ms-timing.feedStart]))});
       console.log(JSON.stringify(runs.at(-1)));
     }
-    await page.locator('#start').click();await expect(page.locator('#status')).toHaveText('Transcription active',{timeout:120000});
+    await startReadyLive(page, { timeout: 120000 });await expect(page.locator('#status')).toHaveText('Transcription active',{timeout:120000});
     await page.evaluate(() => window.graphSession.cancel());await expect(page.locator('#start')).toBeEnabled();
-    expect(await page.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
+    await expectPreparedIdle(page, { timeout: 300000 });
     expect(errors).toEqual([]);expect(requests).toEqual([]);
   } finally {
     const output=info.outputPath('concurrent-evidence.json');

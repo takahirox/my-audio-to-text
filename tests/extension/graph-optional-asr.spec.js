@@ -1,3 +1,4 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
 
@@ -54,7 +55,7 @@ test('parallel production Nodes fan out finals, preserve repeats, clear failed p
 
     await expect(page.locator('#status')).toHaveText('Transcription active');
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-    expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+    await expectPreparedIdle(page);
     await expect(page.locator('[data-display="p"] .display-content')).toHaveText('repeat\nrepeat');
   }
 });

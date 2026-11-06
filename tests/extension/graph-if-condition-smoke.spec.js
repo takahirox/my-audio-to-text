@@ -1,3 +1,4 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph, emitFinal, conditionAssets, seedConditionGraph } from './if-condition-fixture.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -11,7 +12,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
  await conditionAssets(f,true);const page=await openGraph(f);await seedConditionGraph(page.editor);
  const modelCard=page.editor.locator('#graph-models .model-card').filter({hasText:'IfCondition'});
  await page.editor.locator('#graph-save').click();await expect(modelCard).toHaveAttribute('data-state','Ready',{timeout:180000});
- expect(await page.evaluate(()=>window.graphWorkers.length)).toBe(0);
+ expect(await page.evaluate(()=>window.graphWorkers.flatMap(w=>w.messages).some(m=>['vad-start','decide'].includes(m.type)))).toBe(false);
  const downloads=f.requests.length;await page.editor.locator('#graph-save').click();await expect(modelCard).toHaveAttribute('data-state','Ready',{timeout:30000});expect(f.requests.length).toBe(downloads);
  const assets=JSON.parse(await readFile('extension/if-condition-assets.json','utf8'));
  const host=await page.evaluate(()=>({browser:navigator.userAgent,isolated:crossOriginIsolated}));
@@ -39,7 +40,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
     decisions.push({text,branch,latencyMs:Date.now()-before});
    }
    await page.locator('#stop').click();await expect(page.locator('#start')).toBeEnabled({timeout:60000});
-   await expect(page.locator('#errors')).toBeEmpty();expect(await page.evaluate(()=>window.graphWorkers.every(w=>w.released))).toBe(true);
+   await expect(page.locator('#errors')).toBeEmpty();await expectPreparedIdle(page, { timeout: 300000 });
    runs.push({condition,loadMs,decisions});
   }
   // Two simultaneously executable instances have separate conditions/Workers,
@@ -57,7 +58,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
   await expect(page.locator('#start')).toBeEnabled({timeout:60000});
   expect(await items('yes').allTextContents()).toEqual(batch.filter((_,i)=>i%2===0));expect(await items('no').allTextContents()).toEqual(batch.filter((_,i)=>i%2===1));
   expect(await items('animal-yes').allTextContents()).toEqual([]);expect(await items('animal-no').allTextContents()).toEqual(batch);
-  expect(await page.evaluate(()=>window.graphWorkers.every(w=>w.released))).toBe(true);
+  await expectPreparedIdle(page, { timeout: 300000 });
   runs.push({parallelConditions:['Is this a question?','Does this text mention an animal?'],inputs:batch,stopDrainMs:Date.now()-parallelStart});
   expect(requests).toEqual([]);violations.push(...await page.evaluate(()=>cspViolations));expect(violations).toEqual([]);
  } finally {

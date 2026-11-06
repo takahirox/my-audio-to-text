@@ -15,8 +15,8 @@ import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
-import { TextAccumulatorNode, TextFormatterNode, parseTemplate } from '../web/text-nodes.js';
-import { executableGraph, INPUT_TYPES, ASR_TYPES } from './graph.js';
+import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
+import { executableGraph, INPUT_TYPES, ASR_TYPES, nodeDefinition } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 import { TextNode } from '../web/text-constant-node.js';
 import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
@@ -110,23 +110,67 @@ function sharedTabCapture(factory, stopping) {
   };
 }
 
-// Read startup data without invoking graph hooks or sending artificial inputs.
-// A single constant-fed formatter is also static; future audio, model outputs,
-// sampled state and trigger-dependent values cannot configure a warm model.
-function startupValue(graph, [id, port], seen = new Set()) {
-  if (seen.has(id)) throw Error('Startup configuration contains a cycle.');
-  seen.add(id);
-  const spec = graph.nodes.find(node => node.id === id);
-  if (['Text', 'Number'].includes(spec?.type) && port === 'value') return spec.settings.value;
-  if (spec?.type === 'TextFormatter' && port === 'text') {
-    const incoming = graph.edges.filter(route => route.to[0] === id);
-    if (incoming.length === 1) {
-      const value = startupValue(graph, incoming[0].from, seen);
-      return parseTemplate(spec.settings.template, spec.settings.inputCount).map(part => typeof part === 'number'
-        ? (incoming[0].to[1] === `input${part}` ? value : '') : part).join('');
-    }
+// Evaluate only configuration ancestors, with fresh data-node state and the
+// ordinary Pipeline delivery/grouping/sampling semantics. Resource owners,
+// buttons, triggered gates and sinks are inert declarations: this pass cannot
+// capture, infer, fire a trigger or publish output. Dispose even timer-backed
+// data nodes before initializing models; Start gets untouched processing state.
+const startupDataNodes = { Text: TextNode, Number: NumberNode, TextFormatter: TextFormatterNode,
+  TextAccumulator: TextAccumulatorNode, TextSlidingWindow: TextSlidingWindowNode, TextWindow: TextWindowNode,
+  KeyedTextCoalesce: KeyedTextCoalesceNode, KeyedTextPair: KeyedTextPairNode,
+  KeyedPairedTextAccumulator: KeyedPairedTextAccumulatorNode, Hold: HoldNode };
+async function startupValues(graph, configurations, signal, timeoutMs) {
+  const needed = new Set(), pending = [...configurations.values()].map(route => route.from[0]);
+  while (pending.length) {
+    const id = pending.pop();
+    if (needed.has(id)) continue;
+    needed.add(id);
+    for (const route of graph.edges) if (route.to[0] === id) pending.push(route.from[0]);
   }
-  throw Error('Startup configuration is unavailable before capture. Connect a Text/Number constant in Graph Editor and Save so Live can prepare this model without running the graph.');
+  const nodes = {}, connections = graph.edges.filter(route => needed.has(route.from[0]) && needed.has(route.to[0]));
+  for (const spec of graph.nodes.filter(node => needed.has(node.id))) {
+    const Node = startupDataNodes[spec.type];
+    const triggered = spec.type === 'Hold' && graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'trigger');
+    const definition = nodeDefinition(spec, graph);
+    nodes[spec.id] = Node && !triggered ? new Node(spec.settings)
+      : { inputs: definition.inputs, outputs: definition.outputs, receive() {} };
+  }
+  const values = new Map();
+  let wake;
+  for (const [id, route] of configurations) {
+    let sink = `${id}:startup`;
+    while (Object.hasOwn(nodes, sink)) sink += ':';
+    nodes[sink] = { inputs: { value: nodeDefinition(graph.nodes.find(node => node.id === id), graph).inputs[route.to[1]] },
+      outputs: {}, receive: (_, value) => { values.set(id, value); wake?.(); } };
+    connections.push({ from: route.from, to: [sink, 'value'] });
+  }
+  const startup = new Pipeline({ nodes, connections, onError: () => wake?.() });
+  const abort = () => { void startup.dispose(); };
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    signal.throwIfAborted();
+    await startup.start();
+    const deadline = Date.now() + timeoutMs;
+    while (true) {
+      // Settle startup deliveries without Stop's synthetic tail flushes. A
+      // constant-fed TextWindow may legitimately deliver after its own timer.
+      for (const entry of startup.order) await startup.wait(entry, entry.queue);
+      if (startup.errors.length || values.size === configurations.size || !startup.order.some(entry => entry.node.timer != null)) break;
+      let timer;
+      try {
+        await startup.wait(startup.order[0], new Promise(resolve => {
+          wake = resolve; timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+        }));
+      } finally { wake = null; clearTimeout(timer); }
+      if (Date.now() >= deadline && values.size !== configurations.size) throw Error('Startup configuration timed out. Supply configuration before capture in Graph Editor and Save.');
+    }
+    signal.throwIfAborted();
+    if (startup.errors.length) throw startup.errors[0];
+    return values;
+  } finally {
+    signal.removeEventListener('abort', abort);
+    await startup.dispose();
+  }
 }
 
 export function buildGraph(graph, options) {
@@ -224,8 +268,8 @@ export function buildGraph(graph, options) {
     if (INPUT_TYPES.includes(spec.type)) resources.audioSources.set(spec.id, node);
     if (ASR_TYPES.includes(spec.type)) resources.speechNodes.set(spec.id, node);
   }
-  // Startup configuration is read as data, without running constants, gates,
-  // inference or output hooks. Remove just these deliveries in the Live runtime
+  // Resolve startup data on isolated composition nodes, without running the
+  // Live graph's hooks. Remove just these deliveries in the Live runtime
   // so Start cannot run a second configuration pass against already warm ASR.
   const configurations = new Map();
   if (options.preload) for (const [id, node] of resources.speechNodes) {
@@ -237,6 +281,7 @@ export function buildGraph(graph, options) {
   pipeline = new Pipeline({ nodes, connections, onError: options.onError });
   let preparing;
   const prepareModels = () => preparing ??= (async () => {
+    const values = configurations.size ? await startupValues(graph, configurations, pipeline.order[0].controller.signal, options.modelLoadTimeoutMs ?? 180000) : new Map();
     const models = description.nodes.filter(spec => ASR_TYPES.includes(spec.type) || graphModelRequirements({ nodes: [spec] }).length);
     for (const [index, spec] of models.entries()) {
       const entry = pipeline.entries.get(spec.id), node = entry.node;
@@ -250,7 +295,8 @@ export function buildGraph(graph, options) {
         if (resources.speechNodes.has(spec.id)) {
           const route = configurations.get(spec.id);
           if (route) {
-            node.receive(node.configurationPort, startupValue(graph, route.from));
+            if (!values.has(spec.id)) throw Error('Startup configuration is unavailable before capture. Connect startup data in Graph Editor and Save; audio, model output and button-triggered values are not available yet.');
+            node.receive(node.configurationPort, values.get(spec.id));
           }
           node.configurationConnected = false;
           node.preconfigured = true;

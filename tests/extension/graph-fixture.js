@@ -1,4 +1,5 @@
 import { openPalette, loadTranslationFixture } from './ui-controls.js';
+import { startReadyLive } from './live-lifecycle.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -132,11 +133,14 @@ export const test = base.extend({
     } finally { await context?.close(); for (const response of connections) response.destroy(); await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); }
   },
 });
-export async function openGraph(f) {
+export async function openGraph(f, { live = true } = {}) {
   await f.context.addInitScript(() => {
     const add = chrome.runtime.onMessage.addListener.bind(chrome.runtime.onMessage);
     chrome.runtime.onMessage.addListener = listener => { window.graphInvoke = listener; add(listener); };
     const NativeWorker = window.Worker; window.graphWorkers = [];
+    document.addEventListener('click', event => {
+      if (event.target.closest('#start')) window.lastSessionWorkers = window.graphWorkers.filter(worker => !worker.released);
+    }, true);
     window.Worker = class extends NativeWorker {
       constructor(...args) { super(...args); this.url = String(args[0]); this.messages = []; this.released = false; window.graphWorkers.push(this); }
       postMessage(data, ...rest) {
@@ -147,7 +151,9 @@ export async function openGraph(f) {
       terminate() { this.released = true; super.terminate(); }
     };
   });
-  const page = await f.context.newPage(); await page.goto(f.url);
+  // Direct runtime tests use an inert extension host, so they own only the
+  // graph they construct rather than a second, independently prepared Live.
+  const page = await f.context.newPage(); await page.goto(live ? f.url : f.url.replace('recorder.html', 'model-cache.html'));
   await page.evaluate(async () => {
     // Retain internal cancellation/replacement coverage after removing the UI control.
     const { TabSession } = await import('./session.js'), sessionStart = TabSession.prototype.start;
@@ -166,8 +172,7 @@ export async function openGraph(f) {
 export async function startGraph(page, timeout = 30000) {
   // Send through the recorder's registered production invocation listener.
   await page.evaluate(async () => { window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }); });
-  await expect(page.locator('#start')).toBeEnabled({ timeout });
-  await page.locator('#start').click();
+  await startReadyLive(page, { timeout });
   await expect(page.locator('#status')).toHaveText('Transcription active', { timeout });
 }
 export async function emitFinal(page, text) {

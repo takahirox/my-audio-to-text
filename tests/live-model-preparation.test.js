@@ -242,6 +242,84 @@ test('multiple same-model instances keep separate state and transfer each ready 
   assert.equal(f.messages('load').length, 2); assert.equal(f.messages('summarize').length, 2);
 });
 
+for (const composed of ['KeyedTextCoalesce', 'TextFormatter', 'TextWindow']) test(`Whisper accepts startup ${composed} composition before one model load`, async t => {
+  const graph = defaultGraph({ enabled: true });
+  graph.nodes.find(node => node.id === 'speech').type = 'SpeechToTextWhisper';
+  graph.edges = graph.edges.filter(route => !['provisional', 'provisionalId'].includes(route.from[1]));
+  const language = graphNode('Text', 'language'); language.settings.value = 'ja';
+  const other = graphNode(composed === 'TextFormatter' ? 'Text' : 'Number', 'other');
+  other.settings.value = composed === 'TextFormatter' ? '' : composed === 'TextWindow' ? 0.005 : 1;
+  const compose = graphNode(composed, 'compose');
+  if (composed === 'TextFormatter') compose.settings.template = '{1}{2}';
+  graph.nodes.push(language, other, compose, graphNode('Display', 'config-display'));
+  graph.edges.push(edge('language', 'value', 'compose', composed === 'TextWindow' ? 'text' : 'input1'),
+    edge('other', 'value', 'compose', composed === 'KeyedTextCoalesce' ? 'id1' : composed === 'TextWindow' ? 'maxWaitSeconds' : 'input2'),
+    edge('compose', 'text', 'speech', 'language'), edge('compose', 'text', 'config-display', 'input1'));
+  const f = fixture(graph); t.after(() => f.session.close());
+  await f.session.prepareModels();
+  assert.equal(f.session.view.error, ''); assert.equal(f.session.view.modelState, 'ready');
+  const worker = f.workers.find(worker => worker.url.includes('whisper'));
+  assert.equal(worker.messages[0].language, 'ja');
+  assert.equal(worker.messages.filter(message => message.type === 'load').length, 1);
+  assert.deepEqual(f.session.view.displays, {}); assert.deepEqual(f.captures, []);
+  await f.session.start(42); await turn();
+  if (composed === 'TextWindow') await new Promise(resolve => setTimeout(resolve, 15));
+  assert.equal(f.session.view.state, 'running'); assert.equal(f.session.view.error, '');
+  assert.equal(worker.messages.filter(message => message.type === 'load').length, 1);
+  assert.equal(domText(f.session.view.displays['config-display'].input1), 'ja');
+});
+
+for (const close of [false, true]) test(`successive Saves retain pending teardown${close ? ' through close' : ' before Ready'}`, async () => {
+  const f = fixture(textGraph());
+  await f.session.prepareModels();
+  const node = f.session.prepared.pipeline.entries.get('model').node;
+  const dispose = node.dispose.bind(node); let release;
+  node.dispose = () => new Promise(resolve => { release = () => { dispose(); resolve(); }; });
+  f.session.setGraph(textGraph('IfCondition')); await turn();
+  f.session.setGraph(textGraph('TextSummaryQwen35')); await turn();
+  assert.equal(f.workers.length, 1); assert.equal(f.workers[0].released, false);
+  assert.equal(f.session.view.modelState, 'preparing');
+  let closed = false;
+  const closing = close ? f.session.close().then(() => { closed = true; }) : null;
+  await turn(); assert.equal(closed, false);
+  release(); await f.session.preparing; await closing;
+  assert.equal(f.workers[0].released, true);
+  assert.equal(f.workers.length, close ? 1 : 2);
+  assert.equal(f.session.view.modelState, close ? 'closed' : 'ready');
+  await f.session.close(); assert.ok(f.workers.every(worker => worker.released));
+});
+
+test('ReazonSpeech receives a composed numeric startup output before loading', async t => {
+  const graph = defaultGraph();
+  const text = graphNode('Text', 'text'); text.settings.value = 'keyed value';
+  const key = graphNode('Number', 'key'); key.settings.value = 2.5;
+  graph.nodes.push(text, key, graphNode('KeyedTextCoalesce', 'compose'));
+  graph.edges.push(edge('text', 'value', 'compose', 'input1'), edge('key', 'value', 'compose', 'id1'),
+    edge('compose', 'id', 'speech', 'maxDuration'));
+  const f = fixture(graph); t.after(() => f.session.close());
+  await f.session.prepareModels();
+  assert.equal(f.session.view.error, ''); assert.equal(f.session.view.modelState, 'ready');
+  const speech = f.session.prepared.speechNodes.get('speech');
+  assert.equal(speech.maxDuration, 2.5); assert.deepEqual(f.captures, []);
+  await f.session.start(42); await turn();
+  assert.equal(speech.sessionMaxDuration, 2.5); assert.equal(f.messages('load').length, 2);
+});
+
+for (const end of ['close', 'timeout']) test(`${end} interrupts pending startup composition before allocating ASR`, async t => {
+  const graph = defaultGraph(); graph.nodes.find(node => node.id === 'speech').type = 'SpeechToTextWhisper';
+  graph.edges = graph.edges.filter(route => !['provisional', 'provisionalId'].includes(route.from[1]));
+  const language = graphNode('Text', 'language'); language.settings.value = 'ja';
+  graph.nodes.push(language, graphNode('TextWindow', 'window'));
+  graph.edges.push(edge('language', 'value', 'window', 'text'), edge('window', 'text', 'speech', 'language'));
+  const f = fixture(graph, { modelLoadTimeoutMs: end === 'timeout' ? 5 : 180000 }); t.after(() => f.session.close());
+  const preparing = f.session.prepareModels(); await turn();
+  if (end === 'close') await f.session.close();
+  await preparing;
+  assert.deepEqual(f.workers, []); assert.deepEqual(f.captures, []);
+  assert.equal(f.session.view.modelState, end === 'close' ? 'closed' : 'error');
+  if (end === 'timeout') assert.match(f.session.view.error, /Startup configuration timed out/);
+});
+
 test('a Save during Cancel waits for the old GPU owner to finish releasing before allocating replacements', async t => {
   const f = fixture(textGraph('TextSummaryLfm2', true)); t.after(() => f.session.close());
   await f.session.prepareModels(); await f.session.start();

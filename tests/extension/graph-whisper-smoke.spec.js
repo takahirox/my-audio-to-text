@@ -1,3 +1,4 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { selectWhisper } from './whisper-fixture.js';
 import { createHash } from 'node:crypto';
@@ -48,7 +49,7 @@ test('real packaged Whisper tiny: English/Japanese language selection, Silero, S
       await expect(page.locator('#errors')).toBeEmpty();
       const texts = (await page.locator('.display-content').textContent()).split('\n').filter(Boolean);
       expect(texts.join(' ')).toMatch(language === 'en' ? /transformer/i : /[\u3040-\u30ff\u4e00-\u9fff]/);
-      expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+      await expectPreparedIdle(page, { timeout: 300000 });
       runs.push({ language, audioSamples: normalized.length, fixtureSampleRate: sampleRate, texts, loadMs: loaded - start, totalMs: Date.now() - start });
       console.log(JSON.stringify(runs.at(-1)));
     }

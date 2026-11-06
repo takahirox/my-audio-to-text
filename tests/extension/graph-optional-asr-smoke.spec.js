@@ -41,7 +41,7 @@ for (const [key, type, module, className, partials] of [
     const page = await context.newPage();
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', msg => { if (msg.type() === 'error') console.log(key, msg.text().slice(0, 1000)); });
-    await page.goto(`chrome-extension://${id}/extension/recorder.html`);
+    await page.goto(`chrome-extension://${id}/extension/model-cache.html`);
     host = await page.evaluate(async () => ({ browser: navigator.userAgent, isolated: crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency,
       gpu: (await navigator.gpu?.requestAdapter())?.info?.description }));
     // Production cache machinery verifies the exact pinned bytes served by a
@@ -73,13 +73,16 @@ for (const [key, type, module, className, partials] of [
       window.session = new TabSession(view => { window.view = view; }, { graph,
         sourceFactory: (tabId, onAudio) => ({ start() { window.feed = onAudio; }, stop() {} }) });
       window.events = [];
+      await window.session.prepareModels();
+      if (window.view.modelState !== 'ready') throw Error(window.view.error);
+      if (window.events.some(e => ['final','partial'].includes(e.type))) throw Error('Preparation ran inference');
     }, { type, module, className });
     const fixtureSpec = JSON.parse(await readFile('scripts/zipformer-assets.json', 'utf8'));
     for (const fixture of ['0.wav', '1.wav', '0.wav']) {
       const wav = await readFile(`.cache/zipformer-en/test_wavs/${fixture}`);
       expect(createHash('sha256').update(wav).digest('hex')).toBe(fixtureSpec.files.find(f => f.path === `test_wavs/${fixture}`).sha256);
       const pcm = pcm16(wav);
-      const loadMs = await page.evaluate(async () => { window.events = []; window.fed = 0; const at = performance.now(); await window.session.start(42); if (window.view.state !== 'running') throw Error(JSON.stringify(window.view)); return performance.now() - at; });
+      const loadMs = await page.evaluate(async () => { window.events = []; window.fed = 0; const at = performance.now(); window.activeWorkers = window.workers.filter(w => !w.released); const ready = window.session.prepared.pipeline; await window.session.start(42); if (window.session.session.pipeline !== ready) throw Error('Prepared runtime replaced'); if (window.view.state !== 'running') throw Error(JSON.stringify(window.view)); return performance.now() - at; });
       const feedAt = await page.evaluate(() => performance.now());
       await page.evaluate(async ({ pcm, paced }) => {
         for (let offset = 0; offset < pcm.length; offset += 1600) {
@@ -89,7 +92,7 @@ for (const [key, type, module, className, partials] of [
       }, { pcm, paced: partials });
       const stopAt = await page.evaluate(() => performance.now());
       await page.evaluate(async () => { await window.session.stop(); if (window.view.error) throw Error(window.view.error); });
-      const result = await page.evaluate(() => ({ events: window.events, displays: Object.fromEntries(Object.entries(window.view.displays).map(([id,ports])=>[id,ports.input1.textContent])), workersReleased: window.workers.every(w => w.released), end: performance.now() }));
+      const result = await page.evaluate(() => ({ events: window.events, displays: Object.fromEntries(Object.entries(window.view.displays).map(([id,ports])=>[id,ports.input1.textContent])), workersReleased: window.activeWorkers.every(w => w.released), modelState: window.view.modelState, liveWorkers: window.workers.filter(w => !w.released).length, end: performance.now() }));
       const finals = result.events.filter(e => e.type === 'final');
       runs.push({ fixture, loadMs, feedAt, stopAt, ...result });
       console.log(key, fixture, JSON.stringify({ loadMs, finals, partials: result.events.filter(e => e.type === 'partial').length, drainMs: result.end - stopAt }));
@@ -97,7 +100,7 @@ for (const [key, type, module, className, partials] of [
       expect(finals.map(e => e.text).join(' ')).toMatch(fixture === '0.wav' ? /yellow lamps.*light.*quarter/i : /direct consequence.*lovely child.*heaven/i);
       expect(new Set(finals.map(e => e.id)).size).toBe(finals.length);
       expect(result.displays.out).toBe(finals.map(e => e.text).join('\n'));
-      expect(result.workersReleased).toBe(true);
+      expect(result.workersReleased).toBe(true); expect(result.modelState).toBe('ready'); expect(result.liveWorkers).toBe(1);
       if (partials) {
         const firstFinal = result.events.findIndex(e => e.type === 'final');
         const interim = result.events.slice(0, firstFinal).filter(e => e.type === 'partial' && e.text);
@@ -105,11 +108,13 @@ for (const [key, type, module, className, partials] of [
         expect(interim[0].fed).toBeLessThan(pcm.length);
       } else expect(result.events.some(e => e.type === 'partial')).toBe(false);
     }
-    await page.evaluate(async () => { await window.session.start(42); window.feed(new Float32Array(16000)); window.session.cancel(); });
-    const canceled = await page.evaluate(() => ({ events: window.events.length, released: window.workers.every(w => w.released) }));
+    await page.evaluate(async () => { window.activeWorkers = window.workers.filter(w => !w.released); await window.session.start(42); window.feed(new Float32Array(16000)); await window.session.cancel(); });
+    const canceled = await page.evaluate(() => ({ events: window.events.length, released: window.activeWorkers.every(w => w.released), modelState: window.view.modelState }));
     await page.waitForTimeout(300);
     expect(await page.evaluate(() => window.events.length)).toBe(canceled.events);
-    expect(canceled.released).toBe(true);
+    expect(canceled.released).toBe(true); expect(canceled.modelState).toBe('ready');
+    await page.evaluate(() => window.session.close());
+    expect(await page.evaluate(() => window.workers.every(w => w.released))).toBe(true);
     expect(requests).toEqual([]); expect(errors).toEqual([]);
   } finally {
     const evidence = info.outputPath(`${key}-evidence.json`);
