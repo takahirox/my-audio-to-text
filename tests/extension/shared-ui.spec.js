@@ -50,7 +50,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
         await page.locator('#graph-fit').click();
         await assertTraceability(page); await assertRoutingGeometry(page);
         await page.getByRole('button', { name: 'Select previous', exact: true }).press('Enter');
-        await expect(page.locator('.graph-inspector')).toContainText('Node: previous');
+        await expect(page.locator('.graph-inspector')).toContainText('Instance ID: previous');
         await capture(page, info, `${name}-${width}`, width === 390);
         await page.locator('#graph-palette-toggle').press('Enter');
         await expect(page.getByRole('combobox', { name: 'Search nodes' })).toBeFocused();
@@ -76,7 +76,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
   await graph.setViewportSize({ width: 1600, height: 1500 });
   await graph.locator('#graph-zoom').selectOption('1');
   await graph.locator('.graph-scroll').evaluate(el => { el.style.height = '1250px'; });
-  await graph.getByRole('button', { name: 'Clear selection', exact: true }).click();
+  await graph.keyboard.press('Escape');
   await graph.mouse.move(1500, 1400);
   await assertTraceability(graph);
   await capture(graph, info, 'dense-100');

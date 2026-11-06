@@ -8,11 +8,11 @@ const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem('proce
 const port = (page, node, side, name) => page.getByRole('button', { name: `${node} ${side} ${name}`, exact: true });
 async function save(page) {
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
-  await expect(page.locator('#graph-state')).not.toContainText('Unsaved draft');
+  await expect(page.locator('#graph-state')).not.toContainText('Unsaved');
 }
 
 const wireFor = (editor, route) => editor.getByRole('button', { name: `Select connection ${route}`, exact: true });
-for (const action of ['Clear selection', 'Remove literal']) {
+for (const action of ['Select literal', 'Remove literal']) {
   test(`packaged inspector commits text edits before a single ${action} click`, async ({ graphExtension: f }) => {
     const live = await openGraph(f), editor = live.editor;
     await editor.evaluate(async () => { const { readGraph, graphNode, saveGraph } = await import('./graph.js'); const graph = readGraph(localStorage); graph.nodes.push(graphNode('Text', 'literal')); saveGraph(localStorage, graph); });
@@ -21,11 +21,11 @@ for (const action of ['Clear selection', 'Remove literal']) {
     await editor.getByLabel('literal value', { exact: true }).fill('Edited output');
     await editor.getByRole('button', { name: action, exact: true }).click();
     await expect(editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
-    await expect(editor.locator('.graph-scroll')).toBeFocused();
-    await expect(editor.locator('#graph-state')).toContainText('Unsaved draft');
+    await expect(action === 'Select literal' ? editor.getByRole('button', { name: action, exact: true }) : editor.locator('.graph-scroll')).toBeFocused();
+    await expect(editor.locator('#graph-state')).toContainText('Unsaved');
     expect(await saved(live)).toEqual(before);
     const expected = structuredClone(before);
-    if (action === 'Clear selection') {
+    if (action === 'Select literal') {
       expected.nodes.find(node => node.id === 'literal').settings.value = 'Edited output';
       await editor.getByRole('button', { name: 'Select literal', exact: true }).click();
       await expect(editor.getByLabel('literal value', { exact: true })).toHaveValue('Edited output');
@@ -45,7 +45,7 @@ for (const action of ['Clear selection', 'Remove literal']) {
     await save(editor);
     expect(await saved(live)).toEqual(expected);
     await editor.reload();
-    await expect(editor.locator('#graph-state')).toContainText('Saved graph');
+    await expect(editor.locator('#graph-state')).toContainText('Saved');
     await expect(editor.locator('.graph-node')).toHaveCount(expected.nodes.length);
     await expect(editor.locator('.graph-wire')).toHaveCount(expected.edges.length);
   });
@@ -91,7 +91,7 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
     await expect(editor.locator('.selected-node')).toHaveCount(0);
     await expect(control).toHaveAccessibleName('Disconnect audio.audio to speech.audio');
     await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length);
-    await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+    await expect(editor.locator('#graph-state')).not.toContainText('Unsaved');
     await pointerSelect(editor, 'speech.final to coalesce.input1');
     await expect(wireFor(editor, 'audio.audio to speech.audio')).toHaveAttribute('aria-pressed', 'false');
     await expect(control).toHaveAccessibleName('Disconnect speech.final to coalesce.input1');
@@ -212,7 +212,7 @@ test('native touch selects and disconnects without hover; saved removal applies 
   const box = await control.boundingBox(); await touch(editor, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
   await expect(wire).toHaveCount(0); await expect(control).toBeHidden();
   await expect(editor.locator('.graph-scroll')).toBeFocused(); await save(editor);
-  await expect(editor.locator('#graph-state')).toContainText('earlier graph');
+  await expect(editor.locator('.graph-state-notice')).toContainText('earlier graph');
   expect(await live.evaluate(() => window.graphWorkers.length)).toBe(workers);
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'active preview' }));
   await expect(live.locator('[data-display="transcript"] .display-content')).toHaveText('active preview');
@@ -235,17 +235,17 @@ test('click and drag reconnect a populated input, preserving fan-out; identical 
   expect(graph.edges.filter(e => e.to[0] === 'translation' && e.to[1] === 'text')).toEqual([{ from: ['speech', 'provisional'], to: ['translation', 'text'] }]);
   expect(graph.edges.filter(e => !(e.to[0] === 'translation' && e.to[1] === 'text'))).toEqual(original.edges.filter(e => !(e.to[0] === 'translation' && e.to[1] === 'text')));
   await output('provisional').click(); await input.click();
-  await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+  await expect(editor.locator('#graph-state')).not.toContainText('Unsaved');
   await output('final').dragTo(input); await save(editor);
   graph = await saved(live);
   expect(graph.edges.filter(e => e.to[0] === 'translation' && e.to[1] === 'text')).toEqual([{ from: ['speech', 'final'], to: ['translation', 'text'] }]);
-  await output('final').dragTo(input); await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+  await output('final').dragTo(input); await expect(editor.locator('#graph-state')).not.toContainText('Unsaved');
   await port(editor, 'translation', 'output', 'text').click(); await expect(input).toBeDisabled(); await editor.keyboard.press('Escape');
   await port(editor, 'audio', 'output', 'audio').click(); await expect(input).toBeDisabled(); await editor.keyboard.press('Escape');
   // Even a programmatically delivered invalid drop cannot discard the occupied edge.
   await port(editor, 'audio', 'output', 'audio').dispatchEvent('dragstart', { dataTransfer: await editor.evaluateHandle(() => new DataTransfer()) });
   await input.dispatchEvent('drop'); await editor.keyboard.press('Escape');
-  await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+  await expect(editor.locator('#graph-state')).not.toContainText('Unsaved');
   await expect(editor.locator('#graph-errors')).toBeEmpty(); expect(await saved(live)).toEqual(graph);
 });
 

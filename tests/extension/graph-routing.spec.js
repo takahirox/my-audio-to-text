@@ -31,7 +31,7 @@ test('import, Save, Load saved and reset retain logical graph data independently
   const before = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
   const imported = structuredClone(before); imported.nodes[1].position.y += 30;
   await page.locator('input[type="file"]').setInputFiles({ name: 'graph.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(imported)) });
-  await assertRoutingGeometry(page); await expect(page.locator('#graph-state')).toContainText('Unsaved draft');
+  await assertRoutingGeometry(page); await expect(page.locator('#graph-state')).toContainText('Unsaved');
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(imported);
   await page.getByRole('button', { name: 'Select obstacle', exact: true }).press('ArrowDown');

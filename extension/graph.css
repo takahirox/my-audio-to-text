@@ -2,6 +2,13 @@
 .editor-page .page-header { flex-wrap: wrap; }
 .editor-page :is(.graph-viewport, .graph-toolbar, .graph-inspector, .graph-help, .graph-command-list) { min-width: 0; overflow-wrap: anywhere; }
 .editor-page .graph-toolbar { gap: .5rem; }
+.editor-page #graph-state::before { content: 'Graph · '; }
+.editor-page #graph-help { min-width: 44px; padding-inline: .5rem; }
+@media (max-width: 600px) {
+  .editor-page #graph-state::before { content: ''; }
+  .editor-page .graph-toolbar { gap: .25rem; }
+  .editor-page .graph-toolbar > button { padding-inline: .5rem; }
+}
 .editor-page #graph-state.graph-conflict { color: var(--warning); }
 .editor-page .graph-scroll { background: var(--surface-subtle); border-radius: var(--card-radius); }
 .editor-page .graph-canvas { background-image: radial-gradient(#d5cfdf 1px, transparent 1px); }
@@ -27,7 +34,9 @@
 .editor-page .graph-wires .routing-fallback .wire-line { stroke: var(--warning); }
 .editor-page .graph-routing-notice { color: var(--warning); }
 .editor-page .graph-inspector { padding: 1rem; }
-.editor-page .graph-inspector h2 { padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+.editor-page .graph-inspector-header { padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+.editor-page .graph-inspector > h3 { margin-bottom: .25rem; }
+.editor-page .graph-inspector > h3 + p { margin-top: 0; color: var(--muted); font-size: .85rem; }
 .editor-page .graph-actions > summary { border-radius: var(--control-radius); background: var(--panel); }
 .editor-page .graph-actions > summary:hover { background: var(--surface-hover); }
 .editor-page :is(.graph-palette, .graph-command-list) { box-shadow: var(--popover-shadow); }

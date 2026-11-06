@@ -134,11 +134,11 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   // Both drafts diverge from the same saved graph; saving one keeps the other's draft.
   await editor.getByRole('button', { name: 'Select speech', exact: true }).press('ArrowRight');
   await second.getByRole('button', { name: 'Select speech', exact: true }).press('ArrowDown');
-  await second.locator('#graph-save').click(); await expect(second.locator('#graph-save')).toBeEnabled(); await expect(second.locator('#graph-state')).not.toContainText('Unsaved draft');
-  await expect(editor.locator('#graph-state')).toContainText('draft kept');
+  await second.locator('#graph-save').click(); await expect(second.locator('#graph-save')).toBeEnabled(); await expect(second.locator('#graph-state')).not.toContainText('Unsaved');
+  await expect(editor.locator('.graph-state-notice')).toContainText('draft kept');
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled(); await expect(editor.locator('#graph-errors')).toContainText('Load saved');
   expect((await saved(live)).nodes.find(n => n.id === 'speech').position).toEqual({ x: 310, y: 60 });
-  await clickGraphAction(editor, 'graph-load'); await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+  await clickGraphAction(editor, 'graph-load'); await expect(editor.locator('#graph-state')).not.toContainText('Unsaved');
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   expect(f.requests).toHaveLength(7);
 });
@@ -146,7 +146,7 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
 test('three screen layouts show actual provisional/final state and capture-free Models (deterministic screenshots)', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
   await loadTranslationFixture(live.editor, 'ja-en', false); await live.editor.locator('#graph-save').click();
-  await expect(live.editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+  await expect(live.editor.locator('#graph-state')).not.toContainText('Unsaved');
   await startGraph(live); await emitFinal(live, 'Completed fixture utterance.');
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'Current fixture utterance…' }));
   await expect(live.locator('[data-display="transcript"] .display-content')).toHaveCount(1);

@@ -55,7 +55,7 @@ test('adding and removing formatter ports updates attachment geometry and only i
   await page.getByRole('button', { name: 'source output value', exact: true }).click();
   await page.getByRole('button', { name: 'target input input5', exact: true }).click();
   await expect(page.locator('.graph-wire')).toHaveCount(2); await assertRoutingGeometry(page);
-  await page.getByRole('button', { name: 'Select target', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Select target', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'target Remove last input', exact: true }).click();
   await expect(page.locator('.graph-wire')).toHaveCount(1); await assertRoutingGeometry(page);
 });

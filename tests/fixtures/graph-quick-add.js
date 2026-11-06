@@ -123,8 +123,8 @@ export async function checkQuickAddInteraction(page) {
   await search(page).press('Enter');
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
-  await expect(page.locator('.graph-inspector')).toContainText('Node: number');
-  await expect(page.locator('#graph-state')).toContainText('Unsaved draft');
+  await expect(page.locator('.graph-inspector')).toContainText('Instance ID: number');
+  await expect(page.locator('#graph-state')).toContainText('Unsaved');
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(stored);
   await openQuickAdd(page);
   await page.getByRole('listbox', { name: 'Node types' }).getByRole('option', { name: 'Hold', exact: true }).click();
@@ -132,7 +132,7 @@ export async function checkQuickAddInteraction(page) {
   await expect(page.getByRole('button', { name: 'Select hold', exact: true })).toBeFocused();
   await expect(page.locator('#graph-errors')).toBeEmpty();
   await page.locator('#graph-save').click();
-  await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  await expect(page.locator('#graph-state')).toContainText('Saved');
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
   expect(saved.nodes.map(node => node.type)).toEqual(['Number', 'Hold']);
   await page.reload();
@@ -177,7 +177,7 @@ export async function checkQuickAddPlacement(page, width, zoom, transformed = fa
       const box = card.getBoundingClientRect(), scroll = document.querySelector('.graph-scroll'), view = scroll.getBoundingClientRect();
       return { x: parseFloat(card.style.left), y: parseFloat(card.style.top), left: box.left, top: box.top, right: box.right, bottom: box.bottom,
         width: box.width, height: box.height, view: { left: view.left + scroll.clientLeft, top: Math.max(0, view.top + scroll.clientTop),
-          right: view.left + scroll.clientLeft + scroll.clientWidth, bottom: Math.min(innerHeight, view.top + scroll.clientTop + scroll.clientHeight) } };
+          right: view.left + scroll.clientLeft + scroll.clientWidth, bottom: Math.min(innerHeight, view.top + scroll.clientTop + scroll.clientHeight) - 72 } };
     });
     expect(geometry.x).toBeGreaterThanOrEqual(0); expect(geometry.y).toBeGreaterThanOrEqual(0);
     expect(geometry.left).toBeGreaterThanOrEqual(geometry.view.left - 1);
@@ -208,7 +208,9 @@ export async function checkQuickAddTouch(page) {
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Select hold', exact: true })).toBeFocused();
   await openQuickAdd(page, true);
-  await page.locator('#graph-fit').tap();
+  // Floating canvas controls can sit behind the open palette on short screens.
+  // Use an exposed outside target to exercise native touch dismissal.
+  await page.getByRole('heading', { name: 'Graph Editor', exact: true }).tap();
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('.graph-node')).toHaveCount(1);
 }

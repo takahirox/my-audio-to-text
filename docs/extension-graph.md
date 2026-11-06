@@ -16,12 +16,21 @@ Arrow Up selects the last; further arrows navigate results. Enter adds only the
 highlighted Node and does nothing with no selection. Escape or clicking outside
 dismisses the list and clears selection. Adding keeps the current
 zoom and pan, selects and focuses the new Node, and leaves changes unsaved until
-Save graph. Select a heading for settings and help. Drag headings or use arrow
+Save. The compact toolbar shows Saved / Unsaved, Add Node, Save, the Graph actions
+overflow (…), and Help (?). Active-session and conflicting-save warnings remain
+visible below it. Select a heading for settings and help; click it again, press
+Escape, or click blank canvas to clear selection. The Inspector identifies the
+Node by type and Instance ID, with Remove Node beside Settings. Drag headings or use arrow
 keys to move Nodes. Connect an output to a compatible input; reconnecting replaces only that input's wire. Select a wire
-for details or Disconnect. Canvas zoom and Fit graph support large graphs.
+for details or Disconnect. Canvas navigation floats at the bottom-left: −, the
+Canvas zoom chooser, +, and Fit. The chooser retains 25%, 50%, 75%, 100%, 125%,
+and 150%, plus the custom Fit scale (including scales below 25%). Choose 100% to
+resume editing with focus on the last edited port, heading or selected wire.
+Scroll or swipe to pan; controls stay in place and extra bottom scroll space
+lets the final ports move clear of them.
 Settings, essential port names and accessibility labels remain visible.
 
-Graph actions provides Validate draft, Load saved, Reset draft to default, and
+Graph actions (…) provides Validate draft, Load saved, Reset draft to default, and
 Import or Export graph JSON. Export downloads the validated current draft,
 including multiline settings. Import validates before replacing the draft. Save is required
 to apply an import or Reset. Save prepares the selected model assets, including

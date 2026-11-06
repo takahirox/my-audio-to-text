@@ -68,13 +68,21 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 /* Keep the working surface dominant; optional tools open beside it. */
 .editor-page .page-header { margin-bottom: .75rem; }
 .editor-page .eyebrow, .live-page .eyebrow { margin: 0; }
-.graph-toolbar { margin-bottom: .65rem; }
-#graph-state { flex: 1; margin: 0; color: var(--muted); font-size: .85rem; min-width: 12rem; }
+.graph-toolbar { margin-bottom: .65rem; flex-wrap: nowrap; }
+.graph-toolbar > :not(#graph-state) { flex-shrink: 0; }
+#graph-state { flex: 1; margin: 0; color: var(--muted); font-size: .85rem; min-width: 0; white-space: nowrap; }
 #graph-state.graph-conflict { color: #fff1a8; }
 .graph-workspace { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: .75rem; }
 .graph-viewport { min-width: 0; }
-.graph-viewport-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; margin-bottom: .5rem; }
-.graph-scroll { height: calc(100dvh - 210px); min-height: 400px; overscroll-behavior: contain; }
+.graph-surface { position: relative; }
+.graph-zoom-controls { position: absolute; left: 12px; bottom: 12px; z-index: 2; display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: .65rem; box-shadow: 0 2px 12px #30234218; }
+.graph-zoom-controls :is(button, select) { min-width: 44px; min-height: 44px; padding: .4rem .5rem; }
+.graph-zoom-controls select { width: 7.5rem; height: 44px; }
+.graph-inspector-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.graph-inspector-header h2 { margin: 0; }
+.graph-state-notice { font-size: .85rem; color: var(--muted); }
+.graph-state-notice.graph-conflict { color: var(--warning, #fff1a8); }
+.graph-scroll { height: calc(100dvh - 156px); min-height: 400px; overscroll-behavior: contain; }
 .graph-palette { position: fixed; z-index: 5; width: 320px; box-shadow: 0 12px 36px #0008; display: flex; flex-direction: column; gap: .5rem; overflow: auto; }
 .graph-palette > input, .graph-palette > select, .graph-palette > p { flex-shrink: 0; }
 .graph-node-list { min-height: 44px; overflow: auto; overscroll-behavior: contain; }
@@ -88,7 +96,8 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .graph-inspector select { width: 100%; }
 .graph-inspector button { margin: .25rem 0; }
 .graph-actions { position: relative; margin: 0; }
-.graph-actions > summary { border: 1px solid var(--border); border-radius: .45rem; padding: .5rem .75rem; }
+.graph-actions > summary { display: flex; align-items: center; justify-content: center; min-width: 44px; list-style: none; border: 1px solid var(--border); border-radius: .45rem; padding: .5rem .75rem; }
+.graph-actions > summary::-webkit-details-marker { display: none; }
 .graph-command-list { position: absolute; right: 0; top: 100%; z-index: 4; padding: .75rem; width: min(320px, calc(100vw - 2rem)); background: var(--panel); border: 1px solid var(--border); border-radius: .5rem; box-shadow: 0 12px 36px #0008; }
 .graph-command-list > button { display: block; width: 100%; text-align: left; margin-bottom: .4rem; }
 .graph-actions:not([open]) > .graph-command-list { display: none; }
@@ -121,7 +130,6 @@ button, summary, nav a { min-height: 44px; }
 @media (max-width: 600px) {
   body.editor-page, body.live-page { padding: .75rem; }
   .page-header { gap: .5rem; }
-  #graph-state { flex-basis: calc(100% - 8rem); }
   .graph-toolbar { position: relative; gap: .4rem; }
   .graph-actions { position: static; }
   .graph-command-list { left: 0; right: auto; }
