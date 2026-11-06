@@ -6,6 +6,7 @@
     "setup:extension": "npm ci && npm run prepare:assets && npm run prepare:translation-assets && npm run prepare:whisper-assets && npm run prepare:tts-assets && npm run prepare:zipformer-assets && npm run prepare:optional-asr-assets && npm run prepare:text-summary-assets && npm run build:extension",
     "build:extension": "python3 scripts/build-extension.py",
     "test:extension": "playwright test --config playwright.extension.config.js",
+    "test:live-model-real": "LIVE_MODEL_REAL=1 playwright test --config playwright.extension.config.js tests/extension/live-model-real.spec.js",
     "prepare:correction-assets": "python3 scripts/prepare-correction-assets.py",
     "test:correction-real": "CORRECTION_SMOKE=1 TRANSLATION_CHANNEL=chrome playwright test tests/browser/correction-smoke.spec.js --project=chromium --workers=1",
     "prepare:translation-assets": "python3 scripts/prepare-translation-assets.py",

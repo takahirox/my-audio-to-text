@@ -63,6 +63,18 @@ failures, timeouts, cancellation and repeated ownership transfers.
 with controlled Workers, including disabled Start, no remote requests, recovery
 and replacement. These deterministic fixtures establish lifecycle behavior;
 hardware/model inference qualification remains in the opt-in real-model suites.
+For production preloading coverage, run `npm run setup:extension`, then
+`python3 scripts/review-opus-mt-assets.py`,
+`python3 scripts/review-text-summary-assets.py`,
+`python3 scripts/review-tts-assets.py` and
+`python3 scripts/prepare-reazon-ja-en-fixtures.py` to seed the pinned test assets.
+`npm run test:live-model-real` checks real Whisper + OPUS-MT, a Button/Hold-gated
+LFM2 summary and both Kokoro phonemizers. It verifies readiness before Start,
+no pre-Start permissions/inference, Worker reuse on first use, two sessions,
+Stop/reprepare and pagehide termination, with networking blocked during Live.
+Each case saves its source hashes, Worker observations, outputs and host details
+to `test-results`; retained validation is in
+[`evidence/live-model-preparation-239.json`](evidence/live-model-preparation-239.json).
 
 ## Editor and saved graphs
 
