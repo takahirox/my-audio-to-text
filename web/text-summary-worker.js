@@ -1,6 +1,7 @@
 import { textSummaryModel } from './text-summary-models.js';
 import { summaryText, summarizeText, MAX_PROMPT_TOKENS, MAX_NEW_TOKENS } from './text-summary-policy.js';
 import { cacheOnlyTextSummaryRuntime } from '../extension/text-summary-cache.js';
+import { watchGpuDevice } from './gpu-lifecycle.js';
 
 let model, tokenizer, queue = Promise.resolve();
 async function load(type) {
@@ -24,6 +25,7 @@ async function load(type) {
     await (await env.customCache.match(base + 'tokenizer.json')).json(),
     await (await env.customCache.match(base + 'tokenizer_config.json')).json());
   model = await AutoModelForCausalLM.from_pretrained(spec.id, options);
+  watchGpuDevice(env.backends.onnx.webgpu, error => self.postMessage({ type: 'error', fatal: true, message: error.message }));
 }
 async function summarize({ id, text, language, prompt }) {
   if (!model) throw new Error('Text summary model is not ready.');

@@ -52,22 +52,25 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     await page.addInitScript(() => {
       const add = chrome.runtime.onMessage.addListener.bind(chrome.runtime.onMessage);
       chrome.runtime.onMessage.addListener = listener => { window.invoke = listener; add(listener); };
+      window.summaryWorkers = []; window.requests = []; window.violations = [];
+      addEventListener('securitypolicyviolation', e => violations.push(e.violatedDirective));
+      const NativeWorker = window.Worker;
+      window.Worker = class extends NativeWorker {
+        constructor(...args) {
+          super(...args);
+          this.summary = String(args[0]).includes('text-summary-worker');
+          if (this.summary) summaryWorkers.push(this);
+        }
+        postMessage(data, ...rest) { if (data.type === 'summarize') requests.push(data.text); super.postMessage(data, ...rest); }
+        terminate() { this.released = true; super.terminate(); }
+      };
     });
     await page.goto(base + 'recorder.html');
     await page.evaluate(async () => {
-      window.summaryWorkers = []; window.requests = []; window.violations = [];
-      addEventListener('securitypolicyviolation', e => violations.push(e.violatedDirective));
       const { TabSession } = await import('./session.js');
       const start = TabSession.prototype.start;
       TabSession.prototype.start = function(...args) {
         window.owner = this;
-        this.textSummaryWorkerFactory = url => {
-          const worker = new Worker(url, { type: 'module' });
-          const post = worker.postMessage.bind(worker), terminate = worker.terminate.bind(worker);
-          worker.postMessage = data => { if(data.type==='summarize') requests.push(data.text); post(data); };
-          worker.terminate = () => { worker.released = true; terminate(); };
-          summaryWorkers.push(worker); return worker;
-        };
         return start.apply(this, args);
       };
       const { ExtensionTabAudioNode } = await import('./tab-audio-node.js');
@@ -82,8 +85,11 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     await expect(page.locator('#graph-action-status')).toContainText('Start a session');
     // Enter through the recorder's registered production toolbar listener.
     await page.evaluate(() => invoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }, () => {}));
+    await expect(page.locator('#model-status')).toHaveText('Ready');
+    expect(await page.evaluate(() => summaryWorkers.length)).toBe(1);
+    await page.locator('#start').click();
     await expect(page.locator('#status')).toHaveText('Transcription active');
-    expect(await page.evaluate(() => summaryWorkers.length)).toBe(0);
+    expect(await page.evaluate(() => summaryWorkers.length)).toBe(1);
     await page.evaluate(() => emitFinal('A')); await expect(page.getByRole('tabpanel', { name: 'Transcript', exact: true })).toContainText('A');
     await expect(action).toBeEnabled();
     await page.evaluate(() => { window.stale = document.querySelector('#graph-action-buttons button').onclick; });
@@ -107,7 +113,7 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     await page.evaluate(() => emitFinal('C')); await action.press('Space');
     await expect.poll(() => page.evaluate(() => requests.length)).toBe(3);
     await page.evaluate(() => window.owner.cancel()); await expect(action).toBeDisabled();
-    expect(await page.evaluate(() => summaryWorkers.every(w => w.released))).toBe(true);
+    expect(await page.evaluate(() => summaryWorkers.slice(0, -1).every(w => w.released))).toBe(true);
     await page.locator('#start').click(); await expect(action).toBeEnabled();
     await page.evaluate(() => emitFinal('FAIL')); await action.tap();
     await expect.poll(() => page.evaluate(() => requests.length)).toBe(4);

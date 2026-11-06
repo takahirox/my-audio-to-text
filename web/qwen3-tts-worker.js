@@ -13,7 +13,8 @@ self.onmessage = async ({ data }) => {
   try {
     if (data.type === 'load') {
       if (runtime || active) throw Error('Qwen3-TTS Worker already loaded.');
-      runtime = await Qwen3TtsRuntime.create(await qwen3TtsAssets(), message => postMessage({ type: 'progress', message }));
+      runtime = await Qwen3TtsRuntime.create(await qwen3TtsAssets(), message => postMessage({ type: 'progress', message }),
+        error => postMessage({ type: 'error', fatal: true, message: error.message }));
       postMessage({ type: 'ready' });
     } else if (data.type === 'generate') {
       if (!runtime || active) throw Error('Qwen3-TTS Worker is not ready.');

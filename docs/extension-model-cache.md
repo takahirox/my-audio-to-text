@@ -4,7 +4,8 @@
 have independent Save-time preparation and Models cards (749 MB / 1.403 GB),
 including parked Nodes. Both require WebGPU shader-f16 and several GB of free
 RAM/GPU memory per active Node. LFM 1.0 commercial-use conditions apply; see the
-model card's packaged license. Start verifies cached assets and never downloads.
+model card's packaged license. Live opening verifies cached assets and initializes
+executable models before enabling Start; neither Live nor Start downloads weights.
 
 Build/load the extension as described in [the extension guide](chrome-extension.md).
 Open **Models** from Live or Graph Editor, or **Extension options** from Chrome's
@@ -21,7 +22,8 @@ Medium Streaming Nodes](optional-asr-nodes.md) prepare 1.26 GB / 305 MB after Sa
 the editor shows memory, GPU and storage guidance before Save. Editing/loading alone and failed validation or
 storage never trigger preparation. Storage finishes before preparation; download
 failure does not roll it back. No capture, inference, Workers or remote executable
-code starts during preparation. Start/inference remain cache-only.
+code starts during Save-time preparation. Live initialization and Start/inference
+remain cache-only; see the [Live model lifecycle](extension-graph.md#live-model-lifecycle-239).
 Each optional model has independent status, byte progress, error/retry, Cancel,
 Check cache and Delete controls. TTS voice selectors are initialized from saved
 Nodes where present, and never change graph settings. Choose a matching voice

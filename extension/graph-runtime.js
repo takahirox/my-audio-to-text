@@ -15,7 +15,7 @@ import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
-import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
+import { TextAccumulatorNode, TextFormatterNode, parseTemplate } from '../web/text-nodes.js';
 import { executableGraph, INPUT_TYPES, ASR_TYPES } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 import { TextNode } from '../web/text-constant-node.js';
@@ -31,6 +31,7 @@ import { KeyedTextPairNode } from '../web/keyed-text-pair-node.js';
 import { KeyedTextCoalesceNode } from '../web/keyed-text-coalesce-node.js';
 import { TextSlidingWindowNode } from '../web/text-sliding-window-node.js';
 import { TextWindowNode } from '../web/text-window-node.js';
+import { graphModelRequirements } from './graph-model-preparation.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
 // assets, initialization or synthesis failure must leave transcription usable.
@@ -109,6 +110,25 @@ function sharedTabCapture(factory, stopping) {
   };
 }
 
+// Read startup data without invoking graph hooks or sending artificial inputs.
+// A single constant-fed formatter is also static; future audio, model outputs,
+// sampled state and trigger-dependent values cannot configure a warm model.
+function startupValue(graph, [id, port], seen = new Set()) {
+  if (seen.has(id)) throw Error('Startup configuration contains a cycle.');
+  seen.add(id);
+  const spec = graph.nodes.find(node => node.id === id);
+  if (['Text', 'Number'].includes(spec?.type) && port === 'value') return spec.settings.value;
+  if (spec?.type === 'TextFormatter' && port === 'text') {
+    const incoming = graph.edges.filter(route => route.to[0] === id);
+    if (incoming.length === 1) {
+      const value = startupValue(graph, incoming[0].from, seen);
+      return parseTemplate(spec.settings.template, spec.settings.inputCount).map(part => typeof part === 'number'
+        ? (incoming[0].to[1] === `input${part}` ? value : '') : part).join('');
+    }
+  }
+  throw Error('Startup configuration is unavailable before capture. Connect a Text/Number constant in Graph Editor and Save so Live can prepare this model without running the graph.');
+}
+
 export function buildGraph(graph, options) {
   const description = executableGraph(graph);
   if (!description.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
@@ -140,7 +160,7 @@ export function buildGraph(graph, options) {
       case 'Hold': node = new HoldNode({ onState: state => options.onHoldState?.(state, spec.id) }); break;
       case 'Text': node = new TextNode(spec.settings); break;
       case 'TextSummaryLfm2': case 'TextSummaryQwen35':
-        node = new TextSummaryNode({ ...spec.settings, lazy: gatedAncestor(spec.id), type: spec.type, workerFactory: options.textSummaryWorkerFactory,
+        node = new TextSummaryNode({ ...spec.settings, lazy: !options.preload && gatedAncestor(spec.id), type: spec.type, workerFactory: options.textSummaryWorkerFactory,
           onEvent: event => options.onTextSummaryEvent?.(event, spec.id) }); break;
       case 'IfCondition':
         node = new IfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,
@@ -204,6 +224,54 @@ export function buildGraph(graph, options) {
     if (INPUT_TYPES.includes(spec.type)) resources.audioSources.set(spec.id, node);
     if (ASR_TYPES.includes(spec.type)) resources.speechNodes.set(spec.id, node);
   }
-  pipeline = new Pipeline({ nodes, connections: description.edges, onError: options.onError });
-  return { ...resources, description, pipeline };
+  // Startup configuration is read as data, without running constants, gates,
+  // inference or output hooks. Remove just these deliveries in the Live runtime
+  // so Start cannot run a second configuration pass against already warm ASR.
+  const configurations = new Map();
+  if (options.preload) for (const [id, node] of resources.speechNodes) {
+    // Preserve intent even if the configuration producer is incomplete/parked.
+    const route = graph.edges.find(route => route.to[0] === id && route.to[1] === node.configurationPort);
+    if (route) configurations.set(id, route);
+  }
+  const connections = description.edges.filter(route => configurations.get(route.to[0])?.to[1] !== route.to[1]);
+  pipeline = new Pipeline({ nodes, connections, onError: options.onError });
+  let preparing;
+  const prepareModels = () => preparing ??= (async () => {
+    const models = description.nodes.filter(spec => ASR_TYPES.includes(spec.type) || graphModelRequirements({ nodes: [spec] }).length);
+    for (const [index, spec] of models.entries()) {
+      const entry = pipeline.entries.get(spec.id), node = entry.node;
+      options.onModelProgress?.(spec.id, index + 1, models.length);
+      let timeout;
+      try {
+        entry.controller.signal.throwIfAborted();
+        const bounded = work => pipeline.wait(entry, Promise.race([work, new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(Error('Model initialization timed out. Check browser support and free RAM/GPU memory, then Retry models.')), options.modelLoadTimeoutMs ?? 180000);
+        })]));
+        if (resources.speechNodes.has(spec.id)) {
+          const route = configurations.get(spec.id);
+          if (route) {
+            node.receive(node.configurationPort, startupValue(graph, route.from));
+          }
+          node.configurationConnected = false;
+          node.preconfigured = true;
+          await bounded(node.load());
+          if (node.unavailable || node.core?.state !== 'ready') throw Error('ASR model did not become ready. Check model assets, browser support and available memory.');
+        } else {
+          // These hooks only initialize owned inference resources. Keep their
+          // exact context/signal for Start, and never call the hook twice.
+          await bounded(Promise.resolve(node.start(entry.context)).then(() => node.ready));
+          if (node.failed || node.disposed || node.error || entry.failed) throw Error(node.error?.message || node.error || 'Model initialization failed.');
+          node.start = context => {
+            context.signal.throwIfAborted();
+            if (context !== entry.context) throw Error('Prepared model belongs to another runtime.');
+          };
+        }
+        entry.controller.signal.throwIfAborted();
+      } catch (cause) {
+        if (!entry.controller.signal.aborted) pipeline.fail(entry, cause);
+        throw Error(`${spec.id} (${spec.type}): ${cause.message || cause}`, { cause });
+      } finally { clearTimeout(timeout); }
+    }
+  })();
+  return { ...resources, description, pipeline, prepareModels };
 }

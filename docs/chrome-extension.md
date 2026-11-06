@@ -107,9 +107,10 @@ loading it again is unnecessary.
    containing the generated root `manifest.json`).
 3. Pin **Local current-tab transcription** in Chrome's Extensions menu.
 4. Open a normal meeting/video/audio tab and click **Transcribe this tab** in
-   the toolbar. A transcript window opens, loads the models, and starts capturing
-   the tab you invoked. Loading time is excluded from capture; audio played
-   before the active indication is not transcribed.
+   the toolbar. Live opens and shows **Preparing models…** while it initializes
+   models on the saved graph's executable paths. Start stays disabled until
+   **Ready**. Press **Start** to capture the selected tab with those warm models;
+   audio played before the active indication is not transcribed.
 5. Return to the meeting tab; keep the transcript window open. It shows the
    active state, provisional text and committed final text. Audio-signal and
    per-Node diagnostics are available in Session details.
@@ -119,19 +120,24 @@ loading it again is unnecessary.
    Copy the final text before closing the window.
 
 **Start** retries the selected tab and clears the previous transcript.
-Each session loads fresh workers. To capture another tab, stop first, then
+Stop releases used Workers and restores readiness before the next Start; Start
+uses the already prepared Workers without reloading. To capture another tab, stop first, then
 invoke the toolbar action on the new tab; it reuses the transcript window.
 An invocation during a live session focuses its window and leaves the session
 on its originally selected tab.
 
 Tab navigation, closing the captured tab, or Chrome ending its stream finalizes
-the session. Stop during model loading cancels before capture. Closing/reloading
+the session. Stop during model preparation cancels before capture; use Retry models
+to prepare again. Closing/reloading
 the Live page/window or navigating away releases media and workers immediately,
 without waiting for pending summarization or translation. Close Live to abandon
 a session; there is no built-in Cancel recording control. Internal
 `TabSession.cancel()` and `Pipeline.cancel()` still handle teardown and errors. Transcripts are held only in that window's
 memory.
-Errors release capture and workers and leave retry available. If Chrome's
+Preparation failures keep Start disabled and show per-Node errors. Recover missing
+files through Graph Save or Models, check browser/GPU support and free memory,
+then press **Retry models** in Live. See the [model lifecycle](extension-graph.md#live-model-lifecycle-239).
+Session errors release failed resources and leave recovery available. If Chrome's
 temporary tab grant has expired (for example after navigating to another origin),
 invoke the toolbar action again on that tab. Chrome-internal pages and other
 restricted tabs cannot be captured. A silent or muted tab may still expose a
@@ -253,7 +259,7 @@ cross-browser extension support. No post-merge verification is required by #61.
 1. Start a graph with ChromeTabAudio, then a microphone graph. Verify the toolbar
    tab is used automatically and microphone permission still requires Start.
    No target panel, discovery button or media selector should exist.
-2. Connect a lazy summary, translation, condition, Hold or speech path. Waiting,
+2. Connect a summary, translation, condition, Hold or speech path. Waiting,
    loading, generation, completion and queue messages should be absent from the
    main flow and from live announcements. Open **Session details** to inspect
    diagnostics; close it to return to reading. Graph Actions, Display input tabs

@@ -240,11 +240,11 @@ Quota failure does not undo Save. Free storage or delete unused cache entries,
 then Retry preparation. Cancellation preserves complete verified files; retry
 downloads missing files. Preparation across windows is serialized by Web Locks.
 
-Ordinary ungated session Start re-verifies the entire required cached set.
-On paths downstream of a triggered Hold, this verification, Worker creation and
-model initialization wait until the first TEXT request; inference runs only on
-delivery. See [manual Graph Actions](graph-actions.md). Missing/evicted/corrupt data
-is an explicit branch-local error. Only canonical allowlisted cached model
+Opening Live re-verifies the entire required executable cached set, creates
+Workers and initializes models, including paths downstream of a triggered Hold.
+Start stays disabled until Ready. Inference still runs only on TEXT delivery.
+See [manual Graph Actions](graph-actions.md). Missing/evicted/corrupt data
+keeps Start disabled with recovery instructions. Only canonical allowlisted cached model
 URLs can be loaded; optional lookups get local misses. No model downloads after
 Start and no transcript or summary leaves the browser for inference. Save-time
 downloads contact the model host; those requests contain no input text.
@@ -280,6 +280,6 @@ Import [manual-text-summary.json](examples/manual-text-summary.json) for continu
 transcription with a **Generate summary** Button. Hold silently retains the
 accumulator text and emits one snapshot only on each accepted Button trigger.
 Transcription and summaries occupy separate Display tabs. Model initialization
-is deferred on this path until the first request; UI actions have bounded visible
+finishes when Live becomes Ready, before Start or the first request; UI actions have bounded visible
 busy handling. The 32,768-character input cap still rejects oversized recordings
 without truncation. See [Graph Actions](graph-actions.md) for full contracts and lifecycle.

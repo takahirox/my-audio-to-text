@@ -3,6 +3,7 @@
 // algorithm; it does not incorporate Quick Inference's noncommercial runtime.
 import * as ort from './tts-assets/qwen3/ort.webgpu.min.mjs';
 import { Qwen2Tokenizer } from './tts-assets/transformers.js';
+import { watchGpuDevice } from './gpu-lifecycle.js';
 
 const WIDTH = 1024, GROUPS = 16, SAMPLES_PER_FRAME = 1920;
 // Recompute the causal prefix, bounded at 20.48 seconds. Trimming context from
@@ -55,7 +56,7 @@ class Decoder {
 }
 
 export class Qwen3TtsRuntime {
-  static async create(read, progress = () => {}) {
+  static async create(read, progress = () => {}, onFailure = () => {}) {
     if (!await navigator.gpu?.requestAdapter()) throw Error('Qwen3-TTS requires Worker WebGPU. Enable hardware acceleration and use a current desktop Chrome; no CPU/cloud fallback is provided.');
     ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false;
     ort.env.wasm.wasmPaths = new URL('./tts-assets/qwen3/', import.meta.url).href;
@@ -75,6 +76,7 @@ export class Qwen3TtsRuntime {
       runtime.config = JSON.parse(new TextDecoder().decode(await read('config.json')));
       runtime.tokenizer = new Qwen2Tokenizer(JSON.parse(new TextDecoder().decode(await read('tokenizer.json'))),
         { tokenizer_class: 'Qwen2Tokenizer', eos_token: '<|im_end|>', pad_token: '<|endoftext|>' });
+      watchGpuDevice(ort.env.webgpu, onFailure);
       return runtime;
     } catch (error) { await runtime.dispose(); throw error; }
   }

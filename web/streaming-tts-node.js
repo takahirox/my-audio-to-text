@@ -38,7 +38,7 @@ export class StreamingTtsNode {
         this.loading.resolve(); this.loading = null; this.event({ type: 'ready', message: `${this.label} ready (local WebGPU).` }); return;
       }
       if (data.type === 'error') {
-        if (this.loading || (this.current && data.id === this.current.id)) this.fail(Error(data.message));
+        if (data.fatal || this.loading || (this.current && data.id === this.current.id)) this.fail(Error(data.message));
         return;
       }
       if (!this.current || data.id !== this.current.id) return; // retired/late replies cannot replay audio

@@ -2,6 +2,7 @@
 // algorithm; no Quick Inference runtime code or patched ORT binaries.
 import * as ort from './tts-assets/qwen3/ort.webgpu.min.mjs';
 import { Qwen2Tokenizer } from './tts-assets/transformers.js';
+import { watchGpuDevice } from './gpu-lifecycle.js';
 import { streamingCosyVoice3Flow, streamingCosyVoice3Hift, cosyVoice3Mask } from './cosyvoice3-onnx.js';
 
 const TEXT_VOCAB = 151936, SOS = 6561, TASK = 6563, MAX_TOKENS = 500;
@@ -33,7 +34,7 @@ function sample(logits, history, minimum) {
 }
 
 export class CosyVoice3Runtime {
-  static async create(read, progress = () => {}) {
+  static async create(read, progress = () => {}, onFailure = () => {}) {
     if (!await navigator.gpu?.requestAdapter()) throw Error('CosyVoice3 requires desktop Worker WebGPU; no CPU/cloud fallback.');
     ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false;
     ort.env.wasm.wasmPaths = new URL('./tts-assets/qwen3/', import.meta.url).href;
@@ -60,6 +61,7 @@ export class CosyVoice3Runtime {
         const s = v >> 15 ? -1 : 1, e = (v >> 10) & 31, f = v & 1023;
         return s * (e ? 2 ** (e - 15) * (1 + f / 1024) : 2 ** -14 * f / 1024);
       });
+      watchGpuDevice(ort.env.webgpu, onFailure);
       return runtime;
     } catch (error) { await runtime.dispose(); throw error; }
   }

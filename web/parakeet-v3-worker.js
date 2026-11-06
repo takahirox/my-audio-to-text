@@ -2,6 +2,7 @@ import { ParakeetModel } from './vendor/optional-asr/parakeet/parakeet.js';
 import * as ort from './vendor/optional-asr/ort/ort.webgpu.min.mjs';
 import { parakeetManifest, optionalAsrFiles } from '../extension/optional-asr-cache.js';
 import { ParakeetV3Segments } from './parakeet-v3-segments.js';
+import { watchGpuDevice } from './gpu-lifecycle.js';
 
 let model, segments, session, failed = false, chain = Promise.resolve();
 const send = (type, values = {}) => postMessage({ type, ...(session === undefined ? {} : { session }), ...values });
@@ -25,6 +26,7 @@ async function handle(data) {
     try {
       model = await ParakeetModel.fromUrls({ encoderUrl: byName['encoder-model.fp16.onnx'], decoderUrl: byName['decoder_joint-model.int8.onnx'], tokenizerUrl: byName['vocab.txt'], backend: 'webgpu-strict', cpuThreads: 1, preprocessorBackend: 'js', nMels: 128 });
     } finally { for (const [, url] of urls) URL.revokeObjectURL(url); files.clear(); }
+    watchGpuDevice(ort.env.webgpu, error => { failed = true; send('error', { message: error.message }); });
     send('configuration', { model: 'nvidia/parakeet-tdt-0.6b-v3', encoder: 'WebGPU FP16', decoder: 'WASM int8', numThreads: 1 });
     send('ready');
   } else if (data.type === 'start') {

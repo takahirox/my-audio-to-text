@@ -13,7 +13,8 @@ self.onmessage = async ({ data }) => {
   try {
     if (data.type === 'load') {
       if (runtime || active) throw Error('CosyVoice3 Worker already loaded.');
-      runtime = await CosyVoice3Runtime.create(await cosyVoice3Assets(), message => postMessage({ type: 'progress', message }));
+      runtime = await CosyVoice3Runtime.create(await cosyVoice3Assets(), message => postMessage({ type: 'progress', message }),
+        error => postMessage({ type: 'error', fatal: true, message: error.message }));
       postMessage({ type: 'ready' });
     } else if (data.type === 'generate') {
       if (!runtime || active) throw Error('CosyVoice3 Worker is not ready.');

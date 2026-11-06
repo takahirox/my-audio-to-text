@@ -73,15 +73,14 @@ summary** for exactly one current snapshot; switch to the Summary tab to read th
 result. Each Display input is a selectable tab with only one visible panel.
 Button fan-out and multiple Hold instances use ordinary named edges.
 
-For summaries downstream of a Hold with trigger connected, session Start installs
-lifecycle hooks but **does not create a summary Worker, verify/load cached model
-weights, initialize WebGPU or run inference**. First TEXT delivery validates the
-32,768 UTF-16 character bound, then loads the cache-only model and generates.
-The first action therefore includes model initialization latency; the Worker
-stays warm for subsequent requests in that session. Ordinary ungated summaries
-retain their existing eager startup checks. Save still prepares weights, and ASR
-still initializes at Start. No recording-time model download or silent truncation
-is introduced. Long recordings beyond the cap fail visibly; chunking/long-context
+For summaries downstream of a Hold with trigger connected, Live verifies cached
+weights and initializes the summary Worker/WebGPU resources before showing Ready
+and enabling Start. ASR, translation, conditions and TTS follow the same lifecycle.
+No inference or trigger runs during this preparation. The first Button action
+validates the 32,768 UTF-16 character bound and goes directly to inference with
+the ready Worker; Hold still controls when the snapshot is sent. Save prepares
+files only. No Live/recording-time model download or silent truncation is
+introduced. Long recordings beyond the cap fail visibly; chunking/long-context
 summarization remains separate work.
 
 Live admits at most **one in-flight UI action for intersecting downstream paths**.

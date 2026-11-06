@@ -121,7 +121,7 @@ export const test = base.extend({
             return async ({input_ids})=>{if(input_ids.text==='slow')await new Promise(r=>setTimeout(r,2000));if(input_ids.text==='fail')throw Error('Fixture inference failure');
               return {waveform:{data:Float32Array.from({length:2400},(_,i)=>.2*Math.sin(i/10))}};};}};
           export const AutoTokenizer={async from_pretrained(){return text=>({input_ids:{text,dims:[1,10]}});}};`);
-        await writeFile(path.join(root, 'web/kokoro-english.js'), 'export async function phonemize(text){return text;}');
+        await writeFile(path.join(root, 'web/kokoro-english.js'), 'export async function prepareEnglishPhonemizer(){} export async function phonemize(text){return text;}');
         await writeFile(path.join(root, 'web/kokoro-japanese.js'), 'export async function createJapanesePhonemizer(){return async text=>text;}');
       }
       context = await launch(); const id = await load();
@@ -166,6 +166,8 @@ export async function openGraph(f) {
 export async function startGraph(page, timeout = 30000) {
   // Send through the recorder's registered production invocation listener.
   await page.evaluate(async () => { window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }); });
+  await expect(page.locator('#start')).toBeEnabled({ timeout });
+  await page.locator('#start').click();
   await expect(page.locator('#status')).toHaveText('Transcription active', { timeout });
 }
 export async function emitFinal(page, text) {
