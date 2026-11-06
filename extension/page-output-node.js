@@ -28,13 +28,13 @@ export class FocusedInputTextOutputNode {
   }
   skip(reason) {
     this.skipped = true; this.connection?.close();
-    this.onState(`Focused input output skipped: ${reason}. Stop and invoke the toolbar on a normal page to enable it next session.`, false);
+    this.onState(`Focused input output skipped: ${reason}. Stop and invoke the toolbar on a normal page to enable it next session.`, false, 'error');
   }
   failure(message) {
     if (this.failed || this.skipped || this.disposed) return;
     if (!this.connected) { this.skip(`target unavailable (${message})`); return; }
     this.failed = true; this.connection?.close();
-    this.onState(`Insertion detached: ${message} Stop and invoke that page's toolbar action again. Other branches continue.`, false);
+    this.onState(`Insertion detached: ${message} Stop and invoke that page's toolbar action again. Other branches continue.`, false, 'error');
   }
   async receive(port, text, context) {
     if (this.skipped || this.failed || this.disposed || context.signal.aborted || port !== 'text' || typeof text !== 'string' || !text.length) return;
@@ -43,7 +43,7 @@ export class FocusedInputTextOutputNode {
       // identity, never part of the plain TEXT contract. Never retry an edit.
       const result = await this.connection.request('append', { sequence: this.sequence++, text });
       if (context.signal.aborted || this.failed || this.disposed) return;
-      if (result?.skipped) this.onState(`Insertion skipped: ${result.skipped} Other branches continue.`, false);
+      if (result?.skipped) this.onState(`Insertion skipped: ${result.skipped} Other branches continue.`, false, 'error');
       else if (result?.inserted) this.onState(`${this.target.label} · inserted ${++this.inserted} text value(s)`, true);
     } catch (error) { if (!context.signal.aborted) this.failure(error.message); }
   }

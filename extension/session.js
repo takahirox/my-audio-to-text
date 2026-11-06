@@ -1,3 +1,6 @@
+import { graphModelRequirements } from './graph-model-preparation.js';
+import { SELECTED_MEDIA_UNAVAILABLE } from './media-source.js';
+import { authorizePage } from './page-target.js';
 import { buttonLabel } from '../web/button-node.js';
 import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
@@ -21,18 +24,42 @@ export class TabSession {
     this.parakeetWorkerFactory = parakeetWorkerFactory; this.moonshineWorkerFactory = moonshineWorkerFactory;
     this.whisperWorkerFactory = whisperWorkerFactory; this.zipformerWorkerFactory = zipformerWorkerFactory;
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
-    this.pageConnectionFactory = pageConnectionFactory; this.targets = {}; this.outputTarget = null;
+    this.pageConnectionFactory = pageConnectionFactory; this.outputTarget = null;
+    this.nodeErrors = new Map();
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation; this.prepareTranslateGemma = prepareTranslateGemma;
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
     this.speakerContextFactory = speakerContextFactory;
     const preferences = graphPreferences(this.graph);
-    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', error: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', targetStatus: '', translationStatus: 'Translation off' };
+    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', prompt: '', error: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: 'Translation off' };
     this.update();
   }
   update(values = {}) {
     Object.assign(this.view, values);
     this.view.graphActions = this.graphActions();
     this.render({ ...this.view });
+  }
+  nodeEvent(event, id) {
+    // Unknown event types are diagnostics by default, including future Nodes.
+    // Never infer severity from message text.
+    if (event.type !== 'error' && event.severity !== 'error') return;
+    this.nodeErrors.set(id, event.message || 'Operation failed. Start a new session to retry.');
+    this.update({ error: [...this.nodeErrors].map(([id, message]) => `${id}: ${message}`).join('\n'),
+      modelRecovery: [...this.nodeErrors.keys()].some(id => {
+        const node = (this.view.activeGraph || this.graph).nodes.find(node => node.id === id);
+        return node && graphModelRequirements({ nodes: [node] }).length > 0;
+      }) });
+  }
+  async prepareFocusedOutput(tabId) {
+    this.outputTarget = null;
+    if (!executableGraph(this.graph).nodes.some(node => FIELD_TYPES.includes(node.type))) return;
+    this.update({ preparingOutput: true });
+    try {
+      const target = await authorizePage(tabId);
+      if (!this.session) this.outputTarget = target;
+    } catch {
+      // The focused output Node reports its actionable failure on Start.
+      // Other branches still start, even on pages which cannot be authorized.
+    } finally { this.update({ preparingOutput: false }); }
   }
   graphActions() {
     const owner = this.session || null;
@@ -77,6 +104,8 @@ export class TabSession {
   }
   async start(tabId, { microphoneGesture = false, speakerGesture = false } = {}) {
     if (this.session) return; // A second invocation never retargets live capture.
+    this.nodeErrors.clear();
+    this.update({ error: '', modelRecovery: false, prompt: '' });
     let graph, snapshot;
     try {
       snapshot = assertGraph(this.graph); graph = executableGraph(snapshot);
@@ -88,27 +117,28 @@ export class TabSession {
     const speakers = graph.nodes.filter(node => ['SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
     const sources = graph.nodes.filter(n => INPUT_TYPES.includes(n.type));
     const microphones = sources.filter(n => n.type === 'MicrophoneAudio');
-    if (sources.some(node => node.type !== 'MicrophoneAudio') && !Number.isInteger(tabId)) {
-      this.update({ error: 'Invoke the toolbar action on the target tab before starting tab or selected-media capture.' }); return;
+    if (sources.some(node => node.type === 'ChromeTabAudio') && !Number.isInteger(tabId)) {
+      this.update({ error: 'Invoke the toolbar action on the target tab before starting tab capture.' }); return;
     }
-    if (microphones.length && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.' }); return; }
-    if (speakers.length && !speakerGesture) { this.update({ tabId, status: 'Speaker selected. Press Start to enable audio. Keep this Live window open.' }); return; }
-    for (const node of graph.nodes.filter(n => n.type === 'SelectedPageMediaAudio')) {
-      const target = this.targets[node.id];
-      if (!target || !target.mediaId || target.tabId !== tabId) {
-        this.update({ tabId, error: `Select and authorize the target for ${node.id} in Live before Start.` }); return;
-      }
-    }
-    const session = { speakers: new Map(), speakerStates: Object.create(null), microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targets: structuredClone(this.targets), targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
+    if (microphones.length && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.', prompt: 'Press Start to request microphone permission.' }); return; }
+    if (speakers.length && !speakerGesture) { this.update({ tabId, status: 'Speaker selected. Press Start to enable audio. Keep this Live window open.', prompt: 'Press Start to enable speaker audio.' }); return; }
+    const session = { speakers: new Map(), speakerStates: Object.create(null), microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
     session.started = new Promise(resolve => { session.markStarted = resolve; });
     this.session = session;
-    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', targetStatus: '', translationStatus: session.translationEnabled ? 'Preparing local translation…' : 'Translation off', status: graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
+    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: session.translationEnabled ? 'Preparing local translation…' : 'Translation off', status: graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
+    // Explain this source limitation even if a dependent processor fails before
+    // Pipeline reaches the source's start hook. The source itself still fails
+    // through Pipeline, preserving ordinary branch isolation and topology.
+    for (const node of sources.filter(node => node.type === 'SelectedPageMediaAudio')) {
+      this.nodeEvent({ type: 'error', message: SELECTED_MEDIA_UNAVAILABLE }, node.id);
+    }
     try {
       for (const spec of speakers) {
         const Speaker = spec.type === 'StreamingSpeakerOutput' ? StreamingSpeakerOutputNode : SpeakerOutputNode;
         const node = new Speaker({ contextFactory: this.speakerContextFactory, onState: state => {
           if (this.session !== session) return;
           session.speakerStates[spec.id] = state;
+          this.nodeEvent(state, spec.id);
           this.update({ speakerStatus: Object.entries(session.speakerStates).map(([id, value]) => `${id}: ${value.message}`).join('\n'),
             speakerNeedsActivation: Object.values(session.speakerStates).some(value => value.needsActivation) });
         } });
@@ -126,15 +156,16 @@ export class TabSession {
       }
       Object.assign(session, buildGraph(snapshot, {
         speakers: session.speakers,
-        tabId, outputTarget: session.outputTarget, targets: session.targets, microphoneStreams: session.microphoneStreams, pageConnectionFactory: this.pageConnectionFactory,
-        onTargetState: (id, state, active) => {
+        tabId, outputTarget: session.outputTarget, microphoneStreams: session.microphoneStreams, pageConnectionFactory: this.pageConnectionFactory,
+        onTargetState: (id, state, active, severity) => {
           if (this.session === session && state) {
             session.targetStates[id] = state;
             if (active === true) session.activeFieldOutputs.add(id);
             else if (active === false) session.activeFieldOutputs.delete(id);
             const statuses = Object.entries(session.targetStates).map(([id, status]) => `${id}: ${status}`);
             if (!hasDisplay && !hasAudioOutput && !session.activeFieldOutputs.size) statuses.push('No text destination is active. Focus a supported field in the toolbar tab or invoke its toolbar action for the next session, or add a Live view in Graph Editor.');
-            this.update({ targetStatus: statuses.join('\n') });
+            this.update({ outputStatus: statuses.join('\n') });
+            this.nodeEvent({ severity, message: state }, id);
           }
         },
         workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, zipformerWorkerFactory: this.zipformerWorkerFactory, parakeetWorkerFactory: this.parakeetWorkerFactory, moonshineWorkerFactory: this.moonshineWorkerFactory, sourceFactory: this.sourceFactory,
@@ -147,29 +178,31 @@ export class TabSession {
         textSummaryWorkerFactory: this.textSummaryWorkerFactory,
         onTextSummaryEvent: (event, id) => {
           if (this.session !== session) return;
+          this.nodeEvent(event, id);
           session.summaryStates ||= {}; session.summaryStates[id] = event.message || event.type;
           this.update({ summaryStatus: Object.entries(session.summaryStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
         ifConditionWorkerFactory: this.ifConditionWorkerFactory,
         onIfConditionEvent: (event, id) => {
           if (this.session !== session) return;
+          this.nodeEvent(event, id);
           session.conditionStates ||= {}; session.conditionStates[id] = event.message || event.type;
           this.update({ conditionStatus: Object.entries(session.conditionStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
         prepareTranslateGemma: this.prepareTranslateGemma,
         ttsWorkerFactory: this.ttsWorkerFactory, prepareTts: this.prepareTts,
-        onTtsState: ttsStatus => { if (this.session === session) this.update({ ttsStatus }); },
+        onTtsState: (ttsStatus, id, event) => {
+          if (this.session !== session) return;
+          this.update({ ttsStatus }); this.nodeEvent(event || {}, id);
+        },
         onSynthesizedAudio: (audio, signal) => {
           if (this.session === session && !signal.aborted) return this.onSynthesizedAudio(audio, signal);
         },
         onSpeechEvent: (event, id) => {
           if (this.session !== session) return;
-          if (event.type === 'error' && event.branchUnavailable) {
-            session.asrErrors ||= {}; session.asrErrors[id] = event.message;
-            this.update({ error: Object.entries(session.asrErrors).map(([id, message]) => `${id}: ${message}`).join('\n') });
-          } else if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: `${id}: ${event.message}` });
+          this.nodeEvent(event, id);
+          if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: `${id}: ${event.message}` });
           else if (['progress', 'ready'].includes(event.type) && this.view.state === 'running') this.update({ signal: this.sourceStatus(session) });
-          else if (event.type === 'error' && session.pipeline?.state === 'idle') this.update({ error: [this.view.error, `${id}: ${event.message}`].filter(Boolean).join('\n') });
         },
         onDisplay: (id, state, port) => {
           if (this.session === session || (!this.session && this.canceling === session)) this.update({ displays: { ...this.view.displays, [id]: { ...this.view.displays[id], [port]: state } } });
@@ -182,8 +215,9 @@ export class TabSession {
           }
         },
         onEnded: id => { if (this.session === session) void this.sourceEnded(session, id); },
-        onTranslationState: (state, id) => {
+        onTranslationState: (state, id, severity) => {
           if (this.session !== session) return;
+          this.nodeEvent({ severity, message: state }, id);
           session.translationStates ||= {};
           session.translationStates[id] = state;
           const statuses = Object.entries(session.translationStates);
@@ -191,12 +225,9 @@ export class TabSession {
         },
         onError: (error, id) => {
           if (this.session !== session) return;
-          // These processors report actionable errors in their own Live status
-          // before disposing and calling fail(). Keep the Pipeline record, but
-          // do not repeat that same failure in the general error area.
-          const node = session.pipeline.entries.get(id).node;
-          if (node.disposed && ['TextSummaryLfm2', 'TextSummaryQwen35', 'IfCondition'].includes(graph.nodes.find(spec => spec.id === id)?.type)) { this.update(); return; }
-          this.update({ error: [this.view.error, error.message].filter(Boolean).join('\n'), signal: this.sourceStatus(session) });
+          // Structured Node events may already contain more useful recovery
+          // instructions for this failure. Keep one notice per Node.
+          if (!this.nodeErrors.has(id)) this.nodeEvent({ type: 'error', message: error.cause?.message || error.message }, id);
         },
       }));
       await Promise.allSettled([...session.speechNodes].map(async ([id, node]) => {
@@ -210,7 +241,7 @@ export class TabSession {
       this.update({ state: 'running', status: sources.length ? 'Transcription active' : 'Processing active',
         signal: this.sourceStatus(session) });
     } catch (error) {
-      if (this.session === session) this.fail(error.message || String(error));
+      if (this.session === session) this.fail(error.message || String(error), { reported: session.pipeline?.errors.includes(error) });
     }
   }
   releaseMicrophones(session) {
@@ -232,10 +263,10 @@ export class TabSession {
     session.sourceStates[id] = 'Capture ended; finalizing this path.';
     this.update({ signal: this.sourceStatus(session) });
     // When all live capture ends, retain the existing full-session Stop policy.
-    if (session.endedSources.size === session.audioSources.size) return this.stop();
+    if ([...session.audioSources.keys()].every(source => session.endedSources.has(source) || session.pipeline.entries.get(source).failed)) return this.stop();
     // Drain only Nodes with no remaining live source ancestor. A formatter with
     // another live input stays open; one-source fan-out drains all its branches.
-    const live = new Set([...session.audioSources.keys()].filter(source => !session.endedSources.has(source)));
+    const live = new Set([...session.audioSources.keys()].filter(source => !session.endedSources.has(source) && !session.pipeline.entries.get(source).failed));
     // Buttons remain live event producers. Startup-only Text/Number constants
     // must not keep an ended audio branch open through configuration edges.
     for (const node of session.description.nodes) if (node.type === 'Button') live.add(node.id);
@@ -312,20 +343,15 @@ export class TabSession {
   enableSpeakers() {
     for (const speaker of this.session?.speakers.values() || []) speaker.enable();
   }
-  fail(message) {
+  fail(message, { reported = false } = {}) {
     this.cancel();
-    this.update({ status: 'Transcription failed. Invoke the toolbar action or retry.', error: message });
+    this.update({ status: 'Transcription failed. Invoke the toolbar action or retry.', error: reported ? this.view.error : [...new Set([this.view.error, message].filter(Boolean))].join('\n') });
   }
   setGraph(graph) {
     this.graph = assertGraph(graph);
     const preferences = graphPreferences(this.graph);
     this.update({ savedGraph: this.graph, translationEnabled: preferences.enabled, translationDirection: preferences.direction,
       ...(this.session ? {} : { translationStatus: preferences.enabled ? 'Translation enabled for the next session' : 'Translation off' }) });
-  }
-  setTarget(id, target) {
-    if (this.session) throw Error('Stop before selecting or clearing targets.');
-    if (target) this.targets[id] = structuredClone(target); else delete this.targets[id];
-    this.update();
   }
   tabEnded(tabId) {
     if (this.outputTarget?.tabId === tabId) this.outputTarget = null;
@@ -334,7 +360,6 @@ export class TabSession {
         this.session.pipeline.entries.get(spec.id).node.failure('Toolbar document navigated or closed.');
       }
     }
-    for (const [id, target] of Object.entries(this.targets)) if (target.tabId === tabId) delete this.targets[id];
     if (this.session?.tabId === tabId) for (const [id, node] of this.session.audioSources || []) {
       if (this.session.description.nodes.find(spec => spec.id === id).type !== 'MicrophoneAudio') {
         node.end(); void this.sourceEnded(this.session, id);

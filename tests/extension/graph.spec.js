@@ -33,6 +33,8 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     page.on('request', request => requests.push({ url: request.url(), method: request.method(), body: request.postData() }));
     f.mode('error'); await addAudioPath(page, type); await expect(page.editor.locator('#graph-models .model-status')).toHaveText('Error'); await startGraph(page);
     await expect(page.locator('#tts-status')).toContainText('assets missing');
+    await expect(page.locator('#errors')).toContainText('assets missing');
+    await expect(page.locator('#model-recovery')).toBeVisible();
     await emitFinal(page, 'missing'); await expect(page.locator('[data-display="transcript"] .display-content')).toContainText('missing');
     expect(f.requests.length).toBeGreaterThan(0); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
     f.mode('error'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Download / retry' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Error');
@@ -61,6 +63,8 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     await page.evaluate(() => window.graphSession.cancel());
     await expect(page.locator('#audio-outputs audio')).toHaveCount(0); expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
     await startGraph(page); await emitFinal(page, 'fail'); await expect(page.locator('#tts-status')).toContainText('Fixture inference failure');
+    await expect(page.locator('#errors')).toContainText('Fixture inference failure');
+    expect((await page.locator('#errors').textContent()).split('\n')).toHaveLength(1);
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('fail'); await expect(page.locator('#status')).toHaveText('Transcription active');
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
     // Cached models survive window recreation and a browser restart, with no
@@ -147,7 +151,7 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'Current fixture utterance…' }));
   await expect(live.locator('[data-display="transcript"] .display-content')).toHaveCount(1);
   await expect(live.locator('[data-display="transcript"] .display-content')).toHaveText('Completed fixture utterance.Current fixture utterance…');
-  await expect(live.getByRole('heading', { name: 'Input 1', exact: true })).toBeVisible();
+  await expect(live.locator('.live-text-region')).toHaveAccessibleName('Input 1');
   await live.setViewportSize({ width: 620, height: 900 });
   await live.editor.setViewportSize({ width: 1440, height: 1000 });
   await live.models.setViewportSize({ width: 1200, height: 1000 });

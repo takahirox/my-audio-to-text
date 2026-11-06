@@ -19,7 +19,7 @@ export class SpeakerOutputNode {
   report(message, needsActivation = false) {
     if (this.disposed) return;
     const overflow = this.rejected ? ` Queue full; ${this.rejected} clip(s) rejected. Stop to drain accepted audio, then Start again.` : '';
-    this.onState({ message: message + overflow, needsActivation, overflow: !!this.rejected });
+    this.onState({ message: message + overflow, needsActivation, overflow: !!this.rejected, severity: needsActivation || this.rejected || this.blocked ? 'error' : 'info' });
   }
   // Call synchronously from Start/Enable speaker, before permission/model awaits.
   // resume() can remain pending under autoplay policy, so never await it here.
@@ -150,7 +150,7 @@ export class StreamingSpeakerOutputNode extends SpeakerOutputNode {
   report(message, needsActivation = false, fields = {}) {
     if (this.disposed) return;
     const overflow = this.rejected ? ' Stream queue full; further audio rejected. Stop drains accepted audio, then Start again.' : '';
-    this.onState({ message: message + overflow, needsActivation, overflow: !!this.rejected, ...fields });
+    this.onState({ message: message + overflow, needsActivation, overflow: !!this.rejected, severity: needsActivation || this.rejected || this.blocked ? 'error' : 'info', ...fields });
   }
   receive(port, value, context) {
     if (this.disposed || this.stopping || context.signal.aborted) return;

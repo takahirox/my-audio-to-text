@@ -9,7 +9,9 @@ choose [Streaming Zipformer English ASR](zipformer-node.md), or opt into the ind
 [Parakeet v3 and Moonshine Medium Streaming Nodes](optional-asr-nodes.md). The default whole-tab
 graph needs no page injection or
 media picker. Optional microphone, selected media and page-field outputs are
-configured in Graph Editor and explicitly targeted in Live.
+configured in Graph Editor. Focused output follows the toolbar tab automatically;
+microphone permission is requested by Start. Selected-page media is temporarily
+unavailable (see below).
 
 The extension uses the shared Node/Port runtime:
 
@@ -36,9 +38,11 @@ and Models keep their dark appearance:
   Copy text control. Select and copy text using the browser's native commands. A compact
   recording panel retains Start/Stop and an accurate session-state pill.
   Graph-configured Button sources appear in a separate Graph Actions band when
-  present. Errors, target authorization, graph-change warnings and model recovery
-  remain visible; a compact bottom strip shows session progress and expandable
-  details. Optional input/output targeting is collapsed until requested.
+  present. Actionable errors, graph-change warnings and model recovery remain
+  visible. Only the overall session state and permission instructions appear
+  alongside recording controls; routine per-Node waiting, loading, inference,
+  queue and completion diagnostics are available on demand in **Session details**.
+  Live has no input/output target panel or selector.
 - **Graph Editor** opens a separate wide tab dominated by the typed-port canvas.
   **Add Node** opens search and categories; node settings appear only on
   selection. Zoom and Fit graph stay visible, Save is primary, and Graph actions
@@ -107,7 +111,8 @@ loading it again is unnecessary.
    the tab you invoked. Loading time is excluded from capture; audio played
    before the active indication is not transcribed.
 5. Return to the meeting tab; keep the transcript window open. It shows the
-   active state, audio-signal status, provisional text and committed final text.
+   active state, provisional text and committed final text. Audio-signal and
+   per-Node diagnostics are available in Session details.
 6. Click **Stop** to flush capture/VAD tails and drain final decoding
    and transcript output ports (and all final translations when enabled) before
    the UI reports completion.
@@ -145,8 +150,8 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 Save a graph with whole-tab, selected-media and/or microphone Inputs and
 one or more outputs. Multiple independent ASRs and displays run concurrently;
 parked or unfinished Nodes remain saved but inactive. See the
-[execution and permission policy](extension-graph.md). Live shows **Input and output targets** and separate target
-status/errors. Connect `SpeechToTextReazonSpeech.final → FocusedInputTextOutputNode.text`
+[execution and permission policy](extension-graph.md). Graph Editor owns source
+and output choices; Live shows actionable errors without target controls. Connect `SpeechToTextReazonSpeech.final → FocusedInputTextOutputNode.text`
 or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
 strings can fan out to TTS and other consumers. For final-only output, select
 ASR `final` or translation `text`. Bilingual formatting uses grouped primitive
@@ -161,7 +166,7 @@ window focus, a valid prior user-focused field is retained until superseded;
 no field is guessed when there was no valid focus. Dynamic YouTube-style comment
 activation is covered by a controlled fixture; live YouTube compatibility has
 not been manually verified. Complex editors, shadow roots and restricted frames
-may require Live Copy.
+may require selecting and copying Live's displayed text with browser commands.
 
 Manual/selected text and existing whitespace are preserved. Incoming TEXT strings
 append verbatim in order, including leading/trailing whitespace. No spaces,
@@ -170,19 +175,22 @@ are ignored; formatting and spacing belong upstream. Upstream final adapters
 suppress repeated/stale IDs within the session and emit only confirmed
 original/completed translations. The string input itself
 needs no IDs. Sensitive/hidden/disabled fields and authentication/payment forms
-are skipped, as are canceled `beforeinput` edits; a visible status explains the
-skip while other branches continue. Page navigation, closure or permission loss
+are skipped, as are canceled `beforeinput` edits; an actionable error explains the
+skip while other branches continue. Routine insertion counts and successful
+connections appear only in Session details. Page navigation, closure or permission loss
 detaches the sink. Stop and invoke the page toolbar again to recover; a running
 session never retargets when another tab's action is invoked. Page targets are
 not persisted. Unsupported saved field/display ports require Reset or Import of a current graph and an explicit Save.
 
-For selected media, play audio/video, discover in Live, then choose a labeled
-entry. Its `captureStream()` supplies that element's audio separately, never a
-mixed tabCapture stream. Currently playing same-origin/stream-backed top-frame
-media is supported. Cross-origin/protected/DRM, restricted frames, missing audio
-tracks and unavailable capture APIs show a whole-tab fallback explanation.
-The extension does not bypass browser content protections. Save **Chrome tab
-audio** for fallback where permitted. For microphone save **Microphone audio**
+**Temporary selected-media limitation:** `SelectedPageMediaAudio` cannot capture
+until a replacement selection workflow exists. Live no longer offers discovery
+or element selection. Start reports an error naming the source and suggesting
+`ChromeTabAudio` in Graph Editor; it never guesses an element or silently captures
+whole-tab audio. Independent complete graph branches continue. Selection on the
+target Web page is explicitly deferred to a separate task. Saved graph topology
+is preserved.
+
+For microphone save **Microphone audio**
 and press Start to request browser permission; denied/canceled permission is
 visible and late-granted tracks are released after cancellation.
 See [target policies, named ports and browser limitations](extension-graph.md).
@@ -192,7 +200,7 @@ See [target policies, named ports and browser limitations](extension-graph.md).
 | Manifest entry | Purpose |
 | --- | --- |
 | `activeTab` | Temporary access to the specific tab where the user invokes the action; needed for `getMediaStreamId({targetTabId})`. |
-| `scripting` | Inject the packaged isolated adapter only into a user-authorized top-frame document after toolbar invocation for configured focused output, or explicit media discovery in Live. No persistent host permissions. |
+| `scripting` | Inject the packaged isolated adapter only into a user-authorized top-frame document after toolbar invocation for configured focused output. No persistent host permissions. |
 | `tabCapture` | Obtain that tab's audio stream, without the Web sharing picker. |
 | `script-src 'self' 'wasm-unsafe-eval'` | Execute packaged scripts and the existing local WASM runtime. |
 | COOP/COEP | Isolate the extension page/workers for the pinned runtime's shared WASM memory. |
@@ -240,6 +248,27 @@ and cleanup after closing the tab/window. This PoC does not include participant
 labels, overlays, Web Store publication or
 cross-browser extension support. No post-merge verification is required by #61.
 
+### Simplified Live checks (#227)
+
+1. Start a graph with ChromeTabAudio, then a microphone graph. Verify the toolbar
+   tab is used automatically and microphone permission still requires Start.
+   No target panel, discovery button or media selector should exist.
+2. Connect a lazy summary, translation, condition, Hold or speech path. Waiting,
+   loading, generation, completion and queue messages should be absent from the
+   main flow and from live announcements. Open **Session details** to inspect
+   diagnostics; close it to return to reading. Graph Actions, Display input tabs
+   and generated audio players remain usable at desktop and narrow widths.
+3. Cause a missing model, failed operation or denied permission. Verify one
+   actionable error per Node appears in the alert (with Models recovery for
+   optional models). Start a fresh healthy session: old errors must disappear.
+4. Connect SelectedPageMediaAudio to an output. Start remains available and
+   reports the temporary selection limitation with a ChromeTabAudio suggestion.
+   Add an independent text/capture path: that branch must still work. Nothing
+   should select an element, inject a picker or silently switch capture modes.
+   For focused output, invoke the toolbar on a normal page with a supported field
+   focused; successful connection/insertion counts belong in Session details,
+   while unavailable output/permission errors remain visible.
+
 ## Optional OPUS-MT Japanese ↔ English (#69 / #71)
 
 Fresh installs default to a minimal transcription graph. Translation is an
@@ -247,7 +276,8 @@ explicit graph addition. New/reset graphs use the current transcription path; tr
 
 The original ASR preview remains available while committed translations are queued.
 Translation publishes completed results only; no provisional translation or pending
-history rows are produced. Runtime status shows loading/readiness/failure. A failure
+history rows are produced. Session details contains loading/readiness diagnostics;
+actionable failures also appear in Live’s error alert. A failure
 can be displayed through the primitive `error` output while successful `text` sinks
 receive nothing. Stop drains final speech and translations. Closing the Live
 window discards pending work, releases Workers and ignores late completions.

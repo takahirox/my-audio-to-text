@@ -9,7 +9,9 @@ const trackPipeline=page=>page.evaluate(async()=>{
 });
 const expectFailure=async page=>{
  expect(await page.evaluate(()=>({failed:window.conditionPipeline.entries.get('condition').failed,errors:window.conditionPipeline.errors.length,state:window.conditionPipeline.state}))).toEqual({failed:true,errors:1,state:'running'});
- await expect(page.locator('#errors')).toBeEmpty();
+ await expect(page.locator('#errors')).toContainText('IfCondition unavailable');
+ await expect(page.locator('#errors')).toBeVisible();
+ expect((await page.locator('#errors').textContent()).split('\n')).toHaveLength(1);
  expect(await page.evaluate(()=>window.graphWorkers.filter(w=>w.url.includes('if-condition-worker')).every(w=>w.released))).toBe(true);
 };
 

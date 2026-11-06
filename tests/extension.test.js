@@ -91,11 +91,11 @@ function fieldOutputs({ live = true } = {}) {
 test('missing toolbar document skips only focused output; Live drains, retry snapshots the same-tab document', async () => {
   const sent = [], f = fixture({ graph: fieldOutputs(), pageConnectionFactory: target => ({ request: async (action, value) => { sent.push([target, action, value]); return { inserted: true }; }, close() {} }) });
   await f.session.start(42);
-  assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /output skipped: no authorized toolbar document/);
+  assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.outputStatus, /output skipped: no authorized toolbar document/);
   f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop();
   assert.equal((domText(f.session.view.displays.transcript) || ''), 'final text'); assert.deepEqual(sent, []);
   f.session.outputTarget = { tabId: 42, documentId: 'authorized', label: 'Page' };
-  await f.session.start(42); assert.match(f.session.view.targetStatus, /connected and authorized/);
+  await f.session.start(42); assert.match(f.session.view.outputStatus, /connected and authorized/);
   f.session.outputTarget.documentId = 'changed';
   f.sources[1].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop();
   assert.deepEqual(sent.filter(([, action]) => action === 'append').map(([target, , value]) => [target.documentId, value.text]), [['authorized', 'final text']]);
@@ -103,7 +103,7 @@ test('missing toolbar document skips only focused output; Live drains, retry sna
 });
 test('field-only graph reports every unavailable destination without adding a fallback view', async () => {
   const f = fixture({ graph: fieldOutputs({ live: false }), pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
-  await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /No text destination is active/);
+  await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.outputStatus, /No text destination is active/);
   f.sources[0].onAudio(new Float32Array(16000).fill(0.05)); await drain(); await f.session.stop(); assert.equal((domText(f.session.view.displays.transcript) || ''), '');
 });
 test('portable Display remains an active destination when a focused field is unavailable', async () => {
@@ -113,8 +113,8 @@ test('portable Display remains an active destination when a focused field is una
   const f = fixture({ graph, pageConnectionFactory() { assert.fail('Unset targets must not connect'); } });
   await f.session.start(42);
   assert.equal(f.session.view.state, 'running');
-  assert.match(f.session.view.targetStatus, /output skipped/);
-  assert.doesNotMatch(f.session.view.targetStatus, /No text destination is active/);
+  assert.match(f.session.view.outputStatus, /output skipped/);
+  assert.doesNotMatch(f.session.view.outputStatus, /No text destination is active/);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', id: 1, text: 'Portable output' });
   await drain(); assert.equal(domText(f.session.view.displays.portable), 'Portable output');
   await f.session.stop();
@@ -122,16 +122,64 @@ test('portable Display remains an active destination when a focused field is una
 test('stale document disables focused output while Live continues; cancellation releases capture and workers', async () => {
   const f = fixture({ graph: fieldOutputs(), pageConnectionFactory: () => ({ request: async () => { throw Error('Permission lost'); }, close() {} }) });
   f.session.outputTarget = { tabId: 42, documentId: 'stale', label: 'Page' };
-  await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.targetStatus, /Permission lost/);
+  await f.session.start(42); assert.equal(f.session.view.state, 'running'); assert.match(f.session.view.outputStatus, /Permission lost/);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', id: 1, text: 'Live continues' }); await drain(); assert.match((domText(f.session.view.displays.transcript) || ''), /Live continues/);
   f.session.cancel(); await drain(); assert.ok(f.workers.every(worker => worker.terminated)); assert.equal(f.sources[0].stops.at(-1), false);
 });
 
-test('selected media input still requires its target before model or capture startup', async () => {
-  const graph = fieldOutputs(); graph.nodes[0].type = 'SelectedPageMediaAudio';
-  const f = fixture({ graph }); await f.session.start(42);
-  assert.match(f.session.view.error, /Select and authorize.*audio/);
-  assert.equal(f.workers.length, 0); assert.equal(f.sources.length, 0);
+test('selected media fails explicitly without selection or tab capture; an independent text path survives', async () => {
+  const graph = defaultGraph(); graph.nodes[0].type = 'SelectedPageMediaAudio';
+  const f = fixture({ graph });
+  await f.session.start();
+  assert.equal(f.session.view.state, 'idle');
+  assert.match(f.session.view.error, /audio: SelectedPageMediaAudio is temporarily unavailable/);
+  assert.match(f.session.view.error, /Choose ChromeTabAudio in Graph Editor/);
+  assert.equal(f.session.view.error.split('\n').length, 1);
+  assert.equal(f.sources.length, 0);
+  graph.nodes.push(graphNode('Text', 'peer'), graphNode('Display', 'peer-output'));
+  graph.nodes.at(-2).settings.value = 'Independent output';
+  graph.edges.push(edge('peer', 'value', 'peer-output', 'input1'));
+  f.session.setGraph(graph);
+  await f.session.start(); await drain();
+  assert.equal(f.session.view.state, 'running');
+  assert.match(f.session.view.error, /SelectedPageMediaAudio/);
+  assert.equal(domText(f.session.view.displays['peer-output']), 'Independent output');
+  await f.session.stop();
+  graph.nodes = graph.nodes.filter(node => node.id !== 'audio');
+  graph.edges = graph.edges.filter(route => route.from[0] !== 'audio');
+  f.session.setGraph(graph);
+  await f.session.start();
+  assert.equal(f.session.view.error, '');
+  assert.equal(f.session.nodeErrors.size, 0);
+  await f.session.stop();
+});
+
+test('selected-media limitation is explicit even before a dependent model finishes loading', async () => {
+  const graph = defaultGraph(); graph.nodes[0].type = 'SelectedPageMediaAudio';
+  const f = fixture({ graph, holdLoad: true });
+  const starting = f.session.start(); await drain();
+  assert.equal(f.session.view.state, 'loading');
+  assert.match(f.session.view.error, /audio: SelectedPageMediaAudio is temporarily unavailable/);
+  f.session.cancel(); await starting;
+  assert.equal(f.sources.length, 0);
+});
+
+test('an unavailable selected-media branch cannot keep a healthy ended capture session running', async () => {
+  const graph = defaultGraph();
+  graph.nodes.push(graphNode('SelectedPageMediaAudio', 'selected'), graphNode('SpeechToTextReazonSpeech', 'selected-speech'), graphNode('Display', 'selected-output'));
+  graph.edges.push(edge('selected', 'audio', 'selected-speech', 'audio'), edge('selected-speech', 'final', 'selected-output', 'input1'));
+  const f = fixture({ graph });
+  await f.session.start(42);
+  assert.equal(f.session.view.state, 'running');
+  assert.match(f.session.view.error, /selected: SelectedPageMediaAudio/);
+  f.sources[0].onAudio(new Float32Array(16000).fill(0.05));
+  await drain();
+  const owner = f.session.session;
+  f.sources[0].onEnded();
+  await owner.stopping;
+  assert.equal(f.session.view.state, 'idle');
+  assert.equal(f.session.session, null);
+  assert.equal(domText(f.session.view.displays.transcript), 'final text');
 });
 
 test('extension session emits provisional/final output, flushes once and clears repeat transcripts', async () => {

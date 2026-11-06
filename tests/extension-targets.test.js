@@ -6,7 +6,7 @@ import { buildGraph } from '../extension/graph-runtime.js';
 import { TEXT } from '../web/translation-nodes.js';
 import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { Pipeline } from '../web/pipeline.js';
-import { TargetControls } from '../extension/target-controls.js';
+import { TabSession } from '../extension/session.js';
 
 function fieldGraph(translated = false) {
   const graph = defaultGraph({ enabled: translated });
@@ -35,13 +35,13 @@ test('toolbar preparation authorizes only executable focused outputs, leaving pa
     incomplete.nodes.push(graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'field'));
     incomplete.edges.push(edge('unfinished', 'final', 'field', 'text'));
     for (const graph of [parked, incomplete, fieldGraph()]) {
-      const session = { graph, outputTarget: { tabId: 99, documentId: 'stale' }, update() {} };
-      const controls = Object.assign(Object.create(TargetControls.prototype), { session, render() {} });
-      await controls.prepareFocusedOutput(42);
+      const session = new TabSession(() => {}, { graph });
+      session.outputTarget = { tabId: 99, documentId: 'stale' };
+      await session.prepareFocusedOutput(42);
       if (graph === parked || graph === incomplete) {
         assert.deepEqual(calls, [], 'inactive outputs must not inject scripts or open page connections');
         assert.equal(session.outputTarget, null, 'stale authorization is cleared');
-        assert.equal(controls.busy, undefined);
+        assert.equal(session.view.preparingOutput, false);
       } else {
         assert.deepEqual(calls.map(([action]) => action), ['script', 'connect', 'request', 'disconnect']);
         assert.deepEqual(calls[0][1].target, { tabId: 42, frameIds: [0] });

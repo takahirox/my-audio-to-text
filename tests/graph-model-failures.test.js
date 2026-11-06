@@ -104,7 +104,8 @@ for (const type of types) {
       assert.ok(f.translations.every(worker => worker.released));
       assert.equal(pipeline.errors.length, 1);
       assert.equal(pipeline.entries.get('model').failed, true);
-      assert.equal(f.session.view.error, '', 'the processor status reports the error without a duplicate general error');
+      assert.equal(f.session.view.error.match(/Controlled model failure/g)?.length, 1, 'one actionable error per Node');
+      assert.equal(f.session.view.modelRecovery, true);
       assert.equal(f.session.view[status].match(/Controlled model failure/g)?.length, 1);
       assert.doesNotMatch(f.session.view.status, /failed/);
       assert.equal(f.display('model-output'), phase === 'stop' && type === 'IfCondition' ? 'first\nfailed input' : committed);
@@ -112,6 +113,8 @@ for (const type of types) {
       await f.session.start(42); await f.flush();
       assert.notEqual(f.session.session.pipeline, pipeline);
       assert.equal(f.session.session.pipeline.errors.length, 0);
+      assert.equal(f.session.view.error, '');
+      assert.equal(f.session.view.modelRecovery, false);
       assert.equal(f.display('peer'), 'first');
       assert.equal(f.display('model-output'), type === 'IfCondition' ? 'first' : 'committed summary');
       await f.session.stop();
@@ -146,6 +149,8 @@ for (const type of types) {
     await turn();
     assert.deepEqual(snapshot(), before);
     assert.equal(f.session.session.pipeline.errors.length, 0);
+      assert.equal(f.session.view.error, '');
+      assert.equal(f.session.view.modelRecovery, false);
     await f.session.stop();
   });
 

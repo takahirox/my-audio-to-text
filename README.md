@@ -197,6 +197,13 @@ Separate issues should define and implement:
 
 See the [development flow](docs/development-flow.md) for workflow and language policy, the [test and CI principles](docs/development-flow.md#test-and-ci-principles) for validation scope and cost, and the [review guidelines](docs/review-guidelines.md) for review and merge criteria.
 
+Live contains recording controls, graph-defined actions, Display tabs and actionable
+errors. Graph Editor owns source/output connections; routine Node diagnostics are
+available in Session details. There is no target panel. `SelectedPageMediaAudio`
+is temporarily unavailable and reports an error suggesting `ChromeTabAudio`;
+on-page element selection is deferred. Microphone Start permission and automatic
+focused-field output retain their existing behavior.
+
 The extension Live window shows each Display as an independent view with one
 switchable tab per `input1`, `input2`, … ITEM port and exactly one input panel
 visible at a time. Edit input tab labels in Display Settings; blank labels use

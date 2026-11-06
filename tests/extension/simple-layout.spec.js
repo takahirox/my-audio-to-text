@@ -41,7 +41,7 @@ test('Simple shows 0, 1, 2 and 4 independent single-input Displays at narrow and
   }
 });
 
-test('Simple hides routine details but keeps unknown diagnostics, recovery and next-session changes visible', async ({ graphExtension: f }) => {
+test('Live keeps all routine and unknown diagnostics in Session details; structured errors and graph changes remain visible', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
   await live.evaluate(async () => {
     const { TabSession } = await import('./session.js'), update = TabSession.prototype.update;
@@ -57,10 +57,25 @@ test('Simple hides routine details but keeps unknown diagnostics, recovery and n
   await live.locator('#diagnostics > summary').press('Enter');
   await live.evaluate(() => window.layoutSession.update({
     conditionStatus: 'decision: A new diagnostic without a recognized error keyword.',
-    summaryStatus: 'notes: Model unavailable. Retry in Models.',
+    summaryStatus: 'textsummaryqwen35: Text Summary · Qwen3.5 2B: waiting for TEXT; model loads on first request.',
+    translationStatus: 'translator: Generating; queue 1/2', holdStatus: 'hold: Ready',
+    ttsStatus: 'speech: Processing complete', speakerStatus: 'speaker: Playing',
+    status: 'future-node: An unfamiliar progress message',
     signal: 'speech: Waiting for startup language; model has not started.',
   }));
-  for (const id of ['condition-status', 'summary-status', 'signal', 'model-recovery']) await expect(live.locator(`#${id}`)).toBeVisible();
+  for (const id of ['condition-status', 'summary-status', 'translation-status', 'hold-status', 'tts-status', 'speaker-status', 'status', 'signal', 'model-recovery']) await expect(live.locator(`#${id}`)).toBeHidden();
+  await expect(live.locator('#errors')).toBeEmpty();
+  await expect(live.locator('#diagnostics [role=status], #diagnostics [role=alert]')).toHaveCount(0);
+  await expect(live.locator('#tts-output')).toBeHidden();
+  await live.evaluate(() => {
+    layoutSession.nodeEvent({ type: 'error', message: 'Model unavailable. Retry in Models.' }, 'speech');
+    layoutSession.nodeEvent({ type: 'error', message: 'Model unavailable. Retry in Models.' }, 'speech');
+  });
+  await expect(live.locator('#errors')).toHaveText('speech: Model unavailable. Retry in Models.');
+  await expect(live.locator('#errors')).toBeVisible();
+  await live.locator('#diagnostics > summary').press('Enter');
+  await expect(live.locator('#condition-status')).toBeVisible();
+  await live.locator('#diagnostics > summary').press('Enter');
   await live.editor.getByRole('button', { name: 'Select transcript', exact: true }).press('ArrowRight');
   await live.editor.locator('#graph-save').click();
   await expect(live.locator('#saved-state')).toBeVisible();
@@ -71,17 +86,24 @@ test('Simple hides routine details but keeps unknown diagnostics, recovery and n
   await live.locator('#stop').click();
   await expect(live.locator('.display-content')).toHaveText('Readable output');
   await expect(live.locator('#stop')).toBeDisabled();
+  await live.locator('#start').click();
+  await expect(live.locator('#errors')).toBeEmpty();
+  await live.locator('#stop').click();
 });
 
-test('Simple exposes required media selection and retains permission and graph recovery errors', async ({ graphExtension: f }) => {
+test('Live explains unavailable selected media without a selector and retains microphone and graph recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
   await expect(live.locator('#start')).toBeDisabled(); // No toolbar capture tab.
   await live.editor.evaluate(async () => {
     const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
     const graph = defaultGraph(); graph.nodes[0] = graphNode('SelectedPageMediaAudio', 'audio'); saveGraph(localStorage, (graph));
   });
-  await expect(live.locator('#targets')).toHaveAttribute('open', '');
-  await expect(live.getByRole('button', { name: 'Discover media in capture tab' })).toBeVisible();
+  await expect(live.locator('#targets, #target-status, #target-controls, .target-row, select')).toHaveCount(0);
+  await expect(live.locator('#start')).toBeEnabled();
+  await live.locator('#start').click();
+  await expect(live.locator('#errors')).toContainText('SelectedPageMediaAudio is temporarily unavailable');
+  await expect(live.locator('#errors')).toContainText('Choose ChromeTabAudio in Graph Editor');
+  await expect(live.locator('#start')).toBeEnabled();
   await live.editor.evaluate(async () => {
     const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
     const graph = defaultGraph(); graph.nodes[0] = graphNode('MicrophoneAudio', 'audio'); saveGraph(localStorage, (graph));

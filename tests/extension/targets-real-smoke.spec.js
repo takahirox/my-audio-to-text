@@ -35,7 +35,7 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and the same-ta
     await cdp.send('Extensions.triggerAction', { id, targetId: targetInfos.find(target => target.url === website.url()).targetId });
     await expect(live.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
     await expect(live.locator('#errors')).toBeEmpty();
-    await expect(live.locator('#target-status')).toContainText('connected and authorized');
+    await expect(live.locator('#output-status')).toContainText('connected and authorized');
     await expect(live.getByRole('button', { name: /Authorize capture|Pick field|Use next toolbar/ })).toHaveCount(0);
     await website.locator('#play').click(); await website.locator('#field').click();
     await expect(live.locator('#signal')).toHaveText('audio: Audio signal detected.');
