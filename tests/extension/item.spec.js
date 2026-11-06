@@ -3,7 +3,7 @@ import path from 'node:path';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { itemGraph } from '../fixtures/item-graph.js';
 
-test('MV3 portable ITEM graph keeps final rows visible through queued Worker replies, Cancel and restart', async ({ graphExtension: f }) => {
+test('MV3 portable ITEM graph keeps final rows visible through queued Worker replies, internal cancellation and restart', async ({ graphExtension: f }) => {
   await writeFile(path.join(f.root, 'web/opus-mt-en-ja-worker.js'), `const pending=[]; self.onmessage=({data})=>{
     if(data.type==='load')postMessage({type:'ready',id:data.id});
     if(data.type==='translate')pending.push(data);
@@ -34,7 +34,7 @@ test('MV3 portable ITEM graph keeps final rows visible through queued Worker rep
   await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled(); await expect(rows).toHaveCount(3);
   await startGraph(live); await expect(rows).toHaveCount(0);
   await live.evaluate(() => speech.receiveEvent({ type: 'final', id: 0, text: 'pending' })); await expect(cells).toHaveText(['pending', '']);
-  await live.locator('#cancel-session').click(); await expect(live.locator('#start')).toBeEnabled(); await expect(cells).toHaveText(['pending', '']);
+  await live.evaluate(() => window.graphSession.cancel()); await expect(live.locator('#start')).toBeEnabled(); await expect(cells).toHaveText(['pending', '']);
   expect(await live.evaluate(() => graphWorkers.every(worker => worker.released))).toBe(true);
   await live.editor.reload(); expect(await live.editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
 });

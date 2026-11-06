@@ -43,7 +43,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     // Abort a production TTS load RPC while startup is pending.
     await page.evaluate(() => { window.holdTtsLoad = true; window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }); });
     await expect.poll(() => page.evaluate(() => window.graphWorkers.some(w => w.url.match(/supertonic3-worker|kokoro-worker/) && w.messages.some(m => m.type === 'load')))).toBe(true);
-    await page.locator('#cancel-session').click(); expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+    await page.evaluate(() => window.graphSession.cancel()); expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
     await page.evaluate(() => { window.holdTtsLoad = false; });
     await startGraph(page); await expect(page.locator('#tts-status')).toContainText('ready (local)');
     await emitFinal(page, 'hello'); await expect(page.locator('#audio-outputs audio')).toHaveCount(1);
@@ -58,7 +58,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     await expect(page.locator('#start')).toBeEnabled(); await expect(page.locator('#audio-outputs audio')).toHaveCount(1);
     await startGraph(page); await emitFinal(page, 'slow');
     await expect.poll(() => page.evaluate(() => window.graphWorkers.some(w => !w.released && w.messages.some(m => m.type === 'generate' && m.text === 'slow')))).toBe(true);
-    await page.locator('#cancel-session').click();
+    await page.evaluate(() => window.graphSession.cancel());
     await expect(page.locator('#audio-outputs audio')).toHaveCount(0); expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
     await startGraph(page); await emitFinal(page, 'fail'); await expect(page.locator('#tts-status')).toContainText('Fixture inference failure');
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('fail'); await expect(page.locator('#status')).toHaveText('Transcription active');
@@ -172,7 +172,7 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.getByRole('link', { name: 'Graph', exact: true }).focus();
   expect(await live.getByRole('link', { name: 'Graph', exact: true }).evaluate(link => getComputedStyle(link).outlineStyle)).toBe('solid');
   expect(f.requests).toEqual([]);
-  await live.locator('#cancel-session').click(); await expect(live.editor.locator('#graph-state')).toContainText('No active recording');
+  await live.locator('#stop').click(); await expect(live.editor.locator('#graph-state')).toContainText('No active recording');
 });
 
 for (const [id, voice, other] of [['supertonic3', 'F1', 'M1'], ['kokoro', 'jf_alpha', 'af_heart']]) {

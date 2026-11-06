@@ -77,7 +77,6 @@ const session = new TabSession(view => {
   element('enable-speaker').hidden = !view.speakerNeedsActivation;
   element('tts-output').hidden = !view.ttsStatus && !audioURLs.size && !view.speakerStatus && !hasSpeaker;
   element('model-recovery').hidden = !/missing|evict|retry|unavailable/i.test(`${view.translationStatus} ${view.ttsStatus} ${view.conditionStatus} ${view.summaryStatus}`);
-  element('cancel-session').disabled = !running;
   const needsTab = nextGraph.nodes.some(node => ['ChromeTabAudio', 'SelectedPageMediaAudio'].includes(node.type));
   element('start').disabled = !!graphError || running || !!targetControls?.busy || (needsTab && !Number.isInteger(view.tabId));
   element('stop').disabled = !['loading', 'starting', 'running'].includes(view.state);
@@ -101,7 +100,6 @@ function refreshSaved() {
 element('start').onclick = () => { clearAudio(); if (refreshSaved()) void session.start(session.view.tabId, { microphoneGesture: true, speakerGesture: true }); };
 element('enable-speaker').onclick = () => session.enableSpeakers();
 element('stop').onclick = () => { void session.stop(); };
-element('cancel-session').onclick = () => { session.cancel(); clearAudio(); session.update({ status: 'Canceled. Pending processing discarded.' }); };
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return;
   if (message.type === 'get-live-graph-state') { respond(graphState(session.view)); return; }

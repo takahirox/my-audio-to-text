@@ -45,7 +45,9 @@ for(const text of ['uncertain-fixture','error-fixture','long-token-fixture'])tes
  await emitFinal(page,text);await expect(page.locator('#condition-status')).toContainText('unavailable');await expect(items(page,'yes')).toBeEmpty();await expect(items(page,'no')).toBeEmpty();
  await expectFailure(page);
  await emitFinal(page,'peer still alive');await expect(items(page,'transcript').locator('tr td:first-child')).toHaveText([text,'peer still alive']);await expect(page.locator('#status')).toHaveText('Transcription active');
- await page.locator(text==='error-fixture'?'#stop':'#cancel-session').click();await expect(page.locator('#start')).toBeEnabled();
+ if (text === 'error-fixture') await page.locator('#stop').click();
+ else await page.evaluate(() => window.graphSession.cancel());
+ await expect(page.locator('#start')).toBeEnabled();
  if(text==='error-fixture')await expect(page.locator('#status')).toHaveText('Stopped. Outputs are ready.');
  expect(await page.evaluate(()=>window.graphWorkers.every(w=>w.released))).toBe(true);
 });
@@ -54,9 +56,9 @@ test('missing cache never downloads at Start; Cancel during Stop/restart has no 
  await conditionAssets(f);const page=await openGraph(f);await trackPipeline(page);await seedConditionGraph(page.editor);
  const count=f.requests.length;await startGraph(page);await expect(page.locator('#condition-status')).toContainText('missing');await emitFinal(page,'peer');await expect(items(page,'transcript')).toHaveText(['peer'].join('\n'));expect(f.requests.length).toBe(count);
  await expectFailure(page);
- await page.locator('#cancel-session').click();await save(page.editor);await expect(card(page.editor)).toHaveAttribute('data-state','Ready');
+ await page.evaluate(() => window.graphSession.cancel());await save(page.editor);await expect(card(page.editor)).toHaveAttribute('data-state','Ready');
  await startGraph(page);await emitFinal(page,'slow-fixture yes-fixture');await page.locator('#stop').click();await expect(page.locator('#status')).toContainText('Finalizing');
- await page.locator('#cancel-session').click();await expect(page.locator('#start')).toBeEnabled();await startGraph(page);await emitFinal(page,'yes-fixture');
+ await page.evaluate(() => window.graphSession.cancel());await expect(page.locator('#start')).toBeEnabled();await startGraph(page);await emitFinal(page,'yes-fixture');
  await expect(items(page,'yes')).toHaveText(['yes-fixture'].join('\n'));await page.waitForTimeout(1600);await expect(items(page,'yes')).toHaveText(['yes-fixture'].join('\n'));await page.locator('#stop').click();await expect(page.locator('#start')).toBeEnabled();
 });
 

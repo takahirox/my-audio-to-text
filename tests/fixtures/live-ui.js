@@ -11,7 +11,7 @@ export async function installLiveUIGraph(page) {
     const main = graphNode('Display', 'main');
     main.settings = { title: 'Reading', inputCount: 3, inputLabels: { input1: '文字起こし', input2: 'Translation', input3: 'Notes' } };
     const review = graphNode('Button', 'review'), notes = graphNode('Button', 'notes');
-    review.settings.label = 'Review translation'; notes.settings.label = 'Show source notes';
+    review.settings.label = 'Review translation'; notes.settings.label = 'Cancel';
     const graph = { version: GRAPH_VERSION, nodes: [source, translation, main, review, notes, graphNode('Hold', 'held-translation'), graphNode('Hold', 'held-notes')], edges: [
       edge('source', 'value', 'main', 'input1'),
       edge('translation', 'value', 'held-translation', 'input'), edge('review', 'trigger', 'held-translation', 'trigger'), edge('held-translation', 'value', 'main', 'input2'),
@@ -26,8 +26,9 @@ export async function checkLiveUI(page, expect, screenshot) {
   await expect(page.locator('#session-state')).toHaveText('Idle');
   await expect(page.locator('#start')).toBeEnabled();
   await expect(page.locator('#stop')).toBeDisabled();
-  await expect(page.locator('#cancel-session')).toBeDisabled();
-  await expect(page.locator('#graph-action-buttons button')).toHaveText(['Show source notes', 'Review translation']);
+  await expect(page.locator('#cancel-session')).toHaveCount(0);
+  await expect(page.locator('.actions button')).toHaveText(['▶ Start', '■ Stop']);
+  await expect(page.locator('#graph-action-buttons button')).toHaveText(['Cancel', 'Review translation']);
   await page.locator('#start').click();
   await expect(page.locator('#status')).toHaveText('Processing active');
   await expect(page.locator('#session-state')).toHaveText('Running');
@@ -41,9 +42,13 @@ export async function checkLiveUI(page, expect, screenshot) {
     await page.evaluate(() => scrollTo(0, 0));
     const geometry = await page.evaluate(() => {
       const rect = selector => { const b = document.querySelector(selector).getBoundingClientRect(); return { x: b.x, y: b.y, right: b.right, bottom: b.bottom, height: b.height }; };
-      return { overflow: document.documentElement.scrollWidth > innerWidth, reader: rect('.live-display'), content: rect('[data-port=input1] .display-content'), controls: rect('.capture-panel'), status: rect('.live-status'), actions: rect('#graph-action-area'), buttons: [...document.querySelectorAll('.actions button, #graph-action-buttons button, nav a')].map(b => ({ height: b.getBoundingClientRect().height, right: b.getBoundingClientRect().right })), light: getComputedStyle(document.documentElement).colorScheme };
+      return { overflow: document.documentElement.scrollWidth > innerWidth, reader: rect('.live-display'), content: rect('[data-port=input1] .display-content'), controls: rect('.capture-panel'), toolbar: rect('.actions'), start: rect('#start'), stop: rect('#stop'), status: rect('.live-status'), actions: rect('#graph-action-area'), buttons: [...document.querySelectorAll('.actions button, #graph-action-buttons button, nav a')].map(b => ({ height: b.getBoundingClientRect().height, right: b.getBoundingClientRect().right })), light: getComputedStyle(document.documentElement).colorScheme };
     });
     expect(geometry.overflow).toBe(false);
+    expect(geometry.start.y).toBe(geometry.stop.y);
+    expect(geometry.start.x).toBe(geometry.toolbar.x);
+    expect(geometry.stop.right).toBeCloseTo(geometry.toolbar.right, 1);
+    expect(geometry.stop.right - geometry.stop.x).toBeCloseTo(geometry.start.right - geometry.start.x, 1);
     expect(geometry.light).toBe('light');
     expect(geometry.actions.bottom).toBeLessThan(geometry.reader.y);
     expect(geometry.reader.bottom).toBeLessThanOrEqual(geometry.status.y);
@@ -66,8 +71,13 @@ export async function checkLiveUI(page, expect, screenshot) {
   await page.locator('#stop').click();
   await expect(page.locator('#session-state')).toHaveText('Completed');
   await page.locator('#start').click();
-  await page.locator('#cancel-session').click();
-  await expect(page.locator('#session-state')).toHaveText('Canceled');
+  // A graph Button named Cancel remains an ordinary graph action.
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('tab', { name: 'Notes', exact: true }).click();
+  await expect(page.locator('[data-port=input3] .display-content')).toContainText('50.');
+  await expect(page.locator('#session-state')).toHaveText('Running');
+  await page.locator('#stop').click();
+  await expect(page.locator('#session-state')).toHaveText('Completed');
   // Render transient lifecycle states without adding test-only production hooks.
   for (const [state, label] of [['loading', 'Loading'], ['starting', 'Starting'], ['stopping', 'Stopping']]) {
     await page.evaluate(state => liveUISession.update({ state, status: 'Controlled lifecycle progress' }), state);

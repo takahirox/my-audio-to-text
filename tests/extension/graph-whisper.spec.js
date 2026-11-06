@@ -104,7 +104,7 @@ test('MV3 Text literal and empty values round-trip and deliver once to an ordina
   }
 });
 
-for (const duringStop of [false, true]) test(`MV3 Whisper Cancel ignores an in-flight final${duringStop ? ' during Stop' : ''}`, async ({ graphExtension: f }) => {
+for (const duringStop of [false, true]) test(`MV3 Whisper pagehide cancellation ignores an in-flight final${duringStop ? ' during Stop' : ''}`, async ({ graphExtension: f }) => {
   await mockRuntime(f); const page = await openGraph(f); await selectWhisper(page);
   await page.evaluate(() => {
     const post = Worker.prototype.postMessage;
@@ -117,7 +117,7 @@ for (const duringStop of [false, true]) test(`MV3 Whisper Cancel ignores an in-f
   await expect.poll(() => page.evaluate(() => !!window.pendingDecode)).toBe(true);
   if (duringStop) await page.locator('#stop').click();
   await page.evaluate(() => { window.lateCallback=window.pendingWorker.onmessage; });
-  await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeEnabled();
   await page.evaluate(() => window.lateCallback({ data: { type: 'final', session: window.pendingDecode.session, id: window.pendingDecode.id, text: 'late' } }));
   await expect(page.locator('.display-content')).toBeEmpty();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
@@ -128,7 +128,7 @@ test('MV3 Whisper decode and missing model errors release workers and permit ret
   await startGraph(page); await page.evaluate(() => window.capture.emit('audio', new Float32Array(96000).fill(.5)));
   await expect(page.locator('#errors')).toContainText('Fixture decode error');
   await expect(page.locator('#status')).toHaveText('Transcription active');
-  await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
+  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
   await startGraph(page); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await writeFile(path.join(f.root, 'web/vendor/translation/transformers.js'), `export const env={backends:{onnx:{wasm:{}}}}; export async function pipeline(){throw Error('Missing packaged model');}`);

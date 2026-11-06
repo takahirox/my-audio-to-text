@@ -40,7 +40,7 @@ const test = base.extend({
       // transcription-only preference. Fresh-install graph behavior is covered
       // by graph.spec.js.
       await context.addInitScript(() => localStorage.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled: false, direction: 'ja-en' })));
-      await use({ context, cdp, id, url: `chrome-extension://${id}/extension/recorder.html` });
+      await use({ context, cdp, id, root, url: `chrome-extension://${id}/extension/recorder.html` });
     } finally { await context.close(); await rm(temporary, { recursive: true, force: true }); }
   },
 });
@@ -105,11 +105,12 @@ async function setup(extension, { mode = 'audio', fallback = false } = {}) {
   await page.goto(url);
   await observePipeline(page, new URL('../web/', url).href);
   await page.evaluate(async () => {
-    const { TextAccumulatorNode } = await import('../web/text-nodes.js');
-    const receiveInputs = TextAccumulatorNode.prototype.receiveInputs;
-    TextAccumulatorNode.prototype.receiveInputs = async function(values, context) {
-      if (Object.hasOwn(values, 'append') && window.holdTranscript) {
-        window.heldTranscript = values.append;
+    // Delay the current graph's committed TEXT path, not the retired accumulator.
+    const { KeyedTextCoalesceNode } = await import('../web/keyed-text-coalesce-node.js');
+    const receiveInputs = KeyedTextCoalesceNode.prototype.receiveInputs;
+    KeyedTextCoalesceNode.prototype.receiveInputs = async function(values, context) {
+      if (Object.hasOwn(values, 'input1') && window.holdTranscript) {
+        window.heldTranscript = values.input1;
         await new Promise(resolve => { window.releaseTranscript = resolve; });
       }
       if (!context.signal.aborted) return receiveInputs.call(this, values, context);
@@ -173,7 +174,7 @@ test('Stop waits for the final transcript port before completion and disposal', 
   expect(await page.evaluate(() => window.terminated)).toBe(2);
 });
 
-test('teardown while the transcript sink drains discards held output and workers', async ({ extension }) => {
+test('teardown while the transcript sink drains suppresses late output and releases workers', async ({ extension }) => {
   const page = await setup(extension);
   await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
   await page.evaluate(() => { window.holdTranscript = true; });
@@ -183,9 +184,46 @@ test('teardown while the transcript sink drains discards held output and workers
   expect(await page.evaluate(() => window.terminated)).toBe(2);
   await page.evaluate(() => window.releaseTranscript());
   await released(page);
-  await expect(page.locator('[data-display="transcript"] .display-content')).toBeEmpty();
+  await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
   await expect(page.locator('#errors')).toBeEmpty();
 });
+
+for (const action of ['navigate', 'close']) {
+  test(`Live ${action} cancels held summary work and releases capture through pagehide`, async ({ extension }) => {
+    await writeFile(path.join(extension.root, 'web/text-summary-worker.js'), `
+      self.onmessage = ({data}) => {
+        if (data.type === 'load') postMessage({type:'ready', id:data.id});
+        // Deliberately never complete summarization: teardown must not drain it.
+      };`);
+    const observer = await extension.context.newPage(); await observer.goto(extension.url);
+    await observer.evaluate(async () => {
+      const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
+      const graph = defaultGraph(), text = graphNode('Text', 'text'); text.settings.value = 'Held summary';
+      graph.nodes.push(text, graphNode('TextSummaryLfm2', 'summary'), graphNode('Display', 'notes'));
+      graph.edges.push(edge('text', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input1'));
+      saveGraph(localStorage, graph);
+    });
+    const page = await setup(extension);
+    await expect(page.locator('#cancel-session')).toHaveCount(0);
+    await expect(page.locator('#status')).toHaveText('Transcription active');
+    await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
+    await expect(page.locator('#summary-status')).toContainText('summarizing text');
+    await page.evaluate(() => {
+      // Registered after the production pagehide handler: capture its effects
+      // synchronously, before the document and its JS state disappear.
+      addEventListener('pagehide', () => localStorage.setItem('live-teardown', JSON.stringify({
+        terminated: window.terminated, stops: window.streams.map(s => s.stops),
+        ended: window.streams.every(s => s.stream.getTracks().every(track => track.readyState === 'ended')),
+        hooks: window.pipelineCalls.map(call => call.hook),
+      })));
+    });
+    if (action === 'navigate') await page.goto(extension.url.replace('recorder.html', 'model-cache.html'));
+    else await page.close();
+    await expect.poll(() => observer.evaluate(() => JSON.parse(localStorage.getItem('live-teardown')))).toEqual({
+      terminated: 3, stops: [1], ended: true, hooks: ['start', 'dispose'],
+    });
+  });
+}
 
 test('model preload progress and cancellation leave capture unrequested and retry available', async ({ extension }) => {
   const page = await setup(extension, { mode: 'loading' });
@@ -216,7 +254,7 @@ for (const phase of ['loading', 'running']) {
     await expect(page.locator('#errors')).toContainText('Controlled worker failure');
     if (phase === 'running') {
       await expect(page.locator('#status')).toHaveText('Transcription active');
-      await page.locator('#cancel-session').click();
+      await page.locator('#stop').click();
     }
     await expect(page.locator('#start')).toBeEnabled();
     expect(await page.evaluate(() => window.terminated)).toBe(2);

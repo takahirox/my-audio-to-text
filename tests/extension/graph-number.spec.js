@@ -83,12 +83,12 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   expect(samples.length).toBe(44037);
   await startGraph(page); await expect.poll(() => page.evaluate(() => window.speech.core.simulation?.maxSamples)).toBe(40000);
   await feed(page, 40000); await expect(page.locator('.display-content')).toHaveText(['segment 1: 40000'].join('\n'));
-  await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeEnabled();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
   expect(f.requests).toEqual([]);
 });
 
-for (const stop of [false, true]) test(`packaged Cancel with a cap final pending${stop ? ' during Stop' : ''} releases workers and rejects late results`, async ({ graphExtension: f }) => {
+for (const stop of [false, true]) test(`packaged pagehide with a cap final pending${stop ? ' during Stop' : ''} releases workers and rejects late results`, async ({ graphExtension: f }) => {
   const page = await openNumberGraph(f);
   await startGraph(page); await page.evaluate(() => { window.holdDecode = true; });
   await feed(page, 96000);
@@ -96,7 +96,7 @@ for (const stop of [false, true]) test(`packaged Cancel with a cap final pending
   expect(await page.evaluate(() => window.decodeRequests[0].final)).toBe(true);
   if (stop) { await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Finalizing graph outputs'); }
   await page.evaluate(() => { window.callbacks = window.graphWorkers.map(w => w.onmessage); });
-  await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeEnabled();
   await page.evaluate(() => window.callbacks.forEach(callback => callback({ data: { type: 'final', id: 1, session: 1, text: 'late' } })));
   await expect(page.locator('.display-content')).toBeEmpty();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);

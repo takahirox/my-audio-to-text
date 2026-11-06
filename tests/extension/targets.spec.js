@@ -46,6 +46,8 @@ const test = base.extend({
       const cdp = await context.browser().newBrowserCDPSession(), { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
       const page = await context.newPage(); await page.goto(`chrome-extension://${id}/extension/recorder.html`);
       await page.evaluate(async () => {
+        const { TabSession } = await import('./session.js'), start = TabSession.prototype.start;
+        TabSession.prototype.start = function(...args) { window.targetSession = this; return start.apply(this, args); };
         const { defaultGraph, saveGraph } = await import('./graph.js'); saveGraph(localStorage, defaultGraph({ enabled: false }));
         const { SpeechToTextNode } = await import('../web/transcription-nodes.js'), original = SpeechToTextNode.prototype.start;
         SpeechToTextNode.prototype.start = function(context) { window.activeSpeech = this; return original.call(this, context); };
@@ -174,7 +176,7 @@ test('toolbar automatically readies one TEXT sink; Live popup focus, input/searc
   expect(await t.website.evaluate(() => window.submits)).toBe(0);
   await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active');
   await emit(t, 1, 'fresh'); await expect(t.website.locator('#chosen')).toHaveValue('existingnotesfresh');
-  await t.page.locator('#cancel-session').click(); await emit(t, 2, 'late');
+  await t.page.evaluate(() => window.targetSession.cancel()); await emit(t, 2, 'late');
   await expect(t.website.locator('#chosen')).toHaveValue('existingnotesfresh');
   expect(await t.page.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);
 });
@@ -337,7 +339,7 @@ test('microphone has an explicit Start gesture, native permission denial, fake-d
   await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting: 'granted', origin: t.origin }); await t.page.locator('#start').click();
   await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect.poll(() => t.page.evaluate(() => window.captured.length)).toBeGreaterThan(1600);
   expect(await t.page.evaluate(() => window.captured.every(Number.isFinite))).toBe(true);
-  await t.page.locator('#cancel-session').click(); await expect(t.page.locator('#status')).toContainText('Canceled');
+  await t.page.evaluate(() => window.targetSession.cancel()); await expect(t.page.locator('#start')).toBeEnabled();
   const count = await t.page.evaluate(() => window.captured.length); await t.page.waitForTimeout(150); expect(await t.page.evaluate(() => window.captured.length)).toBe(count);
   await t.page.locator('#start').click(); await expect(t.page.locator('#status')).toHaveText('Transcription active'); await t.page.locator('#stop').click(); await expect(t.page.locator('#status')).toContainText('Stopped');
 });
@@ -409,7 +411,9 @@ test('native tab capture and permitted microphone run together; tab navigation d
       await expect.poll(()=>t.page.evaluate(()=>window.concurrentWorkers.filter(worker=>!worker.released).length)).toBe(2);
       expect(await t.page.evaluate(()=>window.concurrentStreams.findLast(record=>record.kind==='mic').stream.getAudioTracks()[0].readyState)).toBe('live');
     }
-    await t.page.locator(mode==='cancel'?'#cancel-session':'#stop').click();await expect(t.page.locator('#start')).toBeEnabled();
+    if (mode === 'cancel') await t.page.evaluate(() => window.targetSession.cancel());
+    else await t.page.locator('#stop').click();
+    await expect(t.page.locator('#start')).toBeEnabled();
     await expect(t.page.locator('#errors')).toBeEmpty();
     if(mode!=='cancel') await expect(t.page.locator('[data-display="local"] .display-content')).toContainText('confirmed fixture');
     if(mode!=='cancel') {

@@ -55,15 +55,15 @@ for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
     await startGraph(page); await emitFinal(page, 'fresh');
     if (phase === 'inference') { await settle(page); await expect(notes(page)).toHaveText('committed notes'); }
     await expect(transcript(page)).toHaveText('fresh');
-    await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
+    await page.evaluate(() => window.graphSession.cancel()); await expect(page.locator('#start')).toBeEnabled();
     expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);
   });
 
-  test(`${type}: Cancel interrupts Stop inference and a restart rejects stale output`, async ({ graphExtension: f }) => {
+  test(`${type}: internal cancellation interrupts Stop inference and a restart rejects stale output`, async ({ graphExtension: f }) => {
     const page = await setup(f, type, 'inference'); await startGraph(page);
     await emitFinal(page, 'first'); await settle(page); await expect(notes(page)).toHaveText('committed notes');
     await emitFinal(page, 'slow'); await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Finalizing');
-    await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
+    await page.evaluate(() => window.graphSession.cancel()); await expect(page.locator('#start')).toBeEnabled();
     await expect(notes(page)).toHaveText('committed notes');
     expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);
     await startGraph(page); await emitFinal(page, 'fresh'); await settle(page);

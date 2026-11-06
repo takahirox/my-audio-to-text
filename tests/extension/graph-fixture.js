@@ -149,6 +149,9 @@ export async function openGraph(f) {
   });
   const page = await f.context.newPage(); await page.goto(f.url);
   await page.evaluate(async () => {
+    // Retain internal cancellation/replacement coverage after removing the UI control.
+    const { TabSession } = await import('./session.js'), sessionStart = TabSession.prototype.start;
+    TabSession.prototype.start = function(...args) { window.graphSession = this; return sessionStart.apply(this, args); };
     const { SpeechToTextNode } = await import('../web/transcription-nodes.js');
     const start = SpeechToTextNode.prototype.start;
     SpeechToTextNode.prototype.start = function(context) { window.speech = this; return start.call(this, context); };

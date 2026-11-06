@@ -11,7 +11,7 @@ import { meetingBatches, summaryFeedbackGraph as summaryGraph, summaryGraph as d
 
 // No inference/model/runtime mocks. Only a controllable committed TEXT producer.
 // Loopback serves exact pinned bytes to Save; Start and inference are offline.
-for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic text/prompts, rolling updates, Stop and Cancel`, async ({}, info) => {
+for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic text/prompts, rolling updates, Stop and pagehide`, async ({}, info) => {
   test.skip(!process.env.TEXT_SUMMARY_SMOKE, 'Run review-text-summary-assets.py, prepare runtimes and build first.');
   test.setTimeout(900000);
   const spec = textSummaryModel(type), temporary = await mkdtemp(path.join(os.tmpdir(), 'text-summary-'));
@@ -67,7 +67,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
             if (window.cancelSummaryOnToken && data.type === 'progress' && data.stage === 'first-token') {
               window.cancelSummaryOnToken = false;
               window.summaryCancelToken = data;
-              document.querySelector('#cancel-session').click();
+              window.dispatchEvent(new Event('pagehide'));
             }
           });
         }
@@ -127,11 +127,11 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
     await expect(page.locator('#errors')).toBeEmpty();
     expect(await page.evaluate(() => window.summaryWorkers.every(w => w.released))).toBe(true);
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText(meetingBatches.join('\n'));
-    // Fresh session resets context; Cancel during real generation cannot write.
+    // Fresh session resets context; Pagehide during real generation cannot write.
     const beforeCancel = await page.evaluate(() => { window.cancelSummaryOnToken = true; return window.summaryEvidence.length; });
     await page.locator('#start').click(); await expect(page.locator('#status')).toHaveText('Processing active', { timeout: 180000 });
     await expect(notes).toBeEmpty();
-    // Cancel on a real decoded token, not a short-lived status string that a
+    // Dispatch pagehide on a real decoded token, not a short-lived status string that a
     // polling assertion can miss when inference completes in <500 ms.
     await page.waitForFunction(() => window.summaryCancelToken && window.summaryWorkers.every(w => w.released), null, { timeout: 60000 });
     await expect(page.locator('#start')).toBeEnabled();
