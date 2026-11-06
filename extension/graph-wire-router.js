@@ -131,7 +131,9 @@ export function createWireRouter(cards, connections, { maxVisits = MAX_VISITS, m
   const size = xs.length * ys.length, bounded = size <= MAX_GRID;
   const rows = bounded ? ys.map(y => obstacles.filter(r => y > r.top && y < r.bottom)) : [];
   const columns = bounded ? xs.map(x => obstacles.filter(r => x > r.left && x < r.right)) : [];
-  const visibility = bounded ? new Map() : null;
+  // Each grid edge has a dense numeric key. Cache unknown/clear/blocked as
+  // 0/1/2 to avoid repeated Map lookups in the A* neighbor hot path.
+  const visibility = bounded ? new Uint8Array(size * 2) : null;
   const congestion = bounded ? new Float64Array(size * 2) : null;
   const routes = new Map();
   const baselines = new Map(), baselineVisits = new Map();
@@ -194,11 +196,11 @@ export function createWireRouter(cards, connections, { maxVisits = MAX_VISITS, m
   }
   function visible(a, b, horizontal) {
     const key = Math.min(a, b) * 2 + (horizontal ? 0 : 1);
-    if (visibility.has(key)) return visibility.get(key);
+    if (visibility[key]) return visibility[key] === 1;
     const ax = a % xs.length, ay = Math.floor(a / xs.length), bx = b % xs.length, by = Math.floor(b / xs.length);
     const clear = horizontal ? !rows[ay].some(r => Math.max(xs[ax], xs[bx]) > r.left && Math.min(xs[ax], xs[bx]) < r.right)
       : !columns[ax].some(r => Math.max(ys[ay], ys[by]) > r.top && Math.min(ys[ay], ys[by]) < r.bottom);
-    visibility.set(key, clear); return clear;
+    visibility[key] = clear ? 1 : 2; return clear;
   }
   function route(index, baseOnly = false) {
     if (routes.has(index)) return routes.get(index);
@@ -238,8 +240,13 @@ export function createWireRouter(cards, connections, { maxVisits = MAX_VISITS, m
           return { points: simplified, d: roundedWirePath(simplified), fallback: null, length: current.length };
         }
         const x = id % xs.length, y = Math.floor(id / xs.length);
-        for (const [next, direction] of [[x + 1 < xs.length ? id + 1 : -1, 0], [y + 1 < ys.length ? id + xs.length : -1, 1],
-          [y > 0 ? id - xs.length : -1, 1], [x > 0 ? id - 1 : -1, 0]]) {
+        // Visit right/down/up/left in the same order without allocating four
+        // neighbor tuples for every expanded search state.
+        for (let neighbor = 0; neighbor < 4; neighbor++) {
+          const direction = neighbor === 0 || neighbor === 3 ? 0 : 1;
+          const next = neighbor === 0 ? (x + 1 < xs.length ? id + 1 : -1)
+            : neighbor === 1 ? (y + 1 < ys.length ? id + xs.length : -1)
+              : neighbor === 2 ? (y > 0 ? id - xs.length : -1) : (x > 0 ? id - 1 : -1);
           if (next < 0 || !visible(id, next, direction === 0)) continue;
           // Never double back over an attachment and fabricate a hairpin at a
           // port. The terminal's first/last turn must face the open corridor.

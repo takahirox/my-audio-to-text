@@ -1,7 +1,7 @@
 import { MAX_DISPLAY_INPUTS } from '../web/display-node.js';
 import { createWireRouter, reusableWireRoute, wireColor, wireDistance } from './graph-wire-router.js';
 import { compatiblePorts } from '../web/port-contracts.js';
-import { NODE_TYPES, nodeDefinition, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
+import { NODE_TYPES, nodeDefinition, portDisplayEntries, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
 
 const el = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -95,7 +95,8 @@ export class GraphEditor {
       el('p', 'Use −, the Canvas zoom chooser, + and Fit at the bottom-left of the canvas to navigate; scroll or swipe to pan. Choose 100% to return focus to the element you were editing. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
       el('p', 'Wires use separate lanes and crossing gaps. At a crossing, the continuous line passes over the interrupted line; this is not a junction. Short shared branches at one output are fan-out. Dotted wires and a notice indicate crowded lanes that could not be separated. Move cards apart to give them more room.'),
       el('p', 'Display renders each complete input snapshot safely. Connect any TEXT output directly to Display.input1. TextAccumulator retains exact completed segments; TextFormatter builds text snapshots. Hold stores TEXT silently. With trigger disconnected, value is sampled with the next ordinary input. Connect Button.trigger → Hold.trigger for on-demand emission of the latest TEXT through value. Live Graph Actions uses each Button caption and disables overlapping work while busy; no audio source is required. Compose TextWindow → TextFormatter → Text Summary → Hold, with Hold.value → a second formatter input, for serialized incremental summaries. Set the rolling-update instruction explicitly in Text Summary Settings.prompt; its default simply summarizes each input. language supplies a default that an explicit prompt language can override. Save prepares required model weights; Models provides asset recovery.'),
-      el('p', 'For continuous ASR/translation rows, connect ASR finalId/final → KeyedTextCoalesce.id1/input1 and provisionalId/provisional → id2/input2. Also connect ASR finalId/final directly to translator.id/text. Connect coalesce.id/text → KeyedTextPair.id1/input1 and translator.id/text → KeyedTextPair.id2/input2, then KeyedTextPair.pair → KeyedPairedTextAccumulator.pair, then pairs → Display.input1. Originals appear immediately; late translations replace their own row. KeyedTextPair pairs only by numeric ID. KeyedPairedTextAccumulator owns portable ordered pair history, replacing each ID in arrival order. Each Display is one tabbed view: its input ports are switchable tabs accepting TEXT, KEYED_PAIRED_TEXT or KEYED_PAIRED_TEXT_LIST from any producer. Only the selected input is visible; hidden inputs keep their latest snapshots. Set per-input tab labels and Add input / Remove last input in Settings. For plain text, connect any TEXT output directly to Display.input1.'),
+      el('p', 'Ports show data above its matching ID, with committed pairs before provisional pairs. Canvas rows, keyboard navigation and Inspector port help use the same display order. Context and translation source/error ports keep their separate roles; display order does not change delivery or saved connections.'),
+      el('p', 'For continuous ASR/translation rows, connect ASR final/finalId → KeyedTextCoalesce.input1/id1 and provisional/provisionalId → input2/id2. Also connect ASR final/finalId directly to translator.text/id. Connect coalesce.text/id → KeyedTextPair.input1/id1 and translator.text/id → KeyedTextPair.input2/id2, then KeyedTextPair.pair → KeyedPairedTextAccumulator.pair, then pairs → Display.input1. Originals appear immediately; late translations replace their own row. KeyedTextPair pairs only by numeric ID. KeyedPairedTextAccumulator owns portable ordered pair history, replacing each ID in arrival order. Each Display is one tabbed view: its input ports are switchable tabs accepting TEXT, KEYED_PAIRED_TEXT or KEYED_PAIRED_TEXT_LIST from any producer. Only the selected input is visible; hidden inputs keep their latest snapshots. Set per-input tab labels and Add input / Remove last input in Settings. For plain text, connect any TEXT output directly to Display.input1.'),
       el('p', 'KeyedTextCoalesce selects nonempty input1, otherwise input2, separately for each numeric ID. Connect Number.value to id1/id2 and independent preferred/backup TEXT sources to input1/input2, then text → Display.input1. Only the exact empty string is empty. Each branch uses its latest ID; text before the first ID waits. ID-only changes never replay old text. Grouped ID/text updates stay atomic, and each selection emits id/text together.'),
       el('p', 'TextWindow batches exact incoming TEXT for any consumer. Optional maxChars and maxWaitSeconds NUMBER inputs default to 600 and 1.5 seconds. Connect ASR.final → TextWindow.text → translator.text → TextAccumulator.append, then TextAccumulator.text → Display.input1. Translator.text can also feed Display.input1 directly. For optional previews, connect a deliberate TEXT snapshot source → translator.provisional and translator.provisionalText → a separate Display.input1; previews clear on final input, Stop and Cancel. For ID-scoped bilingual history, use KeyedTextCoalesce / KeyedTextPair / KeyedPairedTextAccumulator. Batching does not retain conversation-wide context.'),
       el('p', 'TranslateGemma 4B English → Japanese: connect English ASR.final or Text.value → text, then text → TextAccumulator.append, or source/text/error → TextFormatter inputs. Both directions share a 3.112 GB download; allow 7 GB free storage and several GB free RAM/GPU memory. Requires Worker WebGPU; no fallback. Saving a graph containing either direction prepares these weights, including parked Nodes. Google Gemma Terms of Use and Prohibited Use Policy apply to use of this public ONNX conversion.'),
@@ -519,8 +520,8 @@ export class GraphEditor {
     }
     const details = el('details'); details.append(el('summary', 'Node help and ports'));
     if (definition.help) details.append(el('p', definition.help));
-    for (const [side, ports] of [['Input', definition.inputs], ['Output', definition.outputs]]) {
-      for (const [name, contract] of Object.entries(ports)) details.append(el('p', `${side} ${name}: ${contract.name}`, 'muted'));
+    for (const side of ['input', 'output']) {
+      for (const [name, contract] of portDisplayEntries(definition, side)) details.append(el('p', `${side === 'input' ? 'Input' : 'Output'} ${name}: ${contract.name}`, 'muted'));
     }
     this.inspector.append(details);
     if (focused) [...this.inspector.querySelectorAll('[aria-label]')].find(control => control.getAttribute('aria-label') === focused)?.focus({ preventScroll: true });
@@ -576,9 +577,9 @@ export class GraphEditor {
       };
       card.append(heading);
       const ports = el('div', undefined, 'graph-ports');
-      for (const [side, declarations] of [['input', definition.inputs], ['output', definition.outputs]]) {
+      for (const side of ['input', 'output']) {
         const column = el('div');
-        for (const [port, contract] of Object.entries(declarations)) {
+        for (const [port, contract] of portDisplayEntries(definition, side)) {
           const portLabel = port.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
           let suppressClick = false;
           const control = button(`${side === 'input' ? '←' : '→'} ${portLabel}`, null, () => {
@@ -660,6 +661,8 @@ export class GraphEditor {
     this.canvas.style.height = `${renderedHeight}px`;
     this.extent.style.height = `${renderedHeight * this.zoom}px`;
     for (const element of this.canvas.querySelectorAll('.graph-node, .graph-ports button')) this.geometryObserver?.observe(element);
+    // Measure after placing rows in display order. Named button coordinates
+    // invalidate the routing signature whenever the actual attachments change.
     this.drawWires(); if (notify) this.onDraft(structuredClone(this.draft));
   }
   drawWires() {
