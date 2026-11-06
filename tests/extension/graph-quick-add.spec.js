@@ -20,7 +20,10 @@ test('MV3 quick-add mouse, keyboard, touch, Save, zoom, pan and responsive layou
     const session = await context.browser().newBrowserCDPSession();
     const { id } = await session.send('Extensions.loadUnpacked', { path: root });
     const page = await context.newPage(); await page.goto(`chrome-extension://${id}/extension/graph-editor.html`);
-    await checkQuickAddInteraction(page);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await checkQuickAddInteraction(page);
+    }
     for (const width of [390, 1440]) for (const zoom of ['0.25', '0.5', '1', '1.5', 'fit']) await checkQuickAddPlacement(page, width, zoom);
     await checkQuickAddPlacement(page, 1440, '0.5', true);
     await checkQuickAddPlacement(page, 390, '1.5', false, 'KeyedTextCoalesce');

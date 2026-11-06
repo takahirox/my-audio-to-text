@@ -11,7 +11,8 @@ async function serveExtension(route) {
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', serveExtension); await page.goto('/extension/graph-editor.html');
 });
-test('search, categories, mouse/keyboard add, dismissal, focus and explicit Save', async ({ page }) => {
+for (const width of [1440, 390]) test(`selection, search, categories, dismissal, focus and explicit Save at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
   await checkQuickAddInteraction(page);
 });
 for (const width of [390, 1440]) for (const zoom of ['0.25', '0.5', '1', '1.5', 'fit']) {

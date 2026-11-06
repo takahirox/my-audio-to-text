@@ -9,8 +9,12 @@ The active graph is an immutable snapshot; edits take effect at the next Start.
 
 Use Add Node to open a searchable list beside the toolbar button. Search or
 filter by category, then click/tap a result to add it immediately near the center
-of the visible canvas. Arrow Up/Down navigates results; Enter adds the highlighted
-Node. Escape or clicking outside dismisses the list. Adding keeps the current
+of the visible canvas. Opening the list leaves every result unselected. Typing a
+nonempty search highlights its first match; clearing search or changing category
+clears the highlight. From no selection, Arrow Down selects the first result and
+Arrow Up selects the last; further arrows navigate results. Enter adds only the
+highlighted Node and does nothing with no selection. Escape or clicking outside
+dismisses the list and clears selection. Adding keeps the current
 zoom and pan, selects and focuses the new Node, and leaves changes unsaved until
 Save graph. Select a heading for settings and help. Drag headings or use arrow
 keys to move Nodes. Connect an output to a compatible input; reconnecting replaces only that input's wire. Select a wire
