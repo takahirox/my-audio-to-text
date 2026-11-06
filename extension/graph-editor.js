@@ -84,7 +84,7 @@ export class GraphEditor {
     this.help = el('dialog', undefined, 'graph-help'); this.help.setAttribute('aria-label', 'Graph Editor help');
     this.help.append(el('h2', 'Graph Editor help'), this.assetNotice,
       el('p', 'Save applies to the next session. Start runs complete paths to outputs; incomplete Nodes remain in the draft. Graph actions provides validation, Load saved and Reset.'),
-      el('p', 'Add nodes using search and categories. Select a node heading for settings and optional node help. Drag a heading or use arrow keys to move it.'),
+      el('p', 'Add Node opens a nearby searchable list. Choose a result to add it in the visible canvas; arrow keys navigate, Enter adds and Escape dismisses. Save graph applies the draft. Select a node heading for settings and optional node help. Drag a heading or use arrow keys to move it.'),
       el('p', 'Connect by clicking an output then a matching input, or drag from an output to an input. Reconnecting replaces only that input’s wire. Drag a connected input into blank canvas to detach its wire, or to a matching input to move it. Select a wire for connection details and Disconnect in the inspector. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape, Clear selection or blank canvas clears selection.'),
       el('p', 'Use Canvas zoom and Fit graph to navigate; scroll or swipe the canvas to pan. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
       el('p', 'Wires use separate lanes and crossing gaps. At a crossing, the continuous line passes over the interrupted line; this is not a junction. Short shared branches at one output are fan-out. Dotted wires and a notice indicate crowded lanes that could not be separated. Move cards apart to give them more room.'),
@@ -95,23 +95,41 @@ export class GraphEditor {
       el('p', 'TranslateGemma 4B English → Japanese: connect English ASR.final or Text.value → text, then text → TextAccumulator.append, or source/text/error → TextFormatter inputs. Both directions share a 3.112 GB download; allow 7 GB free storage and several GB free RAM/GPU memory. Requires Worker WebGPU; no fallback. Saving a graph containing either direction prepares these weights, including parked Nodes. Google Gemma Terms of Use and Prohibited Use Policy apply to use of this public ONNX conversion.'),
       (() => { const link = el('a', 'TranslateGemma terms, prohibited-use policy and attribution'); link.href = '../web/licenses/gemma-notices.txt'; return link; })(),
       button('Close help', null, () => this.help.close()));
-    this.paletteButton = button('Add Node', 'graph-palette-toggle', () => this.togglePalette()); this.paletteButton.setAttribute('aria-expanded', 'false'); this.paletteButton.setAttribute('aria-controls', 'graph-palette');
+    this.paletteButton = button('Add Node', 'graph-palette-toggle', () => this.togglePalette()); this.paletteButton.setAttribute('aria-haspopup', 'dialog'); this.paletteButton.setAttribute('aria-expanded', 'false'); this.paletteButton.setAttribute('aria-controls', 'graph-palette');
     this.helpButton = button('Help', 'graph-help', () => this.help.showModal());
     this.help.onclose = () => this.helpButton.focus();
     toolbar.append(this.saveButton, this.summary, this.paletteButton, this.actions, this.helpButton);
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
     this.workspace = el('div', undefined, 'graph-workspace');
-    this.palette = el('aside', undefined, 'graph-palette'); this.palette.id = 'graph-palette'; this.palette.hidden = true; this.palette.setAttribute('aria-label', 'Node palette');
-    const paletteHeading = el('div', undefined, 'section-heading'); paletteHeading.append(el('h2', 'Add Node'), button('Close', null, () => this.togglePalette(false)));
+    this.palette = el('aside', undefined, 'graph-palette'); this.palette.id = 'graph-palette'; this.palette.hidden = true;
+    this.palette.setAttribute('role', 'dialog'); this.palette.setAttribute('aria-label', 'Add Node');
     this.search = el('input'); this.search.type = 'search'; this.search.placeholder = 'Search nodes'; this.search.setAttribute('aria-label', 'Search nodes');
+    this.search.setAttribute('role', 'combobox'); this.search.setAttribute('aria-autocomplete', 'list');
+    this.search.setAttribute('aria-controls', 'graph-node-type'); this.search.setAttribute('aria-expanded', 'false');
     this.category = el('select'); this.category.setAttribute('aria-label', 'Node category');
     for (const name of ['All categories', 'Sources / inputs', 'Processors', 'Constants / utilities', 'Outputs']) { const option = el('option', name); this.category.append(option); }
-    this.types = el('select'); this.types.setAttribute('aria-label', 'Node type'); this.types.id = 'graph-node-type'; this.types.size = 8;
+    this.types = el('div', undefined, 'graph-node-list'); this.types.id = 'graph-node-type';
+    this.types.setAttribute('role', 'listbox'); this.types.setAttribute('aria-label', 'Node types');
     this.paletteStatus = el('p', undefined, 'muted'); this.paletteStatus.setAttribute('role', 'status');
-    this.addButton = button('Add selected node', 'graph-add', () => this.addNode(this.types.value));
-    this.search.oninput = this.category.onchange = () => this.filterPalette();
-    this.types.onkeydown = event => { if (event.key === 'Enter' && this.types.value) { event.preventDefault(); this.addNode(this.types.value); } };
-    this.palette.append(paletteHeading, this.search, this.category, this.types, this.paletteStatus, this.addButton); this.filterPalette();
+    this.search.oninput = this.category.onchange = () => { this.filterPalette(); this.positionPalette(); };
+    this.search.onkeydown = event => {
+      if (event.isComposing) return;
+      const options = [...this.types.querySelectorAll('[role="option"]')];
+      if (['ArrowDown', 'ArrowUp'].includes(event.key)) {
+        event.preventDefault();
+        if (!options.length) return;
+        const index = options.findIndex(option => option.dataset.type === this.paletteType);
+        this.highlightPalette(options[(index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length].dataset.type, true);
+      } else if (event.key === 'Enter') {
+        event.preventDefault(); if (this.paletteType) this.addNode(this.paletteType);
+      }
+    };
+    this.palette.append(this.search, this.category, this.types, this.paletteStatus); this.filterPalette();
+    // Listen only while open, including events outside the editor itself.
+    this.paletteOutside = event => {
+      if (!this.palette.contains(event.target) && !this.paletteButton.contains(event.target)) this.togglePalette(false, false);
+    };
+    this.paletteGeometry = () => this.positionPalette();
     this.scroll = el('div', undefined, 'graph-scroll'); this.scroll.tabIndex = 0; this.scroll.setAttribute('aria-label', 'Scrollable graph canvas');
     this.extent = el('div', undefined, 'graph-extent'); this.canvas = el('div', undefined, 'graph-canvas'); this.canvas.id = 'graph-canvas';
     this.canvas.addEventListener('focusin', event => {
@@ -176,26 +194,83 @@ export class GraphEditor {
   closeActions() {
     this.actions.open = false; this.actions.querySelector('summary').focus({ preventScroll: true });
   }
-  togglePalette(open = this.palette.hidden) {
+  togglePalette(open = this.palette.hidden, restoreFocus = true) {
     if (open) this.actions.open = false;
     this.palette.hidden = !open; this.paletteButton.setAttribute('aria-expanded', String(open));
-    if (open) this.search.focus(); else this.paletteButton.focus();
+    this.search.setAttribute('aria-expanded', String(open));
+    if (open) {
+      this.search.value = ''; this.category.value = 'All categories'; this.filterPalette(); this.positionPalette();
+      document.addEventListener('pointerdown', this.paletteOutside, true);
+      document.addEventListener('focusin', this.paletteOutside);
+      window.addEventListener('resize', this.paletteGeometry);
+      document.addEventListener('scroll', this.paletteGeometry, true);
+      window.visualViewport?.addEventListener('resize', this.paletteGeometry);
+      window.visualViewport?.addEventListener('scroll', this.paletteGeometry);
+      this.search.focus({ preventScroll: true });
+    } else {
+      document.removeEventListener('pointerdown', this.paletteOutside, true);
+      document.removeEventListener('focusin', this.paletteOutside);
+      window.removeEventListener('resize', this.paletteGeometry);
+      document.removeEventListener('scroll', this.paletteGeometry, true);
+      window.visualViewport?.removeEventListener('resize', this.paletteGeometry);
+      window.visualViewport?.removeEventListener('scroll', this.paletteGeometry);
+      if (restoreFocus) this.paletteButton.focus({ preventScroll: true });
+    }
+  }
+  positionPalette() {
+    if (this.palette.hidden) return;
+    const anchor = this.paletteButton.getBoundingClientRect(), view = window.visualViewport;
+    const left = (view?.offsetLeft || 0) + 8, top = (view?.offsetTop || 0) + 8;
+    const right = left + (view?.width || document.documentElement.clientWidth) - 16;
+    const bottom = top + (view?.height || document.documentElement.clientHeight) - 16;
+    const below = Math.max(0, Math.min(bottom - top, bottom - anchor.bottom - 6)), above = Math.max(0, Math.min(bottom - top, anchor.top - top - 6));
+    const flip = below < Math.min(360, above);
+    this.palette.style.width = `${Math.max(0, Math.min(320, right - left))}px`;
+    this.palette.style.maxHeight = `${Math.max(0, flip ? above : below)}px`;
+    const box = this.palette.getBoundingClientRect();
+    this.palette.style.left = `${Math.max(left, Math.min(anchor.right - box.width, right - box.width))}px`;
+    this.palette.style.top = `${Math.max(top, Math.min(bottom - box.height, flip ? anchor.top - box.height - 6 : anchor.bottom + 6))}px`;
+  }
+  highlightPalette(type, reveal = false) {
+    this.paletteType = type;
+    for (const option of this.types.querySelectorAll('[role="option"]')) {
+      const active = option.dataset.type === type;
+      option.setAttribute('aria-selected', String(active));
+      if (active) {
+        this.search.setAttribute('aria-activedescendant', option.id);
+        // Scroll only the results, never the page or canvas behind the menu.
+        if (reveal) {
+          const box = option.getBoundingClientRect(), list = this.types.getBoundingClientRect();
+          if (box.top < list.top) this.types.scrollTop += box.top - list.top;
+          else if (box.bottom > list.bottom) this.types.scrollTop += box.bottom - list.bottom;
+        }
+      }
+    }
+    if (!type) this.search.removeAttribute('aria-activedescendant');
   }
   filterPalette() {
-    const selected = this.types.value, query = this.search.value.trim().toLowerCase(); this.types.replaceChildren();
-    const groups = new Map();
+    const query = this.search.value.trim().toLowerCase(); this.types.replaceChildren();
+    const groups = new Map(), matches = [];
     for (const [type, definition] of Object.entries(NODE_TYPES)) {
       const category = ['Number', 'Text', 'TextFormatter', 'Hold'].includes(type) ? 'Constants / utilities'
         : !Object.keys(definition.inputs).length ? 'Sources / inputs'
         : !Object.keys(definition.outputs).length ? 'Outputs' : 'Processors';
       if ((this.category.value !== 'All categories' && this.category.value !== category) || !`${type} ${definition.label}`.toLowerCase().includes(query)) continue;
-      if (!groups.has(category)) { const group = el('optgroup'); group.label = category; groups.set(category, group); this.types.append(group); }
-      const option = el('option', definition.label); option.value = type; groups.get(category).append(option);
+      if (!groups.has(category)) {
+        const group = el('div', undefined, 'graph-node-group'), heading = el('div', category, 'muted');
+        heading.id = `graph-category-${groups.size}`; group.setAttribute('role', 'group'); group.setAttribute('aria-labelledby', heading.id);
+        group.append(heading); groups.set(category, group); this.types.append(group);
+      }
+      const option = el('div', definition.label, 'graph-node-option'); option.id = `graph-option-${type}`;
+      option.dataset.type = type; option.setAttribute('role', 'option');
+      // Mouse keeps focus in search; touch must retain its native click path.
+      option.onpointerdown = event => { if (event.pointerType === 'mouse') event.preventDefault(); };
+      option.onclick = () => this.addNode(type);
+      groups.get(category).append(option); matches.push(type);
     }
-    if ([...this.types.options].some(option => option.value === selected)) this.types.value = selected;
-    else this.types.selectedIndex = this.types.options.length ? 0 : -1;
-    this.addButton.disabled = !this.types.options.length;
-    this.paletteStatus.textContent = this.types.options.length ? `${this.types.options.length} node type${this.types.options.length === 1 ? '' : 's'}` : 'No matching nodes';
+    this.highlightPalette(matches[0]);
+    this.types.scrollTop = 0;
+    this.paletteStatus.textContent = matches.length ? `${matches.length} node type${matches.length === 1 ? '' : 's'}` : 'No matching nodes';
   }
   fit() {
     const cards = [...this.canvas.querySelectorAll('.graph-node')];
@@ -221,16 +296,68 @@ export class GraphEditor {
       (target || this.scroll).scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
   }
+  visibleGraphBounds() {
+    const origin = this.canvas.getBoundingClientRect(), viewport = this.scroll.getBoundingClientRect();
+    // The canvas rect includes zoom, ancestor scaling and the current pan. The
+    // scrollport's client box excludes its border and native scrollbars.
+    const sx = origin.width / this.canvas.offsetWidth, sy = origin.height / this.canvas.offsetHeight;
+    const vx = viewport.width / this.scroll.offsetWidth, vy = viewport.height / this.scroll.offsetHeight;
+    const view = window.visualViewport;
+    const left = Math.max(viewport.left + this.scroll.clientLeft * vx, view?.offsetLeft || 0);
+    const top = Math.max(viewport.top + this.scroll.clientTop * vy, view?.offsetTop || 0);
+    const right = Math.min(viewport.left + (this.scroll.clientLeft + this.scroll.clientWidth) * vx,
+      (view?.offsetLeft || 0) + (view?.width || document.documentElement.clientWidth));
+    const bottom = Math.min(viewport.top + (this.scroll.clientTop + this.scroll.clientHeight) * vy,
+      (view?.offsetTop || 0) + (view?.height || document.documentElement.clientHeight));
+    return { left: Math.max(0, (left - origin.left) / sx), top: Math.max(0, (top - origin.top) / sy),
+      right: Math.max(0, (right - origin.left) / sx), bottom: Math.max(0, (bottom - origin.top) / sy) };
+  }
+  nodePlacement(bounds, card) {
+    const width = card.offsetWidth, height = card.offsetHeight, gap = 16;
+    const minX = bounds.left, minY = bounds.top;
+    // If a card exceeds the view (high zoom / narrow screen), keep its leading
+    // edge and heading reachable rather than centering the card offscreen.
+    const maxX = Math.max(minX, bounds.right - width), maxY = Math.max(minY, bounds.bottom - height);
+    const clampX = x => Math.max(minX, Math.min(x, maxX)), clampY = y => Math.max(minY, Math.min(y, maxY));
+    const center = { x: clampX((bounds.left + bounds.right - width) / 2), y: clampY((bounds.top + bounds.bottom - height) / 2) };
+    const occupied = [...this.canvas.querySelectorAll('.graph-node')].filter(other => other !== card).map(other => ({
+      x: other.offsetLeft, y: other.offsetTop, width: other.offsetWidth, height: other.offsetHeight,
+    }));
+    const candidates = [center];
+    // A fixed grid plus obstacle boundaries finds gaps without an unbounded
+    // spiral. In a packed view, minimize overlap, then distance from center.
+    for (let y = 0; y <= 8; y++) for (let x = 0; x <= 8; x++) candidates.push({ x: minX + (maxX - minX) * x / 8, y: minY + (maxY - minY) * y / 8 });
+    for (const other of occupied.filter(o => o.x < bounds.right && o.x + o.width > bounds.left && o.y < bounds.bottom && o.y + o.height > bounds.top).slice(0, 100)) {
+      for (const x of [other.x - width - gap, other.x + other.width + gap]) for (const y of [center.y, other.y, other.y + other.height - height]) candidates.push({ x: clampX(x), y: clampY(y) });
+      for (const y of [other.y - height - gap, other.y + other.height + gap]) for (const x of [center.x, other.x, other.x + other.width - width]) candidates.push({ x: clampX(x), y: clampY(y) });
+    }
+    let best, bestOverlap = Infinity, bestDistance = Infinity;
+    for (const candidate of candidates) {
+      const overlap = occupied.reduce((sum, other) => sum
+        + Math.max(0, Math.min(candidate.x + width + gap, other.x + other.width + gap) - Math.max(candidate.x, other.x))
+        * Math.max(0, Math.min(candidate.y + height + gap, other.y + other.height + gap) - Math.max(candidate.y, other.y)), 0);
+      const distance = (candidate.x - center.x) ** 2 + (candidate.y - center.y) ** 2;
+      if (overlap < bestOverlap || (overlap === bestOverlap && distance < bestDistance)) { best = candidate; bestOverlap = overlap; bestDistance = distance; }
+    }
+    return best;
+  }
   addNode(type) {
+    if (!Object.hasOwn(NODE_TYPES, type)) return;
+    const bounds = this.visibleGraphBounds();
+    const pan = { left: this.scroll.scrollLeft, top: this.scroll.scrollTop };
     let id = type.toLowerCase(), suffix = 1;
     while (this.draft.nodes.some(node => node.id === id)) id = `${type.toLowerCase()}-${suffix++}`;
-    this.draft.nodes.push(graphNode(type, id, 30 + (this.draft.nodes.length % 4) * 285, 520 + Math.floor(this.draft.nodes.length / 4) * 60));
-    this.selectedEdge = null; this.selectedNode = id; this.draw();
-    const card = this.canvas.querySelector(`[data-node="${id}"]`); card?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    const setting = this.inspector.querySelector('input, select, textarea') || this.inspector.querySelector('button');
-    setting?.focus({ preventScroll: true });
-    // The inspector stacks below the canvas in narrow windows.
-    setting?.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const node = graphNode(type, id, bounds.left, bounds.top);
+    this.draft.nodes.push(node);
+    this.selected = null; this.selectedEdge = null; this.selectedNode = id;
+    this.togglePalette(false, false);
+    // Measure the real card, including dynamic ports and wrapped labels, before
+    // publishing the draft. Both renders finish synchronously before paint.
+    this.draw(false);
+    const card = this.canvas.querySelector(`[data-node="${id}"]`);
+    node.position = this.nodePlacement(bounds, card);
+    this.draw(); this.scroll.scrollTo(pan.left, pan.top);
+    this.canvas.querySelector(`[data-node="${id}"] .graph-heading`)?.focus({ preventScroll: true });
   }
   isDirty() { return JSON.stringify(this.draft) !== JSON.stringify(this.saved); }
   receiveSaved(graph) {
@@ -378,7 +505,7 @@ export class GraphEditor {
     this.draft.edges = this.draft.edges.filter(e => e.from[0] !== node.id && e.to[0] !== node.id);
     this.selected = null; this.selectedNode = null; this.draw();
   }
-  draw() {
+  draw(notify = true) {
     this.geometryObserver?.disconnect();
     if (!this.draft.edges.includes(this.selectedEdge)) this.selectedEdge = null;
     this.editScaleButton.hidden = this.zoom >= 1;
@@ -500,7 +627,7 @@ export class GraphEditor {
     this.canvas.style.height = `${renderedHeight}px`;
     this.extent.style.height = `${renderedHeight * this.zoom}px`;
     for (const element of this.canvas.querySelectorAll('.graph-node, .graph-ports button')) this.geometryObserver?.observe(element);
-    this.drawWires(); this.onDraft(structuredClone(this.draft));
+    this.drawWires(); if (notify) this.onDraft(structuredClone(this.draft));
   }
   drawWires() {
     if (this.wireFrame) { cancelAnimationFrame(this.wireFrame); this.wireFrame = null; }

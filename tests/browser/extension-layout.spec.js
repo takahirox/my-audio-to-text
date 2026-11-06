@@ -28,8 +28,7 @@ for (const width of [390, 1440]) {
     const backTab = optionTab ? 'Alt+Shift+Tab' : 'Shift+Tab';
     const stored = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
     await openPalette(page);
-    await page.locator('#graph-node-type').selectOption('TranslateGemmaEnJa');
-    await page.locator('#graph-add').click();
+    await page.locator('#graph-node-type [data-type="TranslateGemmaEnJa"]').click();
     await page.keyboard.press('Escape');
     await expect(page.locator('#graph-editor > #graph-asset-notice')).toHaveCount(0);
     await expect(page.locator('#graph-asset-notice')).toBeHidden();
@@ -101,8 +100,7 @@ test('Help notices follow draft additions/removals, saved loading and reset with
     await page.getByRole('button', { name: `Remove ${type.toLowerCase()}`, exact: true }).click();
   }
   await showNotices('No model preparation notices for Nodes in the current draft.');
-  await openPalette(page); await page.locator('#graph-node-type').selectOption('SpeechToTextParakeetV3');
-  await page.locator('#graph-add').click(); await page.keyboard.press('Escape');
+  await openPalette(page); await page.locator('#graph-node-type [data-type="SpeechToTextParakeetV3"]').click(); await page.keyboard.press('Escape');
   await page.locator('#graph-help').click();
   await expect(notice.locator('p')).toContainText('Parakeet v3: Save prepares 1.26 GB.');
   await expect(notice.locator('p')).not.toContainText('TranslateGemma');
@@ -305,23 +303,24 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
   await expect(page.getByLabel('Search nodes', { exact: true })).toBeFocused();
   await page.getByLabel('Node category', { exact: true }).selectOption('Processors');
   await page.getByLabel('Search nodes', { exact: true }).fill('OPUS');
-  await expect(page.locator('#graph-node-type option')).toHaveCount(2);
+  await expect(page.locator('#graph-node-type [role="option"]')).toHaveCount(2);
   await page.getByLabel('Search nodes', { exact: true }).fill('no matching type');
-  await expect(page.locator('#graph-add')).toBeDisabled();
+  await expect(page.getByRole('listbox', { name: 'Node types' }).getByRole('option')).toHaveCount(0);
   await expect(page.getByRole('status').filter({ hasText: 'No matching nodes' })).toBeVisible();
   await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
   await page.getByLabel('Search nodes', { exact: true }).fill('Number');
-  await page.locator('#graph-node-type').press('Enter');
-  await expect(page.getByLabel('number value', { exact: true })).toBeFocused();
-  await expect(page.getByLabel('number value', { exact: true })).toBeInViewport({ ratio: 1 });
+  await page.getByLabel('Search nodes', { exact: true }).press('Enter');
+  await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
+  await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('.graph-inspector')).toBeVisible();
   await expect(page.locator('.graph-inspector details')).not.toHaveAttribute('open', '');
   await page.getByLabel('number value', { exact: true }).fill('2.5');
   await page.keyboard.press('Escape');
   await expect(page.locator('#graph-palette')).toBeHidden();
-  await expect(page.locator('#graph-palette-toggle')).toBeFocused();
+  await expect(page.locator('.graph-scroll')).toBeFocused();
   await page.locator('#graph-fit').click();
   expect(await page.locator('#graph-zoom').inputValue().then(Number)).toBeLessThanOrEqual(1.5);
+  await page.getByRole('button', { name: 'Select number', exact: true }).press('Enter');
   await page.getByRole('button', { name: 'Clear selection', exact: true }).click();
   await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await expect(page.locator('.graph-scroll')).toBeFocused();
@@ -349,15 +348,14 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
 });
 
 for (const width of [390, 700]) {
-  test(`keyboard addition reveals the focused setting at ${width}px`, async ({ page }) => {
+  test(`keyboard addition focuses the new node without revealing the inspector at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.getByRole('button', { name: 'Add Node', exact: true }).press('Enter');
     await page.getByLabel('Search nodes', { exact: true }).fill('Number');
-    await page.locator('#graph-node-type').press('Enter');
+    await page.getByLabel('Search nodes', { exact: true }).press('Enter');
     const value = page.getByLabel('number value', { exact: true });
-    // Check before fill/click can automatically scroll an offscreen field.
-    await expect(value).toBeFocused();
-    await expect(value).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
+    await expect(page.locator('#graph-palette')).toBeHidden();
     await value.fill('2.5');
   });
 }

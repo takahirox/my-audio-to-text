@@ -6,8 +6,8 @@ test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepar
   for (const [type, search, key] of [['SpeechToTextParakeetV3', 'Parakeet', 'parakeet-v3'], ['SpeechToTextMoonshineMediumEn', 'Moonshine', 'moonshine-medium-en']]) {
     const before = f.requests.length;
     await openPalette(editor);
-    await editor.getByRole('searchbox', { name: 'Search nodes' }).fill(search);
-    await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
+    await editor.getByRole('combobox', { name: 'Search nodes' }).fill(search);
+    await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
     expect(f.requests).toHaveLength(before);
     await editor.locator('#graph-help').click();
     const notice = editor.getByRole('dialog').locator('#graph-asset-notice');

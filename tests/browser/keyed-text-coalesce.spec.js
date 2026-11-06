@@ -24,8 +24,7 @@ test('KeyedTextCoalesce palette, independent wiring, Help, save/reload and runti
   await page.reload(); await openPalette(page);
   await page.getByLabel('Node category', { exact: true }).selectOption('Processors');
   await page.getByLabel('Search nodes').fill('KeyedTextCoalesce');
-  await page.locator('#graph-node-type').selectOption('KeyedTextCoalesce'); await page.locator('#graph-add').click();
-  await page.locator('#graph-palette-toggle').click();
+  await page.locator('#graph-node-type [data-type="KeyedTextCoalesce"]').click();
   await expect(page.locator('.graph-inspector')).toContainText('This Node has no configurable settings.');
   await expect(page.locator('.graph-inspector input, .graph-inspector select, .graph-inspector textarea')).toHaveCount(0);
   const port = name => page.getByRole('button', { name, exact: true });

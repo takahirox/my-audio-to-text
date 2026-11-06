@@ -19,7 +19,7 @@ async function runtime(f) {
 test('MV3 searchable palette, typed audio/TEXT routes and help; production online Worker drains and repeats', async ({ graphExtension: f }) => {
   await runtime(f); const page = await openGraph(f); await selectZipformer(page);
   const editor = page.editor; await openPalette(editor);
-  await editor.getByRole('searchbox', { name: 'Search nodes' }).fill('zipformer');
+  await editor.getByRole('combobox', { name: 'Search nodes' }).fill('zipformer');
   await expect(editor.getByRole('option', { name: 'Streaming Zipformer English ASR', exact: true })).toHaveCount(1);
   await editor.locator('#graph-palette-toggle').click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toHaveCount(1);

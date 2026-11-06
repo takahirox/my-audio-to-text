@@ -3,7 +3,7 @@ import { openPalette } from './ui-controls.js';
 
 const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
 async function add(editor, type, settings = {}) {
-  await openPalette(editor); await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
+  await openPalette(editor); await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
   for (const [name, value] of Object.entries(settings)) await editor.getByLabel(`${type.toLowerCase()} ${name}`, { exact: true }).selectOption(value);
 }
 async function save(editor) {

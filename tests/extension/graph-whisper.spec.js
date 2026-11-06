@@ -67,8 +67,7 @@ test('MV3 palette and help offer Whisper final and its ID; ReazonSpeech retains 
   const page = await openGraph(f), editor = page.editor;
   await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(1);
   await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toHaveCount(1);
-  await openPalette(editor); await editor.locator('#graph-node-type').selectOption('SpeechToTextWhisper');
-  await editor.locator('#graph-add').click();
+  await openPalette(editor); await editor.locator('#graph-node-type [data-type="SpeechToTextWhisper"]').click();
   const card = editor.locator('[data-node="speechtotextwhisper"]');
   await expect(card.locator('[data-side="output"]')).toHaveCount(2);
   await expect(card.locator('[data-side="output"][data-port="final"]')).toHaveCount(1);
@@ -82,7 +81,7 @@ test('MV3 palette and help offer Whisper final and its ID; ReazonSpeech retains 
 test('MV3 Text literal and empty values round-trip and deliver once to an ordinary TEXT consumer', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
   await disconnectWire(editor, 'speech.provisional to coalesce.input2');
-  await openPalette(editor); await editor.locator('#graph-node-type').selectOption('Text'); await editor.locator('#graph-add').click();
+  await openPalette(editor); await editor.locator('#graph-node-type [data-type="Text"]').click();
   await editor.getByRole('button', { name: 'text output value', exact: true }).click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
   await editor.getByRole('button', { name: 'transcript input input1', exact: true }).click();

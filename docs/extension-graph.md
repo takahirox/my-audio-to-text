@@ -7,9 +7,13 @@ The active graph is an immutable snapshot; edits take effect at the next Start.
 
 ## Editor and saved graphs
 
-Use Add Node to search or filter by category. Select a heading for settings and
-help. Drag headings or use arrow keys to move Nodes. Connect an output to a
-compatible input; reconnecting replaces only that input's wire. Select a wire
+Use Add Node to open a searchable list beside the toolbar button. Search or
+filter by category, then click/tap a result to add it immediately near the center
+of the visible canvas. Arrow Up/Down navigates results; Enter adds the highlighted
+Node. Escape or clicking outside dismisses the list. Adding keeps the current
+zoom and pan, selects and focuses the new Node, and leaves changes unsaved until
+Save graph. Select a heading for settings and help. Drag headings or use arrow
+keys to move Nodes. Connect an output to a compatible input; reconnecting replaces only that input's wire. Select a wire
 for details or Disconnect. Canvas zoom and Fit graph support large graphs.
 Settings, essential port names and accessibility labels remain visible.
 

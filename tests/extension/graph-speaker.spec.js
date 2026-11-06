@@ -15,10 +15,10 @@ async function speakerGraph(f, type = 'Supertonic3') {
     await openPalette(editor);
     if (node === 'SpeakerOutput') {
       await editor.getByLabel('Node category', { exact: true }).selectOption('Outputs');
-      await expect(editor.locator('#graph-node-type option[value="AudioOutput"]')).toHaveText('Audio player / WAV');
-      await expect(editor.locator('#graph-node-type option[value="SpeakerOutput"]')).toHaveText('Speaker');
+      await expect(editor.locator('#graph-node-type [role="option"][data-type="AudioOutput"]')).toHaveText('Audio player / WAV');
+      await expect(editor.locator('#graph-node-type [role="option"][data-type="SpeakerOutput"]')).toHaveText('Speaker');
     }
-    await editor.locator('#graph-node-type').selectOption(node); await editor.locator('#graph-add').click();
+    await editor.locator(`#graph-node-type [data-type="${node}"]`).click();
   }
   for (const [source, output, target, input] of [['speech', 'final', type.toLowerCase(), 'text'], [type.toLowerCase(), 'audio', 'speakeroutput', 'audio']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();

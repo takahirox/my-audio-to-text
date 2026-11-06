@@ -148,7 +148,7 @@ test('Button Sources palette, caption Save/Load/Import/Export, duplicate caption
     await editor.reload();
     await editor.getByRole('button', { name: 'Add Node', exact: true }).click();
     await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'Sources / inputs' });
-    await expect(editor.locator('#graph-node-type option[value=Button]')).toHaveCount(1);
+    await expect(editor.locator('#graph-node-type [role="option"][data-type=Button]')).toHaveCount(1);
     await editor.locator('#graph-palette-toggle').click();
     await editor.getByRole('button', { name: 'Select z', exact: true }).click();
     await expect(editor.getByRole('button', { name: 'z output trigger', exact: true })).toBeVisible();
