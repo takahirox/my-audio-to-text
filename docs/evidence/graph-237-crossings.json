@@ -1,0 +1,134 @@
+[
+  {
+    "zoom": 0.25,
+    "corridors": [
+      {
+        "source": "speech",
+        "target": "coalesce",
+        "edges": 4,
+        "before": 6,
+        "after": 0
+      },
+      {
+        "source": "coalesce",
+        "target": "pair",
+        "edges": 2,
+        "before": 0,
+        "after": 0
+      },
+      {
+        "source": "translation",
+        "target": "pair",
+        "edges": 2,
+        "before": 1,
+        "after": 0
+      },
+      {
+        "source": "translation",
+        "target": "preview-pair",
+        "edges": 2,
+        "before": 1,
+        "after": 0
+      }
+    ]
+  },
+  {
+    "zoom": 0.5,
+    "corridors": [
+      {
+        "source": "speech",
+        "target": "coalesce",
+        "edges": 4,
+        "before": 6,
+        "after": 0
+      },
+      {
+        "source": "coalesce",
+        "target": "pair",
+        "edges": 2,
+        "before": 0,
+        "after": 0
+      },
+      {
+        "source": "translation",
+        "target": "pair",
+        "edges": 2,
+        "before": 1,
+        "after": 0
+      },
+      {
+        "source": "translation",
+        "target": "preview-pair",
+        "edges": 2,
+        "before": 1,
+        "after": 0
+      }
+    ]
+  },
+  {
+    "zoom": 1,
+    "corridors": [
+      {
+        "source": "speech",
+        "target": "coalesce",
+        "edges": 4,
+        "before": 6,
+        "after": 0
+      },
+      {
+        "source": "coalesce",
+        "target": "pair",
+        "edges": 2,
+        "before": 0,
+        "after": 0
+      },
+      {
+        "source": "translation",
+        "target": "pair",
+        "edges": 2,
+        "before": 1,
+        "after": 0
+      },
+      {
+        "source": "translation",
+        "target": "preview-pair",
+        "edges": 2,
+        "before": 1,
+        "after": 0
+      }
+    ]
+  },
+  {
+    "zoom": 1.5,
+    "corridors": [
+      {
+        "source": "speech",
+        "target": "coalesce",
+        "edges": 4,
+        "before": 6,
+        "after": 0
+      },
+      {
+        "source": "coalesce",
+        "target": "pair",
+        "edges": 2,
+        "before": 0,
+        "after": 0
+      },
+      {
+        "source": "translation",
+        "target": "pair",
+        "edges": 2,
+        "before": 1,
+        "after": 0
+      },
+      {
+        "source": "translation",
+        "target": "preview-pair",
+        "edges": 2,
+        "before": 1,
+        "after": 0
+      }
+    ]
+  }
+]
