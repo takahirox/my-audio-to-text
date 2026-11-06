@@ -1,3 +1,4 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { selectZipformer } from './zipformer-fixture.js';
 import { openPalette } from './ui-controls.js';
@@ -41,7 +42,7 @@ test('MV3 searchable palette, typed audio/TEXT routes and help; production onlin
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
 
     await expect(page.locator('.display-content')).toHaveText(['english 16000'].join('\n'));
-    expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+  await expectPreparedIdle(page);
   }
   expect(f.requests).toEqual([]);
 });
@@ -59,7 +60,7 @@ for (const duringStop of [false, true]) test(`MV3 Zipformer pagehide cancellatio
   await expect.poll(() => page.evaluate(() => !!window.pendingAudio)).toBe(true);
   await page.evaluate(() => { window.lateCallback=window.pendingWorker.onmessage; });
   if (duringStop) await page.locator('#stop').click();
-  await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeEnabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeDisabled();
   await page.evaluate(() => window.lateCallback({ data: { type: 'final', session: 1, id: 0, text: 'late' } }));
   await expect(page.locator('.display-content')).toBeEmpty();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
@@ -71,10 +72,10 @@ test('MV3 online inference failure releases Worker and permits a fresh recording
   await expect(page.locator('#errors')).toContainText('Fixture online decode failure');
   await expect(page.locator('#status')).toHaveText('Transcription active');
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+  await expectPreparedIdle(page);
   await startGraph(page); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await writeFile(path.join(f.root, 'web/vendor/zipformer-en/sherpa-onnx-wasm-main-asr.js'), `throw Error('Missing pinned runtime');`);
   await page.reload(); await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
-  await expect(page.locator('#errors')).toContainText('Missing pinned runtime'); await expect(page.locator('#start')).toBeEnabled();
+  await expect(page.locator('#errors')).toContainText('Missing pinned runtime'); await expect(page.locator('#start')).toBeDisabled();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
 });

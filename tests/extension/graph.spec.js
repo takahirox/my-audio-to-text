@@ -1,28 +1,32 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { clickGraphAction, openPalette, loadTranslationFixture } from './ui-controls.js';
 import { test, expect, openGraph, startGraph, emitFinal, addAudioPath, disconnectWire } from './graph-fixture.js';
 
 const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
 
-test('fresh install and Reset use current transcription; explicit translation edits apply next session', async ({ graphExtension: f }) => {
-  const page = await openGraph(f);
-  const minimal = await saved(page);
+test('fresh install and Reset use current transcription; saved model requirements apply next session', async ({ graphExtension: f }) => {
+  const page = await openGraph(f), minimal = await saved(page);
   expect(minimal.nodes.map(n => n.type)).toEqual(['ChromeTabAudio', 'SpeechToTextReazonSpeech', 'KeyedTextCoalesce', 'KeyedTextPair', 'KeyedPairedTextAccumulator', 'Display']);
   expect(minimal.edges).toContainEqual({ from: ['pair', 'pair'], to: ['history', 'pair'] });
   expect(f.requests).toEqual([]); await startGraph(page);
   await emitFinal(page, 'fresh default'); await expect(page.locator('.display-content')).toHaveText('fresh default');
-  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
+  const workers = await page.evaluate(() => window.graphWorkers.length);
   await loadTranslationFixture(page.editor); f.mode('error');
-  await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
-  await startGraph(page); const workers = await page.evaluate(() => window.graphWorkers.length);
-  await emitFinal(page, 'source visible'); await expect(page.locator('[data-display="transcript"] td')).toHaveText(['source visible', '']);
-  await page.editor.getByRole('button', { name: 'Select translation', exact: true }).click();
-  await page.editor.getByRole('button', { name: 'Remove translation', exact: true }).click();
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
   expect(await page.evaluate(() => window.graphWorkers.length)).toBe(workers);
   await expect(page.locator('#saved-state')).toBeVisible();
-  await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await startGraph(page);
-  await expect(page.locator('#translation-status')).toHaveText('Translation off');
-  await page.locator('#stop').click(); await clickGraphAction(page.editor, 'graph-reset');
+  await emitFinal(page, 'active graph stays unchanged');
+  await expect(page.locator('.display-content')).toContainText('active graph stays unchanged');
+  await page.locator('#stop').click();
+  await expect(page.locator('#errors')).toContainText('assets missing');
+  await expect(page.locator('#start')).toBeDisabled();
+  await page.editor.getByRole('button', { name: 'Select translation', exact: true }).click();
+  await page.editor.getByRole('button', { name: 'Remove translation', exact: true }).click();
+  await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
+  await startGraph(page); await expect(page.locator('#translation-status')).toHaveText('Translation off');
+  await emitFinal(page, 'source visible'); await expect(page.locator('.display-content')).toHaveText('source visible');
+  await page.locator('#stop').click(); await expectPreparedIdle(page);
+  await clickGraphAction(page.editor, 'graph-reset');
   await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
   expect(await saved(page)).toEqual(minimal);
 });
@@ -31,28 +35,30 @@ for (const type of ['Supertonic3', 'Kokoro']) {
   test(`${type}: visual final-text/audio path uses production Workers, explicit preparation, playback, repeat, failure and cancellation (fixture inference)`, async ({ graphExtension: f }) => {
     const page = await openGraph(f), requests = [];
     page.on('request', request => requests.push({ url: request.url(), method: request.method(), body: request.postData() }));
-    f.mode('error'); await addAudioPath(page, type); await expect(page.editor.locator('#graph-models .model-status')).toHaveText('Error'); await startGraph(page);
+    f.mode('error'); await addAudioPath(page, type); await expect(page.editor.locator('#graph-models .model-status')).toHaveText('Error');
+    await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
     await expect(page.locator('#tts-status')).toContainText('assets missing');
     await expect(page.locator('#errors')).toContainText('assets missing');
     await expect(page.locator('#model-recovery')).toBeVisible();
-    await emitFinal(page, 'missing'); await expect(page.locator('[data-display="transcript"] .display-content')).toContainText('missing');
-    expect(f.requests.length).toBeGreaterThan(0); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
+    await expect(page.locator('#start')).toBeDisabled();
+    expect(f.requests.length).toBeGreaterThan(0);
     f.mode('error'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Download / retry' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Error');
     f.mode('hold'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Download / retry' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Downloading');
     await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Cancel download' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Download / retry' })).toBeEnabled();
     f.mode('normal'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Download / retry' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Ready');
     const count = f.requests.length;
     // Abort a production TTS load RPC while startup is pending.
-    await page.evaluate(() => { window.holdTtsLoad = true; window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }); });
+    await page.evaluate(() => { window.holdTtsLoad = true; });
+    await page.locator('#retry-models').click();
     await expect.poll(() => page.evaluate(() => window.graphWorkers.some(w => w.url.match(/supertonic3-worker|kokoro-worker/) && w.messages.some(m => m.type === 'load')))).toBe(true);
-    await page.evaluate(() => window.graphSession.cancel()); expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+    await page.locator('#stop').click(); await expect.poll(() => page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
     await page.evaluate(() => { window.holdTtsLoad = false; });
-    await startGraph(page); await expect(page.locator('#tts-status')).toContainText('ready (local)');
+    await startGraph(page);
     await emitFinal(page, 'hello'); await expect(page.locator('#audio-outputs audio')).toHaveCount(1);
     await page.locator('#audio-outputs audio').evaluate(async player => { await player.play(); });
     await expect.poll(() => page.locator('#audio-outputs audio').evaluate(player => player.currentTime)).toBeGreaterThan(0);
     await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-    expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+    await expectPreparedIdle(page);
     // Graceful Stop waits for the actual pending synthesis RPC and output sink.
     await startGraph(page); await emitFinal(page, 'slow');
     await expect.poll(() => page.evaluate(() => window.graphWorkers.some(w => !w.released && w.messages.some(m => m.type === 'generate' && m.text === 'slow')))).toBe(true);
@@ -61,7 +67,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     await startGraph(page); await emitFinal(page, 'slow');
     await expect.poll(() => page.evaluate(() => window.graphWorkers.some(w => !w.released && w.messages.some(m => m.type === 'generate' && m.text === 'slow')))).toBe(true);
     await page.evaluate(() => window.graphSession.cancel());
-    await expect(page.locator('#audio-outputs audio')).toHaveCount(0); expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+    await expect(page.locator('#audio-outputs audio')).toHaveCount(0); await expectPreparedIdle(page);
     await startGraph(page); await emitFinal(page, 'fail'); await expect(page.locator('#tts-status')).toContainText('Fixture inference failure');
     await expect(page.locator('#errors')).toContainText('Fixture inference failure');
     expect((await page.locator('#errors').textContent()).split('\n')).toHaveLength(1);
@@ -76,9 +82,10 @@ for (const type of ['Supertonic3', 'Kokoro']) {
       const cache = await caches.open('transformers-cache'); const keys = await cache.keys();
       await cache.delete(keys.find(request => request.url.includes('.onnx')));
     });
-    await expect(reopened.locator('#start')).toBeEnabled(); await startGraph(reopened);
-    await expect(reopened.locator('#tts-status')).toContainText('assets missing'); await emitFinal(reopened, 'evicted');
-    await expect(reopened.locator('[data-display="transcript"] .display-content')).toHaveText('evicted'); await expect(reopened.locator('#audio-outputs audio')).toHaveCount(0);
+    await reopened.close(); const evicted = await openGraph(f);
+    await expect(evicted.locator('#errors')).toContainText('assets missing');
+    await expect(evicted.locator('#start')).toBeDisabled();
+    await expect(evicted.locator('#audio-outputs audio')).toHaveCount(0);
     expect(f.requests).toHaveLength(count);
     expect(requests.every(r => r.method === 'GET' && r.body === null && !/hello|missing|slow|cached/.test(r.url))).toBe(true);
   });

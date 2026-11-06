@@ -12,7 +12,7 @@ import { SpeakerOutputNode, StreamingSpeakerOutputNode } from '../web/speaker-ou
 export class TabSession {
   constructor(render, {
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
-    sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory,
+    sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph({ enabled: false }),
     textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, onSynthesizedAudio = () => {}, speakerContextFactory,
@@ -29,6 +29,7 @@ export class TabSession {
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation; this.prepareTranslateGemma = prepareTranslateGemma;
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
     this.speakerContextFactory = speakerContextFactory;
+    this.modelLoadTimeoutMs = modelLoadTimeoutMs;
     const preferences = graphPreferences(this.graph);
     this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', prompt: '', error: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: 'Translation off' };
     this.update();
@@ -37,6 +38,56 @@ export class TabSession {
     Object.assign(this.view, values);
     this.view.graphActions = this.graphActions();
     this.render({ ...this.view });
+  }
+  // Live opts into this lifetime before exposing Start. Preparing owns an inert
+  // graph; Start transfers that same owner. A used graph is single-use, so idle
+  // restoration waits for teardown and initializes a fresh graph.
+  prepareModels({ clearErrors = true } = {}) {
+    this.livePreparation = true;
+    if (this.closed || this.session) return Promise.resolve();
+    const snapshot = assertGraph(this.graph), key = JSON.stringify(snapshot);
+    if (this.prepared?.key === key && ['preparing', 'ready'].includes(this.view.modelState)) return this.preparing;
+    const previous = this.prepared;
+    this.prepared = null;
+    // Retain the teardown barrier even when an intervening owner has not built
+    // a pipeline yet. Successive Saves and close must await all older GPU owners.
+    const released = this.releasing = Promise.allSettled([this.releasing, previous?.pipeline?.dispose()]);
+    const preferences = graphPreferences(snapshot);
+    const owner = this.prepared = { key, snapshot, speakers: new Map(), speakerStates: Object.create(null),
+      microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null),
+      targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
+    this.nodeErrors.clear();
+    this.update({ modelState: 'preparing', modelStatus: 'Preparing models…', ...(clearErrors ? { error: '', modelRecovery: false } : {}) });
+    return this.preparing = Promise.resolve(released).then(async () => {
+      if (this.prepared !== owner || this.closed || owner.failed) return;
+      try {
+        this.createRuntime(owner, snapshot);
+        for (const spec of owner.description.nodes) if (['SpeakerOutput', 'StreamingSpeakerOutput'].includes(spec.type)) {
+          owner.speakers.set(spec.id, owner.pipeline.entries.get(spec.id).node);
+        }
+        await owner.prepareModels();
+        if (this.prepared !== owner || this.closed || owner.failed) return;
+        if (owner.pipeline.errors.length || this.nodeErrors.size) throw owner.pipeline.errors[0] || Error(this.view.error);
+        this.update({ modelState: 'ready', modelStatus: 'Ready' });
+      } catch (error) {
+        if (this.prepared === owner && !this.closed) this.preparationFailed(owner, error);
+      }
+    });
+  }
+  preparationFailed(owner, error) {
+    if (this.prepared !== owner || owner.failed) return;
+    owner.failed = true;
+    this.update({ modelState: 'error', modelStatus: 'Models unavailable', modelRecovery: true,
+      error: [...new Set([this.view.error, `${error.message || error} Save the graph to prepare files, or recover in Models; check browser/GPU support and free memory, then Retry models in Live.`].filter(Boolean))].join('\n') });
+    // Keep the failed owner until retry so replacement waits for all teardown.
+    void owner.pipeline?.dispose().catch(() => {});
+  }
+  async close() {
+    this.closed = true;
+    const owner = this.prepared;
+    this.prepared = null;
+    this.update({ modelState: 'closed', modelStatus: '' });
+    await Promise.allSettled([owner?.pipeline?.dispose(), this.cancel(), this.preparing, this.releasing]);
   }
   nodeEvent(event, id) {
     // Unknown event types are diagnostics by default, including future Nodes.
@@ -48,6 +99,7 @@ export class TabSession {
         const node = (this.view.activeGraph || this.graph).nodes.find(node => node.id === id);
         return node && graphModelRequirements({ nodes: [node] }).length > 0;
       }) });
+    if (this.prepared && ['preparing', 'ready'].includes(this.view.modelState)) this.preparationFailed(this.prepared, Error(`${id}: ${event.message}`));
   }
   async prepareFocusedOutput(tabId) {
     this.outputTarget = null;
@@ -103,7 +155,8 @@ export class TabSession {
     }
   }
   async start(tabId, { microphoneGesture = false, speakerGesture = false } = {}) {
-    if (this.session) return; // A second invocation never retargets live capture.
+    if (this.session || this.closed) return; // A second invocation never retargets live capture.
+    if (this.livePreparation && this.view.modelState !== 'ready') return;
     this.nodeErrors.clear();
     this.update({ error: '', modelRecovery: false, prompt: '' });
     let graph, snapshot;
@@ -112,8 +165,6 @@ export class TabSession {
       if (!graph.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination in Graph Editor.');
     } catch (error) { this.update({ error: error.message }); return; }
     const preferences = graphPreferences(graph);
-    const hasDisplay = graph.nodes.some(node => node.type === 'Display');
-    const hasAudioOutput = graph.nodes.some(node => ['AudioOutput', 'SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
     const speakers = graph.nodes.filter(node => ['SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
     const sources = graph.nodes.filter(n => INPUT_TYPES.includes(n.type));
     const microphones = sources.filter(n => n.type === 'MicrophoneAudio');
@@ -122,10 +173,14 @@ export class TabSession {
     }
     if (microphones.length && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.', prompt: 'Press Start to request microphone permission.' }); return; }
     if (speakers.length && !speakerGesture) { this.update({ tabId, status: 'Speaker selected. Press Start to enable audio. Keep this Live window open.', prompt: 'Press Start to enable speaker audio.' }); return; }
-    const session = { speakers: new Map(), speakerStates: Object.create(null), microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
+    const session = this.prepared || { speakers: new Map(), speakerStates: Object.create(null), microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
+    this.prepared = null;
+    session.tabId = tabId;
+    session.outputTarget = this.outputTarget && structuredClone(this.outputTarget);
     session.started = new Promise(resolve => { session.markStarted = resolve; });
     this.session = session;
-    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: session.translationEnabled ? 'Preparing local translation…' : 'Translation off', status: graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
+    if (this.livePreparation) this.update({ modelState: 'active' });
+    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: session.translationEnabled ? 'Local translation ready' : 'Translation off', status: this.livePreparation ? 'Starting prepared graph…' : graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
     // Explain this source limitation even if a dependent processor fails before
     // Pipeline reaches the source's start hook. The source itself still fails
     // through Pipeline, preserving ordinary branch isolation and topology.
@@ -135,7 +190,7 @@ export class TabSession {
     try {
       for (const spec of speakers) {
         const Speaker = spec.type === 'StreamingSpeakerOutput' ? StreamingSpeakerOutputNode : SpeakerOutputNode;
-        const node = new Speaker({ contextFactory: this.speakerContextFactory, onState: state => {
+        const node = session.speakers.get(spec.id) || new Speaker({ contextFactory: this.speakerContextFactory, onState: state => {
           if (this.session !== session) return;
           session.speakerStates[spec.id] = state;
           this.nodeEvent(state, spec.id);
@@ -146,7 +201,7 @@ export class TabSession {
         node.enable();
       }
       if (microphones.length) {
-        // Request directly from the explicit Start action, before loading models.
+        // Request directly from the explicit Start action.
         let stream;
         try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false }); }
         catch (error) { throw Error(`${microphones.map(node => node.id).join(', ')}: Microphone capture unavailable: ${error.message || error}`); }
@@ -154,11 +209,45 @@ export class TabSession {
         session.microphoneStreams.set(microphones[0].id, stream);
         for (const node of microphones.slice(1)) session.microphoneStreams.set(node.id, stream.clone());
       }
-      Object.assign(session, buildGraph(snapshot, {
+      if (!session.pipeline) this.createRuntime(session, snapshot);
+      this.bindRuntime(session);
+      if (!this.livePreparation) await Promise.allSettled([...session.speechNodes].map(async ([id, node]) => {
+        await node.load({ connectedInputs: graph.edges.filter(route => route.to[0] === id).map(route => route.to[1]) });
+      }));
+      if (this.session !== session) return;
+      this.update({ state: 'starting', status: sources.length ? `Starting ${sources.length} audio source(s)…` : 'Starting processing paths…' });
+      await session.pipeline.start();
+      session.markStarted();
+      if (this.session !== session || this.view.state !== 'starting') return;
+      this.update({ state: 'running', status: sources.length ? 'Transcription active' : 'Processing active',
+        signal: this.sourceStatus(session) });
+    } catch (error) {
+      if (this.session === session) this.fail(error.message || String(error), { reported: session.pipeline?.errors.includes(error) });
+    }
+  }
+  ownsRuntime(owner) { return this.session === owner || this.prepared === owner; }
+  createRuntime(session, snapshot) {
+    const graph = executableGraph(snapshot);
+    const hasDisplay = graph.nodes.some(node => node.type === 'Display');
+    const hasAudioOutput = graph.nodes.some(node => ['AudioOutput', 'SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
+    Object.assign(session, buildGraph(snapshot, {
+        preload: this.livePreparation,
+        modelLoadTimeoutMs: this.modelLoadTimeoutMs,
+        onModelProgress: (id, step, total) => {
+          if (this.prepared === session) this.update({ modelStatus: `Preparing models… ${step}/${total} · ${id}` });
+        },
+        speakerContextFactory: this.speakerContextFactory,
+        onSpeakerState: (state, id) => {
+          if (!this.ownsRuntime(session)) return;
+          session.speakerStates[id] = state;
+          this.nodeEvent(state, id);
+          this.update({ speakerStatus: Object.entries(session.speakerStates).map(([key, value]) => `${key}: ${value.message}`).join('\n'),
+            speakerNeedsActivation: Object.values(session.speakerStates).some(value => value.needsActivation) });
+        },
         speakers: session.speakers,
-        tabId, outputTarget: session.outputTarget, microphoneStreams: session.microphoneStreams, pageConnectionFactory: this.pageConnectionFactory,
+        tabId: session.tabId, outputTarget: session.outputTarget, microphoneStreams: session.microphoneStreams, pageConnectionFactory: this.pageConnectionFactory,
         onTargetState: (id, state, active, severity) => {
-          if (this.session === session && state) {
+          if (this.ownsRuntime(session) && state) {
             session.targetStates[id] = state;
             if (active === true) session.activeFieldOutputs.add(id);
             else if (active === false) session.activeFieldOutputs.delete(id);
@@ -171,20 +260,20 @@ export class TabSession {
         workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, zipformerWorkerFactory: this.zipformerWorkerFactory, parakeetWorkerFactory: this.parakeetWorkerFactory, moonshineWorkerFactory: this.moonshineWorkerFactory, sourceFactory: this.sourceFactory,
         translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
         onHoldState: (state, id) => {
-          if (this.session !== session) return;
+          if (!this.ownsRuntime(session)) return;
           session.holdStates ||= {}; session.holdStates[id] = state;
           this.update({ holdStatus: Object.entries(session.holdStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
         textSummaryWorkerFactory: this.textSummaryWorkerFactory,
         onTextSummaryEvent: (event, id) => {
-          if (this.session !== session) return;
+          if (!this.ownsRuntime(session)) return;
           this.nodeEvent(event, id);
           session.summaryStates ||= {}; session.summaryStates[id] = event.message || event.type;
           this.update({ summaryStatus: Object.entries(session.summaryStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
         ifConditionWorkerFactory: this.ifConditionWorkerFactory,
         onIfConditionEvent: (event, id) => {
-          if (this.session !== session) return;
+          if (!this.ownsRuntime(session)) return;
           this.nodeEvent(event, id);
           session.conditionStates ||= {}; session.conditionStates[id] = event.message || event.type;
           this.update({ conditionStatus: Object.entries(session.conditionStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
@@ -192,31 +281,31 @@ export class TabSession {
         prepareTranslateGemma: this.prepareTranslateGemma,
         ttsWorkerFactory: this.ttsWorkerFactory, prepareTts: this.prepareTts,
         onTtsState: (ttsStatus, id, event) => {
-          if (this.session !== session) return;
+          if (!this.ownsRuntime(session)) return;
           this.update({ ttsStatus }); this.nodeEvent(event || {}, id);
         },
         onSynthesizedAudio: (audio, signal) => {
-          if (this.session === session && !signal.aborted) return this.onSynthesizedAudio(audio, signal);
+          if (this.ownsRuntime(session) && !signal.aborted) return this.onSynthesizedAudio(audio, signal);
         },
         onSpeechEvent: (event, id) => {
-          if (this.session !== session) return;
+          if (!this.ownsRuntime(session)) return;
           this.nodeEvent(event, id);
           if (event.type === 'progress' && this.view.state === 'loading') this.update({ status: `${id}: ${event.message}` });
           else if (['progress', 'ready'].includes(event.type) && this.view.state === 'running') this.update({ signal: this.sourceStatus(session) });
         },
         onDisplay: (id, state, port) => {
-          if (this.session === session || (!this.session && this.canceling === session)) this.update({ displays: { ...this.view.displays, [id]: { ...this.view.displays[id], [port]: state } } });
+          if (this.ownsRuntime(session) || (!this.session && this.canceling === session)) this.update({ displays: { ...this.view.displays, [id]: { ...this.view.displays[id], [port]: state } } });
         },
         onCapturedAudio: (pcm, id) => {
-          if (this.session !== session) return;
+          if (!this.ownsRuntime(session)) return;
           if (!session.sourceStates[id] && pcm.some(sample => Math.abs(sample) > 0.00001)) {
             session.sourceStates[id] = 'Audio signal detected.';
             this.update({ signal: this.sourceStatus(session) });
           }
         },
-        onEnded: id => { if (this.session === session) void this.sourceEnded(session, id); },
+        onEnded: id => { if (this.ownsRuntime(session)) void this.sourceEnded(session, id); },
         onTranslationState: (state, id, severity) => {
-          if (this.session !== session) return;
+          if (!this.ownsRuntime(session)) return;
           this.nodeEvent({ severity, message: state }, id);
           session.translationStates ||= {};
           session.translationStates[id] = state;
@@ -224,27 +313,28 @@ export class TabSession {
           this.update({ translationStatus: statuses.length === 1 ? state : statuses.map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
         onError: (error, id) => {
-          if (this.session !== session) return;
+          if (!this.ownsRuntime(session)) return;
           // Preserve richer instructions only for this same failure. A prior
           // recoverable notice must not hide a later fatal error from the Node.
+          if (this.prepared === session) {
+            this.preparationFailed(session, error);
+            return;
+          }
           const cause = error.cause || error;
           const previous = this.nodeErrors.get(id);
           if (previous && (previous.cause === cause || previous.message === cause.message)) return;
           this.nodeEvent({ type: 'error', cause, message: `${cause.message || error.message} Start a new session to retry.` }, id);
         },
-      }));
-      await Promise.allSettled([...session.speechNodes].map(async ([id, node]) => {
-        await node.load({ connectedInputs: graph.edges.filter(route => route.to[0] === id).map(route => route.to[1]) });
-      }));
-      if (this.session !== session) return;
-      this.update({ state: 'starting', status: sources.length ? `Starting ${sources.length} audio source(s)…` : 'Starting processing paths…' });
-      await session.pipeline.start();
-      session.markStarted();
-      if (this.session !== session || this.view.state !== 'starting') return;
-      this.update({ state: 'running', status: sources.length ? 'Transcription active' : 'Processing active',
-        signal: this.sourceStatus(session) });
-    } catch (error) {
-      if (this.session === session) this.fail(error.message || String(error), { reported: session.pipeline?.errors.includes(error) });
+    }));
+  }
+  bindRuntime(session) {
+    // Capture/output Nodes are inert during preparation. Bind gesture-owned
+    // resources only after admission to Start; model Nodes remain untouched.
+    for (const spec of session.description.nodes) {
+      const node = session.pipeline.entries.get(spec.id).node;
+      if (spec.type === 'ChromeTabAudio') node.tabId = session.tabId;
+      if (spec.type === 'MicrophoneAudio') node.stream = session.microphoneStreams.get(spec.id);
+      if (FIELD_TYPES.includes(spec.type)) node.target = session.outputTarget && { ...session.outputTarget };
     }
   }
   releaseMicrophones(session) {
@@ -296,10 +386,10 @@ export class TabSession {
   }
   stop() {
     const session = this.session;
-    if (!session) return Promise.resolve();
+    if (!session) return this.view.modelState === 'preparing' ? this.cancel() : Promise.resolve();
     if (session.stopping) return session.stopping;
     if (this.view.state === 'loading') {
-      this.cancel(); this.update({ status: 'Stopped before capture started.' }); return Promise.resolve();
+      const canceled = this.cancel(); this.update({ status: 'Stopped before capture started.' }); return canceled;
     }
     const starting = this.view.state === 'starting';
     this.update({ state: 'stopping', status: 'Finalizing graph outputs…' });
@@ -322,12 +412,21 @@ export class TabSession {
         this.session = null;
         this.releaseMicrophones(session);
         this.update({ state: 'idle', speakerNeedsActivation: false, status: 'Stopped. Outputs are ready.' });
+        if (this.livePreparation && !this.closed) await this.prepareModels({ clearErrors: false });
       } catch (error) { if (this.session === session) this.fail(error.message || String(error)); }
     });
   }
   cancel() {
     const session = this.session;
-    if (!session) return this.canceling?.canceled;
+    if (!session) {
+      if (this.prepared && this.view.modelState === 'preparing') {
+        const owner = this.prepared;
+        owner.failed = true;
+        this.update({ modelState: 'canceled', modelStatus: 'Preparation canceled. Retry models to continue.' });
+        return owner.pipeline?.dispose().catch(() => {});
+      }
+      return this.canceling?.canceled;
+    }
     session.markStarted?.();
     this.session = null;
     this.canceling = session;
@@ -335,12 +434,15 @@ export class TabSession {
     // These may already be unlocked while microphone permission/model loading
     // is pending and before a Pipeline exists. Disposal halts output immediately.
     for (const speaker of session.speakers.values()) void speaker.dispose();
-    const canceled = session?.pipeline?.cancel().catch(() => {}).finally(() => {
+    this.releasing = Promise.resolve(session.pipeline?.cancel()).catch(() => {}).then(() => {
       if (this.canceling === session) this.canceling = null;
+    });
+    const canceled = this.releasing.then(() => {
+      if (this.livePreparation && !this.closed && !this.session) return this.prepareModels({ clearErrors: false });
     });
     session.canceled = canceled;
     if (!canceled) this.canceling = null;
-    this.update({ state: 'idle', signal: '', speakerStatus: '', speakerNeedsActivation: false, translationStatus: session.translations?.length ? 'Translation canceled' : this.view.translationStatus });
+    this.update({ state: 'idle', ...(this.livePreparation && !this.closed ? { modelState: 'preparing', modelStatus: 'Preparing models…' } : {}), signal: '', speakerStatus: '', speakerNeedsActivation: false, translationStatus: session.translations?.length ? 'Translation canceled' : this.view.translationStatus });
     return canceled;
   }
   enableSpeakers() {
@@ -351,10 +453,13 @@ export class TabSession {
     this.update({ status: 'Transcription failed. Invoke the toolbar action or retry.', error: reported ? this.view.error : [...new Set([this.view.error, message].filter(Boolean))].join('\n') });
   }
   setGraph(graph) {
-    this.graph = assertGraph(graph);
+    const next = assertGraph(graph);
+    const changed = JSON.stringify(this.graph) !== JSON.stringify(next);
+    this.graph = next;
     const preferences = graphPreferences(this.graph);
     this.update({ savedGraph: this.graph, translationEnabled: preferences.enabled, translationDirection: preferences.direction,
       ...(this.session ? {} : { translationStatus: preferences.enabled ? 'Translation enabled for the next session' : 'Translation off' }) });
+    if (changed && this.livePreparation && !this.session && !this.closed) void this.prepareModels();
   }
   tabEnded(tabId) {
     if (this.outputTarget?.tabId === tabId) this.outputTarget = null;

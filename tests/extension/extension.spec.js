@@ -117,13 +117,22 @@ async function setup(extension, { mode = 'audio', fallback = false } = {}) {
     };
   });
   await page.evaluate(() => window.invoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+  if (mode !== 'loading') {
+    await expect(page.locator('#model-status')).toHaveText('Ready');
+    expect(await page.evaluate(() => window.requests)).toEqual([]);
+    await page.locator('#start').click();
+  }
   return page;
 }
 
-async function released(page, count = 1) {
+async function released(page, count = 1, ready = true) {
   await expect.poll(() => page.evaluate(() => window.streams.map(s => s.stops))).toEqual(Array(count).fill(1));
   await expect.poll(() => page.evaluate(() => window.contexts.every(c => c.state === 'closed'))).toBe(true);
   await expect.poll(() => page.evaluate(() => window.streams.every(s => s.context.state === 'closed'))).toBe(true);
+  if (ready) {
+    await expect(page.locator('#model-status')).toHaveText('Ready');
+    expect(await page.evaluate(() => window.workers.length - window.terminated)).toBe(2);
+  } else expect(await page.evaluate(() => window.workers.length - window.terminated)).toBe(0);
 }
 
 for (const fallback of [false, true]) {
@@ -183,7 +192,7 @@ test('teardown while the transcript sink drains suppresses late output and relea
   await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
   expect(await page.evaluate(() => window.terminated)).toBe(2);
   await page.evaluate(() => window.releaseTranscript());
-  await released(page);
+  await released(page, 1, false);
   await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
   await expect(page.locator('#errors')).toBeEmpty();
 });
@@ -227,16 +236,20 @@ for (const action of ['navigate', 'close']) {
 
 test('model preload progress and cancellation leave capture unrequested and retry available', async ({ extension }) => {
   const page = await setup(extension, { mode: 'loading' });
-  await expect(page.locator('#status')).toContainText('Loading ReazonSpeech');
+  await expect(page.locator('#model-status')).toContainText('Preparing models…');
+  await expect(page.locator('#start')).toBeDisabled();
   await page.evaluate(() => window.workers[0].postMessage({ type: 'fixture-progress' }));
-  await expect(page.locator('#status')).toHaveText('speech: Loading fixture models…');
+  await expect(page.locator('#model-status')).toContainText('Preparing models…');
+  await expect(page.locator('#start')).toBeDisabled();
   expect(await page.evaluate(() => window.requests)).toEqual([]);
   await page.locator('#stop').click();
-  await expect(page.locator('#status')).toHaveText('Stopped before capture started.');
+  await expect(page.locator('#model-status')).toContainText('Preparation canceled');
   expect(await page.evaluate(() => window.terminated)).toBe(2);
   expect(await page.evaluate(() => window.requests)).toEqual([]);
   expect(await page.evaluate(() => window.pipelineCalls)).toEqual([{ hook: 'dispose', id: 0 }]);
   await page.evaluate(() => { window.holdLoad = false; });
+  await page.locator('#retry-models').click();
+  await expect(page.locator('#model-status')).toHaveText('Ready');
   await page.locator('#start').click();
   await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
   await page.locator('#stop').click();
@@ -256,11 +269,15 @@ for (const phase of ['loading', 'running']) {
       await expect(page.locator('#status')).toHaveText('Transcription active');
       await page.locator('#stop').click();
     }
-    await expect(page.locator('#start')).toBeEnabled();
-    expect(await page.evaluate(() => window.terminated)).toBe(2);
     if (phase === 'running') await released(page);
-    else expect(await page.evaluate(() => window.requests)).toEqual([]);
+    else {
+      await expect(page.locator('#start')).toBeDisabled();
+      expect(await page.evaluate(() => window.requests)).toEqual([]);
+    }
+    expect(await page.evaluate(() => window.terminated)).toBe(2);
     await page.evaluate(() => { window.holdLoad = false; });
+    if (phase === 'loading') await page.locator('#retry-models').click();
+    await expect(page.locator('#start')).toBeEnabled();
     await page.locator('#start').click();
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
     await expect(page.locator('#errors')).toBeEmpty();
@@ -309,7 +326,7 @@ test('window teardown during capture setup releases late media without stale out
   const page = await setup(extension, { mode: 'pending' });
   await expect.poll(() => page.evaluate(() => !!window.grant)).toBe(true);
   await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
-  await page.evaluate(() => window.grant()); await released(page);
+  await page.evaluate(() => window.grant()); await released(page, 1, false);
   expect(await page.evaluate(() => window.inputs)).toEqual([]);
   expect(await page.evaluate(() => window.terminated)).toBe(2);
   await expect(page.locator('#errors')).toBeEmpty();
@@ -342,6 +359,8 @@ test('native tab capture requires the user-invoked tab grant', async ({ extensio
   await meeting.bringToFront();
   const tabId = await recorder.evaluate(async () => (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0].id);
   await recorder.goto(`${url}?tab=${tabId}`);
+  await expect(recorder.locator('#start')).toBeEnabled();
+  await recorder.locator('#start').click();
   await expect(recorder.locator('#status')).toContainText('Transcription failed');
   await expect(recorder.locator('#errors')).toContainText(/invoked|permission|capture/i);
   await expect(recorder.locator('#start')).toBeEnabled();
@@ -372,6 +391,9 @@ test('real toolbar invocation captures the current tab without a picker, repeats
   ]);
   await expect(recorder.locator('#status')).not.toBeEmpty();
   await expect(recorder.locator('#errors')).toHaveText('');
+  await expect(recorder.locator('#model-status')).toHaveText('Ready');
+  expect(await recorder.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);
+  await recorder.locator('#start').click();
   await expect(recorder.locator('#status')).toHaveText('Transcription active');
   await expect(recorder.locator('#signal')).toHaveText('audio: Audio signal detected.');
   await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
@@ -415,6 +437,8 @@ test('real toolbar invocation captures the current tab without a picker, repeats
   const targets = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
   const next = targets.targetInfos.find(target => target.url === second.url());
   await cdp.send('Extensions.triggerAction', { id, targetId: next.targetId });
+  await expect.poll(() => recorder.evaluate(() => window.invocations.at(-1))).not.toBe(originalTabs[0]);
+  await recorder.locator('#start').click();
   await expect(recorder.locator('#status')).toHaveText('Transcription active');
   await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
   const retargetedTabs = await captured();
@@ -431,6 +455,8 @@ test('real toolbar invocation captures the current tab without a picker, repeats
   const finalTargets = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
   await cdp.send('Extensions.triggerAction', { id,
     targetId: finalTargets.targetInfos.find(target => target.url === meeting.url()).targetId });
+  await expect.poll(() => recorder.evaluate(() => window.invocations.at(-1))).toBe(originalTabs[0]);
+  await recorder.locator('#start').click();
   await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
   await recorder.close();
   await expect.poll(async () => worker.evaluate(async () =>
@@ -446,7 +472,7 @@ base('packaged extension initializes the real pinned ReazonSpeech/Silero workers
     const cdp = await context.browser().newBrowserCDPSession();
     const { id } = await cdp.send('Extensions.loadUnpacked', { path: bundle });
     const page = await context.newPage();
-    await page.goto(`chrome-extension://${id}/extension/recorder.html`);
+    await page.goto(`chrome-extension://${id}/extension/model-cache.html`);
     expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
     const result = await page.evaluate(async () => {
       const { TabSession } = await import('./session.js');
@@ -460,12 +486,16 @@ base('packaged extension initializes the real pinned ReazonSpeech/Silero workers
         start() { audio(new Float32Array(16037)); }, stop() {},
       }) });
       try {
+        await session.prepareModels();
+        if (session.view.modelState !== 'ready') throw Error(session.view.error);
+        const warm = session.prepared.pipeline;
         await session.start(42);
+        if (session.session.pipeline !== warm) throw Error('Start replaced the prepared graph');
         const graph = session.session?.pipeline;
         await session.stop();
         return { events, error: session.view.error || undefined,
-          stopped: graph?.state === 'disposed' && session.view.state === 'idle' };
-      } finally { session.cancel(); SpeechToTextNode.prototype.receiveEvent = receiveEvent; }
+          stopped: graph?.state === 'disposed' && session.view.state === 'idle' && session.view.modelState === 'ready' };
+      } finally { await session.close(); SpeechToTextNode.prototype.receiveEvent = receiveEvent; }
     });
     expect(result.error).toBeUndefined(); expect(result.stopped).toBe(true);
     expect(result.events).toContainEqual({ type: 'configuration', model: 'ja-en', modelName: 'ReazonSpeech ja-en', numThreads: 1 });

@@ -1,3 +1,4 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -67,7 +68,19 @@ const test = base.extend({
         await target.bringToFront(); // Match an actual toolbar click on this tab.
         const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
         await cdp.send('Extensions.triggerAction', { id, targetId: targetInfos.find(info => info.url === target.url()).targetId });
-        if (!page.isClosed()) await page.waitForTimeout(100);
+        if (!page.isClosed()) {
+          await page.waitForTimeout(100);
+          const manual = await page.evaluate(async () => {
+            const { readGraph, executableGraph } = await import('./graph.js');
+            return executableGraph(readGraph(localStorage)).nodes.some(node => node.type === 'MicrophoneAudio');
+          });
+          // The fixture's ordinary tab cases explicitly Start after selecting
+          // the toolbar target. Microphone cases exercise that gesture below.
+          if (!manual && !await page.evaluate(() => !!window.targetSession?.session)) {
+            await expect(page.locator('#start')).toBeEnabled();
+            await page.locator('#start').click();
+          }
+        }
       };
       const graph = async ({ source = 'ChromeTabAudio', outputs = [], translation = false, live = true } = {}) => {
         await page.evaluate(async ({ source, outputs, translation, live }) => {
@@ -89,7 +102,10 @@ const test = base.extend({
   },
 });
 async function stop(t) {
-  if (await t.page.locator('#stop').isEnabled()) { await t.page.locator('#stop').click(); await expect(t.page.locator('#start')).toBeEnabled(); }
+  // Native tab end may begin Stop between an enabled check and a click.
+  // Dispatch the control synchronously, then await the restored idle owner.
+  await t.page.locator('#stop').evaluate(button => button.click());
+  await expect(t.page.locator('#start')).toBeEnabled();
 }
 async function emit(t, id, text, type = 'final') { await t.page.evaluate(({ id, text, type }) => window.activeSpeech.receiveEvent({ type, id, text }), { id, text, type }); }
 
@@ -187,6 +203,7 @@ test('first toolbar-created Live popup prepares a pre-focused editor before wind
   const opening = t.context.waitForEvent('page'); await t.invoke(); const live = await opening;
   await live.waitForURL(/extension\/recorder.html/);
   await (await t.context.newCDPSession(live)).send('Emulation.setFocusEmulationEnabled', { enabled: false });
+  await expect(live.locator('#start')).toBeEnabled(); await live.locator('#start').click();
   await expect(live.locator('#status')).toHaveText('Transcription active');
   await expect(live.locator('#output-status')).toContainText('connected and authorized');
   await expect.poll(() => t.website.evaluate(() => document.hasFocus())).toBe(false);
@@ -303,7 +320,7 @@ test('completed translations flow directly to TEXT fan-out and paired Live; prov
     TranslationSchedulerNode.prototype.start = function(context) { this.prepare = async () => {}; return start.call(this, context); };
   });
   await t.graph({ translation: true, outputs: [['out', 'FocusedInputTextOutputNode', true]] }); await t.website.locator('#focused').click(); await t.invoke();
-  await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect(t.page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
+  await expect(t.page.locator('#status')).toHaveText('Transcription active'); await expect(t.page.locator('#translation-status')).toHaveText('Local translation ready');
   await emit(t, 1, 'pending text', 'partial'); await expect(t.page.locator('[data-display="transcript"] tr td:last-child')).toHaveText(['']); await expect(t.website.locator('#focused')).toHaveValue('manual');
   await emit(t, 1, 'first'); await emit(t, 1, 'duplicate'); await emit(t, 2, 'second'); await stop(t);
   await expect(t.website.locator('#focused')).toHaveValue('manualtranslated firsttranslated second'); await expect(t.page.locator('[data-display="transcript"] tr td:last-child')).toHaveText(['translated first', 'translated second']);
@@ -327,7 +344,7 @@ test('selected media reports its temporary limitation without discovering or cap
 });
 
 test('microphone has an explicit Start gesture, native permission denial, fake-device normalized capture and cleanup', async ({ targets: t }) => {
-  await t.graph({ source: 'MicrophoneAudio' }); await t.invoke(); await expect(t.page.locator('#status')).toContainText('Press Start');
+  await t.graph({ source: 'MicrophoneAudio' }); await t.invoke(); await expect(t.page.locator('#model-status')).toHaveText('Ready');
   await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting: 'denied', origin: t.origin });
   await t.page.locator('#start').click(); await expect(t.page.locator('#errors')).toContainText(/denied|Permission/i); await expect(t.page.locator('#status')).toContainText('failed');
   await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting: 'granted', origin: t.origin }); await t.page.locator('#start').click();
@@ -370,8 +387,9 @@ test('native tab capture and permitted microphone run together; tab navigation d
   await t.cdp.send('Browser.setPermission',{permission:{name:'microphone'},setting:'granted',origin:t.origin});
   for(const mode of ['branch-end','cancel','stop']) {
     await t.website.locator('#play').click();await t.invoke();
-    await expect(t.page.locator('#status')).toContainText('Press Start');
+    await expect(t.page.locator('#model-status')).toHaveText('Ready');
     const count=await t.page.evaluate(()=>window.concurrentStreams.length);
+    await t.page.evaluate(()=>{window.lastSessionWorkers=window.concurrentWorkers.filter(worker=>!worker.released);});
     await t.page.locator('#start').click();await expect(t.page.locator('#status')).toHaveText('Transcription active');
     await expect(t.page.locator('#signal')).toContainText('audio: Audio signal detected.');
     await expect(t.page.locator('#signal')).toContainText('mic: Audio signal detected.');
@@ -396,6 +414,6 @@ test('native tab capture and permitted microphone run together; tab navigation d
       expect(copy).toEqual(original); // Includes worklet/resampler PCM delivered during graceful drain.
     }
     expect(await t.page.evaluate(()=>window.concurrentStreams.every(record=>record.stream.getTracks().every(track=>track.readyState==='ended')))).toBe(true);
-    expect(await t.page.evaluate(()=>window.concurrentWorkers.every(worker=>worker.released))).toBe(true);
+    await expectPreparedIdle(t.page, { workers: 'concurrentWorkers' });
   }
 });

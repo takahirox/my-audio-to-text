@@ -5,6 +5,77 @@ Live session. Start executes complete paths to outputs. Incomplete draft branche
 remain saveable and do not allocate capture, model Workers or output permissions.
 The active graph is an immutable snapshot; edits take effect at the next Start.
 
+## Live model lifecycle (#239)
+
+Save prepares and verifies browser-local model **files**, including parked Nodes;
+it never starts inference Workers or initializes GPU models. Opening Live selects
+only `executableGraph(savedGraph)` routes to output sinks and immediately
+initializes every required model instance, including models behind Button/Hold
+gates. Live shows **Preparing models…**, with real Node/step counts when available,
+and disables Start until every instance is ready. A graph without AI becomes
+Ready after ordinary executable-graph validation.
+
+**Ready** means inference resources are initialized, rather than just cached.
+Start transfers the same runtime, Workers and model instances to the session;
+only then do sources, startup TEXT/NUMBER emissions, outputs, and explicit
+microphone/speaker/capture gestures run. Preloading runs no inference, dummy input,
+trigger, capture or output hook. Hold still gates execution. Whisper.language and
+ReazonSpeech.maxDuration constants are read and validated before model loading,
+and their configuration deliveries are consumed exactly once. A single constant-fed
+TextFormatter can supply startup text too. A configuration
+dependent on future session data cannot be ready before Start: Live reports the
+Node/port and asks for a Text/Number startup constant instead of guessing a default.
+Other consumers of those constants still receive ordinary session startup values.
+
+The model lifecycle is separate from the session's recording state:
+
+| Model state | Admission and transition |
+| --- | --- |
+| `preparing` | Start disabled; initialize an inert runtime from a saved snapshot. |
+| `ready` | All executable models ready; Start also checks existing input/tab constraints. |
+| `active` | Start owns that same runtime; saved edits wait until the session ends. |
+| `error` | Start disabled; identify the failing Node and show Graph/Models recovery plus Retry models. |
+| `canceled` | Stop during preparation releases resources; Retry models resumes preparation. |
+| `closed` | Terminal; release all Workers/media/GPU resources and suppress late callbacks. |
+
+Stop drains outputs, disposes the used single-session graph, and prepares a fresh
+runtime before re-enabling Start. Internal Cancel releases the old owner before
+the same idle restoration. Completed display output remains visible. Each Node
+keeps its own processing state and dedicated Workers; cached immutable files are
+shared, and Start never creates a second copy of its ready models. Repeated
+prepares/Starts coalesce. A Save during idle/preparation invalidates and tears down
+the obsolete owner before preparing the new snapshot. Running sessions retain
+their immutable graph until Stop/Cancel. Closing Live releases both pending and
+active resources; verified Cache Storage files persist.
+
+Live initialization is cache-only: it cannot recover missing, corrupt or evicted
+optional weights by downloading. Save in Graph or use Models preparation, then
+**Retry models** in Live. Unsupported hardware, memory failures, initialization
+timeouts, Worker failures and observed GPU device loss invalidate readiness.
+There is no automatic retry loop or model substitution. Ordinary session branch
+errors remain visible while healthy paths finish. Opening Graph/Models alone
+never opts into this GPU lifetime.
+
+Developer checks: `tests/live-model-preparation.test.js` covers gated and multiple
+models, parked/no-model graphs, configured ASR with translation, graph replacement,
+failures, timeouts, cancellation and repeated ownership transfers.
+`tests/extension/live-model-preparation.spec.js` exercises the real MV3 Live UI
+with controlled Workers, including disabled Start, no remote requests, recovery
+and replacement. These deterministic fixtures establish lifecycle behavior;
+hardware/model inference qualification remains in the opt-in real-model suites.
+For production preloading coverage, run `npm run setup:extension`, then
+`python3 scripts/review-opus-mt-assets.py`,
+`python3 scripts/review-text-summary-assets.py`,
+`python3 scripts/review-tts-assets.py` and
+`python3 scripts/prepare-reazon-ja-en-fixtures.py` to seed the pinned test assets.
+`npm run test:live-model-real` checks real Whisper + OPUS-MT, a Button/Hold-gated
+LFM2 summary and both Kokoro phonemizers. It verifies readiness before Start,
+no pre-Start permissions/inference, Worker reuse on first use, two sessions,
+Stop/reprepare and pagehide termination, with networking blocked during Live.
+Each case saves its source hashes, Worker observations, outputs and host details
+to `test-results`; retained validation is in
+[`evidence/live-model-preparation-239.json`](evidence/live-model-preparation-239.json).
+
 ## Editor and saved graphs
 
 Use Add Node to open a searchable list beside the toolbar button. Search or

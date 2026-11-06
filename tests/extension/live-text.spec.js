@@ -30,7 +30,7 @@ test('MV3 summary TEXT snapshots render literally through Display.input, drain S
   await live.locator('#start').click();await expect(content).toHaveText(literal);
   await live.evaluate(()=>window.summarySession.session.pipeline.entries.get('source').context.emit('value','slow'));
   await expect.poll(()=>live.evaluate(()=>window.graphWorkers.some(worker=>!worker.released&&worker.messages.some(message=>message.type==='summarize'&&message.text==='slow')))).toBe(true);
-  await live.evaluate(() => window.dispatchEvent(new Event('pagehide')));await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText(literal);
+  await live.evaluate(() => window.dispatchEvent(new Event('pagehide')));await expect(live.locator('#start')).toBeDisabled();await expect(content).toHaveText(literal);
   expect(await live.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
 });
 

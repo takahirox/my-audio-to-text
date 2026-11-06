@@ -1,3 +1,4 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -34,8 +35,19 @@ const settle = page => page.evaluate(() => window.modelPipeline.entries.get('sum
 const state = page => page.evaluate(() => ({ failed:window.modelPipeline.entries.get('summary').failed, errors:window.modelPipeline.errors.map(e=>e.message), state:window.modelPipeline.state }));
 
 for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
-  for (const phase of ['load', 'inference']) test(`${type}: ${phase} failure is tracked once; transcription survives Stop and restart`, async ({ graphExtension: f }) => {
-    const page = await setup(f, type, phase); await startGraph(page);
+  for (const phase of ['load', 'inference']) test(`${type}: ${phase === 'load' ? 'load failure blocks Start and allows explicit retry' : 'inference failure is tracked once; transcription survives Stop and restart'}`, async ({ graphExtension: f }) => {
+    const page = await setup(f, type, phase);
+    if (phase === 'load') {
+      await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+      await expect(page.locator('#errors')).toContainText('Controlled model load failure');
+      await expect(page.locator('#start')).toBeDisabled();
+      await expect.poll(() => page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+      await page.locator('#retry-models').click();
+      await expect(page.locator('#model-status')).toHaveText('Models unavailable');
+      await expect(page.locator('#start')).toBeDisabled();
+      return;
+    }
+    await startGraph(page);
     if (phase === 'inference') {
       await emitFinal(page, 'first'); await settle(page); await expect(notes(page)).toHaveText('committed notes');
       await emitFinal(page, 'fail'); await settle(page);
@@ -52,13 +64,13 @@ for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
     await page.locator('#stop').click(); await expect(page.locator('#status')).toHaveText('Stopped. Outputs are ready.');
     await expect(transcript(page)).toContainText('surviving transcript');
     await expect(notes(page)).toHaveText(phase === 'load' ? '' : 'committed notes');
-    expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);
+    await expectPreparedIdle(page);
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
     await startGraph(page); await emitFinal(page, 'fresh');
     if (phase === 'inference') { await expect(page.locator('#errors')).toBeEmpty(); await settle(page); await expect(notes(page)).toHaveText('committed notes'); }
     await expect(transcript(page)).toHaveText('fresh');
     await page.evaluate(() => window.graphSession.cancel()); await expect(page.locator('#start')).toBeEnabled();
-    expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);
+    await expectPreparedIdle(page);
   });
 
   test(`${type}: internal cancellation interrupts Stop inference and a restart rejects stale output`, async ({ graphExtension: f }) => {
@@ -67,7 +79,7 @@ for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
     await emitFinal(page, 'slow'); await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Finalizing');
     await page.evaluate(() => window.graphSession.cancel()); await expect(page.locator('#start')).toBeEnabled();
     await expect(notes(page)).toHaveText('committed notes');
-    expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);
+    await expectPreparedIdle(page);
     await startGraph(page); await emitFinal(page, 'fresh'); await settle(page);
     await page.waitForTimeout(1600); await expect(notes(page)).toHaveText('committed notes'); await expect(transcript(page)).toHaveText('fresh');
     await page.locator('#stop').click(); await expect(page.locator('#status')).toHaveText('Stopped. Outputs are ready.');

@@ -12,7 +12,7 @@ async function save(editor) {
 const card = editor => editor.locator('#graph-models .model-card');
 
 test('palette, Save and reload preserve current connected graph and parked directions; shared verified preparation and recovery', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
+  const live = await openGraph(f, { live: false }), editor = live.editor;
   for (const type of ['Text', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'Display']) await add(editor, type);
   await editor.locator('#graph-help').click();
   await editor.locator('#graph-asset-notice summary').click();
@@ -47,7 +47,7 @@ test('palette, Save and reload preserve current connected graph and parked direc
 });
 
 for (const mode of ['error', 'short', 'corrupt', 'hold']) test(`Gemma Save survives ${mode}; Cancel and retry recover the same saved graph`, async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor; f.mode(mode);
+  const live = await openGraph(f, { live: false }), editor = live.editor; f.mode(mode);
   await add(editor, 'TranslateGemmaEnJa'); await save(editor);
   if (mode === 'hold') {
     await expect(card(editor).locator('.model-status')).toHaveText('Downloading');
@@ -64,7 +64,7 @@ for (const mode of ['error', 'short', 'corrupt', 'hold']) test(`Gemma Save survi
 // These tests execute the production owned module Worker, graph builder,
 // scheduler, verified cache and prompt. Only hardware/model inference are fixtures.
 for (const mode of ['normal', 'missing-gpu', 'no-adapter', 'inference-error', 'cancel']) test(`packaged Gemma Worker/graph: ${mode}, repeat, grouped formatter and plain fan-out`, async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
+  const live = await openGraph(f, { live: false }), editor = live.editor;
   await add(editor, 'TranslateGemmaEnJa'); await save(editor);
   await expect(card(editor).locator('.model-status')).toContainText('Ready');
   const file = path.join(f.root, 'web/translategemma-worker.js');
@@ -107,7 +107,7 @@ for (const mode of ['normal', 'missing-gpu', 'no-adapter', 'inference-error', 'c
 });
 
 for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']) test(`${type}: explicit context graph runs the production prompt Worker and clears to the official path`, async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
+  const live = await openGraph(f, { live: false }), editor = live.editor;
   await add(editor, type); await save(editor);
   await expect(card(editor).locator('.model-status')).toContainText('Ready');
   const before = f.requests.length;

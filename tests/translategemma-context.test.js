@@ -43,7 +43,7 @@ for (const [direction, source, target] of [['en-ja', 'English', 'Japanese'], ['j
 // replaced: these assertions establish prompt/transport contracts, not quality.
 async function workerFixture(t, direction) {
   const root = await mkdtemp(join(tmpdir(), 'gemma-context-'));
-  for (const name of ['translategemma-worker.js', 'translategemma-context.js', 'translation-worker.js', 'translation-models.js']) {
+  for (const name of ['translategemma-worker.js', 'translategemma-context.js', 'translation-worker.js', 'translation-models.js', 'gpu-lifecycle.js']) {
     await copyFile(new URL('../web/' + name, import.meta.url), join(root, name));
   }
   await writeFile(join(root, 'package.json'), '{"type":"module"}');

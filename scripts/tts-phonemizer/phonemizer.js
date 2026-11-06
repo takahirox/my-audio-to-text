@@ -4,6 +4,9 @@ import createEngine from './phonemizer-engine.mjs';
 
 const engine = createEngine().then(module => new module.eSpeakNGWorker());
 
+// Wait for WASM initialization without synthesizing a dummy input.
+export function initialize() { return engine; }
+
 export async function phonemize(text, language = 'en-us') {
   if (!['en', 'en-us'].includes(language)) throw new Error('Unsupported English phonemizer language.');
   const worker = await engine;

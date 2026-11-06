@@ -1,6 +1,7 @@
 import { TRANSLATE_GEMMA } from './translation-models.js';
 import { serveTranslationWorker, translationRuntime, modelLoadError } from './translation-worker.js';
 import { translateGemmaContextPrompt, validateTranslateGemmaContext, validateTranslateGemmaPrompt } from './translategemma-context.js';
+import { watchGpuDevice } from './gpu-lifecycle.js';
 
 serveTranslationWorker(async (progress, { cacheOnly = false, direction = 'ja-en' } = {}) => {
   if (!['ja-en', 'en-ja'].includes(direction)) throw new Error('Unsupported TranslateGemma direction.');
@@ -21,6 +22,7 @@ serveTranslationWorker(async (progress, { cacheOnly = false, direction = 'ja-en'
     translate = await pipeline('text-generation', TRANSLATE_GEMMA.id, {
       ...TRANSLATE_GEMMA, progress_callback: progress,
     });
+    watchGpuDevice(env.backends.onnx.webgpu, error => self.postMessage({ type: 'error', fatal: true, message: error.message }));
   } catch (error) { throw modelLoadError(new Error(`TranslateGemma 4B needs several GB of free RAM/GPU memory and a compatible WebGPU adapter. ${error.message || error}`)); }
   return async (text, { context = '' } = {}) => {
     validateTranslateGemmaContext(context);

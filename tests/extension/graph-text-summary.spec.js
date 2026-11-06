@@ -46,7 +46,7 @@ test('both text processors: parked Save persists, independent settings, cancella
   const count = f.requests.length; await save();
   for (const card of await cards.all()) await expect(card).toHaveAttribute('data-state', 'Ready');
   expect(f.requests.length).toBe(count);
-  expect(await page.evaluate(() => window.graphWorkers.length)).toBe(0);
+  expect(await page.evaluate(() => window.graphWorkers.filter(w => w.url.includes('text-summary-worker')).length)).toBe(0);
 });
 
 // Production module Worker + policy + cache-only loader, with a deterministic

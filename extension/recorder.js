@@ -47,6 +47,8 @@ const session = new TabSession(view => {
   const labels = { idle: 'Idle', loading: 'Loading', starting: 'Starting', running: view.status === 'Transcription active' ? 'Recording' : 'Running', stopping: 'Stopping', completed: 'Completed', canceled: 'Canceled', error: 'Error' };
   element('session-state').textContent = labels[state];
   element('session-state').dataset.state = state;
+  element('model-status').textContent = view.state === 'idle' ? (view.modelStatus || '') : '';
+  element('retry-models').hidden = !['error', 'canceled'].includes(view.modelState);
   element('status').textContent = view.status;
   element('session-prompt').textContent = view.prompt;
   element('errors').textContent = graphError || view.error;
@@ -66,8 +68,8 @@ const session = new TabSession(view => {
   element('tts-output').hidden = !audioURLs.size && !hasSpeaker;
   element('model-recovery').hidden = !view.modelRecovery;
   const needsTab = nextGraph.nodes.some(node => node.type === 'ChromeTabAudio');
-  element('start').disabled = !!graphError || running || view.preparingOutput || (needsTab && !Number.isInteger(view.tabId));
-  element('stop').disabled = !['loading', 'starting', 'running'].includes(view.state);
+  element('start').disabled = !!graphError || running || view.modelState !== 'ready' || view.preparingOutput || (needsTab && !Number.isInteger(view.tabId));
+  element('stop').disabled = view.modelState !== 'preparing' && !['loading', 'starting', 'running'].includes(view.state);
   const nextState = JSON.stringify(graphState(view));
   if (!closed && nextState !== publishedState) { publishedState = nextState; stateChannel.postMessage(graphState(view)); }
 }, { graph, onSynthesizedAudio: (audio, signal) => {
@@ -79,12 +81,22 @@ const session = new TabSession(view => {
   row.append(player, link); element('audio-outputs').append(row); session.update({ ttsStatus: 'Audio ready. Press Play to listen or download WAV.' });
 } });
 session.update();
+if (!graphError) void session.prepareModels();
 function refreshSaved() {
-  try { const next = readGraph(localStorage); graphError = ''; session.setGraph(next); return true; }
-  catch (error) { graphError = `Saved graph unavailable: ${error.message}`; session.update(); return false; }
+  try {
+    const next = readGraph(localStorage); graphError = ''; session.setGraph(next);
+    if (!session.livePreparation) void session.prepareModels();
+    return true;
+  }
+  catch (error) {
+    graphError = `Saved graph unavailable: ${error.message}`;
+    if (!session.session && session.prepared) session.preparationFailed(session.prepared, error);
+    session.update(); return false;
+  }
 }
 element('start').onclick = () => { clearAudio(); if (refreshSaved()) void session.start(session.view.tabId, { microphoneGesture: true, speakerGesture: true }); };
 element('enable-speaker').onclick = () => session.enableSpeakers();
+element('retry-models').onclick = () => { if (refreshSaved()) void session.prepareModels(); };
 element('stop').onclick = () => { void session.stop(); };
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return;
@@ -96,7 +108,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 });
 chrome.tabs.onRemoved.addListener(tabId => { session.tabEnded(tabId); });
 chrome.tabs.onUpdated.addListener((tabId, change) => { if (change.status === 'loading') { session.tabEnded(tabId); } });
-window.addEventListener('pagehide', () => { session.cancel(); clearAudio(); closed = true; stateChannel.close(); });
+window.addEventListener('pagehide', () => { closed = true; void session.close(); clearAudio(); stateChannel.close(); });
 window.addEventListener('error', event => session.fail(event.message));
 window.addEventListener('unhandledrejection', event => session.fail(event.reason?.message || String(event.reason)));
 window.addEventListener('storage', event => {
@@ -109,7 +121,8 @@ async function invokeTab(tabId) {
   session.update({ tabId });
   if (!refreshSaved()) return;
   await session.prepareFocusedOutput(tabId);
-  if (!closed && !session.session) void session.start(tabId);
+  // Toolbar invocation selects the target. Capture and permission requests
+  // remain tied to the explicit Start button after model readiness.
 }
 const params = new URLSearchParams(location.search), tabId = params.has('tab') ? Number(params.get('tab')) : NaN;
 if (params.has('error')) session.update({ error: params.get('error'), tabId });

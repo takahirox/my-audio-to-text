@@ -1,3 +1,4 @@
+import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { GRAPH_VERSION } from '../../extension/graph.js';
 import { openPalette, clickGraphAction } from './ui-controls.js';
 import { writeFile, mkdir } from 'node:fs/promises';
@@ -47,7 +48,7 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   await page.evaluate(() => window.capture.emit('audio', new Float32Array(37).fill(.1)));
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await expect(page.locator('.display-content tr td:first-child')).toHaveText(['en: 96000', 'en: 37']);
-  expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+  await expectPreparedIdle(page);
   await startGraph(page); await page.evaluate(() => window.capture.emit('audio', new Float32Array(37).fill(.1)));
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await expect(page.locator('.display-content')).toHaveText(['ja: 37'].join('\n'));
@@ -58,7 +59,7 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
     await expect(editor.locator('#graph-save')).toBeEnabled();
     await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
     await expect(page.locator('#errors')).toContainText('Whisper.language must be en or ja');
-    await expect(page.locator('#start')).toBeEnabled();
+    await expect(page.locator('#start')).toBeDisabled();
   }
   expect(f.requests).toEqual([]);
 });
@@ -96,6 +97,7 @@ test('MV3 Text literal and empty values round-trip and deliver once to an ordina
     await editor.reload(); await editor.getByRole('button', { name: 'Select text', exact: true }).click();
     await expect(editor.getByLabel('text value', { exact: true })).toHaveValue(value);
     await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+    await startReadyLive(page);
     await expect(page.locator('#status')).toHaveText('Processing active');
     await expect(page.locator('.display-content')).toHaveText(value);
     await expect(page.locator('.display-content img')).toHaveCount(0);
@@ -116,7 +118,7 @@ for (const duringStop of [false, true]) test(`MV3 Whisper pagehide cancellation 
   await expect.poll(() => page.evaluate(() => !!window.pendingDecode)).toBe(true);
   if (duringStop) await page.locator('#stop').click();
   await page.evaluate(() => { window.lateCallback=window.pendingWorker.onmessage; });
-  await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeEnabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeDisabled();
   await page.evaluate(() => window.lateCallback({ data: { type: 'final', session: window.pendingDecode.session, id: window.pendingDecode.id, text: 'late' } }));
   await expect(page.locator('.display-content')).toBeEmpty();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
@@ -128,11 +130,11 @@ test('MV3 Whisper decode and missing model errors release workers and permit ret
   await expect(page.locator('#errors')).toContainText('Fixture decode error');
   await expect(page.locator('#status')).toHaveText('Transcription active');
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+  await expectPreparedIdle(page);
   await startGraph(page); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await writeFile(path.join(f.root, 'web/vendor/translation/transformers.js'), `export const env={backends:{onnx:{wasm:{}}}}; export async function pipeline(){throw Error('Missing packaged model');}`);
   await page.reload();
   await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
-  await expect(page.locator('#errors')).toContainText('Missing packaged model'); await expect(page.locator('#start')).toBeEnabled();
+  await expect(page.locator('#errors')).toContainText('Missing packaged model'); await expect(page.locator('#start')).toBeDisabled();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
 });

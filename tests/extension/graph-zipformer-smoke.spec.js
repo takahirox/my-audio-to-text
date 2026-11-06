@@ -1,3 +1,4 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { selectZipformer } from './zipformer-fixture.js';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -64,7 +65,7 @@ test('real packaged English online Zipformer: incremental speech, cap, Stop tail
           expect(next?.id).toBe(1); expect(next.text).not.toContain(final.text);
         }
       } else { expect(texts).toEqual([]); expect(partial).toBeUndefined(); }
-      expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
+      await expectPreparedIdle(page, { timeout: 300000 });
       runs.push({ name, feedStartMs, stopRequestMs, firstPartialMs: partial ? partial.ms - feedStartMs : null, firstPartialAtAudioSeconds: partial ? partial.fed / 16000 : null, lastFinalAfterStopMs: final ? events.filter(e => e.type === 'final').at(-1).ms - stopRequestMs : null, samples: pcm.length, pacing: name === '0.wav' ? '100ms blocks paced at real time' : 'irregular blocks accelerated at 5ms each', texts, loadMs: loaded - start, stopDrainMs: Date.now() - stopAt, totalMs: Date.now() - start, events });
       console.log(JSON.stringify({ ...runs.at(-1), events: events.length }));
     }

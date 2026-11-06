@@ -28,6 +28,7 @@ serveTts({
     if (voiceData.length !== 510 * 256) throw new Error('Invalid Kokoro voice embedding.');
     if (voice === 'af_heart') {
       const english = await import('./kokoro-english.js');
+      await english.prepareEnglishPhonemizer();
       phonemize = text => english.phonemize(text, 'a');
     } else {
       progress('Loading Japanese Open JTalk frontend and dictionary…');

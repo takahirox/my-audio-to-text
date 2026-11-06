@@ -265,7 +265,7 @@ test(`${real ? `real pinned ${model}` : `controlled ${model} streaming transport
     await page.locator('#start').click();
     await expect.poll(() => page.evaluate(() => window.ttsEvents.filter(event => event.type === 'chunk').length), { timeout: 90000 }).toBeGreaterThan(record.events.filter(event => event.type === 'chunk').length);
     const cancelAt = Date.now();
-    await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeEnabled();
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeDisabled();
     const cancelMs = Date.now() - cancelAt;
     const count = await page.evaluate(() => window.scheduleEvents.length); await page.waitForTimeout(150);
     expect(await page.evaluate(() => window.scheduleEvents.length)).toBe(count);

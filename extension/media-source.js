@@ -16,8 +16,8 @@ export class ExtensionMicrophoneAudioNode extends ExtensionTabAudioNode {
     super(null, { ...options, sourceFactory: (_tab, audio, ended) => {
       const source = new Microphone(audio, ended);
       source.getMedia = async () => {
-        if (!stream) throw Error('Press Start in Live to permit microphone capture.');
-        return stream;
+        if (!this.stream) throw Error('Press Start in Live to permit microphone capture.');
+        return this.stream;
       };
       return source;
     } });

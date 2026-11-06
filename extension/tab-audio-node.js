@@ -4,7 +4,8 @@ import { ExtensionTab } from './tab-source.js';
 // Reuse the shared capture lifecycle and normalized mono 16 kHz audio port.
 export class ExtensionTabAudioNode extends BrowserTabAudioNode {
   constructor(tabId, { sourceFactory = (...args) => new ExtensionTab(...args), ...options } = {}) {
-    super({ ...options, sourceFactory: (audio, ended) => sourceFactory(tabId, audio, ended) });
+    super({ ...options, sourceFactory: (audio, ended) => sourceFactory(this.tabId, audio, ended) });
+    this.tabId = tabId;
   }
   start(context) {
     // Stop can arrive before the pipeline has started this producer.

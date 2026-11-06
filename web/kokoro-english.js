@@ -2,7 +2,9 @@
 // Copyright hexgrad, Apache-2.0; see licenses/kokoro.txt.
 // Changed: import the local eSpeak NG adapter rebuilt from pinned source.
 // Corresponding source/data/build scripts: tts-assets/phonemizer-source.tar.gz.
-import { phonemize as espeakng } from "./tts-assets/phonemizer.js";
+import { phonemize as espeakng, initialize } from "./tts-assets/phonemizer.js";
+
+export function prepareEnglishPhonemizer() { return initialize(); }
 
 /**
  * Helper function to split a string on a regex, but keep the delimiters.

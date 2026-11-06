@@ -5,7 +5,7 @@ import path from 'node:path';
 import { windowGraph, windowTranscript, closedWindows } from '../fixtures/windowed-translation.js';
 
 test('palette exposes NUMBER threshold inputs, one TEXT output, no threshold Settings and reloads', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
+  const live = await openGraph(f, { live: false }), editor = live.editor;
   for (const type of ['TextWindow', 'Number']) {
     await openPalette(editor); await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
   }
@@ -35,7 +35,7 @@ for (const mode of ['baseline', 'window']) test(`packaged ${mode}: committed ASR
       if (data.type === 'drain') postMessage({id:data.id,type:'drained'});
       if (data.type === 'translate') setTimeout(()=>postMessage({id:data.id,type:'result',texts:['訳:'+data.text]}), 30);
     };`);
-  const live = await openGraph(f);
+  const live = await openGraph(f, { live: false });
   // Use the production ASR final emitter with fixture recognition/capture.
   // The translator remains a real owned module Worker with controlled results.
   const graph = windowGraph(mode, 'OpusMtEnJa');

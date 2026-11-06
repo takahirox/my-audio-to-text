@@ -1,3 +1,4 @@
+import { expectPreparedIdle } from './live-lifecycle.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
@@ -15,8 +16,8 @@ test('MV3 portable ITEM graph keeps final rows visible through queued Worker rep
   await live.editor.reload(); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
   await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
   expect(await live.editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
-  await live.evaluate(async () => { const { TabSession } = await import('./session.js'); const start = TabSession.prototype.start;
-    TabSession.prototype.start = function(...args) { this.prepareTranslation = async () => {}; return start.apply(this, args); };
+  await live.evaluate(async () => { const { TabSession } = await import('./session.js'); const start = TabSession.prototype.prepareModels;
+    TabSession.prototype.prepareModels = function(...args) { this.prepareTranslation = async () => {}; return start.apply(this, args); };
     window.keyedReply = () => graphWorkers.findLast(worker => worker.url.endsWith('opus-mt-en-ja-worker.js') && !worker.released).postMessage({ type: 'fixture-complete' });
   });
   await startGraph(live); const rows = live.locator('[data-display="display"] tr'), cells = live.locator('[data-display="display"] td');
@@ -35,7 +36,7 @@ test('MV3 portable ITEM graph keeps final rows visible through queued Worker rep
   await startGraph(live); await expect(rows).toHaveCount(0);
   await live.evaluate(() => speech.receiveEvent({ type: 'final', id: 0, text: 'pending' })); await expect(cells).toHaveText(['pending', '']);
   await live.evaluate(() => window.graphSession.cancel()); await expect(live.locator('#start')).toBeEnabled(); await expect(cells).toHaveText(['pending', '']);
-  expect(await live.evaluate(() => graphWorkers.every(worker => worker.released))).toBe(true);
+  await expectPreparedIdle(live);
   await live.editor.reload(); expect(await live.editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
 });
 

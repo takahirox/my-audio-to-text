@@ -1,3 +1,4 @@
+import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
@@ -78,6 +79,7 @@ test('real concurrent Parakeet v3 and Moonshine Medium: native tab capture, Live
       const before = await resources(), start = Date.now();
       const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
       await cdp.send('Extensions.triggerAction', { id, targetId: targetInfos.find(t => t.url === website.url()).targetId });
+      await startReadyLive(live, { workers: 'workers', timeout: 120000 });
       await expect(live.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
       await expect(live.locator('#errors')).toBeEmpty(); const loaded = Date.now(), samples = [await resources()];
       expect(await live.evaluate(() => window.workers.filter(w => !w.released).length)).toBe(2);
@@ -91,7 +93,7 @@ test('real concurrent Parakeet v3 and Moonshine Medium: native tab capture, Live
       const moonshine = (await live.locator('[data-display="medium"] .display-content').textContent()).split('\n').filter(Boolean);
       expect(parakeet.join(' ')).toMatch(/yellow lamps/i); expect(moonshine.join(' ')).toMatch(/Moonshine:.*yellow lamps/i);
       await expect(website.locator('textarea')).toHaveValue('prefix' + parakeet.join(''));
-      expect(await live.evaluate(() => window.workers.every(w => w.released))).toBe(true);
+      await expectPreparedIdle(live, { workers: 'workers', timeout: 120000 });
       expect(await live.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(t => t.status === 'active').length)).toBe(0);
       const events = await live.evaluate(() => window.events);
       runs.push({ repeat, loadMs: loaded - start, stopDrainMs: Date.now() - stop, cpuSeconds: samples.at(-1).cpuSeconds - before.cpuSeconds,

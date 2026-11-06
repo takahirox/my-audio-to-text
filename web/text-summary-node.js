@@ -38,6 +38,7 @@ export class TextSummaryNode {
       worker.onmessage = ({ data }) => {
         if (this.disposed || this.worker !== worker || context.signal.aborted) return;
         if (data.type === 'progress') { this.event(data); return; }
+        if (data.type === 'error' && data.fatal) { this.failure(Error(data.message)); return; }
         const pending = this.pending.get(data.id);
         if (!pending) return;
         this.pending.delete(data.id); clearTimeout(pending.timer);

@@ -148,7 +148,7 @@ export class SpeechToTextNode {
     this.context = context;
     this.abort = () => this.dispose();
     context.signal.addEventListener('abort', this.abort, { once: true });
-    this.waitingConfiguration = this.configurationConnected || context.connectedInputs?.includes(this.configurationPort) === true;
+    this.waitingConfiguration = !this.preconfigured && (this.configurationConnected || context.connectedInputs?.includes(this.configurationPort) === true);
     this.pendingAudio = []; this.pendingSamples = 0;
     if (this.waitingConfiguration) {
       this.onEvent({ type: 'progress', message: `Waiting for startup ${this.configurationPort}. Model has not started.` });

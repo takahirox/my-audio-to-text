@@ -16,7 +16,7 @@ import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
 import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
-import { executableGraph, INPUT_TYPES, ASR_TYPES } from './graph.js';
+import { executableGraph, INPUT_TYPES, ASR_TYPES, nodeDefinition } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 import { TextNode } from '../web/text-constant-node.js';
 import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
@@ -31,6 +31,7 @@ import { KeyedTextPairNode } from '../web/keyed-text-pair-node.js';
 import { KeyedTextCoalesceNode } from '../web/keyed-text-coalesce-node.js';
 import { TextSlidingWindowNode } from '../web/text-sliding-window-node.js';
 import { TextWindowNode } from '../web/text-window-node.js';
+import { graphModelRequirements } from './graph-model-preparation.js';
 
 // Branch-local lifecycle adapter around an actual production TTS Node. Missing
 // assets, initialization or synthesis failure must leave transcription usable.
@@ -109,6 +110,69 @@ function sharedTabCapture(factory, stopping) {
   };
 }
 
+// Evaluate only configuration ancestors, with fresh data-node state and the
+// ordinary Pipeline delivery/grouping/sampling semantics. Resource owners,
+// buttons, triggered gates and sinks are inert declarations: this pass cannot
+// capture, infer, fire a trigger or publish output. Dispose even timer-backed
+// data nodes before initializing models; Start gets untouched processing state.
+const startupDataNodes = { Text: TextNode, Number: NumberNode, TextFormatter: TextFormatterNode,
+  TextAccumulator: TextAccumulatorNode, TextSlidingWindow: TextSlidingWindowNode, TextWindow: TextWindowNode,
+  KeyedTextCoalesce: KeyedTextCoalesceNode, KeyedTextPair: KeyedTextPairNode,
+  KeyedPairedTextAccumulator: KeyedPairedTextAccumulatorNode, Hold: HoldNode };
+async function startupValues(graph, configurations, signal, timeoutMs) {
+  const needed = new Set(), pending = [...configurations.values()].map(route => route.from[0]);
+  while (pending.length) {
+    const id = pending.pop();
+    if (needed.has(id)) continue;
+    needed.add(id);
+    for (const route of graph.edges) if (route.to[0] === id) pending.push(route.from[0]);
+  }
+  const nodes = {}, connections = graph.edges.filter(route => needed.has(route.from[0]) && needed.has(route.to[0]));
+  for (const spec of graph.nodes.filter(node => needed.has(node.id))) {
+    const Node = startupDataNodes[spec.type];
+    const triggered = spec.type === 'Hold' && graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'trigger');
+    const definition = nodeDefinition(spec, graph);
+    nodes[spec.id] = Node && !triggered ? new Node(spec.settings)
+      : { inputs: definition.inputs, outputs: definition.outputs, receive() {} };
+  }
+  const values = new Map();
+  let wake;
+  for (const [id, route] of configurations) {
+    let sink = `${id}:startup`;
+    while (Object.hasOwn(nodes, sink)) sink += ':';
+    nodes[sink] = { inputs: { value: nodeDefinition(graph.nodes.find(node => node.id === id), graph).inputs[route.to[1]] },
+      outputs: {}, receive: (_, value) => { values.set(id, value); wake?.(); } };
+    connections.push({ from: route.from, to: [sink, 'value'] });
+  }
+  const startup = new Pipeline({ nodes, connections, onError: () => wake?.() });
+  const abort = () => { void startup.dispose(); };
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    signal.throwIfAborted();
+    await startup.start();
+    const deadline = Date.now() + timeoutMs;
+    while (true) {
+      // Settle startup deliveries without Stop's synthetic tail flushes. A
+      // constant-fed TextWindow may legitimately deliver after its own timer.
+      for (const entry of startup.order) await startup.wait(entry, entry.queue);
+      if (startup.errors.length || values.size === configurations.size || !startup.order.some(entry => entry.node.timer != null)) break;
+      let timer;
+      try {
+        await startup.wait(startup.order[0], new Promise(resolve => {
+          wake = resolve; timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+        }));
+      } finally { wake = null; clearTimeout(timer); }
+      if (Date.now() >= deadline && values.size !== configurations.size) throw Error('Startup configuration timed out. Supply configuration before capture in Graph Editor and Save.');
+    }
+    signal.throwIfAborted();
+    if (startup.errors.length) throw startup.errors[0];
+    return values;
+  } finally {
+    signal.removeEventListener('abort', abort);
+    await startup.dispose();
+  }
+}
+
 export function buildGraph(graph, options) {
   const description = executableGraph(graph);
   if (!description.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
@@ -140,7 +204,7 @@ export function buildGraph(graph, options) {
       case 'Hold': node = new HoldNode({ onState: state => options.onHoldState?.(state, spec.id) }); break;
       case 'Text': node = new TextNode(spec.settings); break;
       case 'TextSummaryLfm2': case 'TextSummaryQwen35':
-        node = new TextSummaryNode({ ...spec.settings, lazy: gatedAncestor(spec.id), type: spec.type, workerFactory: options.textSummaryWorkerFactory,
+        node = new TextSummaryNode({ ...spec.settings, lazy: !options.preload && gatedAncestor(spec.id), type: spec.type, workerFactory: options.textSummaryWorkerFactory,
           onEvent: event => options.onTextSummaryEvent?.(event, spec.id) }); break;
       case 'IfCondition':
         node = new IfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,
@@ -204,6 +268,56 @@ export function buildGraph(graph, options) {
     if (INPUT_TYPES.includes(spec.type)) resources.audioSources.set(spec.id, node);
     if (ASR_TYPES.includes(spec.type)) resources.speechNodes.set(spec.id, node);
   }
-  pipeline = new Pipeline({ nodes, connections: description.edges, onError: options.onError });
-  return { ...resources, description, pipeline };
+  // Resolve startup data on isolated composition nodes, without running the
+  // Live graph's hooks. Remove just these deliveries in the Live runtime
+  // so Start cannot run a second configuration pass against already warm ASR.
+  const configurations = new Map();
+  if (options.preload) for (const [id, node] of resources.speechNodes) {
+    // Preserve intent even if the configuration producer is incomplete/parked.
+    const route = graph.edges.find(route => route.to[0] === id && route.to[1] === node.configurationPort);
+    if (route) configurations.set(id, route);
+  }
+  const connections = description.edges.filter(route => configurations.get(route.to[0])?.to[1] !== route.to[1]);
+  pipeline = new Pipeline({ nodes, connections, onError: options.onError });
+  let preparing;
+  const prepareModels = () => preparing ??= (async () => {
+    const values = configurations.size ? await startupValues(graph, configurations, pipeline.order[0].controller.signal, options.modelLoadTimeoutMs ?? 180000) : new Map();
+    const models = description.nodes.filter(spec => ASR_TYPES.includes(spec.type) || graphModelRequirements({ nodes: [spec] }).length);
+    for (const [index, spec] of models.entries()) {
+      const entry = pipeline.entries.get(spec.id), node = entry.node;
+      options.onModelProgress?.(spec.id, index + 1, models.length);
+      let timeout;
+      try {
+        entry.controller.signal.throwIfAborted();
+        const bounded = work => pipeline.wait(entry, Promise.race([work, new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(Error('Model initialization timed out. Check browser support and free RAM/GPU memory, then Retry models.')), options.modelLoadTimeoutMs ?? 180000);
+        })]));
+        if (resources.speechNodes.has(spec.id)) {
+          const route = configurations.get(spec.id);
+          if (route) {
+            if (!values.has(spec.id)) throw Error('Startup configuration is unavailable before capture. Connect startup data in Graph Editor and Save; audio, model output and button-triggered values are not available yet.');
+            node.receive(node.configurationPort, values.get(spec.id));
+          }
+          node.configurationConnected = false;
+          node.preconfigured = true;
+          await bounded(node.load());
+          if (node.unavailable || node.core?.state !== 'ready') throw Error('ASR model did not become ready. Check model assets, browser support and available memory.');
+        } else {
+          // These hooks only initialize owned inference resources. Keep their
+          // exact context/signal for Start, and never call the hook twice.
+          await bounded(Promise.resolve(node.start(entry.context)).then(() => node.ready));
+          if (node.failed || node.disposed || node.error || entry.failed) throw Error(node.error?.message || node.error || 'Model initialization failed.');
+          node.start = context => {
+            context.signal.throwIfAborted();
+            if (context !== entry.context) throw Error('Prepared model belongs to another runtime.');
+          };
+        }
+        entry.controller.signal.throwIfAborted();
+      } catch (cause) {
+        if (!entry.controller.signal.aborted) pipeline.fail(entry, cause);
+        throw Error(`${spec.id} (${spec.type}): ${cause.message || cause}`, { cause });
+      } finally { clearTimeout(timeout); }
+    }
+  })();
+  return { ...resources, description, pipeline, prepareModels };
 }

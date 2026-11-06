@@ -18,6 +18,11 @@ class WorkerTranslationNode {
     this.worker = this.workerFactory(this.url);
     this.worker.onmessage = ({ data }) => {
       if (this.disposed || context.signal.aborted) return;
+      if (data.type === 'error' && data.fatal) {
+        const error = this.failureError = Error(data.message);
+        for (const pending of this.pending.values()) pending.reject(error);
+        this.pending.clear(); context.fail(error); return;
+      }
       if (data.type === 'progress') {
         try { this.onEvent(data); } catch { /* diagnostic observer only */ }
         return;

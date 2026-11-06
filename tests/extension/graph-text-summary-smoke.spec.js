@@ -1,3 +1,4 @@
+import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -101,7 +102,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
     const host = await page.evaluate(() => ({ browser: navigator.userAgent, isolated: crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency }));
     await context.setOffline(true); requests.length = 0;
     const notes = page.locator('[data-display="notes"] .display-content');
-    const started = Date.now(); await page.locator('#start').click();
+    const started = Date.now(); await startReadyLive(page, { workers: 'summaryWorkers', timeout: 180000 });
     await expect(page.locator('#status')).toHaveText('Processing active', { timeout: 180000 });
     expect(await page.locator('#summary-status').textContent()).not.toContain('unavailable');
     const loadMs = Date.now() - started;
@@ -112,7 +113,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
       if (index) await page.evaluate(text => window.emitCommittedText(text), meetingBatches[index]);
       if (index === 2) await page.locator('#stop').click(); // Stop flushes the last TextWindow tail.
       await page.waitForFunction(count => window.summaryEvidence.some(e => e.type === 'error') || window.summaryEvidence.filter(e => e.type === 'result').length === count, index + 1, { timeout: 180000 });
-      const reply = await page.evaluate(() => window.summaryEvidence.at(-1));
+      const reply = await page.evaluate(() => window.summaryEvidence.findLast(event => event.type === 'result' || event.type === 'error'));
       expect(reply.type, reply.message).toBe('result');
       await expect(notes).toHaveText(reply.summary);
       const output = await notes.textContent();
@@ -122,19 +123,19 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
       console.log(`${type}: batch ${index + 1} emitted ${output.length} characters`);
       await observe(`batch-${index + 1}`);
     }
-    await expect(page.locator('#start')).toBeEnabled({ timeout: 60000 });
+    await expect(page.locator('#start')).toBeEnabled({ timeout: 180000 });
     const final = await notes.textContent();
     await expect(page.locator('#errors')).toBeEmpty();
-    expect(await page.evaluate(() => window.summaryWorkers.every(w => w.released))).toBe(true);
+    await expectPreparedIdle(page, { workers: 'summaryWorkers', timeout: 180000 });
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText(meetingBatches.join('\n'));
     // Fresh session resets context; Pagehide during real generation cannot write.
     const beforeCancel = await page.evaluate(() => { window.cancelSummaryOnToken = true; return window.summaryEvidence.length; });
-    await page.locator('#start').click(); await expect(page.locator('#status')).toHaveText('Processing active', { timeout: 180000 });
+    await startReadyLive(page, { workers: 'summaryWorkers', timeout: 180000 }); await expect(page.locator('#status')).toHaveText('Processing active', { timeout: 180000 });
     await expect(notes).toBeEmpty();
     // Dispatch pagehide on a real decoded token, not a short-lived status string that a
     // polling assertion can miss when inference completes in <500 ms.
     await page.waitForFunction(() => window.summaryCancelToken && window.summaryWorkers.every(w => w.released), null, { timeout: 60000 });
-    await expect(page.locator('#start')).toBeEnabled();
+    await expect(page.locator('#start')).toBeDisabled();
     expect(await page.evaluate(index => window.summaryEvidence.slice(index).some(e => e.type === 'result'), beforeCancel)).toBe(false);
     expect(await page.evaluate(() => window.summaryWorkers.every(w => w.released))).toBe(true);
     await expect(notes).toBeEmpty();
@@ -150,13 +151,14 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
       {kind: 'conversation', text: 'A: Would you like tea? B: Coffee, please. A: Shall we sit outside? B: Yes, the weather is pleasant.', prompt: 'Briefly summarize the conversation.'},
       {kind: 'transcript', text: 'Narrator: The trail climbs toward a lake. Guide: At the ridge, the rocks are volcanic. Narrator: We reach the lake at noon.', prompt: 'Give a chronological summary.'},
     ];
+    await page.reload();
     for (const fixture of genericCases) {
       const graph = directSummaryGraph(type);
       graph.nodes.find(n => n.id === 'input').settings.value = fixture.text;
       graph.nodes.find(n => n.id === 'summary').settings = {language: 'en', prompt: fixture.prompt};
       await editor.evaluate(async graph => (await import('./graph.js')).saveGraph(localStorage, graph), graph);
       const before = await page.evaluate(() => summaryEvidence.length);
-      await page.locator('#start').click();
+      await startReadyLive(page, { workers: 'summaryWorkers', timeout: 180000 });
       await expect(page.locator('#status')).toHaveText('Processing active', {timeout: 180000});
       await page.waitForFunction(index => summaryEvidence.slice(index).some(e => e.type === 'result' || e.type === 'error'), before, {timeout: 180000});
       const reply = await page.evaluate(index => summaryEvidence.slice(index).find(e => e.type === 'result' || e.type === 'error'), before);
@@ -165,8 +167,8 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
       expect(reply.summary.trim()).not.toBe('');
       expect(reply.metrics.attempts).toHaveLength(1);
       runs.push({...fixture, output: reply.summary, metrics: reply.metrics});
-      await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled({timeout: 60000});
-      expect(await page.evaluate(() => summaryWorkers.every(w => w.released))).toBe(true);
+      await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled({timeout: 180000});
+      await expectPreparedIdle(page, { workers: 'summaryWorkers', timeout: 180000 });
     }
     expect(requests).toEqual([]);
     const evidence = { time: new Date().toISOString(), sourceSHA256, model: spec, modelBytes: files.reduce((n,f) => n+f.bytes,0),
