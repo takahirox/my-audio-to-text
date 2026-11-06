@@ -53,7 +53,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
         await expect(page.locator('.graph-inspector')).toContainText('Node: previous');
         await capture(page, info, `${name}-${width}`, width === 390);
         await page.locator('#graph-palette-toggle').press('Enter');
-        await expect(page.getByRole('searchbox', { name: 'Search nodes' })).toBeFocused();
+        await expect(page.getByRole('combobox', { name: 'Search nodes' })).toBeFocused();
         await capture(page, info, `palette-${width}`);
         await page.keyboard.press('Escape');
         await page.locator('#graph-help').press('Enter');

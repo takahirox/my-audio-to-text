@@ -175,7 +175,7 @@ export async function addAudioPath(page, type) {
   const editor = page.editor;
   await loadTranslationFixture(editor, 'ja-en', false);
   for (const node of [type, 'AudioOutput']) {
-    await openPalette(editor); await editor.locator('#graph-node-type').selectOption(node); await editor.locator('#graph-add').click();
+    await openPalette(editor); await editor.locator(`#graph-node-type [data-type="${node}"]`).click();
   }
   for (const [source, output, target, input] of [['speech', 'final', type.toLowerCase(), 'text'], [type.toLowerCase(), 'audio', 'audiooutput', 'audio']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();

@@ -22,8 +22,7 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
   for (const [type, category] of [['KeyedTextPair', 'Processors'], ['KeyedPairedTextAccumulator', 'Processors'], ['Display', 'Outputs']]) {
     await openPalette(page); await page.getByLabel('Node category', { exact: true }).selectOption(category);
     await page.getByLabel('Search nodes').fill(type);
-    await page.locator('#graph-node-type').selectOption(type); await page.locator('#graph-add').click();
-    await page.locator('#graph-palette-toggle').click();
+    await page.locator(`#graph-node-type [data-type="${type}"]`).click();
     if (type === 'Display') {
       await expect(page.getByLabel('display title', { exact: true })).toHaveValue('');
       await expect(page.getByLabel('display Add input', { exact: true })).toBeEnabled();

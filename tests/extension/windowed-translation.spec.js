@@ -7,7 +7,7 @@ import { windowGraph, windowTranscript, closedWindows } from '../fixtures/window
 test('palette exposes NUMBER threshold inputs, one TEXT output, no threshold Settings and reloads', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   for (const type of ['TextWindow', 'Number']) {
-    await openPalette(editor); await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
+    await openPalette(editor); await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
   }
   await editor.getByRole('button', { name: 'Select textwindow', exact: true }).click();
   for (const port of ['text', 'maxChars', 'maxWaitSeconds']) await expect(editor.getByRole('button', { name: `textwindow input ${port}`, exact: true })).toBeVisible();

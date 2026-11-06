@@ -4,7 +4,7 @@ import { test, expect, openGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
 
 async function add(editor, type) {
-  await openPalette(editor); await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
+  await openPalette(editor); await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
 }
 async function save(editor) {
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();

@@ -31,9 +31,7 @@
 .editor-page .graph-actions > summary { border-radius: var(--control-radius); background: var(--panel); }
 .editor-page .graph-actions > summary:hover { background: var(--surface-hover); }
 .editor-page :is(.graph-palette, .graph-command-list) { box-shadow: var(--popover-shadow); }
-.editor-page .graph-palette { max-height: min(75dvh, 42rem); overflow: auto; }
-.editor-page .graph-palette select[size] { min-height: 8rem; }
-.editor-page .graph-palette option:checked { background: var(--surface-hover); color: var(--accent); }
+.editor-page .graph-node-list { max-height: 24rem; }
 .editor-page .graph-help { width: min(38rem, calc(100% - 2rem)); }
 .editor-page .graph-help::backdrop { background: #29263566; }
 .editor-page #graph-errors { white-space: pre-wrap; }

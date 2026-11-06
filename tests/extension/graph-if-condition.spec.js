@@ -17,7 +17,7 @@ const expectFailure=async page=>{
 
 test('IfCondition palette/settings/wires persist; preparation verifies, cancels, retries and reuses cache without inference',async({graphExtension:f})=>{
  await conditionAssets(f);const page=await openGraph(f),editor=page.editor;
- await openPalette(editor);await editor.locator('#graph-node-type').selectOption('IfCondition');await editor.locator('#graph-add').click();
+ await openPalette(editor);await editor.locator('#graph-node-type [data-type="IfCondition"]').click();
  await editor.getByLabel('ifcondition condition',{exact:true}).fill('Does this text mention an animal?');
  await editor.getByRole('button',{name:'speech output final',exact:true}).click();await editor.getByRole('button',{name:'ifcondition input text',exact:true}).click();
  await editor.getByRole('button',{name:'ifcondition output yes',exact:true}).click();await editor.getByRole('button',{name:'transcript input input1',exact:true}).click();

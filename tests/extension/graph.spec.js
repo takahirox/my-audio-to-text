@@ -106,7 +106,7 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   const live = await openGraph(f), editor = live.editor;
   await loadTranslationFixture(editor); await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   await editor.setViewportSize({ width: 1440, height: 1000 });
-  await openPalette(editor); await expect(editor.getByRole('complementary', { name: 'Node palette' })).toBeVisible();
+  await openPalette(editor); await expect(editor.getByRole('dialog', { name: 'Add Node' })).toBeVisible();
   await editor.locator('#graph-palette-toggle').click();
   await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
   await expect(editor.getByRole('complementary', { name: 'Graph details inspector' })).toContainText('Display');

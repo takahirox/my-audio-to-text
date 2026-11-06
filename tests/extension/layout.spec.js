@@ -17,17 +17,17 @@ test('MV3 palette search/categories, contextual settings, keyboard help and draf
   await expect(editor.getByLabel('Search nodes', { exact: true })).toBeFocused();
   await editor.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
   await editor.getByLabel('Search nodes', { exact: true }).fill('Number');
-  await expect(editor.locator('#graph-node-type option')).toHaveCount(1);
+  await expect(editor.locator('#graph-node-type [role="option"]')).toHaveCount(1);
   if (process.env.UPDATE_UI_SCREENSHOTS) await editor.screenshot({ path: 'docs/evidence/ui-109-palette.png', fullPage: true });
-  await editor.locator('#graph-node-type').press('Enter');
-  await expect(editor.getByLabel('number value', { exact: true })).toBeFocused();
-  // Check before fill can automatically scroll an offscreen field.
-  await expect(editor.getByLabel('number value', { exact: true })).toBeInViewport({ ratio: 1 });
+  await editor.getByLabel('Search nodes', { exact: true }).press('Enter');
+  await expect(editor.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
+  await expect(editor.locator('#graph-palette')).toBeHidden();
   await editor.getByLabel('number value', { exact: true }).fill('3.5');
-  await editor.keyboard.press('Escape'); await expect(editor.locator('#graph-palette-toggle')).toBeFocused();
+  await editor.keyboard.press('Escape'); await expect(editor.locator('.graph-scroll')).toBeFocused();
   await editor.locator('#graph-fit').click();
   const fit = await editor.locator('#graph-zoom').inputValue().then(Number); expect(fit).toBeLessThan(.5);
   await expect(editor.locator('[data-node="number"]')).toBeInViewport();
+  await editor.getByRole('button', { name: 'Select number', exact: true }).press('Enter');
   await editor.getByRole('button', { name: 'Clear selection', exact: true }).click();
   await expect(editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await editor.locator('#graph-help').click(); await expect(editor.getByRole('dialog')).toBeVisible();

@@ -97,3 +97,31 @@ test('formatter Add/Remove changes only that instance and the removed last wire;
   assert.ok(!graph.edges.some(route => route.to[0] === 'a' && route.to[1] === 'input4'));
   assert.ok(graph.edges.some(route => route.to[0] === 'b' && route.to[1] === 'input4'));
 });
+
+function placementEditor(rectangles) {
+  const e = Object.create(GraphEditor.prototype);
+  const cards = rectangles.map(({ x, y, width, height }) => ({ offsetLeft: x, offsetTop: y, offsetWidth: width, offsetHeight: height }));
+  const added = { offsetWidth: 235, offsetHeight: 150 };
+  e.canvas = { querySelectorAll: () => [...cards, added] };
+  return { e, added };
+}
+test('quick-add finds nearby space when the viewport center is occupied without moving existing cards', () => {
+  const rectangles = [{ x: 380, y: 220, width: 235, height: 150 }], before = structuredClone(rectangles);
+  const { e, added } = placementEditor(rectangles);
+  const position = e.nodePlacement({ left: 0, top: 0, right: 1000, bottom: 600 }, added);
+  const old = rectangles[0];
+  assert.ok(position.x + 235 <= old.x || position.x >= old.x + old.width || position.y + 150 <= old.y || position.y >= old.y + old.height);
+  assert.ok(Math.hypot(position.x - old.x, position.y - old.y) < 300, 'use nearby available space');
+  assert.deepEqual(rectangles, before);
+});
+test('quick-add densely occupied and undersized views have deterministic finite placement within reachable bounds', () => {
+  const rectangles = Array.from({ length: 144 }, (_, i) => ({ x: i % 12 * 200, y: Math.floor(i / 12) * 120, width: 235, height: 150 }));
+  for (const bounds of [{ left: 700, top: 400, right: 1200, bottom: 800 }, { left: 0, top: 0, right: 180, bottom: 100 }]) {
+    const { e, added } = placementEditor(rectangles);
+    const position = e.nodePlacement(bounds, added);
+    assert.deepEqual(e.nodePlacement(bounds, added), position);
+    assert.ok(Number.isFinite(position.x) && Number.isFinite(position.y));
+    assert.ok(position.x >= bounds.left && position.x <= Math.max(bounds.left, bounds.right - added.offsetWidth));
+    assert.ok(position.y >= bounds.top && position.y <= Math.max(bounds.top, bounds.bottom - added.offsetHeight));
+  }
+});

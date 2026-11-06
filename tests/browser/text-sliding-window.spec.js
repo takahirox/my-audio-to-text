@@ -23,8 +23,7 @@ test('processor palette connects TEXT/NUMBER, saves, reloads and runs the rollin
   });
   await page.reload(); await openPalette(page);
   await page.getByLabel('Node category', { exact: true }).selectOption('Processors');
-  await page.locator('#graph-node-type').selectOption('TextSlidingWindow'); await page.locator('#graph-add').click();
-  await page.locator('#graph-palette-toggle').click();
+  await page.locator('#graph-node-type [data-type="TextSlidingWindow"]').click();
   const port = name => page.getByRole('button', { name, exact: true });
   await expect(port('textslidingwindow input maxChars')).toBeAttached();
   await expect(page.locator('.graph-inspector')).toContainText('This Node has no configurable settings.');

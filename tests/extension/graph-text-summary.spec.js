@@ -15,13 +15,13 @@ test('both text processors: parked Save persists, independent settings, cancella
   const page = await openGraph(f), editor = page.editor;
   for (const type of TEXT_SUMMARY_TYPES) {
     await openPalette(editor); await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'Processors' });
-    await editor.locator('#graph-node-type').selectOption(type); await editor.locator('#graph-add').click();
+    await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
     await expect(editor.getByLabel(type.toLowerCase() + ' language', { exact: true })).toHaveValue('ja');
     const prompt = editor.getByLabel(type.toLowerCase() + ' prompt', { exact: true });
     await expect(prompt).toHaveJSProperty('tagName', 'TEXTAREA');
     await expect(prompt).toHaveValue('Summarize the input text.');
     await prompt.fill('Summarize in bullets.\nFocus on ' + type + '.'); await prompt.press('Tab');
-    expect(await editor.locator('#graph-node-type option[value^="MeetingSummary"]').count()).toBe(0);
+    expect(await editor.locator('#graph-node-type [role="option"][data-type^="MeetingSummary"]').count()).toBe(0);
   }
   await editor.getByLabel('textsummaryqwen35 language', { exact: true }).selectOption('en');
   const cards = editor.locator('#graph-models .model-card');
