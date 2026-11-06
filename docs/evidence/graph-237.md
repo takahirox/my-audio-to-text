@@ -88,3 +88,33 @@ WebKit. Native HTML drag/drop and subsequent pointer-capture reconnection are
 separated by a reload after confirming the restored named connection: macOS
 WebKit can retain its native drag session after Playwright's synthetic drop.
 Both gestures are exercised against production handlers.
+
+## Review fix: WebKit dense-routing performance
+
+The review's isolated reproduction consistently exceeded the existing 250 ms
+redraw budget: three runs peaked at 275, 270 and 268 ms. The router now caches
+grid-edge visibility in a bounded byte array instead of a Map and visits A*
+neighbors without allocating four tuples per expanded state. Neighbor order,
+search budgets, scoring, lane reservations and port presentation are unchanged.
+The performance assertion is unchanged.
+
+Executed on 2026-11-07 after the fix:
+
+- `npx playwright test tests/browser/graph-routing.spec.js --project=webkit --grep 'dense routes remain clear' --workers=1 --repeat-each=3`:
+  3 passed; maximum redraw times were 187, 176 and 177 ms.
+- `node --test tests/graph-wire-router.test.js`: 14 passed.
+- `npm test`: 807 passed.
+- `npx playwright test tests/browser/graph-port-order.spec.js tests/browser/graph-routing.spec.js tests/browser/graph-canvas-first.spec.js tests/browser/graph-quick-add.spec.js tests/browser/graph-traceability.spec.js tests/browser/extension-layout.spec.js --workers=1 --reporter=line --output=test-results/browser-routing-fix-237`:
+  144 passed, 2 expected screenshot-only WebKit skips. Dense-routing maximums
+  were 97.3 ms in Chromium and 181 ms in WebKit.
+- `npx playwright test --config playwright.extension.config.js tests/extension/graph-port-order.spec.js tests/extension/graph-routing.spec.js tests/extension/graph-canvas-first.spec.js tests/extension/graph-quick-add.spec.js --workers=1 --reporter=line --output=test-results/mv3-routing-fix-237`:
+  the 3 source-packaged MV3 editor tests passed. The 4 additional routing tests
+  failed during fixture setup because `dist/chrome-extension` is absent; they
+  require the full extension build and its local-model prerequisites described
+  above. No routing assertion ran in those 4 tests.
+- A one-off Node comparison loaded the pre-fix router from Git and compared
+  complete route objects on 40/60-card dense fixtures, with ordinary, constrained
+  and zero search budgets, including reused drag routes. All 12 snapshots
+  (900 routes) matched exactly, including points, SVG paths and fallback/crowding
+  metadata.
+- `node --check extension/graph-wire-router.js` and `git diff --check`: passed.
