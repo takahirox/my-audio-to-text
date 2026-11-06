@@ -25,12 +25,12 @@ test('Concept A keeps real controls, graph actions and reading dominant at wide,
   });
   if (process.env.UPDATE_LIVE_UI_SCREENSHOTS && info.project.name === 'chromium') await writeFile('docs/evidence/live-223-geometry.json', JSON.stringify(measurements, null, 2) + '\n');
   expect(errors).toEqual([]);
-  // Navigation remains operable and shared pages retain their original palette.
+  // Navigation remains operable and shared pages use the same light palette.
   for (const name of ['Graph', 'Models']) {
     const popup = page.waitForEvent('popup');
     await page.getByRole('link', { name, exact: true }).click();
     const target = await popup; await target.waitForLoadState('load');
-    expect(await target.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('dark');
+    expect(await target.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
     expect(await target.locator('link[href="live.css"]').count()).toBe(0);
     await target.close();
   }

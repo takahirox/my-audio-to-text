@@ -34,7 +34,10 @@ class ModelCard {
     this.definition = definition; this.ticket = 0; this.caches = new Map();
     const root = el('section'); root.className = 'panel model-card'; root.id = definition.id;
     root.setAttribute('aria-label', definition.title); this.root = root;
-    root.append(el('h3', definition.title), el('p', definition.size));
+    const heading = el('div'); heading.className = 'model-heading';
+    heading.append(el('h3', definition.title));
+    const metadata = el('p', definition.size); metadata.className = 'model-metadata';
+    root.append(heading, metadata);
     if (definition.voices) {
       const label = el('label', 'Voice '); this.voice = el('select'); this.voice.setAttribute('aria-label', `${definition.title} voice`);
       for (const voice of definition.voices) { const option = el('option', voice === 'jf_alpha' ? 'jf_alpha · Japanese' : voice === 'af_heart' ? 'af_heart · English' : voice); option.value = voice; this.voice.append(option); }
@@ -43,19 +46,22 @@ class ModelCard {
       this.voice.onchange = () => { void this.inspect(); };
       root.append(el('p', 'Configure voice and language in Graph Node settings.'));
     }
-    this.status = el('p', 'Checking cached assets…'); this.status.className = 'model-status'; this.status.setAttribute('role', 'status');
+    this.status = el('p', 'Checking cached assets…'); this.status.className = 'model-status'; this.status.setAttribute('role', 'status'); heading.append(this.status);
     this.error = el('p'); this.error.className = 'model-error'; this.error.setAttribute('role', 'alert');
-    this.progress = el('progress'); this.progress.max = 1; this.progress.value = 0; this.progress.setAttribute('aria-label', `${definition.title} download progress`);
+    this.progress = el('progress'); this.progress.hidden = true; this.progress.max = 1; this.progress.value = 0; this.progress.setAttribute('aria-label', `${definition.title} download progress`);
     this.bytes = el('p'); this.bytes.className = 'muted';
     this.files = el('ul'); const details = el('details'); details.append(el('summary', 'Verified files and size'), this.bytes, this.files);
     const controls = el('div'); controls.className = 'actions';
     const button = (text, action) => { const control = el('button', text); control.type = 'button'; control.onclick = action; controls.append(control); return control; };
     this.prepare = button('Download / retry', () => { void this.run('prepare'); });
+    this.prepare.className = 'primary';
     this.cancel = button('Cancel download', () => this.controller?.abort());
     this.check = button('Check cache', () => { void this.inspect(); });
     this.remove = button('Delete cached assets', () => { void this.run('remove'); });
+    this.remove.className = 'danger';
     const terms = el('a', definition.terms); terms.href = definition.url;
-    root.append(this.status, this.error, this.progress, controls, details, terms);
+    const license = el('p'); license.className = 'model-license'; license.append(terms);
+    root.append(this.error, this.progress, controls, details, license);
     document.getElementById('models').append(root); this.buttons(); void this.inspect();
   }
   settings() { return { language: 'ja', voice: this.voice?.value }; }
@@ -83,7 +89,7 @@ class ModelCard {
   async inspect() {
     if (this.busy || closed) return;
     const ticket = ++this.ticket;
-    this.status.textContent = 'Checking cached assets…';
+    this.status.textContent = 'Checking cached assets…'; this.root.dataset.state = 'Checking';
     try { const cache = await this.cache(), view = await cache.inspect(); if (ticket === this.ticket && !this.busy) this.render(view); }
     catch (error) { if (ticket === this.ticket) this.fail(error); }
   }
@@ -91,7 +97,7 @@ class ModelCard {
     if (this.busy || closed) return;
     this.busy = true; ++this.ticket;
     if (action === 'prepare') this.controller = new AbortController();
-    this.buttons(); this.status.textContent = action === 'prepare' ? 'Downloading · verifying existing files…' : 'Deleting cached assets…';
+    this.buttons(); this.root.dataset.state = action === 'prepare' ? 'Downloading' : 'Deleting'; this.status.textContent = action === 'prepare' ? 'Downloading · verifying existing files…' : 'Deleting cached assets…';
     try {
       const cache = await this.cache(); this.controller?.signal.throwIfAborted();
       this.render(await (action === 'prepare' ? cache.prepare({ signal: this.controller.signal, onChange: view => this.render(view) }) : cache.remove()));

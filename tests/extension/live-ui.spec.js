@@ -12,7 +12,7 @@ test('MV3 Concept A reading layout and truthful lifecycle preserve graph actions
   });
   expect(errors).toEqual([]);
   for (const page of [live.editor, live.models]) {
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('dark');
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
     expect(await page.locator('link[href="live.css"]').count()).toBe(0);
   }
 });

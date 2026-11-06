@@ -64,7 +64,11 @@ test('dense lanes follow movement, card reflow and an added nearby input', async
 test('dense before/after at 100% with identical nodes and no selected or hovered wire', async ({ page, browserName }) => {
   test.skip(browserName!=='chromium','one evidence pair at normal scale');
   const geometry=await assertTraceability(page);
-  expect(geometry.cards).toEqual(before.cards);
+  // Hold gained an optional trigger since the historical #204 snapshot.
+  // Preserve placement/width and endpoints; validate routes against current
+  // card heights below, including the additional real port.
+  const placement = cards => cards.map(({ id, left, right, top }) => ({ id, left, right, top }));
+  expect(placement(geometry.cards)).toEqual(placement(before.cards));
   expect(geometry.connections).toEqual(before.connections);
   await page.locator('.graph-scroll').evaluate(e=>e.style.height='1200px');
   await page.mouse.move(1500,1450);

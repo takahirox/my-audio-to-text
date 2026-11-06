@@ -13,7 +13,7 @@ const lowerBound = (values, value) => {
 
 // Colors supplement geometry; they never encode port types or graph semantics.
 export function wireColor(key) {
-  const palette = ['#9bbfff', '#f6bd7a', '#84dac6', '#d4a9f5', '#f39db5', '#d5d889'];
+  const palette = ['#386aa3', '#946018', '#267565', '#7852a2', '#ac496b', '#6c721f'];
   let hash = 0;
   for (const char of key) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
   return palette[hash % palette.length];

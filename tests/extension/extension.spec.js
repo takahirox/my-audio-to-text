@@ -481,7 +481,7 @@ test('Live navigation opens separate extension pages without stopping or retarge
     const [opened] = await Promise.all([extension.context.waitForEvent('page'), page.getByRole('link', { name, exact: true }).click()]);
     await opened.waitForURL(`**/extension/${file}`);
     await expect(opened.getByRole('heading', { name: name === 'Graph' ? 'Graph Editor' : name, exact: true })).toBeVisible();
-    await opened.getByRole('button', { name: 'Simple' }).click();
+    await opened.getByRole('button', { name: 'Live' }).click();
     await expect(page.locator('#status')).toHaveText('Transcription active');
     expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);
     expect(await page.evaluate(() => window.streams.map(s => s.stops))).toEqual([0]);
