@@ -56,9 +56,9 @@ Fresh setup and Reset create:
 
 ```text
 ChromeTabAudio.audio → SpeechToTextReazonSpeech.audio
-ASR.finalId/final → KeyedTextCoalesce.id1/input1
-ASR.provisionalId/provisional → KeyedTextCoalesce.id2/input2
-KeyedTextCoalesce.id/text → KeyedTextPair.id1/input1
+ASR.final/finalId → KeyedTextCoalesce.input1/id1
+ASR.provisional/provisionalId → KeyedTextCoalesce.input2/id2
+KeyedTextCoalesce.text/id → KeyedTextPair.input1/id1
 KeyedTextPair.pair → KeyedPairedTextAccumulator.pair
 KeyedPairedTextAccumulator.pairs → Display.input1
 ```
@@ -66,8 +66,8 @@ KeyedPairedTextAccumulator.pairs → Display.input1
 Translation is an explicit addition:
 
 ```text
-ASR.finalId/final → Translator.id/text
-Translator.id/text → KeyedTextPair.id2/input2
+ASR.final/finalId → Translator.text/id
+Translator.text/id → KeyedTextPair.input2/id2
 ```
 
 Original text appears immediately, with an empty right cell while translation is
@@ -83,6 +83,34 @@ snapshot, including `TextSummary.summary`, can connect directly to Display.
 See [portable display items](display-items.md) for contracts, exact wiring,
 snapshot ownership and lifecycle, and [ID-scoped pairing](keyed-text-history.md)
 for independent ID/TEXT arrival semantics.
+
+## Port display order
+
+Canvas rows, native keyboard tab order within each input/output column, and
+Inspector **Node help and ports** show payload above its matching numeric ID.
+Committed pairs precede provisional pairs, matching the default coalesce wiring:
+
+| Node | Inputs, top to bottom | Outputs, top to bottom |
+| --- | --- | --- |
+| ASR | Audio, then optional configuration | final, finalId, provisional, provisionalId (previews where supported) |
+| KeyedTextCoalesce | input1, id1, input2, id2 | text, id |
+| KeyedTextPair | input1, id1, input2, id2 | pair |
+| OPUS-MT / TranslateGemma | text, id, provisional, provisionalId, then context where supported | text, id, source, error; provisionalText, provisionalId, provisionalSource, provisionalError |
+
+Translation source/error outputs remain in their committed or provisional family;
+context is an independent auxiliary input. Duration/size limits, triggers and
+other configuration inputs are not identifiers and keep their own roles.
+Numbered Display and TextFormatter inputs stay in numeric order as inputs are
+added/removed, including input10 and above.
+
+Definitions declare optional `inputOrder` / `outputOrder` presentation metadata.
+The view resolves it against each instance's actual ports, ignoring duplicate,
+unknown and malformed entries and appending unspecified ports in declaration
+order. All real ports remain present. This does not change runtime contract or
+group order, queue/producer semantics, graph version 15, saved named endpoints,
+node positions, or import/export. Redraw measures the rendered buttons before
+routing; zoom, resizing and dynamic input changes remeasure the same endpoints.
+See [Issue #237 geometry comparison and checks](evidence/graph-237.md).
 
 ## Automatic wire routing
 
