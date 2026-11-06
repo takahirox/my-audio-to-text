@@ -26,7 +26,8 @@ export async function checkLiveUI(page, expect, screenshot) {
   await expect(page.locator('#session-state')).toHaveText('Idle');
   await expect(page.locator('#start')).toBeEnabled();
   await expect(page.locator('#stop')).toBeDisabled();
-  await expect(page.locator('#cancel-session')).toHaveCount(0);
+  await expect(page.locator('#cancel-session, #targets, #target-status, #target-controls, .target-row')).toHaveCount(0);
+  await expect(page.locator('#hold-status')).toBeHidden();
   await expect(page.locator('.actions button')).toHaveText(['▶ Start', '■ Stop']);
   await expect(page.locator('#graph-action-buttons button')).toHaveText(['Cancel', 'Review translation']);
   await page.locator('#start').click();
@@ -85,11 +86,11 @@ export async function checkLiveUI(page, expect, screenshot) {
     await expect(page.locator('#start')).toBeDisabled();
     await expect(page.locator('#stop')).toBeEnabled({ enabled: state !== 'stopping' });
   }
-  await page.evaluate(() => liveUISession.update({ state: 'idle', error: 'Permission denied. Choose a capture target and retry.', summaryStatus: 'notes: Model unavailable. Retry in Models.' }));
+  await page.evaluate(() => liveUISession.update({ state: 'idle', error: 'Permission denied. Choose a capture target and retry.', modelRecovery: true }));
   await expect(page.locator('#session-state')).toHaveText('Error');
   await expect(page.locator('#errors')).toBeInViewport();
   await expect(page.locator('#model-recovery')).toBeVisible();
-  await expect(page.locator('#summary-status')).toBeVisible();
+  await expect(page.locator('#summary-status')).toBeHidden();
   await screenshot('error-390', null);
   await page.evaluate(async () => {
     const { graphNode, saveGraph, GRAPH_KEY, GRAPH_VERSION } = await import('./graph.js');

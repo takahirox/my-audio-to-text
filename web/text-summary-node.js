@@ -96,7 +96,7 @@ export class TextSummaryNode {
   stop() { this.stopping = true; this.dispose(); }
   failure(error, context = this.context) {
     if (this.disposed) return;
-    this.event({ type: 'error', message: `${this.model.label} unavailable: ${error.message || error}. Last successful summary retained; pending work stopped. Save graph or retry preparation in Models, then Start again. No replacement summary was emitted.` });
+    this.event({ type: 'error', cause: error, message: `${this.model.label} unavailable: ${error.message || error}. Last successful summary retained; pending work stopped. Save graph or retry preparation in Models, then Start again. No replacement summary was emitted.` });
     this.dispose(); context?.fail(error);
   }
   dispose() {

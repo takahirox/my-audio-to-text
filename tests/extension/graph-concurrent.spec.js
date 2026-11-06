@@ -31,7 +31,7 @@ test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauth
   await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
   await expect(page.locator('#status')).toHaveText('Transcription active');
   expect(await page.evaluate(() => window.pageAllocations)).toEqual([]);
-  await expect(page.locator('#target-status')).toBeEmpty();
+  await expect(page.locator('#output-status')).toBeEmpty();
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
   expect(await page.evaluate(() => window.graphWorkers.every(worker => worker.released))).toBe(true);

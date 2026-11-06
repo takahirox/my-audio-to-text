@@ -162,9 +162,13 @@ payloads, startup configuration and correlation.
 
 ## Capture, output and lifecycle
 
-Whole-tab capture uses the toolbar-invoked tab. Selected media and microphone
-sources require their explicit Live controls and permission. Capture targets and
-model failures stay visible in session diagnostics. One unavailable processor
+Whole-tab capture uses the toolbar-invoked tab. Microphone capture requires
+Start and browser permission. `SelectedPageMediaAudio` is
+temporarily unavailable because Live no longer provides an element selector; its
+source reports an actionable error and suggests `ChromeTabAudio`. An on-page
+selector is deferred to a separate task. Focused output still follows the
+toolbar-invoked document automatically. Live shows only actionable Node errors;
+normal per-Node status stays in the optional Session details disclosure. One unavailable processor
 leaves independent healthy paths running. Repeated tab sources share capture;
 processor state, queues and Workers remain independent. A source ending drains
 its downstream paths while unrelated sources may continue.

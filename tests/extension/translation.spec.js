@@ -147,7 +147,7 @@ for (const direction of ['ja-en', 'en-ja']) {
     f.mode('normal'); await page.models.evaluate(() => { const put = Cache.prototype.put; window.restorePut = () => { Cache.prototype.put = put; }; Cache.prototype.put = async function(key, response) { await response.body.cancel(); throw new DOMException('Full', 'QuotaExceededError'); }; });
     await model(page, 'button:has-text("Download / retry")').click(); await expect(model(page, '.model-error')).toContainText('quota exceeded'); await page.models.evaluate(() => window.restorePut()); await prepare(page);
     await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready'); await emit(page, 'final', 'fail'); await expect(page.locator('#translation-status')).toContainText('Controlled inference failure');
-    await emit(page, 'final', '原文', 1); await expect(originalItems(page)).toHaveText(['fail', '原文']); await expect(page.locator('#errors')).toBeEmpty(); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
+    await emit(page, 'final', '原文', 1); await expect(originalItems(page)).toHaveText(['fail', '原文']); await expect(page.locator('#errors')).toContainText('Controlled inference failure'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   });
 
   for (const phase of ['loading', 'inference']) test(`${direction}: teardown during translation ${phase} rejects late output`, async ({ translationExtension: f }) => {
@@ -161,7 +161,7 @@ for (const direction of ['ja-en', 'en-ja']) {
     await emit(page, 'final', '原文'); await expect(originalItems(page)).toHaveText('原文'); await expect(pairText(page).locator('td')).toHaveText(['原文','']); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(await page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
   });
 
-  test(`${direction}: utterance limit errors remain in diagnostics and later pairs still succeed without an error wire`, async ({translationExtension:f}) => {
+  test(`${direction}: utterance limit errors appear in Live and later pairs still succeed without an error wire`, async ({translationExtension:f}) => {
     await instrument(f);const page=await open(f);await prepare(page);await start(page);
     await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready');
     const source='x'.repeat(1001);await emit(page,'final',source,0);
@@ -170,7 +170,7 @@ for (const direction of ['ja-en', 'en-ja']) {
     await emit(page,'final','recovered',1);
     await expect(pairText(page).locator('td')).toHaveText([source,'','recovered',`${target}: recovered`]);
     await page.locator('#stop').click();await expect(page.locator('#start')).toBeEnabled();
-    await expect(page.locator('#errors')).toBeEmpty();
+    await expect(page.locator('#errors')).toContainText('accepts at most 1,000 characters');
   });
 
   test(`${direction}: pagehide during final drain preserves committed text and discards pending pairs`, async ({ translationExtension: f }) => {

@@ -186,6 +186,8 @@ test('multiple translator runtime statuses retain each branch failure independen
   f.session.setGraph((graph)); await f.session.start(42); await tick();
   assert.match(f.session.view.translationStatus, /translation: Translation unavailable: Forward cache unavailable/);
   assert.match(f.session.view.translationStatus, /reverse: Local OPUS-MT ready/);
+  assert.equal(f.session.view.error, 'translation: Translation unavailable: Forward cache unavailable');
+  assert.equal(f.session.view.modelRecovery, true);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
   f.translation.complete(0, 'こんにちは'); await tick(); await f.session.stop();
   assert.equal(display(f), 'Hello');

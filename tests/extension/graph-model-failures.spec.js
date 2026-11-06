@@ -43,7 +43,9 @@ for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
     await expect(page.locator('#summary-status')).toContainText(phase === 'load' ? 'Controlled model load failure' : 'Controlled inference failure');
     expect(await state(page)).toMatchObject({ failed:true, state:'running' });
     expect((await state(page)).errors).toHaveLength(1);
-    await expect(page.locator('#errors')).toBeEmpty();
+    await expect(page.locator('#errors')).toContainText(phase === 'load' ? 'Controlled model load failure' : 'Controlled inference failure');
+    await expect(page.locator('#errors')).toBeVisible();
+    expect((await page.locator('#errors').textContent()).split('\n')).toHaveLength(1);
     await emitFinal(page, 'surviving transcript'); await expect(transcript(page)).toContainText('surviving transcript');
     await expect(page.locator('#status')).toHaveText('Transcription active');
     const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
@@ -53,7 +55,7 @@ for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
     expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
     await startGraph(page); await emitFinal(page, 'fresh');
-    if (phase === 'inference') { await settle(page); await expect(notes(page)).toHaveText('committed notes'); }
+    if (phase === 'inference') { await expect(page.locator('#errors')).toBeEmpty(); await settle(page); await expect(notes(page)).toHaveText('committed notes'); }
     await expect(transcript(page)).toHaveText('fresh');
     await page.evaluate(() => window.graphSession.cancel()); await expect(page.locator('#start')).toBeEnabled();
     expect(await page.evaluate(() => window.graphWorkers.every(w=>w.released))).toBe(true);

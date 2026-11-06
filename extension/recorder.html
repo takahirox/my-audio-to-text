@@ -9,17 +9,18 @@
   <main>
     <section class="panel capture-panel" aria-label="Recording">
       <div class="recording-heading"><p id="session-state" class="session-pill" role="status">Idle</p><div class="actions"><button id="start" class="primary" disabled><span aria-hidden="true">▶</span> Start</button><button id="stop" title="Stop capture and finalize pending text" disabled><span aria-hidden="true">■</span> Stop</button></div></div>
-      <section id="graph-action-area" aria-label="Graph Actions" hidden><h2>Graph Actions</h2><div id="graph-action-buttons"></div><p id="graph-action-status" class="muted" role="status"></p><p id="hold-status" class="muted" role="status"></p></section>
-      <p id="errors" role="alert"></p>
-      <p id="target-status" role="status"></p><details id="targets"><summary>Input and output targets</summary><div id="target-controls"></div></details>
+      <section id="graph-action-area" aria-label="Graph Actions" hidden><h2>Graph Actions</h2><div id="graph-action-buttons"></div></section>
+      <p id="session-prompt" class="muted" role="status"></p><p id="errors" role="alert" aria-atomic="true"></p>
       <p id="saved-state" role="status" class="muted"></p>
-      <div class="session-notices"><p id="signal" class="muted" role="status" hidden></p><p id="translation-status" role="status" hidden></p><p id="summary-status" role="status" hidden></p><p id="condition-status" role="status" hidden></p></div>
-      <p id="model-recovery" hidden>Optional model unavailable. <a href="model-cache.html" data-page="model-cache.html">Prepare or retry in Models</a>, then start a new session.</p>
+      <p id="model-recovery" hidden>Model recovery: <a href="model-cache.html" data-page="model-cache.html">Prepare or retry in Models</a>, then start a new session.</p>
     </section>
     <div id="live-displays" aria-label="Graph text displays"></div>
     <p id="no-live-displays" class="muted" hidden>No Live text displays in this graph. <a href="graph-editor.html" data-page="graph-editor.html">Edit outputs</a></p>
-    <section id="tts-output" class="panel" hidden aria-label="Generated audio"><h2>Generated audio</h2><p id="tts-status" role="status"></p><p id="speaker-hint" class="muted" hidden>Speaker plays through the browser default audio output. Keep this Live window open.</p><p id="speaker-status" role="alert"></p><button id="enable-speaker" hidden>Enable speaker</button><ol id="audio-outputs"></ol></section>
-    <section class="live-status" aria-label="Session status"><p id="status" role="status"></p><details id="diagnostics"><summary>Session details</summary><p id="tab-status" class="muted"></p></details></section>
+    <section id="tts-output" class="panel" hidden aria-label="Generated audio"><h2>Generated audio</h2><p id="speaker-hint" class="muted" hidden>Speaker plays through the browser default audio output. Keep this Live window open.</p><button id="enable-speaker" hidden>Enable speaker</button><ol id="audio-outputs"></ol></section>
+    <section class="live-status" aria-label="Session details"><details id="diagnostics"><summary>Session details</summary>
+      <p id="status"></p><p id="tab-status" class="muted"></p>
+      <div class="session-diagnostics"><p id="graph-action-status"></p><p id="signal"></p><p id="translation-status"></p><p id="summary-status"></p><p id="condition-status"></p><p id="hold-status"></p><p id="tts-status"></p><p id="speaker-status"></p><p id="output-status"></p></div>
+    </details></section>
   </main>
   <script type="module" src="navigation.js"></script><script type="module" src="recorder.js"></script>
 </body></html>

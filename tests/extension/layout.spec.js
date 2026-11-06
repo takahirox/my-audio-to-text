@@ -61,7 +61,7 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
   await expect(live.locator('[data-display="value"]').getByLabel('Content', { exact: true })).toHaveText('<em>committed</em>');
   await expect(live.locator('#live-displays em')).toHaveCount(0);
   expect(await live.locator('#live-displays').evaluate(root => !!(document.querySelector('.capture-panel').compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
-  await expect(live.locator('#targets')).not.toHaveAttribute('open', '');
+  await expect(live.locator('#targets, #target-controls, #target-status, .target-row')).toHaveCount(0);
   await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
   await live.getByRole('button', { name: 'Cancel', exact: true }).click();
   // Cancel retains the latest complete keyed history, including its last preview row.

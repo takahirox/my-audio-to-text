@@ -39,7 +39,7 @@ class PreparedTtsNode {
     this.node = node; this.type = type; this.settings = settings; this.onState = onState; this.prepare = prepare;
     this.inputs = node.inputs; this.outputs = node.outputs;
   }
-  failure(error) { this.failed = true; this.onState(`Audio unavailable: ${error.message || error}`); return this.node.dispose(); }
+  failure(error) { this.failed = true; this.onState(`Audio unavailable: ${error.message || error}`, 'error'); return this.node.dispose(); }
   async start(context) {
     this.context = context;
     try {
@@ -149,11 +149,11 @@ export function buildGraph(graph, options) {
       case 'ChromeTabAudio':
         node = new ExtensionTabAudioNode(options.tabId, { sourceFactory: tabSourceFactory, onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'SelectedPageMediaAudio':
-        node = new SelectedPageMediaAudioNode(options.targets?.[spec.id], { onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id), onState: state => options.onTargetState?.(spec.id, state) }); break;
+        node = new SelectedPageMediaAudioNode({ onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'MicrophoneAudio':
         node = new ExtensionMicrophoneAudioNode(options.microphoneStreams?.get(spec.id), { onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'FocusedInputTextOutputNode':
-        node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active) => options.onTargetState?.(spec.id, state, active) }); break;
+        node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active, severity) => options.onTargetState?.(spec.id, state, active, severity) }); break;
       case 'SpeechToTextParakeetV3':
         node = new SpeechToTextParakeetV3Node({ workerFactory: options.parakeetWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'SpeechToTextMoonshineMediumEn':
@@ -176,22 +176,22 @@ export function buildGraph(graph, options) {
         node = new TranslationSchedulerNode({ prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
           TranslationNode: spec.type === 'TranslateGemmaEnJa' ? EnglishToJapaneseTranslateGemmaTranslationNode : TranslateGemmaTranslationNode,
           modelName: 'TranslateGemma 4B', workerFactory: options.translationWorkerFactory,
-          onState: state => options.onTranslationState?.(state, spec.id) }); resources.translations.push(node); break;
+          onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
       case 'OpusMtJaEn': case 'OpusMtEnJa':
         node = new TranslationSchedulerNode({ prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
           TranslationNode: spec.type === 'OpusMtEnJa' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
-          workerFactory: options.translationWorkerFactory, onState: state => options.onTranslationState?.(state, spec.id) }); resources.translations.push(node); break;
+          workerFactory: options.translationWorkerFactory, onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
       case 'Supertonic3': case 'Kokoro': {
         const Node = spec.type === 'Supertonic3' ? Supertonic3TextToSpeechNode : KokoroTextToSpeechNode;
         const production = new Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,
-          loadOptions: { cacheOnly: true }, onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`) });
-        node = new PreparedTtsNode(production, spec.type, spec.settings, state => options.onTtsState?.(`${spec.id}: ${state}`), options.prepareTts || verifiedTtsCache); break;
+          loadOptions: { cacheOnly: true }, onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`, spec.id, event) });
+        node = new PreparedTtsNode(production, spec.type, spec.settings, (state, severity) => options.onTtsState?.(`${spec.id}: ${state}`, spec.id, { severity, message: state }), options.prepareTts || verifiedTtsCache); break;
       }
       case 'AudioOutput': node = new AudioOutputNode(options.onSynthesizedAudio); break;
       case 'Qwen3TtsStreaming': node = new Qwen3TtsNode({ ...spec.settings, workerFactory: options.ttsWorkerFactory,
-        onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`) }); break;
+        onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`, spec.id, event) }); break;
       case 'CosyVoice3Streaming': node = new CosyVoice3Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,
-        onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`) }); break;
+        onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`, spec.id, event) }); break;
       case 'StreamingSpeakerOutput': node = options.speakers?.get(spec.id) || new StreamingSpeakerOutputNode({
         contextFactory: options.speakerContextFactory, onState: state => options.onSpeakerState?.(state, spec.id),
       }); break;

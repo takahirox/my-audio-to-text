@@ -72,7 +72,7 @@ export class StreamingTtsNode {
     if (this.rejected || this.queue.length + !!this.current >= STREAMING_TTS_LIMITS.utterances
         || this.characters + text.length > STREAMING_TTS_LIMITS.characters) {
       this.rejected = true;
-      this.event({ type: 'overflow', message: `${this.label} text queue full. New utterances rejected; Stop drains accepted speech, then Start again.` }); return;
+      this.event({ type: 'overflow', severity: 'error', message: `${this.label} text queue full. New utterances rejected; Stop drains accepted speech, then Start again.` }); return;
     }
     this.queue.push({ text, context }); this.characters += text.length; this.pump();
   }

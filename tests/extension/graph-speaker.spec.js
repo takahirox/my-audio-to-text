@@ -68,6 +68,8 @@ test('MV3 autoplay failure preserves clips and offers Enable speaker while Stop 
   });
   await startSpeaker(page);
   await expect(page.locator('#speaker-status')).toContainText('Browser blocked playback');
+  await expect(page.locator('#errors')).toContainText('Browser blocked playback');
+  await expect(page.locator('#speaker-status')).toBeHidden();
   await page.evaluate(() => window.liveSpeaker.audio.suspend());
   await emitFinal(page, 'First'); await emitFinal(page, 'Second');
   await expect.poll(() => page.evaluate(() => window.liveSpeaker.queue.length)).toBe(2);
@@ -89,6 +91,7 @@ test('MV3 missing output device reports recovery and retries without losing acce
   });
   await startSpeaker(page); await emitFinal(page, 'First');
   await expect(page.locator('#speaker-status')).toContainText('No audio output device');
+  await expect(page.locator('#errors')).toContainText('No audio output device');
   await expect(page.locator('#enable-speaker')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.liveSpeaker.queue.length)).toBe(1);
   await page.evaluate(() => { window.AudioContext = window.nativeContext; });
