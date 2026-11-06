@@ -169,8 +169,37 @@ test(`${Node.name} text queue is bounded, provisional text is rejected and overs
   }
   for (let i = 0; i < QWEN3_TTS_LIMITS.utterances + 2; i++) f.receive('Accepted speech');
   assert.equal(f.node.queue.length + !!f.node.current, 16); assert.equal(f.node.rejected, true);
+  assert.equal(f.events.at(-1).severity, 'error');
   assert.match(f.events.at(-1).message, /queue full.*Stop drains/);
   f.reply(begin()); f.reply(chunk()); assert.match(f.events.at(-1).message, /Text queue full.*Stop to drain/); f.node.dispose();
+});
+
+test(`${Node.name} queue overflow reaches Live with recovery instructions and resets on restart`, async () => {
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'source'), graphNode(type, 'tts'), graphNode('StreamingSpeakerOutput', 'speaker')],
+    edges: [edge('source', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'stream')] };
+  const f = fixture(); await f.node.dispose();
+  const session = new TabSession(() => {}, { graph,
+    speakerContextFactory: () => ({ ...f.audio, state: 'running', resume() { return Promise.resolve(); } }),
+    ttsWorkerFactory: () => {
+      const worker = { postMessage(data) {
+        if (data.type === 'load') queueMicrotask(() => worker.onmessage?.({ data: { type: 'ready' } }));
+      }, terminate() {} };
+      return worker;
+    } });
+  try {
+    await session.start(42, { speakerGesture: true });
+    assert.equal(session.view.error, '');
+    const pipeline = session.session.pipeline;
+    for (let i = 0; i < 18; i++) pipeline.entries.get('source').context.emit('value', 'Accepted speech');
+    await tick();
+    assert.equal(pipeline.entries.get('tts').node.queue.length + 1, 16);
+    assert.match(session.view.error, /^tts: .*text queue full.*Stop drains accepted speech, then Start again/);
+    assert.equal(session.view.error.split('\n').length, 1);
+    assert.equal(pipeline.entries.get('tts').failed, false, 'accepted speech remains available to drain');
+    await session.cancel();
+    await session.start(42, { speakerGesture: true });
+    assert.equal(session.view.error, '');
+  } finally { await session.cancel(); }
 });
 
 test(`Cancel during ${Node.name} model loading rejects startup and ignores late ready/data`, async () => {

@@ -100,7 +100,7 @@ export class IfConditionNode {
     if (this.disposed) return;
     this.error = error;
     const context = this.context;
-    this.event({ type: 'error', message: `IfCondition unavailable: ${error.message || error}. No decision was fabricated. Fix the input or Save graph to retry preparation, then Start again.` });
+    this.event({ type: 'error', cause: error, message: `IfCondition unavailable: ${error.message || error}. No decision was fabricated. Fix the input or Save graph to retry preparation, then Start again.` });
     this.dispose();
     context?.fail(error);
   }

@@ -83,3 +83,31 @@ extension UI change. Nothing was pushed, published or commented on GitHub.
 
 Manual reproduction steps are in
 [the extension guide](../chrome-extension.md#simplified-live-checks-227).
+
+## Review fixes
+
+Streaming TTS queue overflow now carries explicit error severity for both
+Qwen3TtsStreaming and CosyVoice3Streaming. Live shows the existing instruction
+to Stop, drain accepted speech and Start again while preserving accepted work.
+
+Error deduplication now matches the actual failure (its cause or identical
+message), rather than suppressing every later Pipeline error from that Node.
+A fatal translation backlog failure replaces an earlier per-utterance validation
+notice and includes restart guidance. Summary and condition events carry their
+failure cause so the matching Pipeline report preserves their richer recovery
+instructions. Each Node still occupies one alert line; fresh Start clears it.
+
+Executed for these fixes:
+
+- `npm test`: **791 passed**, including both streaming queue regressions,
+  translation validation followed by fatal backlog overflow, duplicate failure
+  reports, preserved model recovery instructions and restart reset.
+- `npx playwright test --config playwright.extension.config.js tests/extension/simple-layout.spec.js tests/extension/graph-model-failures.spec.js --output=test-results/live-227-fixes`:
+  **14 passed**, including three new regressions through the production session
+  and visible Live alert, layout checks and model failure/restart checks.
+- `git diff --check`: passed.
+
+The MV3 tests used production sources staged from the builder's shared-file
+list, with controlled Worker protocols and fixture assets. Heavyweight model
+inference and a fully prepared production build were not rerun for these
+error-routing fixes.

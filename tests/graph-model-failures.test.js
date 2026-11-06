@@ -105,6 +105,10 @@ for (const type of types) {
       assert.equal(pipeline.errors.length, 1);
       assert.equal(pipeline.entries.get('model').failed, true);
       assert.equal(f.session.view.error.match(/Controlled model failure/g)?.length, 1, 'one actionable error per Node');
+      assert.match(f.session.view.error, type === 'IfCondition'
+        ? /No decision was fabricated\. Fix the input or Save graph/
+        : /Last successful summary retained; pending work stopped\. Save graph/,
+      'the duplicate Pipeline report preserves the structured failure recovery instructions');
       assert.equal(f.session.view.modelRecovery, true);
       assert.equal(f.session.view[status].match(/Controlled model failure/g)?.length, 1);
       assert.doesNotMatch(f.session.view.status, /failed/);

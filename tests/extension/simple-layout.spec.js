@@ -1,4 +1,60 @@
 import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './graph-fixture.js';
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'OpusMtJaEn']) {
+  test(`${type}: Live shows queue failures, replaces prior errors and clears them on restart`, async ({ graphExtension: f }) => {
+    const streaming = type !== 'OpusMtJaEn';
+    const workerFile = { Qwen3TtsStreaming: 'qwen3-tts-worker.js', CosyVoice3Streaming: 'cosyvoice3-worker.js', OpusMtJaEn: 'opus-mt-worker.js' }[type];
+    // Hold generation while exercising production queue admission, session
+    // routing and the accessible Live alert with a controlled Worker protocol.
+    await writeFile(path.join(f.root, 'web', workerFile), `
+      self.onmessage = ({data}) => {
+        if (data.type === 'load') postMessage({id:data.id,type:'ready'});
+        if (data.type === 'drain') postMessage({id:data.id,type:'drained'});
+      };`);
+    const live = await openGraph(f);
+    await live.evaluate(async () => {
+      const { TabSession } = await import('./session.js'), start = TabSession.prototype.start;
+      TabSession.prototype.start = function(...args) {
+        this.prepareTranslation = async () => {};
+        return start.apply(this, args);
+      };
+    });
+    await live.editor.evaluate(async ({ type, streaming }) => {
+      const { GRAPH_VERSION, graphNode, edge, saveGraph } = await import('./graph.js');
+      saveGraph(localStorage, { version: GRAPH_VERSION,
+        nodes: [graphNode('Text', 'source'), graphNode(type, 'processor'), graphNode(streaming ? 'StreamingSpeakerOutput' : 'Display', 'output')],
+        edges: [edge('source', 'value', 'processor', 'text'), edge('processor', streaming ? 'stream' : 'text', 'output', streaming ? 'stream' : 'input1')] });
+    }, { type, streaming });
+    await expect(live.locator('#start')).toBeEnabled();
+    await live.locator('#start').click();
+    await expect(live.locator('#stop')).toBeEnabled();
+    await expect(live.locator('#errors')).toBeEmpty();
+    const send = text => live.evaluate(text => graphSession.session.pipeline.entries.get('source').context.emit('value', text), text);
+    if (streaming) {
+      for (let i = 0; i < 18; i++) await send('Accepted speech');
+      await expect(live.locator('#errors')).toContainText('text queue full');
+      await expect(live.locator('#errors')).toContainText('Stop drains accepted speech, then Start again');
+    } else {
+      await send('x'.repeat(1001));
+      await expect(live.locator('#errors')).toContainText('1,000 characters');
+      await send('x'.repeat(32769));
+      await expect(live.locator('#errors')).toContainText('Translation backlog limit exceeded');
+      await expect(live.locator('#errors')).toContainText('Start a new session to retry');
+      await expect(live.locator('#errors')).not.toContainText('1,000 characters');
+    }
+    await expect(live.locator('#errors')).toBeVisible();
+    await expect(live.locator('#errors')).toHaveAttribute('role', 'alert');
+    expect((await live.locator('#errors').textContent()).split('\n')).toHaveLength(1);
+    await live.evaluate(() => graphSession.cancel());
+    await expect(live.locator('#start')).toBeEnabled();
+    await live.locator('#start').click();
+    await expect(live.locator('#stop')).toBeEnabled();
+    await expect(live.locator('#errors')).toBeEmpty();
+    await live.evaluate(() => graphSession.cancel());
+  });
+}
 
 test('Simple shows 0, 1, 2 and 4 independent single-input Displays at narrow and wide sizes with keyboard scrolling', async ({ graphExtension: f }) => {
   const live = await openGraph(f);

@@ -42,8 +42,8 @@ export class TabSession {
     // Unknown event types are diagnostics by default, including future Nodes.
     // Never infer severity from message text.
     if (event.type !== 'error' && event.severity !== 'error') return;
-    this.nodeErrors.set(id, event.message || 'Operation failed. Start a new session to retry.');
-    this.update({ error: [...this.nodeErrors].map(([id, message]) => `${id}: ${message}`).join('\n'),
+    this.nodeErrors.set(id, { message: event.message || 'Operation failed. Start a new session to retry.', cause: event.cause });
+    this.update({ error: [...this.nodeErrors].map(([id, error]) => `${id}: ${error.message}`).join('\n'),
       modelRecovery: [...this.nodeErrors.keys()].some(id => {
         const node = (this.view.activeGraph || this.graph).nodes.find(node => node.id === id);
         return node && graphModelRequirements({ nodes: [node] }).length > 0;
@@ -225,9 +225,12 @@ export class TabSession {
         },
         onError: (error, id) => {
           if (this.session !== session) return;
-          // Structured Node events may already contain more useful recovery
-          // instructions for this failure. Keep one notice per Node.
-          if (!this.nodeErrors.has(id)) this.nodeEvent({ type: 'error', message: error.cause?.message || error.message }, id);
+          // Preserve richer instructions only for this same failure. A prior
+          // recoverable notice must not hide a later fatal error from the Node.
+          const cause = error.cause || error;
+          const previous = this.nodeErrors.get(id);
+          if (previous && (previous.cause === cause || previous.message === cause.message)) return;
+          this.nodeEvent({ type: 'error', cause, message: `${cause.message || error.message} Start a new session to retry.` }, id);
         },
       }));
       await Promise.allSettled([...session.speechNodes].map(async ([id, node]) => {
