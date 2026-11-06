@@ -59,7 +59,7 @@ test(`real extension ${direction}: native tab audio → ASR.final → committed 
     const models = await context.newPage(); await models.goto(`chrome-extension://${id}/extension/model-cache.html`);
     const card = models.locator(`#opus-${direction}`);
     await loadTranslationFixture(editor, direction); await editor.locator('#graph-save').click();
-    await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+    await expect(editor.locator('#graph-state')).not.toContainText('Unsaved');
     await card.getByRole('button', { name: 'Download / retry', exact: true }).click();
     await expect(card.locator('.model-status')).toHaveText(/^(Ready|Error.*)/, { timeout: 600000 });
     cacheState = await card.locator('.model-status').textContent();

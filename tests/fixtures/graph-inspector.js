@@ -22,7 +22,7 @@ export async function checkStableInspector(page, width) {
   const heading = page.getByRole('button', { name: 'Select audio', exact: true });
   await heading.focus(); await heading.press('Enter');
   await expect(heading).toBeFocused();
-  await expect(inspector).toContainText('Node: audio');
+  await expect(inspector).toContainText('Instance ID: audio');
   expect(await geometry()).toEqual(before);
   await heading.press('Escape'); await expect(heading).toBeFocused();
   expect(await geometry()).toEqual(before);
@@ -40,7 +40,7 @@ export async function checkStableInspector(page, width) {
   await scroll.click({ position: { x: 4, y: 4 } });
   await expect(inspector).toContainText('Select a node or connection.');
   expect(await geometry()).toEqual(before);
-  await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  await expect(page.locator('#graph-state')).toContainText('Saved');
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
@@ -72,24 +72,24 @@ export async function checkInputDetach(page, width) {
   const before = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
   const { input, start, end } = await inputDragPoints(page);
   // A tap on an occupied input has no effect, and a cancelled drag keeps it.
-  await input.click(); await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  await input.click(); await expect(page.locator('#graph-state')).toContainText('Saved');
   await page.mouse.move(start.x, start.y); await page.mouse.down();
   await page.mouse.move(end.x, end.y, { steps: 5 });
   await expect(page.locator('.graph-canvas')).toHaveClass(/detaching/);
   await page.keyboard.press('Escape'); await page.mouse.up();
   await expect(page.locator('.graph-wire')).toHaveCount(before.edges.length);
-  await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  await expect(page.locator('#graph-state')).toContainText('Saved');
   // Dropping on a node heading is not empty canvas and must preserve the wire.
   const heading = await page.getByRole('button', { name: 'Select source', exact: true }).boundingBox();
   await page.mouse.move(start.x, start.y); await page.mouse.down();
   await page.mouse.move(heading.x + heading.width / 2, heading.y + heading.height / 2, { steps: 5 }); await page.mouse.up();
   await expect(page.locator('.graph-wire')).toHaveCount(before.edges.length);
-  await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  await expect(page.locator('#graph-state')).toContainText('Saved');
   await page.mouse.move(start.x, start.y); await page.mouse.down();
   await page.mouse.move(end.x, end.y, { steps: 5 }); await page.mouse.up();
   await expect(page.locator('.graph-wire')).toHaveCount(before.edges.length - 1);
   await expect(page.locator('.graph-scroll')).toBeFocused();
-  await expect(page.locator('#graph-state')).toContainText('Unsaved draft');
+  await expect(page.locator('#graph-state')).toContainText('Unsaved');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(before);
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   const expected = { ...before, edges: before.edges.slice(1) };
@@ -106,15 +106,15 @@ export async function checkInputReconnect(page) {
   const { start, end } = await inputDragPoints(page);
   await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 });
   await input('first input input1').dispatchEvent('pointercancel', { pointerId: 1 }); await page.mouse.up();
-  await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  await expect(page.locator('#graph-state')).toContainText('Saved');
   await expect(page.locator('.graph-wire')).toHaveCount(before.edges.length);
   // Invalid inputs and identical fan-out targets preserve both wires.
   await input('first input input1').dragTo(input('dom input pair'));
-  await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  await expect(page.locator('#graph-state')).toContainText('Saved');
   await input('first input input1').dragTo(input('second input input1'));
-  await expect(page.locator('#graph-state')).toContainText('Saved graph'); // identical fan-out target
+  await expect(page.locator('#graph-state')).toContainText('Saved'); // identical fan-out target
   await input('first input input1').dragTo(input('first input input2'));
-  await expect(page.locator('#graph-state')).toContainText('Unsaved draft');
+  await expect(page.locator('#graph-state')).toContainText('Unsaved');
   await expect(page.locator('.graph-wire')).toHaveCount(2);
   await expect(input('first input input2')).toBeFocused();
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();

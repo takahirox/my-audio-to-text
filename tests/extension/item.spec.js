@@ -48,7 +48,7 @@ test('MV3 unsupported saved Nodes/ports fail visibly and recover with current JS
   await live.editor.evaluate(raw => localStorage.setItem('processing-graph-v1', raw), raw);
   await live.reload(); await live.editor.reload();
   live.editor.on('dialog', dialog => dialog.accept());
-  await expect(live.editor.locator('#graph-state')).toContainText('Unsaved draft');
+  await expect(live.editor.locator('#graph-state')).toContainText('Unsaved');
   await expect(live.locator('#start')).toBeDisabled();
   await expect(live.editor.locator('#errors')).toContainText('Unknown Node type: ViewBuilder');
   await expect(live.editor.locator('#errors')).toContainText('Reset draft or import a current graph');

@@ -68,7 +68,7 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   await page.evaluate(() => { window.decodeRequests = []; });
   await feed(page, 8000); await expect(page.locator('.display-content')).toHaveText('segment 1: 8000');
   await editor.getByLabel('number value', { exact: true }).fill('2.5'); await save(editor);
-  await expect(editor.locator('#graph-state')).toContainText('earlier graph');
+  await expect(editor.locator('.graph-state-notice')).toContainText('earlier graph');
   await feed(page, 36000, .06);
   await expect(page.locator('.display-content tr td:first-child')).toHaveText(['segment 1: 20000', 'segment 2: 20000']);
 

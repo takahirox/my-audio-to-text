@@ -43,7 +43,7 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   await expect(page.locator('.display-content')).toHaveText(['en: 96000'].join('\n'));
 
   await editor.getByLabel('language value', { exact: true }).fill('ja'); await editor.locator('#graph-save').click();
-  await expect(editor.locator('#graph-state')).toContainText('earlier graph');
+  await expect(editor.locator('.graph-state-notice')).toContainText('earlier graph');
   await page.evaluate(() => window.capture.emit('audio', new Float32Array(37).fill(.1)));
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await expect(page.locator('.display-content tr td:first-child')).toHaveText(['en: 96000', 'en: 37']);

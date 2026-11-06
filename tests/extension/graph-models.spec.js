@@ -8,7 +8,7 @@ async function add(editor, type, settings = {}) {
 }
 async function save(editor) {
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  await expect(editor.locator('#graph-state')).not.toContainText('Unsaved draft');
+  await expect(editor.locator('#graph-state')).not.toContainText('Unsaved');
 }
 const cards = editor => editor.locator('#graph-models .model-card');
 
@@ -142,7 +142,7 @@ test('a Save in another editor cancels obsolete preparation without downloading 
   await other.getByRole('button', { name: 'Select opusmtenja', exact: true }).click();
   await other.getByRole('button', { name: 'Remove opusmtenja', exact: true }).click();
   await save(other); await expect(cards(editor)).toHaveCount(0);
-  await expect(editor.locator('#graph-state')).toContainText('draft kept');
+  await expect(editor.locator('.graph-state-notice')).toContainText('draft kept');
   await expect(editor.locator('[data-node=text]')).toHaveCount(1);
   await expect(editor.locator('[data-node=opusmtenja]')).toHaveCount(1);
   expect(await saved(live)).toEqual(initial);

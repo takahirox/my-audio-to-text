@@ -28,7 +28,7 @@ test('MV3 palette search/categories, contextual settings, keyboard help and draf
   const fit = await editor.locator('#graph-zoom').inputValue().then(Number); expect(fit).toBeLessThan(.5);
   await expect(editor.locator('[data-node="number"]')).toBeInViewport();
   await editor.getByRole('button', { name: 'Select number', exact: true }).press('Enter');
-  await editor.getByRole('button', { name: 'Clear selection', exact: true }).click();
+  await editor.keyboard.press('Escape');
   await expect(editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await editor.locator('#graph-help').click(); await expect(editor.getByRole('dialog')).toBeVisible();
   await editor.keyboard.press('Escape'); await expect(editor.locator('#graph-help')).toBeFocused();

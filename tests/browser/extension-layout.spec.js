@@ -133,29 +133,29 @@ for (const width of [390, 1440]) {
     await expect(second).toHaveAccessibleName('Select speech-second');
     await first.click();
     const inspector = page.getByRole('complementary', { name: 'Graph details inspector' });
-    await expect(inspector.getByText('Node: speech', { exact: true })).toBeVisible();
+    await expect(inspector.getByText('Instance ID: speech', { exact: true })).toBeVisible();
     await second.press('Enter');
     await expect(second).toBeFocused();
     await expect(second).toHaveAttribute('aria-pressed', 'true');
     await expect(first).toHaveAttribute('aria-pressed', 'false');
-    await expect(inspector.getByText('Node: speech-second', { exact: true })).toBeVisible();
+    await expect(inspector.getByText('Instance ID: speech-second', { exact: true })).toBeVisible();
     await first.press('Space');
-    await expect(inspector.getByText('Node: speech', { exact: true })).toBeVisible();
+    await expect(inspector.getByText('Instance ID: speech', { exact: true })).toBeVisible();
     await second.press('Space');
     await page.locator('#graph-zoom').selectOption('0.25');
-    await page.getByRole('button', { name: 'Edit at 100%', exact: true }).press('Enter');
+    await page.locator('#graph-zoom').selectOption('1');
     await expect(second).toBeFocused();
     await expectInsideCanvas(second);
-    await expect(inspector.getByText('Node: speech-second', { exact: true })).toBeVisible();
+    await expect(inspector.getByText('Instance ID: speech-second', { exact: true })).toBeVisible();
     await expect(page.locator('#graph-errors')).toBeEmpty();
-    await expect(page.locator('#graph-state')).toContainText('Saved graph');
+    await expect(page.locator('#graph-state')).toContainText('Saved');
     await page.locator('#graph-save').click();
     await expect(page.locator('#graph-save')).toBeEnabled();
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
     await page.reload();
     await expect(page.locator('.graph-heading')).toHaveText(labels);
     await second.click();
-    await expect(inspector.getByText('Node: speech-second', { exact: true })).toBeVisible();
+    await expect(inspector.getByText('Instance ID: speech-second', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
@@ -175,7 +175,7 @@ test('returning from Fit retains the selected wire and its keyboard Disconnect a
   await page.locator('#graph-fit').press('Enter');
   const wire = page.getByRole('button', { name: 'Select connection speech.final to coalesce.input1', exact: true });
   await wire.press('Enter');
-  await page.locator('#graph-edit-scale').press('Enter');
+  await page.locator('#graph-zoom').selectOption('1');
   await expect(wire).toBeFocused(); await expect(wire).toHaveAttribute('aria-pressed', 'true');
   await wire.press('Tab');
   await expect(page.locator('#graph-disconnect')).toBeFocused();
@@ -207,14 +207,14 @@ for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
     const heading = page.getByRole('button', { name: 'Select speech', exact: true });
     await heading.press('ArrowRight'); await expect(heading).toBeFocused();
     await expect(page.locator('[data-node="speech"]')).toHaveCSS('left', '280px');
-    await page.locator('#graph-edit-scale').press('Enter');
+    await page.locator('#graph-zoom').selectOption('1');
     await expect(heading).toBeFocused(); await expectInsideCanvas(heading);
     await heading.press('Enter');
     await expect(page.locator('.graph-inspector')).toBeVisible();
     await expectInsideCanvas(heading);
-    await page.getByRole('button', { name: 'Clear selection', exact: true }).click();
+    await page.keyboard.press('Escape');
     await page.locator('#graph-save').click();
-    await expect(page.locator('#graph-state')).toContainText('Saved graph');
+    await expect(page.locator('#graph-state')).toContainText('Saved');
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
     expect(saved.edges).toEqual([...original.edges.slice(1), original.edges[0]]);
     expect(saved.nodes).toEqual(original.nodes.map(node => node.id === 'speech' ? { ...node, position: { ...node.position, x: 280 } } : node));
@@ -262,7 +262,7 @@ test('touch returns from an overview to connect typed ports, move a node and dis
     if (zoom === 'fit') await page.locator('#graph-fit').tap(); else await page.locator('#graph-zoom').selectOption(zoom);
     // Overview targets may be just 4px tall. The full-size action is the touch
     // route back to editing; edge semantics remain covered at low zoom above.
-    await page.getByRole('button', { name: 'Edit at 100%', exact: true }).tap();
+    await page.locator('#graph-zoom').selectOption('1');
     await page.getByRole('button', { name: 'audio output audio', exact: true }).tap();
     await expect(page.getByRole('button', { name: 'coalesce input input2', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'audio output audio', exact: true }).tap();
@@ -276,7 +276,7 @@ test('touch returns from an overview to connect typed ports, move a node and dis
     await page.getByRole('button', { name: 'coalesce input input2', exact: true }).tap();
     await expect(wire).toHaveCount(1);
     await page.locator('#graph-zoom').selectOption('0.25');
-    await page.getByRole('button', { name: 'Edit at 100%', exact: true }).tap();
+    await page.locator('#graph-zoom').selectOption('1');
     const input = page.getByRole('button', { name: 'coalesce input input2', exact: true });
     await expect(input).toBeFocused(); await expectInsideCanvas(input);
   }
@@ -286,7 +286,7 @@ test('touch returns from an overview to connect typed ports, move a node and dis
   await page.mouse.move(box.x + 20, box.y + 20); await page.mouse.down();
   await page.mouse.move(box.x + 40, box.y + 40, { steps: 5 }); await page.mouse.up();
   await expect(page.locator('[data-node="speech"]')).toHaveCSS('left', '290px');
-  await page.locator('#graph-save').tap(); await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  await page.locator('#graph-save').tap(); await expect(page.locator('#graph-state')).toContainText('Saved');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await context.close();
 });
@@ -296,7 +296,7 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('#translation-enabled')).toBeHidden();
   await expect(page.locator('footer')).toHaveCount(0);
-  await expect(page.locator('#graph-state')).toHaveText('Saved graph · No active recording');
+  await expect(page.locator('#graph-state')).toHaveText('Saved');
   const canvas = await page.locator('.graph-scroll').boundingBox();
   expect(canvas.width).toBeGreaterThan(600);
   await page.locator('#graph-palette-toggle').press('Enter');
@@ -321,18 +321,18 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
   await page.locator('#graph-fit').click();
   expect(await page.locator('#graph-zoom').inputValue().then(Number)).toBeLessThanOrEqual(1.5);
   await page.getByRole('button', { name: 'Select number', exact: true }).press('Enter');
-  await page.getByRole('button', { name: 'Clear selection', exact: true }).click();
+  await page.keyboard.press('Escape');
   await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
-  await expect(page.locator('.graph-scroll')).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
   await page.locator('#graph-help').click(); await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog')).toContainText('Reconnecting replaces');
   await page.keyboard.press('Escape'); await expect(page.locator('#graph-help')).toBeFocused();
-  await page.getByText('Graph actions', { exact: true }).click();
+  await page.locator('.graph-actions > summary').click();
   page.once('dialog', dialog => dialog.dismiss()); await page.locator('#graph-load').click();
   await expect(page.locator('[data-node="number"]')).toHaveCount(1);
   page.once('dialog', dialog => dialog.accept()); await page.locator('#graph-load').click();
   await expect(page.locator('[data-node="number"]')).toHaveCount(0);
-  await page.getByText('Graph actions', { exact: true }).click(); await page.locator('#graph-validate').click();
+  await page.locator('.graph-actions > summary').click(); await page.locator('#graph-validate').click();
   await expect(page.locator('#graph-errors')).toHaveText('Draft valid. Save to use next session.');
   for (const width of [390, 700]) {
     await page.setViewportSize({ width, height: 844 });
@@ -360,7 +360,7 @@ for (const width of [390, 700]) {
   });
 }
 
-for (const action of ['Clear selection', 'Remove literal']) {
+for (const action of ['Select literal', 'Remove literal']) {
   test(`inspector text edits commit before a single ${action} click`, async ({ page }) => {
     const before = await page.evaluate(async () => {
       const { readGraph, graphNode, saveGraph } = await import('/extension/graph.js');
@@ -374,11 +374,11 @@ for (const action of ['Clear selection', 'Remove literal']) {
     // without replacing the command between pointerdown and click.
     await page.getByRole('button', { name: action, exact: true }).click();
     await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
-    await expect(page.locator('.graph-scroll')).toBeFocused();
-    await expect(page.locator('#graph-state')).toContainText('Unsaved draft');
+    await expect(action === 'Select literal' ? page.getByRole('button', { name: action, exact: true }) : page.locator('.graph-scroll')).toBeFocused();
+    await expect(page.locator('#graph-state')).toContainText('Unsaved');
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before.stored);
     const expected = structuredClone(before.graph);
-    if (action === 'Clear selection') {
+    if (action === 'Select literal') {
       expected.nodes.find(node => node.id === 'literal').settings.value = 'Edited output';
       await page.getByRole('button', { name: 'Select literal', exact: true }).click();
       await expect(page.getByLabel('literal value', { exact: true })).toHaveValue('Edited output');
@@ -393,7 +393,7 @@ for (const action of ['Clear selection', 'Remove literal']) {
       await expect(page.locator('#graph-errors')).toBeEmpty();
     }
     await page.locator('#graph-save').click();
-    await expect(page.locator('#graph-state')).toContainText('Saved graph');
+    await expect(page.locator('#graph-state')).toContainText('Saved');
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(expected);
   });
 }

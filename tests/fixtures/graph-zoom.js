@@ -44,15 +44,15 @@ export async function checkZoomRecovery(page, size, info) {
     else await page.locator('#graph-zoom').selectOption(zoom);
     samples.push({ requested: zoom, ...await zoomGeometry(page) });
     expect(samples.at(-1).pageOverflow).toBe(false);
-    const edit = page.getByRole('button', { name: 'Edit at 100%', exact: true });
+    const edit = page.locator('#graph-zoom');
     await expect(edit).toBeVisible();
     const box = await edit.boundingBox(); expect(box.height).toBeGreaterThanOrEqual(44);
-    await edit.press('Enter');
+    await edit.selectOption('1');
     await expect(target).toBeFocused();
     await expectInsideCanvas(target);
     await expect(target).toHaveAttribute('aria-pressed', pressed);
     await expect(page.locator('#graph-zoom')).toHaveValue('1');
-    await expect(edit).toBeHidden();
+    await expect(edit).toBeVisible();
     expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(44);
     // The existing selector also retains the editing location when zooming in.
     await page.locator('#graph-zoom').focus();
@@ -62,7 +62,7 @@ export async function checkZoomRecovery(page, size, info) {
     await expect(page.locator('#graph-zoom')).toBeFocused();
   }
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before);
-  await expect(page.locator('#graph-state')).toContainText('Saved graph');
+  await expect(page.locator('#graph-state')).toContainText('Saved');
   await info.attach('zoom-geometry', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
 }
 
