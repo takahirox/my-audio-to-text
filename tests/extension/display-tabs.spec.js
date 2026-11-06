@@ -150,7 +150,7 @@ test('MV3 label/count edits apply next session; duplicate/blank labels and disco
   await editor.getByLabel('main Remove last input', { exact: true }).click();
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   await expect(live.getByRole('tab')).toHaveCount(4);
-  await live.locator('#cancel-session').click(); await expect(live.locator('#start')).toBeEnabled(); await live.locator('#start').click();
+  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled(); await live.locator('#start').click();
   await expect(live.getByRole('tab')).toHaveText(['Same', 'Same', 'Input 3']);
   await expect(live.locator('.live-text-region:visible')).toHaveCount(1);
   await clickGraphAction(editor, 'graph-load');

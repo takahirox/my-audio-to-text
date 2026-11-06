@@ -260,12 +260,12 @@ test(`${real ? `real pinned ${model}` : `controlled ${model} streaming transport
       record.wavSha256 = createHash('sha256').update(Buffer.from(wav)).digest('hex');
     }
     evidence.languages.push({ language, texts: [text, second], ...record });
-    // A fresh session's Cancel closes the real AudioContext/owned Worker. Wait
+    // A fresh session's pagehide closes the real AudioContext/owned Worker. Wait
     // after cancellation to catch any late reply that tries to schedule audio.
     await page.locator('#start').click();
     await expect.poll(() => page.evaluate(() => window.ttsEvents.filter(event => event.type === 'chunk').length), { timeout: 90000 }).toBeGreaterThan(record.events.filter(event => event.type === 'chunk').length);
     const cancelAt = Date.now();
-    await page.locator('#cancel-session').click(); await expect(page.locator('#start')).toBeEnabled();
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(page.locator('#start')).toBeEnabled();
     const cancelMs = Date.now() - cancelAt;
     const count = await page.evaluate(() => window.scheduleEvents.length); await page.waitForTimeout(150);
     expect(await page.evaluate(() => window.scheduleEvents.length)).toBe(count);

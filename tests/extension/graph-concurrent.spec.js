@@ -97,7 +97,8 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
       await expect.poll(() => page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(2);
       expect(await page.evaluate(() => window.captureStreams.some(record => record.kind==='mic'&&!record.stopped))).toBe(true);
     }
-    await page.locator(mode === 'cancel' ? '#cancel-session' : '#stop').click();
+    if (mode === 'cancel') await page.evaluate(() => window.graphSession.cancel());
+    else await page.locator('#stop').click();
     await expect(page.locator('#start')).toBeEnabled(); await expect(page.locator('#errors')).toBeEmpty();
     if(mode!=='cancel') {
       await expect(page.locator('[data-display="transcript"] .display-content')).toContainText('remote');

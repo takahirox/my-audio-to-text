@@ -34,7 +34,7 @@ and Models keep their dark appearance:
   items and distinct Preview/Current value blocks. Each Display input is a
   switchable tab whose pane shows only content, without a repeated heading or
   Copy text control. Select and copy text using the browser's native commands. A compact
-  recording panel retains Start/Stop/Cancel and an accurate session-state pill.
+  recording panel retains Start/Stop and an accurate session-state pill.
   Graph-configured Button sources appear in a separate Graph Actions band when
   present. Errors, target authorization, graph-change warnings and model recovery
   remain visible; a compact bottom strip shows session progress and expandable
@@ -55,7 +55,7 @@ Navigation opens auxiliary tabs while Live continues to own the active capture.
 auxiliary tabs does not end the session. A missing optional model links from Live
 to Models for direction/voice-specific recovery; retry preparation, then start a new session.
 See [graph editing](extension-graph.md), [model caching](extension-model-cache.md)
-and [#109 validation/screenshots](evidence/ui-109.md).
+and [Live control validation/screenshots](evidence/live-225.md).
 
 ## Build and load unpacked
 
@@ -108,12 +108,12 @@ loading it again is unnecessary.
    before the active indication is not transcribed.
 5. Return to the meeting tab; keep the transcript window open. It shows the
    active state, audio-signal status, provisional text and committed final text.
-6. Click **Stop / finalize** to flush capture/VAD tails and drain final decoding
+6. Click **Stop** to flush capture/VAD tails and drain final decoding
    and transcript output ports (and all final translations when enabled) before
    the UI reports completion.
    Copy the final text before closing the window.
 
-**Start again** retries the selected tab and clears the previous transcript.
+**Start** retries the selected tab and clears the previous transcript.
 Each session loads fresh workers. To capture another tab, stop first, then
 invoke the toolbar action on the new tab; it reuses the transcript window.
 An invocation during a live session focuses its window and leaves the session
@@ -121,8 +121,11 @@ on its originally selected tab.
 
 Tab navigation, closing the captured tab, or Chrome ending its stream finalizes
 the session. Stop during model loading cancels before capture. Closing/reloading
-the transcript window or unloading the extension releases media and workers,
-discarding pending inference. Transcripts are held only in that window's memory.
+the Live page/window or navigating away releases media and workers immediately,
+without waiting for pending summarization or translation. Close Live to abandon
+a session; there is no built-in Cancel recording control. Internal
+`TabSession.cancel()` and `Pipeline.cancel()` still handle teardown and errors. Transcripts are held only in that window's
+memory.
 Errors release capture and workers and leave retry available. If Chrome's
 temporary tab grant has expired (for example after navigating to another origin),
 invoke the toolbar action again on that tab. Chrome-internal pages and other
@@ -246,7 +249,7 @@ The original ASR preview remains available while committed translations are queu
 Translation publishes completed results only; no provisional translation or pending
 history rows are produced. Runtime status shows loading/readiness/failure. A failure
 can be displayed through the primitive `error` output while successful `text` sinks
-receive nothing. Stop drains final speech and translations. Cancel or closing the
+receive nothing. Stop drains final speech and translations. Closing the Live
 window discards pending work, releases Workers and ignores late completions.
 Completed display items remain until the next Start; transcripts are not persisted.
 
@@ -268,8 +271,9 @@ Text over 1,000 characters produces a per-utterance error; model errors make
 translation unavailable for that session while ASR continues. The tokenizer also
 enforces 512 tokens and caps output at 256 tokens. Each Node owns its module Worker,
 pinned runtime/checkpoint and cache-only loading; no remote inference or shared
-model manager is involved. Graceful Stop drains all queued results; Cancel
-terminates inference immediately. Fresh sessions use fresh Nodes.
+model manager is involved. Graceful Stop drains all queued results; closing Live
+uses internal cancellation to terminate inference immediately. Fresh sessions use
+fresh Nodes.
 
 `extension/opus-mt-assets.json` reviews all seven model files at immutable
 revision `05470cd69b62aa32e3ee64ccfd41279789ee4b1e` with exact sizes and 1 MiB

@@ -6,7 +6,7 @@ import path from 'node:path';
 // Actual MV3 package, production recorder/session/editor/Pipeline and DOM.
 // Capture and model Workers are controlled fixtures; no model download or real
 // GPU, speech recognition, hardware permission, or throughput claim is made.
-test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop, Cancel/restart, errors and stale handlers at 390px', async () => {
+test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop, internal cancellation/restart, errors and stale handlers at 390px', async () => {
   test.setTimeout(60000);
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'graph-actions-'));
   let context;
@@ -106,7 +106,7 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     await page.evaluate(() => stale()); expect(await page.evaluate(() => requests.length)).toBe(2);
     await page.evaluate(() => emitFinal('C')); await action.press('Space');
     await expect.poll(() => page.evaluate(() => requests.length)).toBe(3);
-    await page.locator('#cancel-session').click(); await expect(action).toBeDisabled();
+    await page.evaluate(() => window.owner.cancel()); await expect(action).toBeDisabled();
     expect(await page.evaluate(() => summaryWorkers.every(w => w.released))).toBe(true);
     await page.locator('#start').click(); await expect(action).toBeEnabled();
     await page.evaluate(() => emitFinal('FAIL')); await action.tap();

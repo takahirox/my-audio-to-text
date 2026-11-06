@@ -173,9 +173,9 @@ for (const direction of ['ja-en', 'en-ja']) {
     await expect(page.locator('#errors')).toBeEmpty();
   });
 
-  test(`${direction}: Cancel during final drain preserves committed text and discards pending pairs`, async ({ translationExtension: f }) => {
+  test(`${direction}: pagehide during final drain preserves committed text and discards pending pairs`, async ({ translationExtension: f }) => {
     await instrument(f); const page = await open(f); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toHaveText('Local OPUS-MT ready'); await emit(page, 'final', 'slow'); await page.locator('#stop').click();
-    await expect(page.locator('#status')).toHaveText('Finalizing graph outputs…'); await page.locator('#cancel-session').click(); await expect(pairText(page)).toHaveCount(1); await expect(originalItems(page)).toHaveText('slow'); await expect.poll(() => page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
+    await expect(page.locator('#status')).toHaveText('Finalizing graph outputs…'); await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await expect(pairText(page)).toHaveCount(1); await expect(originalItems(page)).toHaveText('slow'); await expect.poll(() => page.evaluate(() => window.ownedWorkers.every(w => w.released))).toBe(true);
   });
 }
 

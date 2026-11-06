@@ -96,9 +96,10 @@ branch and cancels pending work, preserving the transcript and last result.
 Buttons are disabled outside running state and after a reachable branch failure.
 Callbacks capture the exact session, including callbacks rendered while idle;
 stale callbacks cannot obtain a replacement session's contexts. Stop prevents
-new UI admission and drains accepted work. Cancel aborts/discards pending work,
-terminates Workers and suppresses late replies. Restart creates fresh nodes,
-held state and action ownership. Failed summary paths do not stop transcription.
+new UI admission and drains accepted work. Closing Live invokes internal
+cancellation, which aborts/discards pending work, terminates Workers and suppresses
+late replies. Restart creates fresh nodes, held state and action ownership.
+Failed summary paths do not stop transcription.
 
 ## Validation
 

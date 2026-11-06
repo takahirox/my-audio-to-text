@@ -176,8 +176,8 @@ transcription displays remain usable. Permissions are scoped to the selected
 tab/document. It does not replay or retry ambiguous edits.
 
 Start clears session history. Stop drains accepted work in graph order and
-retains the rendered result. Cancel closes delivery, terminates owned inference
-and suppresses late replies while retaining the last display. A fresh Start uses
+retains the rendered result. Internal cancellation closes delivery, terminates
+owned inference and suppresses late replies while retaining the last display. A fresh Start uses
 fresh state and rejects stale contexts. Display renders supplied snapshots only;
 stream selection belongs to explicit processors upstream.
 
@@ -249,7 +249,8 @@ documented with each feature.
 
 Add **Button** from **Sources / inputs**, edit its caption and connect its ordinary
 NUMBER output to any compatible consumer. Live renders active buttons by Node ID
-near Start/Stop/Cancel, with keyboard/touch access and bounded busy handling.
+in Graph Actions below Start/Stop, with keyboard/touch access and bounded busy
+handling.
 For manual summaries, connect Button.trigger → Hold.trigger, accumulated text →
 Hold.input and Hold.value → TextSummary.text. A connected trigger makes value an
 ordinary emitted output; without it the original sampled feedback mode remains.

@@ -112,13 +112,13 @@ test('MV3 saturation reports rejected TTS clips and Stop drains every accepted c
   await expect(page.locator('#speaker-status')).toContainText('2 clip(s) rejected');
 });
 
-test('MV3 Cancel, repeated Start and closing Live release audio and suppress old TTS replies', async ({ graphExtension: f }) => {
+test('MV3 internal cancellation, repeated Start and closing Live release audio and suppress old TTS replies', async ({ graphExtension: f }) => {
   const page = await speakerGraph(f); await startSpeaker(page);
   await emitFinal(page, 'First');
   await expect.poll(() => page.evaluate(() => window.speakerEvents.filter(event => event.type === 'start').length)).toBe(1);
   await emitFinal(page, 'slow');
   await expect.poll(() => page.evaluate(() => window.graphWorkers.some(worker => worker.messages.some(message => message.type === 'generate' && message.text === 'slow')))).toBe(true);
-  await page.locator('#cancel-session').click();
+  await page.evaluate(() => window.graphSession.cancel());
   await expect(page.locator('#start')).toBeEnabled();
   expect(await page.evaluate(() => window.speakerContexts.map(context => context.state))).toEqual(['closed']);
   expect(await page.evaluate(() => window.graphWorkers.every(worker => worker.released))).toBe(true);

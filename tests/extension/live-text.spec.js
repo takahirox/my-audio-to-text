@@ -4,7 +4,7 @@ import { test, expect, openGraph } from './graph-fixture.js';
 import { installLiveScrollFixture, checkLiveScrolling, checkLiveTextFlowScrolling } from '../fixtures/live-scroll.js';
 const region = (page, id) => page.locator(`[data-display="${id}"]`);
 
-test('MV3 summary TEXT snapshots render literally through Display.input, retain committed output on Cancel and drain Stop', async ({ graphExtension: f }) => {
+test('MV3 summary TEXT snapshots render literally through Display.input, drain Stop and retain committed output during pagehide cancellation', async ({ graphExtension: f }) => {
   await writeFile(path.join(f.root,'web/text-summary-worker.js'), `self.onmessage=({data})=>{
     if(data.type==='load')postMessage({type:'ready',id:data.id});
     if(data.type==='summarize')setTimeout(()=>postMessage({type:'result',id:data.id,summary:data.text}),data.text==='slow'?1500:10);
@@ -23,11 +23,15 @@ test('MV3 summary TEXT snapshots render literally through Display.input, retain 
   const content=region(live,'notes').locator('.display-content');await expect(content).toHaveText(literal);
   await expect(content.locator('script')).toHaveCount(0);
   await live.evaluate(()=>window.summarySession.session.pipeline.entries.get('source').context.emit('value','slow'));
-  await expect.poll(()=>live.evaluate(()=>window.graphWorkers.some(worker=>worker.messages.some(message=>message.type==='summarize'&&message.text==='slow')))).toBe(true);
-  await live.locator('#cancel-session').click();await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText(literal);
+  await expect(live.locator('#summary-status')).toContainText('summarizing text');
+  await live.locator('#stop').click();await expect(live.locator('#status')).toHaveText('Finalizing graph outputs…');
+  await expect(live.locator('#start')).toBeDisabled();
+  await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText('slow');
+  await live.locator('#start').click();await expect(content).toHaveText(literal);
+  await live.evaluate(()=>window.summarySession.session.pipeline.entries.get('source').context.emit('value','slow'));
+  await expect.poll(()=>live.evaluate(()=>window.graphWorkers.some(worker=>!worker.released&&worker.messages.some(message=>message.type==='summarize'&&message.text==='slow')))).toBe(true);
+  await live.evaluate(() => window.dispatchEvent(new Event('pagehide')));await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText(literal);
   expect(await live.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
-  await live.locator('#start').click();await expect(live.locator('#status')).toHaveText('Processing active');
-  await live.locator('#stop').click();await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText(literal);
 });
 
 

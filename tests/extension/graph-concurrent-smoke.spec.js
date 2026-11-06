@@ -74,7 +74,7 @@ test('real packaged concurrent Zipformer and Whisper: independent results, resou
       console.log(JSON.stringify(runs.at(-1)));
     }
     await page.locator('#start').click();await expect(page.locator('#status')).toHaveText('Transcription active',{timeout:120000});
-    await page.locator('#cancel-session').click();await expect(page.locator('#start')).toBeEnabled();
+    await page.evaluate(() => window.graphSession.cancel());await expect(page.locator('#start')).toBeEnabled();
     expect(await page.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
     expect(errors).toEqual([]);expect(requests).toEqual([]);
   } finally {

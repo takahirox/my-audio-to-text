@@ -24,7 +24,7 @@ test('Simple shows 0, 1, 2 and 4 independent single-input Displays at narrow and
       expect(await live.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await expect(live.locator('#start')).toBeInViewport();
       await expect(live.locator('#stop')).toBeInViewport();
-      await expect(live.locator('#cancel-session')).toBeInViewport();
+      await expect(live.locator('#cancel-session')).toHaveCount(0);
       if (count) {
         const content = live.locator('.display-content').first();
         await content.focus(); await content.press('ArrowDown');
@@ -68,9 +68,9 @@ test('Simple hides routine details but keeps unknown diagnostics, recovery and n
   await expect(live.locator('.display-label, .live-text-region button, .live-text-region [role="status"]')).toHaveCount(0);
   await expect(live.locator('#stop')).toBeEnabled();
   await expect(live.locator('#start')).toBeDisabled();
-  await live.locator('#cancel-session').click();
+  await live.locator('#stop').click();
   await expect(live.locator('.display-content')).toHaveText('Readable output');
-  await expect(live.locator('#cancel-session')).toBeDisabled();
+  await expect(live.locator('#stop')).toBeDisabled();
 });
 
 test('Simple exposes required media selection and retains permission and graph recovery errors', async ({ graphExtension: f }) => {
