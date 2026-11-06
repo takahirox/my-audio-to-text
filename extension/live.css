@@ -1,15 +1,5 @@
-/* Live owns its light palette. Graph Editor and Models only load recorder.css. */
-:root:has(body.live-page) {
-  color-scheme: light;
-  background: #f3f2f7;
-  color: #292635;
-  font-family: system-ui, -apple-system, "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
-}
+/* Live reading layout; shared light tokens and controls live in app.css. */
 body.live-page {
-  --panel: #fff;
-  --border: #dedbe7;
-  --muted: #686273;
-  --accent: #6740b5;
   max-width: 76rem;
   min-height: 100dvh;
   padding: 1.25rem 1.75rem .5rem;
@@ -30,19 +20,6 @@ body.live-page {
 .live-page .page-header { margin-bottom: .5rem; flex-wrap: nowrap; }
 .live-page h1 { display: flex; align-items: center; gap: .6rem; font-size: 1.5rem; }
 .live-page .live-icon { width: 32px; height: 32px; color: var(--accent); }
-.live-page nav { flex-wrap: nowrap; gap: .35rem; }
-.live-page nav a { display: flex; align-items: center; font-size: .9rem; padding: .4rem .7rem; border-color: transparent; color: #575060; }
-.live-page nav a:hover { background: #f3f0f9; color: var(--accent); }
-.live-page button, .live-page select, .live-page input, .live-page textarea {
-  background: #fff;
-  border-color: var(--border);
-  border-radius: 9px;
-}
-.live-page button:hover:enabled { background: #f2eef9; border-color: #b8a4db; }
-.live-page button.primary { background: #7046bc; border-color: #7046bc; color: #fff; }
-.live-page button.primary:hover:enabled { background: #5f36a6; }
-.live-page button:disabled, .live-page select:disabled { opacity: 1; color: #77717f; background: #f1eff4; border-color: #e7e3ed; }
-.live-page :focus-visible { outline: 3px solid #8057c5; outline-offset: 2px; }
 .live-page .capture-panel { padding: 0; margin: 0; border: 0; background: transparent; }
 .live-page .recording-heading { display: block; }
 .live-page .session-pill {

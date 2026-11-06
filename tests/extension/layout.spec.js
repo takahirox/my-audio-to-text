@@ -63,7 +63,8 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
   expect(await live.locator('#live-displays').evaluate(root => !!(document.querySelector('.capture-panel').compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   await expect(live.locator('#targets, #target-controls, #target-status, .target-row')).toHaveCount(0);
   await expect(live.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
-  await live.getByRole('button', { name: 'Cancel', exact: true }).click();
+  // Cancellation is internal since #223; Live exposes Start/Stop only.
+  await live.evaluate(() => window.graphSession.cancel());
   // Cancel retains the latest complete keyed history, including its last preview row.
   await expect(live.locator('[data-display="transcript"] tr td:first-child')).toHaveText(['<em>committed</em>', 'pending']);
 });
