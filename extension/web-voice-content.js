@@ -135,6 +135,10 @@
       if (message.type === 'state' && session) stateUI(message.state, message.error);
       if (message.type === 'ended') {
         session?.connection?.disconnect(); session = null;
+        // Only active sessions stay bound to the original field. Reconcile
+        // focus before offering another start, including hiding idle controls
+        // when focus moved away from supported editors.
+        if (!message.error) focus();
         stateUI(message.error ? 'error' : 'idle', message.error || '');
         // Preserve actionable errors until next focus or explicit retry.
       }

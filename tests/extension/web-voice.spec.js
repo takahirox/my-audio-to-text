@@ -172,6 +172,36 @@ test('denied microphone, busy tabs, fixed target despite focus changes and OFF d
   await expect(widget(t.website)).toHaveCount(0); await expect(widget(other)).toHaveCount(0);
 });
 
+test('completed sessions refresh the idle target and remove the mic when focus is not editable', async ({ voice: t }) => {
+  test.skip(real, 'Repeated-session target binding uses controlled inference.');
+  await enable(t);
+  let runtime = await start(t);
+  await expect(runtime.locator('#voice-state')).toHaveText('Recording');
+  await t.website.bringToFront();
+  await t.website.locator('#second').focus();
+  await t.website.locator('#second').evaluate(e => e.setSelectionRange(5, 5));
+  await runtime.waitForTimeout(600);
+  let closed = runtime.waitForEvent('close'); await mic(t.website); await closed;
+  await expect(t.website.locator('#first')).toHaveValue('before confirmed fixtureafter');
+  await expect(t.website.locator('#second')).toHaveValue('left right');
+  await expect(t.website.locator('#second')).toBeFocused();
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
+
+  // Click the remaining mic directly: refocusing through start() would mask a
+  // stale target left over from the previous session.
+  const created = t.context.waitForEvent('page', { predicate: page => page.url().includes('web-voice-runtime.html') });
+  await mic(t.website); runtime = await created;
+  await expect(runtime.locator('#voice-state')).toHaveText('Recording');
+  await t.website.bringToFront();
+  await t.website.locator('button[type="submit"]').focus();
+  await runtime.waitForTimeout(600);
+  closed = runtime.waitForEvent('close'); await mic(t.website); await closed;
+  await expect(t.website.locator('#first')).toHaveValue('before confirmed fixtureafter');
+  await expect(t.website.locator('#second')).toHaveValue('left confirmed fixtureright');
+  await expect(widget(t.website)).toHaveCount(0);
+  expect(await t.website.evaluate(() => window.submits)).toBe(0);
+});
+
 test('fresh install has no site permission or injected scripts; assignment is not consent and denial stays OFF', async ({ voice: t }) => {
   test.skip(real, 'Permission boundary does not require real inference.');
   expect(await t.library.evaluate(async () => (await chrome.permissions.getAll()).origins)).toEqual([]);
