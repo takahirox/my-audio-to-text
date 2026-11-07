@@ -23,10 +23,10 @@ test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepar
     await expect(card).toHaveAttribute('data-state', 'Ready');
     expect(f.requests.some(url => url.includes(key))).toBe(true);
   }
-  const nodes = await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage));
+  const nodes = await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage));
   expect(nodes.version).toBe(15); expect(nodes.nodes.filter(n => n.type.includes('Parakeet') || n.type.includes('Moonshine'))).toHaveLength(2);
   await editor.reload();
-  expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(nodes);
+  expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(nodes);
   await expect(editor.getByRole('button', { name: 'speechtotextparakeetv3 output provisional', exact: true })).toHaveCount(0);
   await expect(editor.getByRole('button', { name: 'speechtotextparakeetv3 output final', exact: true })).toBeVisible();
   await expect(editor.getByRole('button', { name: 'speechtotextmoonshinemediumen output provisional', exact: true })).toBeVisible();
@@ -35,7 +35,7 @@ test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepar
 test('parallel production Nodes fan out finals, preserve repeats, clear failed preview, drain/release and Start fresh', async ({ graphExtension: f }) => {
   const page = await openGraph(f);
   await page.evaluate(async () => {
-    const { graphNode, edge, saveGraph, assertGraph } = await import('./graph.js');
+    const { graphNode, edge, assertGraph } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
 
   });
   for (let repeat = 0; repeat < 2; repeat++) {

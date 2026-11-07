@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 
 export async function checkStableInspector(page, width) {
   await page.setViewportSize({ width, height: 900 });
-  const original = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const original = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   const inspector = page.locator('.graph-inspector'), scroll = page.locator('.graph-scroll');
   await expect(inspector).toContainText('Select a node or connection.');
   await scroll.evaluate(canvas => { canvas.scrollLeft = 10; canvas.scrollTop = 10; });
@@ -41,18 +41,18 @@ export async function checkStableInspector(page, width) {
   await expect(inspector).toContainText('Select a node or connection.');
   expect(await geometry()).toEqual(before);
   await expect(page.locator('#graph-state')).toContainText('Saved');
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(original);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 
 export async function loadInputGraph(page) {
   await page.evaluate(async () => {
-    const { graphNode, edge, saveGraph } = await import(new URL('./graph.js', location.href));
+    const { graphNode, edge } = await import(new URL('./graph.js', location.href)); const { saveLiveGraphData } = await import(new URL('./graph-library.js', location.href));
     const nodes = [graphNode('Text', 'source', 20, 20), graphNode('TextFormatter', 'first', 350, 20),
       graphNode('TextFormatter', 'second', 650, 20), graphNode('Text', 'alternate', 20, 400),
       graphNode('KeyedPairedTextAccumulator', 'dom', 650, 400)];
     nodes[0].settings.value = 'Keep settings';
-    saveGraph(localStorage, { version: 15, nodes, edges: [edge('source', 'value', 'first', 'input1'),
+    await saveLiveGraphData(localStorage, { version: 15, nodes, edges: [edge('source', 'value', 'first', 'input1'),
       edge('source', 'value', 'second', 'input1'), edge('alternate', 'value', 'first', 'input2')] });
   });
   await page.reload();
@@ -69,7 +69,7 @@ export async function inputDragPoints(page) {
 export async function checkInputDetach(page, width) {
   await page.setViewportSize({ width, height: 900 }); await loadInputGraph(page);
   await page.locator('#graph-zoom').selectOption('0.5');
-  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const before = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   const { input, start, end } = await inputDragPoints(page);
   // A tap on an occupied input has no effect, and a cancelled drag keeps it.
   await input.click(); await expect(page.locator('#graph-state')).toContainText('Saved');
@@ -90,17 +90,17 @@ export async function checkInputDetach(page, width) {
   await expect(page.locator('.graph-wire')).toHaveCount(before.edges.length - 1);
   await expect(page.locator('.graph-scroll')).toBeFocused();
   await expect(page.locator('#graph-state')).toContainText('Unsaved');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(before);
+  expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(before);
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   const expected = { ...before, edges: before.edges.slice(1) };
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(expected);
+  expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(expected);
   await page.reload(); await expect(page.locator('.graph-wire')).toHaveCount(expected.edges.length);
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(expected);
+  expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(expected);
 }
 
 export async function checkInputReconnect(page) {
   await page.setViewportSize({ width: 1440, height: 900 }); await loadInputGraph(page);
-  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const before = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   const input = name => page.getByRole('button', { name, exact: true });
   // A cancelled pointer leaves the saved draft intact, including the old input.
   const { start, end } = await inputDragPoints(page);
@@ -118,27 +118,26 @@ export async function checkInputReconnect(page) {
   await expect(page.locator('.graph-wire')).toHaveCount(2);
   await expect(input('first input input2')).toBeFocused();
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual({ ...before,
+  expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual({ ...before,
     edges: [before.edges[1], { from: ['source', 'value'], to: ['first', 'input2'] }] });
 }
 
 export async function checkRecovery(page, kind) {
+  const { corruptSavedGraph, recoverAsNew } = await import('../extension/ui-controls.js');
   const raw = await page.evaluate(async kind => {
-    const { defaultGraph, GRAPH_KEY } = await import(new URL('./graph.js', location.href));
+    const { defaultGraph } = await import(new URL('./graph.js', location.href));
     const graph = defaultGraph(); if (kind === 'paired') graph.version = 11;
     if (kind === 'unsupported') graph.nodes.push({ id: 'retired', type: 'RetiredProcessor', settings: {}, position: { x: 0, y: 0 } });
-    const raw = kind === 'invalid' ? '{ invalid JSON' : JSON.stringify(graph, null, 2);
-    localStorage.setItem(GRAPH_KEY, raw); return raw;
+    return kind === 'invalid' ? '{ invalid JSON' : JSON.stringify(graph, null, 2);
   }, kind);
-  await page.reload();
+  await corruptSavedGraph(page, raw); await page.reload();
   if (kind === 'current') { await expect(page.locator('#errors')).toBeEmpty(); return; }
   await expect(page.locator('#errors')).toContainText('Saved graph unavailable');
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
   await page.locator('.graph-actions > summary').click();
   await page.getByText('Saved JSON', { exact: true }).click();
   await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(raw);
-  page.once('dialog', dialog => dialog.accept());
-  await page.locator('#graph-reset').click();
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
-  await page.reload(); await expect(page.locator('#errors')).toBeEmpty();
+  page.once('dialog', dialog => dialog.accept()); await page.locator('#graph-reset').click();
+  await page.locator('#graph-save').click(); await expect(page.locator('#graph-errors')).toContainText('original has been kept');
+  await recoverAsNew(page);
+  await expect(page.locator('#errors')).toBeEmpty();
 }

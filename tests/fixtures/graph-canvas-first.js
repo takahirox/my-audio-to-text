@@ -47,12 +47,12 @@ export async function checkCanvasFirst(page, width) {
 
 export async function checkLeanInspector(page) {
   await page.evaluate(async () => {
-    const { defaultGraph, graphNode, saveGraph } = await import(new URL('./graph.js', location.href));
+    const { defaultGraph, graphNode } = await import(new URL('./graph.js', location.href)); const { saveLiveGraphData } = await import(new URL('./graph-library.js', location.href));
     const graph = defaultGraph(); graph.nodes.push(graphNode('Hold', 'hold-1', 20, 20));
-    saveGraph(localStorage, graph);
+    await saveLiveGraphData(localStorage, graph);
   });
   await page.reload();
-  const before = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const before = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   const heading = page.getByRole('button', { name: 'Select hold-1', exact: true });
   const inspector = page.locator('.graph-inspector');
   await heading.click();
@@ -72,7 +72,7 @@ export async function checkLeanInspector(page) {
   await expect(heading).toHaveAttribute('aria-pressed', 'false');
   await heading.press('Enter'); await page.locator('#graph-canvas').click({ position: { x: 3, y: 3 } });
   await expect(inspector).toContainText('Select a node or connection.');
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
   await expect(page.locator('#graph-state')).toHaveText('Saved');
   await heading.click();
   const box = await heading.boundingBox();

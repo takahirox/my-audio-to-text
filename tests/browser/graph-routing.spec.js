@@ -21,17 +21,17 @@ test('backward, upward and downward port routes avoid intermediate cards', async
   for (const [source, target, obstacle] of [
     [[800, 200], [30, 200], [400, 120]], [[30, 30], [30, 800], [180, 350]], [[30, 800], [30, 30], [180, 350]],
   ]) {
-    await page.evaluate(({ source, target, obstacle }) => {
-      const key = 'processing-graph-v1', graph = JSON.parse(localStorage.getItem(key));
+    await page.evaluate(async ({ source, target, obstacle }) => {
+      const { readLiveGraphData, saveLiveGraphData } = await import('/extension/graph-library.js'); const graph = readLiveGraphData(localStorage);
       for (const [i, position] of [source, obstacle, target].entries()) graph.nodes[i].position = { x: position[0], y: position[1] };
-      localStorage.setItem(key, JSON.stringify(graph));
+      await saveLiveGraphData(localStorage, graph);
     }, { source, target, obstacle });
     await page.reload(); await assertRoutingGeometry(page);
   }
 });
 test('detour hit target supports selection, keyboard deletion and persistence', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 }); await loadRoutingGraph(page);
-  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const before = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   const p = await detourPoint(page); await page.mouse.click(p.x, p.y);
   await expect(page.locator('.selected-wire')).toHaveCount(1); await expect(page.locator('#graph-disconnect')).toBeVisible();
   const initial = await page.locator('.wire-line').getAttribute('d');
@@ -45,7 +45,7 @@ test('detour hit target supports selection, keyboard deletion and persistence', 
   await page.getByRole('button', { name: 'target input input1', exact: true }).press('Enter');
   await assertRoutingGeometry(page);
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(before);
+  expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(before);
   await page.reload(); await assertRoutingGeometry(page);
 });
 test('adding and removing formatter ports updates attachment geometry and only its last wire', async ({ page }) => {
@@ -81,7 +81,7 @@ test('dense routes remain clear and update interactively', async ({ page }) => {
 });
 test('blocked ports show a dashed selectable fallback and recover when cards move', async ({ page }) => {
   await loadRoutingGraph(page);
-  await page.evaluate(() => { const key = 'processing-graph-v1', graph = JSON.parse(localStorage.getItem(key)); graph.nodes[1].position = { x: 260, y: 200 }; localStorage.setItem(key, JSON.stringify(graph)); });
+  await page.evaluate(async () => { const { readLiveGraphData, saveLiveGraphData } = await import('/extension/graph-library.js'); const graph = readLiveGraphData(localStorage); graph.nodes[1].position = { x: 260, y: 200 }; await saveLiveGraphData(localStorage, graph); });
   await page.reload();
   await expect(page.locator('.routing-fallback')).toHaveCount(1);
   await expect(page.locator('.graph-routing-notice')).toBeVisible();

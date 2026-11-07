@@ -37,15 +37,15 @@ test('zoom at scroll edges clamps offsets without moving nodes, and very large F
   expect(after.left).toBeCloseTo(Math.min(after.maxX, Math.max(0, (before.left + before.x) * ratio - before.x)), 0);
   expect(after.top).toBeCloseTo(Math.min(after.maxY, Math.max(0, (before.top + before.y) * ratio - before.y)), 0);
   await page.evaluate(async () => {
-    const { graphNode, saveGraph, GRAPH_VERSION } = await import('/extension/graph.js');
-    saveGraph(localStorage, { version: GRAPH_VERSION, nodes: [graphNode('Hold', 'distant', 200000, 200000)], edges: [] });
+    const { graphNode, GRAPH_VERSION } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes: [graphNode('Hold', 'distant', 200000, 200000)], edges: [] });
   });
   await page.reload();
-  const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const saved = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   await page.locator('#graph-fit').click(); await expect(page.locator('#graph-zoom')).toHaveValue('0.01');
   await expect(page.getByRole('button', { name: 'Zoom out', exact: true })).toBeDisabled();
   await expect(page.locator('[data-node="distant"]')).toHaveCSS('left', '200000px');
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(saved);
 });
 test('native Ctrl+wheel prevents browser zoom; ordinary wheel scrolls', async ({ page }) => {
   await loadRoutingGraph(page); const scroll = page.locator('.graph-scroll'), box = await scroll.boundingBox();

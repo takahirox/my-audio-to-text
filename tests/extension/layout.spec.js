@@ -45,11 +45,11 @@ test('MV3 palette search/categories, contextual settings, keyboard help and draf
 test('MV3 compact controls precede live outputs; preview, current value and independent translation Nodes reflect the graph', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   await live.evaluate(async () => {
-    const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
+    const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode('Display', 'value'), graphNode('OpusMtJaEn', 'forward'), graphNode('OpusMtEnJa', 'reverse'), graphNode('Display', 'forward-output'), graphNode('Display', 'reverse-output'));
     graph.edges.push(edge('speech', 'final', 'value', 'input1'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'input1'), edge('reverse', 'text', 'reverse-output', 'input1'));
-    saveGraph(localStorage, (graph));
+    await saveLiveGraphData(localStorage, (graph));
   });
   await editor.reload();
   await expect(editor.locator('[data-node=forward]')).toContainText('OPUS-MT Japanese → English');

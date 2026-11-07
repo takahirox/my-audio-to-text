@@ -26,7 +26,7 @@ for (const width of [390, 1440]) {
     const optionTab = browserName === 'webkit' && process.platform === 'darwin';
     const tab = optionTab ? 'Alt+Tab' : 'Tab';
     const backTab = optionTab ? 'Alt+Shift+Tab' : 'Shift+Tab';
-    const stored = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+    const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
     await openPalette(page);
     await page.locator('#graph-node-type [data-type="TranslateGemmaEnJa"]').click();
     await page.keyboard.press('Escape');
@@ -69,21 +69,21 @@ for (const width of [390, 1440]) {
     await page.keyboard.press('Escape'); await expect(help).toBeHidden();
     await expect(page.locator('#graph-help')).toBeFocused();
     await expect(page.locator('[data-node="translategemmaenja"]')).toHaveCount(1);
-    expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(stored);
+    expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(stored);
   });
 }
 
 test('Help notices follow draft additions/removals, saved loading and reset without preparing models', async ({ page }) => {
   const { types, notices } = await page.evaluate(async () => {
-    const { NODE_TYPES, defaultGraph, graphNode, saveGraph } = await import('/extension/graph.js');
+    const { NODE_TYPES, defaultGraph, graphNode } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
     const types = Object.keys(NODE_TYPES).filter(type => NODE_TYPES[type].preparationNotice);
     const graph = defaultGraph();
     graph.nodes.push(...types.map(type => graphNode(type, type.toLowerCase())));
-    saveGraph(localStorage, graph);
+    await saveLiveGraphData(localStorage, graph);
     return { types, notices: [...new Set(types.map(type => NODE_TYPES[type].preparationNotice))].join(' ') };
   });
   await page.reload();
-  const stored = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   const preparationRequests = [];
   page.on('request', request => { if (new URL(request.url()).origin !== new URL(page.url()).origin) preparationRequests.push(request.url()); });
   const notice = page.locator('#graph-asset-notice');
@@ -109,7 +109,7 @@ test('Help notices follow draft additions/removals, saved loading and reset with
   await clickGraphAction(page, 'graph-reset');
   await showNotices('No model preparation notices for Nodes in the current draft.');
   await clickGraphAction(page, 'graph-load'); await showNotices(notices);
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(stored);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(stored);
   expect(preparationRequests).toEqual([]);
 });
 
@@ -117,14 +117,14 @@ for (const width of [390, 1440]) {
   test(`canvas headings hide IDs while duplicate nodes remain identifiable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     const labels = await page.evaluate(async () => {
-      const { defaultGraph, graphNode, nodeDefinition, saveGraph } = await import('/extension/graph.js');
+      const { defaultGraph, graphNode, nodeDefinition } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
       const graph = defaultGraph();
       graph.nodes.push(graphNode('SpeechToTextReazonSpeech', 'speech-second', 270, 330));
-      saveGraph(localStorage, graph);
+      await saveLiveGraphData(localStorage, graph);
       return graph.nodes.map(node => nodeDefinition(node).label);
     });
     await page.reload();
-    const original = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+    const original = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
     await expect(page.locator('.graph-heading')).toHaveText(labels);
     const first = page.getByRole('button', { name: 'Select speech', exact: true });
     const second = page.getByRole('button', { name: 'Select speech-second', exact: true });
@@ -151,12 +151,12 @@ for (const width of [390, 1440]) {
     await expect(page.locator('#graph-state')).toContainText('Saved');
     await page.locator('#graph-save').click();
     await expect(page.locator('#graph-save')).toBeEnabled();
-    expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(original);
     await page.reload();
     await expect(page.locator('.graph-heading')).toHaveText(labels);
     await second.click();
     await expect(inspector.getByText('Instance ID: speech-second', { exact: true })).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(original);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
@@ -189,7 +189,7 @@ for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
     await loadZoomGraph(page);
     if (zoom === 'fit') await page.locator('#graph-fit').press('Enter');
     else await page.locator('#graph-zoom').selectOption(zoom);
-    const original = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+    const original = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
     const wire = page.getByRole('button', { name: 'Select connection audio.audio to speech.audio', exact: true });
     await wire.press('Enter'); await wire.press('Tab');
     const disconnect = page.locator('#graph-disconnect');
@@ -215,7 +215,7 @@ for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
     await page.keyboard.press('Escape');
     await page.locator('#graph-save').click();
     await expect(page.locator('#graph-state')).toContainText('Saved');
-    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+    const saved = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
     expect(saved.edges).toEqual([...original.edges.slice(1), original.edges[0]]);
     expect(saved.nodes).toEqual(original.nodes.map(node => node.id === 'speech' ? { ...node, position: { ...node.position, x: 280 } } : node));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -363,9 +363,9 @@ for (const width of [390, 700]) {
 for (const action of ['Select literal', 'Remove literal']) {
   test(`inspector text edits commit before a single ${action} click`, async ({ page }) => {
     const before = await page.evaluate(async () => {
-      const { readGraph, graphNode, saveGraph } = await import('/extension/graph.js');
-      const graph = readGraph(localStorage); graph.nodes.push(graphNode('Text', 'literal')); saveGraph(localStorage, graph);
-      return { graph: readGraph(localStorage), stored: localStorage.getItem('processing-graph-v1') };
+      const { graphNode } = await import('/extension/graph.js'); const { readLiveGraphData, saveLiveGraphData } = await import('/extension/graph-library.js');
+      const graph = readLiveGraphData(localStorage); graph.nodes.push(graphNode('Text', 'literal')); await saveLiveGraphData(localStorage, graph);
+      return { graph: readLiveGraphData(localStorage), stored: localStorage.getItem('processing-graph-library-v1') };
     });
     await page.reload();
     await page.getByRole('button', { name: 'Select literal', exact: true }).click();
@@ -376,7 +376,7 @@ for (const action of ['Select literal', 'Remove literal']) {
     await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
     await expect(action === 'Select literal' ? page.getByRole('button', { name: action, exact: true }) : page.locator('.graph-scroll')).toBeFocused();
     await expect(page.locator('#graph-state')).toContainText('Unsaved');
-    expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before.stored);
+    expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before.stored);
     const expected = structuredClone(before.graph);
     if (action === 'Select literal') {
       expected.nodes.find(node => node.id === 'literal').settings.value = 'Edited output';
@@ -394,7 +394,7 @@ for (const action of ['Select literal', 'Remove literal']) {
     }
     await page.locator('#graph-save').click();
     await expect(page.locator('#graph-state')).toContainText('Saved');
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(expected);
+    expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(expected);
   });
 }
 

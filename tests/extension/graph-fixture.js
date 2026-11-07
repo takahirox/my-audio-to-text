@@ -35,8 +35,14 @@ export const test = base.extend({
       ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'] });
     const load = async () => (await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root })).id;
     try {
-      await cp(path.resolve('dist/chrome-extension'), root, { recursive: true,
-        filter: source => (ifConditionReal || concurrentReal || zipformerReal || whisperReal || !source.includes(`${path.sep}vendor`)) && (real || !source.includes(`${path.sep}tts-assets`)) });
+      if (real) {
+        await cp(path.resolve('dist/chrome-extension'), root, { recursive: true,
+          filter: source => (ifConditionReal || concurrentReal || zipformerReal || whisperReal || !source.includes(`${path.sep}vendor`)) });
+      } else {
+        await cp('extension', path.join(root, 'extension'), { recursive: true });
+        await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(vendor|tts-assets|correction-assets)(\/|$)/.test(source) });
+        await cp('extension/manifest.json', path.join(root, 'manifest.json'));
+      }
       // ASR/capture are fixtures even in TTS smoke. TTS smoke uses every real
       // packaged TTS runtime/frontend and real checkpoint, with no replacements.
       for (const role of (whisperReal || concurrentReal ? [] : ['sherpa', 'silero'])) await writeFile(path.join(root, `web/${role}-worker.js`), `

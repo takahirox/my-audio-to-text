@@ -23,11 +23,11 @@ async function setup(f, type, phase) {
     Pipeline.prototype.start = function() { if (this.entries.has('summary')) window.modelPipeline = this; return start.call(this); };
   });
   await page.editor.evaluate(async type => {
-    const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
+    const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode(type, 'summary'), graphNode('Display', 'notes'));
     graph.edges.push(edge('speech', 'final', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input1'));
-    saveGraph(localStorage, graph);
+    await saveLiveGraphData(localStorage, graph);
   }, type);
   return page;
 }
@@ -60,12 +60,12 @@ for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
     expect((await page.locator('#errors').textContent()).split('\n')).toHaveLength(1);
     await emitFinal(page, 'surviving transcript'); await expect(transcript(page)).toContainText('surviving transcript');
     await expect(page.locator('#status')).toHaveText('Transcription active');
-    const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+    const saved = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
     await page.locator('#stop').click(); await expect(page.locator('#status')).toHaveText('Stopped. Outputs are ready.');
     await expect(transcript(page)).toContainText('surviving transcript');
     await expect(notes(page)).toHaveText(phase === 'load' ? '' : 'committed notes');
     await expectPreparedIdle(page);
-    expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
+    expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(saved);
     await startGraph(page); await emitFinal(page, 'fresh');
     if (phase === 'inference') { await expect(page.locator('#errors')).toBeEmpty(); await settle(page); await expect(notes(page)).toHaveText('committed notes'); }
     await expect(transcript(page)).toHaveText('fresh');

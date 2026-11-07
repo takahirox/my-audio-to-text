@@ -1,6 +1,7 @@
 import { TabSession } from './session.js';
 import { renderTextRegions } from './live-text-regions.js';
-import { readGraph, defaultGraph, GRAPH_KEY, INPUT_TYPES, executableGraph } from './graph.js';
+import { defaultGraph, GRAPH_KEY, INPUT_TYPES, executableGraph } from './graph.js';
+import { openLibrary, readLiveGraph, LIBRARY_KEY } from './graph-library.js';
 import { audioToWav } from '../web/synthesized-audio.js';
 
 const element = id => document.getElementById(id);
@@ -10,8 +11,12 @@ function renderDiagnostics(view) {
     element(id).textContent = text;
   }
 }
-let graphError = '', graph, publishedState, closed = false;
-try { graph = readGraph(localStorage); }
+let graphError = '', graph, graphContext = {}, publishedState, closed = false;
+try {
+  const opened = await openLibrary(localStorage);
+  element('library-warning').textContent = opened.warning;
+  graphContext = readLiveGraph(localStorage); graph = graphContext.graph;
+}
 catch (error) { graphError = `Saved graph unavailable: ${error.message}`; graph = defaultGraph(); }
 const audioURLs = new Set();
 function clearAudio() {
@@ -37,9 +42,14 @@ function renderGraphActions(view) {
   for (const button of byId.values()) button.remove();
   element('graph-action-status').textContent = [...new Set(actions.map(action => action.reason).filter(Boolean))].join(' ');
 }
-function graphState(view) { return { graph: view.activeSavedGraph, state: view.state, tabId: view.tabId }; }
+function graphState(view) { return { graph: view.activeSavedGraph, graphId: view.activeGraphId, state: view.state, tabId: view.tabId }; }
 const session = new TabSession(view => {
   renderGraphActions(view);
+  element('live-graph-name').textContent = view.state === 'idle' ? view.savedGraphName : view.activeGraphName;
+  for (const link of document.querySelectorAll('[data-page="graph-editor.html"], [data-graph-editor]')) {
+    const page = `graph-editor.html?id=${encodeURIComponent(view.state === 'idle' ? view.savedGraphId : view.activeGraphId)}`;
+    link.dataset.graphEditor = ''; link.dataset.page = page; link.href = page;
+  }
   // Use the existing lifecycle and terminal status; never infer recording from
   // the presence of text or a configured model. Errors can coexist with capture.
   const state = view.state === 'idle' && (graphError || view.error) ? 'error' : view.state === 'idle'
@@ -58,8 +68,8 @@ const session = new TabSession(view => {
   const current = view.state !== 'idle' ? view.activeGraph : view.savedGraph;
   const nextGraph = executableGraph(view.savedGraph);
   const running = view.state !== 'idle';
-  const pending = running && JSON.stringify(view.activeSavedGraph) !== JSON.stringify(view.savedGraph);
-  element('saved-state').textContent = pending ? 'Saved graph changed. This session keeps its active graph; changes apply on Start.' : '';
+  const pending = running && (view.activeGraphId !== view.savedGraphId || JSON.stringify(view.activeSavedGraph) !== JSON.stringify(view.savedGraph) || view.activeGraphName !== view.savedGraphName);
+  element('saved-state').textContent = pending ? `Next session: ${view.savedGraphName}. This session keeps ${view.activeGraphName}; changes apply on Start.` : '';
   renderTextRegions(element('live-displays'), view.activeGraph || nextGraph, view.displays);
   element('no-live-displays').hidden = !!element('live-displays').children.length;
   const hasSpeaker = current.nodes.some(node => ['SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
@@ -72,7 +82,7 @@ const session = new TabSession(view => {
   element('stop').disabled = view.modelState !== 'preparing' && !['loading', 'starting', 'running'].includes(view.state);
   const nextState = JSON.stringify(graphState(view));
   if (!closed && nextState !== publishedState) { publishedState = nextState; stateChannel.postMessage(graphState(view)); }
-}, { graph, onSynthesizedAudio: (audio, signal) => {
+}, { graph, graphId: graphContext.id, graphName: graphContext.name, onSynthesizedAudio: (audio, signal) => {
   if (signal.aborted) return;
   const url = URL.createObjectURL(audioToWav(audio)); audioURLs.add(url);
   const row = document.createElement('li'), player = document.createElement('audio'), link = document.createElement('a');
@@ -84,16 +94,17 @@ session.update();
 if (!graphError) void session.prepareModels();
 function refreshSaved() {
   try {
-    const next = readGraph(localStorage); graphError = ''; session.setGraph(next);
+    const next = readLiveGraph(localStorage); graphError = ''; session.setGraph(next.graph, next);
     if (!session.livePreparation) void session.prepareModels();
     return true;
   }
   catch (error) {
     graphError = `Saved graph unavailable: ${error.message}`;
-    if (!session.session && session.prepared) session.preparationFailed(session.prepared, error);
+    session.invalidateGraph(error);
     session.update(); return false;
   }
 }
+window.addEventListener('focus', () => refreshSaved());
 element('start').onclick = () => { clearAudio(); if (refreshSaved()) void session.start(session.view.tabId, { microphoneGesture: true, speakerGesture: true }); };
 element('enable-speaker').onclick = () => session.enableSpeakers();
 element('retry-models').onclick = () => { if (refreshSaved()) void session.prepareModels(); };
@@ -112,7 +123,7 @@ window.addEventListener('pagehide', () => { closed = true; void session.close();
 window.addEventListener('error', event => session.fail(event.message));
 window.addEventListener('unhandledrejection', event => session.fail(event.reason?.message || String(event.reason)));
 window.addEventListener('storage', event => {
-  if (event.key !== GRAPH_KEY && event.key !== null) return;
+  if (![LIBRARY_KEY, GRAPH_KEY, null].includes(event.key)) return;
   refreshSaved();
 });
 async function invokeTab(tabId) {

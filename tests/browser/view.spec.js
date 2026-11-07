@@ -12,10 +12,10 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
   });
   await page.goto('/extension/graph-editor.html');
   await page.evaluate(async () => {
-    const { graphNode, saveGraph, GRAPH_VERSION } = await import('/extension/graph.js');
+    const { graphNode, GRAPH_VERSION } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
     const nodes = [graphNode('Number', 'key'), graphNode('Text', 'left', 20, 300), graphNode('Text', 'right', 20, 600)];
     nodes[0].settings.value = -2.5; nodes[1].settings.value = '<img src=x onerror=alert(1)>'; nodes[2].settings.value = 'right';
-    saveGraph(localStorage, { version: GRAPH_VERSION, nodes, edges: [] });
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes, edges: [] });
     localStorage.setItem('processing-graph-before-v14', 'original recovery');
   });
   await page.reload();
@@ -57,17 +57,17 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
   await port('left output value').press('Enter');
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
   await expect(page.locator('#graph-errors')).toBeEmpty();
-  const saved = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const saved = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   await page.reload();
   await expect(port('keyedtextpair input id2')).toBeAttached(); await expect(port('display input input1')).toBeAttached();
   await page.locator('#graph-help').click();
   await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Each Display is one tabbed view: its input ports are switchable tabs');
   await page.keyboard.press('Escape');
   const result = await page.evaluate(async () => {
-    const { readGraph, graphNode, edge, GRAPH_VERSION } = await import('/extension/graph.js');
+    const { graphNode, edge, GRAPH_VERSION } = await import('/extension/graph.js'); const { readLiveGraphData } = await import('/extension/graph-library.js');
     const { buildGraph } = await import('/extension/graph-runtime.js');
     const { renderTextRegions } = await import('/extension/live-text-regions.js');
-    const graph = readGraph(localStorage), root = document.createElement('div'); document.body.append(root);
+    const graph = readLiveGraphData(localStorage), root = document.createElement('div'); document.body.append(root);
     const { pipeline } = buildGraph(graph, { onDisplay(id, dom) { renderTextRegions(root, graph, { [id]: dom }); } });
     await pipeline.start(); await pipeline.stop();
     const cells = [...root.querySelectorAll('td')].map(td => td.textContent);
@@ -87,7 +87,7 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
     await plain.pipeline.dispose(); return { cells, safe, errors, legible, plainText, plainSafe };
   });
   expect(result).toEqual({ cells: ['<img src=x onerror=alert(1)>', 'right'], safe: true, errors: [], legible: true, plainText: '<b>plain</b>\nnext', plainSafe: true });
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(saved);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(saved);
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-before-v14'))).toBe('original recovery');
 });
 

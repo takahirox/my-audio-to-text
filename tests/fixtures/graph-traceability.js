@@ -4,7 +4,7 @@ export const traceabilityGraph = JSON.parse(readFileSync(new URL('./dense-routin
 
 export async function loadTraceabilityGraph(page) {
   await page.evaluate(async graph => {
-    const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph);
+    const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, graph);
   }, traceabilityGraph);
   await page.reload(); await expect(page.locator('.graph-wire')).toHaveCount(traceabilityGraph.edges.length);
 }

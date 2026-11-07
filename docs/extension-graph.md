@@ -1,9 +1,79 @@
 # Executable extension processing graphs
 
-The Graph Editor saves explicit Nodes and named-port connections for the next
-Live session. Start executes complete paths to outputs. Incomplete draft branches
+The Graph Library stores independent named graphs. Graph Editor saves explicit
+Nodes and named-port connections to the selected library entry. Start executes complete paths to outputs. Incomplete draft branches
 remain saveable and do not allocate capture, model Workers or output permissions.
 The active graph is an immutable snapshot; edits take effect at the next Start.
+
+## Graph Library (#243)
+
+Open **Library** from Live, Graph or Models. Search names, descriptions or model
+names, sort by name/recent update, and filter assigned graphs or entries needing
+recovery. Select a row to inspect its description and lightweight schematic of
+its real Nodes/edges. Create, rename, describe, duplicate, import or export entries
+without starting inference. New graphs use the current default transcription
+layout; imported JSON uses the existing version-15 graph format.
+
+**Live** and **Web page voice typing** assignments store stable graph IDs. Web
+voice typing is **not yet available**: its assignment is reserved for future use;
+there is no in-page microphone or second execution session. Live shows the exact
+named graph it prepares and runs. Changing the Live assignment while idle cancels
+obsolete preparation, disposes its resources and prepares the newly assigned
+saved graph. During a session its graph, ID and name remain immutable. The new
+assignment applies after normal Stop/Cancel, before the next Start. Editing,
+renaming or deleting an unassigned library entry cannot change an active session.
+An unavailable/corrupt assignment blocks Start and stale preparation; it does not
+silently select another graph.
+
+**Edit / Open** opens `graph-editor.html?id=<stable-id>`. Save, Load saved, Reset,
+Import and Export all concern that entry's draft. Save prepares required cached
+files, including parked Nodes, after persistence. Other entries and execution
+assignments remain unchanged. Closing/navigating away from a dirty editor warns
+before discarding. Concurrent edits to different entries merge under Web Locks;
+stale saves to the same entry are rejected and retain the draft for export or
+explicit Load saved. Library name/description forms likewise preserve unsaved
+input when another page changes storage.
+
+Delete requires confirmation, rejects assigned entries until explicit
+reassignment, and keeps at least one usable graph. A corrupt entry stays visible
+with an error and its original JSON available for export; import a repaired copy
+as a new entry. Its original is never overwritten by an editor recovery draft.
+
+The table's **File cache** column is distinct from Live's runtime/GPU readiness:
+model-bearing graphs initially show **Unknown**, not an unconditional Ready.
+**Check model files** inspects the selected graph's actual manifests without
+starting Workers, GPU work or downloads. It reports Ready (verified cached files),
+Needs preparation or Error; packaged ASR verification is left to Live and remains
+Unknown here. Graphs without model files can report Ready on that basis. Model
+cache notifications/focus invalidate old observations to Unknown. Models remains
+the global asset inspection/recovery screen; shared weights retain their existing
+asset-identity cache and are not duplicated per library graph.
+
+The version-1 library envelope is stored atomically in one localStorage value,
+`processing-graph-library-v1`: graph IDs, names, descriptions, timestamps,
+per-entry revisions, graphs and `{ live, webVoice }` assignments. Graph metadata
+never enters the portable version-15 executable graph JSON. Mutations share the
+existing `processing-graph-save` Web Lock and compare revisions; unsupported
+hosts without Web Locks stay read-only.
+
+First open migrates `processing-graph-v1` into **My saved graph** with that exact
+source object and original bytes retained, and assigns its ID to Live. The legacy
+key is never removed or overwritten. Fresh installs create only **Live
+transcription**, with no Web voice assignment. Concurrent opens/reloads reuse the
+committed envelope. Failed quota/write attempts return the same deterministic
+graph/ID as a read-only fallback; a later open can commit migration. Malformed
+legacy data becomes a recoverable invalid entry and blocks Live until a new valid
+entry is assigned. Unsupported/corrupt library envelopes expose original storage
+for export and fail closed. If an older page changes the legacy key after
+migration, saving/Live selection stop until **Keep changed legacy graph as new
+entry** preserves the changed source separately. This never changes assignments.
+
+`readGraph`/`saveGraph` in `graph.js` are now **legacy-only** and reject stores
+containing a library, so an old caller cannot silently edit a different graph.
+Use `GraphLibrary.save(id, revision, graph)` for drafts, `readLiveGraph` for the
+Live target, or the explicitly named async `saveLiveGraphData` and
+`readLiveGraphData` compatibility helpers for automation deliberately targeting
+the current saved Live default. They never refer to the Library/editor selection.
 
 ## Live model lifecycle (#239)
 
@@ -119,10 +189,12 @@ to apply an import or Reset. Save prepares the selected model assets, including
 parked model Nodes; opening or loading a graph does not download weights. Models
 provides preparation, retry, cache verification and license/terms information.
 
-Storage uses `processing-graph-v1`; the current schema version is 15. Unsupported
+Portable graph JSON retains schema version 15. The Library stores metadata and
+assignments separately, migrating the old `processing-graph-v1` key as above. Unsupported
 Nodes, ports and versions fail explicitly. Live disables Start and links to Graph
 Editor. The editor shows the error and a current default draft. Graph actions →
-Saved JSON exposes the rejected original for inspection before Save replaces it.
+Saved JSON exposes the rejected original for inspection/export. Save keeps that
+invalid original intact; repair and import a new Library entry instead.
 Existing version-15 `Display.input` edges are deliberately converted to
 `Display.input1`, with missing `settings.inputCount` initialized to 1 and
 `settings.title` to an empty string. IDs, positions, other settings and unrelated

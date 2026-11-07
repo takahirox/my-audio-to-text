@@ -2,12 +2,12 @@ import { expect } from '@playwright/test';
 
 export async function loadZoomGraph(page, size = 'large') {
   await page.evaluate(async size => {
-    const { defaultGraph, graphNode, saveGraph } = await import(new URL('./graph.js', location.href));
+    const { defaultGraph, graphNode } = await import(new URL('./graph.js', location.href)); const { saveLiveGraphData } = await import(new URL('./graph-library.js', location.href));
     const graph = defaultGraph();
     if (size === 'large') for (let i = 0; i < 35; i++) {
       graph.nodes.push(graphNode('Text', `literal-${i}`, 20 + i % 10 * 400, 600 + Math.floor(i / 10) * 350));
     }
-    saveGraph(localStorage, graph);
+    await saveLiveGraphData(localStorage, graph);
   }, size);
   await page.reload();
 }
@@ -34,7 +34,7 @@ export async function zoomGeometry(page) {
 export async function checkZoomRecovery(page, size, info) {
   await loadZoomGraph(page, size);
   const target = page.getByRole('button', { name: size === 'large' ? 'literal-29 output value' : 'speech output final', exact: true });
-  const before = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const before = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   const samples = [];
   for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
     // Keep a far-away port as the editing anchor through a redraw and Fit.
@@ -61,7 +61,7 @@ export async function checkZoomRecovery(page, size, info) {
     await expectInsideCanvas(target);
     await expect(page.locator('#graph-zoom')).toBeFocused();
   }
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
   await expect(page.locator('#graph-state')).toContainText('Saved');
   await info.attach('zoom-geometry', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
 }

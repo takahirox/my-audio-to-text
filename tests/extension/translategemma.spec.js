@@ -28,13 +28,13 @@ test('palette, Save and reload preserve current connected graph and parked direc
   expect(f.requests).toEqual([]); await save(editor);
   await expect(card(editor)).toHaveCount(1); await expect(card(editor).locator('.model-status')).toContainText('Ready');
   expect(f.requests).toHaveLength(8); expect(f.requests.every(r => r.startsWith('/translategemma-assets.json/'))).toBe(true);
-  const graph = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const graph = await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(graph.version).toBe(15); expect(graph.nodes.some(n => n.type === 'TranslateGemmaJaEn')).toBe(true);
   expect(graph.edges).toContainEqual({ from: ['translategemmaenja', 'text'], to: ['texttodom', 'text'] });
   expect(graph.edges).toContainEqual({ from: ['text', 'value'], to: ['translategemmaenja', 'context'] });
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   await save(editor); await expect(card(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(8);
-  await editor.reload(); expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+  await editor.reload(); expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   await editor.evaluate(async () => {
     const { translateGemmaManifest } = await import('./translategemma-cache.js');
     const manifest = await translateGemmaManifest(), cache = await caches.open('transformers-cache');
@@ -54,11 +54,11 @@ for (const mode of ['error', 'short', 'corrupt', 'hold']) test(`Gemma Save survi
     await card(editor).getByRole('button', { name: 'Cancel preparation', exact: true }).click();
     await expect(card(editor).locator('.model-status')).toHaveText('Canceled');
   } else await expect(card(editor).locator('.model-status')).toHaveText('Error');
-  const before = await editor.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const before = await editor.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   expect(JSON.parse(before).nodes.some(n => n.type === 'TranslateGemmaEnJa')).toBe(true);
   f.mode('normal'); await card(editor).getByRole('button', { name: 'Retry preparation', exact: true }).click();
   await expect(card(editor).locator('.model-status')).toContainText('Ready');
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before);
+  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
 });
 
 // These tests execute the production owned module Worker, graph builder,

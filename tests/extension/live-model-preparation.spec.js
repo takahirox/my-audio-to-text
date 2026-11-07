@@ -29,7 +29,7 @@ test('Live gates Start on actual Worker readiness, warms gated models, restores 
     const source = graphNode('Text', 'source'); source.settings.value = 'Evidence';
     const graph = { version: GRAPH_VERSION, nodes: [source, graphNode('Button', 'button'), graphNode('Hold', 'held'), graphNode('TextSummaryLfm2', 'summary'), graphNode('Display', 'display'), graphNode('TextSummaryQwen35', 'parked')],
       edges: [edge('source', 'value', 'held', 'input'), edge('button', 'trigger', 'held', 'trigger'), edge('held', 'value', 'summary', 'text'), edge('summary', 'summary', 'display', 'input1')] };
-    await editor.evaluate(async graph => (await import('./graph.js')).saveGraph(localStorage, graph), graph);
+    await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
     const page = await context.newPage(), errors = [], remoteRequests = [];
     page.on('pageerror', error => errors.push(error.message));
     context.on('request', request => { if (/^https?:/.test(request.url())) remoteRequests.push(request.url()); });
@@ -82,12 +82,12 @@ test('Live gates Start on actual Worker readiness, warms gated models, restores 
     // Start and the executable no-model graph needs no Worker at all.
     await page.evaluate(() => { holdModelLoads = true; });
     graph.nodes.find(node => node.id === 'summary').settings.prompt = 'A new instruction';
-    await editor.evaluate(async graph => (await import('./graph.js')).saveGraph(localStorage, graph), graph);
+    await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
     await expect(page.locator('#model-status')).toContainText('Preparing models…');
     await expect(page.locator('#start')).toBeDisabled();
     await expect.poll(() => page.evaluate(() => modelWorkers.length)).toBe(4);
     const simple = { version: GRAPH_VERSION, nodes: [source, graphNode('Display', 'display')], edges: [edge('source', 'value', 'display', 'input1')] };
-    await editor.evaluate(async graph => (await import('./graph.js')).saveGraph(localStorage, graph), simple);
+    await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), simple);
     await expect(page.locator('#model-status')).toHaveText('Ready');
     await expect.poll(() => page.evaluate(() => modelWorkers.every(worker => worker.released))).toBe(true);
     await page.evaluate(() => releaseModels());

@@ -34,14 +34,14 @@ test('MV3 imports and reloads Hold feedback; real Worker replies serialize A/B/C
     const editor = await context.newPage(); await editor.goto(base + 'graph-editor.html');
     const graph = JSON.parse(await readFile('docs/examples/incremental-text-summary.json', 'utf8'));
     // Exercise the production JSON Import UI; Save model preparation is covered
-    // separately. Persist via the normal saveGraph function without downloads.
+    // separately. Persist via the normal saveLiveGraphData function without downloads.
     await editor.locator('.graph-actions > summary').click();
     await editor.locator('input[type=file]').setInputFiles({ name: 'feedback.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(graph)) });
     await expect(editor.locator('#graph-errors')).toBeEmpty();
     await expect(editor.getByRole('button', { name: 'previous output value', exact: true })).toBeVisible();
-    await editor.evaluate(async graph => (await import('./graph.js')).saveGraph(localStorage, graph), graph);
+    await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
     await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
-    expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(graph);
+    expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(graph);
     // An ordinary emitting self-cycle is disabled interactively without
     // invalidating the stored graph.
     await editor.getByRole('button', { name: 'Select connection window.text to format.input2', exact: true }).press('Enter');
@@ -107,6 +107,6 @@ test('MV3 imports and reloads Hold feedback; real Worker replies serialize A/B/C
     expect(await page.evaluate(() => workerErrors.join(' '))).toContain('Controlled inference failure');
     await page.evaluate(() => pipeline.cancel());
     expect(await page.evaluate(() => violations)).toEqual([]); expect(errors).toEqual([]);
-    await editor.reload(); expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(graph);
+    await editor.reload(); expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(graph);
   } finally { await context?.close(); await rm(temporary, { recursive: true, force: true }); }
 });

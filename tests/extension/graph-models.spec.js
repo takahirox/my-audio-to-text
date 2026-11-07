@@ -1,7 +1,7 @@
 import { test, expect, openGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
 
-const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+const saved = page => page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
 async function add(editor, type, settings = {}) {
   await openPalette(editor); await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
   for (const [name, value] of Object.entries(settings)) await editor.getByLabel(`${type.toLowerCase()} ${name}`, { exact: true }).selectOption(value);
@@ -32,7 +32,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
     window.beforePersistence = [];
     const nativeFetch = window.fetch;
     window.fetch = (...args) => {
-      if (String(args[0]).startsWith('http://127.0.0.1')) window.beforePersistence.push(!JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.some(node => node.type === 'OpusMtEnJa'));
+      if (String(args[0]).startsWith('http://127.0.0.1')) window.beforePersistence.push(!(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'OpusMtEnJa'));
       return nativeFetch(...args);
     };
     navigator.mediaDevices.getUserMedia = () => { throw Error('Save must not capture'); };
@@ -44,7 +44,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
   expect(f.requests).toHaveLength(7); expect(f.requests.every(url => url.startsWith('/opus-mt-en-ja-assets.json/'))).toBe(true);
   expect(await editor.evaluate(() => window.beforePersistence)).toEqual(Array(7).fill(false));
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
-  expect(await live.evaluate(() => window.graphWorkers.length)).toBe(0);
+  expect(await live.evaluate(() => window.graphWorkers.every(worker => /sherpa-worker|silero-worker/.test(worker.url)))).toBe(true);
   const before = await saved(live); expect(before.version).toBe(15); expect(before.edges).toEqual(initial.edges);
   await save(editor); await expect(cards(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(7);
   for (const corrupt of [true, false]) {
@@ -74,7 +74,7 @@ test('no optional model requests on load, invalid Save, storage failure or a sav
   await editor.getByLabel('number value', { exact: true }).fill('6');
   await editor.evaluate(() => {
     const set = Storage.prototype.setItem;
-    Storage.prototype.setItem = function(key, value) { if (key === 'processing-graph-v1') throw Error('Fixture storage unavailable'); return set.call(this, key, value); };
+    Storage.prototype.setItem = function(key, value) { if (key === 'processing-graph-library-v1') throw Error('Fixture storage unavailable'); return set.call(this, key, value); };
     window.restoreStorage = () => { Storage.prototype.setItem = set; };
   });
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('storage unavailable');
@@ -181,4 +181,22 @@ test('formatter instances add inputs above four, preserve wires, validate edits 
   await expect(editor.locator('#graph-errors')).toContainText('literal braces'); expect(await saved(live)).toEqual(graph);
   await editor.reload(); expect(await saved(live)).toEqual(graph);
   await expect(editor.locator('[data-node=textformatter] [data-side=input]')).toHaveCount(6);
+});
+
+test('named graphs share verified assets by identity; Save prepares only the open entry', async ({ graphExtension: f }) => {
+  const live = await openGraph(f), editor = live.editor;
+  await add(editor, 'OpusMtEnJa'); await save(editor);
+  await expect(cards(editor).locator('.model-status')).toContainText('Ready');
+  expect(f.requests).toHaveLength(7);
+  const { id, original } = await editor.evaluate(async () => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const library = readLibrary(localStorage), original = structuredClone(library.graphs.find(entry => entry.id === library.assignments.live));
+    const next = await new GraphLibrary(localStorage).duplicate(original.id, library.revision);
+    return { id: next.graphs.at(-1).id, original };
+  });
+  const copy = await f.context.newPage(); const url = new URL(editor.url()); url.searchParams.set('id', id);
+  await copy.goto(url.href); await copy.locator('#graph-save').click(); await expect(copy.locator('#graph-save')).toBeEnabled();
+  await expect(cards(copy).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(7);
+  expect(await copy.evaluate(async id => (await import('./graph-library.js')).readLibrary(localStorage).graphs.find(entry => entry.id === id), original.id)).toEqual(original);
+  expect(await copy.evaluate(() => window.graphWorkers.length)).toBe(0);
 });

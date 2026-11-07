@@ -24,11 +24,11 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and the same-ta
     context.on('request', request => { requests.push({ protocol: new URL(request.url()).protocol, hostname: new URL(request.url()).hostname, method: request.method(), hasBody: request.postData() !== null }); });
     const live = await context.newPage(); await live.goto(`chrome-extension://${id}/extension/recorder.html`); live.on('pageerror', error => pageErrors.push(error.message));
     await live.evaluate(async () => {
-      const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
+      const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
       const graph = defaultGraph({ enabled: false });
       graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'field'));
       graph.edges.push(edge('speech', 'final', 'field', 'text'));
-      saveGraph(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+      await saveLiveGraphData(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
     });
     const website = await context.newPage(); await website.goto(`http://127.0.0.1:${server.address().port}/`);
     const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });

@@ -1,3 +1,4 @@
+import { corruptSavedGraph, recoverAsNew } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -12,10 +13,10 @@ test('MV3 portable ITEM graph keeps final rows visible through queued Worker rep
     if(data.type==='drain')postMessage({type:'drained',id:data.id});
   };`);
   const live = await openGraph(f), graph = itemGraph();
-  await live.editor.evaluate(async graph => { const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph); }, graph);
+  await live.editor.evaluate(async graph => { const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, graph); }, graph);
   await live.editor.reload(); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
   await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
-  expect(await live.editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+  expect(await live.editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   await live.evaluate(async () => { const { TabSession } = await import('./session.js'); const start = TabSession.prototype.prepareModels;
     TabSession.prototype.prepareModels = function(...args) { this.prepareTranslation = async () => {}; return start.apply(this, args); };
     window.keyedReply = () => graphWorkers.findLast(worker => worker.url.endsWith('opus-mt-en-ja-worker.js') && !worker.released).postMessage({ type: 'fixture-complete' });
@@ -37,39 +38,39 @@ test('MV3 portable ITEM graph keeps final rows visible through queued Worker rep
   await live.evaluate(() => speech.receiveEvent({ type: 'final', id: 0, text: 'pending' })); await expect(cells).toHaveText(['pending', '']);
   await live.evaluate(() => window.graphSession.cancel()); await expect(live.locator('#start')).toBeEnabled(); await expect(cells).toHaveText(['pending', '']);
   await expectPreparedIdle(live);
-  await live.editor.reload(); expect(await live.editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+  await live.editor.reload(); expect(await live.editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
 });
 
-test('MV3 unsupported saved Nodes/ports fail visibly and recover with current JSON Import or Reset', async ({ graphExtension: f }) => {
+test('MV3 unsupported saved Nodes/ports fail visibly and recover as a new graph without overwriting originals', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
   const raw = JSON.stringify({ version: 15, nodes: [
     { id: 'view', type: 'ViewBuilder', settings: {}, position: { x: 20, y: 20 } },
     { id: 'display', type: 'Display', settings: {}, position: { x: 300, y: 20 } },
   ], edges: [{ from: ['view', 'view'], to: ['display', 'view'] }] }, null, 2);
-  await live.editor.evaluate(raw => localStorage.setItem('processing-graph-v1', raw), raw);
+  await corruptSavedGraph(live.editor, raw);
   await live.reload(); await live.editor.reload();
   live.editor.on('dialog', dialog => dialog.accept());
   await expect(live.editor.locator('#graph-state')).toContainText('Unsaved');
   await expect(live.locator('#start')).toBeDisabled();
   await expect(live.editor.locator('#errors')).toContainText('Unknown Node type: ViewBuilder');
-  await expect(live.editor.locator('#errors')).toContainText('Reset draft or import a current graph');
+  await expect(live.editor.locator('#errors')).toContainText('Repair by importing a copy as a new graph');
   await expect(live.editor.locator('#graph-errors')).toBeEmpty();
-  expect(await live.editor.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
+  expect(await live.editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).source; })())).toBe(raw);
   await live.editor.locator('.graph-actions > summary').click();
   await live.editor.getByText('Saved JSON', { exact: true }).click();
   await expect(live.editor.getByLabel('Original saved graph JSON')).toHaveValue(raw);
   await live.editor.locator('input[type=file]').setInputFiles({ name: 'unsupported.json', mimeType: 'application/json', buffer: Buffer.from(raw) });
   await expect(live.editor.locator('#graph-errors')).toContainText('Cannot import graph: Unknown Node type');
-  expect(await live.editor.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
+  expect(await live.editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).source; })())).toBe(raw);
   await live.editor.locator('input[type=file]').setInputFiles({ name: 'current.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(itemGraph())) });
   await expect(live.editor.locator('#graph-errors')).toBeEmpty();
   const outputs = await live.editor.locator('[data-node="pair"] [data-side="output"]').allTextContents();
   expect(outputs).toHaveLength(1); expect(outputs[0]).toContain('pair');
-  await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
-  await expect(live.editor.locator('#errors')).toBeEmpty();
+  await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-errors')).toContainText('original has been kept');
+  await recoverAsNew(live.editor, itemGraph()); await expect(live.editor.locator('#errors')).toBeEmpty();
   await live.reload(); await expect(live.locator('#errors')).toBeEmpty();
   await live.editor.reload(); await live.editor.locator('.graph-actions > summary').click();
   await live.editor.locator('#graph-reset').click();
   await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
-  expect(await live.editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.some(node => node.type === 'Display'))).toBe(true);
+  expect(await live.editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'Display'))).toBe(true);
 });

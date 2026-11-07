@@ -61,3 +61,9 @@
   .app-page .page-header { gap: .5rem; }
   .app-page nav > :is(a, button, span) { padding-inline: .55rem; }
 }
+.app-page .page-header h1 { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.editor-page #graph-name { font-size: .7em; font-weight: 500; }
+#live-graph-name { overflow-wrap: anywhere; }
+@media (max-width: 380px) {
+  .live-page .page-header { flex-wrap: wrap; }
+}

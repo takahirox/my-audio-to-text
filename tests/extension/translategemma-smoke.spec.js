@@ -65,7 +65,7 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
     }, TRANSLATE_GEMMA);
     expect(publicAccess).toEqual({ status: 200, architecture: 'Gemma3ForCausalLM' });
     await editor.evaluate(async initial => {
-      const { graphNode, edge, saveGraph } = await import('./graph.js');
+      const { graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
       const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemmaEnJa', 'gemma'),
         graphNode('TextFormatter', 'format'), graphNode('Display', 'paired'), graphNode('Display', 'plain'),
         graphNode('TranslateGemmaJaEn', 'parked'), graphNode('Text', 'independent'), graphNode('Display', 'other')], edges: [
@@ -73,7 +73,7 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
         edge('format', 'text', 'paired', 'input1'), edge('gemma', 'text', 'plain', 'input1'), edge('independent', 'value', 'other', 'input1'),
       ] };
       graph.nodes[0].settings.value = initial; graph.nodes[2].settings.template = '{1}\n{2}{3}';
-      graph.nodes[6].settings.value = 'Independent branch'; saveGraph(localStorage, (graph));
+      graph.nodes[6].settings.value = 'Independent branch'; await saveLiveGraphData(localStorage, (graph));
     }, fixtures[0].text);
     await editor.reload();
     const beforeSave = requests.length;
@@ -102,8 +102,8 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
       const targets = [...texts, ...probes.flatMap(f => [f.text, f.text, f.text])];
       const contexts = [...texts.map(() => ''), ...probes.flatMap(f => ['', f.context, ''])];
       const run = await page.evaluate(async ({ direction, targets, contexts }) => {
-        const { readGraph, graphNode, edge } = await import('./graph.js'); const { buildGraph } = await import('./graph-runtime.js');
-        const graph = readGraph(localStorage); graph.nodes.find(n => n.id === 'gemma').type = direction === 'en-ja' ? 'TranslateGemmaEnJa' : 'TranslateGemmaJaEn';
+        const { graphNode, edge } = await import('./graph.js'); const { readLiveGraphData } = await import('./graph-library.js'); const { buildGraph } = await import('./graph-runtime.js');
+        const graph = readLiveGraphData(localStorage); graph.nodes.find(n => n.id === 'gemma').type = direction === 'en-ja' ? 'TranslateGemmaEnJa' : 'TranslateGemmaJaEn';
         graph.nodes.find(n => n.id === 'input').settings.value = targets[0];
         graph.nodes.push(graphNode('Text', 'context'));
         graph.edges.push(edge('context', 'value', 'gemma', 'context'));

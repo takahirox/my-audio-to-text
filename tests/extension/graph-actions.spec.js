@@ -44,9 +44,9 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     await expect(editor.getByRole('button', { name: 'held input trigger', exact: true })).toBeVisible();
     await editor.getByRole('button', { name: 'Select generate', exact: true }).click();
     await expect(editor.getByLabel('generate label', { exact: true })).toHaveValue('Generate summary');
-    await editor.evaluate(async graph => (await import('./graph.js')).saveGraph(localStorage, graph), graph);
+    await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
     await editor.reload();
-    expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(graph);
+    expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(graph);
     const page = await context.newPage(), errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.addInitScript(() => {
@@ -144,12 +144,12 @@ test('Button Sources palette, caption Save/Load/Import/Export, duplicate caption
     const base = `chrome-extension://${id}/extension/`, editor = await context.newPage();
     await editor.goto(base + 'graph-editor.html');
     const graph = await editor.evaluate(async () => {
-      const { graphNode, edge, saveGraph, GRAPH_VERSION } = await import('./graph.js');
+      const { graphNode, edge, GRAPH_VERSION } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
       const graph = { version: GRAPH_VERSION, nodes: ['Button', 'Button', 'Text', 'Text', 'Hold', 'Hold', 'Display', 'Display', 'Display', 'Button'].map((type, i) => graphNode(type, ['z', 'a', 'one', 'two', 'h1', 'h2', 'd1', 'd2', 'fanout', 'parked'][i], 20 + i * 360, i % 2 * 350)), edges: [
         edge('z', 'trigger', 'h1', 'trigger'), edge('one', 'value', 'h1', 'input'), edge('h1', 'value', 'd1', 'input1'), edge('h1', 'value', 'fanout', 'input1'),
         edge('a', 'trigger', 'h2', 'trigger'), edge('two', 'value', 'h2', 'input'), edge('h2', 'value', 'd2', 'input1')] };
       graph.nodes.find(n => n.id === 'one').settings.value = 'one'; graph.nodes.find(n => n.id === 'two').settings.value = 'two';
-      saveGraph(localStorage, graph); return graph;
+      await saveLiveGraphData(localStorage, graph); return graph;
     });
     await editor.reload();
     await editor.getByRole('button', { name: 'Add Node', exact: true }).click();
@@ -164,7 +164,7 @@ test('Button Sources palette, caption Save/Load/Import/Export, duplicate caption
     await editor.getByLabel('a label', { exact: true }).fill('Duplicate'); await editor.getByLabel('a label', { exact: true }).press('Tab');
     await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
     await editor.reload();
-    const saved = await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage));
+    const saved = await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage));
     expect(saved.nodes.filter(n => ['a', 'z'].includes(n.id)).map(n => n.settings.label)).toEqual(['Duplicate', 'Duplicate']);
     await editor.getByRole('button', { name: 'Select z', exact: true }).click();
     await editor.getByLabel('z label', { exact: true }).fill('Unsaved'); await editor.getByLabel('z label', { exact: true }).press('Tab');

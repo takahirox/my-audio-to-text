@@ -27,7 +27,7 @@ export async function checkPointerZoom(page, width = 1440, scale = 1) {
     const pointer = { x: view.left + view.width * .6, y: view.top + view.height * .3 };
     return { pointer, world: { x: (pointer.x - box.left) / (box.width / parseFloat(canvas.style.width)),
       y: (pointer.y - box.top) / (box.height / parseFloat(canvas.style.height)) },
-    saved: localStorage.getItem('processing-graph-v1'), paths: [...document.querySelectorAll('.wire-line')].map(p => p.getAttribute('d')) };
+    saved: localStorage.getItem('processing-graph-library-v1'), paths: [...document.querySelectorAll('.wire-line')].map(p => p.getAttribute('d')) };
   });
   // High-resolution fractions in both directions, while already scrolled.
   for (const delta of [-8.325, 8.325, -2.5, 2.5]) {
@@ -46,7 +46,7 @@ export async function checkPointerZoom(page, width = 1440, scale = 1) {
     expect(Math.abs(after.y - before.pointer.y)).toBeLessThanOrEqual(1);
     expect(after.sameFocus).toBe(true); expect(after.paths).toEqual(before.paths);
   }
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(before.saved);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before.saved);
   await expect(page.locator('#graph-state')).toHaveText('Saved');
 }
 

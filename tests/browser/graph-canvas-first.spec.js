@@ -25,8 +25,8 @@ test('save conflicts and an earlier active graph stay visible with compact state
   try {
     await second.route('**/*', serveExtension); await second.goto(page.url());
     await second.evaluate(async () => {
-      const { defaultGraph, saveGraph } = await import('/extension/graph.js');
-      const graph = defaultGraph(); graph.nodes[0].position.y += 20; saveGraph(localStorage, graph);
+      const { defaultGraph } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
+      const graph = defaultGraph(); graph.nodes[0].position.y += 20; await saveLiveGraphData(localStorage, graph);
     });
     await expect(page.locator('#graph-state')).toHaveText('Unsaved');
     await expect(page.locator('.graph-state-notice')).toContainText('draft kept. Load saved before saving.');
@@ -36,7 +36,7 @@ test('save conflicts and an earlier active graph stay visible with compact state
     await second.evaluate(async () => {
       const { defaultGraph } = await import('/extension/graph.js');
       const channel = new BroadcastChannel('live-graph-state');
-      channel.postMessage({ graph: defaultGraph(), state: 'recording', tabId: 42 }); channel.close();
+      channel.postMessage({ graphId: new URLSearchParams(location.search).get('id'), graph: defaultGraph(), state: 'recording', tabId: 42 }); channel.close();
     });
     await expect(page.locator('.graph-state-notice')).toContainText('Active · tab 42 · earlier graph');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -49,8 +49,8 @@ test('save conflicts and an earlier active graph stay visible with compact state
 test('bottom ports can scroll completely above floating controls and Fit reserves their space', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.evaluate(async () => {
-    const { graphNode, saveGraph } = await import('/extension/graph.js');
-    saveGraph(localStorage, { version: 15, nodes: [graphNode('Hold', 'last', 20, 2400)], edges: [] });
+    const { graphNode } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
+    await saveLiveGraphData(localStorage, { version: 15, nodes: [graphNode('Hold', 'last', 20, 2400)], edges: [] });
   });
   await page.reload();
   const scroll = page.locator('.graph-scroll'), navigation = page.locator('.graph-zoom-controls');
@@ -65,10 +65,10 @@ test('bottom ports can scroll completely above floating controls and Fit reserve
 for (const width of [1440, 390]) test(`canvas-first appearance at ${width}px`, async ({ page }, info) => {
   await page.setViewportSize({ width, height: 900 });
   await page.evaluate(async () => {
-    const { graphNode, edge, saveGraph } = await import('/extension/graph.js');
+    const { graphNode, edge } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
     const nodes = [graphNode('Text', 'text-1', 20, 20), graphNode('Hold', 'hold-1', 310, 20), graphNode('Display', 'display-1', 600, 20)];
     nodes[0].settings.value = 'Draft text';
-    saveGraph(localStorage, { version: 15, nodes, edges: [edge('text-1', 'value', 'hold-1', 'input'), edge('hold-1', 'value', 'display-1', 'input1')] });
+    await saveLiveGraphData(localStorage, { version: 15, nodes, edges: [edge('text-1', 'value', 'hold-1', 'input'), edge('hold-1', 'value', 'display-1', 'input1')] });
   });
   await page.reload(); await page.locator('#graph-fit').click();
   await page.getByRole('button', { name: 'Select hold-1', exact: true }).press('Enter');

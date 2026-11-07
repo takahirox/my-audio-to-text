@@ -20,10 +20,10 @@ test('palette exposes NUMBER threshold inputs, one TEXT output, no threshold Set
   await editor.getByRole('button', { name: 'textwindow input maxChars', exact: true }).click();
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   expect(f.requests).toEqual([]);
-  const graph = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const graph = await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(graph.version).toBe(15); expect(graph.nodes.find(n => n.type === 'TextWindow').settings).toEqual({});
   expect(graph.edges).toContainEqual({ from: ['number', 'value'], to: ['textwindow', 'maxChars'] });
-  await editor.reload(); expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+  await editor.reload(); expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
 });
 
 for (const mode of ['baseline', 'window']) test(`packaged ${mode}: committed ASR TEXT routing, deterministic inference, deadline, Stop and repeat`, async ({ graphExtension: f }) => {
@@ -45,12 +45,12 @@ for (const mode of ['baseline', 'window']) test(`packaged ${mode}: committed ASR
   graph.edges.push({ from: ['audio', 'audio'], to: ['input', 'audio'] });
   const runs = await live.evaluate(async ({ graph, texts }) => {
     const { buildGraph } = await import('./graph-runtime.js');
-    const { saveGraph, readGraph } = await import('./graph.js');
-    saveGraph(localStorage, graph);
+    const { saveLiveGraphData, readLiveGraphData } = await import('./graph-library.js');
+    await saveLiveGraphData(localStorage, graph);
     const runs = [];
     for (let run = 0; run < 2; run++) {
       let display; const events = [];
-      const built = buildGraph(readGraph(localStorage), { tabId: 42, prepareTranslation() {}, onDisplay: (_, s) => { display = s.textContent; events.push(s.textContent); } });
+      const built = buildGraph(readLiveGraphData(localStorage), { tabId: 42, prepareTranslation() {}, onDisplay: (_, s) => { display = s.textContent; events.push(s.textContent); } });
       try {
         await built.pipeline.start(); await built.translations[0].ready;
         for (const text of texts) built.speechNodes.get('input').receiveEvent({ type: 'final', text });

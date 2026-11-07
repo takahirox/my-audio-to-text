@@ -27,10 +27,10 @@ test('real packaged concurrent Zipformer and Whisper: independent results, resou
     offset+=8+size+size%2;
   }
   await page.evaluate(async () => {
-    const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
+    const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph=defaultGraph();graph.nodes[1].type='SpeechToTextZipformerEn';
     graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextWhisper','whisper'),graphNode('Display','local'),graphNode('TextAccumulator','local-accumulator'));
-    graph.edges.push(edge('mic','audio','whisper','audio'),edge('whisper','final','local-accumulator','append'),edge('local-accumulator','text','local','input1'));saveGraph(localStorage, (graph));
+    graph.edges.push(edge('mic','audio','whisper','audio'),edge('whisper','final','local-accumulator','append'),edge('local-accumulator','text','local','input1'));await saveLiveGraphData(localStorage, (graph));
     navigator.mediaDevices.getUserMedia=async()=>({getTracks:()=>[{stop(){}}]});
     const { ExtensionTabAudioNode }=await import('./tab-audio-node.js');
     ExtensionTabAudioNode.prototype.start=function(context){

@@ -8,13 +8,15 @@ import { translateGemmaManifest } from './translategemma-cache.js';
 import { ttsManifest } from './tts-cache.js';
 import { qwen3TtsManifest } from './qwen3-tts-cache.js';
 import { cosyVoice3Manifest } from './cosyvoice3-cache.js';
-import { readGraph } from './graph.js';
+import { readLibrary, entryGraph } from './graph-library.js';
 
 const el = (tag, text) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; };
 const channel = new BroadcastChannel('model-cache-updates');
 const cards = [];
 let closed = false, savedNodes = [];
-try { savedNodes = readGraph(localStorage).nodes; } catch { /* Models can recover assets even with a broken saved graph. */ }
+try { savedNodes = readLibrary(localStorage).graphs.flatMap(entry => {
+  try { return entryGraph(entry).nodes; } catch { return []; }
+}); } catch { /* Global asset recovery remains available with broken library storage. */ }
 const definitions = [
   { id: 'qwen3-tts', title: 'Qwen3-TTS 0.6B CustomVoice · streaming', size: '690 MB shared by Japanese/English and both voices. Desktop Worker WebGPU required; allow 2 GB storage, 6 GB free RAM/GPU memory (planning estimate). No CPU/cloud fallback.', manifest: qwen3TtsManifest, terms: 'Qwen Team / Danyal Malik ONNX conversion · Apache 2.0. Includes a separately pinned Qwen speech decoder. Choose language and voice in Graph Node settings.', url: '../web/licenses/qwen3-tts.txt' },
   { id: 'cosyvoice3', title: 'CosyVoice3 0.5B · streaming', size: '917 MB shared by English/Japanese. Desktop Worker WebGPU; allow 3 GB storage and 6 GB free RAM/GPU per Node (planning estimates). One reviewed reference voice. No CPU/cloud fallback; other languages/mobile unqualified.', manifest: cosyVoice3Manifest, terms: 'FunAudioLLM / Danyal Malik ONNX conversion · Apache 2.0. LibriTTS-R reference features: Koizumi et al., speaker 4446, CC BY 4.0. Language follows input text; spell out numbers and symbols. See attribution and exact pins.', url: '../web/licenses/cosyvoice3.txt' },

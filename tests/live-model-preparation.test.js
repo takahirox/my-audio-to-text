@@ -367,3 +367,34 @@ test('GPU lifecycle observes loss of the existing device without inference', asy
   await turn(); assert.equal(error, undefined);
   lost({ message: 'adapter removed' }); await turn(); assert.match(error.message, /GPU device lost: adapter removed/);
 });
+
+test('identical graphs assigned different library IDs have separate preparation owners', async t => {
+  const graph = textGraph();
+  const f = fixture(graph, { graphId: 'a', graphName: 'Graph A' }); t.after(() => f.session.close());
+  await f.session.prepareModels(); const first = f.session.prepared;
+  f.session.setGraph(graph, { id: 'b', name: 'Graph B' }); await f.session.preparing;
+  assert.notEqual(f.session.prepared, first); assert.equal(f.workers[0].released, true);
+  assert.equal(f.session.view.savedGraphId, 'b'); assert.equal(f.session.view.savedGraphName, 'Graph B');
+});
+
+for (const end of ['stop', 'cancel']) test(`named Live assignment during active session applies only after ${end}`, async t => {
+  const f = fixture(textGraph('TextSummaryLfm2', true), { graphId: 'a', graphName: 'Meeting Notes' }); t.after(() => f.session.close());
+  await f.session.prepareModels(); await f.session.start();
+  const owner = f.session.session, snapshot = structuredClone(f.session.view.activeSavedGraph);
+  f.session.setGraph(textGraph('IfCondition'), { id: 'b', name: 'Different graph' });
+  assert.equal(f.session.session, owner); assert.equal(f.session.view.activeGraphId, 'a'); assert.equal(f.session.view.activeGraphName, 'Meeting Notes');
+  assert.deepEqual(f.session.view.activeSavedGraph, snapshot); assert.equal(f.workers.length, 1);
+  await f.session[end](); assert.equal(f.session.view.modelState, 'ready');
+  await f.session.start(); assert.equal(f.session.view.activeGraphId, 'b'); assert.equal(f.session.view.activeGraphName, 'Different graph');
+});
+
+test('an unavailable next assignment never prepares the previous saved graph after Stop', async t => {
+  const f = fixture(textGraph('TextSummaryLfm2', true), { graphId: 'a', graphName: 'Graph A' }); t.after(() => f.session.close());
+  await f.session.prepareModels(); await f.session.start(); const active = f.session.session;
+  f.session.invalidateGraph(Error('Assigned graph is corrupt'));
+  assert.equal(f.session.session, active); assert.equal(f.workers.length, 1);
+  await f.session.stop(); assert.equal(f.session.view.modelState, 'error'); assert.equal(f.workers.length, 1);
+  await f.session.start(); assert.equal(f.session.session, null);
+  f.session.setGraph(textGraph('IfCondition'), { id: 'b', name: 'Graph B' }); await f.session.preparing;
+  assert.equal(f.session.view.modelState, 'ready'); assert.equal(f.workers.length, 2);
+});

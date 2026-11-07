@@ -273,7 +273,10 @@ export function graphPreferences(graph) {
     ? (['OpusMtEnJa', 'TranslateGemmaEnJa'].includes(translation.type) ? 'en-ja' : 'ja-en')
     : graph.translationDirection || 'ja-en' };
 }
+// Legacy-only API for standalone graph consumers. MV3 pages must resolve a
+// stable library ID via graph-library.js; never implicitly edit another graph.
 export function readGraph(storage) {
+  if (storage.getItem('processing-graph-library-v1') !== null) throw Error('Use graph-library.js with an explicit graph ID; legacy readGraph cannot select a library graph.');
   const saved = storage.getItem(GRAPH_KEY);
   if (saved !== null) {
     try { return assertGraph(JSON.parse(saved)); }
@@ -284,6 +287,7 @@ export function readGraph(storage) {
   return saveGraph(storage, defaultGraph());
 }
 export function saveGraph(storage, graph) {
+  if (storage.getItem('processing-graph-library-v1') !== null) throw Error('Use GraphLibrary.save with a graph ID and revision; legacy saveGraph cannot overwrite a library graph.');
   const validated = assertGraph(graph);
   storage.setItem(GRAPH_KEY, JSON.stringify(validated));
   return validated;

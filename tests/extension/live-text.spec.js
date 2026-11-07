@@ -11,11 +11,11 @@ test('MV3 summary TEXT snapshots render literally through Display.input, drain S
   };`);
   const live=await openGraph(f), literal='<script>literal note</script>\nsecond line';
   await live.evaluate(async literal=>{
-    const {graphNode,edge,saveGraph}=await import('./graph.js');
+    const { graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const source=graphNode('Text','source');source.settings.value=literal;
-    saveGraph(localStorage,{version:15,nodes:[source,graphNode('TextSummaryLfm2','summary'),graphNode('Display','notes')],
+    await saveLiveGraphData(localStorage,{version:15,nodes:[source,graphNode('TextSummaryLfm2','summary'),graphNode('Display','notes')],
       edges:[edge('source','value','summary','text'),edge('summary', 'summary', 'notes', 'input1')]});
-    window.dispatchEvent(new StorageEvent('storage',{key:'processing-graph-v1'}));
+    window.dispatchEvent(new StorageEvent('storage',{key:'processing-graph-library-v1'}));
     const {TabSession}=await import('./session.js'), start=TabSession.prototype.start;
     TabSession.prototype.start=function(...args){window.summarySession=this;return start.apply(this,args);};
   },literal);

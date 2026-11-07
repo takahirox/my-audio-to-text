@@ -16,7 +16,7 @@ export const translationPortWorker = `
 export async function checkTranslationPorts(page, type, base = './') {
   const runs = await page.evaluate(async ({ type, base }) => {
     const { buildGraph } = await import(new URL('graph-runtime.js', new URL(base, location.href)));
-    const { graphNode, edge, GRAPH_VERSION, saveGraph, readGraph } = await import(new URL('graph.js', new URL(base, location.href)));
+    const { graphNode, edge, GRAPH_VERSION } = await import(new URL('graph.js', new URL(base, location.href))); const { saveLiveGraphData, readLiveGraphData } = await import(new URL('graph-library.js', new URL(base, location.href)));
     const nodes = [graphNode('Text', 'final'), graphNode('Text', 'draft'), graphNode(type, 'translator'),
       graphNode('TextAccumulator', 'history'), graphNode('Display', 'committed'), graphNode('Display', 'preview')];
     nodes[0].settings.value = 'seed';
@@ -25,8 +25,8 @@ export async function checkTranslationPorts(page, type, base = './') {
       edge('translator', 'text', 'history', 'append'), edge('history', 'text', 'committed', 'input1'),
       edge('translator', 'provisionalText', 'preview', 'input1'),
     ] };
-    saveGraph(localStorage, graph);
-    const saved = localStorage.getItem('processing-graph-v1'), runs = [];
+    await saveLiveGraphData(localStorage, graph);
+    const saved = localStorage.getItem('processing-graph-library-v1'), runs = [];
     const wait = async predicate => {
       const deadline = Date.now() + 5000;
       while (!predicate()) { if (Date.now() > deadline) throw Error('Translation port fixture timed out'); await new Promise(r => setTimeout(r, 5)); }
@@ -38,7 +38,7 @@ export async function checkTranslationPorts(page, type, base = './') {
         worker.postMessage = m => { if (m.type === 'translate') requests.push({ ...m, worker }); post(m); };
         worker.terminate = () => { worker.released = true; terminate(); }; workers.push(worker); return worker;
       };
-      const built = buildGraph(readGraph(localStorage), { translationWorkerFactory: factory, prepareTranslation() {}, prepareTranslateGemma() {},
+      const built = buildGraph(readLiveGraphData(localStorage), { translationWorkerFactory: factory, prepareTranslation() {}, prepareTranslateGemma() {},
         onDisplay(id, dom) { displays[id] = dom.textContent; events.push({ id, text: dom.textContent }); } });
       const send = (id, text) => built.pipeline.entries.get(id).context.emit('value', text);
       const complete = (i, text) => { const r = requests[i]; r.worker.postMessage({ type: 'fixture-complete', id: r.id, text }); };
@@ -59,7 +59,7 @@ export async function checkTranslationPorts(page, type, base = './') {
         await built.pipeline.dispose();
         runs.push({ previewState, clearBeforeCompletion, displays, events, errors: built.pipeline.errors.map(e => e.message),
           workerCount: workers.length, released: workers.every(w => w.released), count: built.pipeline.entries.get('history').node.count,
-          saved: localStorage.getItem('processing-graph-v1') === saved });
+          saved: localStorage.getItem('processing-graph-library-v1') === saved });
       } finally { await built.pipeline.dispose(); }
     }
     return runs;
@@ -76,16 +76,16 @@ export async function checkTranslationPorts(page, type, base = './') {
 
 export async function checkTranslationPortRecovery(editor, type) {
   const raw = await editor.evaluate(async type => {
-    const { defaultGraph, GRAPH_KEY } = await import(new URL('./graph.js', location.href));
+    const { defaultGraph } = await import(new URL('./graph.js', location.href));
     const graph = defaultGraph({ enabled: true }); graph.version = 13;
     graph.nodes.find(n => n.id === 'translation').type = type;
-    const raw = JSON.stringify(graph, null, 2); localStorage.setItem(GRAPH_KEY, raw); return raw;
+    return JSON.stringify(graph, null, 2);
   }, type);
-  await editor.reload(); await expect(editor.locator('#errors')).toContainText('Expected version 15');
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
+  const { corruptSavedGraph, recoverAsNew } = await import('../extension/ui-controls.js');
+  await corruptSavedGraph(editor, raw); await editor.reload(); await expect(editor.locator('#errors')).toContainText('Expected version 15');
   await editor.locator('.graph-actions > summary').click();
   editor.once('dialog', dialog => dialog.accept());
   await editor.locator('#graph-reset').click();
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  await editor.reload(); await expect(editor.locator('#errors')).toBeEmpty();
+  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('original has been kept');
+  await recoverAsNew(editor); await expect(editor.locator('#errors')).toBeEmpty();
 }

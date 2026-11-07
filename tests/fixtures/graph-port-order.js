@@ -9,7 +9,7 @@ const port = (page, id, side, name) => page.getByRole('button', { name: `${id} $
 
 export async function loadPortOrderGraph(page) {
   const graph = await page.evaluate(async () => {
-    const { defaultGraph, graphNode, edge, ASR_TYPES, saveGraph } = await import(new URL('./graph.js', location.href));
+    const { defaultGraph, graphNode, edge, ASR_TYPES } = await import(new URL('./graph.js', location.href)); const { saveLiveGraphData } = await import(new URL('./graph-library.js', location.href));
     const graph = defaultGraph({ enabled: true });
     graph.nodes.find(n => n.id === 'audio').position.x = 0;
     graph.nodes.find(n => n.id === 'speech').position.x = 320;
@@ -20,7 +20,7 @@ export async function loadPortOrderGraph(page) {
     const types = [...ASR_TYPES, 'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Display', 'TextFormatter'];
     graph.nodes.push(...types.map((type, i) => graphNode(type, `extra-${type}`, 30 + i % 4 * 360, 1450 + Math.floor(i / 4) * 950)));
     for (const node of graph.nodes) if (node.id.startsWith('extra-') && ['Display', 'TextFormatter'].includes(node.type)) node.settings.inputCount = 12;
-    saveGraph(localStorage, graph); return graph;
+    await saveLiveGraphData(localStorage, graph); return graph;
   });
   await page.reload(); await expect(page.locator('.graph-wire')).toHaveCount(graph.edges.length);
   return graph;
@@ -59,7 +59,7 @@ export async function checkPortOrderAndHelp(page, tabKey = 'Tab') {
       expect(await help.locator('p.muted').allTextContents().then(rows => rows.filter(row => row.startsWith(`${prefix} `)).map(row => row.split(':')[0].slice(prefix.length + 1)))).toEqual(names);
     }
   }
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+  expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   await expect(page.locator('#graph-state')).toHaveText('Saved');
 }
 
@@ -69,7 +69,7 @@ export async function checkPortOrderAndHelp(page, tabKey = 'Tab') {
 export async function measurePortCrossings(page) {
   return page.evaluate(async () => {
     const { nodeDefinition } = await import(new URL('./graph.js', location.href));
-    const graph = JSON.parse(localStorage.getItem('processing-graph-v1'));
+    const graph = (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })();
     const corridors = [['speech', 'coalesce'], ['coalesce', 'pair'], ['translation', 'pair'], ['translation', 'preview-pair']];
     return corridors.map(([source, target]) => {
       const routes = graph.edges.filter(e => e.from[0] === source && e.to[0] === target);
@@ -103,7 +103,7 @@ export async function checkPortGeometryAndInteractions(page) {
     const corridors = await measurePortCrossings(page);
     expect(corridors.map(c => [c.before, c.after])).toEqual([[6, 0], [0, 0], [1, 0], [1, 0]]);
     measurements.push({ zoom: Number(zoom), corridors });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+    expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   }
   await page.locator('#graph-zoom').selectOption('0.5');
   // Keyboard selection, output toggling and reconnection keep exact port names.
@@ -149,7 +149,7 @@ export async function checkPortGeometryAndInteractions(page) {
     await expect(port(page, id, 'input', 'input13')).toHaveCount(0); await assertRoutingGeometry(page);
   }
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const saved = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   // Gesture order can change the edge array, but never its named connections.
   expect(saved.nodes).toEqual(graph.nodes); expect(saved.version).toBe(graph.version);
   expect(saved.edges.map(e => JSON.stringify(e)).sort()).toEqual(graph.edges.map(e => JSON.stringify(e)).sort());

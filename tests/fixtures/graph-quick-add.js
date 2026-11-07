@@ -2,10 +2,10 @@ import { expect } from '@playwright/test';
 
 export async function seedQuickAdd(page, large = false) {
   await page.evaluate(async large => {
-    const { graphNode, saveGraph, GRAPH_VERSION } = await import(new URL('./graph.js', location.href));
+    const { graphNode, GRAPH_VERSION } = await import(new URL('./graph.js', location.href)); const { saveLiveGraphData } = await import(new URL('./graph-library.js', location.href));
     // No model preparation is needed to exercise real Save and reload.
     const nodes = large ? [graphNode('Text', 'far', 6000, 4000)] : [];
-    saveGraph(localStorage, { version: GRAPH_VERSION, nodes, edges: [] });
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes, edges: [] });
   }, large);
   await page.reload();
 }
@@ -42,7 +42,7 @@ export async function openQuickAdd(page, touch = false) {
 }
 export async function checkQuickAddInteraction(page) {
   await seedQuickAdd(page);
-  const stored = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   await openQuickAdd(page);
   await expect(page.getByRole('group', { name: 'Sources / inputs' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Constants / utilities' })).toBeVisible();
@@ -125,7 +125,7 @@ export async function checkQuickAddInteraction(page) {
   await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
   await expect(page.locator('.graph-inspector')).toContainText('Instance ID: number');
   await expect(page.locator('#graph-state')).toContainText('Unsaved');
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(stored);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(stored);
   await openQuickAdd(page);
   await page.getByRole('listbox', { name: 'Node types' }).getByRole('option', { name: 'Hold', exact: true }).click();
   await expect(page.locator('#graph-palette')).toBeHidden();
@@ -133,7 +133,7 @@ export async function checkQuickAddInteraction(page) {
   await expect(page.locator('#graph-errors')).toBeEmpty();
   await page.locator('#graph-save').click();
   await expect(page.locator('#graph-state')).toContainText('Saved');
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const saved = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(saved.nodes.map(node => node.type)).toEqual(['Number', 'Hold']);
   await page.reload();
   await expect(page.locator('.graph-node')).toHaveCount(2);
@@ -163,7 +163,7 @@ export async function checkQuickAddPlacement(page, width, zoom, transformed = fa
   // Pan to blank space, far from the origin and the distant fixture card.
   await page.locator('.graph-scroll').evaluate(scroll => { scroll.scrollLeft = scroll.scrollWidth * .35; scroll.scrollTop = scroll.scrollHeight * .35; });
   const initial = await snapshot(page);
-  const stored = await page.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   const positions = [];
   for (let i = 0; i < 3; i++) {
     await openQuickAdd(page);
@@ -195,7 +195,7 @@ export async function checkQuickAddPlacement(page, width, zoom, transformed = fa
     positions.push(geometry);
   }
   expect(new Set((await snapshot(page)).nodes.map(node => node.id)).size).toBe(4);
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(stored);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(stored);
   await expect(page.locator('#graph-errors')).toBeEmpty();
 }
 export async function checkQuickAddTouch(page) {
