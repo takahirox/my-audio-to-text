@@ -185,7 +185,7 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.keyboard.press('Shift+Tab'); await live.keyboard.press('Tab');
   expect(await live.getByRole('link', { name: 'Graph', exact: true }).evaluate(link => getComputedStyle(link).outlineStyle)).toBe('solid');
   expect(f.requests).toEqual([]);
-  await live.locator('#stop').click(); await expect(live.editor.locator('.graph-state-notice')).not.toContainText('Active');
+  await live.locator('#stop').click(); await expect(live.editor.locator('.graph-activity')).toBeHidden();
   await expect(live.editor.locator('#graph-state')).toHaveText('Saved');
 });
 

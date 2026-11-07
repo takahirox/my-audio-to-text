@@ -34,7 +34,10 @@ export class GraphEditor {
     });
     this.saveButton.className = 'primary'; this.saveButton.setAttribute('aria-label', 'Save graph');
     this.saveButton.title = 'Save graph for the next session';
-    this.summary = el('p'); this.summary.id = 'graph-state'; this.summary.setAttribute('role', 'status');
+    const status = el('div', undefined, 'graph-status'); status.setAttribute('role', 'status'); status.setAttribute('aria-atomic', 'true');
+    this.summary = el('p'); this.summary.id = 'graph-state';
+    this.activity = el('span', undefined, 'graph-activity'); this.activity.hidden = true;
+    status.append(this.summary, this.activity);
     this.actions = el('details', undefined, 'graph-actions');
     const actionsTrigger = el('summary', '…'); actionsTrigger.setAttribute('aria-label', 'Graph actions'); actionsTrigger.title = 'Graph actions';
     this.actions.append(actionsTrigger);
@@ -91,6 +94,7 @@ export class GraphEditor {
     this.help = el('dialog', undefined, 'graph-help'); this.help.setAttribute('aria-label', 'Graph Editor help');
     this.help.append(el('h2', 'Graph Editor help'), this.assetNotice,
       el('p', 'Save applies to the next session. Start runs complete paths to outputs; incomplete Nodes remain in the draft. Graph actions provides validation, Load saved and Reset.'),
+      el('p', 'Saved / Unsaved describes this editor’s draft. Active in the toolbar means this graph is running in Live; hover it for the capture tab ID. An earlier-graph warning means saved edits apply only to the next session. If the saved graph changes elsewhere, export your draft if needed, then use Graph actions → Load saved before saving.'),
       el('p', 'Add Node opens a nearby searchable list. Choose a result to add it in the visible canvas; arrow keys navigate, Enter adds and Escape dismisses. Save applies the draft. Select a node heading for settings and optional node help; select it again to clear selection. Drag a heading or use arrow keys to move it.'),
       el('p', 'Connect by clicking an output then a matching input, or drag from an output to an input. Reconnecting replaces only that input’s wire. Drag a connected input into blank canvas to detach its wire, or to a matching input to move it. Select a wire for connection details and Disconnect in the inspector. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape or blank canvas clears selection.'),
       el('p', 'Ctrl + wheel or trackpad pinch over the canvas zooms at the pointer; ordinary scroll or swipe pans. Use − and + for 10 percentage point steps, the Canvas zoom chooser for presets, or Fit for an overview (1%–150%). Choose 100% to return focus to the element you were editing. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
@@ -107,8 +111,9 @@ export class GraphEditor {
     this.helpButton = button('?', 'graph-help', () => { this.actions.open = false; this.help.showModal(); });
     this.helpButton.setAttribute('aria-label', 'Help'); this.helpButton.title = 'Graph Editor help';
     this.help.onclose = () => this.helpButton.focus();
-    toolbar.append(this.summary, this.paletteButton, this.saveButton, this.actions, this.helpButton);
-    this.stateNotice = el('p', undefined, 'graph-state-notice'); this.stateNotice.setAttribute('role', 'status');
+    toolbar.append(status, this.paletteButton, this.saveButton, this.actions, this.helpButton);
+    // Only exceptional states get a row; routine Live activity stays in the toolbar.
+    this.stateNotice = el('p', undefined, 'graph-state-notice'); this.stateNotice.setAttribute('role', 'status'); this.stateNotice.setAttribute('aria-atomic', 'true'); this.stateNotice.hidden = true;
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
     this.workspace = el('div', undefined, 'graph-workspace');
     this.palette = el('aside', undefined, 'graph-palette'); this.palette.id = 'graph-palette'; this.palette.hidden = true;
@@ -445,11 +450,15 @@ export class GraphEditor {
     const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(this.saved);
     const notices = [...new Set(this.draft.nodes.map(node => NODE_TYPES[node.type]?.preparationNotice).filter(Boolean))];
     this.assetRequirements.textContent = notices.join(' ') || 'No model preparation notices for Nodes in the current draft.';
-    this.summary.textContent = this.isDirty() ? 'Unsaved' : 'Saved';
-    const active = running ? `Active${Number.isInteger(this.tabId) ? ` · tab ${this.tabId}` : ''}${pending ? ' · earlier graph; saved edits apply next session' : ''}` : '';
-    this.stateNotice.textContent = [active, this.externalChange ? 'Saved graph changed elsewhere; draft kept. Load saved before saving.' : ''].filter(Boolean).join(' · ');
+    const summary = this.isDirty() ? 'Unsaved' : 'Saved';
+    if (this.summary.textContent !== summary) this.summary.textContent = summary;
+    if (this.activity.textContent !== 'Active') this.activity.textContent = 'Active';
+    this.activity.hidden = !running;
+    this.activity.title = running ? `Running in Live${Number.isInteger(this.tabId) ? ` · tab ${this.tabId}` : ''}` : '';
+    const warning = [this.externalChange ? 'Saved graph changed elsewhere; draft kept. Load saved before saving.' : '', pending ? 'Live uses an earlier graph; saved edits apply next session.' : ''].filter(Boolean).join(' ');
+    if (this.stateNotice.textContent !== warning) this.stateNotice.textContent = warning;
+    this.stateNotice.hidden = !warning;
     this.summary.classList.toggle('graph-conflict', !!this.externalChange);
-    this.stateNotice.classList.toggle('graph-conflict', !!this.externalChange || !!pending);
   }
   connect(id, port, contract, movingConnection = null) {
     if (this.selected && compatiblePorts(this.selected.contract, contract) && this.selected.id !== id) {

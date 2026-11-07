@@ -8,6 +8,11 @@
   .editor-page #graph-state::before { content: ''; }
   .editor-page .graph-toolbar { gap: .25rem; }
   .editor-page .graph-toolbar > button { padding-inline: .5rem; }
+  .editor-page .graph-status { gap: .5rem; }
+}
+@media (max-width: 380px) {
+  /* Keep every action on the same 44px row, including with an unsaved active draft. */
+  .editor-page .graph-status { flex-direction: column; align-items: flex-start; gap: 0; font-size: .8rem; line-height: 1.4; }
 }
 .editor-page #graph-state.graph-conflict { color: var(--warning); }
 .editor-page .graph-scroll { background: var(--surface-subtle); border-radius: var(--card-radius); }

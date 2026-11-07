@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { checkCanvasFirst, checkLeanInspector, checkGraphCommands } from '../fixtures/graph-canvas-first.js';
+import { checkCanvasFirst, checkGraphActivity, checkLeanInspector, checkGraphCommands } from '../fixtures/graph-canvas-first.js';
 import { clickGraphAction } from '../extension/ui-controls.js';
 
 async function serveExtension(route) {
@@ -15,10 +15,14 @@ for (const width of [1440, 390, 320]) {
     const geometry = await checkCanvasFirst(page, width);
     await info.attach('canvas-geometry', { body: JSON.stringify(geometry, null, 2), contentType: 'application/json' });
   });
+  test(`Live activity shares the toolbar and reclaims the status row at ${width}px`, async ({ page }, info) => {
+    const geometry = await checkGraphActivity(page, width, info);
+    await info.attach('activity-geometry', { body: JSON.stringify(geometry, null, 2), contentType: 'application/json' });
+  });
 }
 test('lean inspector toggles heading selection, preserves dragging and edge actions', async ({ page }) => { await checkLeanInspector(page); });
 test('overflow preserves import/export, confirmation, warnings and validation', async ({ page }) => { await checkGraphCommands(page); });
-test('save conflicts and an earlier active graph stay visible with compact state', async ({ page }) => {
+test('save conflicts and an earlier active graph stay visible with compact state', async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 900 });
   await page.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
   const second = await page.context().newPage();
@@ -38,12 +42,28 @@ test('save conflicts and an earlier active graph stay visible with compact state
       const channel = new BroadcastChannel('live-graph-state');
       channel.postMessage({ graphId: new URLSearchParams(location.search).get('id'), graph: defaultGraph(), state: 'recording', tabId: 42 }); channel.close();
     });
-    await expect(page.locator('.graph-state-notice')).toContainText('Active · tab 42 · earlier graph');
+    await expect(page.locator('.graph-toolbar .graph-activity')).toBeVisible();
+    await expect(page.locator('.graph-state-notice')).toContainText('earlier graph; saved edits apply next session');
+    await expect(page.locator('.graph-state-notice')).toContainText('draft kept. Load saved before saving.');
+    const warning = page.locator('.graph-state-notice');
+    await expect(warning).toBeVisible(); await expect(warning).toHaveCSS('text-overflow', 'clip');
+    expect(await warning.evaluate(el => el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath('status-warnings-320.png'), fullPage: true });
+    if (process.env.UPDATE_GRAPH_STATUS_SCREENSHOTS && info.project.name === 'chromium') {
+      await page.screenshot({ path: 'docs/evidence/graph-245-warnings-320.png', fullPage: true });
+    }
     await clickGraphAction(page, 'graph-load');
     await expect(page.locator('#graph-state')).toHaveText('Saved');
     await expect(page.locator('.graph-state-notice')).not.toContainText('draft kept');
+    await expect(page.locator('.graph-state-notice')).toContainText('saved edits apply next session');
     await expect(page.locator('#graph-errors')).toBeEmpty();
+    await second.evaluate(() => {
+      const channel = new BroadcastChannel('live-graph-state');
+      channel.postMessage({ graphId: new URLSearchParams(location.search).get('id'), graph: null, state: 'idle' }); channel.close();
+    });
+    await expect(page.locator('.graph-state-notice')).toBeHidden();
+    await expect(page.locator('.graph-activity')).toBeHidden();
   } finally { await second.close(); }
 });
 test('bottom ports can scroll completely above floating controls and Fit reserves their space', async ({ page }) => {

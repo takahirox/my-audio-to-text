@@ -69,8 +69,11 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .editor-page .page-header { margin-bottom: .75rem; }
 .editor-page .eyebrow, .live-page .eyebrow { margin: 0; }
 .graph-toolbar { margin-bottom: .65rem; flex-wrap: nowrap; }
-.graph-toolbar > :not(#graph-state) { flex-shrink: 0; }
-#graph-state { flex: 1; margin: 0; color: var(--muted); font-size: .85rem; min-width: 0; white-space: nowrap; }
+.graph-toolbar > :not(.graph-status) { flex-shrink: 0; }
+.graph-status { flex: 1; min-width: 0; display: flex; align-items: center; gap: .75rem; font-size: .85rem; white-space: nowrap; }
+#graph-state { margin: 0; color: var(--muted); font-size: inherit; }
+.graph-activity { color: var(--success, #a0dfb7); font-weight: 650; }
+.graph-activity::before { content: ''; display: inline-block; width: .45em; height: .45em; border-radius: 50%; background: currentColor; margin-right: .35em; vertical-align: .1em; }
 #graph-state.graph-conflict { color: #fff1a8; }
 .graph-workspace { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: .75rem; }
 .graph-viewport { min-width: 0; }
@@ -80,9 +83,9 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .graph-zoom-controls select { width: 7.5rem; height: 44px; }
 .graph-inspector-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .graph-inspector-header h2 { margin: 0; }
-.graph-state-notice { font-size: .85rem; color: var(--muted); }
-.graph-state-notice.graph-conflict { color: var(--warning, #fff1a8); }
-.graph-scroll { height: calc(100dvh - 156px); min-height: 400px; overscroll-behavior: contain; }
+.graph-state-notice { margin: 0 0 .5rem; font-size: .85rem; color: var(--warning, #fff1a8); overflow-wrap: anywhere; }
+/* Give the canvas the space reclaimed from routine session status. */
+.graph-scroll { height: calc(100dvh - 140px); min-height: 400px; overscroll-behavior: contain; }
 .graph-palette { position: fixed; z-index: 5; width: 320px; box-shadow: 0 12px 36px #0008; display: flex; flex-direction: column; gap: .5rem; overflow: auto; }
 .graph-palette > input, .graph-palette > select, .graph-palette > p { flex-shrink: 0; }
 .graph-node-list { min-height: 44px; overflow: auto; overscroll-behavior: contain; }
@@ -125,7 +128,7 @@ button, summary, nav a { min-height: 44px; }
 @media (max-width: 800px) {
   .graph-workspace { grid-template-columns: minmax(0, 1fr); }
   .graph-inspector { grid-row: 2; height: clamp(12rem, 32dvh, 20rem); }
-  .graph-scroll { height: 62dvh; }
+  .graph-scroll { height: calc(62dvh + 2rem); }
 }
 @media (max-width: 600px) {
   body.editor-page, body.live-page { padding: .75rem; }

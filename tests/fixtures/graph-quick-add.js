@@ -7,7 +7,10 @@ export async function seedQuickAdd(page, large = false) {
     const nodes = large ? [graphNode('Text', 'far', 6000, 4000)] : [];
     await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes, edges: [] });
   }, large);
-  await page.reload();
+  // A previous scenario can leave a dirty draft; reseeding explicitly discards it.
+  const discard = async dialog => { expect(dialog.type()).toBe('beforeunload'); await dialog.accept(); };
+  page.on('dialog', discard);
+  try { await page.reload(); } finally { page.off('dialog', discard); }
 }
 const search = page => page.getByRole('combobox', { name: 'Search nodes' });
 async function expectPaletteSelection(page, option = null) {
@@ -210,7 +213,7 @@ export async function checkQuickAddTouch(page) {
   await openQuickAdd(page, true);
   // Floating canvas controls can sit behind the open palette on short screens.
   // Use an exposed outside target to exercise native touch dismissal.
-  await page.getByRole('heading', { name: 'Graph Editor', exact: true }).tap();
+  await page.getByRole('heading', { name: /^Graph Editor\b/ }).tap();
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('.graph-node')).toHaveCount(1);
 }

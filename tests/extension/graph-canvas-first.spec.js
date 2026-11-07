@@ -2,7 +2,7 @@ import { test, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { checkCanvasFirst, checkLeanInspector, checkGraphCommands } from '../fixtures/graph-canvas-first.js';
+import { checkCanvasFirst, checkGraphActivity, checkLeanInspector, checkGraphCommands } from '../fixtures/graph-canvas-first.js';
 import { checkZoomRecovery } from '../fixtures/graph-zoom.js';
 import { checkPointerZoom, checkZoomInputModes, checkZoomControls } from '../fixtures/graph-pointer-zoom.js';
 import { checkInputDetach, checkInputReconnect, checkRecovery } from '../fixtures/graph-inspector.js';
@@ -22,7 +22,7 @@ test('MV3 canvas-first controls, inspector, zoom focus, connections and recovery
     const { id } = await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root });
     const page = await context.newPage(); const url = `chrome-extension://${id}/extension/graph-editor.html`;
     await page.goto(url);
-    for (const width of [1440, 390, 320]) await checkCanvasFirst(page, width);
+    for (const width of [1440, 390, 320]) { await checkCanvasFirst(page, width); await checkGraphActivity(page, width); }
     await page.setViewportSize({ width: 1440, height: 900 }); await checkLeanInspector(page);
     await page.evaluate(() => localStorage.clear());
     await page.goto(url); await checkGraphCommands(page);
