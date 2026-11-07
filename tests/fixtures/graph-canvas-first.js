@@ -41,8 +41,79 @@ export async function checkCanvasFirst(page, width) {
   await expect(page.locator('.graph-actions > summary')).toBeFocused();
   await page.locator('#graph-help').press('Enter');
   await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Choose 100%');
+  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Active in the toolbar means this graph is running in Live');
   await page.keyboard.press('Escape'); await expect(page.locator('#graph-help')).toBeFocused();
   return { width, toolbar: bounds, canvas, controls };
+}
+
+// Use the production cross-page Live state channel, including graph-ID filtering.
+export async function publishGraphActivity(page, { state = 'recording', matching = true, tabId = 1476958582 } = {}) {
+  await page.evaluate(async ({ state, matching, tabId }) => {
+    const { readLibrary, entryGraph } = await import(new URL('./graph-library.js', location.href));
+    const id = new URLSearchParams(location.search).get('id');
+    const graph = entryGraph(readLibrary(localStorage).graphs.find(entry => entry.id === id));
+    const channel = new BroadcastChannel('live-graph-state');
+    channel.postMessage({ graphId: matching ? id : 'unrelated-graph', graph, state, tabId }); channel.close();
+  }, { state, matching, tabId });
+}
+
+export async function checkGraphActivity(page, width, info) {
+  await page.setViewportSize({ width, height: 900 });
+  const badge = page.locator('.graph-toolbar .graph-activity'), warning = page.locator('.graph-state-notice');
+  const canvas = page.locator('.graph-scroll'), toolbar = page.locator('.graph-toolbar');
+  await expect(badge).toBeHidden(); await expect(warning).toBeHidden();
+  expect(await warning.boundingBox()).toBeNull();
+  const idle = await canvas.boundingBox();
+  await publishGraphActivity(page);
+  await expect(badge).toBeVisible(); await expect(badge).toHaveText('Active');
+  await expect(badge).toHaveAttribute('title', 'Running in Live · tab 1476958582');
+  await expect(warning).toBeHidden();
+  expect(await warning.boundingBox()).toBeNull();
+  const active = await canvas.boundingBox();
+  expect(active).toEqual(idle);
+  expect(active.height).toBeGreaterThan(width > 800 ? 744 : 558); // Previous canvas sizes at 900px height.
+  const bounds = await toolbar.boundingBox(); expect(bounds.height).toBe(44);
+  expect(active.y - bounds.y - bounds.height).toBeLessThan(20);
+  await expect(page.locator('.graph-status')).toHaveAttribute('role', 'status');
+  await expect(page.locator('.graph-status [role=status]')).toHaveCount(0);
+  expect(await page.locator('#graph-editor').innerText()).not.toContain('1476958582');
+  await page.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
+  await expect(page.locator('#graph-state')).toHaveText('Unsaved');
+  await expect(badge).toBeVisible(); await expect(warning).toBeHidden();
+  expect(await canvas.boundingBox()).toEqual(idle);
+  // All controls and both independent statuses fit, without clipping or overlap.
+  const status = await page.locator('.graph-status').boundingBox();
+  for (const selector of ['#graph-state', '.graph-activity']) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(status.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(status.x + status.width + .5);
+    expect(box.y).toBeGreaterThanOrEqual(bounds.y);
+    expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+  }
+  for (const selector of ['#graph-palette-toggle', '#graph-save', '.graph-actions > summary', '#graph-help']) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box.y).toBe(bounds.y); expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.x).toBeGreaterThanOrEqual(status.x + status.width);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  if (info) {
+    await page.screenshot({ path: info.outputPath(`active-toolbar-${width}.png`), fullPage: true });
+    if (process.env.UPDATE_GRAPH_STATUS_SCREENSHOTS && info.project.name === 'chromium') {
+      await page.screenshot({ path: `docs/evidence/graph-245-${width}.png`, fullPage: true });
+    }
+  }
+  await clickGraphAction(page, 'graph-load');
+  await expect(page.locator('#graph-state')).toHaveText('Saved');
+  await publishGraphActivity(page, { matching: false });
+  await expect(badge).toBeHidden(); await expect(warning).toBeHidden();
+  expect(await canvas.boundingBox()).toEqual(idle);
+  await publishGraphActivity(page, { tabId: null });
+  await expect(badge).toBeVisible(); await expect(badge).toHaveAttribute('title', 'Running in Live');
+  await publishGraphActivity(page, { state: 'idle' });
+  await expect(badge).toBeHidden(); await expect(warning).toBeHidden();
+  expect(await canvas.boundingBox()).toEqual(idle);
+  return { width, toolbar: bounds, idleCanvas: idle, activeCanvas: active };
 }
 
 export async function checkLeanInspector(page) {

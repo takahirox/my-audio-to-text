@@ -124,7 +124,9 @@ for (const width of [390, 1440]) {
       return graph.nodes.map(node => nodeDefinition(node).label);
     });
     await page.reload();
-    const original = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
+    // Library Save advances revisions/timestamps even when graph content is unchanged.
+    const savedGraphs = () => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).graphs.map(({ id, graph }) => ({ id, graph })));
+    const original = await savedGraphs();
     await expect(page.locator('.graph-heading')).toHaveText(labels);
     const first = page.getByRole('button', { name: 'Select speech', exact: true });
     const second = page.getByRole('button', { name: 'Select speech-second', exact: true });
@@ -151,12 +153,12 @@ for (const width of [390, 1440]) {
     await expect(page.locator('#graph-state')).toContainText('Saved');
     await page.locator('#graph-save').click();
     await expect(page.locator('#graph-save')).toBeEnabled();
-    expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(original);
+    expect(await savedGraphs()).toEqual(original);
     await page.reload();
     await expect(page.locator('.graph-heading')).toHaveText(labels);
     await second.click();
     await expect(inspector.getByText('Instance ID: speech-second', { exact: true })).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(original);
+    expect(await savedGraphs()).toEqual(original);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }

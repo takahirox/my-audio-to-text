@@ -104,6 +104,44 @@ test('selected editor saves only its ID, protects drafts across tabs and warns b
   await editor.close();
 });
 
+test('toolbar activity follows only the running graph ID across snapshot saves, reload and Stop', async ({ libraryExtension: f }) => {
+  const { page, context, url } = f;
+  // Identical payloads still represent independent library entries.
+  const a = await create(page, 'Graph A', simple('A')), b = await create(page, 'Graph B', simple('A'));
+  await assign(page, 'live', a);
+  const editorA = await context.newPage(); await editorA.goto(url + `graph-editor.html?id=${a}`);
+  const editorB = await context.newPage(); await editorB.goto(url + `graph-editor.html?id=${b}`);
+  const badgeA = editorA.locator('.graph-toolbar .graph-activity'), badgeB = editorB.locator('.graph-toolbar .graph-activity');
+  await expect(badgeA).toBeHidden(); await expect(badgeB).toBeHidden();
+  const live = await context.newPage(); await live.goto(url + 'recorder.html');
+  await expect(live.locator('#start')).toBeEnabled(); await live.locator('#start').click();
+  await expect(live.locator('#session-state')).toHaveText('Running');
+  await expect(badgeA).toBeVisible(); await expect(badgeB).toBeHidden();
+  await expect(editorA.locator('.graph-state-notice')).toBeHidden();
+  await expect(editorB.locator('.graph-state-notice')).toBeHidden();
+  await editorA.reload(); // Initial runtime lookup also respects the current graph ID.
+  await editorB.reload();
+  await expect(badgeA).toBeVisible(); await expect(badgeB).toBeHidden();
+  await editorA.getByRole('button', { name: 'Select source', exact: true }).press('ArrowRight');
+  await expect(editorA.locator('#graph-state')).toHaveText('Unsaved');
+  await expect(editorA.locator('.graph-state-notice')).toBeHidden();
+  await editorA.locator('#graph-save').click();
+  await expect(editorA.locator('#graph-state')).toHaveText('Saved');
+  await expect(editorA.locator('.graph-state-notice')).toContainText('earlier graph; saved edits apply next session');
+  await expect(badgeA).toBeVisible(); await expect(badgeB).toBeHidden();
+  await expect(live.locator('#live-displays')).toContainText('A');
+  await assign(page, 'live', b);
+  await expect(badgeA).toBeVisible(); await expect(badgeB).toBeHidden();
+  await live.locator('#stop').click(); await expect(live.locator('#start')).toBeEnabled();
+  await expect(badgeA).toBeHidden(); await expect(badgeB).toBeHidden();
+  await expect(editorA.locator('.graph-state-notice')).toBeHidden();
+  await live.locator('#start').click();
+  await expect(live.locator('#session-state')).toHaveText('Running');
+  await expect(badgeB).toBeVisible(); await expect(badgeA).toBeHidden();
+  await live.locator('#stop').click();
+  await expect(badgeB).toBeHidden();
+});
+
 test('migration preserves valid and malformed legacy sources; recovery never overwrites the original', async ({ libraryExtension: f }) => {
   const { page, url, context } = f;
   for (const raw of [JSON.stringify(defaultGraph(), null, 2), '{broken original']) {
