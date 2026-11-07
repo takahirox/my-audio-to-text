@@ -138,11 +138,11 @@ test('real pinned decoder: incremental prefixes preserve full-decode samples thr
 async function graph(f, language, text) {
   const editor = await f.context.newPage(); await editor.goto(f.url + 'graph-editor.html');
   await editor.evaluate(async ({ language, text, nodeType, cosy }) => {
-    const { GRAPH_VERSION, graphNode, edge, saveGraph } = await import('./graph.js');
+    const { GRAPH_VERSION, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const literal = graphNode('Text', 'literal', 20, 50); literal.settings.value = text;
     const tts = graphNode(nodeType, 'tts', 320, 50);
     tts.settings = { language, voice: cosy ? 'libritts-r-4446' : language === 'japanese' ? 'ono_anna' : 'ryan' };
-    saveGraph(localStorage, { version: GRAPH_VERSION, nodes: [literal, tts, graphNode('StreamingSpeakerOutput', 'speaker', 650, 50)],
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes: [literal, tts, graphNode('StreamingSpeakerOutput', 'speaker', 650, 50)],
       edges: [edge('literal', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'stream')] });
   }, { language, text, nodeType, cosy });
   await editor.reload();

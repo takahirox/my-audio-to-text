@@ -69,8 +69,10 @@ toolbar's current tab without the sharing picker. Live initializes executable
 graph models before showing Ready; press Start to begin transcription with warm
 models. It reuses the Web
 ASR core and audio helpers, restores audible tab playback, and shows transcripts
-in a compact Live window. Separate Graph Editor and Models tabs provide
-executable graph editing and verified optional model preparation without
+in a compact Live window. The [Graph Library](docs/extension-graph.md#graph-library-243) stores named, independent
+graphs and assigns the Live default. Open a library entry in Graph Editor; Save
+updates that entry only. The Web page voice typing assignment is reserved for a
+future implementation. Graph Editor and Models tabs provide executable graph editing and verified optional model preparation without
 interrupting capture. Optional local OPUS-MT pairs committed
 Japanese transcripts with English or English transcripts with Japanese using
 independent direction-specific Nodes and editable TextFormatter templates. Saved
@@ -230,6 +232,7 @@ See [contracts and wiring](docs/display-items.md), the
 [importable graph](docs/evidence/item-198.json), and the
 [executable fixture](tests/fixtures/item-graph.js). Legacy `Display.input` edges
 convert to `input1` on Load/Import; Save writes the numbered form. Other removed
-display Nodes and ports are unsupported. Graph Editor reports them visibly and offers Reset or Import;
-Save explicitly replaces the stored graph. Each Live region follows updates
+display Nodes and ports are unsupported. Graph Editor reports them visibly and
+keeps the original available for export. Repair it and import as a new Library
+entry; saving a recovery draft cannot overwrite an invalid original. Each Live region follows updates
 when reading near the bottom and preserves scroll position when reading above it.

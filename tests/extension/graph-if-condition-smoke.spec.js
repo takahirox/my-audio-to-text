@@ -46,10 +46,10 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
   // Two simultaneously executable instances have separate conditions/Workers,
   // while sharing only the same prepared immutable asset cache.
   await page.editor.evaluate(async()=>{
-   const {readGraph,saveGraph,graphNode,edge}=await import('./graph.js');const g=readGraph(localStorage);
+   const { graphNode, edge } = await import('./graph.js'); const { readLiveGraphData, saveLiveGraphData } = await import('./graph-library.js');const g=readLiveGraphData(localStorage);
    g.nodes.push(graphNode('IfCondition','animal',500,650),graphNode('Display','animal-yes',1200,300),graphNode('Display','animal-no',1200,600),graphNode('TextAccumulator','animal-yes-acc'),graphNode('TextAccumulator','animal-no-acc'));
    g.nodes.find(n=>n.id==='animal').settings.condition='Does this text mention an animal?';
-   g.edges.push(edge('speech','final','animal','text'),edge('animal','yes','animal-yes-acc','append'),edge('animal','no','animal-no-acc','append'),edge('animal-yes-acc','text','animal-yes','input1'),edge('animal-no-acc','text','animal-no','input1'));saveGraph(localStorage, (g));
+   g.edges.push(edge('speech','final','animal','text'),edge('animal','yes','animal-yes-acc','append'),edge('animal','no','animal-no-acc','append'),edge('animal-yes-acc','text','animal-yes','input1'),edge('animal-no-acc','text','animal-no','input1'));await saveLiveGraphData(localStorage, (g));
   });
   await page.editor.reload();await page.editor.locator('#graph-save').click();await expect(page.editor.locator('#graph-save')).toBeEnabled();
   const parallelStart=Date.now();await startGraph(page,120000);

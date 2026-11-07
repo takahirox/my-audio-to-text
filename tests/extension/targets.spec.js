@@ -49,7 +49,7 @@ const test = base.extend({
       await page.evaluate(async () => {
         const { TabSession } = await import('./session.js'), start = TabSession.prototype.start;
         TabSession.prototype.start = function(...args) { window.targetSession = this; return start.apply(this, args); };
-        const { defaultGraph, saveGraph } = await import('./graph.js'); saveGraph(localStorage, defaultGraph({ enabled: false }));
+        const { defaultGraph } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, defaultGraph({ enabled: false }));
         const { SpeechToTextNode } = await import('../web/transcription-nodes.js'), original = SpeechToTextNode.prototype.start;
         SpeechToTextNode.prototype.start = function(context) { window.activeSpeech = this; return original.call(this, context); };
         const { ExtensionTabAudioNode } = await import('./tab-audio-node.js'), capture = ExtensionTabAudioNode.prototype.start;
@@ -71,8 +71,8 @@ const test = base.extend({
         if (!page.isClosed()) {
           await page.waitForTimeout(100);
           const manual = await page.evaluate(async () => {
-            const { readGraph, executableGraph } = await import('./graph.js');
-            return executableGraph(readGraph(localStorage)).nodes.some(node => node.type === 'MicrophoneAudio');
+            const { executableGraph } = await import('./graph.js'); const { readLiveGraphData } = await import('./graph-library.js');
+            return executableGraph(readLiveGraphData(localStorage)).nodes.some(node => node.type === 'MicrophoneAudio');
           });
           // The fixture's ordinary tab cases explicitly Start after selecting
           // the toolbar target. Microphone cases exercise that gesture below.
@@ -84,7 +84,7 @@ const test = base.extend({
       };
       const graph = async ({ source = 'ChromeTabAudio', outputs = [], translation = false, live = true } = {}) => {
         await page.evaluate(async ({ source, outputs, translation, live }) => {
-          const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
+          const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
           const graph = defaultGraph({ enabled: translation }); graph.nodes[0].type = source;
           if (!live) {
             const views = graph.nodes.filter(node => ['Display', 'TextFormatter'].includes(node.type)).map(node => node.id);
@@ -94,7 +94,7 @@ const test = base.extend({
             graph.nodes.push(graphNode(type, id));
             graph.edges.push(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', id, 'text'));
           }
-          saveGraph(localStorage, (graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+          await saveLiveGraphData(localStorage, (graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
         }, { source, outputs, translation, live });
       };
       await use({ context, cdp, id, page, website, invoke, graph, origin: `chrome-extension://${id}`, webOrigin: `http://127.0.0.1:${server.address().port}` });
@@ -357,13 +357,13 @@ test('microphone has an explicit Start gesture, native permission denial, fake-d
 
 test('native tab capture and permitted microphone run together; tab navigation drains only its path', async ({ targets: t }) => {
   await t.page.evaluate(async () => {
-    const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
+    const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextReazonSpeech','local-asr'),graphNode('Display','local'),
       graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextReazonSpeech','copy-asr'),graphNode('Display','copy-display'),graphNode('TextAccumulator','local-accumulator'),graphNode('TextAccumulator','copy-accumulator'));
     graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local-accumulator','append'),edge('local-accumulator','text','local','input1'),
       edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-accumulator','append'),edge('copy-accumulator','text','copy-display','input1'));
-    saveGraph(localStorage, (graph));window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));
+    await saveLiveGraphData(localStorage, (graph));window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));
     const NativeWorker=Worker;window.concurrentWorkers=[];
     window.Worker=class extends NativeWorker {
       constructor(...args){super(...args);window.concurrentWorkers.push(this);}

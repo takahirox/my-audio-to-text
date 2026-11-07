@@ -34,7 +34,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
   await loadTraceabilityGraph(graph);
   await models.reload();
   await expect(models.locator('#opus-ja-en .model-status')).toHaveText('Not downloaded');
-  const original = await graph.evaluate(() => localStorage.getItem('processing-graph-v1'));
+  const original = await graph.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   for (const width of [1440, 390]) {
     for (const [name, page] of [['live', live], ['graph', graph], ['models', models]]) {
       await page.setViewportSize({ width, height: 1000 });
@@ -71,7 +71,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
   await checkContrast(models, '.model-heading h3, .model-status, .model-metadata, .model-license a, .actions button:not(:disabled)', '.model-card', 4.5);
   await checkContrast(graph, '.graph-heading, .graph-ports button:not(:disabled), .graph-ports small', '.graph-node', 4.5);
   await checkContrast(graph, '.wire-line', '.graph-scroll', 3);
-  expect(await graph.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
+  expect(await graph.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(original);
   // Keep a normal-scale dense screenshot to inspect crossings rather than only Fit.
   await graph.setViewportSize({ width: 1600, height: 1500 });
   await graph.locator('#graph-zoom').selectOption('1');

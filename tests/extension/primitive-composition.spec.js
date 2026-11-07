@@ -8,7 +8,7 @@ for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa'
   const live=await openGraph(f, { live: false }), editor=live.editor;
   for(const source of ['speech','window']) for(const ports of [['provisional','text'],['text','provisional']]) {
     const graph=defaultGraph(); graph.nodes.push(graphNode(translator,'translator',600,400),graphNode('TextWindow','window',300,400));
-    await editor.evaluate(async graph=>{const {saveGraph}=await import('./graph.js');saveGraph(localStorage, (graph));},graph);await editor.reload();
+    await editor.evaluate(async graph=>{const { saveLiveGraphData } = await import('./graph-library.js');await saveLiveGraphData(localStorage, (graph));},graph);await editor.reload();
     for(const input of ports){
       const output=source==='window'?'text':input==='text'?'final':'provisional';
       await editor.getByRole('button',{name:`${source} output ${output}`,exact:true}).press('Enter');
@@ -16,7 +16,7 @@ for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa'
       await expect(editor.locator('#graph-errors')).toBeEmpty();
       await editor.locator('#graph-save').click();await expect(editor.locator('#graph-save')).toBeEnabled();
       await editor.reload();
-      const saved=await editor.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')));
+      const saved=await editor.evaluate(()=>(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
       expect(saved.edges).toContainEqual(edge(source,output,'translator',input));
     }
   }

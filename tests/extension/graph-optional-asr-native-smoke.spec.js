@@ -56,12 +56,12 @@ test('real concurrent Parakeet v3 and Moonshine Medium: native tab capture, Live
         const manifest = defineAssetSet({ ...spec, files: spec.files.map(file => ({ ...file, sourceURL: `http://127.0.0.1:${port}/${key}/${file.path}` })) });
         const view = await new ModelAssetCache(manifest).prepare(); if (view.state !== 'Ready') throw Error(JSON.stringify(view));
       }
-      const { defaultGraph, graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
+      const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
       const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextParakeetV3'; graph.edges = graph.edges.filter(e => !['provisional', 'provisionalId'].includes(e.from[1]));
       graph.nodes.push(graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('TextFormatter', 'format'), graphNode('Display', 'medium'), graphNode('FocusedInputTextOutputNode', 'field'), graphNode('TextAccumulator', 'medium-accumulator'));
       graph.nodes.find(n => n.id === 'format').settings.template = 'Moonshine: {1}';
       graph.edges.push(edge('audio', 'audio', 'moonshine', 'audio'), edge('moonshine', 'final', 'format', 'input1'), edge('format', 'text', 'medium-accumulator', 'append'), edge('medium-accumulator', 'text', 'medium', 'input1'), edge('speech', 'final', 'field', 'text'));
-      saveGraph(localStorage, (graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
+      await saveLiveGraphData(localStorage, (graph)); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
       for (const [module, name] of [['parakeet-v3-node', 'SpeechToTextParakeetV3Node'], ['moonshine-medium-node', 'SpeechToTextMoonshineMediumEnNode']]) {
         const Node = (await import(`../web/${module}.js`))[name], receive = Node.prototype.receiveEvent;
         Node.prototype.receiveEvent = function(event) { window.events.push({ node: name, ...event, ms: performance.now() }); return receive.call(this, event); };

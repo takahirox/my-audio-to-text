@@ -25,13 +25,13 @@ test('IfCondition palette/settings/wires persist; preparation verifies, cancels,
  f.mode('corrupt');await save(editor);await expect(card(editor)).toHaveAttribute('data-state','Error');
  await editor.reload();await editor.getByRole('button',{name:'Select ifcondition',exact:true}).click();
  await expect(editor.getByLabel('ifcondition condition',{exact:true})).toHaveValue('Does this text mention an animal?');
- expect(await editor.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')).edges.some(e=>e.from[0]==='ifcondition'&&e.from[1]==='yes'))).toBe(true);
+ expect(await editor.evaluate(()=>(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().edges.some(e=>e.from[0]==='ifcondition'&&e.from[1]==='yes'))).toBe(true);
  f.mode('hold');await save(editor);await expect(card(editor)).toHaveAttribute('data-state','Downloading');await card(editor).getByRole('button',{name:'Cancel preparation',exact:true}).click();
  await expect(card(editor)).toHaveAttribute('data-state','Canceled');f.mode('normal');await card(editor).getByRole('button',{name:'Retry preparation',exact:true}).click();
  await expect(card(editor)).toHaveAttribute('data-state','Ready');const count=f.requests.length;await save(editor);await expect(card(editor)).toHaveAttribute('data-state','Ready');expect(f.requests.length).toBe(count);
  expect(await page.evaluate(()=>window.graphWorkers.filter(w=>w.url.includes('if-condition-worker')).flatMap(w=>w.messages).some(m=>m.type==='decide'))).toBe(false);
  await editor.getByLabel('ifcondition condition',{exact:true}).fill(' ');await save(editor);await expect(editor.locator('#graph-errors')).toContainText('nonempty');
- expect(await editor.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.find(n=>n.id==='ifcondition').settings.condition)).toBe('Does this text mention an animal?');
+ expect(await editor.evaluate(()=>(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.find(n=>n.id==='ifcondition').settings.condition)).toBe('Does this text mention an animal?');
 });
 
 test('production Worker with fixture logits routes once, preserves text/repeats/empty and drains on Stop',async({graphExtension:f})=>{
@@ -69,8 +69,8 @@ test('an unavailable packaged backend blocks Start and preserves the saved graph
  await conditionAssets(f);const page=await openGraph(f);await seedConditionGraph(page.editor);await save(page.editor);await expect(card(page.editor)).toHaveAttribute('data-state','Ready');
  const {writeFile}=await import('node:fs/promises');const path=await import('node:path');
  await writeFile(path.join(f.root,'web/vendor/translation/transformers.js'),"throw new Error('Controlled unavailable backend');");
- const saved=await page.evaluate(()=>localStorage.getItem('processing-graph-v1'));await page.reload();
+ const saved=await page.evaluate(()=>localStorage.getItem('processing-graph-library-v1'));await page.reload();
  await expect(page.locator('#errors')).toContainText('Controlled unavailable backend');await expect(page.locator('#start')).toBeDisabled();
- expect(await page.evaluate(()=>localStorage.getItem('processing-graph-v1'))).toBe(saved);
+ expect(await page.evaluate(()=>localStorage.getItem('processing-graph-library-v1'))).toBe(saved);
  await expect.poll(()=>page.evaluate(()=>window.graphWorkers.every(w=>w.released))).toBe(true);
 });

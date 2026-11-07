@@ -1,8 +1,8 @@
 export async function selectZipformer(page) {
   await page.evaluate(async () => {
-    const { readGraph, saveGraph } = await import('./graph.js');
-    const graph = readGraph(localStorage); graph.nodes.find(n => n.id === 'speech').type = 'SpeechToTextZipformerEn';
-    saveGraph(localStorage, graph);
+    const { readLiveGraphData, saveLiveGraphData } = await import('./graph-library.js');
+    const graph = readLiveGraphData(localStorage); graph.nodes.find(n => n.id === 'speech').type = 'SpeechToTextZipformerEn';
+    await saveLiveGraphData(localStorage, graph);
     const { ExtensionTabAudioNode } = await import('./tab-audio-node.js');
     ExtensionTabAudioNode.prototype.start = function(context) { window.capture = context; };
     ExtensionTabAudioNode.prototype.stop = function() {};

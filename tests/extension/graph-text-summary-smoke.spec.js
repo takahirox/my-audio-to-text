@@ -76,7 +76,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
       };
     });
     editor = await context.newPage(); await editor.goto(base + 'graph-editor.html');
-    await editor.evaluate(async graph => { const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph); }, summaryGraph(type));
+    await editor.evaluate(async graph => { const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, graph); }, summaryGraph(type));
     await editor.reload();
     // Both options are production palette entries and remain after a reload.
     await editor.locator('#graph-palette-toggle').click();
@@ -91,7 +91,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
     await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled(); await expect(card).toHaveAttribute('data-state', 'Ready', { timeout: 60000 });
     expect(downloads.length).toBe(count);
     await editor.reload();
-    expect(await editor.evaluate(async () => (await import('./graph.js')).readGraph(localStorage))).toEqual(summaryGraph(type));
+    expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(summaryGraph(type));
     page = await context.newPage(); page.on('pageerror', error => consoleErrors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
     await page.goto(base + 'recorder.html');
@@ -156,7 +156,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
       const graph = directSummaryGraph(type);
       graph.nodes.find(n => n.id === 'input').settings.value = fixture.text;
       graph.nodes.find(n => n.id === 'summary').settings = {language: 'en', prompt: fixture.prompt};
-      await editor.evaluate(async graph => (await import('./graph.js')).saveGraph(localStorage, graph), graph);
+      await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
       const before = await page.evaluate(() => summaryEvidence.length);
       await startReadyLive(page, { workers: 'summaryWorkers', timeout: 180000 });
       await expect(page.locator('#status')).toHaveText('Processing active', {timeout: 180000});

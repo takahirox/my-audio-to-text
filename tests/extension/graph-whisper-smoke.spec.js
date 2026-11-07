@@ -36,7 +36,7 @@ test('real packaged Whisper tiny: English/Japanese language selection, Silero, S
       await page.editor.getByLabel('language value', { exact: true }).fill(language); await page.editor.locator('#graph-save').click();
       await expect(page.editor.locator('#graph-save')).toBeEnabled();
       await expect(page.editor.locator('#graph-errors')).toBeEmpty();
-      await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.find(n => n.id === 'language').settings.value)).toBe(language);
+      await expect.poll(() => page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.find(n => n.id === 'language').settings.value)).toBe(language);
       const start = Date.now(); await startGraph(page, 120000); const loaded = Date.now();
       expect(await page.evaluate(() => window.graphWorkers.filter(w => !w.released && w.url.endsWith('whisper-worker.js'))[0].messages.find(m => m.type === 'load').language)).toBe(language);
       await page.evaluate(async pcm => {

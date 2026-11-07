@@ -6,24 +6,24 @@ import path from 'node:path';
 
 async function saveConcurrent(page) {
   return page.evaluate(async () => {
-    const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
+    const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextWhisper', 'local'), graphNode('Display', 'local-display'),
       graphNode('MicrophoneAudio', 'parked-mic'), graphNode('Kokoro', 'parked-tts'), graphNode('SpeechToTextWhisper', 'unfinished-model'));
     graph.edges.push(edge('mic', 'audio', 'local', 'audio'), edge('local', 'final', 'local-display', 'input1'));
-    saveGraph(localStorage, (graph)); return graph;
+    await saveLiveGraphData(localStorage, (graph)); return graph;
   });
 }
 
 test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauthorized', async ({ graphExtension: f }) => {
   const page = await openGraph(f);
   const graph = await page.evaluate(async () => {
-    const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
+    const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'parked-output'),
       graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'unfinished-output'));
     graph.edges.push(edge('unfinished', 'final', 'unfinished-output', 'text'));
-    saveGraph(localStorage, (graph));
+    await saveLiveGraphData(localStorage, (graph));
     window.pageAllocations = [];
     chrome.scripting.executeScript = async () => { window.pageAllocations.push('script'); throw Error('Inactive output requested authorization'); };
     chrome.tabs.connect = () => { window.pageAllocations.push('connection'); throw Error('Inactive output opened a connection'); };
@@ -35,7 +35,7 @@ test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauth
   expect(await page.evaluate(() => window.pageAllocations)).toEqual([]);
   await expect(page.locator('#output-status')).toBeEmpty();
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+  expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   await expectPreparedIdle(page);
 });
 
@@ -108,7 +108,7 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
     }
     await expectPreparedIdle(page);
     expect(await page.evaluate(() => window.captureStreams.every(record => record.stopped && record.context.state==='closed'))).toBe(true);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+    expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   }
   expect(f.requests).toEqual([]);
 });
@@ -116,9 +116,9 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
 test('MV3 drafts save/reload, optional warnings default off and persist, empty execution starts no resources', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
   await page.evaluate(async () => {
-    const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
+    const { defaultGraph, graphNode } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph(); graph.nodes.push(graphNode('MicrophoneAudio','parked'),graphNode('SpeechToTextWhisper','unfinished'));
-    graph.edges=[]; saveGraph(localStorage, (graph));
+    graph.edges=[]; await saveLiveGraphData(localStorage, (graph));
   });
   await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
   await editor.locator('.graph-actions > summary').click();
@@ -139,9 +139,9 @@ test('MV3 drafts save/reload, optional warnings default off and persist, empty e
 test('MV3 TEXT-only path starts without a toolbar tab or microphone permission', async ({ graphExtension: f }) => {
   const page = await openGraph(f);
   await page.evaluate(async () => {
-    const { graphNode, edge, saveGraph, GRAPH_KEY } = await import('./graph.js');
+    const { graphNode, edge, GRAPH_KEY } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const text = graphNode('Text', 'text'); text.settings.value = 'Independent text path';
-    saveGraph(localStorage, ({ version: 15, nodes: [text, graphNode('Display', 'display')], edges: [edge('text', 'value', 'display', 'input1')] }));
+    await saveLiveGraphData(localStorage, ({ version: 15, nodes: [text, graphNode('Display', 'display')], edges: [edge('text', 'value', 'display', 'input1')] }));
     window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
     navigator.mediaDevices.getUserMedia = () => { throw Error('No microphone permission should be requested'); };
   });

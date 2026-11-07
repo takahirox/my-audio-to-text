@@ -1,8 +1,9 @@
+import { corruptSavedGraph, recoverAsNew } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { clickGraphAction, openPalette, loadTranslationFixture } from './ui-controls.js';
 import { test, expect, openGraph, startGraph, emitFinal, addAudioPath, disconnectWire } from './graph-fixture.js';
 
-const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+const saved = page => page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
 
 test('fresh install and Reset use current transcription; saved model requirements apply next session', async ({ graphExtension: f }) => {
   const page = await openGraph(f), minimal = await saved(page);
@@ -100,11 +101,11 @@ test('saved cycles, type mismatches, unknown ports/types refuse invocation befor
     ['Unknown Node type', graph => graph.nodes[0].type = 'UnverifiedModel'],
   ]) {
     const graph = structuredClone(valid); edit(graph);
-    await page.evaluate(graph => localStorage.setItem('processing-graph-v1', JSON.stringify(graph)), graph); await page.reload(); await page.editor.reload();
+    await corruptSavedGraph(page, JSON.stringify(graph)); await page.reload(); await page.editor.reload();
     await expect(page.locator('#errors')).toContainText(label);
     await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
     expect(await page.evaluate(() => window.graphWorkers.length)).toBe(0);
-    await clickGraphAction(page.editor, 'graph-reset'); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await expect(page.locator('#errors')).toBeEmpty();
+    await recoverAsNew(page.editor, valid); await expect(page.locator('#errors')).toBeEmpty();
   }
   expect(f.requests).toEqual([]);
 });
@@ -162,8 +163,8 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.setViewportSize({ width: 620, height: 900 });
   await live.editor.setViewportSize({ width: 1440, height: 1000 });
   await live.models.setViewportSize({ width: 1200, height: 1000 });
-  await expect(live.models.getByText('ReazonSpeech ja-en · Bundled', { exact: true })).toBeVisible();
-  await expect(live.models.locator('.model-status')).toHaveText(Array(12).fill('Not downloaded'));
+  await expect(live.models.locator('.bundled-models').getByText('ReazonSpeech ja-en', { exact: true })).toBeVisible();
+  await expect(live.models.locator('.model-card .model-status')).toHaveText(Array(12).fill('Not downloaded'));
   await expect(live.models.getByText('CosyVoice3 0.5B · streaming', { exact: true })).toBeVisible();
   expect(await live.models.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.editor.evaluate(() => window.graphWorkers.length)).toBe(0);
@@ -181,9 +182,11 @@ test('three screen layouts show actual provisional/final state and capture-free 
   expect(await live.editor.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await live.emulateMedia({ reducedMotion: 'reduce' });
   await live.getByRole('link', { name: 'Graph', exact: true }).focus();
+  await live.keyboard.press('Shift+Tab'); await live.keyboard.press('Tab');
   expect(await live.getByRole('link', { name: 'Graph', exact: true }).evaluate(link => getComputedStyle(link).outlineStyle)).toBe('solid');
   expect(f.requests).toEqual([]);
-  await live.locator('#stop').click(); await expect(live.editor.locator('#graph-state')).toContainText('No active recording');
+  await live.locator('#stop').click(); await expect(live.editor.locator('.graph-state-notice')).not.toContainText('Active');
+  await expect(live.editor.locator('#graph-state')).toHaveText('Saved');
 });
 
 for (const [id, voice, other] of [['supertonic3', 'F1', 'M1'], ['kokoro', 'jf_alpha', 'af_heart']]) {

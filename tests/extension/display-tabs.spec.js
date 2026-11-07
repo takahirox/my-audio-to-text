@@ -1,3 +1,4 @@
+import { corruptSavedGraph } from './ui-controls.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { checkDisplayTabs } from '../fixtures/display-tabs.js';
 test('MV3 Display tabs show only content and keep independent panes through switching, layout and restart', async ({ graphExtension: f }) => {
@@ -17,9 +18,9 @@ test('MV3 legacy Display graph Load/Import/Export/Reset and numbered Settings pr
     ] };
   });
   const raw = JSON.stringify(old);
-  await editor.evaluate(raw => localStorage.setItem('processing-graph-v1', raw), raw); await editor.reload();
+  await corruptSavedGraph(editor, raw); await editor.reload();
   await expect(editor.getByRole('button', { name: 'main input input1', exact: true })).toBeVisible();
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
+  expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).graphs.find(entry => entry.id === new URLSearchParams(location.search).get('id')).source)).toBe(raw);
   await editor.getByRole('button', { name: 'Select main', exact: true }).click();
   await expect(editor.getByLabel('main Remove last input', { exact: true })).toBeDisabled();
   await editor.getByLabel('main title', { exact: true }).fill('Main'); await editor.getByLabel('main title', { exact: true }).press('Tab');
@@ -31,7 +32,7 @@ test('MV3 legacy Display graph Load/Import/Export/Reset and numbered Settings pr
     await editor.getByLabel(`main ${port} tab label`, { exact: true }).press('Tab');
   }
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  const saved = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const saved = await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(saved.nodes.find(n => n.id === 'main').settings).toEqual({ title: 'Main', inputCount: 2, inputLabels: { input1: 'Transcript', input2: 'Translation' } });
   expect(saved.edges).toContainEqual({ from: ['b', 'value'], to: ['held', 'input'] });
   await editor.reload(); await editor.getByRole('button', { name: 'Select main', exact: true }).click();
@@ -39,7 +40,7 @@ test('MV3 legacy Display graph Load/Import/Export/Reset and numbered Settings pr
   await expect(editor.getByLabel('main input2 tab label', { exact: true })).toHaveValue('Translation');
   await editor.getByLabel('main Remove last input', { exact: true }).click();
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  const reduced = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const reduced = await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(reduced.edges).toEqual(saved.edges.filter(e => !(e.to[0] === 'main' && e.to[1] === 'input2')));
   // Import legacy JSON uses the same conversion without overwriting storage.
   await editor.locator('input[type="file"]').setInputFiles({ name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(raw) });
@@ -62,10 +63,10 @@ test('MV3 legacy Display graph Load/Import/Export/Reset and numbered Settings pr
   await live.locator('#stop').click();
   await clickGraphAction(editor, 'graph-reset');
   await expect(editor.getByRole('button', { name: 'transcript input input1', exact: true })).toBeVisible();
-  expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(reduced);
+  expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(reduced);
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   const reset = await editor.evaluate(async () => {
-    const { defaultGraph, readGraph } = await import('./graph.js'); return { actual: readGraph(localStorage), expected: defaultGraph() };
+    const { defaultGraph } = await import('./graph.js'); const { readLiveGraphData } = await import('./graph-library.js'); return { actual: readLiveGraphData(localStorage), expected: defaultGraph() };
   });
   expect(reset.actual).toEqual(reset.expected);
 });
@@ -137,7 +138,7 @@ test('MV3 label/count edits apply next session; duplicate/blank labels and disco
   await live.getByRole('tab', { name: 'Input 4', exact: true }).click();
   await expect(live.locator('.live-text-region:visible .display-content')).toBeEmpty();
   await expect(live.locator('.live-text-region button, .live-text-region [role="status"]')).toHaveCount(0);
-  const saved = await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+  const saved = await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(saved.edges).toEqual(graph.edges);
   const { clickGraphAction } = await import('./ui-controls.js');
   const downloadPromise = editor.waitForEvent('download'); await clickGraphAction(editor, 'graph-export');

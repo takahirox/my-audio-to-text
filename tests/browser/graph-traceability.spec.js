@@ -28,7 +28,7 @@ test('unselected fan-out, close inputs, parallel detours, crossings and Hold fee
   await assertTraceability(page); await page.locator('#graph-fit').click(); await assertTraceability(page);
   await page.locator('#graph-zoom').selectOption('1'); await page.reload();
   expect(await page.locator('.wire-line').evaluateAll(paths=>paths.map(p=>p.getAttribute('d')))).toEqual(original);
-  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(traceabilityGraph);
+  expect(await page.evaluate(()=>(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(traceabilityGraph);
 });
 
 test('mouse hit resolution follows the crossing gap, keyboard Delete removes only that connection', async ({ page }) => {
@@ -40,7 +40,7 @@ test('mouse hit resolution follows the crossing gap, keyboard Delete removes onl
   await expect(page.locator(`.graph-wire[data-edge="${under}"]`)).toBeFocused();
   await page.keyboard.press('Delete'); await expect(page.locator('.graph-wire')).toHaveCount(traceabilityGraph.edges.length-1);
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
-  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual({...traceabilityGraph,edges:traceabilityGraph.edges.filter((_,i)=>i!==under)});
+  expect(await page.evaluate(()=>(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual({...traceabilityGraph,edges:traceabilityGraph.edges.filter((_,i)=>i!==under)});
   await page.reload(); await assertRoutingGeometry(page);
 });
 

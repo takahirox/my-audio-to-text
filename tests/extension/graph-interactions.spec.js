@@ -4,7 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph, emitFinal, disconnectWire } from './graph-fixture.js';
 
-const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')));
+const saved = page => page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
 const port = (page, node, side, name) => page.getByRole('button', { name: `${node} ${side} ${name}`, exact: true });
 async function save(page) {
   await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
@@ -15,7 +15,7 @@ const wireFor = (editor, route) => editor.getByRole('button', { name: `Select co
 for (const action of ['Select literal', 'Remove literal']) {
   test(`packaged inspector commits text edits before a single ${action} click`, async ({ graphExtension: f }) => {
     const live = await openGraph(f), editor = live.editor;
-    await editor.evaluate(async () => { const { readGraph, graphNode, saveGraph } = await import('./graph.js'); const graph = readGraph(localStorage); graph.nodes.push(graphNode('Text', 'literal')); saveGraph(localStorage, graph); });
+    await editor.evaluate(async () => { const { graphNode } = await import('./graph.js'); const { readLiveGraphData, saveLiveGraphData } = await import('./graph-library.js'); const graph = readLiveGraphData(localStorage); graph.nodes.push(graphNode('Text', 'literal')); await saveLiveGraphData(localStorage, graph); });
     await editor.reload(); const before = await saved(live);
     await editor.getByRole('button', { name: 'Select literal', exact: true }).click();
     await editor.getByLabel('literal value', { exact: true }).fill('Edited output');
@@ -147,10 +147,10 @@ test('inspector disconnect remains available through zoom, scrolling and a narro
 test('a pointer-selected short visible segment of a long wire still reveals a reachable control', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   await editor.setViewportSize({ width: 1600, height: 1000 });
-  await live.evaluate(() => {
-    const key = 'processing-graph-v1', graph = JSON.parse(localStorage.getItem(key));
+  await live.evaluate(async () => {
+    const { readLiveGraphData, saveLiveGraphData } = await import('./graph-library.js'); const graph = readLiveGraphData(localStorage);
     graph.nodes.find(n => n.id === 'speech').position = { x: 3500, y: 3500 };
-    localStorage.setItem(key, JSON.stringify(graph));
+    await saveLiveGraphData(localStorage, graph);
   });
   await expect(editor.locator('[data-node="speech"]')).toHaveCSS('left', '3500px');
   await editor.locator('#graph-zoom').selectOption('1.5');
@@ -292,6 +292,6 @@ test('native touch drags an occupied input to blank canvas without changing its 
 test('MV3 input-end dragging reconnects transactionally and cancellation preserves the wire', async ({ graphExtension: f }) => {
   const live = await openGraph(f); await checkInputReconnect(live.editor);
 });
-for (const kind of ['current', 'paired', 'invalid', 'unsupported']) test(`MV3 Graph actions recovery preserves exact ${kind} originals before Reset and Save`, async ({ graphExtension: f }) => {
+for (const kind of ['current', 'paired', 'invalid', 'unsupported']) test(`MV3 Graph actions recovery preserves exact ${kind} originals through Reset and recovery as new`, async ({ graphExtension: f }) => {
   const live = await openGraph(f); await checkRecovery(live.editor, kind);
 });

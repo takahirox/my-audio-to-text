@@ -1,7 +1,7 @@
 // Shared layout acceptance against the production recorder and model-free graph.
 export async function installLiveUIGraph(page) {
   await page.evaluate(async () => {
-    const { graphNode, edge, saveGraph, GRAPH_KEY, GRAPH_VERSION } = await import('./graph.js');
+    const { graphNode, edge, GRAPH_KEY, GRAPH_VERSION } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const { TabSession } = await import('./session.js');
     const update = TabSession.prototype.update;
     TabSession.prototype.update = function(...args) { window.liveUISession = this; return update.apply(this, args); };
@@ -17,7 +17,7 @@ export async function installLiveUIGraph(page) {
       edge('translation', 'value', 'held-translation', 'input'), edge('review', 'trigger', 'held-translation', 'trigger'), edge('held-translation', 'value', 'main', 'input2'),
       edge('source', 'value', 'held-notes', 'input'), edge('notes', 'trigger', 'held-notes', 'trigger'), edge('held-notes', 'value', 'main', 'input3'),
     ] };
-    saveGraph(localStorage, graph);
+    await saveLiveGraphData(localStorage, graph);
     dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
   });
 }
@@ -93,9 +93,9 @@ export async function checkLiveUI(page, expect, screenshot) {
   await expect(page.locator('#summary-status')).toBeHidden();
   await screenshot('error-390', null);
   await page.evaluate(async () => {
-    const { graphNode, saveGraph, GRAPH_KEY, GRAPH_VERSION } = await import('./graph.js');
+    const { graphNode, GRAPH_KEY, GRAPH_VERSION } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     liveUISession.update({ error: '', summaryStatus: '', status: 'Ready' });
-    saveGraph(localStorage, { version: GRAPH_VERSION, nodes: [graphNode('Text', 'only-source')], edges: [] });
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes: [graphNode('Text', 'only-source')], edges: [] });
     dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
   });
   await expect(page.locator('#graph-action-area')).toBeHidden();

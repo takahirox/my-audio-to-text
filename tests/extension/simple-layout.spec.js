@@ -22,8 +22,8 @@ for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'OpusMtJaEn']) {
       };
     });
     await live.editor.evaluate(async ({ type, streaming }) => {
-      const { GRAPH_VERSION, graphNode, edge, saveGraph } = await import('./graph.js');
-      saveGraph(localStorage, { version: GRAPH_VERSION,
+      const { GRAPH_VERSION, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
+      await saveLiveGraphData(localStorage, { version: GRAPH_VERSION,
         nodes: [graphNode('Text', 'source'), graphNode(type, 'processor'), graphNode(streaming ? 'StreamingSpeakerOutput' : 'Display', 'output')],
         edges: [edge('source', 'value', 'processor', 'text'), edge('processor', streaming ? 'stream' : 'text', 'output', streaming ? 'stream' : 'input1')] });
     }, { type, streaming });
@@ -60,12 +60,12 @@ test('Simple shows 0, 1, 2 and 4 independent single-input Displays at narrow and
   const live = await openGraph(f);
   for (const count of [0, 1, 2, 4]) {
     await live.editor.evaluate(async count => {
-      const { graphNode, edge, saveGraph } = await import('./graph.js');
+      const { graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
       const source = graphNode('Text', 'source'); source.settings.value = 'Long plain text '.repeat(2000);
       const displays = Array.from({ length: count }, (_, i) => {
         const node = graphNode('Display', `display-${i}`); return node;
       });
-      saveGraph(localStorage, ({ version: 15, nodes: [source, ...displays], edges: displays.map(node => edge('source', 'value', node.id, 'input')) }));
+      await saveLiveGraphData(localStorage, ({ version: 15, nodes: [source, ...displays], edges: displays.map(node => edge('source', 'value', node.id, 'input')) }));
     }, count);
     // A stopped session retains its output snapshot until the next Start/reload.
     await live.reload();
@@ -151,8 +151,8 @@ test('Live explains unavailable selected media without a selector and retains mi
   const live = await openGraph(f);
   await expect(live.locator('#start')).toBeDisabled(); // No toolbar capture tab.
   await live.editor.evaluate(async () => {
-    const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
-    const graph = defaultGraph(); graph.nodes[0] = graphNode('SelectedPageMediaAudio', 'audio'); saveGraph(localStorage, (graph));
+    const { defaultGraph, graphNode } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
+    const graph = defaultGraph(); graph.nodes[0] = graphNode('SelectedPageMediaAudio', 'audio'); await saveLiveGraphData(localStorage, (graph));
   });
   await expect(live.locator('#targets, #target-status, #target-controls, .target-row, select')).toHaveCount(0);
   await expect(live.locator('#start')).toBeEnabled();
@@ -161,8 +161,8 @@ test('Live explains unavailable selected media without a selector and retains mi
   await expect(live.locator('#errors')).toContainText('Choose ChromeTabAudio in Graph Editor');
   await expect(live.locator('#start')).toBeEnabled();
   await live.editor.evaluate(async () => {
-    const { defaultGraph, graphNode, saveGraph } = await import('./graph.js');
-    const graph = defaultGraph(); graph.nodes[0] = graphNode('MicrophoneAudio', 'audio'); saveGraph(localStorage, (graph));
+    const { defaultGraph, graphNode } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
+    const graph = defaultGraph(); graph.nodes[0] = graphNode('MicrophoneAudio', 'audio'); await saveLiveGraphData(localStorage, (graph));
   });
   await live.evaluate(() => { window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }); });
   await expect(live.locator('#status')).toContainText('Press Start to request browser permission');
@@ -177,10 +177,10 @@ test('audio-only output keeps its player and download usable at narrow and wide 
   await addAudioPath(live, 'Supertonic3');
   await expect(live.editor.locator('#graph-models .model-status')).toContainText('Ready');
   await live.editor.evaluate(async () => {
-    const { readGraph, saveGraph } = await import('./graph.js');
-    const graph = readGraph(localStorage), displays = graph.nodes.filter(node => node.type === 'Display').map(node => node.id);
+    const { readLiveGraphData, saveLiveGraphData } = await import('./graph-library.js');
+    const graph = readLiveGraphData(localStorage), displays = graph.nodes.filter(node => node.type === 'Display').map(node => node.id);
     graph.nodes = graph.nodes.filter(node => !displays.includes(node.id));
-    graph.edges = graph.edges.filter(route => !displays.includes(route.to[0])); saveGraph(localStorage, (graph));
+    graph.edges = graph.edges.filter(route => !displays.includes(route.to[0])); await saveLiveGraphData(localStorage, (graph));
   });
   await startGraph(live); await emitFinal(live, 'Spoken output');
   await expect(live.locator('.live-text-region')).toHaveCount(0);

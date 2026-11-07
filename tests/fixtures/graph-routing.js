@@ -2,12 +2,12 @@ import { expect } from '@playwright/test';
 
 export async function loadRoutingGraph(page, dense = false) {
   await page.evaluate(async dense => {
-    const { graphNode, edge, saveGraph, GRAPH_VERSION } = await import(new URL('./graph.js', location.href));
+    const { graphNode, edge, GRAPH_VERSION } = await import(new URL('./graph.js', location.href)); const { saveLiveGraphData } = await import(new URL('./graph-library.js', location.href));
     const nodes = dense ? Array.from({ length: 40 }, (_, i) => graphNode('TextFormatter', `n${i}`, 30 + i % 8 * 330, 100 + Math.floor(i / 8) * 340))
       : [graphNode('Text', 'source', 30, 200), graphNode('TextFormatter', 'obstacle', 400, 120), graphNode('TextFormatter', 'target', 800, 200)];
     const edges = dense ? Array.from({ length: 60 }, (_, i) => edge(`n${i % 20}`, 'text', `n${20 + i % 20}`, `input${1 + Math.floor(i / 20)}`))
       : [edge('source', 'value', 'target', 'input1')];
-    saveGraph(localStorage, { version: GRAPH_VERSION, nodes, edges });
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes, edges });
   }, dense);
   await page.reload(); await expect(page.locator('.graph-wire')).toHaveCount(dense ? 60 : 1);
 }

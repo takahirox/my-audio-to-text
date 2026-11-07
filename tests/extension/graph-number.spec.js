@@ -61,7 +61,7 @@ test('packaged Number edge edits, validates, reloads and freezes the cap before 
   for (const value of ['']) {
     await editor.getByLabel('number value', { exact: true }).fill(value);
     await save(editor); await expect(editor.locator('#graph-errors')).toContainText(value === '' ? 'finite number' : '1 to 12 seconds');
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.find(n => n.type === 'Number').settings.value)).toBe(1.25);
+    expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.find(n => n.type === 'Number').settings.value)).toBe(1.25);
   }
   await editor.getByLabel('number value', { exact: true }).fill('1.25'); await save(editor);
   await startGraph(page); await expect.poll(() => page.evaluate(() => window.speech.core.simulation?.maxSamples)).toBe(20000);

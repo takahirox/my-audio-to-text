@@ -227,7 +227,7 @@ test(`${Node.name} failure emits an abort, cancels queued work, and late Worker 
 test(`${Node.name} graph saves without migration, prepares shared model once, and accepts alternate AUDIO_STREAM producers`, () => {
   const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode(type, 'tts'), graphNode('StreamingSpeakerOutput', 'speaker')],
     edges: [edge('text', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'stream')] };
-  const storage = { value: '', setItem(key, value) { this.value = value; }, getItem() { return this.value; }, removeItem() {} };
+  const values = new Map(), storage = { setItem(key, value) { values.set(key, value); }, getItem(key) { return values.get(key) ?? null; }, removeItem(key) { values.delete(key); } };
   saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph); assert.equal(executableGraph(graph).nodes.length, 3);
   assert.deepEqual(NODE_TYPES.StreamingSpeakerOutput.inputs, { stream: AUDIO_STREAM });
   assert.equal(graphModelRequirements({ nodes: [graph.nodes[1], { ...graphNode(type, 'other'), settings: { language: 'english', voice } }] }).length, 1);

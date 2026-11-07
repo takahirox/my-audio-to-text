@@ -14,7 +14,7 @@ export class TabSession {
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
     sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
-    graph = defaultGraph({ enabled: false }),
+    graph = defaultGraph({ enabled: false }), graphId = null, graphName = 'Saved graph',
     textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, onSynthesizedAudio = () => {}, speakerContextFactory,
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
@@ -31,7 +31,7 @@ export class TabSession {
     this.speakerContextFactory = speakerContextFactory;
     this.modelLoadTimeoutMs = modelLoadTimeoutMs;
     const preferences = graphPreferences(this.graph);
-    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', prompt: '', error: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: 'Translation off' };
+    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', prompt: '', error: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, savedGraphId: graphId, savedGraphName: graphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: 'Translation off' };
     this.update();
   }
   update(values = {}) {
@@ -45,7 +45,8 @@ export class TabSession {
   prepareModels({ clearErrors = true } = {}) {
     this.livePreparation = true;
     if (this.closed || this.session) return Promise.resolve();
-    const snapshot = assertGraph(this.graph), key = JSON.stringify(snapshot);
+    if (this.graphUnavailable) { this.update({ modelState: 'error', modelStatus: 'Saved graph unavailable', modelRecovery: true, error: this.graphUnavailable }); return Promise.resolve(); }
+    const snapshot = assertGraph(this.graph), key = JSON.stringify([this.view.savedGraphId, snapshot]);
     if (this.prepared?.key === key && ['preparing', 'ready'].includes(this.view.modelState)) return this.preparing;
     const previous = this.prepared;
     this.prepared = null;
@@ -155,7 +156,7 @@ export class TabSession {
     }
   }
   async start(tabId, { microphoneGesture = false, speakerGesture = false } = {}) {
-    if (this.session || this.closed) return; // A second invocation never retargets live capture.
+    if (this.session || this.closed || this.graphUnavailable) return; // A second invocation never retargets live capture.
     if (this.livePreparation && this.view.modelState !== 'ready') return;
     this.nodeErrors.clear();
     this.update({ error: '', modelRecovery: false, prompt: '' });
@@ -180,7 +181,7 @@ export class TabSession {
     session.started = new Promise(resolve => { session.markStarted = resolve; });
     this.session = session;
     if (this.livePreparation) this.update({ modelState: 'active' });
-    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: session.translationEnabled ? 'Local translation ready' : 'Translation off', status: this.livePreparation ? 'Starting prepared graph…' : graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
+    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, activeGraphId: this.view.savedGraphId, activeGraphName: this.view.savedGraphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: session.translationEnabled ? 'Local translation ready' : 'Translation off', status: this.livePreparation ? 'Starting prepared graph…' : graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
     // Explain this source limitation even if a dependent processor fails before
     // Pipeline reaches the source's start hook. The source itself still fails
     // through Pipeline, preserving ordinary branch isolation and topology.
@@ -452,12 +453,17 @@ export class TabSession {
     this.cancel();
     this.update({ status: 'Transcription failed. Invoke the toolbar action or retry.', error: reported ? this.view.error : [...new Set([this.view.error, message].filter(Boolean))].join('\n') });
   }
-  setGraph(graph) {
+  invalidateGraph(error) {
+    this.graphUnavailable = error.message || String(error);
+    if (!this.session && this.prepared) this.preparationFailed(this.prepared, error);
+    else if (!this.session) this.update({ modelState: 'error', modelStatus: 'Saved graph unavailable', modelRecovery: true, error: this.graphUnavailable });
+  }
+  setGraph(graph, { id = this.view.savedGraphId, name = this.view.savedGraphName } = {}) {
     const next = assertGraph(graph);
-    const changed = JSON.stringify(this.graph) !== JSON.stringify(next);
-    this.graph = next;
+    const changed = !!this.graphUnavailable || id !== this.view.savedGraphId || JSON.stringify(this.graph) !== JSON.stringify(next);
+    this.graphUnavailable = ''; this.graph = next;
     const preferences = graphPreferences(this.graph);
-    this.update({ savedGraph: this.graph, translationEnabled: preferences.enabled, translationDirection: preferences.direction,
+    this.update({ savedGraph: this.graph, savedGraphId: id, savedGraphName: name, translationEnabled: preferences.enabled, translationDirection: preferences.direction,
       ...(this.session ? {} : { translationStatus: preferences.enabled ? 'Translation enabled for the next session' : 'Translation off' }) });
     if (changed && this.livePreparation && !this.session && !this.closed) void this.prepareModels();
   }

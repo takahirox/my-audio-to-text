@@ -1,3 +1,4 @@
+import { corruptSavedGraph, recoverAsNew } from './ui-controls.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
@@ -30,8 +31,8 @@ test('both text processors: parked Save persists, independent settings, cancella
   await expect(cards).toHaveCount(2);
   for (const card of await cards.all()) await expect(card).toHaveAttribute('data-state', 'Error');
   await editor.reload();
-  expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.filter(n => n.type.startsWith('TextSummary')).map(n => n.settings.language))).toEqual(['ja', 'en']);
-  expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')).nodes.filter(n => n.type.startsWith('TextSummary')).map(n => n.settings.prompt))).toEqual(TEXT_SUMMARY_TYPES.map(type => 'Summarize in bullets.\nFocus on ' + type + '.'));
+  expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.filter(n => n.type.startsWith('TextSummary')).map(n => n.settings.language))).toEqual(['ja', 'en']);
+  expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.filter(n => n.type.startsWith('TextSummary')).map(n => n.settings.prompt))).toEqual(TEXT_SUMMARY_TYPES.map(type => 'Summarize in bullets.\nFocus on ' + type + '.'));
   f.mode('hold'); await save(); await expect(cards).toHaveCount(2);
   for (const card of await cards.all()) {
     await expect(card).toHaveAttribute('data-state', 'Downloading');
@@ -94,8 +95,8 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
   `);
   const live = await openGraph(f), editor = live.editor;
   await editor.evaluate(async type => {
-    const { graphNode, saveGraph, GRAPH_VERSION } = await import('./graph.js');
-    saveGraph(localStorage, {version: GRAPH_VERSION, nodes: [graphNode(type, 'summary')], edges: []});
+    const { graphNode, GRAPH_VERSION } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
+    await saveLiveGraphData(localStorage, {version: GRAPH_VERSION, nodes: [graphNode(type, 'summary')], edges: []});
   }, type);
   await editor.reload(); await editor.getByRole('button', { name: 'Select summary', exact: true }).click();
   const savedPrompt = 'Summarize in two bullets.\nFocus on technical highlights.';
@@ -126,7 +127,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
   const fixtures = ['Article: The park opened in April.', 'Technical: Optimization completed in 12 ms.', 'A: Tea? B: Coffee, please.', 'Transcript: Ana sent a draft; Bo will review it.'];
   for (const text of fixtures) {
     const reply = await live.evaluate(async text => {
-      const graph = (await import('./graph.js')).readGraph(localStorage);
+      const graph = (await import('./graph-library.js')).readLiveGraphData(localStorage);
       return requestSummary('summarize', {text, ...graph.nodes[0].settings});
     }, text);
     expect(reply.type).toBe('result'); expect(reply.metrics.attempts).toHaveLength(1);
@@ -145,7 +146,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
   const nextPrompt = 'Give a chronological summary in Japanese.';
   await editor.getByLabel('summary prompt', { exact: true }).fill(nextPrompt); await editor.getByLabel('summary prompt', { exact: true }).press('Tab');
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  const next = await live.evaluate(async text => requestSummary('summarize', {text, ...(await import('./graph.js')).readGraph(localStorage).nodes[0].settings}), fixtures[0]);
+  const next = await live.evaluate(async text => requestSummary('summarize', {text, ...(await import('./graph-library.js')).readLiveGraphData(localStorage).nodes[0].settings}), fixtures[0]);
   expect(JSON.parse(next.summary).messages[0].content).toBe(nextPrompt + '\n\nUse English unless the instruction above requests another language.');
   const atLimit = await live.evaluate(() => requestSummary('summarize', {text: 'Some text.', language: 'en', prompt: 'TOKEN_AT_LIMIT'}));
   expect(atLimit.type).toBe('result'); expect(atLimit.metrics.promptTokens).toBe(7168);
@@ -157,25 +158,25 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
   expect(f.requests.length).toBe(downloadsBeforeInference);
 });
 
-for (const [oldType, type] of [['MeetingSummaryLfm2', 'TextSummaryLfm2'], ['MeetingSummaryQwen35', 'TextSummaryQwen35']]) test(`${oldType}: recovery UI preserves original feedback graph until explicit Import and Save`, async ({ graphExtension: f }) => {
+for (const [oldType, type] of [['MeetingSummaryLfm2', 'TextSummaryLfm2'], ['MeetingSummaryQwen35', 'TextSummaryQwen35']]) test(`${oldType}: recovery UI preserves original feedback graph through repair and import as new`, async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   const graph = JSON.parse(await readFile('docs/examples/incremental-text-summary.json', 'utf8'));
   graph.nodes.find(n => n.id === 'summary').type = oldType;
   delete graph.nodes.find(n => n.id === 'summary').settings.prompt;
   const original = JSON.stringify(graph);
-  await editor.evaluate(json => localStorage.setItem('processing-graph-v1', json), original); await editor.reload();
+  await corruptSavedGraph(editor, original); await editor.reload();
   await expect(editor.locator('#errors')).toContainText(type);
   await expect(editor.locator('#errors')).toContainText('settings.prompt');
   await editor.locator('.graph-actions > summary').click(); await editor.getByText('Saved JSON', {exact: true}).click();
   await expect(editor.getByLabel('Original saved graph JSON', {exact: true})).toHaveValue(original);
-  expect(await editor.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(original);
+  expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).source; })())).toBe(original);
   graph.nodes.find(n => n.id === 'summary').type = type;
   graph.nodes.find(n => n.id === 'summary').settings.prompt = 'Update the previous summary using new text.';
   // No assets needed: persistence is independent of preparation errors.
   editor.once('dialog', dialog => dialog.accept());
   await editor.locator('input[type=file]').setInputFiles({name: 'recovered.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(graph))});
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  await editor.reload();
-  expect(await editor.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-v1')))).toEqual(graph);
+  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('original has been kept');
+  await recoverAsNew(editor, graph);
+  expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(graph);
 });

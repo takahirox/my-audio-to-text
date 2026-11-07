@@ -26,7 +26,7 @@ test('real packaged TranslateGemma: direct translation, bounded batches and ASR 
       return { adapter: !!a, gpu: a ? { vendor: a.info.vendor, architecture: a.info.architecture } : null, isolated: crossOriginIsolated, userAgent: navigator.userAgent };
     });
     expect(evidence.capabilities.adapter, 'A missing GPU is a missing real-model check, not a passed experiment.').toBe(true);
-    await editor.evaluate(async graph => { const { saveGraph } = await import('./graph.js'); saveGraph(localStorage, graph); }, windowGraph('window'));
+    await editor.evaluate(async graph => { const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, graph); }, windowGraph('window'));
     await editor.reload(); await editor.locator('#graph-save').click();
     const card = editor.locator('#graph-models .model-card');
     await expect(card).toHaveCount(1);

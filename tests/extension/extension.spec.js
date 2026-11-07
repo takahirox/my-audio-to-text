@@ -206,11 +206,11 @@ for (const action of ['navigate', 'close']) {
       };`);
     const observer = await extension.context.newPage(); await observer.goto(extension.url);
     await observer.evaluate(async () => {
-      const { defaultGraph, graphNode, edge, saveGraph } = await import('./graph.js');
+      const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
       const graph = defaultGraph(), text = graphNode('Text', 'text'); text.settings.value = 'Held summary';
       graph.nodes.push(text, graphNode('TextSummaryLfm2', 'summary'), graphNode('Display', 'notes'));
       graph.edges.push(edge('text', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input1'));
-      saveGraph(localStorage, graph);
+      await saveLiveGraphData(localStorage, graph);
     });
     const page = await setup(extension);
     await expect(page.locator('#cancel-session')).toHaveCount(0);
