@@ -95,8 +95,19 @@ Node by type and Instance ID, with Remove Node beside Settings. Drag headings or
 keys to move Nodes. Connect an output to a compatible input; reconnecting replaces only that input's wire. Select a wire
 for details or Disconnect. Canvas navigation floats at the bottom-left: −, the
 Canvas zoom chooser, +, and Fit. The chooser retains 25%, 50%, 75%, 100%, 125%,
-and 150%, plus the custom Fit scale (including scales below 25%). Choose 100% to
-resume editing with focus on the last edited port, heading or selected wire.
+and 150%, plus the actual custom zoom (shown to two decimal places), including
+Fit scales below 25%. The − / + buttons change zoom by 10 percentage points.
+Ctrl + mouse wheel and Chromium trackpad pinch zoom continuously around the
+pointer: wheel up / pinch out magnifies, wheel down / pinch in reduces. Both use
+the same viewport-local Ctrl+wheel handler, which prevents browser zoom only
+over the canvas. Ordinary wheel / trackpad scrolling still pans; Inspector,
+search, navigation controls and overlay menus keep their native behavior.
+Zoom is clamped to 1%–150%, including Fit. Wheel line deltas use 16 CSS pixels
+per line, page deltas use the viewport height, and single-event deltas are capped
+at 10 pixels (about a 10% zoom change) to avoid large spikes. Pointer anchoring
+accounts for pan and scale; native scroll bounds can limit it near an edge. Modified wheel gestures
+during a node or port drag are consumed without changing zoom.
+Choose 100% to resume editing with focus on the last edited port, heading or selected wire.
 Scroll or swipe to pan; controls stay in place and extra bottom scroll space
 lets the final ports move clear of them.
 Settings, essential port names and accessibility labels remain visible.

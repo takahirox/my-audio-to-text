@@ -30,7 +30,7 @@ export async function checkCanvasFirst(page, width) {
   expect(await navigation.boundingBox()).toEqual(controls);
   await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Zoom out', exact: true }).press('Enter');
-  await expect(page.locator('#graph-zoom')).toHaveValue('1.25');
+  await expect(page.locator('#graph-zoom')).toHaveValue('1.4');
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await expect(page.locator('#graph-zoom')).toHaveValue('1.5');
   await page.locator('#graph-zoom').selectOption('1');

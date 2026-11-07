@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { checkCanvasFirst, checkLeanInspector, checkGraphCommands } from '../fixtures/graph-canvas-first.js';
 import { checkZoomRecovery } from '../fixtures/graph-zoom.js';
+import { checkPointerZoom, checkZoomInputModes, checkZoomControls } from '../fixtures/graph-pointer-zoom.js';
 import { checkInputDetach, checkInputReconnect, checkRecovery } from '../fixtures/graph-inspector.js';
 
 // Production editor modules and the real MV3 manifest, without inference assets.
@@ -29,6 +30,9 @@ test('MV3 canvas-first controls, inspector, zoom focus, connections and recovery
       await page.setViewportSize({ width, height: 900 }); await checkZoomRecovery(page, 'large', info);
       await checkInputDetach(page, width);
     }
+    await checkPointerZoom(page);
+    await checkZoomInputModes(page);
+    await checkZoomControls(page);
     await checkInputReconnect(page);
     for (const kind of ['invalid', 'unsupported']) await checkRecovery(page, kind);
   } finally { await context?.close(); await rm(temporary, { recursive: true, force: true }); }
