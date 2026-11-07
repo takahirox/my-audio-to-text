@@ -87,7 +87,7 @@ test('touch toggles selection without deleting and uses full-sized zoom controls
     await heading.tap(); await expect(heading).toHaveAttribute('aria-pressed', 'true');
     await heading.tap(); await expect(heading).toHaveAttribute('aria-pressed', 'false');
     await page.getByRole('button', { name: 'Zoom out', exact: true }).tap();
-    await expect(page.locator('#graph-zoom')).toHaveValue('0.75');
+    await expect(page.locator('#graph-zoom')).toHaveValue('0.9');
     await page.getByRole('button', { name: 'Zoom in', exact: true }).tap();
     await expect(page.locator('#graph-zoom')).toHaveValue('1');
     await expect(page.locator('#graph-state')).toHaveText('Saved');

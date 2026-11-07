@@ -14,6 +14,7 @@ const button = (label, id, action) => {
   control.type = 'button'; control.onclick = action; return control;
 };
 const ZOOM_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5];
+const MIN_ZOOM = .01, MAX_ZOOM = 1.5, ZOOM_STEP = .1;
 // Leave room below content for the unscaled viewport controls.
 const VIEWPORT_CONTROL_SPACE = 72;
 const typeLabel = contract => contract.name.split(' {')[0];
@@ -92,7 +93,7 @@ export class GraphEditor {
       el('p', 'Save applies to the next session. Start runs complete paths to outputs; incomplete Nodes remain in the draft. Graph actions provides validation, Load saved and Reset.'),
       el('p', 'Add Node opens a nearby searchable list. Choose a result to add it in the visible canvas; arrow keys navigate, Enter adds and Escape dismisses. Save applies the draft. Select a node heading for settings and optional node help; select it again to clear selection. Drag a heading or use arrow keys to move it.'),
       el('p', 'Connect by clicking an output then a matching input, or drag from an output to an input. Reconnecting replaces only that input’s wire. Drag a connected input into blank canvas to detach its wire, or to a matching input to move it. Select a wire for connection details and Disconnect in the inspector. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape or blank canvas clears selection.'),
-      el('p', 'Use −, the Canvas zoom chooser, + and Fit at the bottom-left of the canvas to navigate; scroll or swipe to pan. Choose 100% to return focus to the element you were editing. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
+      el('p', 'Ctrl + wheel or trackpad pinch over the canvas zooms at the pointer; ordinary scroll or swipe pans. Use − and + for 10 percentage point steps, the Canvas zoom chooser for presets, or Fit for an overview (1%–150%). Choose 100% to return focus to the element you were editing. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
       el('p', 'Wires use separate lanes and crossing gaps. At a crossing, the continuous line passes over the interrupted line; this is not a junction. Short shared branches at one output are fan-out. Dotted wires and a notice indicate crowded lanes that could not be separated. Move cards apart to give them more room.'),
       el('p', 'Display renders each complete input snapshot safely. Connect any TEXT output directly to Display.input1. TextAccumulator retains exact completed segments; TextFormatter builds text snapshots. Hold stores TEXT silently. With trigger disconnected, value is sampled with the next ordinary input. Connect Button.trigger → Hold.trigger for on-demand emission of the latest TEXT through value. Live Graph Actions uses each Button caption and disables overlapping work while busy; no audio source is required. Compose TextWindow → TextFormatter → Text Summary → Hold, with Hold.value → a second formatter input, for serialized incremental summaries. Set the rolling-update instruction explicitly in Text Summary Settings.prompt; its default simply summarizes each input. language supplies a default that an explicit prompt language can override. Save prepares required model weights; Models provides asset recovery.'),
       el('p', 'Ports show data above its matching ID, with committed pairs before provisional pairs. Canvas rows, keyboard navigation and Inspector port help use the same display order. Context and translation source/error ports keep their separate roles; display order does not change delivery or saved connections.'),
@@ -147,6 +148,21 @@ export class GraphEditor {
     };
     this.paletteGeometry = () => this.positionPalette();
     this.scroll = el('div', undefined, 'graph-scroll'); this.scroll.tabIndex = 0; this.scroll.setAttribute('aria-label', 'Scrollable graph canvas');
+    // Chromium delivers trackpad pinch as Ctrl+wheel. Use only this path, on
+    // the scrollport itself, so menus, Inspector and page scrolling stay native.
+    this.scroll.addEventListener('wheel', event => {
+      if (!event.ctrlKey || event.defaultPrevented || !event.cancelable) return;
+      event.preventDefault(); // Also suppress browser zoom when already at a limit.
+      if (this.draggingNode || this.draggingPort || this.cancelDetach) return;
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? this.scroll.clientHeight : 1;
+      // Normalize lines/pages to CSS pixels; bound single-event spikes while
+      // retaining fractional precision and symmetric zoom-in/out factors.
+      // Match Chromium's logarithmic pinch deltas; the 10px cap keeps a
+      // mouse notch near a 10% change without coarsening trackpad fractions.
+      const delta = Math.max(-10, Math.min(10, event.deltaY * unit));
+      if (!Number.isFinite(delta) || !delta) return;
+      this.setZoom(this.zoom * Math.exp(-delta * .01), { anchor: event });
+    }, { passive: false });
     this.extent = el('div', undefined, 'graph-extent'); this.canvas = el('div', undefined, 'graph-canvas'); this.canvas.id = 'graph-canvas';
     this.canvas.addEventListener('focusin', event => {
       if (event.target.closest('.graph-node')) this.editingTarget = event.target.getAttribute('aria-label');
@@ -177,9 +193,9 @@ export class GraphEditor {
     this.zoomControl.title = 'Canvas zoom; choose 100% to resume editing';
     for (const value of ZOOM_PRESETS) { const option = el('option', `${value * 100}%`); option.value = value; this.zoomControl.append(option); }
     this.zoomControl.value = '1';
-    this.zoomControl.onchange = () => this.setZoom(Number(this.zoomControl.value), Number(this.zoomControl.value) === 1);
-    this.zoomOut = button('−', 'graph-zoom-out', () => this.setZoom([...ZOOM_PRESETS].reverse().find(value => value < this.zoom) ?? Math.max(.01, this.zoom / 2)));
-    this.zoomIn = button('+', 'graph-zoom-in', () => this.setZoom(ZOOM_PRESETS.find(value => value > this.zoom) ?? 1.5));
+    this.zoomControl.onchange = () => this.setZoom(Number(this.zoomControl.value), { focus: Number(this.zoomControl.value) === 1 });
+    this.zoomOut = button('−', 'graph-zoom-out', () => this.setZoom(Number((this.zoom - ZOOM_STEP).toFixed(10))));
+    this.zoomIn = button('+', 'graph-zoom-in', () => this.setZoom(Number((this.zoom + ZOOM_STEP).toFixed(10))));
     this.zoomOut.setAttribute('aria-label', 'Zoom out'); this.zoomOut.title = 'Zoom out';
     this.zoomIn.setAttribute('aria-label', 'Zoom in'); this.zoomIn.title = 'Zoom in';
     const fit = button('Fit', 'graph-fit', () => this.fit()); fit.setAttribute('aria-label', 'Fit graph'); fit.title = 'Fit graph in the canvas';
@@ -304,15 +320,26 @@ export class GraphEditor {
     const cards = [...this.canvas.querySelectorAll('.graph-node')];
     const right = Math.max(300, ...cards.map(card => card.offsetLeft + card.offsetWidth + 32));
     const bottom = Math.max(200, ...cards.map(card => card.offsetTop + card.offsetHeight + 32));
-    this.zoom = Math.max(.01, Math.min(1.5, this.scroll.clientWidth / right, (this.scroll.clientHeight - VIEWPORT_CONTROL_SPACE) / bottom));
+    this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.scroll.clientWidth / right, (this.scroll.clientHeight - VIEWPORT_CONTROL_SPACE) / bottom));
     this.fitZoom = this.zoom;
-    this.draw(); this.scroll.scrollTo(0, 0);
+    this.applyZoom(); this.scroll.scrollTo(0, 0);
   }
-  setZoom(zoom, focus = false) {
+  setZoom(zoom, { focus = false, anchor = null } = {}) {
+    if (!Number.isFinite(zoom)) return;
+    zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Number(zoom.toFixed(12))));
     const previous = this.zoom;
-    const center = { x: (this.scroll.scrollLeft + this.scroll.clientWidth / 2) / previous, y: (this.scroll.scrollTop + this.scroll.clientHeight / 2) / previous };
-    this.zoom = zoom; this.draw();
-    this.scroll.scrollTo(center.x * zoom - this.scroll.clientWidth / 2, center.y * zoom - this.scroll.clientHeight / 2);
+    const viewport = this.scroll.getBoundingClientRect(), origin = this.canvas.getBoundingClientRect();
+    const vx = viewport.width / this.scroll.offsetWidth, vy = viewport.height / this.scroll.offsetHeight;
+    const x = anchor ? anchor.clientX : viewport.left + (this.scroll.clientLeft + this.scroll.clientWidth / 2) * vx;
+    const y = anchor ? anchor.clientY : viewport.top + (this.scroll.clientTop + this.scroll.clientHeight / 2) * vy;
+    // Bounding rects include the actual pan, viewport border and ancestor scale.
+    const world = { x: (x - origin.left) / (vx * previous), y: (y - origin.top) / (vy * previous) };
+    this.zoom = zoom; this.applyZoom();
+    const next = this.canvas.getBoundingClientRect();
+    // Read scroll again: reducing the extent may already have clamped it.
+    this.scroll.scrollTo(this.scroll.scrollLeft + (next.left + world.x * vx * zoom - x) / vx,
+      this.scroll.scrollTop + (next.top + world.y * vy * zoom - y) / vy);
+    if (anchor) return;
     // Returning from an overview should reveal the control the user was editing.
     const target = this.svg.querySelector('.selected-wire')
       || [...this.canvas.querySelectorAll('.graph-node [aria-label]')].find(control => control.getAttribute('aria-label') === this.editingTarget)
@@ -322,6 +349,25 @@ export class GraphEditor {
       (target || this.scroll).focus({ preventScroll: true });
       (target || this.scroll).scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
+  }
+  syncZoomControls() {
+    this.zoomControl.querySelector('[data-custom]')?.remove();
+    if (!ZOOM_PRESETS.includes(this.zoom)) {
+      const percent = Number((this.zoom * 100).toFixed(2));
+      const option = el('option', `${percent}%${this.zoom === this.fitZoom ? ' (fit)' : ''}`);
+      option.value = this.zoom; option.dataset.custom = ''; this.zoomControl.append(option);
+    }
+    this.zoomControl.value = String(this.zoom);
+    this.zoomOut.disabled = this.zoom <= MIN_ZOOM; this.zoomIn.disabled = this.zoom >= MAX_ZOOM;
+  }
+  applyZoom() {
+    this.syncZoomControls();
+    this.canvas.style.transform = `scale(${this.zoom})`;
+    this.extent.style.width = `${parseFloat(this.canvas.style.width) * this.zoom}px`;
+    this.extent.style.height = `${parseFloat(this.canvas.style.height) * this.zoom + VIEWPORT_CONTROL_SPACE}px`;
+    // Scaling changes neither world geometry nor routes. Keep focused controls,
+    // pointer captures and wire elements intact; only their hit width changes.
+    for (const hit of this.svg.querySelectorAll('.wire-hit')) hit.style.strokeWidth = `${16 / this.zoom}px`;
   }
   visibleGraphBounds() {
     const origin = this.canvas.getBoundingClientRect(), viewport = this.scroll.getBoundingClientRect();
@@ -534,12 +580,7 @@ export class GraphEditor {
   draw(notify = true) {
     this.geometryObserver?.disconnect();
     if (!this.draft.edges.includes(this.selectedEdge)) this.selectedEdge = null;
-    this.zoomControl.querySelector('[data-fit]')?.remove();
-    if (!ZOOM_PRESETS.includes(this.zoom)) {
-      const option = el('option', `${Math.round(this.zoom * 100)}%${this.zoom === this.fitZoom ? ' (fit)' : ''}`); option.value = this.zoom; option.dataset.fit = ''; this.zoomControl.append(option);
-    }
-    this.zoomControl.value = String(this.zoom);
-    this.zoomOut.disabled = this.zoom <= .01; this.zoomIn.disabled = this.zoom >= 1.5;
+    this.syncZoomControls();
     this.canvas.replaceChildren(this.svg); this.svg.replaceChildren();
     this.errors.textContent = this.error || this.diagnostics(); this.error = '';
     this.updateSummary(); this.drawInspector();
@@ -598,13 +639,14 @@ export class GraphEditor {
             control.setAttribute('aria-pressed', String(this.selected?.id === node.id && this.selected.port === port));
             control.draggable = true;
             control.ondragstart = event => {
+              this.draggingPort = true;
               this.selected = { id: node.id, port, contract }; event.dataTransfer.setData('text/plain', `${node.id}.${port}`);
               for (const input of this.canvas.querySelectorAll('[data-side="input"]')) {
                 const target = this.draft.nodes.find(n => n.id === input.closest('[data-node]').dataset.node);
                 input.disabled = target.id === node.id || !compatiblePorts(contract, nodeDefinition(target, this.draft).inputs[input.dataset.port]);
               }
             };
-            control.ondragend = () => { this.selected = null; this.draw(); };
+            control.ondragend = () => { this.draggingPort = false; this.selected = null; this.draw(); };
           } else {
             control.ondragover = event => { if (compatiblePorts(this.selected?.contract, contract) && this.selected.id !== node.id) event.preventDefault(); };
             control.ondrop = event => { event.preventDefault(); this.connect(node.id, port, contract); };
