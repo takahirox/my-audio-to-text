@@ -22,7 +22,9 @@
         <h2 id="targets-title">Default execution targets</h2>
         <label class="target-label">Live<select id="live-target"></select></label>
         <label class="target-label">Web page voice typing<select id="web-target"></select></label>
-        <p class="muted">Web page voice typing is not yet available. This assignment is saved for its future implementation.</p>
+        <label class="target-label"><span><input id="web-voice-enabled" type="checkbox" disabled role="switch"> Web voice typing ON/OFF</span></label>
+        <p class="muted">OFF by default. Turning ON requests website access to show a mic beside supported fields on HTTP/HTTPS pages. Clicking a mic opens a compact extension recording window for local models and microphone permission. No recording starts on focus. Browser/internal pages, frames and sensitive fields are unsupported.</p>
+        <p id="web-voice-status" role="status"></p>
         <p class="muted">Changes apply to the next session. A running session keeps its active graph.</p>
       </section>
       <section id="selected" class="panel" aria-labelledby="selected-title">

@@ -294,7 +294,7 @@ test('toolbar action passes the invoked tab to a persistent window and reuses it
       sendMessage: async message => sent.push(message) },
     windows: { create: async options => created.push(options), update: async (...args) => focused.push(args) },
   };
-  runInNewContext(readFileSync('extension/background.js', 'utf8'), { chrome });
+  runInNewContext(readFileSync('extension/background.js', 'utf8').replace("import './web-voice-background.js';", ''), { chrome });
   assert.equal(created.length, 0, 'only a user action opens capture UI');
   await invoke({ id: 42 });
   assert.equal(created[0].url, 'chrome-extension://id/extension/recorder.html?tab=42');
@@ -387,8 +387,10 @@ with tempfile.TemporaryDirectory() as tmp:
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest['manifest_version'] == 3
     assert manifest['options_ui'] == {'page': 'extension/model-cache.html', 'open_in_tab': True}
-    assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting'}
-    assert 'host_permissions' not in manifest and 'content_scripts' not in manifest
+    assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting', 'storage'}
+    assert 'host_permissions' not in manifest
+    assert set(manifest['optional_host_permissions']) == {'http://*/*', 'https://*/*'}
+    assert 'content_scripts' not in manifest
     assert (target / manifest['background']['service_worker']).is_file()
     assert 'wasm-unsafe-eval' in manifest['content_security_policy']['extension_pages']
     assert manifest['cross_origin_embedder_policy']['value'] == 'require-corp'

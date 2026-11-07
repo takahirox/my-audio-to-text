@@ -1,3 +1,4 @@
+import './web-voice-background.js';
 // Toolbar invocation grants access to this tab. Default capture needs no page
 // injection; configured focused output uses only this activeTab document.
 chrome.action.onClicked.addListener(async tab => {
