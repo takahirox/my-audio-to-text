@@ -296,8 +296,12 @@ optional-only manifest** before feature tests (an upgrade/grant fixture).
 Microphone grant/denial uses native `Browser.setPermission`; the fresh-install
 host-denial decision is controlled in the Library. This establishes actual
 Chrome injection/permission enforcement and inference, but **does not automate the
-native permission-bubble buttons or physical microphone hardware**. To verify
-those UI surfaces manually in a fresh installed profile: assign the graph, turn
+native permission-bubble buttons or physical microphone hardware**. Under the
+[current Issue completion scope](https://github.com/takahirox/my-audio-to-text/issues/247),
+manual permission prompts, real microphone trials and settings revocation are
+optional later checks, not acceptance criteria or required post-merge verification.
+They do not block review, merge, Issue closure or Project Done. No manual result
+is claimed. For a later manual trial in a fresh installed profile: assign the graph, turn
 ON, deny the website prompt and confirm OFF/no widget, then grant it on retry;
 click a field mic, allow the native microphone prompt, speak, and Stop. Confirm
 text stays at the original caret and no form sends. Remove website/microphone

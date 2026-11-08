@@ -51,3 +51,9 @@ Limitations of this evidence:
   are not established by controlled device/Worker failure checks.
 - No push, PR, merge, Issue comment, deployment or post-merge verification was
   performed. No usage allowance/reset/model switch was used.
+
+Under the [current Issue completion scope](https://github.com/takahirox/my-audio-to-text/issues/247),
+manual permission prompts, real microphone trials and settings revocation checks
+are optional later notes. They are not acceptance criteria or required post-merge
+verification and do not block review, merge, Issue closure or Project Done. No
+manual result is claimed; the recorded automated evidence above is unchanged.
