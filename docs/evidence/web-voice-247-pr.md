@@ -26,11 +26,13 @@ Per the [owner's Issue clarification](https://github.com/takahirox/my-audio-to-t
 - [ ] **Pending — native website/microphone permission deny and grant:** On an installed Chrome extension, exercise the native prompts. Expected: denial prevents recording and leaves the feature disabled when website access is denied; granting access permits dictation into native input and textarea exactly once at the selected caret, Stop works, and nothing submits automatically.
 - [ ] **Pending — microphone revocation through Chrome settings during recording:** Expected: capture stops, the session closes, an actionable error appears, and no late text is inserted.
 
-Keep #247 open until the required post-merge checks are performed and their results recorded. Applicable automated validation and fixes for demonstrated defects remain required before merge.
+Record the required post-merge checks and their results on #247. Applicable automated validation and fixes for demonstrated defects remain required before merge.
 
 ## Related issues
 
-Related to #247. Required post-merge owner verification remains pending; this PR must not automatically close the Issue.
+Closes #247.
+
+Required post-merge owner verification remains pending as documented above.
 
 ## Scope check
 
