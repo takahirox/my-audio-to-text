@@ -21,14 +21,22 @@ async function rename(page, name, description = '') {
 test('Library manages independent named graphs, portable JSON, persistent targets, safeguards and responsive preview', async ({ libraryExtension: f }) => {
   const { page } = f;
   await expect(page.locator('#web-target')).toHaveValue('');
-  await expect(page.getByText(/Web page voice typing is not yet available/)).toBeVisible();
+  await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
+  await expect(page.locator('#web-target option').last()).toHaveAttribute('disabled', '');
   await expect(page.locator('#graph-list')).toContainText('Unknown');
   await expect(page.locator('#delete')).toBeDisabled();
   await page.locator('#new').click(); await expect(page.locator('#selected-title')).toHaveText('Selected graph: Untitled graph'); await rename(page, 'Meeting Notes', 'Summarize meetings locally');
   const meeting = (await library(page)).graphs.at(-1);
-  await page.locator('#duplicate').click(); await expect(page.locator('#selected-title')).toHaveText('Selected graph: Meeting Notes copy'); await rename(page, 'Voice Typing', 'Future graph assignment');
+  await page.locator('#duplicate').click(); await expect(page.locator('#selected-title')).toHaveText('Selected graph: Meeting Notes copy'); await rename(page, 'Voice Typing', 'Microphone dictation');
   const voice = (await library(page)).graphs.at(-1);
   expect(voice.id).not.toBe(meeting.id); expect(voice.graph).toEqual(meeting.graph);
+  await page.evaluate(async ({ id, revision, graph }) => {
+    const { GraphLibrary } = await import('./graph-library.js');
+    await new GraphLibrary(localStorage).save(id, revision, graph);
+  }, { id: voice.id, revision: voice.revision, graph: { version: 15,
+    nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
+    edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] } });
+  await page.reload();
   await page.locator('#web-target').selectOption(voice.id);
   await expect(page.locator('#delete')).toBeDisabled();
   await page.locator('#live-target').selectOption(meeting.id);

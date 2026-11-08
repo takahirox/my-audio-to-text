@@ -1,3 +1,5 @@
+import { webVoiceError } from './web-voice-graph.js';
+import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_ORIGINS, WEB_VOICE_KEY, voiceEnabled } from './web-voice-preference.js';
 import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, entryError, exportEntry, legacyChanged, usable } from './graph-library.js';
 import { GRAPH_KEY, NODE_TYPES, ASR_TYPES } from './graph.js';
 import { graphModelRequirements } from './graph-model-preparation.js';
@@ -5,7 +7,7 @@ import { ModelAssetCache } from './model-asset-cache.js';
 
 const element = id => document.getElementById(id), store = new GraphLibrary(localStorage);
 const selectionKey = 'graph-library-selection';
-let library, selectedId, detailsEntry, fatal = false;
+let library, selectedId, detailsEntry, fatal = false, refreshVoiceStatus = () => {};
 const states = new Map();
 const el = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
 function download(text, filename) {
@@ -94,10 +96,13 @@ function render(replaceDetails = false) {
     if (target === 'webVoice') { const option = el('option', 'Not assigned'); option.value = ''; select.append(option); }
     for (const entry of library.graphs) {
       const option = el('option', entry.name + (entryError(entry) ? ' (needs recovery)' : '')); option.value = entry.id;
-      option.disabled = !!entryError(entry) || target === 'live' && !usable(entry); select.append(option);
+      const reason = target === 'webVoice' ? webVoiceError(entry.graph) : '';
+      if (reason) { option.textContent += ` (incompatible: ${reason})`; option.title = reason; }
+      option.disabled = !!entryError(entry) || !!reason || target === 'live' && !usable(entry); select.append(option);
     }
     select.value = library.assignments[target] || '';
   }
+  refreshVoiceStatus();
   if (replaceDetails || !dirty()) renderDetails();
   else if (!selected()) {
     element('selected-error').textContent = 'This graph was deleted in another page. Unsaved details have been kept; copy them before selecting another graph. Export JSON still recovers the previous saved graph.';
@@ -136,6 +141,41 @@ try {
   element('selected').hidden = true;
 }
 if (!fatal) {
+  const toggle = element('web-voice-enabled'), status = element('web-voice-status');
+  let voiceMessageError = false;
+  const assignedError = () => {
+    const entry = library.graphs.find(entry => entry.id === library.assignments.webVoice);
+    return entry ? webVoiceError(entry.graph) : 'Assign a compatible Web page voice typing graph first. The Live assignment is independent.';
+  };
+  toggle.checked = await readVoiceEnabled();
+  refreshVoiceStatus = () => {
+    if (!voiceMessageError) status.textContent = assignedError() || (toggle.checked ? 'ON · focus a supported field on an authorized website, then click its mic.' : 'OFF · no page controls or recording.');
+  };
+  refreshVoiceStatus();
+  toggle.onchange = async () => {
+    const enabled = toggle.checked; voiceMessageError = false;
+    toggle.disabled = true;
+    try {
+      if (enabled) {
+        const reason = assignedError(); if (reason) throw Error(reason);
+        // Request synchronously from this user gesture, before other async work.
+        if (!await chrome.permissions.request({ origins: WEB_VOICE_ORIGINS })) throw Error('Website access denied. Web voice typing remains OFF. Enable it again to request access.');
+      }
+      await setVoiceEnabled(enabled);
+      const reply = await chrome.runtime.sendMessage({ type: 'web-voice-reconcile' });
+      if (reply?.error) throw Error(reply.error);
+      status.textContent = enabled ? 'ON · focus a supported field on an authorized website, then click its mic.' : 'OFF · page controls removed and recording canceled.';
+    } catch (error) {
+      voiceMessageError = true; await setVoiceEnabled(false); toggle.checked = false; status.textContent = error.message;
+    } finally { toggle.disabled = false; }
+  };
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[WEB_VOICE_KEY]) {
+      toggle.checked = voiceEnabled(changes[WEB_VOICE_KEY].newValue);
+      if (!voiceMessageError) status.textContent = toggle.checked ? 'ON · click a field mic to start.' : 'OFF · no page controls or recording.';
+    }
+  });
+  toggle.disabled = false;
   for (const id of ['search', 'sort', 'filter']) element(id).addEventListener(id === 'search' ? 'input' : 'change', () => render());
   element('new').onclick = () => { if (!dirty() || confirm('Discard unsaved graph details?')) void action(() => store.create({}, library.revision), { selectNew: true }); };
   element('import').onclick = () => element('import-file').click();
