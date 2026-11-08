@@ -10,7 +10,9 @@ OFF users receive no injected controls or feature model loading. Stop drains fin
 
 ## Validation
 
-- The latest fix refreshes the idle mic target after a session completes, or removes it when focus is outside supported editors. Its repeated-session regression failed before the fix and passed afterward.
+- The latest fix restores focus/selection listeners and reconnects controls after back-forward-cache restoration, rechecking consent without resuming the canceled recording. The installed-extension regression confirms `pageshow.persisted`, fresh-session caret insertion, no late writes or auto-submit, and OFF while cached. It reproduced the missing mic before the fix and passed afterward.
+- Revision validation passed **863 unit tests**, **21 affected installed-extension tests** (14 Web voice tests with controlled inference and 7 Graph Library tests), and `git diff --check`. Real-model and human permission checks were not rerun for this lifecycle fix.
+- The earlier fix refreshes the idle mic target after a session completes, or removes it when focus is outside supported editors. Its repeated-session regression failed before the fix and passed afterward.
 - Review of head `443f65b` reports **863 unit tests** and **21 installed-extension tests**, including **13 Web voice tests with mocked inference**, passed. Another **23 tests could not start** because `dist/chrome-extension` was absent. Real-model tests were not rerun during that review.
 - Earlier publication verification recorded a passing `git diff --check` and verified the PR head against the complete worktree tree; it did not rerun tests.
 - Upstream implementation evidence records successful extension packaging and **43 affected installed-extension tests**, including opt-in/permissions, saved selection, sensitive fields, replay/sender rejection, busy state and cleanup.
@@ -30,7 +32,7 @@ Record the required post-merge checks and their results on #247. Applicable auto
 
 ## Related issues
 
-Closes #247.
+Related to #247.
 
 Required post-merge owner verification remains pending as documented above.
 

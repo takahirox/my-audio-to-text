@@ -33,7 +33,7 @@ const test = base.extend({
         };`);
       }
       context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
-        ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream',
+        ignoreDefaultArgs: ['--disable-extensions', ...(info.title.includes('back-forward cache') ? ['--disable-back-forward-cache'] : [])], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream',
           ...(real ? [`--use-file-for-fake-audio-capture=${path.resolve('tests/fixtures/ordinary-english.wav')}%noloop`] : [])] });
       const cdp = await context.browser().newBrowserCDPSession();
       // Seed a real Chrome host grant as an installation/upgrade fixture. The
@@ -371,4 +371,44 @@ test('extension reload cancels capture and reinstalls only an idle opt-in widget
   await expect(widget(t.website)).toHaveCount(1);
   await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
   await expect(t.website.locator('#first')).toHaveValue('before after');
+});
+
+test('back-forward cache restores idle controls and selection listeners without resuming capture', async ({ voice: t }) => {
+  test.skip(real, 'Cached-document lifecycle uses controlled inference.');
+  await enable(t);
+  let runtime = await start(t);
+  await expect(runtime.locator('#voice-state')).toHaveText('Recording');
+  await t.website.bringToFront();
+  await t.website.evaluate(() => {
+    window.cachedVoiceDocument = true;
+    window.addEventListener('pageshow', event => { window.voiceRestored = event.persisted; });
+  });
+  const original = t.website.url();
+  const closed = runtime.waitForEvent('close');
+  await t.website.goto(original + '?away'); await closed;
+  await t.website.goBack({ waitUntil: 'commit' });
+  await expect.poll(() => t.website.evaluate(() => window.cachedVoiceDocument && window.voiceRestored)).toBe(true);
+  await t.website.locator('#second').focus();
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
+  expect(t.context.pages().filter(page => page.url().includes('web-voice-runtime.html'))).toHaveLength(0);
+  await expect(t.website.locator('#first')).toHaveValue('before after');
+  await expect(t.website.locator('#second')).toHaveValue('left right');
+
+  runtime = await start(t, '#second');
+  await expect(runtime.locator('#voice-state')).toHaveText('Recording');
+  await t.website.bringToFront();
+  await t.website.locator('#second').evaluate(element => element.setSelectionRange(5, 5));
+  await runtime.waitForTimeout(600);
+  const stopped = runtime.waitForEvent('close'); await mic(t.website); await stopped;
+  await expect(t.website.locator('#second')).toHaveValue('left confirmed fixtureright');
+  expect(await t.website.evaluate(() => window.submits)).toBe(0);
+
+  // A second cache round trip must restore listeners again and recheck consent.
+  await t.website.goto(original + '?away-again');
+  await t.library.locator('#web-voice-enabled').uncheck();
+  await t.website.goBack({ waitUntil: 'commit' });
+  await expect.poll(() => t.website.evaluate(() => window.voiceRestored)).toBe(true);
+  await t.website.locator('#first').focus();
+  await expect(widget(t.website)).toHaveCount(0);
+  expect(t.context.pages().filter(page => page.url().includes('web-voice-runtime.html'))).toHaveLength(0);
 });

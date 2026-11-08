@@ -27,7 +27,7 @@
   const native = element => element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
   const value = element => native(element) ? element.value : element.textContent;
   let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle', inserting = false;
-  const listeners = new AbortController();
+  let listeners;
   function send(message) { try { control?.postMessage(message); } catch { disable(); } }
   function stateUI(next, error = '') {
     state = next;
@@ -120,9 +120,10 @@
   function connect() {
     if (!disposed) { focus(); return; }
     disposed = false;
-    control = chrome.runtime.connect({ name: 'web-voice-control' });
-    control.onDisconnect.addListener(disable);
-    control.onMessage.addListener(message => {
+    const connection = control = chrome.runtime.connect({ name: 'web-voice-control' });
+    connection.onDisconnect.addListener(() => { if (control === connection) disable(); });
+    connection.onMessage.addListener(message => {
+      if (control !== connection) return;
       if (message.type === 'disabled') { disable(); return; }
       if (message.type === 'enabled') {
         enabled = true; focus();
@@ -145,18 +146,27 @@
     });
   }
   globalThis.localWebVoice = connect;
-  const options = { capture: true, signal: listeners.signal };
-  document.addEventListener('focusin', focus, options);
-  document.addEventListener('focusout', () => queueMicrotask(focus), options);
-  for (const event of ['scroll', 'resize']) window.addEventListener(event, position, options);
-  visualViewport?.addEventListener('resize', position, options);
-  document.addEventListener('selectionchange', () => {
-    if (!inserting && session && document.activeElement === session.element) try { saveCaret(session); } catch { /* A later insertion validates the saved range. */ }
-  }, options);
-  document.addEventListener('input', event => {
-    if (!inserting && event.isTrusted && session?.element === event.target) saveCaret(session);
-  }, options);
-  window.addEventListener('pagehide', () => { send({ type: 'cancel' }); disable(); listeners.abort(); }, { once: true });
+  function listen() {
+    listeners = new AbortController();
+    const options = { capture: true, signal: listeners.signal };
+    document.addEventListener('focusin', focus, options);
+    document.addEventListener('focusout', () => queueMicrotask(focus), options);
+    for (const event of ['scroll', 'resize']) window.addEventListener(event, position, options);
+    visualViewport?.addEventListener('resize', position, options);
+    document.addEventListener('selectionchange', () => {
+      if (!inserting && session && document.activeElement === session.element) try { saveCaret(session); } catch { /* A later insertion validates the saved range. */ }
+    }, options);
+    document.addEventListener('input', event => {
+      if (!inserting && event.isTrusted && session?.element === event.target) saveCaret(session);
+    }, options);
+  }
+  window.addEventListener('pagehide', () => { send({ type: 'cancel' }); disable(); listeners.abort(); });
+  window.addEventListener('pageshow', event => {
+    if (!event.persisted) return;
+    // Cached documents retain this script, but never retain a recording. A new
+    // control connection rechecks current consent and website permission.
+    listen(); connect();
+  });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes['web-voice-typing-v1'] && !(changes['web-voice-typing-v1'].newValue?.version === 1 && changes['web-voice-typing-v1'].newValue.enabled === true)) disable();
   });
@@ -208,5 +218,5 @@
       }
     });
   });
-  connect();
+  listen(); connect();
 })();
