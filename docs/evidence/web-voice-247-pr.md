@@ -32,7 +32,7 @@ Record the required post-merge checks and their results on #247. Applicable auto
 
 ## Related issues
 
-Related to #247.
+Closes #247.
 
 Required post-merge owner verification remains pending as documented above.
 
