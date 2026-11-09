@@ -9,14 +9,28 @@ The active graph is an immutable snapshot; edits take effect at the next Start.
 
 Open **Library** from Live, Graph or Models. Search names, descriptions or model
 names, sort by name/recent update, and filter assigned graphs or entries needing
-recovery. Select a row to inspect its description and lightweight schematic of
-its real Nodes/edges. Create, rename, describe, duplicate, import or export entries
+recovery. On wide windows, select a row on the left to inspect the graph on the
+right. On narrow windows, selection opens the details; **Back to graphs** returns
+to the list. Assignment markers identify Live and Web voice graphs independently
+of selection. Create, rename, describe, duplicate, import or export entries
 without starting inference. New graphs use the current default transcription
 layout; imported JSON uses the existing version-15 graph format.
 
-**Live** and **Web page voice typing** assignments store stable graph IDs. Web
-voice typing is **not yet available**: its assignment is reserved for future use;
-there is no in-page microphone or second execution session. Live shows the exact
+**Use this graph for** assigns the selected entry to **Live** or **Web voice
+typing** by stable ID. Selection alone changes neither assignment. Live requires
+an executable graph and cannot be unassigned. Web voice typing requires a
+microphone-only executable path to one focused-field output; an incompatible
+action reveals the repair reason. **Unassign** clears only the Web assignment.
+
+The separate global **Web voice typing** switch shows its assigned graph and
+starts OFF without explicit opt-in. Assigning a graph never enables website
+controls, and turning OFF preserves the assignment. Turning ON first opens a
+short consent dialog, then **Continue to website permission** requests Chrome
+access to all HTTP/HTTPS websites. Cancel or denial leaves the feature OFF.
+**Help** discloses exact permission patterns, click-only microphone capture,
+local processing, unsupported fields/pages, OFF behavior and Chrome Site access
+revocation. Missing permissions and incompatible assignments show recovery only
+when relevant. Live shows the exact
 named graph it prepares and runs. Changing the Live assignment while idle cancels
 obsolete preparation, disposes its resources and prepares the newly assigned
 saved graph. During a session its graph, ID and name remain immutable. The new
@@ -25,23 +39,29 @@ renaming or deleting an unassigned library entry cannot change an active session
 An unavailable/corrupt assignment blocks Start and stale preparation; it does not
 silently select another graph.
 
-**Edit / Open** opens `graph-editor.html?id=<stable-id>`. Save, Load saved, Reset,
+**Edit graph** opens `graph-editor.html?id=<stable-id>`. Save, Load saved, Reset,
 Import and Export all concern that entry's draft. Save prepares required cached
 files, including parked Nodes, after persistence. Other entries and execution
 assignments remain unchanged. Closing/navigating away from a dirty editor warns
 before discarding. Concurrent edits to different entries merge under Web Locks;
 stale saves to the same entry are rejected and retain the draft for export or
 explicit Load saved. Library name/description forms likewise preserve unsaved
-input when another page changes storage.
+input when another page changes storage. **Save details** saves the name and
+description; **Edit graph** edits Nodes. Unsaved details survive filtering and
+cache updates, warn before selection changes or navigation, and are retained in
+per-tab sessionStorage across refresh with their original entry revision. A
+stale restored draft still cannot overwrite a concurrent save. **More → Load
+saved details** explicitly discards the draft after confirmation.
 
-Delete requires confirmation, rejects assigned entries until explicit
+**More** also holds Export JSON and Delete. Delete requires confirmation, rejects assigned entries until explicit
 reassignment, and keeps at least one usable graph. A corrupt entry stays visible
 with an error and its original JSON available for export; import a repaired copy
 as a new entry. Its original is never overwritten by an editor recovery draft.
 
-The table's **File cache** column is distinct from Live's runtime/GPU readiness:
+**Models & saved information** in the detail panel holds timestamps, required
+models and **File cache**, distinct from Live's runtime/GPU readiness:
 model-bearing graphs initially show **Unknown**, not an unconditional Ready.
-**Check model files** inspects the selected graph's actual manifests without
+**More → Check model files** inspects the selected graph's actual manifests without
 starting Workers, GPU work or downloads. It reports Ready (verified cached files),
 Needs preparation or Error; packaged ASR verification is left to Live and remains
 Unknown here. Graphs without model files can report Ready on that basis. Model
