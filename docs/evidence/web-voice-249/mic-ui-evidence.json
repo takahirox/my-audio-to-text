@@ -1,0 +1,19 @@
+{
+  "browser": "153.0.8010.12",
+  "installedExtension": true,
+  "productionManifest": true,
+  "isolatedClosedShadow": true,
+  "controlledInference": true,
+  "states": [
+    "idle",
+    "preparing",
+    "recording",
+    "stopping",
+    "error"
+  ],
+  "remoteRequests": 0,
+  "pageErrors": [],
+  "inputCaretPreserved": true,
+  "pointerStart": true,
+  "keyboardStop": true
+}
