@@ -161,3 +161,10 @@ Local text summary processors (Issue #130)
   unmodified model data is prepared after Save, not during inference.
   Details, provenance limits, memory guidance and evidence:
   docs/text-summary-nodes.md
+
+In-page Web voice control: Google Material Symbols Outlined
+  Copyright Google LLC. Apache License 2.0.
+  https://github.com/google/material-design-icons/tree/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7
+  mic, stop, error, progress_activity: 20dp, weight 400, fill 0, grade 0.
+  Paths embedded as inline SVG with currentColor and accessibility attributes.
+  Packaged originals, source details and license: ../extension/icons/material-symbols/

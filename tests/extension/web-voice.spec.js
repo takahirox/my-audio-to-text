@@ -79,8 +79,52 @@ const widget = page => page.locator('[data-local-web-voice]');
 // A real pointer click is delivered using its host's visible geometry.
 async function mic(page) {
   const box = await widget(page).boundingBox(); expect(box).not.toBeNull();
-  await page.mouse.click(box.x + 15, box.y + 14);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
+// DevTools can inspect closed Shadow DOM without adding page-world access or
+// production-only test hooks. Activation still uses real pointer/key events.
+async function controlUI(t, focus = false) {
+  await expect(widget(t.website)).toBeVisible();
+  const cdp = await t.context.newCDPSession(t.website);
+  try {
+    const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+    const find = node => node.attributes?.includes('data-local-web-voice') ? node :
+      [...node.children || [], ...node.shadowRoots || []].map(find).find(Boolean);
+    const host = find(root); expect(host?.shadowRoots).toHaveLength(1);
+    const { object } = await cdp.send('DOM.resolveNode', { backendNodeId: host.shadowRoots[0].backendNodeId });
+    const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true, arguments:[{ value:focus }],
+      functionDeclaration: `function(focus) {
+        const button = this.querySelector('button'), svg = button.querySelector('svg'), status = this.querySelector('span');
+        if (focus) button.focus();
+        const style = getComputedStyle(button), motion = getComputedStyle(svg);
+        const rect = element => { const r = element.getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height }; };
+        return { icon:svg.dataset.icon, path:svg.firstChild.getAttribute('d'), viewBox:svg.getAttribute('viewBox'),
+          ariaHidden:svg.getAttribute('aria-hidden'), focusable:svg.getAttribute('focusable'), text:button.textContent,
+          label:button.getAttribute('aria-label'), title:button.title, disabled:button.disabled, status:status.textContent,
+          button:rect(button), svg:rect(svg), bubble:rect(status), theme:this.host.dataset.theme,
+          circle:style.borderRadius, display:style.display, align:style.alignItems, justify:style.justifyContent,
+          padding:style.padding, boxSizing:style.boxSizing, appearance:style.appearance, lineHeight:style.lineHeight,
+          color:style.color, background:style.backgroundColor, fill:motion.fill, animation:motion.animationName,
+          outline:style.outlineStyle, focused:this.activeElement === button };
+      }` });
+    return result.value;
+  } finally { await cdp.detach(); }
+}
+function expectIcon(ui, icon) {
+  expect(ui.icon).toBe(icon); expect(ui.viewBox).toBe('0 -960 960 960');
+  expect(ui.ariaHidden).toBe('true'); expect(ui.focusable).toBe('false'); expect(ui.text).toBe('');
+  expect(ui.button.width).toBe(36); expect(ui.button.height).toBe(36);
+  // A rotating SVG's bounding rectangle grows mid-animation; its CSS size is
+  // asserted at rest/reduced motion, along with the actual centered geometry.
+  if (ui.animation === 'none') { expect(ui.svg.width).toBe(20); expect(ui.svg.height).toBe(20); }
+  expect(ui.svg.x + ui.svg.width / 2).toBeCloseTo(ui.button.x + 18, 1);
+  expect(ui.svg.y + ui.svg.height / 2).toBeCloseTo(ui.button.y + 18, 1);
+  expect(ui.fill).toBe(ui.color);
+}
+function intersects(a, b) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
 async function enable(t) {
   await t.library.bringToFront();
   await t.library.locator('#web-voice-enabled').check();
@@ -411,4 +455,166 @@ test('back-forward cache restores idle controls and selection listeners without 
   await t.website.locator('#first').focus();
   await expect(widget(t.website)).toHaveCount(0);
   expect(t.context.pages().filter(page => page.url().includes('web-voice-runtime.html'))).toHaveLength(0);
+});
+
+test('Material Symbols circle: isolated styles, light/dark, focus, hover, reduced motion and forced colors', async ({ voice: t }, info) => {
+  test.skip(real, 'Visual checks use the lightweight installed extension.');
+  await enable(t); await t.website.bringToFront();
+  await t.website.evaluate(() => {
+    const style = document.createElement('style');
+    style.textContent = `body{padding:70px;background:#fafafa} input{width:220px;height:34px}
+      button,svg{width:100px!important;padding:40px!important;fill:lime!important}
+      [data-local-web-voice]{width:300px!important;margin:20px!important;font-size:80px!important}`;
+    document.head.append(style);
+  });
+  await t.website.locator('#first').focus();
+  let ui = await controlUI(t); expectIcon(ui, 'mic');
+  const micSource = await readFile(path.join(t.root,'extension/icons/material-symbols/mic.svg'), 'utf8');
+  expect(micSource).toContain(`d="${ui.path}"`);
+  expect(ui).toMatchObject({ circle:'50%', display:'inline-flex', align:'center', justify:'center', padding:'0px', boxSizing:'border-box', appearance:'none', lineHeight:'14px', theme:'light', disabled:false, label:'Start voice typing', title:'Start voice typing', status:'' });
+  expect(await t.website.locator('[data-local-web-voice]').evaluate(e => e.shadowRoot)).toBeNull();
+  const idleBackground = ui.background;
+  await t.website.mouse.move(ui.button.x + 18, ui.button.y + 18);
+  expect((await controlUI(t)).background).not.toBe(idleBackground);
+  ui = await controlUI(t, true); expect(ui.focused).toBe(true); expect(ui.outline).toBe('solid');
+  await t.website.screenshot({ path:info.outputPath('mic-light-focus.png'),clip:{x:0,y:50,width:600,height:220} });
+  await t.website.locator('#first').focus();
+  await t.website.locator('#first').evaluate(e => e.setSelectionRange(0,0));
+  await t.website.keyboard.type('normal typing');
+  await expect(t.website.locator('#first')).toHaveValue('normal typingbefore after');
+  await t.website.mouse.move(0,0);
+  for (const colorScheme of ['dark', 'light']) {
+    await t.website.emulateMedia({ colorScheme, reducedMotion:'reduce' });
+    await t.website.evaluate(dark => { document.documentElement.style.colorScheme = dark ? 'dark' : 'light'; document.body.style.background = dark ? '#141820' : '#fafafa'; }, colorScheme === 'dark');
+    await expect.poll(async () => (await controlUI(t)).theme).toBe(colorScheme);
+    ui = await controlUI(t); expectIcon(ui, 'mic');
+    if (colorScheme === 'dark') { expect(ui.background).toBe('rgb(32, 40, 51)'); await t.website.screenshot({ path:info.outputPath('mic-dark.png'),clip:{x:0,y:50,width:600,height:220} }); }
+  }
+  await t.website.emulateMedia({ forcedColors:'active' });
+  ui = await controlUI(t); expectIcon(ui, 'mic'); expect(ui.color).not.toBe(ui.background);
+  await t.website.screenshot({ path:info.outputPath('mic-forced-colors.png') });
+  await t.cdp.send('Browser.setPermission', { permission:{ name:'microphone' }, setting:'denied', origin:t.url.replace(/\/extension\/$/,'') });
+  const created = t.context.waitForEvent('page', { predicate:page => page.url().includes('web-voice-runtime.html') });
+  await controlUI(t,true); await t.website.keyboard.press('Space');
+  const runtime = await created; await expect.poll(() => runtime.isClosed()).toBe(true);
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state','error');
+});
+
+test('field attachment avoids neighbours, stays in viewport across reflow, zoom, resize and scroll', async ({ voice: t }, info) => {
+  test.skip(real, 'Layout coverage uses controlled inference.');
+  await enable(t); await t.website.bringToFront();
+  await t.website.locator('#first').focus();
+  const crowded = await controlUI(t);
+  for (const selector of ['#first','#second','#password','#otp','#card','#readonly','button[type="submit"]']) {
+    expect(intersects(crowded.button, await t.website.locator(selector).boundingBox())).toBe(false);
+  }
+  await t.website.evaluate(() => {
+    document.body.style.cssText = 'margin:0;min-height:2000px';
+    for (const e of document.querySelectorAll('body > input, [contenteditable]')) e.remove();
+    document.querySelector('form').style.cssText = 'position:absolute;left:100px;top:100px;display:flex;align-items:center;gap:2px';
+    document.querySelector('#first').style.cssText = 'box-sizing:border-box;width:92px;height:22px';
+    document.querySelector('#second').style.cssText = 'width:50px;height:22px';
+  });
+  await t.website.locator('#first').focus();
+  const check = async () => {
+    const ui = await controlUI(t), viewport = await t.website.evaluate(() => ({ width:innerWidth,height:innerHeight }));
+    expect(ui.button.x).toBeGreaterThanOrEqual(4); expect(ui.button.y).toBeGreaterThanOrEqual(4);
+    expect(ui.button.x + 36).toBeLessThanOrEqual(viewport.width - 4);
+    expect(ui.button.y + 36).toBeLessThanOrEqual(viewport.height - 4);
+    for (const selector of ['#first','#second','button[type="submit"]']) expect(intersects(ui.button, await t.website.locator(selector).boundingBox())).toBe(false);
+    const field = await t.website.locator('#first').boundingBox();
+    const distance = Math.max(field.x - ui.button.x - 36, ui.button.x - field.x - field.width, field.y - ui.button.y - 36, ui.button.y - field.y - field.height);
+    expect(distance).toBeLessThanOrEqual(6.1); expect(distance).toBeGreaterThanOrEqual(0);
+  };
+  await check();
+  for (const [width, height, left, top] of [[320,240,0,0],[320,240,228,0],[320,240,228,218],[600,360,250,160]]) {
+    await t.website.setViewportSize({ width,height });
+    await t.website.locator('form').evaluate((e, p) => { e.style.left = p.left+'px'; e.style.top = p.top+'px'; }, { left,top });
+    // Reflow can occur without a resize or one of the observed attributes.
+    await expect(check).toPass({ timeout:5000 });
+  }
+  await t.website.evaluate(() => { document.body.style.zoom = '1.25'; });
+  await expect(check).toPass({ timeout:5000 });
+  await t.library.evaluate(async websiteURL => {
+    const [tab] = await chrome.tabs.query({ url:websiteURL });
+    await chrome.tabs.setZoom(tab.id,1.25);
+  }, t.website.url());
+  const metrics = await t.context.newCDPSession(t.website);
+  await metrics.send('Emulation.setDeviceMetricsOverride', { width:600,height:360,deviceScaleFactor:2,mobile:false });
+  await expect(check).toPass({ timeout:5000 });
+  expect(await t.website.evaluate(() => devicePixelRatio)).toBeGreaterThan(1);
+  await metrics.detach();
+  await t.website.screenshot({ path:info.outputPath('mic-small-field-zoom.png') });
+  await t.website.evaluate(() => scrollTo(0,900)); await expect(widget(t.website)).toBeHidden();
+  await t.website.evaluate(() => scrollTo(0,0)); await expect(widget(t.website)).toBeVisible(); await check();
+});
+
+test('all visual states use local SVGs, keep the caret and expose a visible keyboard stop', async ({ voice: t }, info) => {
+  test.skip(real, 'State rendering uses controlled Worker scheduling.');
+  await enable(t);
+  await t.website.evaluate(() => {
+    document.body.style.cssText = 'margin:0;padding:60px';
+    document.querySelector('form').style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:60px';
+    document.querySelector('#first').style.cssText = 'width:200px;height:32px';
+  });
+  await t.context.addInitScript(() => {
+    if (!location.href.includes('web-voice-runtime.html')) return;
+    const NativeWorker = Worker;
+    window.Worker = class extends NativeWorker {
+      postMessage(data, ...rest) {
+        const send = () => super.postMessage(data, ...rest);
+        if (data.type === 'load') setTimeout(send, 700);
+        else if (data.type === 'vad-stop') setTimeout(send, 700);
+        else send();
+      }
+    };
+  });
+  const runtime = await start(t);
+  expect(await readFile(path.join(t.root,'extension/icons/material-symbols/LICENSE'),'utf8')).toContain('Apache License');
+  expect(await readFile(path.join(t.root,'extension/icons/material-symbols/README.md'),'utf8')).toContain('10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7');
+  let ui = await controlUI(t); expectIcon(ui, 'progress_activity');
+  expect(await readFile(path.join(t.root,'extension/icons/material-symbols/progress_activity.svg'),'utf8')).toContain(`d="${ui.path}"`);
+  expect(ui.label).toContain('cancel'); expect(ui.disabled).toBe(false); expect(ui.animation).toBe('voice-spin');
+  await t.website.emulateMedia({ reducedMotion:'reduce' });
+  expect((await controlUI(t)).animation).toBe('none');
+  await expect(t.website.locator('#first')).toBeFocused();
+  expect(await t.website.locator('#first').evaluate(e => [e.selectionStart,e.selectionEnd])).toEqual([7,7]);
+  await t.website.screenshot({ path:info.outputPath('mic-preparing.png'),clip:{x:0,y:0,width:600,height:240} });
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state','recording');
+  ui = await controlUI(t); expectIcon(ui, 'stop');
+  expect(await readFile(path.join(t.root,'extension/icons/material-symbols/stop.svg'),'utf8')).toContain(`d="${ui.path}"`);
+  expect(ui.label).toBe('Recording · Stop voice typing');
+  expect(ui.color).toBe('rgb(180, 35, 24)'); expect(ui.status).toBe('Recording');
+  await t.website.screenshot({ path:info.outputPath('mic-recording.png'),clip:{x:0,y:0,width:600,height:240} });
+  await t.website.mouse.move(0,0);
+  await t.website.evaluate(() => { document.documentElement.style.colorScheme = 'dark'; document.body.style.background = '#141820'; });
+  await t.website.emulateMedia({ colorScheme:'dark',reducedMotion:'reduce' });
+  await expect.poll(async () => (await controlUI(t)).theme).toBe('dark');
+  ui = await controlUI(t); expectIcon(ui,'stop'); expect(ui.background).toBe('rgb(96, 27, 22)');
+  await t.website.screenshot({ path:info.outputPath('mic-recording-dark.png'),clip:{x:0,y:0,width:600,height:240} });
+  await t.website.emulateMedia({ colorScheme:'light',reducedMotion:'reduce' });
+  await t.website.evaluate(() => { document.documentElement.style.colorScheme = 'light'; document.body.style.background = '#fff'; });
+  await t.website.evaluate(() => { for (const e of document.querySelectorAll('input,textarea,button,[contenteditable]')) e.tabIndex = -1; document.body.style.minHeight = '2000px'; scrollTo(0,1000); });
+  await expect(widget(t.website)).toBeVisible();
+  await t.website.keyboard.press('Tab');
+  expect((await controlUI(t)).focused).toBe(true);
+  const closed = runtime.waitForEvent('close'); await t.website.keyboard.press('Enter');
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state','stopping');
+  ui = await controlUI(t); expectIcon(ui, 'progress_activity'); expect(ui.disabled).toBe(true); expect(ui.label).toBe('Stopping…');
+  await t.website.screenshot({ path:info.outputPath('mic-stopping.png') });
+  await closed;
+  await t.website.evaluate(() => scrollTo(0,0));
+  const denied = await start(t, '#first', 'denied'); await expect.poll(() => denied.isClosed()).toBe(true);
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state','error');
+  ui = await controlUI(t); expectIcon(ui, 'error'); expect(ui.title.length).toBeGreaterThan(0); expect(ui.label).toContain('Retry');
+  expect(ui.status).toBe(ui.title);
+  const viewport = t.website.viewportSize();
+  expect(ui.bubble.x).toBeGreaterThanOrEqual(4); expect(ui.bubble.y).toBeGreaterThanOrEqual(4);
+  expect(ui.bubble.x + ui.bubble.width).toBeLessThanOrEqual(viewport.width - 4);
+  await t.website.screenshot({ path:info.outputPath('mic-error.png'),clip:{x:0,y:0,width:600,height:240} });
+  expect(await readFile(path.join(t.root,'extension/icons/material-symbols/error.svg'),'utf8')).toContain(`d="${ui.path}"`);
+  await writeFile(info.outputPath('mic-ui-evidence.json'), JSON.stringify({ browser:t.context.browser().version(),
+    installedExtension:true, productionManifest:true, isolatedClosedShadow:true, controlledInference:true,
+    states:['idle','preparing','recording','stopping','error'], remoteRequests:t.remote.length, pageErrors:t.pageErrors,
+    inputCaretPreserved:true, pointerStart:true, keyboardStop:true }, null, 2)+'\n');
 });

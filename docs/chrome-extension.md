@@ -229,6 +229,17 @@ accepted final TEXT once, in order; Cancel, OFF, navigation, field removal and
 permission/device loss abort and suppress late replies. Send/Submit and browser
 editing remain manual. No audio or transcript is persisted or transmitted.
 
+The circular in-page control uses locally bundled Material Symbols Outlined SVGs:
+Mic when idle, Stop while recording, an activity spinner while preparing/stopping,
+and Error for recovery. Spinner motion respects reduced-motion settings; light,
+dark and forced-color treatments preserve distinct icon shapes and accessible
+labels. The widget first looks for free space 6 px outside the field, then searches
+slightly farther out in crowded rows. It clamps the control and compact status to
+the viewport and keeps Stop visible when the recording field scrolls away.
+Completely occupied viewports can still require a best-effort placement.
+[Icon source, pinned revision and license](../extension/icons/material-symbols/README.md)
+and [Chrome UI validation](evidence/web-voice-249.md).
+
 A **compact extension recording window**, separate from Live, owns the existing
 `TabSession`, graph, Workers, Web Audio and local inference. Keep it open while
 recording; it provides Stop, Library and Models recovery links. Closing it cancels.

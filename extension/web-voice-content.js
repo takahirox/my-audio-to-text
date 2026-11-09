@@ -3,6 +3,15 @@
 (() => {
   if (globalThis.localWebVoice) { globalThis.localWebVoice(); return; }
   if (window.top !== window || !/^https?:$/.test(location.protocol)) return;
+  // Google Material Symbols Outlined, 20dp, wght 400 / FILL 0 / GRAD 0.
+  // Inlined local SVG paths; source revision and Apache-2.0: icons/material-symbols/.
+  const iconPaths = {
+    mic: 'M480-384q-50 0-85-35t-35-85v-240q0-50 35-85t85-35q50 0 85 35t35 85v240q0 50-35 85t-85 35Zm0-240Zm-36 480v-99q-98.8-13.1-163.4-87.05Q216-404 216-504h72q0 79.68 56.23 135.84 56.22 56.16 136 56.16Q560-312 616-368.16q56-56.16 56-135.84h72q0 100-64.6 173.95Q614.8-256.1 516-243v99h-72Zm36-312q20.4 0 34.2-13.8Q528-483.6 528-504v-240q0-20.4-13.8-34.2Q500.4-792 480-792q-20.4 0-34.2 13.8Q432-764.4 432-744v240q0 20.4 13.8 34.2Q459.6-456 480-456Z',
+    stop: 'M336-624v288-288Zm-72 360v-432h432v432H264Zm72-72h288v-288H336v288Z',
+    error: 'M479.79-288q15.21 0 25.71-10.29t10.5-25.5q0-15.21-10.29-25.71t-25.5-10.5q-15.21 0-25.71 10.29t-10.5 25.5q0 15.21 10.29 25.71t25.5 10.5ZM444-432h72v-240h-72v240Zm36.28 336Q401-96 331-126t-122.5-82.5Q156-261 126-330.96t-30-149.5Q96-560 126-629.5q30-69.5 82.5-122T330.96-834q69.96-30 149.5-30t149.04 30q69.5 30 122 82.5T834-629.28q30 69.73 30 149Q864-401 834-331t-82.5 122.5Q699-156 629.28-126q-69.73 30-149 30Zm-.28-72q130 0 221-91t91-221q0-130-91-221t-221-91q-130 0-221 91t-91 221q0 130 91 221t221 91Zm0-312Z',
+    progress_activity: 'M480-96q-78.72 0-148.8-30.24-70.08-30.24-122.4-82.56-52.32-52.32-82.56-122.4Q96-401.28 96-480q0-79.68 30.22-149.28 30.21-69.6 82.49-121.92 52.28-52.32 122.3-82.56Q401.04-864 479.69-864 496-864 506-854t10 25.51q0 15.51-10 26T480-792q-129.67 0-220.84 90.5Q168-611 168-480.5T259.16-259q91.17 91 220.84 91 131 0 221.5-91.16Q792-350.33 792-480q0-16 10.49-26t26-10Q844-516 854-506q10 10 10 26.31 0 78.65-30.24 148.68-30.24 70.02-82.56 122.3-52.32 52.28-121.92 82.49Q559.68-96 480-96Z',
+  };
+  const controlSize = 36, gap = 6, viewportInset = 4;
   const sensitive = /password|passcode|\bauth(?:entication)?\b|\blogin\b|\busername\b|\bpin\b|\biban\b|\bbic\b|\bswift\b|financial|transaction|payment|credit|cc-|card.?number|cvc|cvv|security|one.?time|otp|verification|social.?security|ssn|bank|routing|account.?number/i;
   function editable(element) {
     if (!(element instanceof HTMLElement) || !element.isConnected || element.ownerDocument !== document || element.getRootNode() !== document) return false;
@@ -34,7 +43,14 @@
     host?.setAttribute('data-voice-state', next);
     if (!button) return;
     const labels = { idle: 'Start voice typing', preparing: 'Preparing… Click to cancel', recording: 'Recording · Stop voice typing', stopping: 'Stopping…', error: 'Voice typing error · Retry' };
-    button.textContent = { idle: '🎙', preparing: '…', recording: '■', stopping: '…', error: '!' }[next];
+    const icon = { idle: 'mic', preparing: 'progress_activity', recording: 'stop', stopping: 'progress_activity', error: 'error' }[next];
+    // Build SVG in the isolated world; no HTML parsing, font or resource requests.
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 -960 960 960');
+    svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
+    svg.dataset.icon = icon;
+    const path = document.createElementNS(svg.namespaceURI, 'path');
+    path.setAttribute('d', iconPaths[icon]); svg.append(path); button.replaceChildren(svg);
     button.setAttribute('aria-label', labels[next]); button.title = error || labels[next]; host.title = error || labels[next]; button.disabled = next === 'stopping';
     button.dataset.state = next;
     status.textContent = error || (next === 'preparing' ? 'Preparing…' : next === 'recording' ? 'Recording' : next === 'stopping' ? 'Stopping…' : '');
@@ -48,12 +64,65 @@
       else removeWidget();
       return;
     }
-    const rect = target.getBoundingClientRect();
-    // Outside the upper edge when space permits; no host layout changes.
-    const x = Math.max(4, Math.min(innerWidth - 42, rect.right - 34));
-    const y = Math.max(4, Math.min(innerHeight - 42, rect.top >= 38 ? rect.top - 34 : rect.bottom + 4));
-    host.style.setProperty('left', `${x}px`, 'important'); host.style.setProperty('top', `${y}px`, 'important');
-    host.style.setProperty('visibility', !session && (!editable(target) || rect.bottom < 0 || rect.top > innerHeight) ? 'hidden' : 'visible', 'important');
+    const rect = target.getBoundingClientRect(), viewport = window.visualViewport;
+    const bounds = { left: (viewport?.offsetLeft || 0) + viewportInset, top: (viewport?.offsetTop || 0) + viewportInset,
+      right: (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth) - viewportInset,
+      bottom: (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) - viewportInset };
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    const box = (x, y, width = controlSize, height = controlSize) => ({ left: x, top: y, right: x + width, bottom: y + height });
+    // Test the painted page at a small grid of points. Ignore only the overlay
+    // and the field's containers; adjacent inputs, labels and buttons count as
+    // obstacles. Prefer exterior positions to protect content and native controls.
+    const obstruction = candidate => {
+      let hits = 0;
+      for (const x of [candidate.left + 1, (candidate.left + candidate.right) / 2, candidate.right - 1]) {
+        for (const y of [candidate.top + 1, (candidate.top + candidate.bottom) / 2, candidate.bottom - 1]) {
+          if (document.elementsFromPoint(x, y).some(element => element !== host && !element.contains(target))) hits++;
+        }
+      }
+      return hits;
+    };
+    const x = clamp(rect.right - controlSize, bounds.left, bounds.right - controlSize);
+    const y = clamp((rect.top + rect.bottom - controlSize) / 2, bounds.top, bounds.bottom - controlSize);
+    // Try a tight attachment first. If a crowded row has no free adjacent
+    // space, expand a few button widths rather than covering another control.
+    const candidates = [gap, gap + controlSize + gap, gap + 2 * (controlSize + gap)].flatMap(distance => [
+      box(rect.right + distance, y), box(rect.left - distance - controlSize, y),
+      box(x, rect.top - distance - controlSize), box(x, rect.bottom + distance),
+      box(clamp(rect.left, bounds.left, bounds.right - controlSize), rect.top - distance - controlSize),
+      box(clamp(rect.left, bounds.left, bounds.right - controlSize), rect.bottom + distance),
+    ]).map(candidate => box(clamp(candidate.left, bounds.left, bounds.right - controlSize), clamp(candidate.top, bounds.top, bounds.bottom - controlSize)));
+    // Retain a visible stop control if a dense page or an offscreen recording
+    // target leaves no unobstructed placement. Score each candidate only once.
+    const score = candidate => (overlaps(candidate, rect) ? 100 : 0) + obstruction(candidate);
+    const choose = (options, evaluate) => {
+      let best = options[0], minimum = Infinity;
+      for (const candidate of options) {
+        const cost = evaluate(candidate);
+        if (cost < minimum) { best = candidate; minimum = cost; }
+        if (cost === 0) break;
+      }
+      return best;
+    };
+    const anchor = choose(candidates, score);
+    host.style.setProperty('left', `${anchor.left}px`, 'important'); host.style.setProperty('top', `${anchor.top}px`, 'important');
+    const scheme = getComputedStyle(target).colorScheme;
+    host.dataset.theme = scheme === 'dark' || (scheme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    host.style.setProperty('visibility', !session && (rect.bottom < bounds.top || rect.top > bounds.bottom || rect.right < bounds.left || rect.left > bounds.right) ? 'hidden' : 'visible', 'important');
+    // Status is a separate, non-interactive bubble. Clamp it independently so
+    // long errors cannot escape the viewport or enlarge the circular hit target.
+    status.style.maxWidth = `${Math.max(1, Math.min(260, bounds.right - bounds.left))}px`;
+    if (status.textContent) {
+      const { width, height } = status.getBoundingClientRect();
+      const statusX = clamp(anchor.right - width, bounds.left, bounds.right - width);
+      const options = [box(statusX, anchor.bottom + gap, width, height), box(statusX, anchor.top - gap - height, width, height),
+        box(anchor.right + gap, anchor.top, width, height), box(anchor.left - gap - width, anchor.top, width, height)]
+        .map(candidate => box(clamp(candidate.left, bounds.left, bounds.right - width), clamp(candidate.top, bounds.top, bounds.bottom - height), width, height));
+      const statusScore = candidate => score(candidate) + (overlaps(candidate, anchor) ? 100 : 0);
+      const label = choose(options, statusScore);
+      status.style.left = `${label.left - anchor.left}px`; status.style.top = `${label.top - anchor.top}px`;
+    }
   }
   function removeWidget() { host?.remove(); host = button = status = null; if (!session) target = null; }
   function saveCaret(owner) {
@@ -75,9 +144,39 @@
     target = element;
     if (!host) {
       host = document.createElement('div'); host.setAttribute('data-local-web-voice', '');
-      host.style.cssText = 'all:initial!important;position:fixed!important;z-index:2147483647!important;display:block!important;width:34px!important;height:30px!important;';
+      host.style.cssText = `all:initial!important;position:fixed!important;z-index:2147483647!important;display:block!important;direction:ltr!important;width:${controlSize}px!important;height:${controlSize}px!important;`;
       const shadow = host.attachShadow({ mode: 'closed' }), style = document.createElement('style');
-      style.textContent = ':host([hidden]){display:none!important}button{width:32px;height:30px;border:1px solid #98a2b3;border-radius:16px;background:#fff;color:#152334;cursor:pointer;font:16px system-ui;box-shadow:0 1px 5px #0003}button[data-state="recording"]{color:#b42318;border-color:#b42318}button:focus-visible{outline:3px solid #4263eb}span{position:absolute;right:0;top:33px;width:max-content;max-width:260px;padding:3px 6px;border-radius:4px;background:#fff;color:#152334;font:12px system-ui;box-shadow:0 1px 5px #0003}span:empty{display:none}';
+      style.textContent = `
+        :host([hidden]){display:none!important}
+        button,span{box-sizing:border-box;color-scheme:light;font-family:system-ui,sans-serif;
+          background:#fff;color:#253041;box-shadow:0 2px 6px #0003}
+        button{appearance:none;-webkit-appearance:none;display:inline-flex;align-items:center;justify-content:center;
+          width:${controlSize}px;height:${controlSize}px;border:1px solid #98a2b3;border-radius:50%;padding:0;margin:0;
+          font-size:14px;line-height:1;cursor:pointer;vertical-align:top;touch-action:manipulation}
+        svg{display:block;flex:none;width:20px;height:20px;fill:currentColor;pointer-events:none}
+        button:hover:not(:disabled){background:#edf1f7;border-color:#475467}
+        button:focus-visible{outline:3px solid #4263eb;outline-offset:2px}
+        button[data-state="recording"]{background:#fee4e2;color:#b42318;border-color:#b42318}
+        button[data-state="recording"]:hover{background:#fecdca}
+        button[data-state="error"]{color:#b42318;border-color:#b42318}
+        button:disabled{cursor:wait;opacity:.65}
+        button[data-state="preparing"] svg,button[data-state="stopping"] svg{animation:voice-spin 1s linear infinite}
+        @keyframes voice-spin{to{transform:rotate(360deg)}}
+        @media(prefers-reduced-motion:reduce){button svg{animation:none!important}}
+        span{position:absolute;width:max-content;max-width:260px;padding:3px 6px;border:1px solid #98a2b3;
+          border-radius:4px;font-size:12px;line-height:1.4;overflow-wrap:anywhere;pointer-events:none}
+        span:empty{display:none}
+        :host([data-theme="dark"]) button,:host([data-theme="dark"]) span{color-scheme:dark;background:#202833;color:#f2f4f7;border-color:#98a2b3}
+        :host([data-theme="dark"]) button:hover:not(:disabled){background:#344054}
+        :host([data-theme="dark"]) button[data-state="recording"]{background:#601b16;color:#ffdad6;border-color:#fda29b}
+        :host([data-theme="dark"]) button[data-state="recording"]:hover{background:#7a271a}
+        :host([data-theme="dark"]) button[data-state="error"]{color:#fda29b;border-color:#fda29b}
+        @media(forced-colors:active){
+          button,span,:host([data-theme]) button,:host([data-theme]) span{background:Canvas;color:CanvasText;border-color:ButtonText;box-shadow:none}
+          button[data-state="recording"],:host([data-theme]) button[data-state="recording"]{background:Highlight;color:HighlightText;border-color:Highlight}
+          button:focus-visible{outline-color:Highlight}
+        }
+      `;
       button = document.createElement('button'); button.type = 'button';
       status = document.createElement('span'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
       // Pointer activation leaves the page selection intact. Keyboard activation
@@ -153,6 +252,7 @@
     document.addEventListener('focusout', () => queueMicrotask(focus), options);
     for (const event of ['scroll', 'resize']) window.addEventListener(event, position, options);
     visualViewport?.addEventListener('resize', position, options);
+    visualViewport?.addEventListener('scroll', position, options);
     document.addEventListener('selectionchange', () => {
       if (!inserting && session && document.activeElement === session.element) try { saveCaret(session); } catch { /* A later insertion validates the saved range. */ }
     }, options);
