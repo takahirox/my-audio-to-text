@@ -128,7 +128,7 @@ function intersects(a, b) {
 async function enable(t) {
   await t.library.bringToFront();
   await t.library.locator('#web-voice-enabled').click();
-  await expect(t.library.getByRole('dialog', { name: 'Enable Web voice typing?' })).toBeVisible();
+  await expect(t.library.getByRole('dialog', { name: 'Show microphone buttons on web pages?' })).toBeVisible();
   await t.library.getByRole('button', { name: 'Continue to website permission' }).click();
   await expect(t.library.locator('#web-voice-status')).toContainText('ON', { timeout: 10000 });
   await expect.poll(() => t.library.evaluate(async () => (await chrome.permissions.getAll()).origins)).toEqual(['http://*/*', 'https://*/*']);
@@ -156,9 +156,21 @@ test('consent stays OFF for an existing assignment; permission and UI activation
   const otherLibrary = await t.context.newPage(); await otherLibrary.goto(t.url + 'graph-library.html');
   await expect(otherLibrary.locator('#web-voice-enabled')).toBeChecked();
   await otherLibrary.locator('#web-voice-enabled').uncheck(); await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
-  await expect(t.library.locator('#web-voice-using')).toHaveText('Using: Dictation');
+  await expect(t.library.locator('#web-graph')).toHaveValue(t.graphId);
   expect(await t.library.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).assignments.webVoice)).toBe(t.graphId);
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0);
+  await otherLibrary.locator('#web-graph').selectOption('');
+  await expect(t.library.locator('#web-graph')).toHaveValue('');
+  await t.library.locator('#web-voice-enabled').click();
+  await expect(t.library.locator('#voice-consent')).not.toBeVisible();
+  await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
+  await otherLibrary.locator('#web-graph').selectOption(t.graphId);
+  await expect(t.library.locator('#web-graph')).toHaveValue(t.graphId);
+  await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
+  await expect(t.library.locator('#voice-consent')).not.toBeVisible();
+  await enable(t);
+  await t.library.locator('#web-voice-enabled').uncheck();
+  await expect(t.library.locator('#web-graph')).toHaveValue(t.graphId);
 });
 
 test('native input and textarea: selected caret, real microphone permission, final drain, no submit and cleanup', async ({ voice: t }, info) => {
@@ -268,7 +280,7 @@ test('fresh install has no site permission or injected scripts; assignment is no
   expect(await t.library.evaluate(() => permissionCalls)).toEqual([]);
   await t.library.setViewportSize({ width: 390, height: 844 });
   expect(await t.library.locator('#voice-consent').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await t.library.screenshot({ path: 'docs/evidence/library-250-consent-390.png', fullPage: true });
+  await t.library.screenshot({ path: 'docs/evidence/library-253-consent-390.png', fullPage: true });
   await t.library.locator('#cancel-voice').click();
   await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
   await expect(t.library.locator('#web-voice-enabled')).toBeFocused();

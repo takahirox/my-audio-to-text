@@ -6,6 +6,13 @@ const simple = (text = 'Graph output') => {
   const source = graphNode('Text', 'source'); source.settings.value = text;
   return { version: 15, nodes: [source, graphNode('Display', 'display', 300, 20)], edges: [edge('source', 'value', 'display', 'input1')] };
 };
+const microphoneGraph = () => ({ version: 15,
+  nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
+  edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] });
+async function choose(page, target, id) {
+  await page.locator(target === 'live' ? '#live-graph' : '#web-graph').selectOption(id ?? '');
+  await expect.poll(async () => (await library(page)).assignments[target]).toBe(id);
+}
 async function assign(page, target, id) {
   await page.evaluate(async ({ target, id }) => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js');
@@ -24,9 +31,9 @@ async function rename(page, name, description = '') {
 
 test('Library manages independent named graphs, portable JSON, persistent targets, safeguards and responsive preview', async ({ libraryExtension: f }) => {
   const { page } = f;
-  await expect(page.locator('#web-assignment')).toBeEmpty();
+  await expect(page.getByLabel('Web page microphone button', { exact: true })).toHaveValue('');
   await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
-  await expect(page.locator('#use-web')).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.locator('#web-graph option[value="default-live"]')).toBeDisabled();
   await expect(page.locator('#graph-cache')).toHaveText('Unknown');
   await expect(page.locator('#delete')).toBeDisabled();
   await page.locator('#new').click(); await expect(page.locator('#selected-title')).toHaveText('Untitled graph'); await rename(page, 'Meeting Notes', 'Summarize meetings locally');
@@ -41,14 +48,16 @@ test('Library manages independent named graphs, portable JSON, persistent target
     nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
     edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] } });
   await page.reload();
-  await page.locator('#use-web').click();
+  await page.locator('#web-graph').selectOption(voice.id);
   await expect(page.locator('#delete')).toBeDisabled();
   await page.getByRole('button', { name: 'Select Meeting Notes', exact: true }).click();
-  await page.locator('#use-live').click();
+  await page.locator('#live-graph').selectOption(meeting.id);
   await page.getByRole('button', { name: 'Select Voice Typing', exact: true }).click();
   expect((await library(page)).assignments).toEqual({ live: meeting.id, webVoice: voice.id });
   await page.reload(); await expect(page.locator('#selected-title')).toHaveText('Voice Typing');
-  await expect(page.getByRole('button', { name: 'Select Meeting Notes', exact: true })).toContainText('Live');
+  await expect(page.getByRole('button', { name: 'Select Meeting Notes', exact: true })).toHaveText('Meeting Notes');
+  await expect(page.locator('#live-graph')).toHaveValue(meeting.id);
+  await expect(page.locator('#web-graph')).toHaveValue(voice.id);
   await page.locator('#search').fill('meet'); await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Meeting Notes']);
   await page.locator('#search').fill(''); await page.locator('#sort').selectOption('name');
   await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Live transcription', 'Meeting Notes', 'Voice Typing']);
@@ -73,11 +82,11 @@ test('Library manages independent named graphs, portable JSON, persistent target
   await page.getByRole('button', { name: 'Select Meeting Notes', exact: true }).focus(); await page.keyboard.press('Enter');
   await expect(page.locator('#selected-title')).toHaveText('Meeting Notes');
   await mkdir('docs/evidence', { recursive: true });
-  await page.screenshot({ path: 'docs/evidence/library-250-1440.png', fullPage: true });
+  await page.screenshot({ path: 'docs/evidence/library-253-1440.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.locator('#open')).toBeVisible();
-  await page.screenshot({ path: 'docs/evidence/library-250-390.png', fullPage: true });
+  await page.screenshot({ path: 'docs/evidence/library-253-390.png', fullPage: true });
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
 });
 
@@ -173,7 +182,8 @@ test('migration preserves valid and malformed legacy sources; recovery never ove
       const editor = await context.newPage(); await editor.goto(url + 'graph-editor.html?id=legacy-graph');
       await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('original has been kept');
       await page.locator('#new').click();
-      await page.locator('#use-live').click();
+      await expect(page.locator('#selected-title')).toHaveText('Untitled graph');
+      await page.locator('#live-graph').selectOption((await library(page)).graphs.at(-1).id);
       expect((await library(page)).graphs.find(entry => entry.id === 'legacy-graph').source).toBe(raw);
       await editor.close();
     }
@@ -195,15 +205,15 @@ test('Live assignment cancels stale preload, shows exact names and keeps active 
   await live.goto(url + 'recorder.html');
   await expect(live.locator('#live-graph-name')).toHaveText('Meeting Notes'); await expect(live.locator('#start')).toBeDisabled();
   await expect.poll(() => live.evaluate(() => modelWorkers.length)).toBe(1); // Parked summary does not load.
-  await assign(page, 'live', b);
+  await choose(page, 'live', b);
   await expect(live.locator('#live-graph-name')).toHaveText('Text only'); await expect(live.locator('#start')).toBeEnabled();
   await expect.poll(() => live.evaluate(() => modelWorkers.every(worker => worker.released))).toBe(true);
   await live.evaluate(() => releaseModels());
-  await assign(page, 'live', a); await expect(live.locator('#start')).toBeEnabled(); await expect(live.locator('#live-graph-name')).toHaveText('Meeting Notes');
+  await choose(page, 'live', a); await expect(live.locator('#start')).toBeEnabled(); await expect(live.locator('#live-graph-name')).toHaveText('Meeting Notes');
   await live.locator('#start').click(); await expect(live.locator('#session-state')).toHaveText('Running');
   await expect(live.locator('#live-displays')).toContainText('Summary from selected graph');
   const workers = await live.evaluate(() => modelWorkers.length);
-  await assign(page, 'live', b);
+  await choose(page, 'live', b);
   await expect(live.locator('#saved-state')).toContainText('Next session: Text only');
   await expect(live.locator('#live-graph-name')).toHaveText('Meeting Notes'); expect(await live.evaluate(() => modelWorkers.length)).toBe(workers);
   await page.evaluate(async id => {
@@ -277,7 +287,7 @@ test('concurrent migration, quota errors and corrupt envelopes keep originals re
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
 });
 
-test('master/detail separates keyboard selection, assignment and global consent', async ({ libraryExtension: f }) => {
+test('master/detail separates keyboard selection from accessible launch settings and consent', async ({ libraryExtension: f }) => {
   const { page } = f;
   const a = await create(page, 'Notes', simple('notes'));
   const voiceGraph = { version: 15, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
@@ -297,25 +307,36 @@ test('master/detail separates keyboard selection, assignment and global consent'
   const master = await page.locator('#graphs').boundingBox(), detail = await page.locator('#selected').boundingBox();
   expect(master.x + master.width).toBeLessThanOrEqual(detail.x + 1); expect(master.y).toBe(detail.y);
   expect(await notes.evaluate(node => getComputedStyle(node).borderTopWidth)).toBe('0px');
-  await page.locator('#use-web').click();
-  await expect(page.locator('#web-assignment')).toHaveText('Assigned ✓');
-  await expect(page.locator('#web-voice-using')).toHaveText('Using: Voice Input');
+  const liveSelect = page.getByLabel('Live window', { exact: true });
+  const webSelect = page.getByLabel('Web page microphone button', { exact: true });
+  const launch = await page.locator('#launch-settings').boundingBox();
+  expect(launch.y).toBeGreaterThanOrEqual(detail.y + detail.height);
+  await expect(page.locator('#selected')).not.toContainText('Use this graph for');
+  await expect(page.locator('#selected select')).toHaveCount(0);
+  await expect(page.locator('#graph-list .graph-markers')).toHaveCount(0);
+  await expect(page.getByRole('switch', { name: 'Show microphone buttons on web pages' })).not.toBeChecked();
+  await webSelect.selectOption(b);
+  await expect(page.locator('#web-launch-status')).toContainText('Saved');
   await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
   expect((await library(page)).assignments).toEqual({ live: before.live, webVoice: b });
-  await expect(page.getByRole('button', { name: 'Select Voice Input', exact: true })).toContainText('Web voice typing');
+  await expect(page.getByRole('button', { name: 'Select Voice Input', exact: true })).toHaveText('Voice Input');
   await notes.click();
-  await expect(page.locator('#use-web')).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.locator('#web-ineligible-reason')).not.toBeVisible();
-  await page.locator('#use-web').press('Enter');
-  await expect(page.locator('#web-ineligible-reason')).toBeVisible();
-  await expect(page.locator('#web-ineligible-reason')).toContainText('MicrophoneAudio');
+  await expect(page.locator(`#web-graph option[value="${a}"]`)).toBeDisabled();
+  await expect(page.locator(`#web-graph option[value="${a}"]`)).toContainText('MicrophoneAudio');
   expect((await library(page)).assignments.webVoice).toBe(b);
-  await page.locator('#use-live').click();
-  await expect(page.locator('#live-assignment')).toHaveText('Assigned ✓');
+  // Native keyboard selection changes a launch setting without selecting a Library row.
+  await liveSelect.focus(); await liveSelect.press('n'); await liveSelect.press('Tab');
+  await expect(liveSelect).toHaveValue(a);
+  await expect(page.locator('#live-launch-status')).toContainText('Saved');
   expect((await library(page)).assignments).toEqual({ live: a, webVoice: b });
+  await expect(page.locator('#selected-title')).toHaveText('Notes');
   await page.getByRole('button', { name: 'Select Voice Input', exact: true }).click();
-  await page.locator('#unassign-web').click();
-  await expect(page.locator('#web-voice-using')).toHaveText('No graph assigned');
+  await moreAction(page, 'check-cache');
+  await expect(page.locator('#delete')).toBeDisabled();
+  await expect(page.locator('#delete-hint')).toContainText('Launch settings');
+  await webSelect.selectOption('');
+  await expect(webSelect).toHaveValue('');
+  await expect(page.locator('#delete')).toBeEnabled();
   expect((await library(page)).assignments).toEqual({ live: a, webVoice: null });
   await page.locator('#web-voice-enabled').click();
   await expect(page.locator('#voice-consent')).not.toBeVisible();
@@ -371,7 +392,9 @@ test('metadata drafts survive filtering, canceled selection, async refresh and r
 
 test('narrow Library has a focused Back action, usable menus and no overflow at small screen zoom', async ({ libraryExtension: f }) => {
   const { page } = f;
-  await create(page, 'A long graph name that wraps on small screens', simple()); await page.reload();
+  const long = await create(page, 'A long graph name that wraps on small screens', simple());
+  const mic = await create(page, 'A long microphone pipeline name that should fit within its selector', microphoneGraph());
+  await page.reload(); await choose(page, 'live', long); await choose(page, 'webVoice', mic);
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(page.locator('#graphs')).toBeVisible(); await expect(page.locator('#selected')).not.toBeVisible();
@@ -386,7 +409,16 @@ test('narrow Library has a focused Back action, usable menus and no overflow at 
     await page.locator('#back-to-graphs').click();
     await expect(page.getByRole('button', { name: 'Select A long graph name that wraps on small screens', exact: true })).toBeFocused();
     await expect(page.locator('#graphs')).toBeVisible();
-    await page.screenshot({ path: `docs/evidence/library-250-list-${width}.png`, fullPage: true });
+    await expect(page.locator('#launch-settings')).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Live window', exact: true })).toHaveValue(long);
+    await expect(page.getByRole('combobox', { name: 'Web page microphone button', exact: true })).toHaveValue(mic);
+    await page.locator('#web-graph').focus(); await page.keyboard.press('Tab');
+    await expect(page.getByRole('switch', { name: 'Show microphone buttons on web pages' })).toBeFocused();
+    await page.keyboard.press('Space'); await expect(page.locator('#voice-consent')).toBeVisible();
+    await page.keyboard.press('Escape'); await expect(page.locator('#web-voice-enabled')).toBeFocused();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.locator('#launch-settings').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `docs/evidence/library-253-list-${width}.png`, fullPage: true });
   }
 });
 
@@ -400,4 +432,118 @@ test('long lists scroll beside the selected details without moving the working p
   expect(await page.locator('#graph-list').evaluate(node => node.scrollTop)).toBeGreaterThan(0);
   expect((await page.locator('#selected-title').boundingBox()).y).toBe(title.y);
   await expect(page.locator('#open')).toBeInViewport();
+});
+
+test('launch selectors synchronize across tabs and renames without discarding metadata drafts', async ({ libraryExtension: f }) => {
+  const { page, context, url } = f;
+  const a = await create(page, 'Meeting Notes', simple()), b = await create(page, 'Voice Input', microphoneGraph());
+  await page.reload();
+  const other = await context.newPage(); await other.goto(url + 'graph-library.html');
+  await page.locator('#graph-name').fill('Unsaved library name');
+  await page.locator('#graph-description').fill('Unsaved description');
+  await choose(other, 'live', a); await choose(other, 'webVoice', b);
+  await expect(page.locator('#live-graph')).toHaveValue(a);
+  await expect(page.locator('#web-graph')).toHaveValue(b);
+  await expect(page.locator('#graph-name')).toHaveValue('Unsaved library name');
+  await expect(page.locator('#graph-description')).toHaveValue('Unsaved description');
+  await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
+  await other.getByRole('button', { name: 'Select Voice Input', exact: true }).click();
+  await rename(other, 'Renamed pipeline');
+  await expect(page.locator(`#web-graph option[value="${b}"]`)).toHaveText('Renamed pipeline');
+  await page.locator('#sort').selectOption('name');
+  await expect(page.locator('#web-graph')).toHaveValue(b);
+  await expect(page.locator('#graph-name')).toHaveValue('Unsaved library name');
+  await page.locator('#save-details').click();
+  await expect(page.locator('#selected-title')).toHaveText('Unsaved library name');
+  await page.reload();
+  await expect(page.locator('#live-graph')).toHaveValue(a); await expect(page.locator('#web-graph')).toHaveValue(b);
+  await expect(page.locator(`#web-graph option[value="${b}"]`)).toHaveText('Renamed pipeline');
+  await choose(other, 'webVoice', null); await expect(page.locator('#web-graph')).toHaveValue('');
+  expect((await library(page)).assignments.live).toBe(a);
+});
+
+test('launch conflicts and failed writes restore saved choices, retain drafts and focus actionable errors', async ({ libraryExtension: f }) => {
+  const { page } = f;
+  const a = await create(page, 'Meeting Notes', simple()), b = await create(page, 'Voice Input', microphoneGraph());
+  await page.reload(); await page.locator('#graph-name').fill('Unsaved details');
+  // Simulate a write winning before this tab receives the storage event.
+  await page.evaluate(id => {
+    const next = JSON.parse(localStorage.getItem('processing-graph-library-v1'));
+    next.revision = crypto.randomUUID(); next.assignments.live = id;
+    localStorage.setItem('processing-graph-library-v1', JSON.stringify(next));
+  }, b);
+  await page.locator('#live-graph').selectOption(a);
+  await expect(page.locator('#live-launch-status')).toContainText('not saved');
+  await expect(page.locator('#live-launch-status')).toBeFocused();
+  await expect(page.locator('#live-graph')).toHaveValue(b);
+  expect((await library(page)).assignments.live).toBe(b);
+  await expect(page.locator('#graph-name')).toHaveValue('Unsaved details');
+  await choose(page, 'live', a);
+  await expect(page.locator('#live-launch-status')).toContainText('Saved');
+  await expect(page.locator('#live-graph')).toBeFocused();
+  await page.evaluate(() => {
+    const nativeSet = Storage.prototype.setItem;
+    window.restoreStorage = () => { Storage.prototype.setItem = nativeSet; };
+    Storage.prototype.setItem = function(key, value) {
+      if (key === 'processing-graph-library-v1') throw Error('Fixture quota exceeded');
+      return nativeSet.call(this, key, value);
+    };
+  });
+  const before = await library(page);
+  await page.locator('#web-graph').selectOption(b);
+  await expect(page.locator('#web-launch-status')).toContainText('quota exceeded');
+  await expect(page.locator('#web-launch-status')).toBeFocused();
+  await expect(page.locator('#web-graph')).toHaveValue('');
+  expect(await library(page)).toEqual(before);
+  await expect(page.locator('#graph-name')).toHaveValue('Unsaved details');
+  await page.evaluate(() => restoreStorage());
+  await choose(page, 'webVoice', b);
+  await expect(page.locator('#web-launch-status')).toContainText('Saved');
+  await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
+});
+
+test('invalid launch choices are disabled and rejected; changed bound graphs retain their identity and recovery', async ({ libraryExtension: f }) => {
+  const { page, context, url } = f;
+  const a = await create(page, 'Notes', simple()), b = await create(page, 'Voice Input', microphoneGraph());
+  const empty = await create(page, 'Unconnected draft', { version: 15, nodes: [graphNode('Text', 'source')], edges: [] });
+  await page.reload();
+  await expect(page.locator(`#live-graph option[value="${empty}"]`)).toBeDisabled();
+  await expect(page.locator(`#live-graph option[value="${empty}"]`)).toContainText('executable path');
+  await expect(page.locator('#live-graph option[value=""]')).toHaveCount(0);
+  await expect(page.locator(`#web-graph option[value="${a}"]`)).toBeDisabled();
+  const before = (await library(page)).assignments;
+  // Defense in depth for a synthetic change event bypassing native disabled options.
+  await page.locator('#web-graph').evaluate((node, id) => { node.value = id; node.dispatchEvent(new Event('change')); }, a);
+  await expect(page.locator('#web-launch-status')).toContainText('MicrophoneAudio');
+  await expect(page.locator('#web-launch-status')).toBeFocused();
+  expect((await library(page)).assignments).toEqual(before);
+  await choose(page, 'webVoice', b);
+  const other = await context.newPage(); await other.goto(url + 'graph-library.html');
+  await other.evaluate(async ({ id, graph }) => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const entry = readLibrary(localStorage).graphs.find(entry => entry.id === id);
+    await new GraphLibrary(localStorage).save(id, entry.revision, graph);
+  }, { id: b, graph: simple('Changed to another purpose') });
+  await expect(page.locator('#web-graph')).toHaveValue(b);
+  await expect(page.locator('#web-launch-status')).toContainText('MicrophoneAudio');
+  await page.locator('#web-voice-enabled').click();
+  await expect(page.locator('#voice-consent')).not.toBeVisible();
+  await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
+  expect((await library(page)).assignments.webVoice).toBe(b);
+  await page.getByRole('button', { name: 'Select Voice Input', exact: true }).click();
+  await moreAction(page, 'check-cache'); await expect(page.locator('#delete')).toBeDisabled();
+  await choose(page, 'webVoice', null); await expect(page.locator('#delete')).toBeEnabled();
+  page.once('dialog', dialog => dialog.accept()); await moreAction(page, 'delete');
+  await expect(page.getByRole('button', { name: 'Select Voice Input', exact: true })).toHaveCount(0);
+  expect((await library(page)).graphs.some(entry => entry.id === b)).toBe(false);
+  // Corrupt stored entries stay visible and recoverable, with no launch fallback.
+  await other.evaluate(id => {
+    const next = JSON.parse(localStorage.getItem('processing-graph-library-v1'));
+    next.graphs.find(entry => entry.id === id).graph = { version: 999 };
+    next.revision = crypto.randomUUID(); localStorage.setItem('processing-graph-library-v1', JSON.stringify(next));
+  }, empty);
+  await expect(page.locator(`#live-graph option[value="${empty}"]`)).toBeDisabled();
+  await expect(page.locator(`#web-graph option[value="${empty}"]`)).toBeDisabled();
+  await expect(page.locator('#graph-list .recovery-marker')).toHaveCount(1);
+  expect((await library(page)).assignments).toEqual(before);
 });

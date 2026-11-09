@@ -11,24 +11,28 @@ Open **Library** from Live, Graph or Models. Search names, descriptions or model
 names, sort by name/recent update, and filter assigned graphs or entries needing
 recovery. On wide windows, select a row on the left to inspect the graph on the
 right. On narrow windows, selection opens the details; **Back to graphs** returns
-to the list. Assignment markers identify Live and Web voice graphs independently
-of selection. Create, rename, describe, duplicate, import or export entries
-without starting inference. New graphs use the current default transcription
-layout; imported JSON uses the existing version-15 graph format.
+to the list. Rows present graphs without launch-specific tags. Create, rename,
+describe, duplicate, import or export entries without starting inference. New
+graphs use the current default transcription layout; imported JSON uses the
+existing version-15 graph format.
 
-**Use this graph for** assigns the selected entry to **Live** or **Web voice
-typing** by stable ID. Selection alone changes neither assignment. Live requires
-an executable graph and cannot be unassigned. Web voice typing requires a
-microphone-only executable path to one focused-field output; an incompatible
-action reveals the repair reason. **Unassign** clears only the Web assignment.
+**Launch settings**, below the list/detail area, chooses a saved graph by stable
+ID for each entry point. **Live window** always has an assignment and requires
+an executable graph. **Web page microphone button** requires a microphone-only
+executable path to one focused-field output; **Not assigned** clears only that
+binding. Incompatible options are disabled with a repair reason. A bound graph
+that becomes incompatible stays selected and reports recovery, with no fallback.
+Library selection changes neither binding. Other tabs update the selectors
+without discarding unsaved name/description edits; stale or failed writes restore
+the saved choice and focus an actionable error so the user can review and retry.
 
-The separate global **Web voice typing** switch shows its assigned graph and
-starts OFF without explicit opt-in. Assigning a graph never enables website
-controls, and turning OFF preserves the assignment. Turning ON first opens a
-short consent dialog, then **Continue to website permission** requests Chrome
+The independent **ON/OFF switch** in the Web page microphone button row controls
+website mic UI and starts OFF without explicit opt-in. Choosing a graph never
+enables website controls or requests permission; turning OFF preserves the
+assignment. Turning ON first opens a short consent dialog, then **Continue to website permission** requests Chrome
 access to all HTTP/HTTPS websites. Cancel or denial leaves the feature OFF.
-**Help** discloses exact permission patterns, click-only microphone capture,
-local processing, unsupported fields/pages, OFF behavior and Chrome Site access
+**Website access & microphone help** discloses exact permission patterns,
+click-only microphone capture, local processing, unsupported fields/pages, OFF behavior and Chrome Site access
 revocation. Missing permissions and incompatible assignments show recovery only
 when relevant. Live shows the exact
 named graph it prepares and runs. Changing the Live assignment while idle cancels
@@ -53,10 +57,12 @@ per-tab sessionStorage across refresh with their original entry revision. A
 stale restored draft still cannot overwrite a concurrent save. **More → Load
 saved details** explicitly discards the draft after confirmation.
 
-**More** also holds Export JSON and Delete. Delete requires confirmation, rejects assigned entries until explicit
-reassignment, and keeps at least one usable graph. A corrupt entry stays visible
-with an error and its original JSON available for export; import a repaired copy
+**More** also holds Export JSON and Delete. Delete requires confirmation, rejects
+assigned entries until explicit reassignment in Launch settings, and keeps at
+least one usable graph. A corrupt entry stays visible with an error and its original JSON available for export; import a repaired copy
 as a new entry. Its original is never overwritten by an editor recovery draft.
+
+See [Launch settings screenshots and validation](evidence/graph-library-253.md).
 
 **Models & saved information** in the detail panel holds timestamps, required
 models and **File cache**, distinct from Live's runtime/GPU readiness:

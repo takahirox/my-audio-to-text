@@ -38,20 +38,26 @@
           <label>Description<textarea id="graph-description" rows="2" maxlength="2000"></textarea></label>
           <div class="actions"><button type="submit" id="save-details">Save details</button><span id="details-state" role="status" class="muted"></span></div>
         </form>
-        <section class="graph-assignments" aria-labelledby="assignment-title">
-          <h3 id="assignment-title">Use this graph for</h3>
-          <div class="assignment-row"><span>Live</span><span id="live-assignment"></span><button id="use-live">Use for Live</button></div>
-          <div class="assignment-row"><span>Web voice typing</span><span id="web-assignment"></span><button id="use-web" aria-describedby="web-ineligible-reason">Use for Web voice typing</button><button id="unassign-web" hidden>Unassign</button></div>
-          <details id="assignment-help"><summary>Assignment details</summary><p id="live-ineligible-reason"></p><p id="web-ineligible-reason" tabindex="-1"></p><p>Changes apply to the next session. A running session keeps its graph.</p></details>
-        </section>
         <details id="graph-metadata"><summary>Models &amp; saved information</summary><dl><dt>Updated</dt><dd id="graph-updated"></dd><dt>Required models</dt><dd id="graph-models"></dd><dt>File cache</dt><dd id="graph-cache" role="status"></dd></dl><p class="muted">File cache checks do not load models. Live verifies runtime readiness. <a href="model-cache.html">Manage model files</a></p></details>
       </section>
     </div>
-    <section class="web-voice-global" aria-labelledby="web-voice-title">
-      <div class="web-voice-bar"><h2 id="web-voice-title">Web voice typing</h2><label class="voice-switch"><input id="web-voice-enabled" type="checkbox" disabled role="switch" aria-label="Web voice typing" aria-describedby="web-voice-using web-voice-status"><span id="voice-switch-state" aria-hidden="true">OFF</span></label><span id="web-voice-using"></span><details id="web-voice-help"><summary>Help</summary><div><p>Enabling requests access to all HTTP and HTTPS websites (<code>http://*/*</code> and <code>https://*/*</code>) to place a mic beside supported text fields. Microphone capture starts only when you click the mic, in an extension recording window with a separate microphone permission. Audio is processed locally.</p><p>Browser/internal pages, frames and sensitive fields are unsupported. Turn OFF to remove page controls and cancel recording; the graph assignment stays saved. To revoke website access, open Chrome → Extensions → Manage extensions → this extension → Details → Site access.</p></div></details></div>
-      <p id="web-voice-status" role="status"></p>
+    <section id="launch-settings" aria-labelledby="launch-title">
+      <div class="section-heading"><h2 id="launch-title">Launch settings</h2><details id="launch-help"><summary>Help</summary><div><p>Graph choices apply to the next session. A running session keeps its graph.</p><p>Choosing a graph does not enable website controls or grant permission. Turn ON to request website access.</p></div></details></div>
+      <div class="launch-row">
+        <label for="live-graph">Live window</label>
+        <select id="live-graph" aria-describedby="live-launch-status"></select>
+        <p id="live-launch-status" class="launch-status" role="status" tabindex="-1"></p>
+      </div>
+      <div class="launch-row">
+        <label for="web-graph">Web page microphone button</label>
+        <select id="web-graph" aria-describedby="web-launch-status"></select>
+        <label class="voice-switch"><input id="web-voice-enabled" type="checkbox" disabled role="switch" aria-label="Show microphone buttons on web pages" aria-describedby="web-launch-status web-voice-status"><span id="voice-switch-state" aria-hidden="true">OFF</span></label>
+        <p id="web-launch-status" class="launch-status" role="status" tabindex="-1"></p>
+        <p id="web-voice-status" class="launch-status" role="status"></p>
+      </div>
+      <details id="web-voice-help"><summary>Website access &amp; microphone help</summary><div><p>Enabling requests access to all HTTP and HTTPS websites (<code>http://*/*</code> and <code>https://*/*</code>) to place a mic beside supported text fields. Microphone capture starts only when you click the mic, in an extension recording window with a separate microphone permission. Audio is processed locally.</p><p>Browser/internal pages, frames and sensitive fields are unsupported. Turn OFF to remove page controls and cancel recording; the graph assignment stays saved. To revoke website access, open Chrome → Extensions → Manage extensions → this extension → Details → Site access.</p></div></details>
     </section>
-    <dialog id="voice-consent" aria-labelledby="consent-title" aria-describedby="consent-description"><h2 id="consent-title">Enable Web voice typing?</h2><p id="consent-description">Allow access to all HTTP and HTTPS websites to show a mic beside supported text fields. Audio is processed locally; microphone capture starts only when you click the mic, with a separate microphone permission.</p><p class="muted">Turn OFF here to stop and remove controls. Revoke website access in Chrome’s extension Site access settings.</p><div class="actions"><button id="confirm-voice" class="primary">Continue to website permission</button><button id="cancel-voice">Cancel</button></div></dialog>
+    <dialog id="voice-consent" aria-labelledby="consent-title" aria-describedby="consent-description"><h2 id="consent-title">Show microphone buttons on web pages?</h2><p id="consent-description">Allow access to all HTTP and HTTPS websites to show a mic beside supported text fields. Audio is processed locally; microphone capture starts only when you click the mic, with a separate microphone permission.</p><p class="muted">Turn OFF here to stop and remove controls. Revoke website access in Chrome’s extension Site access settings.</p><div class="actions"><button id="confirm-voice" class="primary">Continue to website permission</button><button id="cancel-voice">Cancel</button></div></dialog>
     <section id="recovery" class="panel" hidden><h2>Storage recovery</h2><p id="recovery-message"></p><div class="actions"><button id="export-storage">Export original library storage</button><button id="export-legacy">Export original legacy JSON</button><button id="recover-legacy">Keep changed legacy graph as new entry</button></div></section>
   </main>
   <script type="module" src="navigation.js"></script><script type="module" src="graph-library-page.js"></script>
