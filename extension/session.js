@@ -8,10 +8,11 @@ import { assertGraph, executableGraph, defaultGraph, graphPreferences, INPUT_TYP
 import { buildGraph } from './graph-runtime.js';
 import { SpeakerOutputNode, StreamingSpeakerOutputNode } from '../web/speaker-output.js';
 
-// Owns tab targeting and the window's UI. Nodes own capture and recognition.
+// Each instance owns its graph, targeting and UI. Nodes own capture and
+// recognition; no mutable runtime is shared with another Live/Web session.
 export class TabSession {
   constructor(render, {
-    acquireRuntime, onSourceEnded,
+    onSourceEnded,
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
     sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
@@ -20,7 +21,7 @@ export class TabSession {
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
   } = {}) {
-    this.acquireRuntime = acquireRuntime; this.onSourceEnded = onSourceEnded;
+    this.onSourceEnded = onSourceEnded;
     this.textSummaryWorkerFactory = textSummaryWorkerFactory;
     this.ifConditionWorkerFactory = ifConditionWorkerFactory;
     this.parakeetWorkerFactory = parakeetWorkerFactory; this.moonshineWorkerFactory = moonshineWorkerFactory;
@@ -44,16 +45,7 @@ export class TabSession {
   // Live opts into this lifetime before exposing Start. Preparing owns an inert
   // graph; Start transfers that same owner. A used graph is single-use, so idle
   // restoration waits for teardown and initializes a fresh graph.
-  async ensureRuntime() {
-    if (!this.acquireRuntime || this.runtimeRelease) return;
-    const release = await (this.acquiringRuntime ??= this.acquireRuntime().finally(() => { this.acquiringRuntime = null; }));
-    if (this.closed) { release(); return; }
-    this.runtimeRelease = release;
-  }
   prepareModels({ clearErrors = true } = {}) {
-    if (this.acquireRuntime && !this.runtimeRelease && !this.closed) return this.ensureRuntime().then(
-      () => this.prepareModels({ clearErrors }),
-      error => { this.update({ modelState: 'error', modelStatus: 'Runtime busy', error: error.message }); });
     this.livePreparation = true;
     if (this.closed || this.session) return Promise.resolve();
     if (this.graphUnavailable) { this.update({ modelState: 'error', modelStatus: 'Saved graph unavailable', modelRecovery: true, error: this.graphUnavailable }); return Promise.resolve(); }
@@ -99,8 +91,7 @@ export class TabSession {
     const owner = this.prepared;
     this.prepared = null;
     this.update({ modelState: 'closed', modelStatus: '' });
-    await Promise.allSettled([owner?.pipeline?.dispose(), this.cancel(), this.preparing, this.releasing, this.acquiringRuntime]);
-    this.runtimeRelease?.(); this.runtimeRelease = null;
+    await Promise.allSettled([owner?.pipeline?.dispose(), this.cancel(), this.preparing, this.releasing]);
   }
   nodeEvent(event, id) {
     // Unknown event types are diagnostics by default, including future Nodes.
@@ -170,9 +161,6 @@ export class TabSession {
   async start(tabId, { microphoneGesture = false, speakerGesture = false } = {}) {
     if (this.session || this.closed || this.graphUnavailable) return; // A second invocation never retargets live capture.
     if (this.livePreparation && this.view.modelState !== 'ready') return;
-    try { if (this.acquireRuntime && !this.runtimeRelease) await this.ensureRuntime(); }
-    catch (error) { this.update({ error: error.message }); return; }
-    if (this.session || this.closed) return;
     this.nodeErrors.clear();
     this.update({ error: '', modelRecovery: false, prompt: '' });
     let graph, snapshot;

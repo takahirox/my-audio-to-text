@@ -1,5 +1,8 @@
 # Web voice typing #247 validation
 
+The global inference exclusion and multi-tab busy expectations below are historical;
+[#256](runtime-concurrency-256.md) supersedes them with independent sessions.
+
 Implementation uses the existing TabSession/prepared graph runtime in a compact
 extension-owned recording window. The service worker coordinates opt-in,
 permission-gated top-frame injection and one document-bound session. The Content
