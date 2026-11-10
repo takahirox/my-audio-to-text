@@ -590,6 +590,37 @@ for (const reason of ['host permission', 'microphone permission', 'offscreen los
   }
 });
 
+test('shared ASR processing updates the next Web execution without resaving its parent or hot-swapping active dictation', async ({ voice: t }) => {
+  test.skip(real);
+  const parentBefore = await t.library.evaluate(async id => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { graphNode, edge } = await import('./graph.js');
+    const { extractSubgraph } = await import('./subgraphs.js');
+    const store = new GraphLibrary(localStorage), entry = readLibrary(localStorage).graphs.find(entry => entry.id === id);
+    const graph = structuredClone(entry.graph), formatter = graphNode('TextFormatter', 'format'); formatter.settings.template = 'Before: {1}';
+    graph.nodes.push(formatter); graph.edges[1] = edge('asr', 'final', 'format', 'input1'); graph.edges.push(edge('format', 'text', 'field', 'text'));
+    const extracted = extractSubgraph(graph, ['asr', 'format'], 'shared-asr');
+    await store.create({ id: 'shared-asr', kind: 'subgraph', name: 'Shared dictation processing', graph: extracted.shared });
+    const saved = await store.save(id, entry.revision, extracted.parent);
+    return saved.graphs.find(entry => entry.id === id);
+  }, t.graphId);
+  await enable(t); await start(t); await recording(t);
+  await t.library.evaluate(async () => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const entry = readLibrary(localStorage).graphs.find(entry => entry.id === 'shared-asr'), graph = structuredClone(entry.graph);
+    graph.nodes.find(node => node.type === 'TextFormatter').settings.template = 'After: {1}';
+    await new GraphLibrary(localStorage).save(entry.id, entry.revision, graph);
+  });
+  await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await expect(t.website.locator('#first')).toHaveValue('before Before: confirmed fixtureafter');
+  await t.website.locator('#first').fill('before after');
+  await start(t); await recording(t); await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await expect(t.website.locator('#first')).toHaveValue('before After: confirmed fixtureafter');
+  expect(await t.library.evaluate(async id => {
+    const { readLibrary } = await import('./graph-library.js'); return readLibrary(localStorage).graphs.find(entry => entry.id === id);
+  }, t.graphId)).toEqual(parentBefore);
+});
+
 test('snapshots, authenticated routing, replay rejection and model failures retain target safeguards', async ({ voice: t }) => {
   test.skip(real); await enable(t);
   await bootstrap(t, `const connect = chrome.runtime.connect.bind(chrome.runtime);

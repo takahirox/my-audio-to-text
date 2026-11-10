@@ -1,6 +1,6 @@
 import { TabSession } from './session.js';
 import { PageConnection } from './page-target.js';
-import { readLibrary, entryGraph } from './graph-library.js';
+import { readLibrary, resolvedEntryGraph } from './graph-library.js';
 import { webVoiceGraph } from './web-voice-graph.js';
 
 // Chrome permits one offscreen document per profile. Only this inert host is
@@ -46,7 +46,7 @@ async function start(owner, target) {
     const library = readLibrary(localStorage), entry = library.graphs.find(entry => entry.id === library.assignments.webVoice);
     if (!entry) throw Error('No Web voice graph assigned. Select one in Graph Library; Live is never substituted.');
     // Snapshot before awaiting permission or models; Library edits are future-only.
-    const snapshot = webVoiceGraph(entryGraph(entry));
+    const snapshot = webVoiceGraph(resolvedEntryGraph(entry, library));
     const permission = owner.permission = await navigator.permissions.query({ name: 'microphone' });
     if (owner.ending) return;
     if (permission.state === 'prompt') {

@@ -244,6 +244,111 @@ Export write the canonical numbered ports. Conflicting `input`/`input1` connecti
 fail validation instead of replacing an edge. Removed display Node types and
 older schema versions still fail explicitly. Current [example JSON](evidence/item-198.json) can be imported directly.
 
+## Reusable processing subgraphs
+
+Select a connected group of processing node headings with **Shift+click** or
+**Shift+Enter**, then choose **Graph actions → Create Subgraph**. Review the
+subgraph name and the inferred exposed input/output names before creating it.
+Crossing connections become typed ports; repeated connections from the same
+internal output share one exposed port. Concrete capture nodes and output
+destinations stay on the parent canvas. The shared definition is saved in the
+existing Graph Library immediately; the parent replacement remains a draft
+until **Save**, like other graph edits.
+
+Library lists regular graphs and subgraphs together. **Filters & more** can
+filter either type. **Add Node** includes saved subgraphs under **Subgraphs**.
+Select an instance and choose **Edit Subgraph**, or double-click its heading,
+to open its definition on the same Graph Editor canvas. **Back to parent graph**
+restores the parent's draft, including an unsaved extraction. The draft is kept
+in that tab's session storage; navigation is refused if it cannot be preserved.
+Changed parent revisions require **Load saved** before saving a restored draft.
+Subgraphs can also be opened directly from Library.
+
+In a subgraph, **Graph actions → Edit exposed ports** opens the port controls in
+the existing Inspector. Edit labels and internal endpoints, expose another
+input/output, or remove a port there. Types come from the internal endpoint.
+Port IDs stay stable when labels change, so renaming never disconnects parents.
+An exposed input must not also have an internal incoming wire. A removed node
+or port must be repaired in these controls before the definition can be saved.
+
+Instances store only `type: "Subgraph"`, `subgraphId`, ordinary node ID, empty
+settings and position. Library entry `kind: "subgraph"` distinguishes definitions;
+missing `kind` remains a regular graph. Definitions retain version 15 nodes and
+edges, adding `interface.inputs` and `interface.outputs` lists with
+`{ id, name, node, port }` entries. There are no embedded per-instance copies.
+This version supports **one level** of reusable processing: nested references,
+including self or indirect cycles, fail explicitly before saving/importing.
+
+Every next execution resolves current saved definitions and expands instances
+into separate ordinary runtime nodes. Parent entries/revisions are not rewritten
+and need no re-save. Live reloads this snapshot at Start; Web dictation resolves
+its own assigned graph at Start. Each already-started session retains its own
+settings, worker ownership and queues. Direct expanded connections preserve
+atomic output families and Hold sampling; ordinary typed and cycle validation
+runs again on the expansion. Shared models, including parked nodes, participate
+in Save preparation, cache inspection and resolved runtime requirements. Editing
+or saving a definition never hot-swaps active workers or capture.
+
+Saves use the existing Web Lock and entry revisions. Changes in another
+tab/window refresh instance labels, ports and diagnostics without dirtying the
+parent; dirty definition editors retain their drafts and cannot overwrite a
+newer saved revision. Missing/corrupt external definitions produce visible
+errors and prevent execution/saving; original storage and drafts remain
+recoverable through JSON export.
+
+While saved parents reference a definition, Save blocks exposed port removal,
+type changes and additions, listing all affected parents **before storage is
+changed**. Additions are conservative because a new required internal input can
+deactivate existing paths. Label changes and same-type endpoint edits are
+allowed and expanded parents are validated again. To migrate a contract,
+**Duplicate** the subgraph in Library, change the duplicate's ports, then add it
+to each affected parent, reconnect and remove the old instance, and save those
+parents. Deleting the old definition is blocked until all saved references are
+removed. Duplicate parents keep sharing their original dependencies; duplicate
+definitions get a new independent identity. Subgraphs cannot be launch targets.
+
+Exporting a parent with references, or a definition, produces a version-1
+`graph-bundle` containing its root and shared dependencies once each. Import
+bundles through **Graph Library → Import JSON**: the entire bundle is validated
+and committed atomically, with fresh IDs and remapped references, so existing
+graphs/definitions are never overwritten. Missing dependencies and invalid or
+nested references reject the whole import without writes. Multiple parents in
+one bundle share one imported dependency; separately imported bundles are
+independent copies. Reuse the imported subgraph from Add Node when moving more
+parents to that installation. Graph Editor directs bundle imports to Library;
+ordinary graph JSON without references retains its existing format and flow.
+
+Issue #265 validation: `tests/subgraphs.test.js` covers extraction/fan-out,
+automatic resolution, immutable snapshots, contract protection, concurrent
+saves, deletion, corrupt storage, bundle identity remapping, nested/circular
+rejection, resolved models, event delivery and independent ASR worker cleanup.
+`tests/browser/subgraphs.spec.js` covers keyboard extraction, port review,
+parent-draft return, Add Node, cross-tab synchronization/stale editors, Library
+filters, bundle export/import, deleted-parent recovery and narrow-screen cancellation.
+`tests/extension/subgraphs.spec.js` and the shared-ASR case in
+`tests/extension/web-voice.spec.js` exercise next-run updates and active snapshot
+isolation in actual extension Live pages and offscreen Web sessions. Browser tests use
+controlled host APIs; worker tests use controlled inference workers, not real
+ASR inference.
+
+Checks executed for #265 (2026-11-10):
+
+- `npm test`: **901 passed**, including 15 shared-subgraph unit tests.
+- Chromium Playwright browser suites `graph-quick-add`, `graph-port-order`,
+  `graph-canvas-first`, and `subgraphs`: **38 passed**, followed by **6 passed**
+  for the subgraph suite after adding deleted-parent recovery (39 distinct cases).
+- Extension Playwright suites `graph-library`, `graph-concurrent`, `graph-actions`
+  and `graph`: **31 passed**. `subgraphs` and the existing `web-voice` suite:
+  **32 passed**. The new shared-ASR Web case: **1 passed**. After focused-input
+  draft handling changes, `subgraphs`, `graph-actions` and `graph` passed again
+  (**11 cases**). These are 64 distinct extension cases; inference is controlled.
+- `git diff --check`: passed.
+- `npm run build:extension`: blocked by missing prepared local model assets
+  (`Missing local models. Run npm run prepare:assets first.`). No model weights
+  were downloaded for these checks; real-model ASR quality and the full model
+  bundle build were not verified. One-level nesting and conservative contract
+  migration remain the documented feature limits above.
+
 ## Default transcription and translated history
 
 Fresh setup and Reset create:

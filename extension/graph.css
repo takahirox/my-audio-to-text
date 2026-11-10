@@ -49,4 +49,10 @@
 .editor-page .graph-help { width: min(38rem, calc(100% - 2rem)); }
 .editor-page .graph-help::backdrop { background: #29263566; }
 .editor-page #graph-errors { white-space: pre-wrap; }
+.editor-page .graph-subgraph-dialog { width: min(42rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; box-sizing: border-box; }
+.editor-page .graph-subgraph-dialog::backdrop { background: #29263566; }
+.editor-page .graph-subgraph-dialog :is(input, select), .editor-page .graph-inspector fieldset { width: 100%; min-width: 0; box-sizing: border-box; }
+.editor-page .graph-subgraph-dialog fieldset { min-width: 0; }
+.editor-page :is(.graph-subgraph-dialog, .graph-inspector) fieldset > div { display: grid; gap: .4rem; margin-bottom: 1rem; }
+.editor-page :is(.graph-subgraph-dialog, .graph-inspector) fieldset > div > button { justify-self: start; }
 .editor-page #graph-models { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--panel); }
