@@ -40,7 +40,7 @@ export const test = base.extend({
         window.releaseModels = () => { holdModelLoads = false; pendingLoads.splice(0).forEach(send => send()); };
       });
       const page = await context.newPage(); await page.goto(url + 'graph-library.html');
-      await expect(page.locator('#graph-list button')).toHaveCount(1);
+      await expect(page.locator('#graph-list button[data-id]')).toHaveCount(1);
       await use({ context, page, url, errors, remote });
       expect(errors).toEqual([]); expect(remote).toEqual([]);
     } finally { await context?.close(); await rm(temporary, { recursive: true, force: true }); }
