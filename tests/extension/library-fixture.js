@@ -1,5 +1,5 @@
 import { test as base, expect, chromium } from '@playwright/test';
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -14,17 +14,34 @@ export const test = base.extend({
       await cp('extension', path.join(root, 'extension'), { recursive: true });
       await cp('web', path.join(root, 'web'), { recursive: true, filter: file => !file.includes('/vendor') && !file.includes('/tts-assets') });
       await cp('extension/manifest.json', path.join(root, 'manifest.json'));
+      // Call the registered production event handlers while Chrome owns the real
+      // menus, worker, offscreen DOM, windows and storage. Headless has no toolbar.
+      await writeFile(path.join(root, 'extension/toolbar-test-harness.js'), `
+        globalThis.toolbarEvents = {}; globalThis.toolbarMenus = {};
+        for (const [name, event] of [['action', chrome.action.onClicked], ['menu', chrome.contextMenus.onClicked]]) {
+          const add = event.addListener.bind(event);
+          event.addListener = listener => { toolbarEvents[name] = listener; add(listener); };
+        }
+        const create = chrome.contextMenus.create.bind(chrome.contextMenus);
+        chrome.contextMenus.create = (item, done) => { toolbarMenus[item.id] = item; return create(item, done); };
+        const remove = chrome.contextMenus.removeAll.bind(chrome.contextMenus);
+        chrome.contextMenus.removeAll = async () => { toolbarMenus = {}; return remove(); };
+      `);
+      const background = path.join(root, 'extension/background.js');
+      await writeFile(background, "import './toolbar-test-harness.js';\n" + await readFile(background, 'utf8'));
+
       await writeFile(path.join(root, 'web/text-summary-worker.js'), `self.onmessage=({data})=>{
         if(data.type==='load')postMessage({type:'ready',id:data.id});
         if(data.type==='summarize')postMessage({type:'result',id:data.id,summary:'Summary from selected graph'});
         if(data.type==='drain')postMessage({type:'drained',id:data.id});
       };`);
-      context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
+      const launch = () => chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
         viewport: { width: 1440, height: 1000 }, ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'] });
+      context = await launch();
       const { id } = await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root });
-      const url = `chrome-extension://${id}/extension/`, errors = [], remote = [];
+      const url = `chrome-extension://${id}/extension/`, errors = [], remote = [], allowedRemote = [];
       context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
-      context.on('request', request => { if (/^https?:/.test(request.url())) remote.push(request.url()); });
+      context.on('request', request => { if (/^https?:/.test(request.url()) && !allowedRemote.some(prefix => request.url().startsWith(prefix))) remote.push(request.url()); });
       await context.addInitScript(() => {
         window.modelWorkers = []; window.pendingLoads = []; window.holdModelLoads = false;
         const NativeWorker = window.Worker;
@@ -41,7 +58,16 @@ export const test = base.extend({
       });
       const page = await context.newPage(); await page.goto(url + 'graph-library.html');
       await expect(page.locator('#graph-list button[data-id]')).toHaveCount(1);
-      await use({ context, page, url, errors, remote });
+      const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+      const f = { context, page, url, errors, remote, worker, allowedRemote, async restart() {
+        await context.close(); context = await launch();
+        const loaded = await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root });
+        expect(loaded.id).toBe(id);
+        this.context = context;
+        this.worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+        this.page = await context.newPage(); await this.page.goto(url + 'graph-library.html');
+      } };
+      await use(f);
       expect(errors).toEqual([]); expect(remote).toEqual([]);
     } finally { await context?.close(); await rm(temporary, { recursive: true, force: true }); }
   },

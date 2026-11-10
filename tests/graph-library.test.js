@@ -103,17 +103,17 @@ test('revisions reject stale edits to the same graph; independent concurrent gra
   assert.equal(s.getItem(LIBRARY_KEY), before); assert.equal(ga.nodes[0].position.x, 31);
 });
 
-test('assigned graph and last usable graph deletion are blocked; reassignment is explicit and validated', async () => {
+test('deleting a default clears it explicitly; last usable graph and invalid choices remain protected', async () => {
   const { store, s, library } = await fixture(), a = entry(library);
-  await assert.rejects(store.delete(a.id), /Reassign/);
+  await assert.rejects(store.delete(a.id), /Keep at least one usable/);
   await store.create({ graph: { version: 15, nodes: [graphNode('Text', 'parked')], edges: [] } });
   let current = readLibrary(s), b = current.graphs.at(-1);
   await assert.rejects(store.assign('live', b.id), /executable path/);
   await assert.rejects(store.assign('live', 'missing'));
   await assert.rejects(store.assign('invalid-target', a.id));
   current = await store.assign('webVoice', b.id);
-  await assert.rejects(store.delete(b.id), /Reassign/);
-  current = await store.assign('webVoice', null); current = await store.delete(b.id);
+  current = await store.delete(b.id);
+  assert.equal(current.assignments.webVoice, null);
   assert.equal(current.graphs.length, 1);
 });
 
@@ -128,9 +128,9 @@ test('a corrupt graph cannot break browsing, replace a valid entry, or overwrite
   await assert.rejects(store.duplicate(bad.id)); assert.equal(s.getItem(LIBRARY_KEY), before);
 });
 
-test('duplicate graph IDs, malformed metadata and dangling assignments fail closed without overwrites', async () => {
+test('duplicate graph IDs, malformed metadata and unsupported versions fail closed without overwrites', async () => {
   const { s, lock, library } = await fixture();
-  for (const corrupt of [ { ...library, graphs: [...library.graphs, library.graphs[0]] }, { ...library, assignments: { live: 'missing', webVoice: null } }, { ...library, version: 99 } ]) {
+  for (const corrupt of [ { ...library, graphs: [...library.graphs, library.graphs[0]] }, { ...library, assignments: { live: 42, webVoice: null } }, { ...library, version: 99 } ]) {
     const raw = JSON.stringify(corrupt); s.setItem(LIBRARY_KEY, raw);
     assert.throws(() => validateLibrary(corrupt)); await assert.rejects(openLibrary(s, lock)); assert.equal(s.getItem(LIBRARY_KEY), raw);
   }
@@ -190,4 +190,17 @@ test('explicit Live compatibility saves can initialize an unopened library witho
   await saveLiveGraphData(s, graph, lock);
   assert.deepEqual(readLiveGraph(s).graph, graph); assert.equal(s.getItem(GRAPH_KEY), null);
   assert.equal(readLibrary(s).graphs.length, 1);
+});
+
+test('an invalidated extension messaging context cannot report a committed graph save as failed', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'chrome');
+  Object.defineProperty(globalThis, 'chrome', { configurable: true, value: { runtime: { sendMessage() { throw Error('Extension context invalidated'); } } } });
+  try {
+    const { s, store } = await fixture();
+    const next = await store.create({ name: 'Committed graph' });
+    assert.equal(next.graphs.at(-1).name, 'Committed graph');
+    assert.equal(readLibrary(s).revision, next.revision);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'chrome', previous); else delete globalThis.chrome;
+  }
 });

@@ -286,24 +286,39 @@ test('stream end during pending capture setup settles startup and drains once', 
   assert.equal(f.session.view.state, 'idle');
 });
 
-test('toolbar action passes the invoked tab to a persistent window and reuses it', async () => {
-  let invoke; const created = [], sent = [], focused = []; let contexts = [];
+test('toolbar action and menu preserve their invoked tabs in distinct windows; defaults are explicit', async () => {
+  let invoke, menu; const created = [], items = [];
+  const listener = () => ({ addListener() {} });
+  let defaultId = 'a';
   const chrome = {
     action: { onClicked: { addListener(callback) { invoke = callback; } } },
-    runtime: { getURL: path => `chrome-extension://id/${path}`, getContexts: async () => contexts,
-      sendMessage: async message => sent.push(message) },
-    windows: { create: async options => created.push(options), update: async (...args) => focused.push(args) },
+    contextMenus: { onClicked: { addListener(callback) { menu = callback; } }, removeAll: async () => {}, create(item, done) { items.push(item); done(); } },
+    runtime: { getURL: path => `chrome-extension://id/${path}`, onMessage: listener(), onStartup: listener(), onInstalled: listener() },
+    windows: { create: async options => created.push(options) },
   };
-  runInNewContext(readFileSync('extension/background.js', 'utf8').replace("import './web-voice-background.js';", ''), { chrome });
-  assert.equal(created.length, 0, 'only a user action opens capture UI');
-  await invoke({ id: 42 });
-  assert.equal(created[0].url, 'chrome-extension://id/extension/recorder.html?tab=42');
-  assert.equal(created[0].type, 'popup');
-  assert.equal(created[0].focused, false, 'new Live prepares page focus before taking window focus');
-  contexts = [{ documentUrl: created[0].url, windowId: 7 }];
-  await invoke({ id: 99 });
-  assert.equal(created.length, 1); assert.equal(sent[0].tabId, 99);
-  assert.equal(focused[0][0], 7);
+  let seq = 0;
+  runInNewContext(readFileSync('extension/background.js', 'utf8').replace(/^import .*\n/, ''), {
+    chrome, URLSearchParams, crypto: { randomUUID: () => `session-${++seq}` },
+    requestLaunchLibrary: async (op, id) => {
+      if (op === 'live-check') return id;
+      if (op === 'live-default') defaultId = id;
+      return { defaultId, graphs: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] };
+    },
+  });
+  await drain(); assert.equal(created.length, 0);
+  invoke({ id: 42 }); menu({ menuItemId: 'live-run:b' }, { id: 99 }); invoke({ id: 12 });
+  await drain(); assert.equal(created.length, 3);
+  const launches = created.map(item => new URL(item.url).searchParams);
+  assert.deepEqual(launches.map(p => [p.get('graph'), p.get('tab')]), [['a', '42'], ['b', '99'], ['a', '12']]);
+  assert.equal(new Set(launches.map(p => p.get('session'))).size, 3);
+  assert.ok(created.every(item => item.type === 'popup' && item.focused === false));
+  assert.equal(defaultId, 'a');
+  menu({ menuItemId: 'live-default:b' }, { id: 100 }); await drain();
+  assert.equal(defaultId, 'b'); assert.equal(created.length, 3);
+  invoke({ id: 77 }); await drain();
+  assert.equal(new URL(created[3].url).searchParams.get('graph'), 'b');
+  assert.ok(items.every(item => item.contexts.join() === 'action'));
+  assert.ok(items.filter(item => !item.parentId).every(item => item.id === 'live-graphs'));
 });
 
 test('extension package retains byte-identical Web core/models and minimum permissions', () => {
@@ -387,7 +402,7 @@ with tempfile.TemporaryDirectory() as tmp:
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest['manifest_version'] == 3
     assert manifest['options_ui'] == {'page': 'extension/model-cache.html', 'open_in_tab': True}
-    assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting', 'storage', 'offscreen'}
+    assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting', 'storage', 'offscreen', 'contextMenus'}
     assert 'host_permissions' not in manifest
     assert set(manifest['optional_host_permissions']) == {'http://*/*', 'https://*/*'}
     assert 'content_scripts' not in manifest

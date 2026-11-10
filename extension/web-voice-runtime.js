@@ -1,6 +1,7 @@
 import { TabSession } from './session.js';
 import { PageConnection } from './page-target.js';
 import { readLibrary, entryGraph } from './graph-library.js';
+import { launchLibrary } from './launch-library.js';
 import { webVoiceGraph } from './web-voice-graph.js';
 
 // Chrome permits one offscreen document per profile. Only this inert host is
@@ -44,7 +45,7 @@ async function finish(owner, cancel = false, error = '') {
 async function start(owner, target) {
   try {
     const library = readLibrary(localStorage), entry = library.graphs.find(entry => entry.id === library.assignments.webVoice);
-    if (!entry) throw Error('No Web voice graph assigned. Select one in Graph Library; Live is never substituted.');
+    if (!entry) throw Error('No Web voice graph assigned. Right-click the page mic to select a saved default; Live is never substituted.');
     // Snapshot before awaiting permission or models; Library edits are future-only.
     const snapshot = webVoiceGraph(entryGraph(entry));
     const permission = owner.permission = await navigator.permissions.query({ name: 'microphone' });
@@ -85,6 +86,12 @@ async function start(owner, target) {
 }
 port.onMessage.addListener(message => {
   if (message.type === 'heartbeat') { lastHeartbeat = Date.now(); return; }
+  if (message.type === 'launch-library') {
+    void launchLibrary(localStorage, message.operation, message.id).then(
+      result => port.postMessage({ type: 'launch-library-result', request: message.request, result }),
+      error => port.postMessage({ type: 'launch-library-result', request: message.request, error: error.message }));
+    return;
+  }
   const owner = owners.get(message.token);
   if (message.type === 'abort' && owner) { void finish(owner, true, message.error); return; }
   if (message.type === 'stop' && owner) { void finish(owner, owner.state !== 'recording'); return; }

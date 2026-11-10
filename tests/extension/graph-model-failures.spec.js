@@ -38,7 +38,7 @@ for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
   for (const phase of ['load', 'inference']) test(`${type}: ${phase === 'load' ? 'load failure blocks Start and allows explicit retry' : 'inference failure is tracked once; transcription survives Stop and restart'}`, async ({ graphExtension: f }) => {
     const page = await setup(f, type, phase);
     if (phase === 'load') {
-      await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
       await expect(page.locator('#errors')).toContainText('Controlled model load failure');
       await expect(page.locator('#start')).toBeDisabled();
       await expect.poll(() => page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);

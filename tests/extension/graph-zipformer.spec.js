@@ -25,7 +25,7 @@ test('MV3 searchable palette, typed audio/TEXT routes and help; production onlin
   await editor.locator('#graph-palette-toggle').click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toHaveCount(1);
   await expect(editor.locator('[data-node="speech"] [data-side="input"]')).toHaveCount(1);
-  await expect(editor.locator('[data-node="speech"] [data-side="output"]')).toHaveCount(2);
+  await expect(editor.locator('[data-node="speech"] [data-side="output"]')).toHaveCount(4);
   // Exercise the editor's real connection gesture for all three public routes.
   for (const [source, output, target, input] of [['audio', 'audio', 'speech', 'audio'], ['speech', 'provisional', 'coalesce', 'input2'], ['speech', 'final', 'coalesce', 'input1']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
@@ -75,7 +75,7 @@ test('MV3 online inference failure releases Worker and permits a fresh recording
   await expectPreparedIdle(page);
   await startGraph(page); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await writeFile(path.join(f.root, 'web/vendor/zipformer-en/sherpa-onnx-wasm-main-asr.js'), `throw Error('Missing pinned runtime');`);
-  await page.reload(); await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+  await page.reload(); await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('#errors')).toContainText('Missing pinned runtime'); await expect(page.locator('#start')).toBeDisabled();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
 });

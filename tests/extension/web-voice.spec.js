@@ -230,21 +230,13 @@ test('consent stays OFF for an existing assignment; permission and UI activation
   const otherLibrary = await t.context.newPage(); await otherLibrary.goto(t.url + 'graph-library.html');
   await expect(otherLibrary.locator('#web-voice-enabled')).toBeChecked();
   await otherLibrary.locator('#web-voice-enabled').uncheck(); await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
-  await expect(t.library.locator('#web-graph')).toHaveValue(t.graphId);
   expect(await t.library.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).assignments.webVoice)).toBe(t.graphId);
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0);
-  await otherLibrary.locator('#web-graph').selectOption('');
-  await expect(t.library.locator('#web-graph')).toHaveValue('');
-  await t.library.locator('#web-voice-enabled').click();
-  await expect(t.library.locator('#voice-consent')).not.toBeVisible();
-  await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
-  await otherLibrary.locator('#web-graph').selectOption(t.graphId);
-  await expect(t.library.locator('#web-graph')).toHaveValue(t.graphId);
-  await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
-  await expect(t.library.locator('#voice-consent')).not.toBeVisible();
+  await expect(t.library.locator('#launch-settings, #web-graph, #live-graph')).toHaveCount(0);
   await enable(t);
   await t.library.locator('#web-voice-enabled').uncheck();
-  await expect(t.library.locator('#web-graph')).toHaveValue(t.graphId);
+  expect(await t.library.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).assignments.webVoice)).toBe(t.graphId);
+
 });
 
 test('fresh install has no site permission or injected scripts; assignment is not consent and denial stays OFF', async ({ voice: t }) => {
@@ -715,4 +707,87 @@ test('device startup failure is actionable and preserves another Web owner', asy
   await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
   await expect(other.locator('#first')).toHaveValue('before after');
   await t.website.waitForTimeout(650); await stop(t); await idle(t); await r.detach();
+});
+
+test('page mic right-click and Shift+F10 choose a compatible default without capture or Library dropdowns', async ({ voice: t }) => {
+  test.skip(real, 'Graph selection does not require real inference.');
+  const nextId = await t.library.evaluate(async () => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const store = new GraphLibrary(localStorage), entry = readLibrary(localStorage).graphs.find(entry => entry.name === 'Dictation');
+    const next = await store.create({ name: 'Second dictation', graph: entry.graph }); return next.graphs.at(-1).id;
+  });
+  await enable(t); await t.website.bringToFront(); await t.website.locator('#first').focus();
+  await expect(widget(t.website)).toBeVisible();
+  const inspectMenu = async () => {
+    const cdp = await t.context.newCDPSession(t.website);
+    try {
+      const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+      const find = node => node.attributes?.includes('data-local-web-voice') ? node : [...node.children || [], ...node.shadowRoots || []].map(find).find(Boolean);
+      const host = find(root);
+      const { object } = await cdp.send('DOM.resolveNode', { backendNodeId: host.shadowRoots[0].backendNodeId });
+      const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true,
+        functionDeclaration: `function() { return [...this.querySelectorAll('[role=menuitemradio]')].map(item => ({ name: item.textContent, checked: item.getAttribute('aria-checked'), focused: this.activeElement === item })); }` });
+      return result.value;
+    } finally { await cdp.detach(); }
+  };
+  const rect = await widget(t.website).boundingBox();
+  await t.website.mouse.click(rect.x + 18, rect.y + 18, { button: 'right' });
+  await expect.poll(async () => (await inspectMenu()).map(item => item.name)).toEqual(['Dictation', 'Second dictation']);
+  expect((await inspectMenu())[0].checked).toBe('true');
+  await t.website.keyboard.press('End'); await t.website.keyboard.press('Enter');
+  await expect.poll(() => t.library.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).assignments.webVoice)).toBe(nextId);
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
+  await expect(t.website.locator('#first')).toHaveValue('before after');
+  await controlUI(t, true); await t.website.keyboard.press('Shift+F10');
+  await expect.poll(async () => (await inspectMenu()).length).toBe(2);
+  expect((await inspectMenu())[1].checked).toBe('true');
+  await t.website.keyboard.press('Escape');
+  await expect.poll(async () => (await inspectMenu()).length).toBe(0);
+  expect((await controlUI(t)).focused).toBe(true);
+  await start(t); await recording(t);
+  const active = await runtime(t);
+  const streams = await active.evaluate(() => voiceResources.streams.length);
+  await controlUI(t, true); await t.website.keyboard.press('Shift+F10');
+  await expect.poll(async () => (await inspectMenu()).length).toBe(2);
+  await t.website.keyboard.press('Home'); await t.website.keyboard.press('Enter');
+  await expect.poll(() => t.library.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).assignments.webVoice)).toBe(t.graphId);
+  await recording(t);
+  expect(await active.evaluate(() => voiceResources.streams.length)).toBe(streams);
+  await active.detach();
+  await t.library.locator('#web-voice-enabled').uncheck(); await expect(widget(t.website)).toHaveCount(0);
+});
+
+
+test('Web microphone remains revocable while the graph library needs storage recovery', async ({ voice: t }) => {
+  test.skip(real, 'Storage recovery does not require real inference.');
+  await enable(t); await start(t); await recording(t);
+  await t.library.evaluate(() => localStorage.setItem('processing-graph-library-v1', '{broken library'));
+  await t.library.reload();
+  await expect(t.library.locator('#errors')).not.toBeEmpty();
+  await expect(t.library.locator('#web-voice-enabled')).toBeEnabled();
+  await expect(t.library.locator('#web-voice-enabled')).toBeChecked();
+  await t.library.locator('#web-voice-enabled').uncheck(); await idle(t);
+  await expect(widget(t.website)).toHaveCount(0);
+  expect(await t.library.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe('{broken library');
+});
+
+test('empty Web graph menu is actionable and Escape returns keyboard focus to the mic', async ({ voice: t }) => {
+  test.skip(real, 'Empty graph handling does not require inference.');
+  await t.library.evaluate(async id => {
+    const { GraphLibrary } = await import('./graph-library.js'); await new GraphLibrary(localStorage).delete(id);
+  }, t.graphId);
+  await enable(t); await t.website.bringToFront(); await t.website.locator('#first').focus();
+  await controlUI(t, true); await t.website.keyboard.press('Shift+F10');
+  // Wait for the native offscreen library round-trip without inspecting page-world data.
+  const cdp = await t.context.newCDPSession(t.website);
+  try {
+    await expect.poll(async () => {
+      const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+      const text = node => [node.nodeValue || '', ...[...node.children || [], ...node.shadowRoots || []].map(text)].join(' ');
+      return text(root);
+    }).toContain('No compatible graphs.');
+    await t.website.keyboard.press('Escape');
+    expect((await controlUI(t)).focused).toBe(true);
+    await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
+  } finally { await cdp.detach(); }
 });

@@ -70,10 +70,13 @@ graph models before showing Ready; press Start to begin transcription with warm
 models. It reuses the Web
 ASR core and audio helpers, restores audible tab playback, and shows transcripts
 in a compact Live window. The [Graph Library](docs/extension-graph.md#graph-library-243) stores named, independent
-graphs. Its separate Launch settings choose graphs for the Live window and
-Web page microphone button, with an independent, default-OFF website mic switch.
+graphs in a responsive workspace. Left-click the toolbar icon for its saved Live
+default; right-click for Chrome's native graph launcher and default submenu.
+Each launch opens an independent window, with capture beginning only on Start.
+The Library retains a compact, default-OFF Web microphone consent switch; choose
+its graph from the in-page mic's right-click menu (also Shift+F10).
 Live and Web microphone sessions can prepare and record independently, using
-the same or different assigned models. Stopping or closing one leaves the other
+the same or different saved graphs. Stopping or closing one leaves the other
 running; actual browser/device and memory limits can still cause session errors.
 Open a library entry in Graph Editor; Save updates that entry only. Graph Editor and Models tabs provide executable graph editing and verified optional model preparation without
 interrupting capture. Optional local OPUS-MT pairs committed

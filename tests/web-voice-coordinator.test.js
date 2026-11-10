@@ -27,12 +27,13 @@ async function fixture(t, { existingDocument = false } = {}) {
       closeDocument: async () => { contexts = []; closed++; },
     },
   };
-  const source = (await readFile(new URL('../extension/web-voice-background.js', import.meta.url), 'utf8')).replace(/^import .*\n/, '');
-  runInNewContext(source, { chrome, crypto: { randomUUID },
+  const source = (await readFile(new URL('../extension/web-voice-background.js', import.meta.url), 'utf8')).replace(/^import .*\n/, '').replace('export function', 'function');
+  const globals = { chrome, crypto: { randomUUID },
     setTimeout(callback) { timers.add(callback); return callback; }, clearTimeout: timer => timers.delete(timer),
     readVoiceEnabled: async () => true, setVoiceEnabled: async () => {}, voiceEnabled: value => value?.enabled === true,
     WEB_VOICE_KEY: 'voice', WEB_VOICE_ORIGINS: ['http://*/*', 'https://*/*'],
-  });
+  };
+  runInNewContext(source, globals);
   function connect(name, sender) { const port = makePort(name, sender); chrome.runtime.onConnect.emit(port); return port; }
   function control(tabId) { return connect('web-voice-control', { tab: { id: tabId }, documentId: `document-${tabId}`, frameId: 0, url: 'https://example.org/' }); }
   async function start(port) { port.onMessage.emit({ type: 'start', capability: randomUUID() }); await turn(); }
@@ -40,7 +41,7 @@ async function fixture(t, { existingDocument = false } = {}) {
   function output(token, url = created.at(-1)?.url) { return connect(`web-voice-output:${token}`, { url }); }
   t.after(async () => { chrome.storage.onChanged.emit({ voice: { newValue: { enabled: false } } }, 'local'); await turn(); assert.equal(timers.size, 0); });
   await turn();
-  return { chrome, control, start, host, output, connect, created, removed, timers, relays, setups, closed: () => closed };
+  return { requestLibrary: globals.requestLaunchLibrary, chrome, control, start, host, output, connect, created, removed, timers, relays, setups, closed: () => closed };
 }
 
 test('one authenticated offscreen host multiplexes independent documents and rejects forged owners', async t => {
@@ -146,4 +147,32 @@ test('failed return to the target closes the permission setup and its capture ow
   let response;
   f.chrome.runtime.onMessage.emit({ type: 'web-voice-permission-result' }, { id: 'extension', url: tab.url, tab: { id: tab.id } }, value => { response = value; });
   await turn(); assert.match(response.error, /Target tab/); assert.deepEqual(f.removed, [tab.id]); assert.equal(f.closed(), 1);
+});
+
+test('toolbar library reads/default writes share the DOM host without closing independent Web captures', async t => {
+  const f = await fixture(t), a = f.control(1), b = f.control(2); await turn();
+  await f.start(a); await f.start(b); const host = f.host();
+  const read = f.requestLibrary('live-list'); await turn();
+  const request = host.sent.at(-1);
+  assert.equal(request.type, 'launch-library'); assert.equal(request.operation, 'live-list');
+  host.onMessage.emit({ type: 'launch-library-result', request: request.request, result: { defaultId: 'saved' } });
+  assert.equal((await read).defaultId, 'saved'); await turn();
+  assert.equal(f.closed(), 0); assert.equal(f.created.length, 1);
+  const write = f.requestLibrary('live-default', 'other'); await turn();
+  const next = host.sent.at(-1);
+  host.onMessage.emit({ type: 'launch-library-result', request: next.request, error: 'Storage quota exceeded' });
+  await assert.rejects(write, /quota/);
+  assert.equal(f.closed(), 0);
+  assert.ok(!a.sent.some(message => message.type === 'ended'));
+  assert.ok(!b.sent.some(message => message.type === 'ended'));
+});
+
+test('library request pending during host startup is dispatched once and keeps the host until its reply', async t => {
+  const f = await fixture(t);
+  const read = f.requestLibrary('live-list'); await turn();
+  const host = f.host(); await turn();
+  const requests = host.sent.filter(message => message.type === 'launch-library');
+  assert.equal(requests.length, 1); assert.equal(f.closed(), 0);
+  host.onMessage.emit({ type: 'launch-library-result', request: requests[0].request, result: { graphs: [] } });
+  await read; await turn(); assert.equal(f.closed(), 1);
 });

@@ -33,7 +33,7 @@ async function speakerGraph(f, type = 'Supertonic3') {
   return page;
 }
 async function startSpeaker(page) {
-  await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   expect(await page.evaluate(() => window.speakerContexts.length)).toBe(0);
   await startReadyLive(page); await expect(page.locator('#status')).toHaveText('Transcription active');
 }

@@ -27,6 +27,11 @@ for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'OpusMtJaEn']) {
         nodes: [graphNode('Text', 'source'), graphNode(type, 'processor'), graphNode(streaming ? 'StreamingSpeakerOutput' : 'Display', 'output')],
         edges: [edge('source', 'value', 'processor', 'text'), edge('processor', streaming ? 'stream' : 'text', 'output', streaming ? 'stream' : 'input1')] });
     }, { type, streaming });
+    if (!streaming) {
+      await live.models.locator('#opus-ja-en').getByRole('button', { name: 'Download / retry' }).click();
+      await expect(live.models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Ready');
+      await live.locator('#retry-models').click();
+    }
     await expect(live.locator('#start')).toBeEnabled();
     await live.locator('#start').click();
     await expect(live.locator('#stop')).toBeEnabled();
@@ -148,7 +153,7 @@ test('Live keeps all routine and unknown diagnostics in Session details; structu
 });
 
 test('Live explains unavailable selected media without a selector and retains microphone and graph recovery', async ({ graphExtension: f }) => {
-  const live = await openGraph(f);
+  const live = await openGraph(f, { tabId: null });
   await expect(live.locator('#start')).toBeDisabled(); // No toolbar capture tab.
   await live.editor.evaluate(async () => {
     const { defaultGraph, graphNode } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
@@ -164,8 +169,8 @@ test('Live explains unavailable selected media without a selector and retains mi
     const { defaultGraph, graphNode } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph(); graph.nodes[0] = graphNode('MicrophoneAudio', 'audio'); await saveLiveGraphData(localStorage, (graph));
   });
-  await live.evaluate(() => { window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }); });
-  await expect(live.locator('#status')).toContainText('Press Start to request browser permission');
+  await live.evaluate(() => { window.dispatchEvent(new Event('focus')); });
+  await expect(live.locator('#tab-status')).toContainText('microphone');
   await expect(live.locator('#start')).toBeEnabled();
   await live.editor.evaluate(() => localStorage.setItem('processing-graph-v1', '{broken'));
   await expect(live.locator('#errors')).toBeVisible(); await expect(live.locator('#start')).toBeDisabled();
@@ -208,6 +213,8 @@ test('Graph stays canvas-first and Models keeps preparation and legal notices se
     await expect(live.editor.locator('.graph-actions')).not.toHaveAttribute('open', '');
     await live.editor.locator('#graph-fit').click();
     await live.editor.getByRole('button', { name: 'Live', exact: true }).focus();
+    await live.editor.keyboard.press('Tab');
+    await expect(live.editor.getByRole('link', { name: 'Library', exact: true })).toBeFocused();
     await live.editor.keyboard.press('Tab');
     await expect(live.editor.getByRole('link', { name: 'Models', exact: true })).toBeFocused();
     expect(await live.editor.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

@@ -36,7 +36,30 @@
   const native = element => element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
   const value = element => native(element) ? element.value : element.textContent;
   let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle', inserting = false;
-  let listeners;
+  let listeners, graphMenu;
+  function closeGraphMenu(restoreFocus = true) { graphMenu?.remove(); graphMenu = null; if (restoreFocus) button?.focus({ preventScroll: true }); }
+  function openGraphMenu(event) {
+    if (!event.isTrusted || !enabled) return;
+    event.preventDefault();
+    graphMenu?.remove();
+    graphMenu = document.createElement('div');
+    graphMenu.setAttribute('role', 'menu'); graphMenu.setAttribute('aria-label', 'Default Web microphone graph');
+    graphMenu.className = 'graph-menu'; graphMenu.tabIndex = -1; graphMenu.textContent = 'Loading saved graphs…';
+    button.parentNode.append(graphMenu);
+    const rect = button.getBoundingClientRect();
+    graphMenu.style.left = `${Math.max(4, Math.min(rect.left, innerWidth - 284))}px`;
+    graphMenu.style.top = `${Math.max(4, Math.min(rect.bottom + 4, innerHeight - 240))}px`;
+    graphMenu.addEventListener('keydown', event => {
+      const items = [...graphMenu.querySelectorAll('button')], index = items.indexOf(graphMenu.getRootNode().activeElement);
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length]?.focus();
+      }
+      if (['Escape', 'Tab'].includes(event.key)) { if (event.key === 'Escape') event.preventDefault(); closeGraphMenu(); }
+    });
+    graphMenu.focus({ preventScroll: true });
+    send({ type: 'graph-list' });
+  }
   function send(message) { try { control?.postMessage(message); } catch { disable(); } }
   function stateUI(next, error = '') {
     state = next;
@@ -124,7 +147,7 @@
       status.style.left = `${label.left - anchor.left}px`; status.style.top = `${label.top - anchor.top}px`;
     }
   }
-  function removeWidget() { host?.remove(); host = button = status = null; if (!session) target = null; }
+  function removeWidget() { graphMenu = null; host?.remove(); host = button = status = null; if (!session) target = null; }
   function saveCaret(owner) {
     if (native(owner.element)) { owner.start = owner.element.selectionStart; owner.end = owner.element.selectionEnd; }
     else {
@@ -153,6 +176,8 @@
         button{appearance:none;-webkit-appearance:none;display:inline-flex;align-items:center;justify-content:center;
           width:${controlSize}px;height:${controlSize}px;border:1px solid #98a2b3;border-radius:50%;padding:0;margin:0;
           font-size:14px;line-height:1;cursor:pointer;vertical-align:top;touch-action:manipulation}
+        .graph-menu{box-sizing:border-box;position:fixed;max-width:calc(100vw - 8px);width:280px;max-height:230px;overflow:auto;padding:6px;border:1px solid #98a2b3;border-radius:6px;background:#fff;color:#253041;font:14px system-ui;box-shadow:0 2px 6px #0003}
+        .graph-menu button{display:block;border-radius:4px;width:100%;height:auto;min-height:36px;text-align:left;padding:8px;line-height:1.4;overflow-wrap:anywhere;box-shadow:none}
         svg{display:block;flex:none;width:20px;height:20px;fill:currentColor;pointer-events:none}
         button:hover:not(:disabled){background:#edf1f7;border-color:#475467}
         button:focus-visible{outline:3px solid #4263eb;outline-offset:2px}
@@ -182,8 +207,13 @@
       // Pointer activation leaves the page selection intact. Keyboard activation
       // uses the same saved field and never redirects to the widget or new focus.
       button.addEventListener('pointerdown', event => { if (event.isTrusted) event.preventDefault(); });
+      button.addEventListener('contextmenu', openGraphMenu);
+      button.addEventListener('keydown', event => {
+        if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) openGraphMenu(event);
+      });
       button.addEventListener('click', event => {
         if (!event.isTrusted || !enabled) return;
+        if (graphMenu) { closeGraphMenu(); return; }
         if (session) {
           if (state === 'preparing') abort('Preparation canceled. Click the mic to retry.');
           else { stateUI('stopping'); send({ type: 'stop' }); }
@@ -232,6 +262,20 @@
         let ticks = 0;
         timer = setInterval(() => { position(); if (++ticks % 20 === 0) send({ type: 'heartbeat' }); }, 1000);
       }
+      if (message.type === 'graph-choices' && !graphMenu && message.error) stateUI(state, message.error);
+      if (message.type === 'graph-default-saved') stateUI(state, 'Default graph saved. Applies to the next recording.');
+      if (message.type === 'graph-choices' && graphMenu) {
+        graphMenu.replaceChildren();
+        const label = document.createElement('p'); label.textContent = message.error || 'Default for this page mic (next recording)'; graphMenu.append(label);
+        for (const graph of message.graphs || []) {
+          const item = document.createElement('button'); item.type = 'button'; item.textContent = graph.name;
+          item.setAttribute('role', 'menuitemradio'); item.setAttribute('aria-checked', String(graph.id === message.defaultId));
+          item.onclick = event => { if (event.isTrusted) { send({ type: 'graph-default', id: graph.id }); closeGraphMenu(); } };
+          graphMenu.append(item);
+        }
+        if (!message.error && !message.graphs?.length) label.textContent = 'No compatible graphs. Create a MicrophoneAudio → ASR final → field output graph in Graph Library.';
+        graphMenu.querySelector('button')?.focus();
+      }
       if (message.type === 'state' && session) stateUI(message.state, message.error);
       if (message.type === 'ended') {
         session?.connection?.disconnect(); session = null;
@@ -248,6 +292,7 @@
   function listen() {
     listeners = new AbortController();
     const options = { capture: true, signal: listeners.signal };
+    document.addEventListener('pointerdown', event => { if (graphMenu && !event.composedPath().includes(host)) closeGraphMenu(false); }, options);
     document.addEventListener('focusin', focus, options);
     document.addEventListener('focusout', () => queueMicrotask(focus), options);
     for (const event of ['scroll', 'resize']) window.addEventListener(event, position, options);

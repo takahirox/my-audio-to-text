@@ -5,6 +5,13 @@ export const LIBRARY_LOCK = 'processing-graph-save';
 const conflict = () => Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');
 const token = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
+function notifyLibrary() {
+  // A closed/invalidated messaging context must not turn a committed save into
+  // a reported write failure. A later worker generation refreshes the menus.
+  try {
+    if (globalThis.chrome?.runtime?.sendMessage) void chrome.runtime.sendMessage({ type: 'graph-library-changed' }).catch(() => {});
+  } catch {}
+}
 const validText = value => typeof value === 'string' && value.trim().length > 0;
 
 // Validate the envelope separately: a corrupt graph must remain recoverable and
@@ -20,7 +27,7 @@ export function validateLibrary(value) {
       || !Object.hasOwn(entry, 'graph') || (entry.source !== undefined && typeof entry.source !== 'string')) throw Error('Invalid graph library entry or duplicate graph ID. Original storage has been kept.');
     ids.add(entry.id);
   }
-  if (!ids.has(value.assignments.live) || !(value.assignments.webVoice === null || ids.has(value.assignments.webVoice))) throw Error('Invalid execution target assignment. Original storage has been kept.');
+  if (!(value.assignments.live === null || validText(value.assignments.live)) || !(value.assignments.webVoice === null || validText(value.assignments.webVoice))) throw Error('Invalid execution target assignment. Original storage has been kept.');
   return value;
 }
 export function entryGraph(entry) {
@@ -58,7 +65,7 @@ export async function openLibrary(storage, locks = globalThis.navigator?.locks) 
   try {
     return await exclusive(locks, () => {
       const library = readLibrary(storage);
-      if (storage.getItem(LIBRARY_KEY) === null) storage.setItem(LIBRARY_KEY, JSON.stringify(library));
+      if (storage.getItem(LIBRARY_KEY) === null) { storage.setItem(LIBRARY_KEY, JSON.stringify(library)); notifyLibrary(); }
       return { library, warning: legacyChanged(storage, library) ? 'The legacy graph changed in another page. Recover it in Graph Library before saving.' : '' };
     });
   } catch (error) {
@@ -66,12 +73,19 @@ export async function openLibrary(storage, locks = globalThis.navigator?.locks) 
     return { library: readLibrary(storage), warning: `Library could not be committed: ${error.message} Read-only fallback; reload after restoring storage to save changes.` };
   }
 }
-export function readLiveGraph(storage) {
+function savedGraphContext(storage, id) {
   const library = readLibrary(storage);
   if (legacyChanged(storage, library)) throw Error('The legacy graph changed in another page. Recover it in Graph Library before continuing.');
-  const entry = library.graphs.find(entry => entry.id === library.assignments.live);
+  const entry = library.graphs.find(entry => entry.id === id);
+  if (!entry) throw Error('The selected graph no longer exists. Use the toolbar context menu to open a saved runnable graph.');
   return { id: entry.id, name: entry.name, graph: entryGraph(entry), revision: entry.revision };
 }
+export function readSelectedGraph(storage, id) {
+  const context = savedGraphContext(storage, id);
+  if (!executableGraph(context.graph).nodes.length) throw Error('No executable path in the selected graph. Connect a path in Graph Editor or choose another graph from the toolbar context menu.');
+  return context;
+}
+export function readLiveGraph(storage) { return savedGraphContext(storage, readLibrary(storage).assignments.live); }
 export function exportEntry(entry) {
   // Invalid sources are exported byte-for-byte, including malformed legacy JSON.
   if (entryError(entry)) return entry.source ?? JSON.stringify(entry.graph, null, 2);
@@ -88,6 +102,7 @@ export class GraphLibrary {
       library.revision = token(); validateLibrary(library);
       if (before !== this.storage.getItem(LIBRARY_KEY)) throw conflict();
       this.storage.setItem(LIBRARY_KEY, JSON.stringify(library));
+      notifyLibrary();
       return library;
     });
   }
@@ -135,9 +150,9 @@ export class GraphLibrary {
   delete(id, revision) {
     return this.change(library => {
       if (!library.graphs.some(entry => entry.id === id)) throw Error('Graph no longer exists. Load saved details before continuing.');
-      if (Object.values(library.assignments).includes(id)) throw Error('Reassign execution targets before deleting this graph.');
       if (library.graphs.length <= 1 || !library.graphs.some(entry => entry.id !== id && usable(entry))) throw Error('Keep at least one usable graph. Create or repair another graph first.');
       library.graphs = library.graphs.filter(entry => entry.id !== id);
+      for (const target of ['live', 'webVoice']) if (library.assignments[target] === id) library.assignments[target] = null;
     }, { revision });
   }
   recoverLegacy(revision) {

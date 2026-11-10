@@ -4,6 +4,7 @@ const scriptId = 'web-voice-typing';
 const controls = new Set();
 // One offscreen DOM document, with an independent TabSession per page document.
 const sessions = new Map();
+const libraryRequests = new Map();
 let reconciling = Promise.resolve(), host, hostURL, lifecycle = Promise.resolve();
 const post = (port, message) => { try { port?.postMessage(message); } catch {} };
 const extensionPage = (sender, name) => sender?.id === chrome.runtime.id && sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL(`extension/${name}`);
@@ -18,7 +19,7 @@ async function closeDocument() {
   if (contexts.some(context => context.documentUrl?.split(/[?#]/)[0] === chrome.runtime.getURL('extension/web-voice-runtime.html'))) await chrome.offscreen.closeDocument();
 }
 function idleCleanup() {
-  void serialize(async () => { if (!sessions.size) await closeDocument(); }).catch(() => {});
+  void serialize(async () => { if (!sessions.size && !libraryRequests.size) await closeDocument(); }).catch(() => {});
 }
 function end(owner, reason = '') {
   if (!owner || !current(owner)) return;
@@ -37,7 +38,7 @@ function initialize(owner) {
 }
 async function ensureRuntime(owner) {
   await serialize(async () => {
-    if (!current(owner)) return;
+    if (owner && !current(owner)) return;
     if (!hostURL) {
       hostURL = chrome.runtime.getURL(`extension/web-voice-runtime.html#${crypto.randomUUID()}`);
       try {
@@ -45,7 +46,25 @@ async function ensureRuntime(owner) {
           justification: 'Run explicitly requested local Web dictation with independently owned microphone, graph and model Workers.' });
       } catch (error) { hostURL = null; throw error; }
     }
-    initialize(owner);
+    if (owner) initialize(owner);
+  });
+}
+
+// Share the offscreen lifecycle; a toolbar read must never close a Web session.
+export function requestLaunchLibrary(operation, id) {
+  const request = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    const finish = (error, result) => {
+      const pending = libraryRequests.get(request);
+      if (!pending) return;
+      clearTimeout(pending.timer); libraryRequests.delete(request);
+      if (error) reject(Error(error)); else resolve(result);
+      idleCleanup();
+    };
+    const pending = { dispatch() { if (host && !this.sent) { this.sent = true; post(host, this.message); } }, message: { type: 'launch-library', request, operation, id }, finish,
+      timer: setTimeout(() => finish('Graph Library did not respond. Reopen the toolbar to retry.'), 15000) };
+    libraryRequests.set(request, pending);
+    void ensureRuntime().then(() => { if (libraryRequests.has(request)) pending.dispatch(); }, error => finish(error.message));
   });
 }
 async function permissionSetup(owner) {
@@ -92,6 +111,14 @@ chrome.runtime.onConnect.addListener(port => {
       if (session?.control === port) end(session, 'Target page disconnected.');
     });
     port.onMessage.addListener(message => {
+      if (['graph-list', 'graph-default'].includes(message.type)) {
+        void (async () => {
+          if (!owner.valid || !await authorized()) throw Error('Enable Web microphone in Graph Library first.');
+          const result = await requestLaunchLibrary(message.type === 'graph-list' ? 'web-list' : 'web-default', message.id);
+          post(port, { type: message.type === 'graph-default' ? 'graph-default-saved' : 'graph-choices', ...result });
+        })().catch(error => post(port, { type: 'graph-choices', error: error.message }));
+        return;
+      }
       const existing = sessions.get(owner.documentId);
       if (message.type === 'cancel' && existing?.control === port) { end(existing, message.error || 'Voice typing canceled.'); return; }
       if (message.type === 'stop' && existing?.control === port) {
@@ -120,8 +147,10 @@ chrome.runtime.onConnect.addListener(port => {
     if (!hostURL || sender?.id !== chrome.runtime.id || sender.url !== hostURL || host) { port.disconnect(); return; }
     host = port;
     for (const owner of sessions.values()) initialize(owner);
+    for (const pending of libraryRequests.values()) pending.dispatch();
     port.onMessage.addListener(message => {
       if (host !== port) return;
+      if (message.type === 'launch-library-result') { libraryRequests.get(message.request)?.finish(message.error, message.result); return; }
       if (message.type === 'heartbeat') { post(port, { type: 'heartbeat' }); return; }
       const owner = [...sessions.values()].find(owner => owner.token === message.token);
       if (!owner) return;
@@ -131,7 +160,9 @@ chrome.runtime.onConnect.addListener(port => {
     });
     port.onDisconnect.addListener(() => {
       if (host !== port) return;
-      host = null; endAll('Voice runtime disconnected. Click the mic to retry.');
+      host = null;
+      for (const pending of libraryRequests.values()) pending.finish('Graph Library disconnected. Reopen the toolbar to retry.');
+      endAll('Voice runtime disconnected. Click the mic to retry.');
       // Invalidate this generation even if a retry reserves a new session before
       // idle cleanup runs. A disconnected host must never be reused.
       void serialize(closeDocument).catch(() => {});

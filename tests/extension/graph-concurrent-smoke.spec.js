@@ -48,7 +48,7 @@ test('real packaged concurrent Zipformer and Whisper: independent results, resou
   const host = await page.evaluate(() => ({ browser:navigator.userAgent, isolated:crossOriginIsolated, hardwareConcurrency:navigator.hardwareConcurrency }));
   try {
     for(let repeat=0;repeat<2;repeat++) {
-      await page.evaluate(()=>window.graphInvoke({type:'invoke',tabId:42},{id:chrome.runtime.id}));
+      await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
       const start=Date.now();await startReadyLive(page, { timeout: 120000 });
       await expect(page.locator('#status')).toHaveText('Transcription active',{timeout:120000});const loaded=Date.now();
       expect(await page.evaluate(()=>window.graphWorkers.filter(worker=>!worker.released).length)).toBe(3);

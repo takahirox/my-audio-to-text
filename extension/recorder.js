@@ -1,9 +1,13 @@
 import { TabSession } from './session.js';
 import { renderTextRegions } from './live-text-regions.js';
-import { defaultGraph, GRAPH_KEY, INPUT_TYPES, executableGraph } from './graph.js';
-import { openLibrary, readLiveGraph, LIBRARY_KEY } from './graph-library.js';
+import { GRAPH_VERSION, GRAPH_KEY, INPUT_TYPES, executableGraph } from './graph.js';
+import { openLibrary, readLiveGraph, readSelectedGraph, readLibrary, entryGraph, LIBRARY_KEY } from './graph-library.js';
 import { audioToWav } from '../web/synthesized-audio.js';
 
+const params = new URLSearchParams(location.search);
+const sessionId = params.get('session') || crypto.randomUUID();
+let selectedGraphId = params.get('graph');
+const readWindowGraph = () => readSelectedGraph(localStorage, selectedGraphId);
 const element = id => document.getElementById(id);
 const stateChannel = new BroadcastChannel('live-graph-state');
 function renderDiagnostics(view) {
@@ -15,9 +19,22 @@ let graphError = '', graph, graphContext = {}, publishedState, closed = false;
 try {
   const opened = await openLibrary(localStorage);
   element('library-warning').textContent = opened.warning;
-  graphContext = readLiveGraph(localStorage); graph = graphContext.graph;
+  if (params.has('error')) throw Error(params.get('error'));
+  selectedGraphId ||= readLiveGraph(localStorage).id;
+  graphContext = readWindowGraph(); graph = graphContext.graph;
+  params.set('graph', selectedGraphId); params.set('session', sessionId);
+  history.replaceState(null, '', `?${params}`);
 }
-catch (error) { graphError = `Saved graph unavailable: ${error.message}`; graph = defaultGraph(); }
+catch (error) {
+  graphError = `Saved graph unavailable: ${error.message}`;
+  graph = { version: GRAPH_VERSION, nodes: [], edges: [] };
+  // Show the chosen graph's name and any valid draft layout, never a different
+  // runnable graph as an error fallback. Start stays disabled until repaired.
+  try {
+    const entry = readLibrary(localStorage).graphs.find(entry => entry.id === selectedGraphId);
+    if (entry) { graphContext = { id: entry.id, name: entry.name }; graph = entryGraph(entry); }
+  } catch { /* Invalid saved graphs retain an empty display and recovery error. */ }
+}
 const audioURLs = new Set();
 function clearAudio() {
   for (const player of element('audio-outputs').querySelectorAll('audio')) { player.pause(); player.removeAttribute('src'); player.load(); }
@@ -42,7 +59,7 @@ function renderGraphActions(view) {
   for (const button of byId.values()) button.remove();
   element('graph-action-status').textContent = [...new Set(actions.map(action => action.reason).filter(Boolean))].join(' ');
 }
-function graphState(view) { return { graph: view.activeSavedGraph, graphId: view.activeGraphId, state: view.state, tabId: view.tabId }; }
+function graphState(view) { return { sessionId, graph: view.activeSavedGraph, graphId: view.activeGraphId, state: view.state, tabId: view.tabId }; }
 const session = new TabSession(view => {
   renderGraphActions(view);
   element('live-graph-name').textContent = view.state === 'idle' ? view.savedGraphName : view.activeGraphName;
@@ -94,7 +111,8 @@ session.update();
 if (!graphError) void session.prepareModels();
 function refreshSaved() {
   try {
-    const next = readLiveGraph(localStorage); graphError = ''; session.setGraph(next.graph, next);
+    if (!selectedGraphId && params.has('error')) throw Error(params.get('error'));
+    const next = readWindowGraph(); graphError = ''; session.setGraph(next.graph, next);
     if (!session.livePreparation) void session.prepareModels();
     return true;
   }
@@ -112,14 +130,11 @@ element('stop').onclick = () => { void session.stop(); };
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return;
   if (message.type === 'get-live-graph-state') { respond(graphState(session.view)); return; }
-  if (message.type === 'invoke' && Number.isInteger(message.tabId) && !session.session) {
-    void invokeTab(message.tabId).then(() => respond?.({ prepared: true }));
-    return true;
-  }
 });
 chrome.tabs.onRemoved.addListener(tabId => { session.tabEnded(tabId); });
 chrome.tabs.onUpdated.addListener((tabId, change) => { if (change.status === 'loading') { session.tabEnded(tabId); } });
-window.addEventListener('pagehide', () => { closed = true; void session.close(); clearAudio(); stateChannel.close(); });
+stateChannel.onmessage = ({ data }) => { if (data.type === 'get-live-graph-state' && !closed) stateChannel.postMessage(graphState(session.view)); };
+window.addEventListener('pagehide', () => { stateChannel.postMessage({ sessionId, state: 'idle' }); closed = true; void session.close(); clearAudio(); stateChannel.close(); });
 window.addEventListener('error', event => session.fail(event.message));
 window.addEventListener('unhandledrejection', event => session.fail(event.reason?.message || String(event.reason)));
 window.addEventListener('storage', event => {
@@ -135,11 +150,10 @@ async function invokeTab(tabId) {
   // Toolbar invocation selects the target. Capture and permission requests
   // remain tied to the explicit Start button after model readiness.
 }
-const params = new URLSearchParams(location.search), tabId = params.has('tab') ? Number(params.get('tab')) : NaN;
-if (params.has('error')) session.update({ error: params.get('error'), tabId });
-else if (Number.isInteger(tabId)) {
+const tabId = params.has('tab') ? Number(params.get('tab')) : NaN;
+if (Number.isInteger(tabId)) {
   // New Live windows open unfocused so tracking is prepared before a page
-  // editor can blur on window deactivation. Reused windows do this in background.
+  // editor can blur on window deactivation.
   void invokeTab(tabId).then(async () => {
     if (!closed) { const live = await chrome.windows.getCurrent(); await chrome.windows.update(live.id, { focused: true }); }
   });
