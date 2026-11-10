@@ -295,7 +295,7 @@ test('fresh install has no site permission or injected scripts; assignment is no
   expect(await t.library.evaluate(() => permissionCalls)).toEqual([]);
   await t.library.setViewportSize({ width: 390, height: 844 });
   expect(await t.library.locator('#voice-consent').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await t.library.screenshot({ path: 'docs/evidence/library-255-consent-390.png', fullPage: true });
+  await t.library.screenshot({ path: 'docs/evidence/library-260-consent-390.png', fullPage: true });
   await t.library.locator('#cancel-voice').click();
   await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
   await expect(t.library.locator('#web-voice-enabled')).toBeFocused();

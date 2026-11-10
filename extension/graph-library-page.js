@@ -89,7 +89,6 @@ function renderSelectedState() {
   const invalid = entryError(entry), removed = !current;
   element('open').hidden = removed;
   element('open').href = `graph-editor.html?id=${encodeURIComponent(entry.id)}`;
-  element('editor-link').href = removed ? 'graph-editor.html' : element('open').href;
   element('selected-error').textContent = removed ? 'This graph was deleted in another page. Unsaved details have been kept; copy them before selecting another graph. Export JSON still recovers the previous saved graph.'
     : invalid ? `Invalid saved graph: ${invalid} Export the original JSON, repair it, and import as new. The original is kept.` : '';
   element('duplicate').disabled = !!invalid || removed;
@@ -142,14 +141,14 @@ function render(replaceDetails = false) {
   const focusedMenu = document.activeElement?.tagName === 'SUMMARY';
   element('graph-list').replaceChildren(...rows.map(entry => {
     const row = el('li'), button = el('button'); row.dataset.id = entry.id; button.dataset.id = entry.id;
-    row.classList.toggle('is-selected', entry.id === selectedId);
     button.onclick = () => select(entry.id, { id: entry.id, menu: false });
-    button.setAttribute('aria-label', `Select ${entry.name}`); button.setAttribute('aria-pressed', String(entry.id === selectedId)); button.setAttribute('aria-controls', 'selected'); button.setAttribute('aria-haspopup', 'dialog');
+    button.setAttribute('aria-label', `Open details for ${entry.name}`); button.setAttribute('aria-controls', 'selected'); button.setAttribute('aria-haspopup', 'dialog');
     const name = el('span', entry.name); name.className = 'graph-row-name'; button.append(name);
     if (entry.description) {
       const description = el('span', entry.description); description.className = 'graph-row-description';
       description.id = `description-${entry.id}`; button.setAttribute('aria-describedby', description.id); button.append(description);
     }
+    const hint = el('span', 'View details →'); hint.className = 'graph-row-hint'; hint.setAttribute('aria-hidden', 'true'); button.append(hint);
     const menu = el('details'), summary = el('summary', '⋯'), commands = el('div');
     menu.className = 'row-menu'; summary.setAttribute('aria-label', `Actions for ${entry.name}`); summary.title = `Actions for ${entry.name}`;
     commands.className = 'row-commands';
@@ -316,12 +315,6 @@ if (!fatal) {
     if (element('graph-more').open) {
       event.preventDefault(); element('graph-more').open = false; element('graph-more').querySelector('summary').focus();
     } else { event.preventDefault(); closeDetails(); }
-  });
-  for (const link of document.querySelectorAll('[data-section]')) link.addEventListener('click', event => {
-    event.preventDefault();
-    for (const other of document.querySelectorAll('[data-section]')) other.removeAttribute('aria-current');
-    link.setAttribute('aria-current', 'location');
-    const section = element(link.dataset.section); section.focus(); section.scrollIntoView({ block: 'start' });
   });
   element('graph-list').onkeydown = event => {
     const buttons = [...element('graph-list').querySelectorAll('button[data-id]')], index = buttons.indexOf(event.target);
