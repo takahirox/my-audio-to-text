@@ -1,22 +1,13 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Graph Library · Local processing</title><link rel="stylesheet" href="recorder.css"><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="graph-library.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Graph Library</title><link rel="stylesheet" href="recorder.css"><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="graph-library.css"></head>
 <body class="app-page library-page">
-  <aside class="library-sidebar">
-    <div class="library-brand"><span aria-hidden="true">◈</span> Local processing</div>
-    <nav aria-label="View">
-      <a href="#graphs" data-section="graphs" aria-current="location"><span aria-hidden="true">▦</span> Graphs</a>
-      <a href="#launch-settings" data-section="launch-settings"><span aria-hidden="true">⚙</span> Launch Settings</a>
-      <a href="model-cache.html" data-page="model-cache.html"><span aria-hidden="true">▤</span> Models</a>
-      <button data-live><span aria-hidden="true">▷</span> Live</button>
-      <a id="editor-link" href="graph-editor.html"><span aria-hidden="true">◇</span> Graph Editor</a>
-    </nav>
-  </aside>
   <main>
-    <p id="navigation-status" role="status"></p><p id="errors" role="alert"></p><p id="library-warning" role="status"></p>
+    <header class="library-header"><h1>Graph Library</h1><a class="models-link" href="model-cache.html" data-page="model-cache.html">Models</a></header>
+    <p id="errors" role="alert"></p><p id="library-warning" role="status"></p>
     <div class="library-workspace">
-      <section id="graphs" class="library-master" aria-labelledby="graphs-title" tabindex="-1">
-        <div class="section-heading"><h1 id="graphs-title">Graph Library <span id="graph-count" class="muted"></span></h1><button id="new" class="primary">+ New Graph</button></div>
+      <section id="graphs" class="library-master" aria-labelledby="graphs-title">
+        <div class="section-heading"><h2 id="graphs-title">Graphs <span id="graph-count" class="muted"></span></h2><button id="new" class="primary">+ New Graph</button></div>
         <div class="library-toolbar">
           <input id="search" type="search" aria-label="Search graphs" placeholder="Search graphs…">
           <details id="library-tools">
@@ -32,7 +23,7 @@
         <ul id="graph-list" aria-label="Saved graphs"></ul>
         <p id="empty" hidden>No matching graphs.</p>
       </section>
-    <section id="launch-settings" aria-labelledby="launch-title" tabindex="-1">
+    <section id="launch-settings" aria-labelledby="launch-title">
       <div class="section-heading"><h2 id="launch-title">Launch Settings</h2><details id="launch-help"><summary>Help</summary><div><p>Graph choices apply to the next session. A running session keeps its graph.</p><p>Choosing a graph does not enable website controls or grant permission. Turn ON to request website access.</p></div></details></div>
       <div class="launch-row">
         <label for="live-graph">Live Window</label>

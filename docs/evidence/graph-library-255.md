@@ -1,5 +1,10 @@
 # Sidebar and paired Graph Library / Launch Settings panels (#255)
 
+Historical validation record: #260 supersedes the sidebar, in-page navigation
+and selected-card treatment described below. See the [current layout and
+validation](graph-library-260.md). The images here preserve the #255 appearance;
+current tests capture `library-260-*` evidence instead.
+
 The desktop Library now has a persistent 200 px navigation sidebar and two
 balanced panels: **Graph Library** and **Launch Settings**. Graphs and Launch
 Settings focus their respective panels; Models uses the existing page-opening
