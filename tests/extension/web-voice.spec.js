@@ -59,7 +59,7 @@ const test = base.extend({
       context.on('page', page => page.on('pageerror', error => pageErrors.push(error.message)));
       context.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith(`http://127.0.0.1:${server.address().port}/`)) remote.push(request.url()); });
       const library = await context.newPage(); await library.goto(url + 'graph-library.html');
-      await expect(library.locator('#graph-list button')).toHaveCount(1);
+      await expect(library.locator('#graph-list button[data-id]')).toHaveCount(1);
       const graphId = await library.evaluate(async () => {
         const { GraphLibrary, readLibrary } = await import('./graph-library.js'), { graphNode, edge } = await import('./graph.js');
         const graph = { version: 15, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
@@ -280,7 +280,7 @@ test('fresh install has no site permission or injected scripts; assignment is no
   expect(await t.library.evaluate(() => permissionCalls)).toEqual([]);
   await t.library.setViewportSize({ width: 390, height: 844 });
   expect(await t.library.locator('#voice-consent').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await t.library.screenshot({ path: 'docs/evidence/library-253-consent-390.png', fullPage: true });
+  await t.library.screenshot({ path: 'docs/evidence/library-255-consent-390.png', fullPage: true });
   await t.library.locator('#cancel-voice').click();
   await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
   await expect(t.library.locator('#web-voice-enabled')).toBeFocused();

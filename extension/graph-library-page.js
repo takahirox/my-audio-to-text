@@ -9,6 +9,8 @@ const element = id => document.getElementById(id), store = new GraphLibrary(loca
 const selectionKey = 'graph-library-selection', draftKey = 'graph-library-details-draft';
 let library, selectedId, detailsEntry, fatal = false, refreshVoiceStatus = () => {};
 const states = new Map();
+new MutationObserver(() => { element('details-error').textContent = element('errors').textContent; })
+  .observe(element('errors'), { childList: true });
 const el = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
 function download(text, filename) {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
@@ -37,21 +39,41 @@ function keepDraft() {
   } catch { element('details-state').textContent = 'Unsaved changes · refresh recovery unavailable; save before leaving.'; }
 }
 function clearDraft() { try { sessionStorage.removeItem(draftKey); } catch {} }
-function showDetails() {
-  document.body.classList.add('show-detail');
-  if (matchMedia('(max-width: 760px)').matches) {
-    element('selected-title').focus(); element('selected').scrollIntoView({ block: 'start' });
+let detailInvoker;
+function showDetails(invoker = document.activeElement) {
+  const dialog = element('selected');
+  if (!dialog.open) {
+    detailInvoker = !invoker || invoker === document.body ? { id: selectedId, menu: false } : invoker;
+    dialog.showModal();
   }
+  element('selected-title').focus();
 }
-function select(id) {
-  if (id !== selectedId && dirty() && !confirm('Discard unsaved graph name or description changes?')) return;
+function select(id, invoker) {
+  if (id !== selectedId && dirty() && !confirm('Discard unsaved graph name or description changes?')) return false;
   if (id !== selectedId) { clearDraft(); selectedId = id; render(true); }
   else render();
   try { localStorage.setItem(selectionKey, id); } catch { /* Selection is optional; graph writes report their own errors. */ }
-  showDetails();
+  showDetails(invoker);
+  return true;
+}
+function closeDetails() {
+  // Closing preserves the draft; selecting another graph still warns before discarding it.
+  keepDraft();
+  hideDetails();
+}
+function hideDetails() {
+  const dialog = element('selected');
+  if (!dialog.open) return;
+  element('graph-more').open = false;
+  dialog.close();
+  const row = [...element('graph-list').children].find(row => row.dataset.id === (detailInvoker?.id || selectedId));
+  const target = detailInvoker instanceof HTMLElement && detailInvoker.isConnected ? detailInvoker
+    : row?.querySelector(detailInvoker?.menu ? 'summary' : 'button[data-id]');
+  // Restore once, before the queued close event can interrupt subsequent focus changes.
+  (target || element('search')).focus();
 }
 function renderDetails(entry = selected()) {
-  element('selected').hidden = !entry;
+  if (!entry) hideDetails();
   if (!entry) { detailsEntry = null; return; }
   detailsEntry = structuredClone(entry);
   element('selected-title').textContent = entry.name;
@@ -115,17 +137,42 @@ function render(replaceDetails = false) {
   const rows = library.graphs.filter(entry => `${entry.name} ${entry.description} ${models(entry).join(' ')}`.toLocaleLowerCase().includes(search)
     && (filter === 'all' || filter === 'assigned' && Object.values(library.assignments).includes(entry.id) || filter === 'invalid' && entryError(entry)));
   rows.sort(element('sort').value === 'name' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name));
-  const focusedId = document.activeElement?.closest('#graph-list button')?.dataset.id;
+  const focusedRow = document.activeElement?.closest('#graph-list li');
+  const focusedId = focusedRow?.dataset.id;
+  const focusedMenu = document.activeElement?.tagName === 'SUMMARY';
   element('graph-list').replaceChildren(...rows.map(entry => {
-    const row = el('li'), button = el('button'); button.dataset.id = entry.id;
-    button.onclick = () => select(entry.id); button.setAttribute('aria-label', `Select ${entry.name}`); button.setAttribute('aria-pressed', String(entry.id === selectedId)); button.setAttribute('aria-controls', 'selected');
+    const row = el('li'), button = el('button'); row.dataset.id = entry.id; button.dataset.id = entry.id;
+    row.classList.toggle('is-selected', entry.id === selectedId);
+    button.onclick = () => select(entry.id, { id: entry.id, menu: false });
+    button.setAttribute('aria-label', `Select ${entry.name}`); button.setAttribute('aria-pressed', String(entry.id === selectedId)); button.setAttribute('aria-controls', 'selected'); button.setAttribute('aria-haspopup', 'dialog');
     const name = el('span', entry.name); name.className = 'graph-row-name'; button.append(name);
-    const markers = el('span'); markers.className = 'graph-markers';
-    if (entryError(entry)) { const recovery = el('span', 'Error · needs recovery'); recovery.className = 'recovery-marker'; markers.append(recovery); }
-    if (markers.childElementCount) { markers.id = `markers-${entry.id}`; button.setAttribute('aria-describedby', markers.id); button.append(markers); }
-    row.append(button); return row;
+    if (entry.description) {
+      const description = el('span', entry.description); description.className = 'graph-row-description';
+      description.id = `description-${entry.id}`; button.setAttribute('aria-describedby', description.id); button.append(description);
+    }
+    const menu = el('details'), summary = el('summary', '⋯'), commands = el('div');
+    menu.className = 'row-menu'; summary.setAttribute('aria-label', `Actions for ${entry.name}`); summary.title = `Actions for ${entry.name}`;
+    commands.className = 'row-commands';
+    for (const [label, command] of [['Graph details', null], ['Edit graph', 'open'], ['Duplicate', 'duplicate'], ['Export JSON', 'export']]) {
+      const actionButton = el('button', label);
+      actionButton.onclick = () => {
+        menu.open = false;
+        if (!select(entry.id, { id: entry.id, menu: true })) { summary.focus(); return; }
+        if (command) element(command).click();
+      };
+      actionButton.disabled = ['open', 'duplicate'].includes(command) && !!entryError(entry);
+      commands.append(actionButton);
+    }
+    menu.append(summary, commands);
+    menu.addEventListener('toggle', () => {
+      if (menu.open) for (const other of element('graph-list').querySelectorAll('.row-menu[open]')) if (other !== menu) other.open = false;
+    });
+    row.append(button, menu); return row;
   }));
-  if (focusedId) [...element('graph-list').querySelectorAll('button')].find(button => button.dataset.id === focusedId)?.focus({ preventScroll: true });
+  if (focusedId) {
+    const row = [...element('graph-list').children].find(row => row.dataset.id === focusedId);
+    row?.querySelector(focusedMenu ? 'summary' : 'button[data-id]')?.focus({ preventScroll: true });
+  }
   element('graph-count').textContent = rows.length;
   element('empty').hidden = !!rows.length;
   if (replaceDetails || !dirty() && (detailsEntry?.id !== selectedId || detailsEntry?.revision !== selected()?.revision)) renderDetails();
@@ -152,6 +199,7 @@ function renderLaunchSettings() {
     });
     if (target === 'webVoice') { const none = el('option', 'Not assigned'); none.value = ''; options.unshift(none); }
     select.replaceChildren(...options); select.value = assignedId ?? '';
+    select.title = library.graphs.find(entry => entry.id === assignedId)?.name || 'Not assigned';
     const reason = launchReason(target, library.graphs.find(entry => entry.id === assignedId));
     element(`${prefix}-launch-status`).textContent = reason;
   }
@@ -197,7 +245,7 @@ try {
   element('recovery').hidden = false; element('recover-legacy').hidden = true;
   element('recovery-message').textContent = 'Original storage is available for export. No saved data has been overwritten.';
   for (const node of document.querySelectorAll('#new, main button, main input, main select')) node.disabled = !['export-storage', 'export-legacy'].includes(node.id);
-  element('selected').hidden = true;
+  hideDetails();
 }
 if (!fatal) {
   const toggle = element('web-voice-enabled'), status = element('web-voice-status'), consent = element('voice-consent');
@@ -263,21 +311,35 @@ if (!fatal) {
   chrome.permissions.onRemoved.addListener(() => { void checkWebsiteAccess(); });
   chrome.permissions.onAdded.addListener(() => { void checkWebsiteAccess(); });
   refreshVoiceStatus(); toggle.disabled = false;
-  element('back-to-graphs').onclick = () => {
-    document.body.classList.remove('show-detail');
-    const row = [...element('graph-list').querySelectorAll('button')].find(button => button.dataset.id === selectedId);
-    (row || element('search')).focus();
-  };
+  element('back-to-graphs').onclick = closeDetails;
+  element('selected').addEventListener('cancel', event => {
+    if (element('graph-more').open) {
+      event.preventDefault(); element('graph-more').open = false; element('graph-more').querySelector('summary').focus();
+    } else { event.preventDefault(); closeDetails(); }
+  });
+  for (const link of document.querySelectorAll('[data-section]')) link.addEventListener('click', event => {
+    event.preventDefault();
+    for (const other of document.querySelectorAll('[data-section]')) other.removeAttribute('aria-current');
+    link.setAttribute('aria-current', 'location');
+    const section = element(link.dataset.section); section.focus(); section.scrollIntoView({ block: 'start' });
+  });
   element('graph-list').onkeydown = event => {
-    const buttons = [...element('graph-list').querySelectorAll('button')], index = buttons.indexOf(event.target);
+    const buttons = [...element('graph-list').querySelectorAll('button[data-id]')], index = buttons.indexOf(event.target);
     if (index < 0 || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
     buttons[next]?.focus();
   };
   const more = element('graph-more');
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && more.open) { more.open = false; more.querySelector('summary').focus(); } });
-  document.addEventListener('click', event => { if (!more.contains(event.target)) more.open = false; });
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    const menu = event.target.closest('.row-menu[open]');
+    if (menu) { event.preventDefault(); menu.open = false; menu.querySelector('summary').focus(); }
+  });
+  document.addEventListener('click', event => {
+    if (!more.contains(event.target)) more.open = false;
+    for (const menu of element('graph-list').querySelectorAll('.row-menu[open]')) if (!menu.contains(event.target)) menu.open = false;
+  });
   more.addEventListener('click', event => {
     if (event.target.closest('button')) { more.open = false; more.querySelector('summary').focus(); }
   });

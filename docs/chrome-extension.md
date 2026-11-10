@@ -203,8 +203,8 @@ See [target policies, named ports and browser limitations](extension-graph.md).
 
 ## Opt-in Web voice typing (#247)
 
-In **Graph Library → Default execution targets**, assign a compatible graph to
-**Web page voice typing**, then explicitly turn **Web voice typing ON/OFF** ON.
+In **Graph Library → Launch Settings**, assign a compatible graph to
+**Web Page Microphone**, then explicitly turn its independent switch **ON**.
 The preference defaults OFF on installation/upgrade, even with an existing
 `assignments.webVoice`. It is a separately validated versioned boolean in
 `chrome.storage.local`; graph JSON remains version 15. Assignment never grants
