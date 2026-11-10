@@ -1,0 +1,59 @@
+{
+  "realModel": true,
+  "browser": "153.0.8010.12",
+  "peakConcurrentSessions": 3,
+  "fixtureSha256": "21212faed6ae5f5958603d4d7cf60a423f1090fb6542d00e3a826ebe6235a768",
+  "webInserted": "THE MEETING STARTS AT TEN",
+  "webFinalsExactlyOnce": true,
+  "liveDisplayed": "THE MEETING STARTS AT TEN",
+  "liveOutputMatchesFinal": true,
+  "independentReadyStartStopRestartClose": true,
+  "webOffPreservesLive": true,
+  "microphone": "Chrome fake device; native getUserMedia and Browser.setPermission grant",
+  "remoteRequests": 0,
+  "pageErrors": [],
+  "model": "ReazonSpeech ja-en + Silero VAD, WASM CPU",
+  "assetManifest": {
+    "sherpa-ja-en": {
+      "source": "https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en",
+      "revision": "12b44671ff48b9aed622551d64e02fea9a2cf870",
+      "models": [
+        {
+          "path": "encoder-epoch-35-avg-1.int8.onnx",
+          "virtualPath": "/transducer-encoder.onnx",
+          "sha256": "ead1579e118b821a767242a8eb9272634b0e63ba16f8dfc4d126732406eae268"
+        },
+        {
+          "path": "decoder-epoch-35-avg-1.onnx",
+          "virtualPath": "/transducer-decoder.onnx",
+          "sha256": "90b60985672df5023e187e9d25aa2dc93abc4286bfacf71a35a78a6b76d88df5"
+        },
+        {
+          "path": "joiner-epoch-35-avg-1.int8.onnx",
+          "virtualPath": "/transducer-joiner.onnx",
+          "sha256": "c7f4ba40a8ae307a6c30b5c06e2570add04466bcb45bab62699f0ec5d00ed495"
+        },
+        {
+          "path": "tokens.txt",
+          "virtualPath": "/tokens.txt",
+          "sha256": "144f8a4f639373a1bdf7eabb2437482ef64b0cc5db24ad27cce65f293e4faa24"
+        }
+      ],
+      "runtime": {
+        "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.2/sherpa-onnx-wasm-simd-1.13.2-vad-asr-en-moonshine_tiny.tar.bz2",
+        "sha256": "c388d09c952557f0aeaf7a3c796d20143a2bbed7cb0fe2eca656c26dc8beb444"
+      },
+      "sha256": "900bca64640c969acdae920b4e797094a9169c5dffa780a3941e1c2659eabea7",
+      "bytes": 90822540
+    }
+  },
+  "sourceSha256": {
+    "extension/session.js": "693e73505cb78baae35381ce0843cd785ecf320f09ecb102511e729859506f19",
+    "extension/recorder.js": "3a7e05c80095c12c65fa90aa237e0d75bd39d3d06910c6eb9a3d60c95912808e",
+    "extension/graph-runtime.js": "2b0fc3586a5a68e0d8d44ec11d0fb0522de60870b71ee7c4c204c9401b635ec3",
+    "extension/web-voice-runtime.js": "21d399ba4c310ac53c1e418f25b1ac30431f1d451aa31bd65cd9be63374be77c",
+    "extension/web-voice-background.js": "84de2f6f7f76166911c1e46e16031f2b845072f7f8e9d7f1d6f7092c19bce5ab",
+    "web/local-asr-core.js": "b8bf3f9160bacb523c786741644c34fca8abbaf2d27b2a2d26a649870cc03dac",
+    "web/transcription-nodes.js": "e295e91549f595fd6aeebd1514fe4de64f0b8e0b8f7a9db74060f9b83355388f"
+  }
+}

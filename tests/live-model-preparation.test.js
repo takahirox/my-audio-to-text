@@ -398,3 +398,88 @@ test('an unavailable next assignment never prepares the previous saved graph aft
   f.session.setGraph(textGraph('IfCondition'), { id: 'b', name: 'Graph B' }); await f.session.preparing;
   assert.equal(f.session.view.modelState, 'ready'); assert.equal(f.workers.length, 2);
 });
+
+function isolatedSpeechGraph() {
+  return { version: GRAPH_VERSION, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextReazonSpeech', 'speech'), graphNode('Display', 'display')],
+    edges: [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'display', 'input1')] };
+}
+
+test('separate sessions overlap preparation, recording, Stop and restart without sharing runtime or output', async t => {
+  const a = fixture(isolatedSpeechGraph()), b = fixture(isolatedSpeechGraph()), c = fixture(isolatedSpeechGraph());
+  t.after(() => Promise.all([a.session.close(), b.session.close(), c.session.close()]));
+  b.controls.hold = true;
+  const preparing = b.session.prepareModels();
+  await Promise.all([a.session.prepareModels(), c.session.prepareModels()]);
+  assert.equal(b.session.view.modelState, 'preparing');
+  await Promise.all([a.session.start(1), c.session.start(3)]);
+  b.controls.hold = false;
+  for (const worker of b.workers) worker.reply(worker.messages[0]);
+  await preparing; await b.session.start(2);
+  const owners = [a, b, c].map(f => f.session.session);
+  for (const [index, f] of [a, b, c].entries()) {
+    assert.equal(f.session.view.state, 'running');
+    for (const other of owners.filter(owner => owner !== owners[index])) {
+      assert.notEqual(owners[index].pipeline, other.pipeline);
+      assert.notEqual(owners[index].speechNodes.get('speech').core, other.speechNodes.get('speech').core);
+      assert.notEqual(owners[index].audioSources.get('audio'), other.audioSources.get('audio'));
+    }
+    await f.session.start(99); assert.equal(f.session.session.tabId, index + 1);
+    const node = owners[index].speechNodes.get('speech');
+    node.receiveEvent({ type: 'final', id: 1, text: `owner ${index}` });
+    node.receiveEvent({ type: 'final', id: 1, text: 'duplicate' });
+  }
+  await turn();
+  for (const [index, f] of [a, b, c].entries()) assert.equal(domText(f.session.view.displays.display.input1), `owner ${index}`);
+  const old = [...a.workers];
+  await a.session.stop(); await a.session.start(4);
+  assert.ok(old.every(worker => worker.released));
+  assert.equal(a.session.view.state, 'running');
+  for (const [index, f] of [b, c].entries()) {
+    assert.equal(f.session.session, owners[index + 1]);
+    assert.ok(f.workers.every(worker => !worker.released));
+    assert.equal(f.messages('load').length, 2);
+  }
+  await b.session.close();
+  assert.ok(b.workers.every(worker => worker.released));
+  assert.equal(c.session.view.state, 'running'); assert.ok(c.workers.every(worker => !worker.released));
+});
+
+test('model failure, worker failure and late canceled preparation affect only their own session', async t => {
+  const a = fixture(isolatedSpeechGraph()), b = fixture(isolatedSpeechGraph());
+  t.after(() => Promise.all([a.session.close(), b.session.close()]));
+  await a.session.prepareModels(); await a.session.start(1);
+  const owner = a.session.session;
+  b.controls.failure = true; await b.session.prepareModels();
+  assert.equal(b.session.view.modelState, 'error'); assert.match(b.session.view.error, /Controlled model memory failure/);
+  b.controls.failure = false; await b.session.prepareModels(); await b.session.start(2);
+  b.workers.find(worker => !worker.released).onerror({ preventDefault() {}, message: 'GPU device removed' });
+  assert.match(b.session.view.error, /GPU device removed/);
+  await b.session.cancel();
+  b.controls.hold = true;
+  const preparing = b.session.prepareModels(); await turn();
+  const late = b.workers.filter(worker => !worker.released);
+  await b.session.close(); await preparing;
+  for (const worker of late) worker.reply(worker.messages[0]);
+  assert.equal(b.session.view.modelState, 'closed'); assert.ok(b.workers.every(worker => worker.released));
+  assert.equal(a.session.session, owner); assert.equal(a.session.view.error, '');
+  assert.equal(a.session.view.state, 'running'); assert.ok(a.workers.every(worker => !worker.released));
+  owner.speechNodes.get('speech').receiveEvent({ type: 'final', id: 1, text: 'still running' });
+  await turn(); assert.equal(domText(a.session.view.displays.display.input1), 'still running');
+});
+
+test('one session awaiting Stop disposal does not delay another session preparing and starting', async t => {
+  const a = fixture(textGraph('TextSummaryLfm2', true)), b = fixture(textGraph());
+  let release;
+  t.after(() => { release?.(); return Promise.all([a.session.close(), b.session.close()]); });
+  await a.session.prepareModels(); await a.session.start();
+  const node = a.session.session.pipeline.entries.get('model').node, dispose = node.dispose.bind(node);
+  node.dispose = () => new Promise(resolve => { release = () => { dispose(); resolve(); }; });
+  const stopping = a.session.stop(); await turn();
+  assert.equal(a.session.view.state, 'stopping');
+  await b.session.prepareModels(); await b.session.start(); await turn();
+  assert.equal(b.session.view.state, 'running'); assert.equal(b.session.view.error, '');
+  assert.equal(domText(b.session.view.displays.display.input1), 'Summary');
+  release(); await stopping;
+  assert.equal(a.session.view.modelState, 'ready');
+  assert.equal(b.session.view.state, 'running'); assert.ok(b.workers.every(worker => !worker.released));
+});

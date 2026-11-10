@@ -195,6 +195,8 @@ export function buildGraph(graph, options) {
   const tabSources = description.nodes.filter(spec => spec.type === 'ChromeTabAudio');
   // Toolbar-tab navigation ends every tab subscriber even while a microphone
   // keeps the Pipeline running. Flush before detaching any of those subscribers.
+  // Share only among tab-source Nodes inside this execution. Another graph
+  // gets a fresh capture factory, nodes, Workers and Pipeline.
   const tabSourceFactory = sharedTabCapture(options.sourceFactory || ((...args) => new ExtensionTab(...args)),
     () => pipeline.state === 'stopping' || tabSources.every(spec => nodes[spec.id].endRequested));
   for (const spec of description.nodes) {

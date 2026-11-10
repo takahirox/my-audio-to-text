@@ -1,4 +1,3 @@
-import { acquireRuntimeLease } from './runtime-lease.js';
 import { TabSession } from './session.js';
 import { renderTextRegions } from './live-text-regions.js';
 import { defaultGraph, GRAPH_KEY, INPUT_TYPES, executableGraph } from './graph.js';
@@ -83,7 +82,7 @@ const session = new TabSession(view => {
   element('stop').disabled = view.modelState !== 'preparing' && !['loading', 'starting', 'running'].includes(view.state);
   const nextState = JSON.stringify(graphState(view));
   if (!closed && nextState !== publishedState) { publishedState = nextState; stateChannel.postMessage(graphState(view)); }
-}, { acquireRuntime: acquireRuntimeLease, graph, graphId: graphContext.id, graphName: graphContext.name, onSynthesizedAudio: (audio, signal) => {
+}, { graph, graphId: graphContext.id, graphName: graphContext.name, onSynthesizedAudio: (audio, signal) => {
   if (signal.aborted) return;
   const url = URL.createObjectURL(audioToWav(audio)); audioURLs.add(url);
   const row = document.createElement('li'), player = document.createElement('audio'), link = document.createElement('a');

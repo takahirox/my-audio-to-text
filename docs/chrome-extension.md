@@ -264,10 +264,25 @@ effects; it does not change general Graph/Live semantics or schema/ports.
 
 Model preparation uses #239's actual runtime initialization with verified local
 cached/package assets. Missing files/GPU support fail visibly with Models/Graph
-recovery, before microphone capture, without downloading while recording. A Web
-Lock admits one extension inference owner: a prepared Live window already owns
-resources, so close it before starting Web voice typing. Web voice never stops or
-steals a Live session. Library edits affect future sessions only.
+recovery, before microphone capture, without downloading while recording.
+Live windows and Web microphone sessions run independently, including overlapping
+preparation, Ready/idle, recording and Stop. Each graph execution owns its own
+Pipeline, Nodes, model Workers, audio streams, output connection and cancellation;
+closing or failing one owner does not stop another. Live keeps its model preloading
+and re-prepares its own resources after Stop. There is no global inference lock,
+queue or application-imposed runtime count limit. Available RAM/GPU memory, browser
+microphone permissions and OS/device limits can still cause real resource errors;
+parallel inference speed or unlimited capacity is not guaranteed. Shared pinned
+asset caches retain their verification and file-operation locks, separate from
+runtime ownership.
+
+Web microphones on different tabs/documents can record simultaneously. Within one
+document the existing single widget owns one fixed field/session; duplicate Start
+cannot replace it or insert twice. Stop, Cancel, navigation and closing a recording
+window affect that document only. Web voice OFF or website-permission removal
+cancels all Web sessions and leaves Live running. Live and Web assignments remain
+separate, and Library edits affect future sessions only. No graph schema changes
+are required. This concurrency behavior supersedes #247's earlier exclusion.
 
 The page bridge uses Chrome's isolated world and extension-only ports, exact
 sender URL, tab/top-frame/document identity, a random per-field session capability
@@ -285,20 +300,23 @@ website/editor compatibility. The supported fixture coverage is documented below
 ```sh
 npm test
 npx playwright test --config playwright.extension.config.js tests/extension/web-voice.spec.js
-WEB_VOICE_REAL=1 npx playwright test --config playwright.extension.config.js tests/extension/web-voice.spec.js -g 'native input'
+WEB_VOICE_REAL=1 npx playwright test --config playwright.extension.config.js tests/extension/web-voice.spec.js -g 'native input|Live and Web overlap'
 ```
 
 The regular suite uses an installed unpacked extension, real Chrome host access,
 injection, gUM, audio normalization, production Nodes and Pipeline, with controlled
 ASR worker replies. It covers default OFF, explicit consent/denial, cross-page
 preference sync, sensitive fields, input/textarea/basic editable caret insertion,
-exactly-once finals, no submit, Stop, Cancel during preparation, busy tabs, Live
-ownership, snapshots, rejected sender messages, navigation/removal, native host permission removal, controlled device-ended events, extension reload,
+exactly-once finals, no submit, Stop, Cancel during preparation, concurrent tabs,
+independent Live/Web preparation, recording, Stop/restart and multiple Live windows,
+owner-scoped Worker failure/navigation/close, snapshots, rejected sender messages, navigation/removal, native host permission removal, controlled device-ended events, extension reload,
 message replay, Worker failure, and missing verified cache. Real-model mode uses the actual packaged
 ReazonSpeech/Silero models and a fake microphone device fed the pinned
 `ordinary-english.wav`, with real microphone grant and native input/textarea
 insertion. It records final-event versus inserted-text equality and no remote
-requests in [the real-model evidence](evidence/web-voice-247-real.json).
+requests in [the original real-model evidence](evidence/web-voice-247-real.json).
+See [#256 concurrency validation and limits](evidence/runtime-concurrency-256.md)
+for the current overlap checks.
 
 Chrome's native host-permission bubble is outside Playwright/CDP's click surface.
 Except for the fresh-install/denial check, the disposable test extension is first

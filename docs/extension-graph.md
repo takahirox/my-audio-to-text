@@ -134,6 +134,12 @@ The model lifecycle is separate from the session's recording state:
 | `canceled` | Stop during preparation releases resources; Retry models resumes preparation. |
 | `closed` | Terminal; release all Workers/media/GPU resources and suppress late callbacks. |
 
+Each Live window and Web microphone session owns an independent runtime, including
+while its models are preparing or Ready. There is no global inference admission
+lock. Starting or closing another window does not release this window's prepared
+models; hardware/permission failures remain local resource errors. See
+[concurrent Live/Web sessions](chrome-extension.md#web-voice-validation).
+
 Stop drains outputs, disposes the used single-session graph, and prepares a fresh
 runtime before re-enabling Start. Internal Cancel releases the old owner before
 the same idle restoration. Completed display output remains visible. Each Node

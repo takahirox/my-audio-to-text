@@ -2,7 +2,6 @@ import { TabSession } from './session.js';
 import { readLibrary, entryGraph } from './graph-library.js';
 import { webVoiceGraph } from './web-voice-graph.js';
 import { readVoiceEnabled } from './web-voice-preference.js';
-import { acquireRuntimeLease } from './runtime-lease.js';
 
 const port = chrome.runtime.connect({ name: 'web-voice-runtime' });
 const label = document.getElementById('voice-state'), errorLabel = document.getElementById('voice-error'), stop = document.getElementById('voice-stop');
@@ -44,7 +43,7 @@ port.onMessage.addListener(message => {
       else if (view.state === 'running') publish('recording');
       else if (view.state === 'stopping') publish('stopping');
       else publish('preparing');
-    }, { graph: snapshot, graphId: entry.id, graphName: entry.name, acquireRuntime: acquireRuntimeLease,
+    }, { graph: snapshot, graphId: entry.id, graphName: entry.name,
       onSourceEnded: () => { void finish(true, 'Microphone ended or permission was removed. Click the mic to start a new session.'); } });
     session.outputTarget = structuredClone(message.target);
     await session.prepareModels();
