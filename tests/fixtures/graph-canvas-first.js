@@ -46,15 +46,15 @@ export async function checkCanvasFirst(page, width) {
   return { width, toolbar: bounds, canvas, controls };
 }
 
-// Use the production cross-page Live state channel, including graph-ID filtering.
-export async function publishGraphActivity(page, { state = 'recording', matching = true, tabId = 1476958582 } = {}) {
-  await page.evaluate(async ({ state, matching, tabId }) => {
+// Use the production cross-page Live state channel, including session and graph IDs.
+export async function publishGraphActivity(page, { sessionId = 'live-window-1', state = 'recording', matching = true, tabId = 1476958582 } = {}) {
+  await page.evaluate(async ({ sessionId, state, matching, tabId }) => {
     const { readLibrary, entryGraph } = await import(new URL('./graph-library.js', location.href));
     const id = new URLSearchParams(location.search).get('id');
     const graph = entryGraph(readLibrary(localStorage).graphs.find(entry => entry.id === id));
     const channel = new BroadcastChannel('live-graph-state');
-    channel.postMessage({ graphId: matching ? id : 'unrelated-graph', graph, state, tabId }); channel.close();
-  }, { state, matching, tabId });
+    channel.postMessage({ sessionId, graphId: matching ? id : 'unrelated-graph', graph, state, tabId }); channel.close();
+  }, { sessionId, state, matching, tabId });
 }
 
 export async function checkGraphActivity(page, width, info) {
@@ -105,7 +105,17 @@ export async function checkGraphActivity(page, width, info) {
   }
   await clickGraphAction(page, 'graph-load');
   await expect(page.locator('#graph-state')).toHaveText('Saved');
-  await publishGraphActivity(page, { matching: false });
+  // Another window's activity and cleanup cannot clear this graph's status.
+  await publishGraphActivity(page, { sessionId: 'unrelated-window', matching: false });
+  await expect(badge).toBeVisible(); await expect(warning).toBeHidden();
+  await publishGraphActivity(page, { sessionId: 'unrelated-window', matching: false, state: 'idle' });
+  await expect(badge).toBeVisible();
+  // Two windows can run the same graph; stopping one leaves the other active.
+  await publishGraphActivity(page, { sessionId: 'live-window-2', tabId: 84 });
+  await expect(badge).toHaveAttribute('title', 'Running in Live · tab 1476958582');
+  await publishGraphActivity(page, { state: 'idle' });
+  await expect(badge).toBeVisible(); await expect(badge).toHaveAttribute('title', 'Running in Live · tab 84');
+  await publishGraphActivity(page, { sessionId: 'live-window-2', state: 'idle' });
   await expect(badge).toBeHidden(); await expect(warning).toBeHidden();
   expect(await canvas.boundingBox()).toEqual(idle);
   await publishGraphActivity(page, { tabId: null });
