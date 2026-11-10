@@ -443,6 +443,33 @@ test('narrow Library has a focused Back action, usable menus and no overflow at 
   }
 });
 
+test('closing graph details restores focus once without interrupting subsequent focus changes', async ({ libraryExtension: f }) => {
+  const { page } = f;
+  const id = await create(page, 'Focus regression', simple());
+  await page.reload();
+  for (const menu of [false, true]) {
+    const invoker = menu ? page.getByLabel('Actions for Focus regression', { exact: true })
+      : page.getByRole('button', { name: 'Select Focus regression', exact: true });
+    await invoker.click();
+    if (menu) await page.locator('.row-menu[open]').getByRole('button', { name: 'Graph details', exact: true }).click();
+    await expect(page.locator('#selected-title')).toBeFocused();
+    const focus = await page.evaluate(({ id, menu }) => new Promise(resolve => {
+      const dialog = document.getElementById('selected');
+      const row = [...document.querySelectorAll('#graph-list li')].find(row => row.dataset.id === id);
+      const target = row.querySelector(menu ? 'summary' : 'button[data-id]');
+      let restored;
+      dialog.addEventListener('close', () => resolve({ restored, afterClose: document.activeElement.id }), { once: true });
+      document.getElementById('back-to-graphs').click();
+      restored = document.activeElement === target;
+      // Move focus in the same task, before the native dialog's queued close event.
+      document.getElementById('web-graph').focus();
+    }), { id, menu });
+    expect(focus).toEqual({ restored: true, afterClose: 'web-graph' });
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#web-voice-enabled')).toBeFocused();
+  }
+});
+
 test('long lists scroll independently and details return focus to the invoking row', async ({ libraryExtension: f }) => {
   const { page } = f;
   for (let i = 0; i < 24; i++) await create(page, `Graph ${String(i).padStart(2, '0')}`, simple());

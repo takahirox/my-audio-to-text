@@ -59,10 +59,21 @@ function select(id, invoker) {
 function closeDetails() {
   // Closing preserves the draft; selecting another graph still warns before discarding it.
   keepDraft();
-  element('selected').close();
+  hideDetails();
+}
+function hideDetails() {
+  const dialog = element('selected');
+  if (!dialog.open) return;
+  element('graph-more').open = false;
+  dialog.close();
+  const row = [...element('graph-list').children].find(row => row.dataset.id === (detailInvoker?.id || selectedId));
+  const target = detailInvoker instanceof HTMLElement && detailInvoker.isConnected ? detailInvoker
+    : row?.querySelector(detailInvoker?.menu ? 'summary' : 'button[data-id]');
+  // Restore once, before the queued close event can interrupt subsequent focus changes.
+  (target || element('search')).focus();
 }
 function renderDetails(entry = selected()) {
-  if (!entry && element('selected').open) element('selected').close();
+  if (!entry) hideDetails();
   if (!entry) { detailsEntry = null; return; }
   detailsEntry = structuredClone(entry);
   element('selected-title').textContent = entry.name;
@@ -234,7 +245,7 @@ try {
   element('recovery').hidden = false; element('recover-legacy').hidden = true;
   element('recovery-message').textContent = 'Original storage is available for export. No saved data has been overwritten.';
   for (const node of document.querySelectorAll('#new, main button, main input, main select')) node.disabled = !['export-storage', 'export-legacy'].includes(node.id);
-  if (element('selected').open) element('selected').close();
+  hideDetails();
 }
 if (!fatal) {
   const toggle = element('web-voice-enabled'), status = element('web-voice-status'), consent = element('voice-consent');
@@ -305,13 +316,6 @@ if (!fatal) {
     if (element('graph-more').open) {
       event.preventDefault(); element('graph-more').open = false; element('graph-more').querySelector('summary').focus();
     } else { event.preventDefault(); closeDetails(); }
-  });
-  element('selected').addEventListener('close', () => {
-    element('graph-more').open = false;
-    const row = [...element('graph-list').children].find(row => row.dataset.id === (detailInvoker?.id || selectedId));
-    const target = detailInvoker instanceof HTMLElement && detailInvoker.isConnected ? detailInvoker
-      : row?.querySelector(detailInvoker?.menu ? 'summary' : 'button[data-id]');
-    (target || element('search')).focus();
   });
   for (const link of document.querySelectorAll('[data-section]')) link.addEventListener('click', event => {
     event.preventDefault();
