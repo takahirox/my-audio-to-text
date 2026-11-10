@@ -1,4 +1,6 @@
 import { assertGraph, defaultGraph, GRAPH_KEY, executableGraph } from './graph.js';
+import { assertSubgraph, resolveSubgraphs, references, portContract, executableBoundaryEdges } from './subgraphs.js';
+import { webVoiceError } from './web-voice-graph.js';
 
 export const LIBRARY_KEY = 'processing-graph-library-v1';
 export const LIBRARY_LOCK = 'processing-graph-save';
@@ -24,21 +26,25 @@ export function validateLibrary(value) {
     if (!entry || !validText(entry.id) || ids.has(entry.id) || !validText(entry.name) || typeof entry.description !== 'string'
       || !validText(entry.revision) || typeof entry.createdAt !== 'string' || typeof entry.updatedAt !== 'string'
       || !Number.isFinite(Date.parse(entry.createdAt)) || !Number.isFinite(Date.parse(entry.updatedAt))
-      || !Object.hasOwn(entry, 'graph') || (entry.source !== undefined && typeof entry.source !== 'string')) throw Error('Invalid graph library entry or duplicate graph ID. Original storage has been kept.');
+      || !Object.hasOwn(entry, 'graph') || (entry.kind !== undefined && !['graph', 'subgraph'].includes(entry.kind)) || (entry.source !== undefined && typeof entry.source !== 'string')) throw Error('Invalid graph library entry or duplicate graph ID. Original storage has been kept.');
     ids.add(entry.id);
   }
   if (!ids.has(value.assignments.live) || !(value.assignments.webVoice === null || ids.has(value.assignments.webVoice))) throw Error('Invalid execution target assignment. Original storage has been kept.');
+  if (value.graphs.some(entry => entry.kind === 'subgraph' && Object.values(value.assignments).includes(entry.id))) throw Error('Reusable subgraphs cannot be assigned directly. Choose a parent graph.');
   return value;
 }
-export function entryGraph(entry) {
+export function entryGraph(entry, library) {
   if (!entry) throw Error('Graph no longer exists. Return to Graph Library; your draft has been kept.');
-  return assertGraph(entry.graph);
+  return entry.kind === 'subgraph' ? assertSubgraph(entry.graph) : assertGraph(entry.graph, library?.graphs);
 }
-export function entryError(entry) {
-  try { entryGraph(entry); return ''; } catch (error) { return error.message; }
+export function resolvedEntryGraph(entry, library) {
+  return resolveSubgraphs(entryGraph(entry, library), library?.graphs);
 }
-export function usable(entry) {
-  try { return executableGraph(entryGraph(entry)).nodes.length > 0; } catch { return false; }
+export function entryError(entry, library) {
+  try { entryGraph(entry, library); resolvedEntryGraph(entry, library); return ''; } catch (error) { return error.message; }
+}
+export function usable(entry, library) {
+  try { return entry.kind !== 'subgraph' && executableGraph(resolvedEntryGraph(entry, library)).nodes.length > 0; } catch { return false; }
 }
 function initialLibrary(storage) {
   const source = storage.getItem(GRAPH_KEY), stamp = now();
@@ -77,12 +83,56 @@ export function readLiveGraph(storage) {
   const library = readLibrary(storage);
   if (legacyChanged(storage, library)) throw Error('The legacy graph changed in another page. Recover it in Graph Library before continuing.');
   const entry = library.graphs.find(entry => entry.id === library.assignments.live);
-  return { id: entry.id, name: entry.name, graph: entryGraph(entry), revision: entry.revision };
+  return { id: entry.id, name: entry.name, graph: resolvedEntryGraph(entry, library), revision: entry.revision };
 }
-export function exportEntry(entry) {
+export function exportEntry(entry, library) {
   // Invalid sources are exported byte-for-byte, including malformed legacy JSON.
-  if (entryError(entry)) return entry.source ?? JSON.stringify(entry.graph, null, 2);
-  return JSON.stringify(entryGraph(entry), null, 2) + '\n';
+  if (entryError(entry, library)) return entry.source ?? JSON.stringify(entry.graph, null, 2);
+  const dependencies = new Set(entry.graph.nodes.filter(node => node.type === 'Subgraph').map(node => node.subgraphId));
+  if (entry.kind === 'subgraph' || dependencies.size) {
+    const entries = [entry, ...(library?.graphs || []).filter(item => dependencies.has(item.id))];
+    return JSON.stringify({ format: 'graph-bundle', version: 1, root: entry.id,
+      graphs: entries.map(({ id, name, description, kind = 'graph', graph }) => ({ id, name, description, kind, graph })) }, null, 2) + '\n';
+  }
+  return JSON.stringify(entryGraph(entry, library), null, 2) + '\n';
+}
+export function exportDraft(entry, graph, library) {
+  // Original-source recovery belongs only to saved entries, never to a draft.
+  const { source, ...metadata } = entry;
+  return exportEntry({ ...metadata, graph }, library);
+}
+
+export function assertSubgraphUpdate(library, id, graph) {
+  const entry = library.graphs.find(entry => entry.id === id);
+  if (!entry) return;
+  const parents = references(library, id);
+  const breaking = ['inputs', 'outputs'].flatMap(side => entry.graph.interface[side].filter(port => {
+    const replacement = graph.interface[side].find(next => next.id === port.id);
+    return !replacement || portContract(entry.graph, side, port) !== portContract(graph, side, replacement);
+  }).map(port => port.name));
+  for (const side of ['inputs', 'outputs']) for (const port of graph.interface[side]) {
+    if (!entry.graph.interface[side].some(previous => previous.id === port.id)) breaking.push(port.name);
+  }
+  const resolution = 'Duplicate this subgraph for a new contract, replace instances and reconnect in those parents, then save them before retiring the old definition. Your draft has been kept.';
+  if (parents.length && breaking.length) throw Error(`Cannot change exposed ports (${breaking.join(', ')}). Referenced by: ${parents.map(parent => parent.name).join(', ')}. ${resolution}`);
+  const candidate = library.graphs.map(item => item.id === id ? { ...entry, graph } : item);
+  const affected = [];
+  for (const parent of parents) {
+    // Expansion also rejects errors such as internal event cycles.
+    const next = executableBoundaryEdges(parent.graph, candidate);
+    const previous = executableBoundaryEdges(parent.graph, library.graphs);
+    if ([...previous].some(route => !next.has(route))) affected.push(parent.name);
+  }
+  if (affected.length) throw Error(`Cannot disable executable paths. Referenced by: ${affected.join(', ')}. Restore the internal connections. ${resolution}`);
+  const incompatible = [];
+  for (const parent of parents) {
+    // Every compatible parent can be selected from a field mic. Preserve that
+    // capability even when it is not the legacy Web voice default.
+    if (webVoiceError(resolveSubgraphs(parent.graph, library.graphs))) continue;
+    const reason = webVoiceError(resolveSubgraphs(parent.graph, candidate));
+    if (reason) incompatible.push(`${parent.name}: ${reason}`);
+  }
+  if (incompatible.length) throw Error(`Cannot break Web voice paths. Referenced by: ${incompatible.join('; ')}. ${resolution}`);
 }
 export class GraphLibrary {
   constructor(storage, locks = globalThis.navigator?.locks) { this.storage = storage; this.locks = locks; }
@@ -99,21 +149,31 @@ export class GraphLibrary {
       return library;
     });
   }
-  async create({ name = 'Untitled graph', description = '', graph = defaultGraph() } = {}, revision) {
-    const validated = assertGraph(graph); // Validate before acquiring storage; rejected imports write nothing.
+  async create({ name = 'Untitled graph', description = '', graph = defaultGraph(), kind = 'graph', id: requestedId, replacementGraph, replacementSource } = {}, revision) {
     return this.change(library => {
-      const stamp = now(); let id;
-      do { id = token(); } while (library.graphs.some(entry => entry.id === id));
+      if (replacementSource) {
+        const source = library.graphs.find(entry => entry.id === replacementSource.id);
+        if (!source || source.revision !== replacementSource.revision) throw Error('Parent graph changed while Create Subgraph was open. Cancel this dialog, load the latest saved graph if needed, then select the nodes and create the subgraph again.');
+      }
+      const validated = kind === 'subgraph' ? assertSubgraph(graph) : assertGraph(graph, library.graphs);
+      resolveSubgraphs(validated, library.graphs);
+      const stamp = now(); let id = requestedId;
+      if (id !== undefined && (!validText(id) || library.graphs.some(entry => entry.id === id))) throw Error('Subgraph identity already exists. Retry Create Subgraph.');
+      if (id === undefined) do { id = token(); } while (library.graphs.some(entry => entry.id === id));
       if (!validText(name) || typeof description !== 'string') throw Error('Enter a graph name and description.');
-      library.graphs.push({ id, name: name.trim(), description, graph: validated, revision: token(), createdAt: stamp, updatedAt: stamp });
+      library.graphs.push({ id, kind, name: name.trim(), description, graph: validated, revision: token(), createdAt: stamp, updatedAt: stamp });
+      // Extraction must validate its replacement in the same storage transaction.
+      if (replacementGraph) resolveSubgraphs(replacementGraph, library.graphs);
     }, { revision });
   }
   async save(id, revision, graph) {
-    const validated = assertGraph(graph);
     return this.change(library => {
       const entry = library.graphs.find(entry => entry.id === id);
       if (!entry || revision !== entry.revision) throw conflict();
-      if (entryError(entry)) throw Error('This saved graph is invalid. Export its original and import a repaired copy as a new graph; the original has been kept.');
+      if (entryError(entry, library)) throw Error('This saved graph is invalid. Export its original and import a repaired copy as a new graph; the original has been kept.');
+      const validated = entry.kind === 'subgraph' ? assertSubgraph(graph) : assertGraph(graph, library.graphs);
+      resolveSubgraphs(validated, library.graphs);
+      if (entry.kind === 'subgraph') assertSubgraphUpdate(library, id, validated);
       entry.graph = validated; delete entry.source; entry.updatedAt = now(); entry.revision = token();
     });
   }
@@ -127,15 +187,16 @@ export class GraphLibrary {
   }
   async duplicate(id, revision) {
     const library = readLibrary(this.storage), entry = library.graphs.find(entry => entry.id === id);
-    return this.create({ name: `${entry?.name || 'Graph'} copy`, description: entry?.description || '', graph: entryGraph(entry) }, revision ?? library.revision);
+    return this.create({ name: `${entry?.name || 'Graph'} copy`, description: entry?.description || '', graph: entryGraph(entry, library), kind: entry.kind || 'graph' }, revision ?? library.revision);
   }
   assign(target, id, revision) {
     return this.change(library => {
       if (!['live', 'webVoice'].includes(target)) throw Error('Unknown execution target.');
       if (!(target === 'webVoice' && id === null)) {
         const entry = library.graphs.find(entry => entry.id === id);
-        entryGraph(entry);
-        if (target === 'live' && !usable(entry)) throw Error('Live needs a graph with an executable path.');
+        if (entry?.kind === 'subgraph') throw Error('Choose a parent graph; reusable subgraphs cannot run directly.');
+        resolvedEntryGraph(entry, library);
+        if (target === 'live' && !usable(entry, library)) throw Error('Live needs a graph with an executable path.');
       }
       library.assignments[target] = id;
     }, { revision });
@@ -144,9 +205,37 @@ export class GraphLibrary {
     return this.change(library => {
       if (!library.graphs.some(entry => entry.id === id)) throw Error('Graph no longer exists. Load saved details before continuing.');
       if (library.assignments.live === id) throw Error('Reassign execution targets before deleting this graph.');
-      if (library.graphs.length <= 1 || !library.graphs.some(entry => entry.id !== id && usable(entry))) throw Error('Keep at least one usable graph. Create or repair another graph first.');
+      const parents = references(library, id);
+      if (parents.length) throw Error(`Referenced by: ${parents.map(entry => entry.name).join(', ')}. Remove or replace those instances and save the parents before deleting this subgraph.`);
+      if (library.graphs.length <= 1 || !library.graphs.some(entry => entry.id !== id && usable(entry, library))) throw Error('Keep at least one usable graph. Create or repair another graph first.');
       library.graphs = library.graphs.filter(entry => entry.id !== id);
       if (library.assignments.webVoice === id) library.assignments.webVoice = null;
+    }, { revision });
+  }
+  import(value, name, revision) {
+    if (value?.format !== 'graph-bundle') return this.create({ name, graph: value }, revision);
+    return this.change(library => {
+      if (value.version !== 1 || !Array.isArray(value.graphs) || !value.graphs.length || !value.graphs.some(entry => entry.id === value.root)) throw Error('Invalid graph dependency bundle.');
+      const ids = new Map();
+      for (const entry of value.graphs) {
+        if (!validText(entry.id) || ids.has(entry.id) || !validText(entry.name) || typeof entry.description !== 'string' || !['graph', 'subgraph'].includes(entry.kind)) throw Error('Invalid or duplicate bundled graph.');
+        ids.set(entry.id, token());
+      }
+      const imported = value.graphs.map(entry => {
+        const graph = structuredClone(entry.graph);
+        if (!Array.isArray(graph?.nodes)) throw Error('Invalid bundled graph.');
+        for (const node of graph.nodes) if (node.type === 'Subgraph') {
+          if (!ids.has(node.subgraphId)) throw Error(`Missing bundled dependency ${node.subgraphId}. Export the parent with its dependencies.`);
+          node.subgraphId = ids.get(node.subgraphId);
+        }
+        const stamp = now();
+        return { ...entry, id: ids.get(entry.id), graph, revision: token(), createdAt: stamp, updatedAt: stamp };
+      });
+      // Fresh IDs on every import never overwrite definitions already in use.
+      const candidate = { ...library, graphs: [...library.graphs, ...imported] };
+      for (const entry of imported) { entryGraph(entry, candidate); resolvedEntryGraph(entry, candidate); }
+      const root = imported.find(entry => entry.id === ids.get(value.root));
+      library.graphs.push(...imported.filter(entry => entry !== root), root);
     }, { revision });
   }
   recoverLegacy(revision) {
@@ -171,5 +260,5 @@ export async function saveLiveGraphData(storage, graph, locks = globalThis.navig
   if (storage.getItem(LIBRARY_KEY) === null) throw Error(opened.warning);
   const context = readLiveGraph(storage);
   const library = await new GraphLibrary(storage, locks).save(context.id, context.revision, graph);
-  return entryGraph(library.graphs.find(entry => entry.id === context.id));
+  return resolvedEntryGraph(library.graphs.find(entry => entry.id === context.id), library);
 }

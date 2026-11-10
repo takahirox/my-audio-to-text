@@ -1,8 +1,9 @@
 import { webVoiceChoices } from './web-voice-graph.js';
 import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_ORIGINS, WEB_VOICE_KEY, voiceEnabled } from './web-voice-preference.js';
-import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, entryError, exportEntry, legacyChanged, usable } from './graph-library.js';
-import { GRAPH_KEY, NODE_TYPES, ASR_TYPES } from './graph.js';
+import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, resolvedEntryGraph, entryError, exportEntry, legacyChanged, usable } from './graph-library.js';
+import { GRAPH_KEY, ASR_TYPES, nodeDefinition } from './graph.js';
 import { graphModelRequirements } from './graph-model-preparation.js';
+import { references } from './subgraphs.js';
 import { ModelAssetCache } from './model-asset-cache.js';
 
 const element = id => document.getElementById(id), store = new GraphLibrary(localStorage);
@@ -19,14 +20,14 @@ function download(text, filename) {
 function dirty() { return detailsEntry && (element('graph-name').value !== detailsEntry.name || element('graph-description').value !== detailsEntry.description); }
 function selected() { return library.graphs.find(entry => entry.id === selectedId); }
 function models(entry) {
-  if (entryError(entry)) return [];
-  const graph = entryGraph(entry), requirements = graphModelRequirements(graph);
+  if (entryError(entry, library)) return [];
+  const graph = resolvedEntryGraph(entry, library), requirements = graphModelRequirements(graph);
   return [...new Set([...requirements.map(requirement => requirement.title.split(' · ').filter(part => !/\d[\d.]* (?:MB|GB)|allow |WebGPU|CPU WASM|terms apply|Apache/.test(part)).slice(0, 2).join(' · ')),
-    ...graph.nodes.filter(node => ASR_TYPES.includes(node.type) && !['SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'].includes(node.type)).map(node => NODE_TYPES[node.type].label)])];
+    ...graph.nodes.filter(node => ASR_TYPES.includes(node.type) && !['SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'].includes(node.type)).map(node => (nodeDefinition(node, graph, library.graphs)?.label || node.type))])];
 }
 function state(entry) {
-  if (entryError(entry)) return 'Error · needs recovery';
-  return states.get(JSON.stringify(entry.graph)) || (models(entry).length ? 'Unknown' : 'Ready · no model files');
+  if (entryError(entry, library)) return 'Error · needs recovery';
+  return states.get(JSON.stringify(resolvedEntryGraph(entry, library))) || (models(entry).length ? 'Unknown' : 'Ready · no model files');
 }
 function updateDetailsState() {
   element('details-state').textContent = dirty() ? 'Unsaved changes' : '';
@@ -81,12 +82,12 @@ function renderDetails(entry = selected()) {
   element('graph-more').open = false;
   element('graph-metadata').open = false;
   updateDetailsState();
-  preview(entryError(entry) ? null : entryGraph(entry));
+  preview(entryError(entry, library) ? null : entryGraph(entry, library));
 }
 function renderSelectedState() {
   const current = selected(), entry = current || detailsEntry;
   if (!entry) return;
-  const invalid = entryError(entry), removed = !current;
+  const invalid = entryError(entry, library), removed = !current;
   element('open').hidden = removed;
   element('open').href = `graph-editor.html?id=${encodeURIComponent(entry.id)}`;
   element('selected-error').textContent = removed ? 'This graph was deleted in another page. Unsaved details have been kept; copy them before selecting another graph. Export JSON still recovers the previous saved graph.'
@@ -96,16 +97,17 @@ function renderSelectedState() {
   element('cache-hint').textContent = removed ? 'This graph was deleted.' : invalid ? 'Repair and import this graph before checking model files.' : '';
   element('save-details').disabled = removed;
   const assigned = library.assignments.live === entry.id;
-  const last = !library.graphs.some(other => other.id !== entry.id && usable(other));
-  element('delete').disabled = removed || assigned || last;
-  element('delete-hint').textContent = removed ? 'This graph was deleted.' : assigned ? 'Used by a launch setting; choose another graph in Launch settings first.' : last ? 'Keep at least one usable graph.' : '';
+  const parents = references(library, entry.id);
+  const last = !library.graphs.some(other => other.id !== entry.id && usable(other, library));
+  element('delete').disabled = removed || assigned || last || parents.length > 0;
+  element('delete-hint').textContent = removed ? 'This graph was deleted.' : parents.length ? `Referenced by: ${parents.map(parent => parent.name).join(', ')}. Replace or remove instances and save those graphs before deleting.` : assigned ? 'Used by a launch setting; choose another graph in Launch settings first.' : last ? 'Keep at least one usable graph.' : '';
   element('graph-updated').textContent = new Date(entry.updatedAt).toLocaleString();
   element('graph-models').textContent = invalid ? 'Unknown · repair graph first' : models(entry).join(', ') || 'None';
   element('graph-cache').textContent = state(entry);
 }
 function preview(graph) {
   const root = element('preview'); root.replaceChildren();
-  root.setAttribute('aria-label', graph ? `Graph preview: ${graph.nodes.length} nodes, ${graph.edges.length} connections. ${graph.nodes.map(node => `${node.id}: ${NODE_TYPES[node.type].label}`).join('; ')}` : 'No preview available; repair this saved graph.');
+  root.setAttribute('aria-label', graph ? `Graph preview: ${graph.nodes.length} nodes, ${graph.edges.length} connections. ${graph.nodes.map(node => `${node.id}: ${(nodeDefinition(node, graph, library.graphs)?.label || node.type)}`).join('; ')}` : 'No preview available; repair this saved graph.');
   if (!graph?.nodes.length) { root.setAttribute('viewBox', '0 0 300 100'); root.style.width = '100%'; root.style.height = '160px'; return; }
   const svg = (tag, attributes) => {
     const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -126,7 +128,7 @@ function preview(graph) {
     const p = positions.get(node.id), group = svg('g', {});
     group.append(svg('rect', { x: p.x, y: p.y, width: 180, height: 50, rx: 6 }));
     const name = svg('text', { x: p.x + 8, y: p.y + 19 }); name.textContent = node.id;
-    const type = svg('text', { x: p.x + 8, y: p.y + 38 }); type.textContent = NODE_TYPES[node.type].label;
+    const type = svg('text', { x: p.x + 8, y: p.y + 38 }); type.textContent = (nodeDefinition(node, graph, library.graphs)?.label || node.type);
     group.append(name, type); root.append(group);
   }
 }
@@ -134,7 +136,7 @@ function render(replaceDetails = false) {
   if (!selected() && (!dirty() || replaceDetails)) selectedId = library.assignments.live;
   const search = element('search').value.toLocaleLowerCase(), filter = element('filter').value;
   const rows = library.graphs.filter(entry => `${entry.name} ${entry.description} ${models(entry).join(' ')}`.toLocaleLowerCase().includes(search)
-    && (filter === 'all' || filter === 'assigned' && Object.values(library.assignments).includes(entry.id) || filter === 'invalid' && entryError(entry)));
+    && (filter === 'all' || filter === 'subgraph' && entry.kind === 'subgraph' || filter === 'graph' && entry.kind !== 'subgraph' || filter === 'assigned' && Object.values(library.assignments).includes(entry.id) || filter === 'invalid' && entryError(entry, library)));
   rows.sort(element('sort').value === 'name' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name));
   const focusedRow = document.activeElement?.closest('#graph-list li');
   const focusedId = focusedRow?.dataset.id;
@@ -143,7 +145,7 @@ function render(replaceDetails = false) {
     const row = el('li'), button = el('button'); row.dataset.id = entry.id; button.dataset.id = entry.id;
     button.onclick = () => select(entry.id, { id: entry.id, menu: false });
     button.setAttribute('aria-label', `Open details for ${entry.name}`); button.setAttribute('aria-controls', 'selected'); button.setAttribute('aria-haspopup', 'dialog');
-    const name = el('span', entry.name); name.className = 'graph-row-name'; button.append(name);
+    const name = el('span', `${entry.name}${entry.kind === 'subgraph' ? ' · Subgraph' : ''}`); name.className = 'graph-row-name'; button.append(name);
     if (entry.description) {
       const description = el('span', entry.description); description.className = 'graph-row-description';
       description.id = `description-${entry.id}`; button.setAttribute('aria-describedby', description.id); button.append(description);
@@ -159,7 +161,7 @@ function render(replaceDetails = false) {
         if (!select(entry.id, { id: entry.id, menu: true })) { summary.focus(); return; }
         if (command) element(command).click();
       };
-      actionButton.disabled = ['open', 'duplicate'].includes(command) && !!entryError(entry);
+      actionButton.disabled = ['open', 'duplicate'].includes(command) && !!entryError(entry, library);
       commands.append(actionButton);
     }
     menu.append(summary, commands);
@@ -185,12 +187,13 @@ function render(replaceDetails = false) {
 }
 function launchReason(entry) {
   if (!entry) return 'Choose a saved graph.';
-  return entryError(entry) ? 'Repair and import this graph first.' : !usable(entry) ? 'Connect an executable path in Graph Editor.' : '';
+  if (entry.kind === 'subgraph') return 'Choose a parent graph.';
+  return entryError(entry, library) ? 'Repair and import this graph first.' : !usable(entry, library) ? 'Connect an executable path in Graph Editor.' : '';
 }
 function renderLaunchSettings() {
   for (const [target, prefix] of [['live', 'live']]) {
     const select = element(`${prefix}-graph`), assignedId = library.assignments[target];
-    const options = library.graphs.map(entry => {
+    const options = library.graphs.filter(entry => entry.kind !== 'subgraph').map(entry => {
       const reason = launchReason(entry);
       const option = el('option', `${entry.name}${reason ? ` — ${reason}` : ''}`);
       option.value = entry.id; option.disabled = !!reason; return option;
@@ -331,7 +334,7 @@ if (!fatal) {
     const file = element('import-file').files?.[0]; if (!file) return;
     try {
       const graph = JSON.parse(await file.text());
-      if (!dirty() || confirm('Discard unsaved graph details?')) await action(() => store.create({ name: file.name.replace(/\.json$/i, '') || 'Imported graph', graph }, library.revision), { selectNew: true });
+      if (!dirty() || confirm('Discard unsaved graph details?')) await action(() => store.import(graph, file.name.replace(/\.json$/i, '') || 'Imported graph', library.revision), { selectNew: true });
     } catch (error) { element('errors').textContent = `Cannot import graph: ${error.message}. Existing graphs have been kept.`; }
     finally { element('import-file').value = ''; }
   };
@@ -347,7 +350,7 @@ if (!fatal) {
   element('duplicate').onclick = () => { if (!dirty() || confirm('Discard unsaved graph details?')) void action(() => store.duplicate(selectedId, library.revision), { selectNew: true }); };
   element('export').onclick = () => {
     const entry = selected() || detailsEntry;
-    download(exportEntry(entry), `${entry.name.replace(/[^\p{L}\p{N} _-]/gu, '_')}.json`);
+    download(exportEntry(entry, library), `${entry.name.replace(/[^\p{L}\p{N} _-]/gu, '_')}.json`);
   };
   element('delete').onclick = () => {
     const entry = selected(); if (!entry) return;
@@ -377,14 +380,14 @@ if (!fatal) {
   element('recover-legacy').onclick = () => { void action(() => store.recoverLegacy(library.revision)); };
   element('check-cache').onclick = async () => {
     const entry = selected(); if (!entry) return;
-    const key = JSON.stringify(entry.graph);
+    const key = JSON.stringify(resolvedEntryGraph(entry, library));
     element('graph-metadata').open = true;
     element('check-cache').disabled = true;
     states.set(key, 'Unknown · checking'); render();
     try {
-      const requirements = graphModelRequirements(entryGraph(entry));
+      const requirements = graphModelRequirements(resolvedEntryGraph(entry, library));
       const views = await Promise.all(requirements.map(async requirement => new ModelAssetCache(await requirement.manifest()).inspect()));
-      const packaged = entryGraph(entry).nodes.some(node => ASR_TYPES.includes(node.type) && !['SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'].includes(node.type));
+      const packaged = resolvedEntryGraph(entry, library).nodes.some(node => ASR_TYPES.includes(node.type) && !['SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'].includes(node.type));
       states.set(key, views.some(view => view.state === 'Error') ? 'Error · open Models' : views.some(view => view.state !== 'Ready') ? 'Needs preparation' : packaged ? 'Unknown · packaged models checked by Live' : 'Ready · cached files');
     } catch (error) { states.set(key, 'Error · open Models'); element('errors').textContent = error.message; }
     finally { render(); }
