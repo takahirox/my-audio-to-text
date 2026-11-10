@@ -1,4 +1,5 @@
 import { assertSubgraph, extractSubgraph, resolveSubgraphs } from './subgraphs.js';
+import { assertSubgraphUpdate } from './graph-library.js';
 import { MAX_DISPLAY_INPUTS } from '../web/display-node.js';
 import { createWireRouter, reusableWireRoute, wireColor, wireDistance } from './graph-wire-router.js';
 import { compatiblePorts } from '../web/port-contracts.js';
@@ -295,8 +296,12 @@ export class GraphEditor {
         create.disabled = true;
         try {
           assertSubgraph(extracted.shared);
-          const library = await this.onCreateSubgraph({ id, name: name.value, kind: 'subgraph', graph: extracted.shared });
-          this.definitions = library.graphs; this.draft = this.assert(extracted.parent);
+          const definition = { id, name: name.value, kind: 'subgraph', graph: extracted.shared };
+          const definitions = [...this.definitions, definition];
+          const parent = assertGraph(extracted.parent, definitions);
+          resolveSubgraphs(parent, definitions);
+          const library = await this.onCreateSubgraph({ ...definition, replacementGraph: parent });
+          this.definitions = library.graphs; this.draft = parent;
           this.multiSelection.clear(); this.selectedNode = extracted.instance.id; this.error = ''; dialog.close(); this.draw();
         } catch (failure) { error.textContent = failure.message; }
         finally { create.disabled = false; }
@@ -308,7 +313,12 @@ export class GraphEditor {
   }
   diagnostics(includeWarnings = this.warningPreference?.checked) {
     let boundaryError = '';
-    try { if (this.kind === 'subgraph') assertSubgraph(this.draft); else resolveSubgraphs(this.draft, this.definitions); } catch (error) { boundaryError = error.message; }
+    try {
+      if (this.kind === 'subgraph') {
+        const graph = assertSubgraph(this.draft);
+        assertSubgraphUpdate({ graphs: this.definitions }, this.graphId, graph);
+      } else resolveSubgraphs(this.draft, this.definitions);
+    } catch (error) { boundaryError = error.message; }
     return [...(boundaryError ? [boundaryError] : validateGraph(this.draft, false, this.definitions)).map(message => `Error: ${message}`),
       ...(includeWarnings && !boundaryError && this.kind !== 'subgraph' ? graphWarnings(resolveSubgraphs(this.draft, this.definitions)).map(message => `Warning: ${message}`) : [])].join('\n');
   }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, readLiveGraph, entryGraph, entryError, exportEntry, validateLibrary, saveLiveGraphData } from '../extension/graph-library.js';
+import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, readLiveGraph, entryGraph, entryError, exportEntry, exportDraft, validateLibrary, saveLiveGraphData } from '../extension/graph-library.js';
 import { defaultGraph, graphNode, edge, GRAPH_KEY, readGraph, saveGraph } from '../extension/graph.js';
 
 function storage(source = null) {
@@ -36,6 +36,19 @@ test('fresh installation creates only a named Live default; no Web voice assignm
   const { library, s } = await fixture();
   assert.equal(entry(library).name, 'Live transcription'); assert.deepEqual(entry(library).graph, defaultGraph());
   assert.equal(library.assignments.webVoice, null); assert.equal(s.getItem(GRAPH_KEY), null);
+});
+
+test('invalid draft export preserves current edits while saved legacy recovery stays byte-for-byte', async () => {
+  const raw = '  ' + JSON.stringify(defaultGraph()) + '\n';
+  const { library } = await fixture(raw), saved = entry(library);
+  const draft = entryGraph(saved, library);
+  draft.nodes.push({ id: 'shared', type: 'Subgraph', subgraphId: 'deleted', settings: {}, position: { x: 0, y: 0 } });
+  draft.nodes[0].position.x = 321;
+  assert.deepEqual(JSON.parse(exportDraft(saved, draft, library)), draft);
+  assert.equal(saved.source, raw);
+  const invalidSaved = { ...saved, graph: { version: 999 } };
+  assert.equal(exportEntry(invalidSaved, library), raw);
+  assert.deepEqual(JSON.parse(exportDraft(invalidSaved, draft, library)), draft);
 });
 
 for (const raw of ['{broken JSON', '{"version":999,"nodes":[],"edges":[]}', JSON.stringify({ ...defaultGraph(), nodes: [{ id: 'bad', type: 'Unsupported' }] })]) test(`corrupt legacy remains recoverable: ${raw.slice(0, 28)}`, async () => {

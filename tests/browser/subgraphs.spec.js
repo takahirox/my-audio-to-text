@@ -165,3 +165,61 @@ test('returning after a parent was deleted externally exposes its preserved draf
   const draft = JSON.parse(await page.getByLabel('Deleted parent draft JSON').inputValue());
   expect(draft.nodes.find(node => node.type === 'Subgraph').subgraphId).toBe(ids.shared);
 });
+
+test('exporting a restored invalid migrated draft retains extraction and text edits after dependency deletion', async ({ page }) => {
+  await page.evaluate(async () => {
+    const { readLiveGraph, LIBRARY_KEY } = await import('/extension/graph-library.js');
+    const { GRAPH_KEY } = await import('/extension/graph.js');
+    const graph = readLiveGraph(localStorage).graph;
+    localStorage.removeItem(LIBRARY_KEY);
+    localStorage.setItem(GRAPH_KEY, '  ' + JSON.stringify(graph) + '\n');
+  });
+  await page.goto('/extension/graph-editor.html');
+  const ids = await extract(page);
+  await page.getByRole('button', { name: 'Select source', exact: true }).click();
+  await page.getByLabel('source value', { exact: true }).fill('Preserve this draft');
+  await page.getByRole('button', { name: 'Select subgraph', exact: true }).click();
+  await page.locator('#graph-edit-subgraph').click();
+  await expect(page.getByRole('link', { name: 'Back to parent graph' })).toBeVisible();
+  await page.evaluate(async id => {
+    const { GraphLibrary, readLibrary } = await import('/extension/graph-library.js');
+    await new GraphLibrary(localStorage).delete(id, readLibrary(localStorage).revision);
+  }, ids.shared);
+  await page.getByRole('link', { name: 'Back to parent graph' }).click();
+  await expect(page.locator('#graph-errors')).toContainText('Missing or invalid subgraph');
+  await page.getByLabel('Graph actions', { exact: true }).click();
+  const downloading = page.waitForEvent('download'); await page.locator('#graph-export').click();
+  const download = await downloading, draft = JSON.parse(await readFile(await download.path(), 'utf8'));
+  expect(draft.nodes.find(node => node.type === 'Subgraph').subgraphId).toBe(ids.shared);
+  expect(draft.nodes.find(node => node.id === 'source').settings.value).toBe('Preserve this draft');
+});
+
+test('disconnecting shared processing reports affected parents in Validate and blocks saving without changing storage', async ({ page }) => {
+  const ids = await extract(page); await save(page);
+  await page.goto(`/extension/graph-editor.html?id=${ids.shared}`);
+  const before = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
+  await page.locator('.graph-wire').focus(); await page.keyboard.press('Delete');
+  await page.getByLabel('Graph actions', { exact: true }).click(); await page.locator('#graph-validate').click();
+  await expect(page.locator('#graph-errors')).toContainText('Cannot disable executable paths. Referenced by: Live transcription');
+  await page.locator('#graph-save').click();
+  await expect(page.locator('#graph-errors')).toContainText('Restore the internal connections');
+  await expect(page.locator('#graph-state')).toHaveText('Unsaved');
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
+});
+
+test('invalid reviewed extraction leaves storage and canvas unchanged and can be corrected in the same dialog', async ({ page }) => {
+  await page.getByRole('button', { name: 'Select format', exact: true }).click();
+  await page.getByLabel('Graph actions', { exact: true }).click(); await page.locator('#graph-create-subgraph').click();
+  const dialog = page.getByRole('dialog', { name: 'Create Subgraph', exact: true });
+  const before = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
+  await dialog.getByRole('button', { name: 'Remove out1', exact: true }).click();
+  await dialog.locator('#graph-confirm-subgraph').click();
+  await expect(dialog.getByRole('alert')).toContainText('Unknown port: subgraph.out1');
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
+  await expect(page.locator('.graph-node')).toHaveCount(4);
+  await dialog.getByRole('button', { name: 'Expose output', exact: true }).click();
+  await dialog.locator('#graph-confirm-subgraph').click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator('.graph-node')).toHaveCount(4);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).graphs.filter(entry => entry.kind === 'subgraph').length)).toBe(1);
+});

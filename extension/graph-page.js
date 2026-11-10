@@ -1,5 +1,5 @@
 import { defaultGraph, GRAPH_KEY, GRAPH_VERSION } from './graph.js';
-import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, resolvedEntryGraph, entryError, exportEntry, legacyChanged } from './graph-library.js';
+import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, resolvedEntryGraph, entryError, exportEntry, exportDraft, legacyChanged } from './graph-library.js';
 import { GraphEditor } from './graph-editor.js';
 import { graphModelStatus } from './graph-model-status.js';
 
@@ -61,7 +61,7 @@ async function openEditor() {
     : defaultGraph() : entryGraph(entry, library);
   const editor = new GraphEditor(element('graph-editor'), initialDraft, {
     invalidSaved, definitions: library.graphs, graphId: id, kind: entry.kind || 'graph', onSave: persist,
-    onExport: graph => { try { return exportEntry({ ...entry, graph }, readLibrary(localStorage)); } catch { return JSON.stringify(graph, null, 2); } },
+    onExport: graph => { try { return exportDraft(entry, graph, readLibrary(localStorage)); } catch { return JSON.stringify(graph, null, 2); } },
     onCreateSubgraph: async definition => {
       if (conflict) throw Error('Load saved before creating a subgraph; your draft has been kept.');
       library = await store.create(definition); return library;

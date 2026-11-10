@@ -1,5 +1,5 @@
 import { assertGraph, defaultGraph, GRAPH_KEY, executableGraph } from './graph.js';
-import { assertSubgraph, resolveSubgraphs, references, portContract } from './subgraphs.js';
+import { assertSubgraph, resolveSubgraphs, references, portContract, executableBoundaryEdges } from './subgraphs.js';
 
 export const LIBRARY_KEY = 'processing-graph-library-v1';
 export const LIBRARY_LOCK = 'processing-graph-save';
@@ -88,6 +88,35 @@ export function exportEntry(entry, library) {
   }
   return JSON.stringify(entryGraph(entry, library), null, 2) + '\n';
 }
+export function exportDraft(entry, graph, library) {
+  // Original-source recovery belongs only to saved entries, never to a draft.
+  const { source, ...metadata } = entry;
+  return exportEntry({ ...metadata, graph }, library);
+}
+
+export function assertSubgraphUpdate(library, id, graph) {
+  const entry = library.graphs.find(entry => entry.id === id);
+  if (!entry) return;
+  const parents = references(library, id);
+  const breaking = ['inputs', 'outputs'].flatMap(side => entry.graph.interface[side].filter(port => {
+    const replacement = graph.interface[side].find(next => next.id === port.id);
+    return !replacement || portContract(entry.graph, side, port) !== portContract(graph, side, replacement);
+  }).map(port => port.name));
+  for (const side of ['inputs', 'outputs']) for (const port of graph.interface[side]) {
+    if (!entry.graph.interface[side].some(previous => previous.id === port.id)) breaking.push(port.name);
+  }
+  const resolution = 'Duplicate this subgraph for a new contract, replace instances and reconnect in those parents, then save them before retiring the old definition. Your draft has been kept.';
+  if (parents.length && breaking.length) throw Error(`Cannot change exposed ports (${breaking.join(', ')}). Referenced by: ${parents.map(parent => parent.name).join(', ')}. ${resolution}`);
+  const candidate = library.graphs.map(item => item.id === id ? { ...entry, graph } : item);
+  const affected = [];
+  for (const parent of parents) {
+    // Expansion also rejects errors such as internal event cycles.
+    const next = executableBoundaryEdges(parent.graph, candidate);
+    const previous = executableBoundaryEdges(parent.graph, library.graphs);
+    if ([...previous].some(route => !next.has(route))) affected.push(parent.name);
+  }
+  if (affected.length) throw Error(`Cannot disable executable paths. Referenced by: ${affected.join(', ')}. Restore the internal connections. ${resolution}`);
+}
 export class GraphLibrary {
   constructor(storage, locks = globalThis.navigator?.locks) { this.storage = storage; this.locks = locks; }
   async change(action, { revision, recoverLegacy = false } = {}) {
@@ -102,7 +131,7 @@ export class GraphLibrary {
       return library;
     });
   }
-  async create({ name = 'Untitled graph', description = '', graph = defaultGraph(), kind = 'graph', id: requestedId } = {}, revision) {
+  async create({ name = 'Untitled graph', description = '', graph = defaultGraph(), kind = 'graph', id: requestedId, replacementGraph } = {}, revision) {
     return this.change(library => {
       const validated = kind === 'subgraph' ? assertSubgraph(graph) : assertGraph(graph, library.graphs);
       resolveSubgraphs(validated, library.graphs);
@@ -111,6 +140,8 @@ export class GraphLibrary {
       if (id === undefined) do { id = token(); } while (library.graphs.some(entry => entry.id === id));
       if (!validText(name) || typeof description !== 'string') throw Error('Enter a graph name and description.');
       library.graphs.push({ id, kind, name: name.trim(), description, graph: validated, revision: token(), createdAt: stamp, updatedAt: stamp });
+      // Extraction must validate its replacement in the same storage transaction.
+      if (replacementGraph) resolveSubgraphs(replacementGraph, library.graphs);
     }, { revision });
   }
   async save(id, revision, graph) {
@@ -120,21 +151,7 @@ export class GraphLibrary {
       if (entryError(entry, library)) throw Error('This saved graph is invalid. Export its original and import a repaired copy as a new graph; the original has been kept.');
       const validated = entry.kind === 'subgraph' ? assertSubgraph(graph) : assertGraph(graph, library.graphs);
       resolveSubgraphs(validated, library.graphs);
-      if (entry.kind === 'subgraph') {
-        const parents = references(library, id);
-        const breaking = ['inputs', 'outputs'].flatMap(side => entry.graph.interface[side].filter(port => {
-          const replacement = validated.interface[side].find(next => next.id === port.id);
-          return !replacement || portContract(entry.graph, side, port) !== portContract(validated, side, replacement);
-        }).map(port => port.name));
-        // A new required endpoint could deactivate an unchanged parent's path.
-        for (const side of ['inputs', 'outputs']) for (const port of validated.interface[side]) {
-          if (!entry.graph.interface[side].some(previous => previous.id === port.id)) breaking.push(port.name);
-        }
-        if (parents.length && breaking.length) throw Error(`Cannot change exposed ports (${breaking.join(', ')}). Referenced by: ${parents.map(parent => parent.name).join(', ')}. Duplicate this subgraph for a new contract, replace instances and reconnect in those parents, then save them before retiring the old definition. Your draft has been kept.`);
-        // Validate the expanded parents too (e.g. a new internal event cycle).
-        const candidate = { ...library, graphs: library.graphs.map(item => item.id === id ? { ...entry, graph: validated } : item) };
-        for (const parent of parents) resolvedEntryGraph(parent, candidate);
-      }
+      if (entry.kind === 'subgraph') assertSubgraphUpdate(library, id, validated);
       entry.graph = validated; delete entry.source; entry.updatedAt = now(); entry.revision = token();
     });
   }

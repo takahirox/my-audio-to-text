@@ -1,4 +1,4 @@
-import { assertGraph, nodeDefinition, INPUT_TYPES, edge } from './graph.js';
+import { assertGraph, executableGraph, nodeDefinition, INPUT_TYPES, edge } from './graph.js';
 
 const key = endpoint => JSON.stringify(endpoint);
 const portID = value => typeof value === 'string' && /^[a-zA-Z][\w-]{0,63}$/.test(value);
@@ -32,6 +32,19 @@ export function portContract(graph, side, port) {
 // Edges go directly to the real endpoints, preserving atomic output families,
 // sampled Hold semantics and the existing runtime's ownership/cleanup rules.
 export function resolveSubgraphs(graph, definitions = []) {
+  return expandSubgraphs(graph, definitions).graph;
+}
+
+// Compare parent wires by their original identities, even when expansion assigns
+// different internal node IDs after an edit. Partial branch loss matters too.
+export function executableBoundaryEdges(graph, definitions = []) {
+  graph = assertGraph(graph, definitions);
+  const expanded = expandSubgraphs(graph, definitions);
+  const active = new Set(executableGraph(expanded.graph).edges.map(key));
+  return new Set(graph.edges.filter(route => active.has(key(expanded.translate(route)))).map(key));
+}
+
+function expandSubgraphs(graph, definitions) {
   graph = assertGraph(graph, definitions);
   const nodes = [], edges = [], endpoints = new Map(), used = new Set(graph.nodes.map(node => node.id));
   let sequence = 0;
@@ -48,10 +61,11 @@ export function resolveSubgraphs(graph, definitions = []) {
     edges.push(...shared.edges.map(route => ({ from: translate(route.from), to: translate(route.to) })));
     for (const side of ['inputs', 'outputs']) for (const port of shared.interface[side]) endpoints.set(key([node.id, side, port.id]), translate([port.node, port.port]));
   }
-  for (const route of graph.edges) edges.push({ from: endpoints.get(key([route.from[0], 'outputs', route.from[1]])) || route.from,
+  const translate = route => ({ from: endpoints.get(key([route.from[0], 'outputs', route.from[1]])) || route.from,
     to: endpoints.get(key([route.to[0], 'inputs', route.to[1]])) || route.to });
+  for (const route of graph.edges) edges.push(translate(route));
   const resolved = { ...graph, nodes, edges }; delete resolved.interface;
-  return assertGraph(resolved);
+  return { graph: assertGraph(resolved), translate };
 }
 
 export function extractSubgraph(graph, selection, subgraphId, definitions = []) {

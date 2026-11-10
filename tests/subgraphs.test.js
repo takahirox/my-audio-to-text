@@ -7,6 +7,7 @@ import { GraphLibrary, openLibrary, readLibrary, entryGraph, entryError, exportE
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
 import { webVoiceGraph } from '../extension/web-voice-graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
+import { GraphEditor } from '../extension/graph-editor.js';
 
 async function fixture() {
   const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
@@ -32,6 +33,45 @@ async function sharedFixture() {
   return { ...f, extracted, tab, mic: library.graphs.at(-1).id };
 }
 const find = (library, id) => library.graphs.find(entry => entry.id === id);
+
+function formatterChain() {
+  return { version: 15, nodes: [graphNode('Text', 'text'), graphNode('TextFormatter', 'first'), graphNode('TextFormatter', 'second'), graphNode('Display', 'output')],
+    edges: [edge('text', 'value', 'first', 'input1'), edge('first', 'text', 'second', 'input1'), edge('second', 'text', 'output', 'input1')] };
+}
+
+test('rejected extraction writes nothing and the same identity can be retried after repairing reviewed ports', async () => {
+  const f = await fixture(), extracted = extractSubgraph(formatterChain(), ['first', 'second'], 'formatters');
+  const output = extracted.shared.interface.outputs.pop(), before = f.storage.getItem(LIBRARY_KEY);
+  const definition = { id: 'formatters', name: 'Formatters', kind: 'subgraph', graph: extracted.shared, replacementGraph: extracted.parent };
+  await assert.rejects(f.store.create(definition), /Unknown port: subgraph.out1/);
+  assert.equal(f.storage.getItem(LIBRARY_KEY), before);
+  extracted.shared.interface.outputs.push(output);
+  const saved = await f.store.create(definition);
+  assert.equal(saved.graphs.filter(entry => entry.id === 'formatters').length, 1);
+  assert.equal(executableGraph(resolveSubgraphs(extracted.parent, saved.graphs)).nodes.length, 4);
+});
+
+test('unchanged exposed contracts cannot silently disable complete or partial parent paths', async () => {
+  const f = await fixture(), extracted = extractSubgraph(formatterChain(), ['first', 'second'], 'formatters');
+  await f.store.create({ id: 'formatters', name: 'Formatters', kind: 'subgraph', graph: extracted.shared });
+  await f.store.create({ name: 'Complete parent', graph: extracted.parent });
+  const partial = structuredClone(extracted.parent);
+  // This parent remains runnable after the shared path breaks, with the same
+  // source and sink active; comparing only node counts would miss lost wiring.
+  partial.nodes.find(node => node.id === 'output').settings.inputCount = 2;
+  partial.edges.push(edge('text', 'value', 'output', 'input2'));
+  await f.store.create({ name: 'Partial parent', graph: partial });
+  const library = f.current(), shared = find(library, 'formatters'), draft = entryGraph(shared);
+  draft.edges = [];
+  const before = f.storage.getItem(LIBRARY_KEY);
+  const editor = Object.assign(Object.create(GraphEditor.prototype), { kind: 'subgraph', graphId: shared.id, definitions: library.graphs, draft });
+  assert.match(editor.diagnostics(true), /Cannot disable executable paths.*Complete parent, Partial parent.*Restore the internal connections.*Duplicate this subgraph/);
+  await assert.rejects(f.store.save(shared.id, shared.revision, draft), /Cannot disable executable paths.*Complete parent, Partial parent/);
+  assert.equal(f.storage.getItem(LIBRARY_KEY), before);
+  // Reordering internals changes expansion IDs but leaves the boundary runnable.
+  const repaired = entryGraph(shared); repaired.nodes.reverse();
+  await f.store.save(shared.id, shared.revision, repaired);
+});
 
 test('extraction infers stable typed boundary ports, preserves fan-out, settings and internal grouped edges', () => {
   const graph = defaultGraph(); graph.nodes.push(graphNode('Display', 'second'));
