@@ -462,8 +462,11 @@ test('Live navigation opens separate extension pages without stopping or retarge
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   for (const [name, file] of [['Graph', 'graph-editor.html'], ['Models', 'model-cache.html']]) {
     const [opened] = await Promise.all([extension.context.waitForEvent('page'), page.getByRole('link', { name, exact: true }).click()]);
-    await opened.waitForURL(`**/extension/${file}`);
-    await expect(opened.getByRole('heading', { name: name === 'Graph' ? 'Graph Editor' : name, exact: true })).toBeVisible();
+    await opened.waitForURL(url => url.pathname === `/extension/${file}`);
+    if (name === 'Graph') {
+      expect(new URL(opened.url()).searchParams.get('id')).toBe('default-live');
+      await expect(opened.getByRole('heading', { name: 'Graph Editor Live transcription', exact: true })).toBeVisible();
+    } else await expect(opened.getByRole('heading', { name, exact: true })).toBeVisible();
     await opened.getByRole('button', { name: 'Live' }).click();
     await expect(page.locator('#status')).toHaveText('Transcription active');
     expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);
