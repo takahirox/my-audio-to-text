@@ -33,3 +33,15 @@ export function webVoiceGraph(value) {
   return { ...graph, nodes, edges };
 }
 export function webVoiceError(value) { try { webVoiceGraph(value); return ''; } catch (error) { return error.message; } }
+
+// Keep selection and execution on precisely the same validation boundary.
+export function webVoiceChoices(library) {
+  return library.graphs.flatMap(entry => {
+    try { return [{ id: entry.id, name: entry.name, graph: webVoiceGraph(entry.graph) }]; }
+    catch { return []; }
+  });
+}
+export function webVoiceDefault(choices, saved, legacy) {
+  const id = saved === undefined ? legacy : saved;
+  return choices.some(choice => choice.id === id) ? id : choices.length === 1 ? choices[0].id : null;
+}
