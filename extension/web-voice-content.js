@@ -36,10 +36,11 @@
   const native = element => element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
   const value = element => native(element) ? element.value : element.textContent;
   let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle', inserting = false;
-  let listeners;
+  let listeners, menu, menuCaret, choices = [], defaultId = null, selectionPending = false;
   function send(message) { try { control?.postMessage(message); } catch { disable(); } }
   function stateUI(next, error = '') {
     state = next;
+    if (session) closeMenu();
     host?.setAttribute('data-voice-state', next);
     if (!button) return;
     const labels = { idle: 'Start voice typing', preparing: 'Preparing… Click to cancel', recording: 'Recording · Stop voice typing', stopping: 'Stopping…', error: 'Voice typing error · Retry' };
@@ -51,7 +52,7 @@
     svg.dataset.icon = icon;
     const path = document.createElementNS(svg.namespaceURI, 'path');
     path.setAttribute('d', iconPaths[icon]); svg.append(path); button.replaceChildren(svg);
-    button.setAttribute('aria-label', labels[next]); button.title = error || labels[next]; host.title = error || labels[next]; button.disabled = next === 'stopping';
+    button.setAttribute('aria-label', labels[next]); button.setAttribute('aria-description', 'Right-click or press Shift+F10 to choose the default voice graph.'); button.title = error || labels[next]; host.title = error || labels[next]; button.disabled = next === 'stopping' || selectionPending;
     button.dataset.state = next;
     status.textContent = error || (next === 'preparing' ? 'Preparing…' : next === 'recording' ? 'Recording' : next === 'stopping' ? 'Stopping…' : '');
     position();
@@ -124,9 +125,9 @@
       status.style.left = `${label.left - anchor.left}px`; status.style.top = `${label.top - anchor.top}px`;
     }
   }
-  function removeWidget() { host?.remove(); host = button = status = null; if (!session) target = null; }
+  function removeWidget() { closeMenu(); host?.remove(); host = button = status = null; if (!session) target = null; }
   function saveCaret(owner) {
-    if (native(owner.element)) { owner.start = owner.element.selectionStart; owner.end = owner.element.selectionEnd; }
+    if (native(owner.element)) { owner.start = owner.element.selectionStart; owner.end = owner.element.selectionEnd; owner.direction = owner.element.selectionDirection; }
     else {
       const selection = getSelection();
       if (!selection?.rangeCount || !owner.element.contains(selection.anchorNode) || !owner.element.contains(selection.focusNode)) throw Error('Select a caret in this basic editable field first.');
@@ -134,10 +135,71 @@
     }
     owner.expected = value(owner.element);
   }
+  function closeMenu(restore = false) {
+    if (!menu) return;
+    menu.remove(); menu = null; button?.setAttribute('aria-expanded', 'false'); button?.removeAttribute('aria-controls');
+    if (restore && menuCaret && editable(menuCaret.element)) {
+      const owner = menuCaret;
+      owner.element.focus({ preventScroll: true });
+      if (value(owner.element) === owner.expected) {
+        if (native(owner.element)) owner.element.setSelectionRange(owner.start, owner.end, owner.direction);
+        else { const selection = getSelection(); selection.removeAllRanges(); selection.addRange(owner.range); }
+      }
+    }
+    menuCaret = null;
+  }
+  function openMenu(event) {
+    if (!event.isTrusted || !enabled) return;
+    event.preventDefault(); event.stopPropagation();
+    if (selectionPending || session || ['preparing', 'recording', 'stopping'].includes(state) || !choices.length) return;
+    if (menu) { closeMenu(true); return; }
+    try { menuCaret = { element: target }; saveCaret(menuCaret); }
+    catch (error) { stateUI('error', error.message); return; }
+    stateUI('idle'); // The open menu replaces the choose-a-graph prompt.
+    menu = document.createElement('div'); menu.className = 'graph-menu'; menu.id = 'voice-graph-menu'; menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Default voice graph');
+    button.setAttribute('aria-expanded', 'true'); button.setAttribute('aria-controls', menu.id);
+    for (const choice of choices) {
+      const item = document.createElement('button'); item.type = 'button'; item.textContent = choice.name;
+      item.setAttribute('role', 'menuitemradio'); item.setAttribute('aria-checked', String(choice.id === defaultId));
+      item.tabIndex = -1;
+      item.addEventListener('pointerdown', event => { if (event.isTrusted) event.preventDefault(); });
+      item.addEventListener('click', event => {
+        if (!event.isTrusted || session) return;
+        selectionPending = true;
+        send({ type: 'select-graph', id: choice.id }); closeMenu(true);
+        stateUI('idle', 'Saving default graph…');
+      });
+      menu.append(item);
+    }
+    menu.addEventListener('keydown', event => {
+      if (!event.isTrusted) return;
+      const items = [...menu.children], index = items.indexOf(menu.getRootNode().activeElement);
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items[next].focus();
+      } else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(true); }
+      else if (event.key === 'Tab') { closeMenu(); button.focus(); }
+    });
+    button.getRootNode().append(menu);
+    const rect = host.getBoundingClientRect();
+    menu.style.minWidth = `${Math.max(1, Math.min(180, innerWidth - 8))}px`;
+    menu.style.maxWidth = `${Math.max(1, innerWidth - 8)}px`;
+    menu.style.maxHeight = `${Math.max(1, innerHeight - 8)}px`;
+    const size = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(4, Math.min(rect.left, innerWidth - size.width - 4))}px`;
+    menu.style.top = `${Math.max(4, Math.min(rect.bottom + 6, innerHeight - size.height - 4))}px`;
+    (menu.querySelector('[aria-checked="true"]') || menu.firstChild).focus({ preventScroll: true });
+  }
   function abort(error) {
-    const old = session; session = null;
-    try { old?.connection?.disconnect(); } catch { /* Context may have been revoked. */ }
-    if (old) send({ type: 'cancel', error });
+    if (session?.cancelRequested) return;
+    if (session) {
+      session.cancelRequested = true;
+      send({ type: 'cancel', error });
+      try { session.connection?.disconnect(); } catch { /* Context may have been revoked. */ }
+    }
+    // Keep ownership until the runtime acknowledges track/Worker cleanup.
     stateUI('error', error);
   }
   function widget(element) {
@@ -177,18 +239,39 @@
           button:focus-visible{outline-color:Highlight}
         }
       `;
+      style.textContent += `
+        .graph-menu{position:fixed;box-sizing:border-box;min-width:180px;width:max-content;max-width:300px;
+          padding:4px;border:1px solid #98a2b3;border-radius:6px;background:#fff;box-shadow:0 3px 12px #0004;
+          overflow:auto;color-scheme:light;font-family:system-ui,sans-serif}
+        .graph-menu button{display:flex;justify-content:flex-start;width:100%;height:auto;min-height:32px;
+          padding:7px 10px;border:0;border-radius:3px;box-shadow:none;font-size:13px;line-height:1.4;text-align:left;overflow-wrap:anywhere}
+        .graph-menu button::before{content:'✓';visibility:hidden;flex:none;width:18px}
+        .graph-menu button[aria-checked="true"]::before{visibility:visible}
+        .graph-menu button:focus{outline:2px solid #4263eb;outline-offset:-2px;background:#edf1f7}
+        :host([data-theme="dark"]) .graph-menu{background:#202833;color-scheme:dark}
+        :host([data-theme="dark"]) .graph-menu button:focus{background:#344054}
+        @media(forced-colors:active){.graph-menu{background:Canvas;border-color:ButtonText}}
+      `;
       button = document.createElement('button'); button.type = 'button';
+      button.setAttribute('aria-keyshortcuts', 'Shift+F10 Alt+ArrowDown'); button.setAttribute('aria-haspopup', 'menu'); button.setAttribute('aria-expanded', 'false');
+      button.addEventListener('contextmenu', openMenu);
+      button.addEventListener('keydown', event => {
+        if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey || event.key === 'ArrowDown' && event.altKey) openMenu(event);
+      });
       status = document.createElement('span'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
       // Pointer activation leaves the page selection intact. Keyboard activation
       // uses the same saved field and never redirects to the widget or new focus.
       button.addEventListener('pointerdown', event => { if (event.isTrusted) event.preventDefault(); });
       button.addEventListener('click', event => {
-        if (!event.isTrusted || !enabled) return;
+        if (!event.isTrusted || !enabled || selectionPending) return;
+        closeMenu(true);
         if (session) {
-          if (state === 'preparing') abort('Preparation canceled. Click the mic to retry.');
+          if (session.cancelRequested || state === 'error') return;
+          if (state === 'preparing') { session.cancelRequested = true; stateUI('stopping'); send({ type: 'cancel', error: 'Preparation canceled. Click the mic to retry.' }); }
           else { stateUI('stopping'); send({ type: 'stop' }); }
           return;
         }
+        if (!defaultId) { stateUI('error', 'Right-click the mic (or press Shift+F10) to choose a voice graph first.'); return; }
         try {
           if (!editable(target)) throw Error('Focus a supported writable field first.');
           const owner = { element: target, capability: crypto.randomUUID(), last: -1 };
@@ -202,12 +285,13 @@
   }
   function focus() {
     if (!enabled || session) return;
+    if (!choices.length) { removeWidget(); return; }
     const element = field(document.activeElement);
     if (element === host) return;
     if (editable(element)) widget(element); else removeWidget();
   }
   function disable() {
-    enabled = false; disposed = true;
+    enabled = false; disposed = true; choices = []; defaultId = null; selectionPending = false;
     const owner = session, previous = control; session = null; control = null;
     observer?.disconnect(); observer = null; clearInterval(timer);
     removeWidget();
@@ -232,13 +316,24 @@
         let ticks = 0;
         timer = setInterval(() => { position(); if (++ticks % 20 === 0) send({ type: 'heartbeat' }); }, 1000);
       }
+      if (message.type === 'graphs') {
+        const changed = JSON.stringify(choices) !== JSON.stringify(message.graphs) || defaultId !== message.defaultId;
+        choices = message.graphs; defaultId = message.defaultId;
+        if (changed) { closeMenu(true); if (!session) focus(); }
+      }
+      if (message.type === 'selection-saved' || message.type === 'selection-error') {
+        selectionPending = false;
+        if (!session) stateUI(message.error ? 'error' : 'idle', message.error || '');
+      }
       if (message.type === 'state' && session) stateUI(message.state, message.error);
       if (message.type === 'ended') {
+        if (!session) return;
         session?.connection?.disconnect(); session = null;
         // Only active sessions stay bound to the original field. Reconcile
         // focus before offering another start, including hiding idle controls
         // when focus moved away from supported editors.
-        if (!message.error) focus();
+        if (!choices.length) removeWidget();
+        else if (!message.error) focus();
         stateUI(message.error ? 'error' : 'idle', message.error || '');
         // Preserve actionable errors until next focus or explicit retry.
       }
@@ -248,11 +343,13 @@
   function listen() {
     listeners = new AbortController();
     const options = { capture: true, signal: listeners.signal };
+    document.addEventListener('pointerdown', event => { if (menu && event.target !== host) closeMenu(); }, options);
     document.addEventListener('focusin', focus, options);
     document.addEventListener('focusout', () => queueMicrotask(focus), options);
-    for (const event of ['scroll', 'resize']) window.addEventListener(event, position, options);
-    visualViewport?.addEventListener('resize', position, options);
-    visualViewport?.addEventListener('scroll', position, options);
+    for (const event of ['scroll', 'resize']) window.addEventListener(event, () => { closeMenu(); position(); }, options);
+    window.addEventListener('blur', event => { if (event.target === window) closeMenu(); }, options);
+    visualViewport?.addEventListener('resize', () => { closeMenu(); position(); }, options);
+    visualViewport?.addEventListener('scroll', () => { closeMenu(); position(); }, options);
     document.addEventListener('selectionchange', () => {
       if (!inserting && session && document.activeElement === session.element) try { saveCaret(session); } catch { /* A later insertion validates the saved range. */ }
     }, options);
@@ -283,7 +380,7 @@
       if (!Number.isSafeInteger(message.request)) return;
       const reply = result => { try { port.postMessage({ request: message.request, result }); } catch {} };
       try {
-        if (!enabled || session !== owner || message.capability !== owner.capability || !editable(owner.element)) throw Error('Stale, unauthorized or removed voice target.');
+        if (!enabled || session !== owner || owner.cancelRequested || message.capability !== owner.capability || !editable(owner.element)) throw Error('Stale, unauthorized or removed voice target.');
         if (message.action === 'output') { reply(true); return; }
         if (message.action !== 'append' || !Number.isSafeInteger(message.sequence) || message.sequence < 0 || typeof message.text !== 'string' || message.text.length > 100000) throw Error('Invalid voice output message.');
         if (message.sequence <= owner.last) { reply({ duplicate: true }); return; }
@@ -293,7 +390,7 @@
         inserting = true;
         try {
           if (!element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: text }))) throw Error('The editor rejected insertion. Use another field.');
-          if (!enabled || session !== owner || !editable(element) || value(element) !== owner.expected) throw Error('Field changed during insertion.');
+          if (!enabled || session !== owner || owner.cancelRequested || !editable(element) || value(element) !== owner.expected) throw Error('Field changed during insertion.');
           if (native(element)) {
             const next = owner.expected.slice(0, owner.start) + text + owner.expected.slice(owner.end);
             if (element.maxLength >= 0 && next.length > element.maxLength) throw Error('Field length limit reached.');

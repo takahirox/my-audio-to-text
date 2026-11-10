@@ -103,7 +103,7 @@ test('revisions reject stale edits to the same graph; independent concurrent gra
   assert.equal(s.getItem(LIBRARY_KEY), before); assert.equal(ga.nodes[0].position.x, 31);
 });
 
-test('assigned graph and last usable graph deletion are blocked; reassignment is explicit and validated', async () => {
+test('Live assignment blocks deletion; deleting a legacy Web default clears its assignment', async () => {
   const { store, s, library } = await fixture(), a = entry(library);
   await assert.rejects(store.delete(a.id), /Reassign/);
   await store.create({ graph: { version: 15, nodes: [graphNode('Text', 'parked')], edges: [] } });
@@ -112,8 +112,8 @@ test('assigned graph and last usable graph deletion are blocked; reassignment is
   await assert.rejects(store.assign('live', 'missing'));
   await assert.rejects(store.assign('invalid-target', a.id));
   current = await store.assign('webVoice', b.id);
-  await assert.rejects(store.delete(b.id), /Reassign/);
-  current = await store.assign('webVoice', null); current = await store.delete(b.id);
+  current = await store.delete(b.id);
+  assert.equal(current.assignments.webVoice, null);
   assert.equal(current.graphs.length, 1);
 });
 
@@ -190,4 +190,16 @@ test('explicit Live compatibility saves can initialize an unopened library witho
   await saveLiveGraphData(s, graph, lock);
   assert.deepEqual(readLiveGraph(s).graph, graph); assert.equal(s.getItem(GRAPH_KEY), null);
   assert.equal(readLibrary(s).graphs.length, 1);
+});
+
+test('a disconnected coordinator cannot make a committed library change report failure', async () => {
+  const { store, s } = await fixture(), previous = globalThis.chrome;
+  try {
+    globalThis.chrome = { runtime: { sendMessage() { throw Error('Extension context invalidated'); } } };
+    const saved = await store.create({ name: 'Saved while coordinator restarted' });
+    assert.equal(readLibrary(s).revision, saved.revision);
+    assert.equal(saved.graphs.at(-1).name, 'Saved while coordinator restarted');
+  } finally {
+    if (previous === undefined) delete globalThis.chrome; else globalThis.chrome = previous;
+  }
 });

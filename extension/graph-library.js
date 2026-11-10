@@ -2,6 +2,13 @@ import { assertGraph, defaultGraph, GRAPH_KEY, executableGraph } from './graph.j
 
 export const LIBRARY_KEY = 'processing-graph-library-v1';
 export const LIBRARY_LOCK = 'processing-graph-save';
+// Notify the coordinator after committed library changes. It reads the canonical
+// extension-origin storage through its inert offscreen host; no model preparation.
+function notifyVoiceLibrary() {
+  try {
+    if (globalThis.chrome?.runtime?.sendMessage) void chrome.runtime.sendMessage({ type: 'web-voice-library-changed' }).catch(() => {});
+  } catch { /* An invalidated context must not turn a committed save into an error. */ }
+}
 const conflict = () => Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');
 const token = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -88,6 +95,7 @@ export class GraphLibrary {
       library.revision = token(); validateLibrary(library);
       if (before !== this.storage.getItem(LIBRARY_KEY)) throw conflict();
       this.storage.setItem(LIBRARY_KEY, JSON.stringify(library));
+      notifyVoiceLibrary();
       return library;
     });
   }
@@ -135,9 +143,10 @@ export class GraphLibrary {
   delete(id, revision) {
     return this.change(library => {
       if (!library.graphs.some(entry => entry.id === id)) throw Error('Graph no longer exists. Load saved details before continuing.');
-      if (Object.values(library.assignments).includes(id)) throw Error('Reassign execution targets before deleting this graph.');
+      if (library.assignments.live === id) throw Error('Reassign execution targets before deleting this graph.');
       if (library.graphs.length <= 1 || !library.graphs.some(entry => entry.id !== id && usable(entry))) throw Error('Keep at least one usable graph. Create or repair another graph first.');
       library.graphs = library.graphs.filter(entry => entry.id !== id);
+      if (library.assignments.webVoice === id) library.assignments.webVoice = null;
     }, { revision });
   }
   recoverLegacy(revision) {
