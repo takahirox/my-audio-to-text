@@ -272,7 +272,7 @@
   });
   chrome.runtime.onConnect.addListener(port => {
     if (port.name !== 'web-voice-output') return;
-    if (port.sender?.id !== chrome.runtime.id || port.sender.url?.split(/[?#]/)[0] !== chrome.runtime.getURL('extension/web-voice-runtime.html')) { port.disconnect(); return; }
+    if (port.sender?.id !== chrome.runtime.id || port.sender.url?.split(/[?#]/)[0] !== chrome.runtime.getURL('extension/background.js')) { port.disconnect(); return; }
     const owner = session;
     if (!enabled || !owner || owner.connection) { port.disconnect(); return; }
     owner.connection = port;
