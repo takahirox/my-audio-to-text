@@ -1,0 +1,67 @@
+{
+  "realModel": true,
+  "sourceSha256": {
+    "extension/session.js": "91eddf959d30162285f2038b7a12e0d6d215c81e2b2b8ba59dca0ae79660069d",
+    "extension/media-source.js": "7c74ece33881b9d04208b887110b5fc9c3318a313d3f278c16dab91e1727858f",
+    "extension/page-target.js": "ed6a7a99661dd3aea297dee956879d08eaff5e66926241d7f72da7450053be1c",
+    "extension/web-voice-runtime.js": "fa3677e970c40747371d601305e2e8ec148df2c48bed799fc058925728855b6a",
+    "extension/web-voice-background.js": "87a04a47fbc3cf87548d5a051227b83dbd563328b595058f25fc3c1e5a744413",
+    "extension/web-voice-content.js": "39c20a5436df79aa3dd3a0fbea98ba59bd57bc73982bc4b5899d691d69c9379c",
+    "web/local-asr-core.js": "b8bf3f9160bacb523c786741644c34fca8abbaf2d27b2a2d26a649870cc03dac",
+    "web/transcription-nodes.js": "e295e91549f595fd6aeebd1514fe4de64f0b8e0b8f7a9db74060f9b83355388f"
+  },
+  "fixtureSha256": "21212faed6ae5f5958603d4d7cf60a423f1090fb6542d00e3a826ebe6235a768",
+  "model": "ReazonSpeech ja-en + Silero VAD, CPU/WASM",
+  "assetManifest": {
+    "sherpa-ja-en": {
+      "source": "https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en",
+      "revision": "12b44671ff48b9aed622551d64e02fea9a2cf870",
+      "models": [
+        {
+          "path": "encoder-epoch-35-avg-1.int8.onnx",
+          "virtualPath": "/transducer-encoder.onnx",
+          "sha256": "ead1579e118b821a767242a8eb9272634b0e63ba16f8dfc4d126732406eae268"
+        },
+        {
+          "path": "decoder-epoch-35-avg-1.onnx",
+          "virtualPath": "/transducer-decoder.onnx",
+          "sha256": "90b60985672df5023e187e9d25aa2dc93abc4286bfacf71a35a78a6b76d88df5"
+        },
+        {
+          "path": "joiner-epoch-35-avg-1.int8.onnx",
+          "virtualPath": "/transducer-joiner.onnx",
+          "sha256": "c7f4ba40a8ae307a6c30b5c06e2570add04466bcb45bab62699f0ec5d00ed495"
+        },
+        {
+          "path": "tokens.txt",
+          "virtualPath": "/tokens.txt",
+          "sha256": "144f8a4f639373a1bdf7eabb2437482ef64b0cc5db24ad27cce65f293e4faa24"
+        }
+      ],
+      "runtime": {
+        "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.2/sherpa-onnx-wasm-simd-1.13.2-vad-asr-en-moonshine_tiny.tar.bz2",
+        "sha256": "c388d09c952557f0aeaf7a3c796d20143a2bbed7cb0fe2eca656c26dc8beb444"
+      },
+      "sha256": "900bca64640c969acdae920b4e797094a9169c5dffa780a3941e1c2659eabea7",
+      "bytes": 90822540
+    }
+  },
+  "browser": "153.0.8010.12",
+  "microphone": "native gUM, fake device, CDP permission grant; native bubble buttons not automated",
+  "evidence": [
+    {
+      "selector": "#first",
+      "inserted": "THE MEETING STARTS AT TENPLEASE SEND ME THE REPORTWE NEED TO FINISH THIS PROJECT BY FRIDAY",
+      "exactlyOnce": true,
+      "visibleRuntime": false
+    },
+    {
+      "selector": "#second",
+      "inserted": "THE MEETING STARTS A TENPLEASE SEND ME THE REPORTWE NEED TO FINISH THIS PROJECT BY FRIDAY",
+      "exactlyOnce": true,
+      "visibleRuntime": false
+    }
+  ],
+  "remoteRequests": [],
+  "errors": []
+}

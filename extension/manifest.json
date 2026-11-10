@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "minimum_chrome_version": "116",
   "description": "Transcribe tab audio locally and compose translation with OPUS-MT or TranslateGemma 4B English/Japanese Nodes.",
-  "permissions": ["activeTab", "tabCapture", "scripting", "storage"],
+  "permissions": ["activeTab", "tabCapture", "scripting", "storage", "offscreen"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "action": { "default_title": "Transcribe this tab" },
   "background": { "service_worker": "extension/background.js", "type": "module" },

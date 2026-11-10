@@ -387,7 +387,7 @@ with tempfile.TemporaryDirectory() as tmp:
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest['manifest_version'] == 3
     assert manifest['options_ui'] == {'page': 'extension/model-cache.html', 'open_in_tab': True}
-    assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting', 'storage'}
+    assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting', 'storage', 'offscreen'}
     assert 'host_permissions' not in manifest
     assert set(manifest['optional_host_permissions']) == {'http://*/*', 'https://*/*'}
     assert 'content_scripts' not in manifest

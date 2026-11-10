@@ -1,9 +1,11 @@
 // Browser communication belongs to concrete adapters, outside Pipeline.
 export class PageConnection {
-  constructor(target, onEvent = () => {}) {
+  constructor(target, onEvent = () => {}, port) {
     if (!Number.isInteger(target?.tabId) || typeof target.documentId !== 'string') throw Error('Invoke the toolbar on a normal page first.');
     this.target = { ...target }; this.pending = new Map(); this.nextRequest = 0;
-    this.port = chrome.tabs.connect(target.tabId, { name: target.portName || 'local-page-target', documentId: target.documentId });
+    // Offscreen callers supply an authenticated runtime-port relay; Live uses
+    // the direct tab adapter. Request/sequence handling is identical.
+    this.port = port || chrome.tabs.connect(target.tabId, { name: target.portName || 'local-page-target', documentId: target.documentId });
     this.port.onMessage.addListener(message => {
       if (message.event) { onEvent(message); return; }
       const pending = this.pending.get(message.request);
