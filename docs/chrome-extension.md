@@ -276,6 +276,13 @@ parallel inference speed or unlimited capacity is not guaranteed. Shared pinned
 asset caches retain their verification and file-operation locks, separate from
 runtime ownership.
 
+If microphone startup fails, only that session reports the browser/device error:
+allow access in Chrome and OS privacy settings for a permission failure, connect
+or enable an input for a missing device, or check the device connection and OS
+input settings when another audio stream cannot be opened. Retry that session
+after resolving the cause. Its graph/model assignment is retained; peers are
+never stopped automatically to make room.
+
 Web microphones on different tabs/documents can record simultaneously. Within one
 document the existing single widget owns one fixed field/session; duplicate Start
 cannot replace it or insert twice. Stop, Cancel, navigation and closing a recording

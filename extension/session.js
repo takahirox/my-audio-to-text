@@ -1,5 +1,5 @@
 import { graphModelRequirements } from './graph-model-preparation.js';
-import { SELECTED_MEDIA_UNAVAILABLE } from './media-source.js';
+import { SELECTED_MEDIA_UNAVAILABLE, microphoneCaptureError } from './media-source.js';
 import { authorizePage } from './page-target.js';
 import { buttonLabel } from '../web/button-node.js';
 import { verifiedOpusCache } from './opus-mt-cache.js';
@@ -208,7 +208,10 @@ export class TabSession {
         // Request directly from the explicit Start action.
         let stream;
         try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false }); }
-        catch (error) { throw Error(`${microphones.map(node => node.id).join(', ')}: Microphone capture unavailable: ${error.message || error}`); }
+        catch (error) {
+          const failure = microphoneCaptureError(error);
+          throw Error(`${microphones.map(node => node.id).join(', ')}: ${failure.message}`, { cause: failure });
+        }
         if (this.session !== session) { stream.getTracks().forEach(track => track.stop()); return; }
         session.microphoneStreams.set(microphones[0].id, stream);
         for (const node of microphones.slice(1)) session.microphoneStreams.set(node.id, stream.clone());

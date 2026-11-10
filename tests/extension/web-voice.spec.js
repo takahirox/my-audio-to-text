@@ -25,11 +25,11 @@ const test = base.extend({
         await cp('extension', path.join(root, 'extension'), { recursive: true });
         await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(vendor|tts-assets|correction-assets)(\/|$)/.test(source) });
         await cp('extension/manifest.json', path.join(root, 'manifest.json'));
-        for (const role of ['sherpa', 'silero']) await writeFile(path.join(root, `web/${role}-worker.js`), `self.onmessage=({data})=>{
+        for (const role of ['sherpa', 'silero', 'whisper']) await writeFile(path.join(root, `web/${role}-worker.js`), `self.onmessage=({data})=>{
           if(data.type==='load')postMessage({type:'ready'});
           if(data.type==='vad-audio')postMessage({type:'vad',session:data.session,frames:[{audio:data.audio,speaking:data.audio.some(x=>Math.abs(x)>.001)}]});
           if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});
-          if(data.type==='decode'){postMessage({type:data.final?'final':'partial',text:data.final?'confirmed fixture':'pending fixture',session:data.session,id:data.id});postMessage({type:'decoded',session:data.session});}
+          if(data.type==='decode'){postMessage({type:data.final?'final':'partial',text:data.final?'${role === 'whisper' ? 'whisper fixture' : 'confirmed fixture'}':'pending fixture',session:data.session,id:data.id});postMessage({type:'decoded',session:data.session});}
         };`);
       }
       context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
@@ -48,7 +48,7 @@ const test = base.extend({
       await context.addInitScript(() => {
         if (location.protocol !== 'chrome-extension:') return;
         window.voiceFinals = [];
-        window.voiceResources = { workers: [], streams: [] };
+        window.voiceResources = { workers: [], streams: [], audioSamples: 0 };
         const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
         navigator.mediaDevices.getUserMedia = async options => {
           const stream = await getUserMedia(options); window.voiceResources.streams.push(stream); return stream;
@@ -59,6 +59,10 @@ const test = base.extend({
             super(...args);
             this.released = false; window.voiceResources.workers.push(this);
             this.addEventListener('message', ({ data }) => { if (data.type === 'final') window.voiceFinals.push({ id: data.id, text: data.text }); });
+          }
+          postMessage(data, ...rest) {
+            if (data.type === 'vad-audio') window.voiceResources.audioSamples += data.audio.length;
+            return super.postMessage(data, ...rest);
           }
           terminate() { this.released = true; super.terminate(); }
         };
@@ -434,13 +438,54 @@ test('Live and Web overlap Ready, recording, Stop, restart, multiple Live window
     report.model = 'ReazonSpeech ja-en + Silero VAD, WASM CPU';
     report.assetManifest = JSON.parse(await readFile(path.join(t.root, 'web/vendor/manifest.json'), 'utf8'));
     report.sourceSha256 = {};
-    for (const name of ['extension/session.js', 'extension/recorder.js', 'extension/graph-runtime.js', 'extension/web-voice-runtime.js', 'extension/web-voice-background.js', 'web/local-asr-core.js', 'web/transcription-nodes.js']) {
+    for (const name of ['extension/session.js', 'extension/media-source.js', 'extension/recorder.js', 'extension/graph-runtime.js', 'extension/web-voice-runtime.js', 'extension/web-voice-background.js', 'web/local-asr-core.js', 'web/transcription-nodes.js']) {
       const bytes = await readFile(name);
       expect((await readFile(path.join(t.root, name))).equals(bytes), `Rebuild changed source: ${name}`).toBe(true);
       report.sourceSha256[name] = createHash('sha256').update(bytes).digest('hex');
     }
     await writeFile('docs/evidence/runtime-concurrency-256-real.json', JSON.stringify(report, null, 2) + '\n');
   }
+});
+
+test('different Live and Web models retain their outputs through Stop, device failure and close', async ({ voice: t }) => {
+  test.skip(real, 'Controlled ReazonSpeech and Whisper inference plus device failure.');
+  await enable(t); await assignLiveMicrophone(t);
+  await t.library.evaluate(async id => {
+    const { GraphLibrary, readLibrary, entryGraph } = await import('./graph-library.js');
+    const entry = readLibrary(localStorage).graphs.find(entry => entry.id === id), graph = entryGraph(entry);
+    graph.nodes.find(node => node.id === 'asr').type = 'SpeechToTextWhisper';
+    await new GraphLibrary(localStorage).save(id, entry.revision, graph);
+  }, t.graphId);
+  await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting: 'granted', origin: t.url.replace(/\/extension\/$/, '') });
+  const live = await openLive(t); await live.locator('#start').click(); await expectLiveRecording(live);
+  let runtime = await start(t); await expect(runtime.locator('#voice-state')).toHaveText('Recording');
+  await expectLiveRecording(live);
+  // Stop flushes each model's distinct final to its original output. A wrong
+  // graph/model substitution or crossed target would change these assertions.
+  await expect.poll(() => runtime.evaluate(() => voiceResources.audioSamples)).toBeGreaterThan(8000);
+  let closed = runtime.waitForEvent('close'); await runtime.locator('#voice-stop').click(); await closed;
+  await expect(t.website.locator('#first')).toHaveValue('before whisper fixtureafter');
+  await expectLiveRecording(live);
+  runtime = await start(t, '#second'); await expect(runtime.locator('#voice-state')).toHaveText('Recording');
+  await live.locator('#stop').click(); await expect(live.locator('#model-status')).toHaveText('Ready');
+  await expect(live.locator('[data-display="display"] .display-content')).toHaveText('confirmed fixture');
+  await expect(runtime.locator('#voice-state')).toHaveText('Recording');
+  // A platform refusal to open a new stream must give this Live an actionable
+  // error without terminating the Web model, stream or field capability.
+  await live.evaluate(() => {
+    navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Controlled device stream limit', 'NotReadableError'); };
+  });
+  await live.locator('#start').click();
+  await expect(live.locator('#errors')).toContainText('Controlled device stream limit');
+  await expect(live.locator('#errors')).toContainText('Check the microphone connection and OS input settings');
+  await expect(runtime.locator('#voice-state')).toHaveText('Recording');
+  expect(await runtime.evaluate(() => voiceResources.workers.every(w => !w.released) && voiceResources.streams[0].active)).toBe(true);
+  await live.close(); await expect(runtime.locator('#voice-state')).toHaveText('Recording');
+  await expect.poll(() => runtime.evaluate(() => voiceResources.audioSamples)).toBeGreaterThan(8000);
+  closed = runtime.waitForEvent('close'); await runtime.locator('#voice-stop').click(); await closed;
+  await expect(t.website.locator('#first')).toHaveValue('before whisper fixtureafter');
+  await expect(t.website.locator('#second')).toHaveValue('left riwhisper fixtureght');
+  expect(await t.website.evaluate(() => window.submits)).toBe(0);
 });
 
 test('Web worker failure, navigation, device end and canceled preparation leave Live and a second tab running', async ({ voice: t }) => {
