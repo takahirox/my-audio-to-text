@@ -1,3 +1,4 @@
+import { webVoiceChoices } from './web-voice-graph.js';
 import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_ORIGINS, WEB_VOICE_KEY, voiceEnabled } from './web-voice-preference.js';
 import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, entryError, exportEntry, legacyChanged, usable } from './graph-library.js';
 import { GRAPH_KEY, NODE_TYPES, ASR_TYPES } from './graph.js';
@@ -229,7 +230,8 @@ try {
   let voiceMessage = '', hasWebsiteAccess = true;
   refreshVoiceStatus = () => {
     element('voice-switch-state').textContent = toggle.checked ? 'ON' : 'OFF';
-    status.textContent = voiceMessage || (toggle.checked ? hasWebsiteAccess ? 'ON · click a field mic to start; right-click it to choose a default graph.' : 'Website access missing. Turn OFF, then ON to grant access.' : 'OFF · website microphone controls are disabled.');
+    const count = library ? webVoiceChoices(library).length : null;
+    status.textContent = voiceMessage || (count === 0 ? 'No compatible graphs. Connect MicrophoneAudio through final text processing to FocusedInputTextOutputNode in Graph Editor.' : toggle.checked ? hasWebsiteAccess ? 'ON · click a field mic to start; right-click it to choose a default graph.' : 'Website access missing. Turn OFF, then ON to grant access.' : 'OFF · website microphone controls are disabled.');
   };
   toggle.checked = await readVoiceEnabled();
   const checkWebsiteAccess = async () => {
@@ -353,6 +355,7 @@ if (!fatal) {
     if (![LIBRARY_KEY, GRAPH_KEY, null].includes(event.key)) return;
     try {
       library = readLibrary(localStorage);
+      void chrome.runtime.sendMessage({ type: 'web-voice-library-changed' }).catch(() => {});
       if (dirty()) element('errors').textContent = 'Library changed in another page. Unsaved details have been kept; Load saved details before saving if this graph changed.';
       render();
     } catch (error) { element('errors').textContent = `${error.message} Your changes have been kept.`; }

@@ -2,6 +2,13 @@ import { assertGraph, defaultGraph, GRAPH_KEY, executableGraph } from './graph.j
 
 export const LIBRARY_KEY = 'processing-graph-library-v1';
 export const LIBRARY_LOCK = 'processing-graph-save';
+// Notify the coordinator after committed library changes. It reads the canonical
+// extension-origin storage through its inert offscreen host; no model preparation.
+function notifyVoiceLibrary() {
+  try {
+    if (globalThis.chrome?.runtime?.sendMessage) void chrome.runtime.sendMessage({ type: 'web-voice-library-changed' }).catch(() => {});
+  } catch { /* An invalidated context must not turn a committed save into an error. */ }
+}
 const conflict = () => Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');
 const token = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -103,6 +110,7 @@ export class GraphLibrary {
       if (before !== this.storage.getItem(LIBRARY_KEY)) throw conflict();
       this.storage.setItem(LIBRARY_KEY, JSON.stringify(library));
       notifyLibrary();
+      notifyVoiceLibrary();
       return library;
     });
   }

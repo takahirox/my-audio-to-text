@@ -44,6 +44,7 @@ test('Library manages independent named graphs, portable JSON, persistent target
   const { page } = f;
   await expect(page.locator('#launch-settings, #live-graph, #web-graph, #filter option[value=assigned]')).toHaveCount(0);
   await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
+  await expect(page.locator('#web-voice-status')).toContainText('No compatible graphs');
   await expect(page.locator('#graph-cache')).toHaveText('Unknown');
   await expect(page.locator('#delete')).toBeDisabled();
   await browse(page); await page.locator('#new').click(); await expect(page.locator('#selected-title')).toHaveText('Untitled graph'); await rename(page, 'Meeting Notes', 'Summarize meetings locally');

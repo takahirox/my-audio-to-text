@@ -93,10 +93,12 @@ asset-identity cache and are not duplicated per library graph.
 
 The version-1 library envelope is stored atomically in one localStorage value,
 `processing-graph-library-v1`: graph IDs, names, descriptions, timestamps,
-per-entry revisions, graphs and `{ live, webVoice }` defaults. The legacy
-`assignments.live` ID is retained as the toolbar default without changing identity;
-`assignments.webVoice` remains the independent page-mic default. Defaults may be null
-or dangling so deleted/invalid choices can be repaired without corrupting the library. Graph metadata
+per-entry revisions, graphs and `{ live, webVoice }` legacy assignments. The
+`assignments.live` ID is retained as the toolbar default without changing identity.
+The legacy `assignments.webVoice` migrates on first use to the independent page-mic
+default, `web-microphone-default-v1` in `chrome.storage.local`; subsequent page-mic
+choices use that preference. Assignments may be null or dangling so deleted/invalid
+choices can be repaired without corrupting the library. Graph metadata
 never enters the portable version-15 executable graph JSON. Mutations share the
 existing `processing-graph-save` Web Lock and compare revisions; unsupported
 hosts without Web Locks stay read-only.

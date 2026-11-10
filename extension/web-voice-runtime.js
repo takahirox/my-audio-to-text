@@ -1,6 +1,6 @@
 import { TabSession } from './session.js';
 import { PageConnection } from './page-target.js';
-import { readLibrary, entryGraph } from './graph-library.js';
+import { readLibrary, LIBRARY_KEY } from './graph-library.js';
 import { launchLibrary } from './launch-library.js';
 import { webVoiceGraph } from './web-voice-graph.js';
 
@@ -42,12 +42,11 @@ async function finish(owner, cancel = false, error = '') {
     send(owner, { type: 'ended', error: error || owner.failure || '' });
   }
 }
-async function start(owner, target) {
+async function start(owner, target, entry) {
   try {
-    const library = readLibrary(localStorage), entry = library.graphs.find(entry => entry.id === library.assignments.webVoice);
-    if (!entry) throw Error('No Web voice graph assigned. Right-click the page mic to select a saved default; Live is never substituted.');
-    // Snapshot before awaiting permission or models; Library edits are future-only.
-    const snapshot = webVoiceGraph(entryGraph(entry));
+    // The coordinator captured this validated graph at the explicit Start.
+    // Revalidate the detached snapshot without rereading a later library edit.
+    const snapshot = webVoiceGraph(entry.graph);
     const permission = owner.permission = await navigator.permissions.query({ name: 'microphone' });
     if (owner.ending) return;
     if (permission.state === 'prompt') {
@@ -92,6 +91,11 @@ port.onMessage.addListener(message => {
       error => port.postMessage({ type: 'launch-library-result', request: message.request, error: error.message }));
     return;
   }
+  if (message.type === 'library-read') {
+    try { port.postMessage({ type: 'library', request: message.request, library: readLibrary(localStorage) }); }
+    catch (error) { port.postMessage({ type: 'library', request: message.request, error: error.message }); }
+    return;
+  }
   const owner = owners.get(message.token);
   if (message.type === 'abort' && owner) { void finish(owner, true, message.error); return; }
   if (message.type === 'stop' && owner) { void finish(owner, owner.state !== 'recording'); return; }
@@ -100,7 +104,7 @@ port.onMessage.addListener(message => {
   if (message.stopRequested) { send({ token: message.token }, { type: 'ended' }); return; }
   const next = { token: message.token, state: 'preparing' };
   owners.set(next.token, next);
-  void start(next, message.target);
+  void start(next, message.target, message.graph);
 });
 function disconnect() {
   if (disconnected) return;
@@ -119,3 +123,9 @@ const heartbeat = setInterval(() => {
   if (Date.now() - lastHeartbeat > 65000) { disconnect(); return; }
   try { port.postMessage({ type: 'heartbeat' }); } catch { disconnect(); }
 }, 20000);
+
+window.addEventListener('storage', event => {
+  if (event.key === LIBRARY_KEY || event.key === null) {
+    try { port.postMessage({ type: 'library-changed' }); } catch {}
+  }
+});

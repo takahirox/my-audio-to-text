@@ -91,3 +91,28 @@ Chrome API references: [native contextMenus](https://developer.chrome.com/docs/e
 - [Narrow graph details](library-267-390.png)
 - [390px graph list](library-267-list-390.png)
 - [320px graph list](library-267-list-320.png)
+
+## Integration with merged #266
+
+Resolved the conflicts with `main` at
+`77e28cc7eb15e75ca884b8f1ffce189312134ec1`. The merged page-mic picker keeps
+its separate persisted default, compatible-graph filtering, caret preservation,
+and Preparing/Recording/Stopping selection guards. Toolbar requests share the
+offscreen lifecycle while using a separate pending-request map, so catalog reads
+and cleanup preserve independent Web sessions. The graph-only workspace keeps
+its compact consent switch and zero-compatible-graph guidance.
+
+Checks run against the combined implementation:
+
+- `npm test`: **896 passed**.
+- `npx playwright test --config playwright.extension.config.js tests/extension/toolbar-launch.spec.js tests/extension/graph-library.spec.js tests/extension/web-voice.spec.js tests/extension/graph-concurrent.spec.js`:
+  **59 passed**, including corrupt-storage microphone revocation.
+- `npx playwright test --config playwright.extension.config.js tests/extension/extension.spec.js --grep 'real toolbar'`:
+  **1 passed**, including three simultaneous native tab captures.
+- `npx playwright test --config playwright.extension.config.js tests/extension/graph-library.spec.js --grep 'Library manages independent'`:
+  **1 passed** after adding the zero-compatible-graph guidance assertion.
+- `git diff --check` and `git diff --cached --check`: passed.
+
+The manual-browser and production-model limitations above still apply. No
+physical menu, hardware-capacity or production model-bundle verification was
+performed during this integration.
