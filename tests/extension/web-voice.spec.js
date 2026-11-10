@@ -34,9 +34,11 @@ const test = base.extend({
           if(data.type==='decode'){postMessage({type:data.final?'final':'partial',text:data.final?'${role === 'whisper' ? 'whisper fixture' : 'confirmed fixture'}':'pending fixture',session:data.session,id:data.id});postMessage({type:'decoded',session:data.session});}
         };`);
       }
-      context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
+      const launch = () => chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
         ignoreDefaultArgs: ['--disable-extensions', ...(info.title.includes('back-forward cache') ? ['--disable-back-forward-cache'] : [])], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream',
           ...(real ? [`--use-file-for-fake-audio-capture=${path.resolve('tests/fixtures/ordinary-english.wav')}${info.title.includes('overlap') ? '' : '%noloop'}`] : [])] });
+      context = await launch();
+      context.on('serviceworker', worker => worker.on('console', message => { if (message.type() === 'warning') console.log(message.text()); }));
       const cdp = await context.browser().newBrowserCDPSession();
       // Seed a real Chrome host grant as an installation/upgrade fixture. The
       // production optional-only manifest is restored before any feature test.
@@ -87,7 +89,24 @@ const test = base.extend({
       });
       await library.reload();
       const website = await context.newPage(); await website.goto(`http://127.0.0.1:${server.address().port}/`);
-      await use({ context, library, website, url, cdp, id, graphId, pageErrors, remote, root });
+      await use({ context, library, website, url, cdp, id, graphId, pageErrors, remote, root,
+        async restart() {
+          const websiteURL = website.url(); await context.close(); context = await launch();
+          this.context = context; this.cdp = await context.browser().newBrowserCDPSession();
+          // Reapply the fixture's native host grant: loading an unpacked optional-only
+          // manifest does not persist the earlier required-host installation grant.
+          await writeFile(manifestPath, JSON.stringify({ ...JSON.parse(originalManifest), host_permissions: ['http://*/*', 'https://*/*'] }));
+          expect((await this.cdp.send('Extensions.loadUnpacked', { path: root })).id).toBe(id);
+          await writeFile(manifestPath, originalManifest);
+          await this.cdp.send('Extensions.loadUnpacked', { path: root });
+          this.library = await context.newPage(); await this.library.goto(url + 'graph-library.html');
+          this.website = await context.newPage(); await this.website.goto(websiteURL);
+        } });
+      if (info.status !== info.expectedStatus && !library.isClosed()) console.log('Voice test state:', await library.evaluate(async () => ({
+        preferences: await chrome.storage.local.get(['web-voice-typing-v1', 'web-microphone-default-v1']),
+        origins: (await chrome.permissions.getAll()).origins, registered: (await chrome.scripting.getRegisteredContentScripts()).length,
+        offscreen: (await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length
+      })));
       expect(pageErrors).toEqual([]); expect(remote).toEqual([]);
     } finally { await context?.close(); await rm(temporary, { recursive: true, force: true }); await new Promise(resolve => server.close(resolve)); }
   },
@@ -216,6 +235,7 @@ async function runtime(t) {
   };
 }
 async function bootstrap(t, source) {
+  await idle(t); // Ensure the next offscreen generation loads this test instrumentation.
   const file = path.join(t.root, 'extension/voice-test-probe.js');
   await writeFile(file, (await readFile(file, 'utf8')) + '\n' + source);
 }
@@ -230,21 +250,12 @@ test('consent stays OFF for an existing assignment; permission and UI activation
   const otherLibrary = await t.context.newPage(); await otherLibrary.goto(t.url + 'graph-library.html');
   await expect(otherLibrary.locator('#web-voice-enabled')).toBeChecked();
   await otherLibrary.locator('#web-voice-enabled').uncheck(); await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
-  await expect(t.library.locator('#web-graph')).toHaveValue(t.graphId);
+  await expect(t.library.locator('#web-graph')).toHaveCount(0);
   expect(await t.library.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).assignments.webVoice)).toBe(t.graphId);
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0);
-  await otherLibrary.locator('#web-graph').selectOption('');
-  await expect(t.library.locator('#web-graph')).toHaveValue('');
-  await t.library.locator('#web-voice-enabled').click();
-  await expect(t.library.locator('#voice-consent')).not.toBeVisible();
-  await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
-  await otherLibrary.locator('#web-graph').selectOption(t.graphId);
-  await expect(t.library.locator('#web-graph')).toHaveValue(t.graphId);
-  await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
-  await expect(t.library.locator('#voice-consent')).not.toBeVisible();
   await enable(t);
   await t.library.locator('#web-voice-enabled').uncheck();
-  await expect(t.library.locator('#web-graph')).toHaveValue(t.graphId);
+  expect(await t.library.evaluate(async () => (await chrome.storage.local.get('web-microphone-default-v1'))['web-microphone-default-v1'])).toBe(t.graphId);
 });
 
 test('fresh install has no site permission or injected scripts; assignment is not consent and denial stays OFF', async ({ voice: t }) => {
@@ -639,9 +650,11 @@ test('snapshots, authenticated routing, replay rejection and model failures reta
     const entry = readLibrary(localStorage).graphs.find(e => e.id === id);
     await new GraphLibrary(localStorage).save(id, entry.revision, defaultGraph());
   }, t.graphId);
-  await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await t.website.waitForTimeout(650); await mic(t.website); await idle(t);
   await expect(t.website.locator('#first')).toHaveValue('before confirmed fixtureafter');
-  await start(t); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error'); await idle(t);
+  await expect(widget(t.website)).toHaveCount(0);
+  await t.library.reload();
+  await expect(t.library.locator('#web-voice-status')).toContainText('No compatible graphs');
   await expect(t.website.locator('#first')).toHaveValue('before confirmed fixtureafter');
 });
 
@@ -746,4 +759,164 @@ test('device startup failure is actionable and preserves another Web owner', asy
   await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
   await expect(other.locator('#first')).toHaveValue('before after');
   await t.website.waitForTimeout(650); await stop(t); await idle(t); await r.detach();
+});
+
+async function graphMenu(t) {
+  const cdp = await t.context.newCDPSession(t.website);
+  try {
+    const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+    const find = node => node.attributes?.includes('data-local-web-voice') ? node :
+      [...node.children || [], ...node.shadowRoots || []].map(find).find(Boolean);
+    const host = find(root); if (!host) return [];
+    const { object } = await cdp.send('DOM.resolveNode', { backendNodeId: host.shadowRoots[0].backendNodeId });
+    const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true,
+      functionDeclaration: `function() { return [...this.querySelectorAll('[role="menuitemradio"]')].map(item => {
+        const r = item.getBoundingClientRect(); return { name:item.textContent, selected:item.getAttribute('aria-checked') === 'true',
+          focused:this.activeElement === item, x:r.x, y:r.y, width:r.width, height:r.height }; }); }` });
+    return result.value;
+  } finally { await cdp.detach(); }
+}
+async function rightMic(t) {
+  const box = await widget(t.website).boundingBox();
+  await t.website.mouse.click(box.x + 18, box.y + 18, { button: 'right' });
+}
+async function addVoice(t, name, { disconnected = false, prefix = '' } = {}) {
+  return t.library.evaluate(async ({ name, disconnected, prefix }) => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js'), { graphNode, edge } = await import('./graph.js');
+    const graph = structuredClone(readLibrary(localStorage).graphs.find(e => e.name === 'Dictation').graph);
+    if (disconnected) graph.edges.pop();
+    if (prefix) {
+      const formatter = graphNode('TextFormatter', 'formatter'); formatter.settings.template = prefix + '{1}';
+      graph.nodes.push(formatter); graph.edges[1] = edge('asr', 'final', 'formatter', 'input1');
+      graph.edges.push(edge('formatter', 'text', 'field', 'text'));
+    }
+    const next = await new GraphLibrary(localStorage).create({ name, graph }); return next.graphs.at(-1).id;
+  }, { name, disconnected, prefix });
+}
+const savedDefault = t => t.library.evaluate(async () => (await chrome.storage.local.get('web-microphone-default-v1'))['web-microphone-default-v1']);
+
+test('one automatic graph: right-click selection, keyboard and outside dismissal preserve field and caret without capture', async ({ voice: t }) => {
+  await enable(t); await t.website.bringToFront();
+  await t.website.locator('#first').focus(); await t.website.locator('#first').evaluate(e => e.setSelectionRange(3, 7));
+  await expect(widget(t.website)).toBeVisible(); await idle(t);
+  await rightMic(t);
+  expect((await graphMenu(t)).map(({ name, selected }) => ({ name, selected }))).toEqual([{ name: 'Dictation', selected: true }]);
+  await t.website.keyboard.press('Escape'); expect(await graphMenu(t)).toEqual([]);
+  expect(await t.website.locator('#first').evaluate(e => [document.activeElement === e, e.selectionStart, e.selectionEnd])).toEqual([true, 3, 7]);
+  await controlUI(t, true); await t.website.keyboard.press('Shift+F10'); expect(await graphMenu(t)).toHaveLength(1);
+  await t.website.keyboard.press('Enter'); await expect.poll(() => savedDefault(t)).toBe(t.graphId); await idle(t);
+  expect(await graphMenu(t)).toEqual([]); await expect(t.website.locator('#first')).toHaveValue('before after');
+  expect(await t.website.evaluate(() => [submits, edits.length])).toEqual([0, 0]);
+  await rightMic(t); await t.website.locator('#second').click(); expect(await graphMenu(t)).toEqual([]);
+  await expect(t.website.locator('#second')).toBeFocused();
+  // Menu dismissal with Tab returns to the ordinary tab order.
+  await controlUI(t, true); await t.website.keyboard.press('Shift+F10'); await t.website.keyboard.press('Tab');
+  expect(await graphMenu(t)).toEqual([]);
+  await t.website.locator('#basic').focus();
+  await t.website.locator('#basic').evaluate(e => {
+    const range = document.createRange(); range.setStart(e.firstChild, 3); range.collapse(true);
+    const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+  });
+  await rightMic(t); await t.website.keyboard.press('Escape');
+  expect(await t.website.locator('#basic').evaluate(e => [document.activeElement === e, getSelection().anchorOffset])).toEqual([true, 3]);
+});
+
+test('multiple graphs require a choice; selection persists across tabs and reloads without capture; running sessions retain snapshots', async ({ voice: t }, info) => {
+  test.skip(real);
+  const b = await addVoice(t, 'Formatted dictation', { prefix: 'B: ' });
+  await addVoice(t, 'Disconnected microphone', { disconnected: true });
+  await t.library.evaluate(async () => {
+    const { GraphLibrary } = await import('./graph-library.js'); await new GraphLibrary(localStorage).assign('webVoice', null);
+    await chrome.storage.local.remove('web-microphone-default-v1');
+  });
+  await t.library.reload(); await enable(t); await t.website.bringToFront(); await t.website.locator('#first').focus();
+  await expect(widget(t.website)).toBeVisible(); await mic(t.website);
+  await expect(widget(t.website)).toHaveAttribute('title', /choose a voice graph/); await idle(t);
+  await rightMic(t);
+  expect((await graphMenu(t)).map(({ name, selected }) => ({ name, selected }))).toEqual([
+    { name: 'Dictation', selected: false }, { name: 'Formatted dictation', selected: false }]);
+  await t.website.screenshot({ path: info.outputPath('mic-graph-menu.png') });
+  await t.website.keyboard.press('End'); await t.website.keyboard.press('Enter');
+  await expect.poll(() => savedDefault(t)).toBe(b); await idle(t);
+  await expect(t.website.locator('#first')).toHaveValue('before after');
+  const second = await t.context.newPage(); await second.goto(t.website.url());
+  const peer = { ...t, website: second };
+  await second.locator('#first').focus(); await expect(widget(second)).toBeVisible(); await rightMic(peer);
+  expect((await graphMenu(peer)).filter(x => x.selected).map(x => x.name)).toEqual(['Formatted dictation']);
+  await second.keyboard.press('Escape');
+  await t.website.reload(); await start(t); await recording(t);
+  await rightMic(t); expect(await graphMenu(t)).toEqual([]);
+  await t.library.evaluate(async id => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js'), { defaultGraph } = await import('./graph.js');
+    const entry = readLibrary(localStorage).graphs.find(e => e.id === id);
+    await new GraphLibrary(localStorage).save(id, entry.revision, defaultGraph());
+  }, b);
+  // A sole remaining candidate becomes the next default; the active graph is frozen.
+  await expect.poll(() => savedDefault(t)).toBe(t.graphId);
+  await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await expect(t.website.locator('#first')).toHaveValue('before B: confirmed fixtureafter');
+  await rightMic(t); expect((await graphMenu(t)).map(x => x.name)).toEqual(['Dictation']); await t.website.keyboard.press('Escape');
+});
+
+test('preparing and stopping reject right-click and keyboard switching until cleanup', async ({ voice: t }) => {
+  test.skip(real); await addVoice(t, 'Another dictation'); await enable(t); await idle(t);
+  await bootstrap(t, 'window.voiceDelay = 700;');
+  await start(t); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
+  await rightMic(t); expect(await graphMenu(t)).toEqual([]);
+  await controlUI(t, true); await t.website.keyboard.press('Shift+F10'); expect(await graphMenu(t)).toEqual([]);
+  await mic(t.website); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error'); await idle(t);
+  expect(await savedDefault(t)).toBe(t.graphId);
+  await start(t); await recording(t); await t.website.waitForTimeout(650); await mic(t.website);
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'stopping'); await rightMic(t); expect(await graphMenu(t)).toEqual([]);
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle'); await idle(t);
+  expect(await savedDefault(t)).toBe(t.graphId);
+});
+
+test('deleting defaults requires reselection for multiple candidates; zero graphs hides icons while opt-in stays ON', async ({ voice: t }) => {
+  await addVoice(t, 'Second'); const c = await addVoice(t, 'Third');
+  await enable(t); await t.website.bringToFront(); await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible();
+  await t.library.evaluate(async id => { const { GraphLibrary } = await import('./graph-library.js'); await new GraphLibrary(localStorage).delete(id); }, t.graphId);
+  await expect.poll(() => savedDefault(t)).toBe(null);
+  await mic(t.website); await expect(widget(t.website)).toHaveAttribute('title', /choose a voice graph/); await idle(t);
+  await rightMic(t); expect((await graphMenu(t)).map(x => x.selected)).toEqual([false, false]);
+  const item = (await graphMenu(t)).find(x => x.name === 'Third');
+  await t.website.mouse.click(item.x + item.width / 2, item.y + item.height / 2); await expect.poll(() => savedDefault(t)).toBe(c);
+  await t.library.evaluate(async () => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js'), { defaultGraph } = await import('./graph.js');
+    const store = new GraphLibrary(localStorage);
+    for (const entry of readLibrary(localStorage).graphs.filter(e => e.name !== 'Live transcription')) await store.save(entry.id, entry.revision, defaultGraph());
+  });
+  await expect(widget(t.website)).toHaveCount(0); await expect(t.library.locator('#web-voice-enabled')).toBeChecked();
+  await t.library.reload();
+  await expect(t.library.locator('#web-voice-status')).toContainText('No compatible graphs');
+});
+
+test('the selected default and explicit consent survive a full browser restart', async ({ voice: t }) => {
+  const b = await addVoice(t, 'Saved default'); await enable(t);
+  await t.website.bringToFront(); await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible();
+  await rightMic(t); await t.website.keyboard.press('End'); await t.website.keyboard.press('Enter');
+  await expect.poll(() => savedDefault(t)).toBe(b); await idle(t);
+  await t.restart(); await expect(t.library.locator('#web-voice-enabled')).toBeChecked();
+  await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible(); await rightMic(t);
+  await expect.poll(async () => (await graphMenu(t)).filter(x => x.selected).map(x => x.name)).toEqual(['Saved default']);
+  await t.website.keyboard.press('Escape'); await idle(t);
+  await expect(t.website.locator('#first')).toHaveValue('before after');
+});
+
+test('zero compatible graphs can stay explicitly enabled; adding a saved path reveals the mic without reauthorizing', async ({ voice: t }) => {
+  await t.library.evaluate(async id => { const { GraphLibrary } = await import('./graph-library.js'); await new GraphLibrary(localStorage).delete(id); }, t.graphId);
+  await t.library.reload(); await t.library.locator('#web-voice-enabled').click();
+  await t.library.getByRole('button', { name: 'Continue to website permission' }).click();
+  await expect(t.library.locator('#web-voice-enabled')).toBeChecked();
+  await expect(t.library.locator('#web-voice-status')).toContainText('No compatible graphs');
+  await t.website.bringToFront(); await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0);
+  await t.library.evaluate(async () => {
+    const { GraphLibrary } = await import('./graph-library.js'), { graphNode, edge } = await import('./graph.js');
+    await new GraphLibrary(localStorage).create({ name: 'New dictation', graph: { version: 15,
+      nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
+      edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] } });
+  });
+  await expect(widget(t.website)).toBeVisible(); await rightMic(t);
+  expect((await graphMenu(t)).map(({ name, selected }) => ({ name, selected }))).toEqual([{ name: 'New dictation', selected: true }]);
+  await t.website.keyboard.press('Escape'); await idle(t);
 });

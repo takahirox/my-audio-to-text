@@ -77,7 +77,10 @@ asset-identity cache and are not duplicated per library graph.
 
 The version-1 library envelope is stored atomically in one localStorage value,
 `processing-graph-library-v1`: graph IDs, names, descriptions, timestamps,
-per-entry revisions, graphs and `{ live, webVoice }` assignments. Graph metadata
+per-entry revisions, graphs and the Live assignment. The legacy `webVoice`
+assignment remains readable for migration; the field microphone now chooses its
+profile-wide default in a right-click/Shift+F10 menu, stored separately as
+`web-microphone-default-v1` in `chrome.storage.local`. Graph metadata
 never enters the portable version-15 executable graph JSON. Mutations share the
 existing `processing-graph-save` Web Lock and compare revisions; unsupported
 hosts without Web Locks stay read-only.

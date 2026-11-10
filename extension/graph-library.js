@@ -1,8 +1,16 @@
 import { assertGraph, defaultGraph, GRAPH_KEY, executableGraph } from './graph.js';
 import { assertSubgraph, resolveSubgraphs, references, portContract, executableBoundaryEdges } from './subgraphs.js';
+import { webVoiceError } from './web-voice-graph.js';
 
 export const LIBRARY_KEY = 'processing-graph-library-v1';
 export const LIBRARY_LOCK = 'processing-graph-save';
+// Notify the coordinator after committed library changes. It reads the canonical
+// extension-origin storage through its inert offscreen host; no model preparation.
+function notifyVoiceLibrary() {
+  try {
+    if (globalThis.chrome?.runtime?.sendMessage) void chrome.runtime.sendMessage({ type: 'web-voice-library-changed' }).catch(() => {});
+  } catch { /* An invalidated context must not turn a committed save into an error. */ }
+}
 const conflict = () => Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');
 const token = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -116,6 +124,15 @@ export function assertSubgraphUpdate(library, id, graph) {
     if ([...previous].some(route => !next.has(route))) affected.push(parent.name);
   }
   if (affected.length) throw Error(`Cannot disable executable paths. Referenced by: ${affected.join(', ')}. Restore the internal connections. ${resolution}`);
+  const incompatible = [];
+  for (const parent of parents) {
+    // Every compatible parent can be selected from a field mic. Preserve that
+    // capability even when it is not the legacy Web voice default.
+    if (webVoiceError(resolveSubgraphs(parent.graph, library.graphs))) continue;
+    const reason = webVoiceError(resolveSubgraphs(parent.graph, candidate));
+    if (reason) incompatible.push(`${parent.name}: ${reason}`);
+  }
+  if (incompatible.length) throw Error(`Cannot break Web voice paths. Referenced by: ${incompatible.join('; ')}. ${resolution}`);
 }
 export class GraphLibrary {
   constructor(storage, locks = globalThis.navigator?.locks) { this.storage = storage; this.locks = locks; }
@@ -128,6 +145,7 @@ export class GraphLibrary {
       library.revision = token(); validateLibrary(library);
       if (before !== this.storage.getItem(LIBRARY_KEY)) throw conflict();
       this.storage.setItem(LIBRARY_KEY, JSON.stringify(library));
+      notifyVoiceLibrary();
       return library;
     });
   }
@@ -182,11 +200,12 @@ export class GraphLibrary {
   delete(id, revision) {
     return this.change(library => {
       if (!library.graphs.some(entry => entry.id === id)) throw Error('Graph no longer exists. Load saved details before continuing.');
-      if (Object.values(library.assignments).includes(id)) throw Error('Reassign execution targets before deleting this graph.');
+      if (library.assignments.live === id) throw Error('Reassign execution targets before deleting this graph.');
       const parents = references(library, id);
       if (parents.length) throw Error(`Referenced by: ${parents.map(entry => entry.name).join(', ')}. Remove or replace those instances and save the parents before deleting this subgraph.`);
       if (library.graphs.length <= 1 || !library.graphs.some(entry => entry.id !== id && usable(entry, library))) throw Error('Keep at least one usable graph. Create or repair another graph first.');
       library.graphs = library.graphs.filter(entry => entry.id !== id);
+      if (library.assignments.webVoice === id) library.assignments.webVoice = null;
     }, { revision });
   }
   import(value, name, revision) {

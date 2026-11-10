@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { webVoiceGraph, webVoiceError } from '../extension/web-voice-graph.js';
+import { webVoiceGraph, webVoiceError, webVoiceChoices, webVoiceDefault } from '../extension/web-voice-graph.js';
 import { voiceEnabled } from '../extension/web-voice-preference.js';
 import { graphNode, edge, defaultGraph } from '../extension/graph.js';
 
@@ -55,4 +55,22 @@ test('existing ASRs, translation, formatting, batching and summary processors re
       assert.equal(webVoiceError(graph), '', type + ' context');
     }
   }
+});
+
+test('choices validate the executable runtime; defaults migrate once and never choose arbitrarily', () => {
+  const bad = voice(); bad.edges.pop();
+  const library = { graphs: [{ id: 'a', name: 'A', graph: voice() }, { id: 'b', name: 'B', graph: voice() },
+    { id: 'disconnected', name: 'Voice', graph: bad }, { id: 'invalid', name: 'Microphone', graph: { version: 999 } },
+    { id: 'live', name: 'Dictation', graph: defaultGraph() }] };
+  const choices = webVoiceChoices(library);
+  assert.deepEqual(choices.map(choice => choice.id), ['a', 'b']);
+  assert.equal(webVoiceDefault(choices, undefined, 'b'), 'b');
+  assert.equal(webVoiceDefault(choices, undefined, 'invalid'), null);
+  assert.equal(webVoiceDefault(choices, null, 'b'), null);
+  assert.equal(webVoiceDefault(choices, 'deleted', 'b'), null);
+  assert.equal(webVoiceDefault(choices, 'a', 'b'), 'a');
+  assert.equal(webVoiceDefault(choices.slice(1), 'deleted', 'a'), 'b');
+  assert.equal(webVoiceDefault([], 'a', 'a'), null);
+  library.graphs[0].graph.edges.length = 0;
+  assert.equal(choices[0].graph.edges.length, 2);
 });

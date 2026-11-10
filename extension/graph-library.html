@@ -31,13 +31,11 @@
         <p id="live-launch-status" class="launch-status" role="status" tabindex="-1"></p>
       </div>
       <div class="launch-row">
-        <label for="web-graph">Web Page Microphone</label>
-        <select id="web-graph" aria-describedby="web-launch-status"></select>
-        <label class="voice-switch"><input id="web-voice-enabled" type="checkbox" disabled role="switch" aria-label="Show microphone buttons on web pages" aria-describedby="web-launch-status web-voice-status"><span id="voice-switch-state" aria-hidden="true">OFF</span></label>
-        <p id="web-launch-status" class="launch-status" role="status" tabindex="-1"></p>
+        <span>Web Page Microphone</span>
+        <label class="voice-switch"><input id="web-voice-enabled" type="checkbox" disabled role="switch" aria-label="Show microphone buttons on web pages" aria-describedby="web-voice-status"><span id="voice-switch-state" aria-hidden="true">OFF</span></label>
         <p id="web-voice-status" class="launch-status" role="status"></p>
       </div>
-      <details id="web-voice-help"><summary>Website access &amp; microphone help</summary><div><p>Enabling requests access to all HTTP and HTTPS websites (<code>http://*/*</code> and <code>https://*/*</code>) to place a mic beside supported text fields. Click the page mic to start or stop local dictation in place. If microphone permission is needed, a one-time setup tab asks for Chrome’s native consent, then closes. Later recordings run without a visible recording window.</p><p>Browser/internal pages, frames and sensitive fields are unsupported. Turn OFF to remove page controls and cancel recording; the graph assignment stays saved. To revoke website access, open Chrome → Extensions → Manage extensions → this extension → Details → Site access.</p></div></details>
+      <details id="web-voice-help"><summary>Website access &amp; microphone help</summary><div><p>Enabling requests access to all HTTP and HTTPS websites (<code>http://*/*</code> and <code>https://*/*</code>) to place a mic beside supported text fields. Left-click the page mic to start or stop local dictation. Right-click it, or focus it and press Shift+F10, to select the default graph without recording. If microphone permission is needed, a one-time setup tab asks for Chrome’s native consent, then closes. Later recordings run without a visible recording window.</p><p>Browser/internal pages, frames and sensitive fields are unsupported. Turn OFF to remove page controls and cancel recording; the graph assignment stays saved. To revoke website access, open Chrome → Extensions → Manage extensions → this extension → Details → Site access.</p></div></details>
     </section>
     </div>
       <dialog id="selected" class="library-detail" aria-labelledby="selected-title">

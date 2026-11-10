@@ -203,12 +203,30 @@ See [target policies, named ports and browser limitations](extension-graph.md).
 
 ## Opt-in Web voice typing (#247)
 
-In **Graph Library → Launch Settings**, assign a compatible graph to
-**Web Page Microphone**, then explicitly turn its independent switch **ON**.
+In **Graph Library → Launch Settings**, explicitly turn **Web Page Microphone**
+**ON**. Graph selection lives on the existing field-attached microphone: left-click
+starts the default and right-click opens a small menu of compatible saved graphs.
+Focus the mic and press Shift+F10 (or the context-menu key/Alt+Down) for the same
+keyboard menu; arrows/Home/End navigate, Enter selects, Escape dismisses.
+Selection only saves the default: it never starts recording, loads models or
+requests microphone permission. The original editable target and caret survive
+menu use. There is no Web graph dropdown in Launch Settings.
 The preference defaults OFF on installation/upgrade, even with an existing
 `assignments.webVoice`. It is a separately validated versioned boolean in
 `chrome.storage.local`; graph JSON remains version 15. Assignment never grants
 consent and the Live assignment is never used as a fallback.
+
+The single default Web microphone graph ID is stored as
+`web-microphone-default-v1` in `chrome.storage.local`. A compatible legacy
+`assignments.webVoice` migrates on first use. One compatible graph is selected
+automatically; with multiple candidates and no valid saved default, left-click
+asks for explicit selection. Deletion/incompatibility clears an invalid default
+and automatically falls back only if exactly one candidate remains. A saved
+choice survives browser restarts and updates all page controls. Library changes
+refresh eligibility; a running session retains its validated graph snapshot.
+Preparing/Recording/Stopping controls cannot switch or start a second graph.
+With zero compatible graphs no page mic appears; existing settings explain the
+required path. Enabling remains an independent explicit opt-in.
 
 Turning ON explains and requests optional HTTP/HTTPS host access through Chrome.
 Denial leaves the feature OFF. Browser/internal pages, the Chrome Web Store,
@@ -316,7 +334,7 @@ Web microphones on different tabs/documents can record simultaneously. Within on
 document the existing single widget owns one fixed field/session; duplicate Start
 cannot replace it or insert twice. Stop, Cancel, navigation, target removal and
 closing its setup tab affect that document only. Web voice OFF or website-permission removal
-cancels all Web sessions and leaves Live running. Live and Web assignments remain
+cancels all Web sessions and leaves Live running. Live selection and the Web microphone default remain
 separate, and Library edits affect future sessions only. No graph schema changes
 are required. This concurrency behavior supersedes #247's earlier exclusion.
 
@@ -367,7 +385,7 @@ use a disposable installation/upgrade fixture, restored to the production
 optional-only manifest before feature tests. Microphone decisions use native
 `Browser.setPermission`; the setup page still calls actual gUM from its button.
 No physical microphone, native bubble-button automation or real GPU-model run is
-claimed. To manually check a fresh profile, assign a Web graph, opt in, click a
+claimed. To manually check a fresh profile, save a compatible graph, opt in, click a
 page mic and then Allow microphone on the setup page. Allow Chrome's native
 request, confirm return to the original field, speak and Stop from the same mic.
 The next recording should start without any setup or recording tab/window. Deny

@@ -5,7 +5,7 @@ import { graphNode, defaultGraph, edge, assertGraph, nodeDefinition, executableG
 import { extractSubgraph, assertSubgraph, resolveSubgraphs, references } from '../extension/subgraphs.js';
 import { GraphLibrary, openLibrary, readLibrary, entryGraph, entryError, exportEntry, resolvedEntryGraph, readLiveGraph, LIBRARY_KEY } from '../extension/graph-library.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
-import { webVoiceGraph } from '../extension/web-voice-graph.js';
+import { webVoiceGraph, webVoiceChoices } from '../extension/web-voice-graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { GraphEditor } from '../extension/graph-editor.js';
 
@@ -71,6 +71,50 @@ test('unchanged exposed contracts cannot silently disable complete or partial pa
   // Reordering internals changes expansion IDs but leaves the boundary runnable.
   const repaired = entryGraph(shared); repaired.nodes.reverse();
   await f.store.save(shared.id, shared.revision, repaired);
+});
+
+for (const assigned of [true, false]) test(`shared saves preserve Web voice compatibility with unchanged ports (legacy default: ${assigned})`, async () => {
+  const f = await fixture(), graph = parent('MicrophoneAudio', 'FocusedInputTextOutputNode');
+  graph.nodes.push(graphNode('TextFormatter', 'format'));
+  graph.edges.at(-1).to = ['format', 'input1'];
+  graph.edges.push(edge('format', 'text', 'output', 'text'));
+  const extracted = extractSubgraph(graph, ['format'], 'shared-formatter');
+  await f.store.create({ id: 'shared-formatter', name: 'Shared formatter', kind: 'subgraph', graph: extracted.shared });
+  let library = await f.store.create({ name: 'Web parent', graph: extracted.parent });
+  const parentId = library.graphs.at(-1).id;
+  if (assigned) library = await f.store.assign('webVoice', parentId, library.revision);
+  assert.deepEqual(webVoiceChoices(library).map(entry => entry.id), [parentId]);
+  const shared = find(library, 'shared-formatter'), draft = entryGraph(shared);
+  // The external IDs and TEXT types stay identical, and the path still runs
+  // generically; only the Web dictation semantics become unsafe.
+  draft.nodes = [graphNode('TextAccumulator', 'accumulate')];
+  draft.interface.inputs[0].node = 'accumulate'; draft.interface.inputs[0].port = 'append';
+  draft.interface.outputs[0].node = 'accumulate';
+  const candidate = { ...library, graphs: library.graphs.map(entry => entry.id === shared.id ? { ...entry, graph: draft } : entry) };
+  assert.equal(executableGraph(resolvedEntryGraph(find(candidate, parentId), candidate)).nodes.length, graph.nodes.length);
+  assert.deepEqual(webVoiceChoices(candidate), []);
+  const before = f.storage.getItem(LIBRARY_KEY);
+  const editor = Object.assign(Object.create(GraphEditor.prototype), { kind: 'subgraph', graphId: shared.id, definitions: library.graphs, draft });
+  assert.match(editor.diagnostics(true), /Cannot break Web voice paths.*Web parent:.*TextAccumulator.*Duplicate this subgraph/);
+  await assert.rejects(f.store.save(shared.id, shared.revision, draft), /Cannot break Web voice paths.*Web parent:.*TextAccumulator.*Duplicate this subgraph/);
+  assert.equal(f.storage.getItem(LIBRARY_KEY), before);
+  assert.deepEqual(webVoiceChoices(f.current()).map(entry => entry.id), [parentId]);
+  const repaired = entryGraph(shared); repaired.nodes[0].settings.template = 'Updated: {1}';
+  const saved = await f.store.save(shared.id, shared.revision, repaired);
+  assert.deepEqual(find(saved, parentId), find(library, parentId));
+  assert.equal(webVoiceChoices(saved)[0].graph.nodes.find(node => node.type === 'TextFormatter').settings.template, 'Updated: {1}');
+});
+
+test('shared Live-only paths can use cumulative processing without Web voice restrictions', async () => {
+  const f = await fixture(), extracted = extractSubgraph(formatterChain(), ['first'], 'formatter');
+  await f.store.create({ id: 'formatter', name: 'Formatter', kind: 'subgraph', graph: extracted.shared });
+  await f.store.create({ name: 'Live parent', graph: extracted.parent });
+  const shared = find(f.current(), 'formatter'), draft = entryGraph(shared);
+  draft.nodes = [graphNode('TextAccumulator', 'accumulate')];
+  draft.interface.inputs[0].node = 'accumulate'; draft.interface.inputs[0].port = 'append';
+  draft.interface.outputs[0].node = 'accumulate';
+  const saved = await f.store.save(shared.id, shared.revision, draft);
+  assert.equal(find(saved, shared.id).graph.nodes[0].type, 'TextAccumulator');
 });
 
 test('extraction infers stable typed boundary ports, preserves fan-out, settings and internal grouped edges', () => {

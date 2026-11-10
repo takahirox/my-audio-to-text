@@ -1,4 +1,4 @@
-import { webVoiceError } from './web-voice-graph.js';
+import { webVoiceChoices } from './web-voice-graph.js';
 import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_ORIGINS, WEB_VOICE_KEY, voiceEnabled } from './web-voice-preference.js';
 import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, resolvedEntryGraph, entryError, exportEntry, legacyChanged, usable } from './graph-library.js';
 import { GRAPH_KEY, ASR_TYPES, nodeDefinition } from './graph.js';
@@ -96,7 +96,7 @@ function renderSelectedState() {
   element('check-cache').disabled = !!invalid || removed || state(entry) === 'Unknown · checking';
   element('cache-hint').textContent = removed ? 'This graph was deleted.' : invalid ? 'Repair and import this graph before checking model files.' : '';
   element('save-details').disabled = removed;
-  const assigned = Object.values(library.assignments).includes(entry.id);
+  const assigned = library.assignments.live === entry.id;
   const parents = references(library, entry.id);
   const last = !library.graphs.some(other => other.id !== entry.id && usable(other, library));
   element('delete').disabled = removed || assigned || last || parents.length > 0;
@@ -185,24 +185,22 @@ function render(replaceDetails = false) {
   element('recover-legacy').hidden = !changed;
   element('recovery-message').textContent = changed ? 'The legacy graph changed after migration. Keep it as a separate entry before further edits. Both versions are preserved; no assignment will change.' : '';
 }
-function launchReason(target, entry) {
-  if (!entry) return target === 'webVoice' ? '' : 'Choose a saved graph.';
+function launchReason(entry) {
+  if (!entry) return 'Choose a saved graph.';
   if (entry.kind === 'subgraph') return 'Choose a parent graph.';
-  if (target === 'webVoice') { try { return webVoiceError(resolvedEntryGraph(entry, library)); } catch (error) { return error.message; } }
   return entryError(entry, library) ? 'Repair and import this graph first.' : !usable(entry, library) ? 'Connect an executable path in Graph Editor.' : '';
 }
 function renderLaunchSettings() {
-  for (const [target, prefix] of [['live', 'live'], ['webVoice', 'web']]) {
+  for (const [target, prefix] of [['live', 'live']]) {
     const select = element(`${prefix}-graph`), assignedId = library.assignments[target];
     const options = library.graphs.filter(entry => entry.kind !== 'subgraph').map(entry => {
-      const reason = launchReason(target, entry);
+      const reason = launchReason(entry);
       const option = el('option', `${entry.name}${reason ? ` — ${reason}` : ''}`);
       option.value = entry.id; option.disabled = !!reason; return option;
     });
-    if (target === 'webVoice') { const none = el('option', 'Not assigned'); none.value = ''; options.unshift(none); }
     select.replaceChildren(...options); select.value = assignedId ?? '';
     select.title = library.graphs.find(entry => entry.id === assignedId)?.name || 'Not assigned';
-    const reason = launchReason(target, library.graphs.find(entry => entry.id === assignedId));
+    const reason = launchReason(library.graphs.find(entry => entry.id === assignedId));
     element(`${prefix}-launch-status`).textContent = reason;
   }
 }
@@ -251,19 +249,13 @@ try {
 }
 if (!fatal) {
   const toggle = element('web-voice-enabled'), status = element('web-voice-status'), consent = element('voice-consent');
-  let voiceMessage = '', hasWebsiteAccess = true, assignmentIdentity;
-  const assignedError = () => {
-    const entry = library.graphs.find(entry => entry.id === library.assignments.webVoice);
-    return entry ? launchReason('webVoice', entry) : 'Choose a graph before turning ON.';
-  };
+  let voiceMessage = '', hasWebsiteAccess = true;
   refreshVoiceStatus = () => {
-    const entry = library.graphs.find(entry => entry.id === library.assignments.webVoice);
-    const identity = entry ? `${entry.id}:${entry.revision}` : '';
-    if (identity !== assignmentIdentity) { voiceMessage = ''; assignmentIdentity = identity; }
     element('voice-switch-state').textContent = toggle.checked ? 'ON' : 'OFF';
-    const reason = assignedError();
-    // Bound-graph errors are already beside the selector; avoid repeating them.
-    status.textContent = voiceMessage || (reason ? entry ? '' : reason : toggle.checked ? hasWebsiteAccess ? 'ON · click a field mic to start.' : 'Website access missing. Turn OFF, then ON to grant access.' : '');
+    const count = webVoiceChoices(library).length;
+    status.textContent = voiceMessage || (!count ? 'No compatible graphs. Connect MicrophoneAudio through final text processing to FocusedInputTextOutputNode in Graph Editor.'
+      : toggle.checked ? hasWebsiteAccess ? 'ON · left-click a field mic to start; right-click (or Shift+F10) to choose its default graph.' : 'Website access missing. Turn OFF, then ON to grant access.'
+      : 'Right-click a field mic to choose its default graph after turning ON.');
   };
   toggle.checked = await readVoiceEnabled();
   const checkWebsiteAccess = async () => {
@@ -275,7 +267,6 @@ if (!fatal) {
     try {
       if (enabled) {
         if (!await permission) throw Error('Website access denied. Microphone buttons remain OFF. Turn ON again to request access.');
-        const reason = assignedError(); if (reason) throw Error(reason);
         hasWebsiteAccess = true;
       }
       await setVoiceEnabled(enabled); toggle.checked = enabled;
@@ -290,13 +281,9 @@ if (!fatal) {
     voiceMessage = '';
     if (!toggle.checked) { void changeVoice(false); return; }
     toggle.checked = false;
-    const reason = assignedError();
-    if (reason) { voiceMessage = reason; refreshVoiceStatus(); return; }
     refreshVoiceStatus(); consent.showModal();
   };
   element('confirm-voice').onclick = () => {
-    const reason = assignedError();
-    if (reason) { consent.close(); voiceMessage = reason; refreshVoiceStatus(); return; }
     // Stay in this explicit user gesture for Chrome's native permission flow.
     let permission;
     try { permission = chrome.permissions.request({ origins: WEB_VOICE_ORIGINS }); }
@@ -371,12 +358,12 @@ if (!fatal) {
       if (success) { clearDraft(); selectedId = library.assignments.live; render(true); }
     });
   };
-  for (const [target, prefix] of [['live', 'live'], ['webVoice', 'web']]) {
+  for (const [target, prefix] of [['live', 'live']]) {
     const select = element(`${prefix}-graph`), status = element(`${prefix}-launch-status`);
     select.onchange = async () => {
       const id = select.value || null, revision = library.revision;
       const entry = library.graphs.find(entry => entry.id === id);
-      const reason = id && !entry ? 'Graph no longer exists. Choose another graph.' : launchReason(target, entry);
+      const reason = id && !entry ? 'Graph no longer exists. Choose another graph.' : launchReason(entry);
       const failed = error => {
         // Refresh bindings after conflicts without replacing an unsaved details draft.
         let readError = '';
@@ -409,6 +396,7 @@ if (!fatal) {
     if (![LIBRARY_KEY, GRAPH_KEY, null].includes(event.key)) return;
     try {
       library = readLibrary(localStorage);
+      void chrome.runtime.sendMessage({ type: 'web-voice-library-changed' }).catch(() => {});
       if (dirty()) element('errors').textContent = 'Library changed in another page. Unsaved details have been kept; Load saved details before saving if this graph changed.';
       render();
     } catch (error) { element('errors').textContent = `${error.message} Your changes have been kept.`; }
