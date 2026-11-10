@@ -51,6 +51,20 @@ test('rejected extraction writes nothing and the same identity can be retried af
   assert.equal(executableGraph(resolveSubgraphs(extracted.parent, saved.graphs)).nodes.length, 4);
 });
 
+test('extraction checks its original parent revision after a queued concurrent save acquires the storage lock', async () => {
+  const f = await fixture();
+  const created = await f.store.create({ name: 'Parent', graph: formatterChain() }), source = created.graphs.at(-1);
+  const extracted = extractSubgraph(source.graph, ['first', 'second'], 'formatters');
+  const updated = structuredClone(source.graph); updated.nodes.find(node => node.id === 'text').settings.value = 'Saved concurrently';
+  const saving = f.store.save(source.id, source.revision, updated);
+  const extracting = f.store.create({ id: 'formatters', name: 'Formatters', kind: 'subgraph', graph: extracted.shared,
+    replacementGraph: extracted.parent, replacementSource: { id: source.id, revision: source.revision } });
+  const [saved] = await Promise.all([saving, assert.rejects(extracting, /Parent graph changed while Create Subgraph was open/)]);
+  assert.equal(f.storage.getItem(LIBRARY_KEY), JSON.stringify(saved));
+  assert.equal(find(f.current(), source.id).graph.nodes.find(node => node.id === 'text').settings.value, 'Saved concurrently');
+  assert.equal(find(f.current(), 'formatters'), undefined);
+});
+
 test('unchanged exposed contracts cannot silently disable complete or partial parent paths', async () => {
   const f = await fixture(), extracted = extractSubgraph(formatterChain(), ['first', 'second'], 'formatters');
   await f.store.create({ id: 'formatters', name: 'Formatters', kind: 'subgraph', graph: extracted.shared });

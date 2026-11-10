@@ -286,6 +286,9 @@ export class GraphEditor {
   }
   createSubgraph() {
     try {
+      // The modal keeps an extracted snapshot even if a clean editor refreshes
+      // from another tab. Keep that snapshot bound to its original revision.
+      const parentRevision = this.definitions.find(entry => entry.id === this.graphId)?.revision;
       const id = crypto.randomUUID(), extracted = extractSubgraph(this.draft, this.multiSelection, id, this.definitions);
       const dialog = el('dialog', undefined, 'graph-subgraph-dialog'); dialog.setAttribute('aria-label', 'Create Subgraph');
       const title = el('h2', 'Create Subgraph'), name = el('input'), ports = el('div'), error = el('p');
@@ -300,7 +303,7 @@ export class GraphEditor {
           const definitions = [...this.definitions, definition];
           const parent = assertGraph(extracted.parent, definitions);
           resolveSubgraphs(parent, definitions);
-          const library = await this.onCreateSubgraph({ ...definition, replacementGraph: parent });
+          const library = await this.onCreateSubgraph({ ...definition, replacementGraph: parent }, parentRevision);
           this.definitions = library.graphs; this.draft = parent;
           this.multiSelection.clear(); this.selectedNode = extracted.instance.id; this.error = ''; dialog.close(); this.draw();
         } catch (failure) { error.textContent = failure.message; }

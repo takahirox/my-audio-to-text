@@ -149,8 +149,12 @@ export class GraphLibrary {
       return library;
     });
   }
-  async create({ name = 'Untitled graph', description = '', graph = defaultGraph(), kind = 'graph', id: requestedId, replacementGraph } = {}, revision) {
+  async create({ name = 'Untitled graph', description = '', graph = defaultGraph(), kind = 'graph', id: requestedId, replacementGraph, replacementSource } = {}, revision) {
     return this.change(library => {
+      if (replacementSource) {
+        const source = library.graphs.find(entry => entry.id === replacementSource.id);
+        if (!source || source.revision !== replacementSource.revision) throw Error('Parent graph changed while Create Subgraph was open. Cancel this dialog, load the latest saved graph if needed, then select the nodes and create the subgraph again.');
+      }
       const validated = kind === 'subgraph' ? assertSubgraph(graph) : assertGraph(graph, library.graphs);
       resolveSubgraphs(validated, library.graphs);
       const stamp = now(); let id = requestedId;

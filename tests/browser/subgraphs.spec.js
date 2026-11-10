@@ -29,7 +29,7 @@ test.beforeEach(async ({ context, page }) => {
   await page.reload();
 });
 
-async function extract(page) {
+async function openExtraction(page) {
   await page.getByRole('button', { name: 'Select format', exact: true }).focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Select history', exact: true }).focus(); await page.keyboard.press('Shift+Enter');
   await expect(page.locator('.selected-node')).toHaveCount(2);
@@ -38,6 +38,10 @@ async function extract(page) {
   const dialog = page.getByRole('dialog', { name: 'Create Subgraph', exact: true });
   await dialog.getByLabel('Subgraph name', { exact: true }).fill('Shared formatting');
   await dialog.getByLabel('inputs in1 name').fill('Transcript'); await dialog.getByLabel('outputs out1 name').fill('History');
+  return dialog;
+}
+async function extract(page) {
+  const dialog = await openExtraction(page);
   await dialog.locator('#graph-confirm-subgraph').click();
   await expect(dialog).not.toBeVisible();
   await expect(page.getByRole('button', { name: 'subgraph input in1', exact: true })).toContainText('Transcript');
@@ -48,6 +52,47 @@ async function extract(page) {
   });
 }
 const save = async page => { await page.locator('#graph-save').click(); await expect(page.locator('#graph-state')).toHaveText('Saved'); };
+
+for (const receiveStorageEvent of [true, false]) test(`open extraction rejects concurrent parent saves (storage event ${receiveStorageEvent ? 'received' : 'pending'})`, async ({ page, context }) => {
+  if (!receiveStorageEvent) {
+    // Register before the editor to hold its notification back and exercise
+    // the revision check inside the storage lock.
+    await page.addInitScript(() => window.addEventListener('storage', event => event.stopImmediatePropagation()));
+    await page.reload();
+  }
+  const dialog = await openExtraction(page);
+  await page.evaluate(receive => {
+    if (receive) {
+      globalThis.parentStorageEvent = new Promise(resolve => window.addEventListener('storage', event => {
+        if (event.key === 'processing-graph-library-v1') resolve();
+      }));
+    }
+  }, receiveStorageEvent);
+  const other = await context.newPage(); await other.goto(page.url());
+  await other.getByRole('button', { name: 'Select source', exact: true }).click();
+  await other.getByLabel('source value', { exact: true }).fill('Saved concurrently'); await save(other);
+  if (receiveStorageEvent) await page.evaluate(() => globalThis.parentStorageEvent);
+  const concurrent = await other.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
+  await dialog.locator('#graph-confirm-subgraph').click();
+  await expect(dialog.getByRole('alert')).toContainText('Parent graph changed while Create Subgraph was open');
+  await expect(page.locator('.graph-node')).toHaveCount(4);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(concurrent);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  // Saving after rejecting the extraction must never restore its old snapshot.
+  await page.locator('#graph-save').click();
+  if (receiveStorageEvent) await expect(page.locator('#graph-state')).toHaveText('Saved');
+  else await expect(page.locator('#graph-errors')).toContainText('Load saved before saving');
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')));
+  expect(stored.graphs).toHaveLength(1);
+  expect(stored.graphs[0].graph.nodes.find(node => node.id === 'source').settings.value).toBe('Saved concurrently');
+  // The user can reopen extraction from the refreshed graph and save safely.
+  if (!receiveStorageEvent) await page.reload();
+  await extract(page); await save(page);
+  expect(await page.evaluate(async () => {
+    const { readLiveGraph } = await import('/extension/graph-library.js');
+    return readLiveGraph(localStorage).graph.nodes.find(node => node.id === 'source').settings.value;
+  })).toBe('Saved concurrently');
+});
 
 test('extract, review port names, edit on the same canvas and return to an unsaved parent without losing it', async ({ page }) => {
   const ids = await extract(page);

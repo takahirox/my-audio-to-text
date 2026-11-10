@@ -62,9 +62,9 @@ async function openEditor() {
   const editor = new GraphEditor(element('graph-editor'), initialDraft, {
     invalidSaved, definitions: library.graphs, graphId: id, kind: entry.kind || 'graph', onSave: persist,
     onExport: graph => { try { return exportDraft(entry, graph, readLibrary(localStorage)); } catch { return JSON.stringify(graph, null, 2); } },
-    onCreateSubgraph: async definition => {
+    onCreateSubgraph: async (definition, revision) => {
       if (conflict) throw Error('Load saved before creating a subgraph; your draft has been kept.');
-      library = await store.create(definition); return library;
+      library = await store.create({ ...definition, replacementSource: { id, revision } }); return library;
     },
     onEditSubgraph: sharedId => {
       try {
