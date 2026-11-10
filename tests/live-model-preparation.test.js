@@ -483,3 +483,36 @@ test('one session awaiting Stop disposal does not delay another session preparin
   assert.equal(a.session.view.modelState, 'ready');
   assert.equal(b.session.view.state, 'running'); assert.ok(b.workers.every(worker => !worker.released));
 });
+
+for (const [name, recovery] of [
+  ['NotAllowedError', /Allow microphone access.*OS privacy settings/],
+  ['NotFoundError', /Connect or enable a microphone/],
+  ['NotReadableError', /device could not provide another audio stream/],
+  ['OverconstrainedError', /Choose an available microphone/],
+  ['AbortError', /input device and available system resources/],
+]) test(`${name} during a prepared microphone Start reports recovery and preserves a recording peer`, async t => {
+  const previous = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+    getUserMedia: async () => { throw new DOMException('Controlled device failure', name); },
+  } });
+  t.after(() => { if (previous) Object.defineProperty(navigator, 'mediaDevices', previous); else delete navigator.mediaDevices; });
+  const peer = fixture(isolatedSpeechGraph()), graph = isolatedSpeechGraph();
+  graph.nodes[0].type = 'MicrophoneAudio'; graph.nodes[1].type = 'SpeechToTextWhisper';
+  const affected = fixture(graph);
+  t.after(() => Promise.all([peer.session.close(), affected.session.close()]));
+  await Promise.all([peer.session.prepareModels(), affected.session.prepareModels()]);
+  await peer.session.start(1);
+  const owner = peer.session.session, workers = [...affected.workers];
+  await affected.session.start(2, { microphoneGesture: true });
+  await affected.session.releasing;
+  await affected.session.preparing;
+  assert.match(affected.session.view.error, /audio: Microphone capture unavailable: Controlled device failure/);
+  assert.match(affected.session.view.error, recovery);
+  assert.equal(affected.session.session, null);
+  assert.ok(workers.every(worker => worker.released));
+  assert.deepEqual(affected.session.graph, graph);
+  assert.equal(peer.session.session, owner); assert.equal(peer.session.view.state, 'running');
+  assert.equal(peer.session.view.error, ''); assert.ok(peer.workers.every(worker => !worker.released));
+  owner.speechNodes.get('speech').receiveEvent({ type: 'final', id: 1, text: 'peer still transcribes' });
+  await turn(); assert.equal(domText(peer.session.view.displays.display.input1), 'peer still transcribes');
+});

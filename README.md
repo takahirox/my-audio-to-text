@@ -72,6 +72,9 @@ ASR core and audio helpers, restores audible tab playback, and shows transcripts
 in a compact Live window. The [Graph Library](docs/extension-graph.md#graph-library-243) stores named, independent
 graphs. Its separate Launch settings choose graphs for the Live window and
 Web page microphone button, with an independent, default-OFF website mic switch.
+Live and Web microphone sessions can prepare and record independently, using
+the same or different assigned models. Stopping or closing one leaves the other
+running; actual browser/device and memory limits can still cause session errors.
 Open a library entry in Graph Editor; Save updates that entry only. Graph Editor and Models tabs provide executable graph editing and verified optional model preparation without
 interrupting capture. Optional local OPUS-MT pairs committed
 Japanese transcripts with English or English transcripts with Japanese using
