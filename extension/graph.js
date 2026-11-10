@@ -85,7 +85,21 @@ export function portDisplayEntries(definition, side) {
   for (const name of Object.keys(ports)) names.add(name);
   return [...names].map(name => [name, ports[name]]);
 }
-export function nodeDefinition(node, graph) {
+export function nodeDefinition(node, graph, definitions = []) {
+  if (node?.type === 'Subgraph') {
+    const entry = definitions.find(entry => entry.id === node.subgraphId && entry.kind === 'subgraph');
+    if (!entry || !Array.isArray(entry.graph?.nodes) || !Array.isArray(entry.graph?.edges)
+      || !['inputs', 'outputs'].every(side => Array.isArray(entry.graph.interface?.[side]))
+      || entry.graph.nodes.some(child => child?.type === 'Subgraph')) return undefined;
+    const ports = side => Object.fromEntries((entry.graph.interface?.[side] || []).map(port => [port.id,
+      nodeDefinition(entry.graph.nodes.find(child => child.id === port.node), entry.graph)?.[side]?.[port.port]]));
+    const inputs = ports('inputs'), outputs = ports('outputs');
+    if (![...Object.values(inputs), ...Object.values(outputs)].every(Boolean)) return undefined;
+    return { label: entry.name, inputs, outputs, optionalInputs: Object.keys(inputs),
+      sampledOutputs: (entry.graph.interface?.outputs || []).filter(port => nodeDefinition(entry.graph.nodes.find(child => child.id === port.node), entry.graph)?.sampledOutputs?.includes(port.port)).map(port => port.id),
+      portLabels: Object.fromEntries(['inputs', 'outputs'].map(side => [side, Object.fromEntries((entry.graph.interface?.[side] || []).map(port => [port.id, port.name]))])),
+      help: 'Shared saved definition. Save changes in its editor to apply them to every parent on the next run.' };
+  }
   const definition = Object.hasOwn(NODE_TYPES, node?.type) ? NODE_TYPES[node.type] : undefined;
   if (!definition) return undefined;
   if (node.type === 'Hold' && graph) return { ...definition, sampledOutputs: holdSampledOutputs(graph.edges.filter(route => route?.to?.[0] === node.id).map(route => route.to[1])) };
@@ -138,7 +152,7 @@ export function upgradeDisplayGraph(graph) {
   for (const route of upgraded.edges) if (Array.isArray(route?.to) && ids.has(route.to[0]) && route.to[1] === 'input') route.to[1] = 'input1';
   return upgraded;
 }
-export function validateGraph(graph, optionalWarnings = false) {
+export function validateGraph(graph, optionalWarnings = false, definitions = []) {
   graph = upgradeDisplayGraph(graph);
   const definitionOf = type => Object.hasOwn(NODE_TYPES, type) ? NODE_TYPES[type] : undefined;
   const errors = [], warnings = [];
@@ -149,13 +163,15 @@ export function validateGraph(graph, optionalWarnings = false) {
     if (!record(node) || typeof node.id !== 'string' || !/^[a-zA-Z][\w-]{0,63}$/.test(node.id)) { errors.push('Invalid Node ID.'); continue; }
     if (nodes.has(node.id)) errors.push(`Duplicate Node ID: ${node.id}`);
     nodes.set(node.id, node);
-    const definition = nodeDefinition(node, graph);
+    const definition = nodeDefinition(node, graph, definitions);
     if (!definition) {
       if (['MeetingSummaryLfm2', 'MeetingSummaryQwen35'].includes(node.type)) {
         errors.push(`Legacy summary Node ${node.id}: ${node.type} was replaced by ${node.type.replace('MeetingSummary', 'TextSummary')}. Copy the original saved JSON from Graph actions → Saved JSON; change only the type and add settings.prompt (for example: Summarize the input text.). Keep IDs, positions, language and edges, then Import and Save. Rolling-summary instructions now belong in prompt. See docs/text-summary-nodes.md. The original graph is retained.`);
-      } else errors.push(`Unknown Node type: ${node.type}`);
+      } else if (node.type === 'Subgraph') errors.push(`Missing or invalid subgraph ${node.subgraphId}. Import its dependency bundle or remove the instance. Nested and circular subgraphs are not supported.`);
+      else errors.push(`Unknown Node type: ${node.type}`);
       continue;
     }
+    if (node.type === 'Subgraph' && (typeof node.subgraphId !== 'string' || !definitions.some(entry => entry.id === node.subgraphId && entry.kind === 'subgraph'))) errors.push(`Missing subgraph: ${node.subgraphId}`);
     if (Object.hasOwn(node, 'legacyView')) errors.push(`Unsupported setting: ${node.id}.legacyView. Reset or import a current graph.`);
     if (!record(node.position) || ![node.position.x, node.position.y].every(n => Number.isFinite(n) && n >= 0)) errors.push(`Invalid position: ${node.id}`);
     if (!record(node.settings)) { errors.push(`Invalid settings: ${node.id}`); continue; }
@@ -184,7 +200,7 @@ export function validateGraph(graph, optionalWarnings = false) {
     if (seen.has(key)) errors.push('Duplicate edge.');
     seen.add(key);
     const [source, output] = connection.from, [target, input] = connection.to;
-    const a = nodeDefinition(nodes.get(source), graph), b = nodeDefinition(nodes.get(target), graph);
+    const a = nodeDefinition(nodes.get(source), graph, definitions), b = nodeDefinition(nodes.get(target), graph, definitions);
     if (!a || !b) { errors.push(`Unknown edge Node: ${source} → ${target}`); continue; }
     if (!Object.hasOwn(a.outputs, output) || !Object.hasOwn(b.inputs, input)) { errors.push(`Unknown port: ${source}.${output} → ${target}.${input}`); continue; }
     if (!compatiblePorts(a.outputs[output], b.inputs[input])) errors.push(`Incompatible port types: ${source}.${output} → ${target}.${input}`);
@@ -207,7 +223,7 @@ export function validateGraph(graph, optionalWarnings = false) {
   }
   if (roots.length !== nodes.size) errors.push('Graph must be acyclic.');
   for (const node of nodes.values()) {
-    const definition = nodeDefinition(node, graph);
+    const definition = nodeDefinition(node, graph, definitions);
     if (!definition) continue;
     if (['TextFormatter', 'TextAccumulator'].includes(node.type)) {
       if (!Object.keys(definition.inputs).filter(port => definition.inputs[port] === TEXT).some(port => incoming.has(JSON.stringify([node.id, port])))) warnings.push(`Required connection missing: ${node.id} needs at least one TEXT input`);
@@ -261,9 +277,9 @@ export function graphWarnings(graph) {
   }
   return warnings;
 }
-export function assertGraph(graph) {
+export function assertGraph(graph, definitions = []) {
   graph = upgradeDisplayGraph(graph);
-  const errors = validateGraph(graph);
+  const errors = validateGraph(graph, false, definitions);
   if (errors.length) throw new Error(errors.join('\n'));
   return structuredClone(graph);
 }

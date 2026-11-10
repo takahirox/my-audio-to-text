@@ -24,11 +24,10 @@ handling remain. Web microphone consent is a compact control above the list,
 starts OFF, and remains revocable even with corrupt graph storage. The page mic
 has a compatible-default context menu with keyboard support, so removing the
 old Web dropdown leaves an actionable selection path. Its default and active
-snapshot remain independent of Live. The selected upstream predates the #265
-subgraph implementation and #266 page menu: this change adds the minimal page
-selection path required here, preserves the existing graph format/runtime, and
-rejects unsupported Subgraph Nodes rather than inventing a subgraph execution
-architecture.
+snapshot remain independent of Live. Parent graphs resolve shared definitions
+through the canonical #265 library resolver before launch validation and each
+Start. Reusable definitions are excluded from launch choices; running sessions
+retain their expanded snapshots when definitions are edited.
 
 ## Validation
 
@@ -116,3 +115,37 @@ Checks run against the combined implementation:
 The manual-browser and production-model limitations above still apply. No
 physical menu, hardware-capacity or production model-bundle verification was
 performed during this integration.
+
+## Integration with merged #265
+
+Integrated `main` at `32824e54fe7d8df593caf1b2ebba3cd5e726acd2` and
+resolved the Library conflicts while preserving the graph-only workspace,
+revocable microphone control, reusable-subgraph filters, previews, editing,
+bundle import/export and reference-protected deletion.
+
+Toolbar validation and default selection now resolve saved parents through the
+canonical library. Reusable definitions cannot run directly. Selected windows
+resolve their own parent and current definitions at each Start, without following
+later default changes. Definition edits leave running snapshots intact, and
+incomplete or missing dependencies keep Start disabled with a recovery error.
+
+Checks run against these combined sources:
+
+- `npm test`: **920 passed**.
+- `npx playwright test --config playwright.extension.config.js tests/extension/toolbar-launch.spec.js tests/extension/subgraphs.spec.js tests/extension/graph-library.spec.js tests/extension/web-voice.spec.js tests/extension/graph-concurrent.spec.js`:
+  **61 passed**. Includes two independent toolbar-launched parent windows sharing
+  one definition: each retains its active snapshot until its own next Start,
+  and changing the default/reloading/closing one preserves the other's graph.
+- `npx playwright test --config playwright.extension.config.js tests/extension/subgraphs.spec.js --grep 'stale definition'`:
+  **1 passed**, added after the suite above. Covers incomplete parent, direct
+  definition and missing-dependency selections with no model workers or Start.
+- `npx playwright test tests/browser/subgraphs.spec.js --project=chromium`:
+  **11 passed**, including Library type filters, dependency bundles, reference
+  deletion safeguards, editor extraction, concurrent saves and draft recovery.
+- `npx playwright test --config playwright.extension.config.js tests/extension/extension.spec.js --grep 'real toolbar'`:
+  **1 passed**, including three simultaneous native tab captures and scoped cleanup.
+- `git diff --check` and `git diff --cached --check`: passed.
+
+The native menu and permission-dialog questions remain for human review.
+The headless automation limitations above still apply; no physical menu,
+permission-bubble, hardware or production-model verification is claimed here.

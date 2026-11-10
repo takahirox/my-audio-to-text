@@ -1,7 +1,7 @@
 import { TabSession } from './session.js';
 import { renderTextRegions } from './live-text-regions.js';
 import { GRAPH_VERSION, GRAPH_KEY, INPUT_TYPES, executableGraph } from './graph.js';
-import { openLibrary, readLiveGraph, readSelectedGraph, readLibrary, entryGraph, LIBRARY_KEY } from './graph-library.js';
+import { openLibrary, readLiveGraph, readSelectedGraph, readLibrary, resolvedEntryGraph, LIBRARY_KEY } from './graph-library.js';
 import { audioToWav } from '../web/synthesized-audio.js';
 
 const params = new URLSearchParams(location.search);
@@ -31,8 +31,11 @@ catch (error) {
   // Show the chosen graph's name and any valid draft layout, never a different
   // runnable graph as an error fallback. Start stays disabled until repaired.
   try {
-    const entry = readLibrary(localStorage).graphs.find(entry => entry.id === selectedGraphId);
-    if (entry) { graphContext = { id: entry.id, name: entry.name }; graph = entryGraph(entry); }
+    const library = readLibrary(localStorage), entry = library.graphs.find(entry => entry.id === selectedGraphId);
+    if (entry) {
+      graphContext = { id: entry.id, name: entry.name };
+      if (entry.kind !== 'subgraph') graph = resolvedEntryGraph(entry, library);
+    }
   } catch { /* Invalid saved graphs retain an empty display and recovery error. */ }
 }
 const audioURLs = new Set();

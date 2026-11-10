@@ -1,4 +1,5 @@
 import { assertGraph, executableGraph, ASR_TYPES } from './graph.js';
+import { resolveSubgraphs } from './subgraphs.js';
 
 // Run only the assigned field sink and its complete ancestors. Optional Live,
 // speaker and other output branches never run in the page-mic workflow.
@@ -37,7 +38,8 @@ export function webVoiceError(value) { try { webVoiceGraph(value); return ''; } 
 // Keep selection and execution on precisely the same validation boundary.
 export function webVoiceChoices(library) {
   return library.graphs.flatMap(entry => {
-    try { return [{ id: entry.id, name: entry.name, graph: webVoiceGraph(entry.graph) }]; }
+    if (entry.kind === 'subgraph') return [];
+    try { return [{ id: entry.id, name: entry.name, graph: webVoiceGraph(resolveSubgraphs(entry.graph, library.graphs)) }]; }
     catch { return []; }
   });
 }

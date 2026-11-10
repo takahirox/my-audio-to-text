@@ -1,3 +1,5 @@
+import { assertSubgraph, extractSubgraph, resolveSubgraphs } from './subgraphs.js';
+import { assertSubgraphUpdate } from './graph-library.js';
 import { MAX_DISPLAY_INPUTS } from '../web/display-node.js';
 import { createWireRouter, reusableWireRoute, wireColor, wireDistance } from './graph-wire-router.js';
 import { compatiblePorts } from '../web/port-contracts.js';
@@ -19,15 +21,17 @@ const MIN_ZOOM = .01, MAX_ZOOM = 1.5, ZOOM_STEP = .1;
 const VIEWPORT_CONTROL_SPACE = 72;
 const typeLabel = contract => contract.name.split(' {')[0];
 export class GraphEditor {
-  constructor(root, graph, { onSave, onDraft = () => {}, onLoad = () => {}, invalidSaved = false }) {
+  constructor(root, graph, { onSave, onDraft = () => {}, onLoad = () => {}, invalidSaved = false, definitions = [], kind = 'graph', graphId, onCreateSubgraph, onExport, onEditSubgraph }) {
+    Object.assign(this, { definitions, kind, graphId, onCreateSubgraph, onExport, onEditSubgraph });
+    this.multiSelection = new Set();
     this.root = root; this.onSave = onSave; this.onDraft = onDraft; this.onLoad = onLoad;
-    this.saved = invalidSaved ? null : assertGraph(graph); this.draft = assertGraph(graph); this.zoom = 1;
+    this.saved = invalidSaved ? null : this.assert(graph); this.draft = this.assert(graph); this.zoom = 1;
     const toolbar = el('div', undefined, 'graph-toolbar');
     this.saveButton = button('Save', 'graph-save', async () => {
       this.actions.open = false; this.saveButton.disabled = true; this.saveButton.setAttribute('aria-busy', 'true'); this.summary.textContent = 'Saving…';
       try {
-        const graph = assertGraph(this.draft);
-        this.saved = assertGraph(await this.onSave(graph) || graph);
+        const graph = this.assert(this.draft);
+        this.saved = this.assert(await this.onSave(graph) || graph);
         this.externalChange = false; this.error = ''; this.draw();
       } catch (error) { this.error = error.message; this.draw(); }
       finally { this.saveButton.disabled = false; this.saveButton.setAttribute('aria-busy', 'false'); }
@@ -45,13 +49,13 @@ export class GraphEditor {
     commands.append(
       button('Reset draft to default', 'graph-reset', () => {
         if (this.isDirty() && !confirm('Replace your unsaved draft with the default graph? Save is still required.')) return;
-        this.closeActions(); this.draft = defaultGraph(); this.selected = null; this.selectedNode = null; this.draw();
+        this.closeActions(); this.draft = this.kind === 'subgraph' ? { version: 15, nodes: [], edges: [], interface: { inputs: [], outputs: [] } } : defaultGraph(); this.selected = null; this.selectedNode = null; this.draw();
       }),
       button('Load saved', 'graph-load', () => {
         if (this.isDirty() && !confirm('Discard your unsaved draft and load the saved graph?')) return;
         this.closeActions();
         try {
-          this.saved = assertGraph(this.onLoad() || this.saved);
+          this.saved = this.assert(this.onLoad() || this.saved);
           this.draft = structuredClone(this.saved); this.selected = null; this.selectedNode = null; this.externalChange = false;
         } catch (error) { this.error = error.message; }
         this.draw();
@@ -61,7 +65,9 @@ export class GraphEditor {
     importFile.onchange = async () => {
       const file = importFile.files?.[0]; if (!file) return;
       try {
-        const next = assertGraph(JSON.parse(await file.text()));
+        const value = JSON.parse(await file.text());
+        if (value?.format === 'graph-bundle') throw Error('Import dependency bundles in Graph Library to preserve shared identities.');
+        const next = this.assert(value);
         if (this.isDirty() && !confirm('Replace your unsaved draft with the imported graph? Save is still required.')) return;
         this.draft = next; this.selected = null; this.selectedNode = null; this.selectedEdge = null; this.error = ''; this.closeActions();
       } catch (error) { this.error = `Cannot import graph: ${error.message}`; }
@@ -70,14 +76,18 @@ export class GraphEditor {
     commands.append(button('Import graph JSON', 'graph-import', () => importFile.click()), importFile);
     commands.append(button('Export graph JSON', 'graph-export', () => {
       try {
-        const graph = assertGraph(this.draft);
-        const url = URL.createObjectURL(new Blob([JSON.stringify(graph, null, 2) + '\n'], { type: 'application/json' }));
+        const graph = this.onExport ? structuredClone(this.draft) : this.assert(this.draft);
+        const url = URL.createObjectURL(new Blob([this.onExport ? this.onExport(graph) : JSON.stringify(graph, null, 2) + '\n'], { type: 'application/json' }));
         const link = el('a'); link.href = url; link.download = 'processing-graph.json'; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 0);
         this.error = ''; this.closeActions();
       } catch (error) { this.error = `Cannot export graph: ${error.message}`; }
       this.draw();
     }));
+    this.createButton = button('Create Subgraph', 'graph-create-subgraph', () => this.createSubgraph());
+    this.createButton.hidden = this.kind === 'subgraph' || !this.onCreateSubgraph;
+    commands.append(this.createButton);
+    if (this.kind === 'subgraph') commands.append(button('Edit exposed ports', 'graph-exposed-ports', () => { this.closeActions(); this.selectDetails(); this.inspector.querySelector('input, button')?.focus(); }));
     const warningLabel = el('label'); this.warningPreference = el('input'); this.warningPreference.type = 'checkbox';
     this.warningPreference.id = 'graph-optional-warnings';
     this.warningPreference.checked = localStorage.getItem('graph-show-optional-warnings') === 'true';
@@ -122,7 +132,7 @@ export class GraphEditor {
     this.search.setAttribute('role', 'combobox'); this.search.setAttribute('aria-autocomplete', 'list');
     this.search.setAttribute('aria-controls', 'graph-node-type'); this.search.setAttribute('aria-expanded', 'false');
     this.category = el('select'); this.category.setAttribute('aria-label', 'Node category');
-    for (const name of ['All categories', 'Sources / inputs', 'Processors', 'Constants / utilities', 'Outputs']) { const option = el('option', name); this.category.append(option); }
+    for (const name of ['All categories', 'Sources / inputs', 'Processors', 'Constants / utilities', 'Outputs', 'Subgraphs']) { const option = el('option', name); this.category.append(option); }
     this.types = el('div', undefined, 'graph-node-list'); this.types.id = 'graph-node-type';
     this.types.setAttribute('role', 'listbox'); this.types.setAttribute('aria-label', 'Node types');
     this.paletteStatus = el('p', undefined, 'muted'); this.paletteStatus.setAttribute('role', 'status');
@@ -233,9 +243,87 @@ export class GraphEditor {
     if (this.wireFrame) return;
     this.wireFrame = requestAnimationFrame(() => { this.wireFrame = null; this.drawWires(); });
   }
+  assert(graph) { return assertGraph(graph, this.definitions); }
+  definition(node) {
+    try { const definition = nodeDefinition(node, this.draft, this.definitions); if (definition) return definition; } catch { /* Keep a stale draft visible for recovery. */ }
+    return { label: `Unavailable subgraph ${node?.subgraphId || ''}`, inputs: {}, outputs: {} };
+  }
+  renderPortEditor(root, graph, changed) {
+    const panel = el('details'); panel.open = true; panel.append(el('summary', 'Exposed ports'));
+    panel.append(el('p', 'Names are editable labels; IDs preserve parent wires. Endpoint types are inferred. Incompatible changes are blocked while parents reference this definition.'));
+    for (const side of ['inputs', 'outputs']) {
+      const group = el('fieldset'); group.append(el('legend', side));
+      const endpoints = graph.nodes.flatMap(node => Object.entries(nodeDefinition(node, graph)?.[side] || {}).filter(([port]) => side !== 'inputs' || !graph.edges.some(route => route.to[0] === node.id && route.to[1] === port)).map(([port, contract]) => ({ node: node.id, port, contract })));
+      for (const port of graph.interface[side]) {
+        const row = el('div'), name = el('input'), endpoint = el('select');
+        name.value = port.name; name.maxLength = 120; name.setAttribute('aria-label', `${side} ${port.id} name`);
+        name.oninput = () => {
+          port.name = name.value;
+          if (graph === this.draft) { this.errors.textContent = this.diagnostics(); this.updateSummary(); this.onDraft(structuredClone(this.draft)); }
+        };
+        endpoint.setAttribute('aria-label', `${side} ${port.id} endpoint`);
+        const current = JSON.stringify([port.node, port.port]);
+        if (!endpoints.some(item => JSON.stringify([item.node, item.port]) === current)) {
+          const missing = el('option', `Unavailable: ${port.node}.${port.port}`); missing.value = current; endpoint.append(missing);
+        }
+        for (const item of endpoints) {
+          const option = el('option', `${item.node}.${item.port} · ${item.contract.name}`); option.value = JSON.stringify([item.node, item.port]); endpoint.append(option);
+        }
+        endpoint.value = current;
+        endpoint.onchange = () => { [port.node, port.port] = JSON.parse(endpoint.value); changed(); };
+        row.append(el('span', `${port.id} `), name, endpoint, button(`Remove ${port.id}`, null, () => {
+          graph.interface[side] = graph.interface[side].filter(item => item !== port); changed();
+        })); group.append(row);
+      }
+      const available = endpoints.filter(item => !graph.interface[side].some(port => port.node === item.node && port.port === item.port));
+      const add = button(`Expose ${side === 'inputs' ? 'input' : 'output'}`, null, () => {
+        const item = available[0]; if (!item) return;
+        let index = 1, id; do { id = `${side === 'inputs' ? 'in' : 'out'}${index++}`; } while (graph.interface[side].some(port => port.id === id));
+        graph.interface[side].push({ id, name: `${item.node} ${item.port}`, node: item.node, port: item.port }); changed();
+      }); add.disabled = !available.length; group.append(add); panel.append(group);
+    }
+    root.append(panel);
+  }
+  createSubgraph() {
+    try {
+      // The modal keeps an extracted snapshot even if a clean editor refreshes
+      // from another tab. Keep that snapshot bound to its original revision.
+      const parentRevision = this.definitions.find(entry => entry.id === this.graphId)?.revision;
+      const id = crypto.randomUUID(), extracted = extractSubgraph(this.draft, this.multiSelection, id, this.definitions);
+      const dialog = el('dialog', undefined, 'graph-subgraph-dialog'); dialog.setAttribute('aria-label', 'Create Subgraph');
+      const title = el('h2', 'Create Subgraph'), name = el('input'), ports = el('div'), error = el('p');
+      error.setAttribute('role', 'alert'); name.value = 'Shared processing'; name.setAttribute('aria-label', 'Subgraph name');
+      const redrawPorts = () => { ports.replaceChildren(); this.renderPortEditor(ports, extracted.shared, redrawPorts); };
+      redrawPorts();
+      const create = button('Create Subgraph', 'graph-confirm-subgraph', async () => {
+        create.disabled = true;
+        try {
+          assertSubgraph(extracted.shared);
+          const definition = { id, name: name.value, kind: 'subgraph', graph: extracted.shared };
+          const definitions = [...this.definitions, definition];
+          const parent = assertGraph(extracted.parent, definitions);
+          resolveSubgraphs(parent, definitions);
+          const library = await this.onCreateSubgraph({ ...definition, replacementGraph: parent }, parentRevision);
+          this.definitions = library.graphs; this.draft = parent;
+          this.multiSelection.clear(); this.selectedNode = extracted.instance.id; this.error = ''; dialog.close(); this.draw();
+        } catch (failure) { error.textContent = failure.message; }
+        finally { create.disabled = false; }
+      });
+      dialog.append(title, el('label', 'Subgraph name'), name, ports, error, create, button('Cancel', null, () => dialog.close()));
+      dialog.onclose = () => { dialog.remove(); this.actions.querySelector('summary').focus(); };
+      this.root.append(dialog); this.actions.open = false; dialog.showModal(); name.focus(); name.select();
+    } catch (error) { this.error = error.message; this.draw(); }
+  }
   diagnostics(includeWarnings = this.warningPreference?.checked) {
-    return [...validateGraph(this.draft).map(message => `Error: ${message}`),
-      ...(includeWarnings ? graphWarnings(this.draft).map(message => `Warning: ${message}`) : [])].join('\n');
+    let boundaryError = '';
+    try {
+      if (this.kind === 'subgraph') {
+        const graph = assertSubgraph(this.draft);
+        assertSubgraphUpdate({ graphs: this.definitions }, this.graphId, graph);
+      } else resolveSubgraphs(this.draft, this.definitions);
+    } catch (error) { boundaryError = error.message; }
+    return [...(boundaryError ? [boundaryError] : validateGraph(this.draft, false, this.definitions)).map(message => `Error: ${message}`),
+      ...(includeWarnings && !boundaryError && this.kind !== 'subgraph' ? graphWarnings(resolveSubgraphs(this.draft, this.definitions)).map(message => `Warning: ${message}`) : [])].join('\n');
   }
   closeActions() {
     this.actions.open = false; this.actions.querySelector('summary').focus({ preventScroll: true });
@@ -299,8 +387,8 @@ export class GraphEditor {
   filterPalette() {
     const query = this.search.value.trim().toLowerCase(); this.types.replaceChildren();
     const groups = new Map(), matches = [];
-    for (const [type, definition] of Object.entries(NODE_TYPES)) {
-      const category = ['Number', 'Text', 'TextFormatter', 'Hold'].includes(type) ? 'Constants / utilities'
+    for (const [type, definition] of [...Object.entries(NODE_TYPES), ...(this.kind === 'subgraph' ? [] : (this.definitions || []).filter(entry => entry.kind === 'subgraph').map(entry => [`Subgraph:${entry.id}`, { label: entry.name, inputs: {}, outputs: {} }]))]) {
+      const category = type.startsWith('Subgraph:') ? 'Subgraphs' : ['Number', 'Text', 'TextFormatter', 'Hold'].includes(type) ? 'Constants / utilities'
         : !Object.keys(definition.inputs).length ? 'Sources / inputs'
         : !Object.keys(definition.outputs).length ? 'Outputs' : 'Processors';
       if ((this.category.value !== 'All categories' && this.category.value !== category) || !`${type} ${definition.label}`.toLowerCase().includes(query)) continue;
@@ -420,13 +508,17 @@ export class GraphEditor {
     return best;
   }
   addNode(type) {
-    if (!Object.hasOwn(NODE_TYPES, type)) return;
+    const shared = type.startsWith('Subgraph:') ? this.definitions.find(entry => entry.id === type.slice(9) && entry.kind === 'subgraph') : null;
+    if (!shared && !Object.hasOwn(NODE_TYPES, type)) return;
+    if (shared) { try { assertSubgraph(shared.graph); } catch (error) { this.error = error.message; this.draw(); return; } }
     const bounds = this.visibleGraphBounds();
     const pan = { left: this.scroll.scrollLeft, top: this.scroll.scrollTop };
-    let id = type.toLowerCase(), suffix = 1;
-    while (this.draft.nodes.some(node => node.id === id)) id = `${type.toLowerCase()}-${suffix++}`;
-    const node = graphNode(type, id, bounds.left, bounds.top);
+    const baseID = shared ? 'subgraph' : type.toLowerCase();
+    let id = baseID, suffix = 1;
+    while (this.draft.nodes.some(node => node.id === id)) id = `${baseID}-${suffix++}`;
+    const node = shared ? { id, type: 'Subgraph', subgraphId: shared.id, settings: {}, position: { x: bounds.left, y: bounds.top } } : graphNode(type, id, bounds.left, bounds.top);
     this.draft.nodes.push(node);
+    this.multiSelection = new Set([id]);
     this.selected = null; this.selectedEdge = null; this.selectedNode = id;
     this.togglePalette(false, false);
     // Measure the real card, including dynamic ports and wrapped labels, before
@@ -439,16 +531,20 @@ export class GraphEditor {
   }
   isDirty() { return JSON.stringify(this.draft) !== JSON.stringify(this.saved); }
   receiveSaved(graph) {
-    const dirty = this.isDirty(); this.saved = assertGraph(graph);
+    const dirty = this.isDirty(); this.saved = this.assert(graph);
     if (dirty) this.externalChange = true;
     else { this.draft = structuredClone(this.saved); this.externalChange = false; }
     this.draw();
   }
-  setSaved(graph) { this.saved = assertGraph(graph); this.draft = structuredClone(this.saved); this.selected = null; this.externalChange = false; this.error = ''; this.draw(); }
+  setSaved(graph) { this.saved = this.assert(graph); this.draft = structuredClone(this.saved); this.selected = null; this.externalChange = false; this.error = ''; this.draw(); }
   setActive(graph, state, tabId) { this.active = graph; this.state = state; this.tabId = tabId; this.updateSummary(); }
   updateSummary() {
-    const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(this.saved);
-    const notices = [...new Set(this.draft.nodes.map(node => NODE_TYPES[node.type]?.preparationNotice).filter(Boolean))];
+    let savedSnapshot = this.saved;
+    try { if (this.saved) savedSnapshot = resolveSubgraphs(this.saved, this.definitions); } catch { /* Show the pending warning if a dependency becomes invalid. */ }
+    const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(savedSnapshot);
+    let nodes = this.draft.nodes;
+    try { nodes = resolveSubgraphs(this.draft, this.definitions).nodes; } catch { /* Diagnostics explains unavailable dependencies. */ }
+    const notices = [...new Set(nodes.map(node => NODE_TYPES[node.type]?.preparationNotice).filter(Boolean))];
     this.assetRequirements.textContent = notices.join(' ') || 'No model preparation notices for Nodes in the current draft.';
     const summary = this.isDirty() ? 'Unsaved' : 'Saved';
     if (this.summary.textContent !== summary) this.summary.textContent = summary;
@@ -467,8 +563,8 @@ export class GraphEditor {
       if (!identical) {
         const candidate = { ...this.draft, edges: this.draft.edges.filter(e => e !== movingConnection && (e.to[0] !== id || e.to[1] !== port)).concat(proposed) };
         // Drafts can be incomplete. Reject newly introduced structural errors.
-        const previous = new Set(validateGraph(this.draft));
-        const errors = validateGraph(candidate).filter(message => !previous.has(message));
+        const previous = new Set(validateGraph(this.draft, false, this.definitions));
+        const errors = validateGraph(candidate, false, this.definitions).filter(message => !previous.has(message));
         if (errors.length) this.error = errors.join('\n');
         else this.draft.edges = candidate.edges;
       }
@@ -499,10 +595,16 @@ export class GraphEditor {
     this.errors.textContent = this.diagnostics(); this.updateSummary();
     this.onDraft(structuredClone(this.draft));
   }
-  selectDetails(node = null, connection = null) {
+  selectDetails(node = null, connection = null, extend = false) {
+    if (extend && node) {
+      this.multiSelection ||= new Set();
+      if (this.multiSelection.has(node)) this.multiSelection.delete(node); else this.multiSelection.add(node);
+      node = this.multiSelection.has(node) ? node : [...this.multiSelection].at(-1) || null;
+    } else this.multiSelection = new Set(node ? [node] : []);
+    if (this.createButton) this.createButton.disabled = !this.multiSelection.size;
     this.selected = null; this.selectedNode = node; this.selectedEdge = connection;
     for (const card of this.canvas.querySelectorAll('.graph-node')) {
-      const selected = card.dataset.node === node;
+      const selected = this.multiSelection.has(card.dataset.node);
       card.classList.toggle('selected-node', selected);
       card.querySelector('.graph-heading').setAttribute('aria-pressed', String(selected));
     }
@@ -522,7 +624,7 @@ export class GraphEditor {
     const header = el('div', undefined, 'graph-inspector-header'); header.append(el('h2', node ? 'Settings' : 'Details'));
     this.inspector.replaceChildren(header);
     this.disconnectButton.hidden = !this.selectedEdge;
-    if (!node && !this.selectedEdge) { this.inspector.append(el('p', 'Select a node or connection.', 'muted')); return; }
+    if (!node && !this.selectedEdge) { this.inspector.append(el('p', 'Select a node or connection. Shift+click or Shift+Enter on headings selects a connected group for Graph actions → Create Subgraph.', 'muted')); if (this.kind === 'subgraph') this.renderPortEditor(this.inspector, this.draft, () => this.draw()); return; }
     if (this.selectedEdge) {
       const { from, to } = this.selectedEdge;
       this.disconnectButton.setAttribute('aria-label', `Disconnect ${from.join('.')} to ${to.join('.')}`);
@@ -532,7 +634,9 @@ export class GraphEditor {
     }
     const remove = button('Remove Node', null, () => { this.removeNode(node); this.scroll.focus({ preventScroll: true }); });
     remove.className = 'danger'; remove.setAttribute('aria-label', `Remove ${node.id}`); header.append(remove);
-    const definition = nodeDefinition(node, this.draft); this.inspector.append(el('h3', definition.label), el('p', `Instance ID: ${node.id}`));
+    if (node.type === 'Subgraph' && this.onEditSubgraph) this.inspector.append(button('Edit Subgraph', 'graph-edit-subgraph', () => this.onEditSubgraph(node.subgraphId)));
+    if (this.multiSelection?.size > 1) this.inspector.append(el('p', `${this.multiSelection.size} nodes selected. Use Graph actions → Create Subgraph.`));
+    const definition = this.definition(node); this.inspector.append(el('h3', definition.label), el('p', `Instance ID: ${node.id}`));
     for (const [key, values] of Object.entries(definition.settings || {})) {
       const label = el('label', key + ' '), select = el('select'); select.setAttribute('aria-label', `${node.id} ${key}`);
       for (const value of values) { const option = el('option', value); option.value = value; select.append(option); }
@@ -542,7 +646,9 @@ export class GraphEditor {
     for (const [key, spec] of Object.entries(definition.textSettings || {})) {
       const label = el('label', key + ' '), control = el(spec.multiline ? 'textarea' : 'input');
       control.setAttribute('aria-label', `${node.id} ${key}`); if (spec.maxLength !== undefined) control.maxLength = spec.maxLength; control.value = node.settings[key] ?? spec.default;
-      control.onchange = () => this.updateSetting(node, key, control.value);
+      // Capture every keystroke before a cross-page storage update can redraw
+      // the Inspector; a focused, unblurred edit must still count as a draft.
+      control.oninput = () => this.updateSetting(node, key, control.value);
       label.append(control); this.inspector.append(label);
     }
     if (node.type === 'Display') for (let i = 1; i <= node.settings.inputCount; i++) {
@@ -588,6 +694,9 @@ export class GraphEditor {
   }
   draw(notify = true) {
     this.geometryObserver?.disconnect();
+    if (!this.selectedNode) this.multiSelection?.clear();
+    else if (this.multiSelection) for (const id of this.multiSelection) if (!this.draft.nodes.some(node => node.id === id)) this.multiSelection.delete(id);
+    if (this.createButton) this.createButton.disabled = !(this.multiSelection?.size);
     if (!this.draft.edges.includes(this.selectedEdge)) this.selectedEdge = null;
     this.syncZoomControls();
     this.canvas.replaceChildren(this.svg); this.svg.replaceChildren();
@@ -597,16 +706,17 @@ export class GraphEditor {
     this.canvas.style.width = `${width}px`; this.canvas.style.height = `${height}px`; this.canvas.style.transform = `scale(${this.zoom})`;
     this.extent.style.width = `${width * this.zoom}px`; this.extent.style.height = `${height * this.zoom + VIEWPORT_CONTROL_SPACE}px`;
     for (const node of this.draft.nodes) {
-      const definition = nodeDefinition(node, this.draft), card = el('section', undefined, 'graph-node'); card.dataset.node = node.id;
-      card.classList.toggle('selected-node', this.selectedNode === node.id);
+      const definition = this.definition(node), card = el('section', undefined, 'graph-node'); card.dataset.node = node.id;
+      card.classList.toggle('selected-node', this.multiSelection?.has(node.id) || this.selectedNode === node.id);
       card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`;
       const heading = el('button', definition.label, 'graph-heading'); heading.type = 'button';
       heading.setAttribute('aria-label', `Select ${node.id}`); heading.setAttribute('aria-pressed', String(this.selectedNode === node.id));
-      heading.title = 'Select to inspect settings; select again to deselect. Drag to move; arrow keys move by 10 pixels.';
-      heading.onclick = () => { this.selectDetails(this.selectedNode === node.id ? null : node.id); heading.focus({ preventScroll: true }); };
+      heading.title = 'Select to inspect settings; Shift+click or Shift+Enter selects a group. Drag to move; arrow keys move by 10 pixels.';
+      heading.onclick = event => { this.selectDetails(event.shiftKey ? node.id : this.selectedNode === node.id ? null : node.id, null, event.shiftKey); heading.focus({ preventScroll: true }); };
+      if (node.type === 'Subgraph' && this.onEditSubgraph) heading.ondblclick = () => this.onEditSubgraph(node.subgraphId);
       heading.onkeydown = event => {
         const delta = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[event.key];
-        if (!delta) return; event.preventDefault(); this.selectedEdge = null; this.selectedNode = node.id;
+        if (!delta) return; event.preventDefault(); this.selectedEdge = null; this.selectedNode = node.id; this.multiSelection = new Set([node.id]);
         node.position.x = Math.max(0, node.position.x + delta[0]); node.position.y = Math.max(0, node.position.y + delta[1]); this.draw();
         this.canvas.querySelector(`[data-node="${node.id}"] .graph-heading`).focus();
       };
@@ -630,7 +740,7 @@ export class GraphEditor {
       for (const side of ['input', 'output']) {
         const column = el('div');
         for (const [port, contract] of portDisplayEntries(definition, side)) {
-          const portLabel = port.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+          const portLabel = definition.portLabels?.[`${side}s`]?.[port] || port.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
           let suppressClick = false;
           const control = button(`${side === 'input' ? '←' : '→'} ${portLabel}`, null, () => {
             if (suppressClick) return;
@@ -652,7 +762,7 @@ export class GraphEditor {
               this.selected = { id: node.id, port, contract }; event.dataTransfer.setData('text/plain', `${node.id}.${port}`);
               for (const input of this.canvas.querySelectorAll('[data-side="input"]')) {
                 const target = this.draft.nodes.find(n => n.id === input.closest('[data-node]').dataset.node);
-                input.disabled = target.id === node.id || !compatiblePorts(contract, nodeDefinition(target, this.draft).inputs[input.dataset.port]);
+                input.disabled = target.id === node.id || !compatiblePorts(contract, this.definition(target).inputs[input.dataset.port]);
               }
             };
             control.ondragend = () => { this.draggingPort = false; this.selected = null; this.draw(); };
@@ -690,8 +800,8 @@ export class GraphEditor {
                     if (input && this.canvas.contains(input)) {
                       const id = input.closest('[data-node]').dataset.node;
                       const source = this.draft.nodes.find(n => n.id === connection.from[0]);
-                      this.selected = { id: source.id, port: connection.from[1], contract: nodeDefinition(source, this.draft).outputs[connection.from[1]] };
-                      this.connect(id, input.dataset.port, nodeDefinition(this.draft.nodes.find(n => n.id === id), this.draft).inputs[input.dataset.port], connection);
+                      this.selected = { id: source.id, port: connection.from[1], contract: this.definition(source).outputs[connection.from[1]] };
+                      this.connect(id, input.dataset.port, this.definition(this.draft.nodes.find(n => n.id === id)).inputs[input.dataset.port], connection);
                     } else this.drawWires();
                   }
                 };

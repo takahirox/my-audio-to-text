@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { GraphLibrary, openLibrary, readLibrary, LIBRARY_KEY, readSelectedGraph, saveLiveGraphData } from '../extension/graph-library.js';
 import { launchLibrary } from '../extension/launch-library.js';
 import { graphNode, edge, GRAPH_KEY } from '../extension/graph.js';
+import { extractSubgraph } from '../extension/subgraphs.js';
 
 async function fixture() {
   const values = new Map();
@@ -57,14 +58,14 @@ test('Web choices retain their independent default, require compatibility, and n
   assert.equal(f.storage.getItem('web-voice-typing-v1'), null);
 });
 
-test('corrupt sources and unsupported subgraph nodes are excluded; legacy conflicts block launches without overwriting data', async () => {
+test('corrupt sources and missing subgraph definitions are excluded; legacy conflicts block launches without overwriting data', async () => {
   const f = await fixture();
   await f.store.create({ graph: simple() });
   const saved = readLibrary(f.storage), bad = saved.graphs.at(-1);
   bad.graph.nodes[0].type = 'Subgraph';
   f.storage.setItem(LIBRARY_KEY, JSON.stringify(saved));
   assert.ok(!(await f.launch('live-list')).graphs.some(entry => entry.id === bad.id));
-  await assert.rejects(f.launch('live-check', bad.id), /Unknown Node type/);
+  await assert.rejects(f.launch('live-check', bad.id), /Missing or invalid subgraph/);
   const before = f.storage.getItem(LIBRARY_KEY);
   f.storage.setItem(GRAPH_KEY, '{changed legacy');
   await assert.rejects(f.launch('live-list'), /Recover/);
@@ -78,4 +79,46 @@ test('default compatibility saves can repair an incomplete graph while launch va
   await assert.rejects(f.launch('live-check', 'default-live'), /No executable path/);
   await saveLiveGraphData(f.storage, simple(), f.locks);
   assert.equal(await f.launch('live-check', 'default-live'), 'default-live');
+});
+
+
+test('launch choices resolve shared definitions, exclude definitions, and retain detached selected-parent snapshots', async () => {
+  const f = await fixture(), graph = simple();
+  const formatter = graphNode('TextFormatter', 'format'); formatter.settings.template = 'Before: {1}';
+  graph.nodes.push(formatter);
+  graph.edges = [edge('source', 'value', 'format', 'input1'), edge('format', 'text', 'display', 'input1')];
+  const extracted = extractSubgraph(graph, ['format'], 'shared');
+  await f.store.create({ id: 'shared', name: 'Shared', kind: 'subgraph', graph: extracted.shared });
+  const saved = await f.store.create({ name: 'Parent', graph: extracted.parent }), parent = saved.graphs.at(-1);
+  assert.deepEqual((await f.launch('live-list')).graphs.map(entry => entry.id), ['default-live', parent.id]);
+  assert.equal(await f.launch('live-check', parent.id), parent.id);
+  await f.launch('live-default', parent.id);
+  await assert.rejects(f.launch('live-check', 'shared'), /Choose a parent graph/);
+  await assert.rejects(f.launch('live-default', 'shared'), /cannot run/);
+  const snapshot = readSelectedGraph(f.storage, parent.id);
+  assert.ok(snapshot.graph.nodes.every(node => node.type !== 'Subgraph'));
+  const definition = readLibrary(f.storage).graphs.find(entry => entry.id === 'shared');
+  definition.graph.nodes[0].settings.template = 'After: {1}';
+  await f.store.save(definition.id, definition.revision, definition.graph);
+  assert.equal(snapshot.graph.nodes.find(node => node.type === 'TextFormatter').settings.template, 'Before: {1}');
+  assert.equal(readSelectedGraph(f.storage, parent.id).graph.nodes.find(node => node.type === 'TextFormatter').settings.template, 'After: {1}');
+  assert.equal((await f.launch('live-list')).defaultId, parent.id);
+  assert.deepEqual(readLibrary(f.storage).graphs.find(entry => entry.id === parent.id), parent);
+  await f.store.change(current => { current.assignments.live = 'shared'; current.graphs = current.graphs.filter(entry => entry.id !== 'default-live'); });
+  assert.equal((await f.launch('live-list')).defaultId, parent.id, 'sole viable parent replaces an invalid definition default');
+});
+
+test('Web launch choices resolve shared ASR through the same compatibility boundary as the page mic', async () => {
+  const f = await fixture(), extracted = extractSubgraph(voice(), ['asr'], 'shared-asr');
+  await f.store.create({ id: 'shared-asr', name: 'Shared ASR', kind: 'subgraph', graph: extracted.shared });
+  const saved = await f.store.create({ name: 'Web parent', graph: extracted.parent }), id = saved.graphs.at(-1).id;
+  assert.deepEqual((await f.launch('web-list')).graphs.map(entry => entry.id), [id]);
+  await f.launch('web-default', id);
+  assert.equal((await f.launch('web-list')).defaultId, id);
+  await assert.rejects(f.launch('web-default', 'shared-asr'), /cannot run/);
+  await f.store.change(current => { current.graphs = current.graphs.filter(entry => entry.id !== 'shared-asr'); });
+  assert.deepEqual((await f.launch('web-list')).graphs, []);
+  assert.equal((await f.launch('web-list')).defaultId, null);
+  assert.ok(!(await f.launch('live-list')).graphs.some(entry => entry.id === id));
+  await assert.rejects(f.launch('live-check', id), /Missing or invalid subgraph/);
 });
