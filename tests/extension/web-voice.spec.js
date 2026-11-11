@@ -29,7 +29,7 @@ const test = base.extend({
       if (!real) {
         // Insertion assertions recognize one utterance, regardless of Chromium's fake
         // microphone tone/silence cycle or how long placement checks take.
-        const singleUtterance = /^(active recording relocates|closed-shadow modal|stacked modal dialogs)/.test(info.title);
+        const singleUtterance = /^(active recording stays|closed-shadow modal|stacked modal dialogs)/.test(info.title);
         for (const role of ['sherpa', 'silero', 'whisper']) await writeFile(path.join(root, `web/${role}-worker.js`), `let samples=0;self.onmessage=({data})=>{
           if(data.type==='load')postMessage({type:'ready'});
           if(data.type==='vad-start')samples=0;
@@ -368,18 +368,14 @@ test('Material Symbols circle: isolated styles, light/dark, focus, hover, reduce
   await expect(widget(t.website)).toHaveAttribute('data-voice-state','error');
 });
 
-test('field attachment avoids neighbours, stays in viewport across reflow, zoom, resize and scroll', async ({ voice: t }, info) => {
+test('field attachment stays predictable across focus, reflow, zoom, resize and scroll', async ({ voice: t }, info) => {
   test.skip(real, 'Layout coverage uses controlled inference.');
   await enable(t); await t.website.bringToFront();
   await t.website.locator('#first').focus();
-  const crowded = await controlUI(t);
-  for (const selector of ['#first','#second','#password','#otp','#card','#readonly','button[type="submit"]']) {
-    expect(intersects(crowded.button, await t.website.locator(selector).boundingBox())).toBe(false);
-  }
   await t.website.evaluate(() => {
     document.body.style.cssText = 'margin:0;min-height:2000px';
     for (const e of document.querySelectorAll('body > input, [contenteditable]')) e.remove();
-    document.querySelector('form').style.cssText = 'position:absolute;left:100px;top:100px;display:flex;align-items:center;gap:2px';
+    document.querySelector('form').style.cssText = 'position:absolute;left:100px;top:100px;display:flex;align-items:center;gap:60px';
     document.querySelector('#first').style.cssText = 'box-sizing:border-box;width:92px;height:22px';
     document.querySelector('#second').style.cssText = 'width:50px;height:22px';
   });
@@ -389,17 +385,17 @@ test('field attachment avoids neighbours, stays in viewport across reflow, zoom,
     expect(ui.button.x).toBeGreaterThanOrEqual(4); expect(ui.button.y).toBeGreaterThanOrEqual(4);
     expect(ui.button.x + 36).toBeLessThanOrEqual(viewport.width - 4);
     expect(ui.button.y + 36).toBeLessThanOrEqual(viewport.height - 4);
-    for (const selector of ['#first','#second','button[type="submit"]']) expect(intersects(ui.button, await t.website.locator(selector).boundingBox())).toBe(false);
     const field = await t.website.locator('#first').boundingBox();
-    const distance = Math.max(field.x - ui.button.x - 36, ui.button.x - field.x - field.width, field.y - ui.button.y - 36, ui.button.y - field.y - field.height);
-    // Focus-ring clearance can require the next field-adjacent candidate.
-    expect(distance).toBeLessThanOrEqual(90.1); expect(distance).toBeGreaterThanOrEqual(0);
+    const preferredX = field.x + field.width + 6;
+    const expectedX = preferredX + 36 <= viewport.width - 4 ? preferredX : field.x - 42;
+    expect(ui.button.x).toBeCloseTo(Math.max(4, Math.min(viewport.width - 40, expectedX)), 1);
+    expect(ui.button.y).toBeCloseTo(Math.max(4, Math.min(viewport.height - 40, field.y + (field.height - 36) / 2)), 1);
   };
   await expect(check).toPass({ timeout:5000 });
   for (const [width, height, left, top] of [[320,240,0,0],[320,240,228,0],[320,240,228,218],[600,360,250,160]]) {
     await t.website.setViewportSize({ width,height });
     await t.website.locator('form').evaluate((e, p) => { e.style.left = p.left+'px'; e.style.top = p.top+'px'; }, { left,top });
-    // Reflow can occur without a resize or one of the observed attributes.
+    // Reflow can occur without a resize.
     await expect(check).toPass({ timeout:5000 });
   }
   await t.website.evaluate(() => { document.body.style.zoom = '1.25'; });
@@ -432,220 +428,55 @@ async function placementPage(t, extra = '') {
   }, extra);
   await t.website.locator('#field').focus();
 }
-async function clearOf(t, selectors) {
-  const ui = await controlUI(t);
-  for (const selector of selectors) {
-    const rect = await t.website.locator(selector).boundingBox();
-    expect(intersects({ x:ui.button.x-6,y:ui.button.y-6,width:48,height:48 }, rect)).toBe(false);
-    if (ui.status && ui.bubbleClip === 'none') expect(intersects(ui.bubble, rect)).toBe(false);
-  }
-  return ui;
-}
 
-test('safe placement prefers the right, protects an adjacent site button and catches thin partial overlaps', async ({ voice: t }) => {
+test('idle mic stays visible and stable in a packed viewport without changing page layout', async ({ voice: t }) => {
   test.skip(real); await placementPage(t);
-  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
-  await t.website.evaluate(() => {
-    const button = document.createElement('button'); button.id = 'neighbour'; button.textContent = 'Send';
-    button.style.cssText = 'position:absolute;left:286px;top:120px;width:60px;height:36px'; document.body.append(button);
-  });
-  await expect(async () => {
-    const ui = await clearOf(t, ['#field', '#neighbour']); expect(ui.button.x).toBe(118);
-  }).toPass();
-  await t.website.locator('#neighbour').click();
-  expect(await t.website.evaluate(() => siteClicks)).toBe(1);
-  await t.website.locator('#field').focus();
-  await t.website.locator('#neighbour').evaluate(e => { e.style.cssText = 'position:absolute;left:294px;top:110px;width:2px;height:60px;padding:0;border:0;pointer-events:none'; });
-  await expect(async () => {
-    const ui = await clearOf(t, ['#field', '#neighbour']); expect(ui.button.x).toBe(118);
-  }).toPass();
-  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
-  await idle(t);
-});
-
-test('idle mic hides in a packed viewport and returns when controls leave without changing page layout', async ({ voice: t }) => {
-  test.skip(real); await placementPage(t, '<button id="cover" style="position:fixed;inset:0;width:100%;height:100%">Site action</button>');
-  await expect(widget(t.website)).toBeHidden();
-  expect(await t.website.locator('#field').boundingBox()).toMatchObject({ x:160,y:120,width:120,height:36 });
-  await t.website.mouse.click(20,20); expect(await t.website.evaluate(() => siteClicks)).toBe(1);
-  await t.website.locator('#field').focus();
-  await t.website.locator('#cover').evaluate(e => e.remove());
+  const initial = (await controlUI(t)).button;
+  expect(initial).toMatchObject({ x:286,y:120,width:36,height:36 });
+  await occupyViewport(t);
+  // Let mutation-triggered placement finish before checking visibility.
+  await t.website.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await expect(widget(t.website)).toBeVisible();
+  expect((await controlUI(t)).button).toEqual(initial);
   expect(await t.website.locator('#field').boundingBox()).toMatchObject({ x:160,y:120,width:120,height:36 });
   expect(await t.website.locator('#field').evaluate(e => e.parentElement === document.body)).toBe(true);
-  await idle(t);
-});
-
-test('shadow controls, clipped controls and labels remain conservative geometry obstructions', async ({ voice: t }) => {
-  test.skip(real); await placementPage(t, '<span id="open"></span><div id="closed"></div>');
-  await t.website.evaluate(() => {
-    const open = document.querySelector('#open');
-    open.style.cssText = 'position:absolute;left:286px;top:120px;width:0;height:0';
-    open.attachShadow({mode:'open'}).innerHTML = '<button style="position:absolute;left:0;top:0;width:36px;height:36px">Shadow</button>';
-    const closed = document.querySelector('#closed');
-    closed.style.cssText = 'position:absolute;left:118px;top:120px;width:36px;height:36px;overflow:hidden';
-    closed.attachShadow({mode:'closed'}).innerHTML = '<button style="width:60px;height:36px">Closed</button>';
-  });
-  await expect(async () => {
-    const ui = await clearOf(t, ['#field', '#open button', '#closed']);
-    expect(ui.button.y + ui.button.height).toBeLessThanOrEqual(114);
-  }).toPass();
-  // An interactive label introduced inside an existing open root must trigger
-  // rediscovery too, even though light-DOM observers cannot see this mutation.
-  await t.website.locator('#open').evaluate(e => {
-    const label = document.createElement('label'); label.id = 'shadow-label'; label.textContent = 'Label';
-    label.style.cssText = 'position:fixed;left:244px;top:78px;width:36px;height:36px'; e.shadowRoot.append(label);
-  });
-  await expect(async () => { await clearOf(t, ['#field', '#open button', '#closed', '#open #shadow-label']); }).toPass();
-});
-
-test('transformed root placement verifies the rendered mic and preserves native button clicks', async ({ voice: t }) => {
-  test.skip(real); await placementPage(t);
-  await t.website.setViewportSize({ width:800, height:320 });
-  await t.website.evaluate(() => {
-    document.documentElement.style.transform = 'translateX(100px)';
-    const button = document.createElement('button'); button.id = 'neighbour'; button.textContent = 'Send';
-    button.style.cssText = 'position:absolute;left:386px;top:120px;width:36px;height:36px'; document.body.append(button);
-  });
-  await expect(async () => {
-    const ui = await clearOf(t, ['#field', '#neighbour']); expect(ui.button.x).toBe(386);
-  }).toPass();
-  await t.website.locator('#neighbour').click(); expect(await t.website.evaluate(() => siteClicks)).toBe(1);
+  await expect(t.website.locator('#field')).toBeFocused();
   await start(t, '#field'); await recording(t);
-  await expect(async () => { await clearOf(t, ['#field', '#neighbour']); }).toPass();
+  expect((await controlUI(t)).button).toEqual(initial);
   await stop(t); await idle(t);
-  // Transforms that cannot be corrected by a translation must fail closed.
+  expect(await t.website.evaluate(() => siteClicks)).toBe(0);
+  // The page is still clickable outside the existing mic's small hit target.
+  await t.website.mouse.click(20,20); expect(await t.website.evaluate(() => siteClicks)).toBe(1);
   await t.website.locator('#field').focus();
-  await t.website.evaluate(() => { document.documentElement.style.transform = 'scale(1.2)'; });
-  await expect(widget(t.website)).toBeHidden();
-  await t.website.evaluate(() => { document.documentElement.style.transform = ''; });
-  await expect(widget(t.website)).toBeVisible();
-});
-
-test('collapsed closed-shadow overflow uses descendant geometry for idle safety', async ({ voice: t }) => {
-  test.skip(real); await placementPage(t);
-  for (const offset of [8, -8]) {
-    await t.website.evaluate(offset => {
-      const host = document.createElement('div'); host.id = 'opaque';
-      host.style.cssText = 'position:absolute;left:286px;top:120px;width:0;height:0'; document.body.append(host);
-      const button = document.createElement('button'); button.setAttribute('aria-label', 'Native shadow action');
-      button.style.cssText = `position:absolute;left:${offset}px;top:0;width:2px;height:36px;padding:0;border:0`;
-      window.shadowClicks = 0; button.onclick = () => shadowClicks++;
-      host.attachShadow({ mode:'closed' }).append(button);
-    }, offset);
-    await expect(async () => {
-      const ui = await controlUI(t);
-      expect(intersects({ x:ui.button.x-6,y:ui.button.y-6,width:48,height:48 },
-        { x:286+offset,y:120,width:2,height:36 })).toBe(false);
-    }).toPass();
-    await t.website.mouse.click(287 + offset, 138);
-    expect(await t.website.evaluate(() => shadowClicks)).toBe(1);
-    await t.website.locator('#opaque').evaluate(e => e.remove());
-    await t.website.locator('#field').focus();
-    await expect(widget(t.website)).toBeVisible();
-  }
-});
-
-for (const mode of ['open', 'closed']) test(`late ${mode} shadow attachment discovers thin controls and observes subsequent updates`, async ({ voice: t }) => {
-  test.skip(real);
-  // Put the existing host beyond one discovery batch to exercise cursor progress.
-  await placementPage(t, '<span style="display:none"></span>'.repeat(260) +
-    '<div id="late-shadow" style="position:absolute;left:286px;top:120px;width:0;height:0"></div>');
-  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
-  await t.website.evaluate(async () => {
-    // Drain initial light-DOM discovery before the otherwise unobservable attach.
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  });
-  await t.website.evaluate(mode => {
-    const root = document.querySelector('#late-shadow').attachShadow({ mode });
-    window.shadowClicks = 0;
-    window.addShadowButton = rect => {
-      const button = document.createElement('button');
-      button.style.cssText = `position:fixed;left:${rect.x}px;top:${rect.y}px;width:2px;height:36px;padding:0;border:0`;
-      button.onclick = () => shadowClicks++;
-      root.append(button);
-    };
-    addShadowButton({ x:294, y:120 });
-  }, mode);
-  const clear = async rect => {
-    await expect(async () => {
-      const ui = await controlUI(t);
-      expect(intersects({ x:ui.button.x-6,y:ui.button.y-6,width:48,height:48 }, rect)).toBe(false);
-    }).toPass({ timeout:4000 });
-  };
-  await clear({ x:294,y:120,width:2,height:36 });
-  await t.website.mouse.click(295,138);
-  expect(await t.website.evaluate(() => shadowClicks)).toBe(1);
-  await t.website.locator('#field').focus();
-  const ui = await controlUI(t), next = { x:ui.button.x+8,y:ui.button.y,width:2,height:36 };
-  // The discovered root must now invalidate obstacles on internal mutations.
-  await t.website.evaluate(rect => addShadowButton(rect), next);
-  await clear(next);
-  await t.website.mouse.click(next.x+1,next.y+18);
-  expect(await t.website.evaluate(() => shadowClicks)).toBe(2);
+  expect((await controlUI(t)).button).toEqual(initial);
+  await t.website.locator('#cover').evaluate(e => e.remove());
+  expect((await controlUI(t)).button).toEqual(initial);
   await idle(t);
 });
 
-for (const variant of ['absolute', 'hidden light child', 'fixed']) test(`noncollapsed closed-shadow ${variant} preserves thin native button clicks`, async ({ voice: t }) => {
-  test.skip(real); await placementPage(t);
+test('right-side attachment uses only a deterministic left fallback at the viewport edge', async ({ voice: t }) => {
+  test.skip(real); await placementPage(t, '<button id="neighbour" style="position:absolute;left:400px;top:120px;width:70px;height:36px">Send</button>');
   await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
-  await t.website.evaluate(variant => {
-    const host = document.createElement('div'); host.id = 'opaque';
-    host.style.cssText = 'position:absolute;left:0;top:0;width:10px;height:10px';
-    const button = document.createElement('button');
-    button.style.cssText = `position:${variant === 'fixed' ? 'fixed' : 'absolute'};left:294px;top:120px;width:2px;height:36px;padding:0;border:0`;
-    window.shadowClicks = 0; button.onclick = () => shadowClicks++;
-    window.moveShadowButton = (left, top) => { button.style.left = `${left}px`; button.style.top = `${top}px`; };
-    host.attachShadow({ mode:'closed' }).append(button);
-    if (variant === 'hidden light child') {
-      const child = document.createElement('span'); child.hidden = true; host.append(child);
-    }
-    document.body.append(host);
-  }, variant);
-  await expect(async () => {
-    const ui = await controlUI(t);
-    expect(intersects({ x:ui.button.x-6,y:ui.button.y-6,width:48,height:48 },
-      { x:294,y:120,width:2,height:36 })).toBe(false);
-  }).toPass();
-  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
-  await t.website.mouse.click(295, 138);
-  expect(await t.website.evaluate(() => shadowClicks)).toBe(1);
-  await idle(t);
-  if (variant === 'fixed') {
-    await t.website.locator('#field').focus();
-    const ui = await controlUI(t), native = { x:ui.button.x+8,y:ui.button.y,width:2,height:36 };
-    await t.website.evaluate(rect => moveShadowButton(rect.x, rect.y), native);
-    // Closed-root mutations must invalidate cached discovery/placement too.
-    await expect(async () => {
-      const moved = await controlUI(t);
-      expect(intersects({ x:moved.button.x-6,y:moved.button.y-6,width:48,height:48 }, native)).toBe(false);
-    }).toPass();
-    await t.website.mouse.click(native.x+1, native.y+18);
-    expect(await t.website.evaluate(() => shadowClicks)).toBe(2); await idle(t);
-  }
-  await t.website.locator('#opaque').evaluate(e => e.remove());
+  await t.website.locator('#field').evaluate(e => { e.style.left = '360px'; });
+  await expect.poll(async () => (await controlUI(t)).button.x).toBe(318);
+  const fallback = (await controlUI(t)).button;
+  expect(intersects(fallback, await t.website.locator('#field').boundingBox())).toBe(false);
+  expect(intersects(fallback, await t.website.locator('#neighbour').boundingBox())).toBe(false);
+  await t.website.locator('#neighbour').click(); expect(await t.website.evaluate(() => siteClicks)).toBe(1);
   await t.website.locator('#field').focus();
-  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
-});
-
-test('layout and CSS animation rechecks move idle mic away from newly occupied space', async ({ voice: t }) => {
-  test.skip(real); await placementPage(t);
-  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
+  expect((await controlUI(t)).button).toEqual(fallback);
   await t.website.evaluate(() => {
-    const style = document.createElement('style');
-    style.textContent = '@keyframes arrive{from{transform:translateX(100px)}to{transform:translateX(0)}} #moving{position:absolute;left:286px;top:120px;width:36px;height:36px;animation:arrive .5s .2s forwards}';
-    document.head.append(style);
-    const button = document.createElement('button'); button.id = 'moving'; button.textContent = 'Action'; document.body.append(button);
+    const other = document.createElement('textarea'); other.id = 'other';
+    other.style.cssText = 'position:absolute;left:60px;top:200px;width:80px;height:36px;box-sizing:border-box';
+    document.body.append(other); other.focus();
   });
-  await expect.poll(async () => (await t.website.locator('#moving').boundingBox()).x).toBe(286);
-  await expect(async () => { await clearOf(t, ['#field','#moving']); }).toPass();
-  await t.website.locator('#moving').click(); expect(await t.website.evaluate(() => siteClicks)).toBe(1);
+  await expect.poll(async () => (await controlUI(t)).button.x).toBe(146);
   await t.website.locator('#field').focus();
-  await t.website.locator('#field').evaluate(e => { e.style.left = '350px'; e.style.top = '280px'; });
-  await expect(async () => {
-    const ui = await clearOf(t, ['#field','#moving']);
-    expect(ui.button.x + 36).toBeLessThanOrEqual(476); expect(ui.button.y + 36).toBeLessThanOrEqual(316);
-  }).toPass();
+  expect((await controlUI(t)).button).toEqual(fallback);
+  await expect(widget(t.website)).toHaveCount(1);
+  await t.website.setViewportSize({ width:600,height:320 });
+  await expect.poll(async () => (await controlUI(t)).button.x).toBe(486);
+  await idle(t);
 });
 
 async function occupyViewport(t, pocket = false) {
@@ -660,12 +491,12 @@ async function occupyViewport(t, pocket = false) {
   }, pocket);
 }
 
-test('active recording relocates to a viewport pocket and keeps the same Stop, target, focus and status click-through', async ({ voice: t }) => {
+test('active recording stays beside its target in a crowded viewport with the same Stop, focus and status click-through', async ({ voice: t }) => {
   test.skip(real); await placementPage(t); await start(t, '#field'); await recording(t);
   await t.website.locator('#field').evaluate(e => e.setSelectionRange(7,7));
   const ui = await controlUI(t);
   // Status labels never intercept native page clicks, including when the label
-  // has to disappear visually to avoid a new control.
+  // overlaps another control.
   await t.website.evaluate(bubble => {
     const link = document.createElement('a'); link.id = 'under-status'; link.href = '#'; link.textContent = 'Link';
     link.style.cssText = `position:fixed;left:${bubble.x}px;top:${bubble.y}px;width:${bubble.width}px;height:${bubble.height}px`;
@@ -675,8 +506,7 @@ test('active recording relocates to a viewport pocket and keeps the same Stop, t
   await t.website.locator('#field').focus();
   await occupyViewport(t, true);
   await expect(async () => {
-    const relocated = await clearOf(t, ['#cover','#bottom']);
-    expect(relocated.button.x).toBeGreaterThanOrEqual(416); expect(relocated.button.y).toBeGreaterThanOrEqual(256);
+    expect((await controlUI(t)).button).toEqual(ui.button);
   }).toPass();
   await expect(t.website.locator('#field')).toBeFocused();
   await expect(widget(t.website)).toHaveCount(1); await recording(t); await noVisibleRuntime(t);
@@ -687,31 +517,31 @@ test('active recording relocates to a viewport pocket and keeps the same Stop, t
   await stop(t); await idle(t);
   expect(await t.website.evaluate(() => siteClicks)).toBe(clicks);
   await expect(t.website.locator('#field')).toHaveValue('before confirmed fixtureafter');
-  await expect(widget(t.website)).toBeHidden();
+  await expect(widget(t.website)).toBeVisible();
 });
 
-test('fully occupied active viewport retains Cancel and Stop, and returns to clear placement when space opens', async ({ voice: t }) => {
+test('fully occupied active viewport retains Cancel and Stop without placement hops', async ({ voice: t }) => {
   test.skip(real); await placementPage(t); await bootstrap(t, 'window.voiceDelay = 1000;');
   await start(t, '#field');
   await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
   await occupyViewport(t);
   await expect(widget(t.website)).toBeVisible();
-  await expect.poll(async () => (await controlUI(t)).button.x).toBe(10);
+  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
   await expect(t.website.locator('#field')).toBeFocused();
   await mic(t.website); await idle(t);
   expect(await t.website.evaluate(() => siteClicks)).toBe(0);
-  await expect(widget(t.website)).toBeHidden();
+  await expect(widget(t.website)).toBeVisible();
   await t.website.locator('#cover').evaluate(e => e.remove());
   await start(t, '#field'); await recording(t);
   await occupyViewport(t);
-  await expect.poll(async () => (await controlUI(t)).button.x).toBe(10);
+  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
   const fallback = await controlUI(t); expectIcon(fallback, 'stop'); expect(fallback.disabled).toBe(false);
-  expect(fallback.bubbleClip).toBe('inset(50%)');
+  expect(fallback.bubbleClip).toBe('none');
   await t.website.locator('#cover').evaluate(e => e.remove());
   await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
   await recording(t); await expect(widget(t.website)).toHaveCount(1);
   await occupyViewport(t);
-  await expect.poll(async () => (await controlUI(t)).button.x).toBe(10);
+  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
   await stop(t); await idle(t);
   expect(await t.website.evaluate(() => siteClicks)).toBe(0);
 });
@@ -853,41 +683,6 @@ for (const phase of ['preparing', 'recording']) test(`stacked modal dialogs keep
   await expect(t.website.locator('#field')).toHaveValue(phase === 'recording' ? 'before confirmed fixtureafter' : 'before after');
   expect(await t.website.evaluate(() => siteClicks)).toBe(0);
 });
-
-test('clipped or covered focused targets hide idle placement until visible again', async ({ voice: t }) => {
-  test.skip(real); await placementPage(t);
-  await t.website.locator('#field').evaluate(e => {
-    const clip = document.createElement('div'); clip.id = 'clip';
-    clip.style.cssText = 'position:absolute;left:0;top:0;width:100px;height:60px;overflow:hidden';
-    e.before(clip); clip.append(e); e.focus({preventScroll:true});
-  });
-  await expect(widget(t.website)).toBeHidden();
-  await t.website.locator('#clip').evaluate(e => { e.style.overflow = 'visible'; });
-  await expect(widget(t.website)).toBeVisible();
-  await occupyViewport(t);
-  await expect(widget(t.website)).toBeHidden();
-  await t.website.locator('#cover').evaluate(e => e.remove());
-  await expect(widget(t.website)).toBeVisible(); await idle(t);
-});
-
-test('active viewport search finds a narrow interior pocket between controls', async ({ voice: t }) => {
-  test.skip(real); await placementPage(t); await start(t, '#field'); await recording(t);
-  await t.website.evaluate(() => {
-    for (const [id,left,top,width,height] of [['top',0,0,480,231],['bottom',0,283,480,37],['left',0,231,337,52],['right',389,231,91,52]]) {
-      const button = document.createElement('button'); button.id = id; button.textContent = 'Website';
-      button.style.cssText = `position:fixed;left:${left}px;top:${top}px;width:${width}px;height:${height}px;border:0;padding:0`;
-      document.body.append(button);
-    }
-  });
-  await expect(async () => {
-    const ui = await clearOf(t, ['#top','#bottom','#left','#right']);
-    expect(ui.button.x).toBeGreaterThanOrEqual(343); expect(ui.button.x).toBeLessThanOrEqual(347);
-    expect(ui.button.y).toBeGreaterThanOrEqual(237); expect(ui.button.y).toBeLessThanOrEqual(241);
-  }).toPass();
-  await expect(t.website.locator('#field')).toBeFocused();
-  await stop(t); await idle(t); expect(await t.website.evaluate(() => siteClicks)).toBe(0);
-});
-
 
 async function realEvidence(t) {
   if (!real) return {};
