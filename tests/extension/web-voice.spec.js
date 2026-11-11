@@ -487,6 +487,51 @@ test('shadow controls, clipped controls and labels remain conservative geometry 
   await expect(async () => { await clearOf(t, ['#field', '#open button', '#closed', '#open #shadow-label']); }).toPass();
 });
 
+test('transformed root placement verifies the rendered mic and preserves native button clicks', async ({ voice: t }) => {
+  test.skip(real); await placementPage(t);
+  await t.website.setViewportSize({ width:800, height:320 });
+  await t.website.evaluate(() => {
+    document.documentElement.style.transform = 'translateX(100px)';
+    const button = document.createElement('button'); button.id = 'neighbour'; button.textContent = 'Send';
+    button.style.cssText = 'position:absolute;left:386px;top:120px;width:36px;height:36px'; document.body.append(button);
+  });
+  await expect(async () => {
+    const ui = await clearOf(t, ['#field', '#neighbour']); expect(ui.button.x).toBe(386);
+  }).toPass();
+  await t.website.locator('#neighbour').click(); expect(await t.website.evaluate(() => siteClicks)).toBe(1);
+  await start(t, '#field'); await recording(t);
+  await expect(async () => { await clearOf(t, ['#field', '#neighbour']); }).toPass();
+  await stop(t); await idle(t);
+  // Transforms that cannot be corrected by a translation must fail closed.
+  await t.website.locator('#field').focus();
+  await t.website.evaluate(() => { document.documentElement.style.transform = 'scale(1.2)'; });
+  await expect(widget(t.website)).toBeHidden();
+  await t.website.evaluate(() => { document.documentElement.style.transform = ''; });
+  await expect(widget(t.website)).toBeVisible();
+});
+
+test('collapsed closed-shadow overflow cannot certify idle safety from sparse hit tests', async ({ voice: t }) => {
+  test.skip(real); await placementPage(t);
+  for (const offset of [8, -8]) {
+    await t.website.evaluate(offset => {
+      const host = document.createElement('div'); host.id = 'opaque';
+      host.style.cssText = 'position:absolute;left:286px;top:120px;width:0;height:0'; document.body.append(host);
+      const button = document.createElement('button'); button.setAttribute('aria-label', 'Native shadow action');
+      button.style.cssText = `position:absolute;left:${offset}px;top:0;width:2px;height:36px;padding:0;border:0`;
+      window.shadowClicks = 0; button.onclick = () => shadowClicks++;
+      host.attachShadow({ mode:'closed' }).append(button);
+    }, offset);
+    // Opaque overflowing contents have no inspectable rectangle. Hiding an
+    // idle utility is safer than inferring free space from a point grid.
+    await expect(widget(t.website)).toBeHidden();
+    await t.website.mouse.click(287 + offset, 138);
+    expect(await t.website.evaluate(() => shadowClicks)).toBe(1);
+    await t.website.locator('#opaque').evaluate(e => e.remove());
+    await t.website.locator('#field').focus();
+    await expect(widget(t.website)).toBeVisible();
+  }
+});
+
 test('layout and CSS animation rechecks move idle mic away from newly occupied space', async ({ voice: t }) => {
   test.skip(real); await placementPage(t);
   await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
@@ -602,6 +647,47 @@ test('active Stop remains clickable above later maximum-z-index overlays, popove
   await expect(widget(t.website)).toBeHidden();
 });
 
+
+for (const phase of ['preparing', 'recording']) test(`stacked modal dialogs keep ${phase === 'preparing' ? 'Cancel' : 'Stop'} in the active modal regardless of DOM order`, async ({ voice: t }) => {
+  test.skip(real); await placementPage(t);
+  if (phase === 'preparing') await bootstrap(t, 'window.voiceDelay = 3000;');
+  await start(t, '#field');
+  if (phase === 'recording') await recording(t);
+  else await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
+  await t.website.evaluate(() => {
+    const first = document.createElement('dialog'), second = document.createElement('dialog');
+    first.id = 'first-modal'; second.id = 'second-modal';
+    first.textContent = 'First dialog'; second.textContent = 'Second dialog';
+    document.body.append(first, second); first.showModal(); second.showModal();
+  });
+  const inModal = async id => {
+    await expect(async () => {
+      expect(await widget(t.website).evaluate(e => e.parentElement.id)).toBe(id);
+      const rect = await widget(t.website).boundingBox();
+      expect(await t.website.evaluate(rect => document.elementFromPoint(rect.x + 18, rect.y + 18)?.hasAttribute('data-local-web-voice'), rect)).toBe(true);
+    }).toPass();
+  };
+  await inModal('second-modal');
+  await t.website.locator('#second-modal').evaluate(e => e.close()); await inModal('first-modal');
+  // Reverse opening order without changing DOM order. Neither the first nor
+  // last matching :modal can identify the active dialog in both cases.
+  await t.website.evaluate(() => {
+    document.querySelector('#second-modal').showModal();
+    document.querySelector('#first-modal').close(); document.querySelector('#first-modal').showModal();
+  });
+  await inModal('first-modal');
+  await t.website.locator('#first-modal').evaluate(e => e.close()); await inModal('second-modal');
+  await expect(widget(t.website)).toHaveCount(1);
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', phase);
+  const before = await t.website.locator('#field').inputValue();
+  // Keyboard focus proves that the button is outside the inert subtree,
+  // and a trusted click proves hit-testing reaches the same Cancel/Stop.
+  await controlUI(t, true);
+  expect((await controlUI(t)).focused).toBe(true);
+  await mic(t.website); await idle(t);
+  expect(await t.website.locator('#field').inputValue()).toBe(before);
+  expect(await t.website.evaluate(() => siteClicks)).toBe(0);
+});
 
 test('clipped or covered focused targets hide idle placement until visible again', async ({ voice: t }) => {
   test.skip(real); await placementPage(t);

@@ -41,6 +41,7 @@
   // Include native, ARIA and common custom controls, even when disabled or
   // pointer-events:none: their visual area still belongs to the website.
   const controls = 'button,a,input,textarea,select,option,label,summary,details,dialog,iframe,object,embed,video,audio,[contenteditable],[tabindex],[role],[onclick],[onpointerdown],[onmousedown],[aria-haspopup],:popover-open';
+  const shadowHosts = 'article,aside,blockquote,div,footer,h1,h2,h3,h4,h5,h6,header,main,nav,p,section,span';
   function pageObstacles() {
     if (!obstaclesDirty) return obstacleElements;
     obstaclesDirty = false;
@@ -94,14 +95,20 @@
       else removeWidget();
       return;
     }
-    // Modal dialogs make outside nodes inert, regardless of z-index. Only our
-    // own widget moves; site DOM, field focus and the session stay untouched.
-    const parent = session && document.querySelector('dialog:modal') || document.documentElement;
-    if (host.parentElement !== parent) parent.append(host);
+    // Measure without our own hit target or top-layer popover affecting the
+    // result. No intermediate placement is painted before this call returns.
+    host.style.setProperty('visibility', 'hidden', 'important');
     const rect = target.getBoundingClientRect(), viewport = window.visualViewport;
     const bounds = { left: (viewport?.offsetLeft || 0) + viewportInset, top: (viewport?.offsetTop || 0) + viewportInset,
       right: (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth) - viewportInset,
       bottom: (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) - viewportInset };
+    // Only the active modal admits interactions. DOM order is unrelated to
+    // showModal() order; hit-testing its backdrop also identifies it outside
+    // the dialog's rectangle. Move only our widget, preserving field/session.
+    const modal = session && document.elementsFromPoint((bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2)
+      .map(element => element.closest('dialog:modal')).find(Boolean);
+    const parent = modal || document.documentElement;
+    if (host.parentElement !== parent) parent.append(host);
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     const box = (x, y, width = controlSize, height = controlSize) => ({ left: x, top: y, right: x + width, bottom: y + height });
@@ -125,7 +132,18 @@
       if (!element.isConnected || element === host) continue;
       const style = getComputedStyle(element);
       if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') continue;
-      for (const area of element.getClientRects()) if (area.width && area.height && overlaps(area, bounds)) obstacles.push(area);
+      const areas = [...element.getClientRects()];
+      if (!element.shadowRoot && !element.children.length &&
+          (element.matches(shadowHosts) || element.localName.includes('-')) && areas.some(area => !area.width || !area.height) &&
+          (style.overflowX === 'visible' || style.overflowY === 'visible') &&
+          (element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight)) {
+        // A collapsed, opaque host can paint closed-shadow controls outside
+        // its empty border box. Scroll extents reveal overflow, but cannot
+        // bound negative/fixed descendants. A sparse grid cannot prove safety
+        // anywhere: hide idle UI; keep the explicit active-session fallback.
+        obstacles.push(bounds);
+      }
+      for (const area of areas) if (area.width && area.height && overlaps(area, bounds)) obstacles.push(area);
     }
     if (overlaps(rect, bounds)) obstacles.push(rect);
     const area = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
@@ -203,16 +221,32 @@
       // Keep the control reachable at its edge instead of ending the session.
       anchor ||= box(bounds.left, bounds.top);
     }
-    host.style.setProperty('visibility', anchor ? 'visible' : 'hidden', 'important');
     if (!anchor) return;
-    host.style.setProperty('left', `${anchor.left}px`, 'important'); host.style.setProperty('top', `${anchor.top}px`, 'important');
+    const place = (left = anchor.left, top = anchor.top) => {
+      host.style.setProperty('left', `${left}px`, 'important'); host.style.setProperty('top', `${top}px`, 'important');
+      return host.getBoundingClientRect();
+    };
+    const aligned = rendered => Math.abs(rendered.left - anchor.left) < .5 && Math.abs(rendered.top - anchor.top) < .5 &&
+      Math.abs(rendered.width - controlSize) < .5 && Math.abs(rendered.height - controlSize) < .5;
+    let rendered = place();
+    // A transformed containing block changes fixed coordinates. Correct a
+    // translation once, then verify actual geometry. Other transforms fail
+    // closed while idle; an active control can escape via the top layer.
+    if (!aligned(rendered)) rendered = place(2 * anchor.left - rendered.left, 2 * anchor.top - rendered.top);
+    const promote = () => {
+      host.popover = 'manual';
+      if (host.matches(':popover-open')) host.hidePopover();
+      host.showPopover();
+      return place();
+    };
+    if (session && !aligned(rendered)) rendered = promote();
+    if (!session && (!aligned(rendered) || !safe(box(rendered.left, rendered.top, rendered.width, rendered.height)))) return;
+    host.style.setProperty('visibility', 'visible', 'important');
     // A later site overlay can outrank even the maximum z-index. Promote this
     // same active control to the top layer only when actual hit-testing says
     // it is unreachable (and re-promote if a newer popover covered it).
     if (session && document.elementFromPoint(anchor.left + controlSize / 2, anchor.top + controlSize / 2) !== host) {
-      host.popover = 'manual';
-      if (host.matches(':popover-open')) host.hidePopover();
-      host.showPopover();
+      promote();
     }
     const scheme = getComputedStyle(target).colorScheme;
     host.dataset.theme = scheme === 'dark' || (scheme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
