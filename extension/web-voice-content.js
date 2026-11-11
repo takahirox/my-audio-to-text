@@ -36,7 +36,35 @@
   const native = element => element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
   const value = element => native(element) ? element.value : element.textContent;
   let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle', inserting = false;
-  let listeners;
+  let listeners, placementFrame, obstacleElements = [], obstaclesDirty = true;
+  // Include native, ARIA and common custom controls, even when disabled or
+  // pointer-events:none: their visual area still belongs to the website.
+  const controls = 'button,a,input,textarea,select,option,label,summary,details,dialog,iframe,object,embed,video,audio,[contenteditable],[tabindex],[role],[onclick],[onpointerdown],[onmousedown],[aria-haspopup],:popover-open';
+  function pageObstacles() {
+    if (!obstaclesDirty) return obstacleElements;
+    obstaclesDirty = false;
+    const found = new Set();
+    const visit = root => {
+      for (const element of root.querySelectorAll('*')) {
+        if (element === host) continue;
+        // Opaque/closed shadow hosts must be treated as one obstruction. Open
+        // roots are also visited so overflowing children cannot escape checks.
+        if (element.matches(controls) || element.localName.includes('-') || element.shadowRoot ||
+            !element.children.length || getComputedStyle(element).cursor === 'pointer') found.add(element);
+        if (element.shadowRoot) {
+          observer?.observe(element.shadowRoot, { childList: true, subtree: true, attributes: true, characterData: true });
+          visit(element.shadowRoot);
+        }
+      }
+    };
+    visit(document);
+    obstacleElements = [...found];
+    return obstacleElements;
+  }
+  function schedulePosition() {
+    if (placementFrame || !enabled) return;
+    placementFrame = requestAnimationFrame(() => { placementFrame = null; position(); });
+  }
   function send(message) { try { control?.postMessage(message); } catch { disable(); } }
   function stateUI(next, error = '') {
     state = next;
@@ -60,10 +88,14 @@
     if (!host || !target) return;
     if (!editable(target)) {
       if (session) abort('Target field removed or no longer supported. Focus a supported field to retry.');
-      else if (state === 'error') host.style.setProperty('visibility', 'visible', 'important');
+      else if (state === 'error') host.style.setProperty('visibility', 'hidden', 'important');
       else removeWidget();
       return;
     }
+    // Modal dialogs make outside nodes inert, regardless of z-index. Only our
+    // own widget moves; site DOM, field focus and the session stay untouched.
+    const parent = session && document.querySelector('dialog:modal') || document.documentElement;
+    if (host.parentElement !== parent) parent.append(host);
     const rect = target.getBoundingClientRect(), viewport = window.visualViewport;
     const bounds = { left: (viewport?.offsetLeft || 0) + viewportInset, top: (viewport?.offsetTop || 0) + viewportInset,
       right: (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth) - viewportInset,
@@ -71,57 +103,133 @@
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     const box = (x, y, width = controlSize, height = controlSize) => ({ left: x, top: y, right: x + width, bottom: y + height });
-    // Test the painted page at a small grid of points. Ignore only the overlay
-    // and the field's containers; adjacent inputs, labels and buttons count as
-    // obstacles. Prefer exterior positions to protect content and native controls.
-    const obstruction = candidate => {
-      let hits = 0;
+    // Reserve the shadow and keyboard focus ring as well as the hit target.
+    const paintInset = 6;
+    const painted = candidate => ({ left: candidate.left - paintInset, top: candidate.top - paintInset,
+      right: candidate.right + paintInset, bottom: candidate.bottom + paintInset });
+    const fits = candidate => candidate.left >= bounds.left && candidate.right <= bounds.right && candidate.top >= bounds.top && candidate.bottom <= bounds.bottom;
+    const visible = { left: Math.max(rect.left, bounds.left), top: Math.max(rect.top, bounds.top),
+      right: Math.min(rect.right, bounds.right), bottom: Math.min(rect.bottom, bounds.bottom) };
+    const visibleTarget = overlaps(rect, bounds) && [visible.left + 1, (visible.left + visible.right) / 2, visible.right - 1].some(x =>
+      [visible.top + 1, (visible.top + visible.bottom) / 2, visible.bottom - 1].some(y => {
+        const hit = document.elementsFromPoint(x, y).find(element => element !== host);
+        return hit && (hit === target || target.contains(hit));
+      }));
+    const obstacles = [];
+    // Snapshot geometry once per placement, never once per candidate. Keep full
+    // rectangles for clipped/transformed controls; false negatives are worse
+    // than hiding an idle utility. Discovery is cached between DOM changes.
+    for (const element of pageObstacles()) {
+      if (!element.isConnected || element === host) continue;
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') continue;
+      for (const area of element.getClientRects()) if (area.width && area.height && overlaps(area, bounds)) obstacles.push(area);
+    }
+    if (overlaps(rect, bounds)) obstacles.push(rect);
+    const area = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+    const collisionArea = candidate => obstacles.reduce((sum, obstacle) => sum + area(candidate, obstacle), 0);
+    // Exclude only our widget and non-control containers of the focused field.
+    // Geometry catches thin/partial overlaps that a point grid cannot detect;
+    // hit-testing catches overlays and unknown custom UI, including stacking.
+    const pageClear = candidate => {
       for (const x of [candidate.left + 1, (candidate.left + candidate.right) / 2, candidate.right - 1]) {
         for (const y of [candidate.top + 1, (candidate.top + candidate.bottom) / 2, candidate.bottom - 1]) {
-          if (document.elementsFromPoint(x, y).some(element => element !== host && !element.contains(target))) hits++;
+          for (const element of document.elementsFromPoint(x, y)) {
+            if (element === host || element === document.documentElement || element === document.body) continue;
+            if (!element.contains(target) || element.matches(controls)) return false;
+          }
         }
       }
-      return hits;
+      return true;
     };
-    const x = clamp(rect.right - controlSize, bounds.left, bounds.right - controlSize);
-    const y = clamp((rect.top + rect.bottom - controlSize) / 2, bounds.top, bounds.bottom - controlSize);
-    // Try a tight attachment first. If a crowded row has no free adjacent
-    // space, expand a few button widths rather than covering another control.
+    const safe = candidate => fits(painted(candidate)) && !collisionArea(painted(candidate)) && pageClear(painted(candidate));
+    const x = clamp(rect.right - controlSize, bounds.left + paintInset, bounds.right - controlSize - paintInset);
+    const y = clamp((rect.top + rect.bottom - controlSize) / 2, bounds.top + paintInset, bounds.bottom - controlSize - paintInset);
+    const limit = candidate => box(clamp(candidate.left, bounds.left + paintInset, bounds.right - controlSize - paintInset),
+      clamp(candidate.top, bounds.top + paintInset, bounds.bottom - controlSize - paintInset));
     const candidates = [gap, gap + controlSize + gap, gap + 2 * (controlSize + gap)].flatMap(distance => [
       box(rect.right + distance, y), box(rect.left - distance - controlSize, y),
       box(x, rect.top - distance - controlSize), box(x, rect.bottom + distance),
-      box(clamp(rect.left, bounds.left, bounds.right - controlSize), rect.top - distance - controlSize),
-      box(clamp(rect.left, bounds.left, bounds.right - controlSize), rect.bottom + distance),
-    ]).map(candidate => box(clamp(candidate.left, bounds.left, bounds.right - controlSize), clamp(candidate.top, bounds.top, bounds.bottom - controlSize)));
-    // Retain a visible stop control if a dense page or an offscreen recording
-    // target leaves no unobstructed placement. Score each candidate only once.
-    const score = candidate => (overlaps(candidate, rect) ? 100 : 0) + obstruction(candidate);
-    const choose = (options, evaluate) => {
-      let best = options[0], minimum = Infinity;
-      for (const candidate of options) {
-        const cost = evaluate(candidate);
-        if (cost < minimum) { best = candidate; minimum = cost; }
-        if (cost === 0) break;
+      box(rect.left, rect.top - distance - controlSize), box(rect.left, rect.bottom + distance),
+    ]).map(limit);
+    let anchor = visibleTarget ? candidates.find(safe) : null;
+    if (!anchor && session) {
+      // Sweep horizontal free intervals at obstacle boundaries. This finds
+      // narrow pockets without a quadratic X/Y candidate product. Geometry is
+      // read above; this search does no layout reads except actual hit tests.
+      const minX = bounds.left + paintInset, maxX = bounds.right - controlSize - paintInset;
+      const minY = bounds.top + paintInset, maxY = bounds.bottom - controlSize - paintInset;
+      const ys = new Set([minY, maxY]);
+      for (const obstacle of obstacles) {
+        ys.add(obstacle.bottom + paintInset); ys.add(obstacle.top - controlSize - paintInset);
       }
-      return best;
-    };
-    const anchor = choose(candidates, score);
+      for (let y = minY; y <= maxY; y += controlSize + gap) ys.add(y);
+      search: for (const y of ys) {
+        if (y < minY || y > maxY) continue;
+        const intervals = obstacles.filter(obstacle => obstacle.top < y + controlSize + paintInset && obstacle.bottom > y - paintInset)
+          .map(obstacle => [obstacle.left - controlSize - paintInset, obstacle.right + paintInset]).sort((a, b) => a[0] - b[0]);
+        let x = minX;
+        for (const [left, right] of [...intervals, [maxX + 1, maxX + 1]]) {
+          if (right <= x) continue;
+          // Hit-testing may reject an unclassified overlay within a free
+          // geometric interval. Continue across that interval at bounded steps.
+          for (let testX = x; testX <= Math.min(left, maxX); testX += controlSize + gap) {
+            const candidate = box(testX, y);
+            if (safe(candidate)) { anchor = candidate; break search; }
+          }
+          x = Math.max(x, right);
+          if (x > maxX) break;
+        }
+      }
+      if (!anchor) {
+        // Only active sessions may overlap. Minimize overlap area among edge,
+        // corner and grid positions instead of hiding the only Stop/Cancel.
+        // Bound work on dense pages; do not score every pair of obstacle edges.
+        const fallback = [box(minX, minY), box(maxX, minY), box(minX, maxY), box(maxX, maxY)];
+        for (let y = minY; y <= maxY; y += controlSize + gap)
+          for (let x = minX; x <= maxX; x += controlSize + gap) fallback.push(box(x, y));
+        for (const obstacle of obstacles) for (const x of [obstacle.left - controlSize - paintInset, obstacle.right + paintInset])
+          for (const y of [obstacle.top - controlSize - paintInset, obstacle.bottom + paintInset]) fallback.push(limit(box(x, y)));
+        let minimum = Infinity;
+        for (const candidate of fallback) {
+          if (!fits(candidate)) continue;
+          const cost = collisionArea(painted(candidate));
+          if (cost < minimum) { anchor = candidate; minimum = cost; }
+        }
+      }
+      // A zoomed visual viewport may be smaller than the normal touch target.
+      // Keep the control reachable at its edge instead of ending the session.
+      anchor ||= box(bounds.left, bounds.top);
+    }
+    host.style.setProperty('visibility', anchor ? 'visible' : 'hidden', 'important');
+    if (!anchor) return;
     host.style.setProperty('left', `${anchor.left}px`, 'important'); host.style.setProperty('top', `${anchor.top}px`, 'important');
+    // A later site overlay can outrank even the maximum z-index. Promote this
+    // same active control to the top layer only when actual hit-testing says
+    // it is unreachable (and re-promote if a newer popover covered it).
+    if (session && document.elementFromPoint(anchor.left + controlSize / 2, anchor.top + controlSize / 2) !== host) {
+      host.popover = 'manual';
+      if (host.matches(':popover-open')) host.hidePopover();
+      host.showPopover();
+    }
     const scheme = getComputedStyle(target).colorScheme;
     host.dataset.theme = scheme === 'dark' || (scheme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
-    host.style.setProperty('visibility', !session && (rect.bottom < bounds.top || rect.top > bounds.bottom || rect.right < bounds.left || rect.left > bounds.right) ? 'hidden' : 'visible', 'important');
-    // Status is a separate, non-interactive bubble. Clamp it independently so
-    // long errors cannot escape the viewport or enlarge the circular hit target.
-    status.style.maxWidth = `${Math.max(1, Math.min(260, bounds.right - bounds.left))}px`;
+    // The status remains a live region even if its visual bubble has no safe
+    // position. It can never enlarge or intercept the button's hit target.
+    status.style.maxWidth = `${Math.max(1, Math.min(260, bounds.right - bounds.left - 2 * paintInset))}px`;
+    status.style.clipPath = 'inset(50%)';
     if (status.textContent) {
       const { width, height } = status.getBoundingClientRect();
-      const statusX = clamp(anchor.right - width, bounds.left, bounds.right - width);
+      const statusX = clamp(anchor.right - width, bounds.left + paintInset, bounds.right - width - paintInset);
       const options = [box(statusX, anchor.bottom + gap, width, height), box(statusX, anchor.top - gap - height, width, height),
         box(anchor.right + gap, anchor.top, width, height), box(anchor.left - gap - width, anchor.top, width, height)]
-        .map(candidate => box(clamp(candidate.left, bounds.left, bounds.right - width), clamp(candidate.top, bounds.top, bounds.bottom - height), width, height));
-      const statusScore = candidate => score(candidate) + (overlaps(candidate, anchor) ? 100 : 0);
-      const label = choose(options, statusScore);
-      status.style.left = `${label.left - anchor.left}px`; status.style.top = `${label.top - anchor.top}px`;
+        .map(candidate => box(clamp(candidate.left, bounds.left + paintInset, bounds.right - width - paintInset),
+          clamp(candidate.top, bounds.top + paintInset, bounds.bottom - height - paintInset), width, height));
+      const label = options.find(candidate => safe(candidate) && !overlaps(painted(candidate), anchor));
+      if (label) {
+        status.style.left = `${label.left - anchor.left}px`; status.style.top = `${label.top - anchor.top}px`;
+        status.style.clipPath = 'none';
+      }
     }
   }
   function removeWidget() { host?.remove(); host = button = status = null; if (!session) target = null; }
@@ -148,6 +256,7 @@
       const shadow = host.attachShadow({ mode: 'closed' }), style = document.createElement('style');
       style.textContent = `
         :host([hidden]){display:none!important}
+        :host::backdrop{pointer-events:none!important;background:transparent!important}
         button,span{box-sizing:border-box;color-scheme:light;font-family:system-ui,sans-serif;
           background:#fff;color:#253041;box-shadow:0 2px 6px #0003}
         button{appearance:none;-webkit-appearance:none;display:inline-flex;align-items:center;justify-content:center;
@@ -210,6 +319,7 @@
     enabled = false; disposed = true;
     const owner = session, previous = control; session = null; control = null;
     observer?.disconnect(); observer = null; clearInterval(timer);
+    cancelAnimationFrame(placementFrame); placementFrame = null; obstacleElements = []; obstaclesDirty = true;
     removeWidget();
     // Extension reload can invalidate messaging methods before disconnect is
     // delivered. Always remove the UI first, even in an invalidated context.
@@ -226,11 +336,16 @@
       if (message.type === 'disabled') { disable(); return; }
       if (message.type === 'enabled') {
         enabled = true; focus();
-        observer = new MutationObserver(() => position());
-        observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'readonly', 'hidden', 'type', 'contenteditable', 'autocomplete', 'name', 'aria-disabled', 'aria-readonly'] });
-        // Layout, zoom and transforms can change without DOM mutation.
+        observer = new MutationObserver(records => {
+          if (!records.some(record => record.target !== host && !host?.contains(record.target))) return;
+          obstaclesDirty = true; schedulePosition();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
+        obstaclesDirty = true; schedulePosition();
+        // CSS animation, scrolling shadow trees and style-sheet changes need no
+        // light-DOM mutation. Bound these checks; never poll every animation frame.
         let ticks = 0;
-        timer = setInterval(() => { position(); if (++ticks % 20 === 0) send({ type: 'heartbeat' }); }, 1000);
+        timer = setInterval(() => { schedulePosition(); if (++ticks % 80 === 0) send({ type: 'heartbeat' }); }, 250);
       }
       if (message.type === 'state' && session) stateUI(message.state, message.error);
       if (message.type === 'ended') {
@@ -250,9 +365,9 @@
     const options = { capture: true, signal: listeners.signal };
     document.addEventListener('focusin', focus, options);
     document.addEventListener('focusout', () => queueMicrotask(focus), options);
-    for (const event of ['scroll', 'resize']) window.addEventListener(event, position, options);
-    visualViewport?.addEventListener('resize', position, options);
-    visualViewport?.addEventListener('scroll', position, options);
+    for (const event of ['scroll', 'resize']) window.addEventListener(event, schedulePosition, options);
+    visualViewport?.addEventListener('resize', schedulePosition, options);
+    visualViewport?.addEventListener('scroll', schedulePosition, options);
     document.addEventListener('selectionchange', () => {
       if (!inserting && session && document.activeElement === session.element) try { saveCaret(session); } catch { /* A later insertion validates the saved range. */ }
     }, options);
