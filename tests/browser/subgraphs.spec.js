@@ -180,8 +180,8 @@ test('shared library type filters, safe deletion hint, bundle export and atomic 
   const bundle = JSON.parse(await readFile(await download.path(), 'utf8'));
   expect(bundle.format).toBe('graph-bundle'); expect(bundle.root).toBe(ids.parent); expect(bundle.graphs).toHaveLength(2);
   await page.locator('#import-file').setInputFiles({ name: 'shared.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bundle)) });
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).graphs.length)).toBe(4);
   await expect(page.locator('#selected')).toBeVisible();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).graphs.length)).toBe(4);
 });
 
 test('port review fits a narrow screen and Escape cancels without saving a definition', async ({ page }) => {
