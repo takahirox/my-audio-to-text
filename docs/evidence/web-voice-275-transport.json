@@ -1,0 +1,142 @@
+[
+  {
+    "fixture": "busy",
+    "environment": {
+      "os": "darwin",
+      "arch": "arm64",
+      "browser": "153.0.8010.12",
+      "microphone": "Chrome fake device",
+      "inference": "controlled VAD/ASR Worker replies",
+      "permission": "site-scoped native CDP decision"
+    },
+    "capture": {
+      "contexts": [
+        "running"
+      ],
+      "pending": 0,
+      "streams": 1,
+      "transport": {
+        "bytes": 527360,
+        "encodeMs": 6.100000500679016,
+        "messages": 103,
+        "peakPending": 1
+      },
+      "worklet": true
+    },
+    "relay": {
+      "messages": 103,
+      "base64Bytes": 703284,
+      "decodeMs": 21.169999837875366,
+      "captureToRuntimeMs": {
+        "min": 39.704833984375,
+        "mean": 54.18526717991505,
+        "p95": 75.599853515625,
+        "max": 76.244873046875
+      },
+      "interarrivalMs": {
+        "min": 53.705078125,
+        "mean": 80.09789321001838,
+        "p95": 104.51513671875,
+        "max": 115.829833984375
+      },
+      "absoluteJitterMs": {
+        "min": 0,
+        "mean": 9.064939012714461,
+        "p95": 26.054931640625,
+        "max": 35.829833984375
+      }
+    },
+    "baseline": {
+      "location": "concurrent Live extension microphone; existing BrowserAudioSource, no runtime PCM relay",
+      "samples": 129707,
+      "captureToRuntimeMs": {
+        "min": 11.33837890625,
+        "mean": 11.401079358552632,
+        "p95": 11.465087890625,
+        "max": 11.5
+      },
+      "interarrivalMs": {
+        "min": 42.344970703125,
+        "mean": 42.66550280051256,
+        "p95": 42.76513671875,
+        "max": 43
+      }
+    },
+    "pageMetrics": {
+      "taskSeconds": 2.7930260000000002,
+      "heapBefore": 3400960,
+      "heapAfter": 4759140
+    },
+    "limits": "8-second fixtures; render-clock estimate at chunk emission, excludes device ADC and chunk collection; no physical mic or real model inference; heap/task values include page and test instrumentation"
+  },
+  {
+    "fixture": "ordinary",
+    "environment": {
+      "os": "darwin",
+      "arch": "arm64",
+      "browser": "153.0.8010.12",
+      "microphone": "Chrome fake device",
+      "inference": "controlled VAD/ASR Worker replies",
+      "permission": "site-scoped native CDP decision"
+    },
+    "capture": {
+      "contexts": [
+        "running"
+      ],
+      "pending": 0,
+      "streams": 1,
+      "transport": {
+        "bytes": 527360,
+        "encodeMs": 16.199999809265137,
+        "messages": 103,
+        "peakPending": 1
+      },
+      "worklet": true
+    },
+    "relay": {
+      "messages": 103,
+      "base64Bytes": 703284,
+      "decodeMs": 51.959999322891235,
+      "captureToRuntimeMs": {
+        "min": 39.7451171875,
+        "mean": 50.604686551881066,
+        "p95": 51.775146484375,
+        "max": 83.91015625
+      },
+      "interarrivalMs": {
+        "min": 45.919921875,
+        "mean": 80.11083266314338,
+        "p95": 81.514892578125,
+        "max": 123.699951171875
+      },
+      "absoluteJitterMs": {
+        "min": 0,
+        "mean": 1.2889787262561274,
+        "p95": 1.900146484375,
+        "max": 43.699951171875
+      }
+    },
+    "baseline": {
+      "location": "concurrent Live extension microphone; existing BrowserAudioSource, no runtime PCM relay",
+      "samples": 129707,
+      "captureToRuntimeMs": {
+        "min": 6.4599609375,
+        "mean": 6.6296875,
+        "p95": 6.864990234375,
+        "max": 6.93994140625
+      },
+      "interarrivalMs": {
+        "min": 41.89501953125,
+        "mean": 42.66621713789682,
+        "p95": 43.090087890625,
+        "max": 43.330078125
+      }
+    },
+    "pageMetrics": {
+      "taskSeconds": 0.079339,
+      "heapBefore": 3401660,
+      "heapAfter": 4639508
+    },
+    "limits": "8-second fixtures; render-clock estimate at chunk emission, excludes device ADC and chunk collection; no physical mic or real model inference; heap/task values include page and test instrumentation"
+  }
+]

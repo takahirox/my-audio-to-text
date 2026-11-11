@@ -25,6 +25,7 @@ export class SelectedPageMediaAudioNode extends ExtensionTabAudioNode {
 export class ExtensionMicrophoneAudioNode extends ExtensionTabAudioNode {
   constructor(stream, options = {}) {
     super(null, { ...options, sourceFactory: (_tab, audio, ended) => {
+      if (options.microphoneSourceFactory) return options.microphoneSourceFactory(audio, ended);
       const source = new Microphone(audio, ended);
       source.getMedia = async () => {
         if (!this.stream) throw Error('Press Start in Live to permit microphone capture.');

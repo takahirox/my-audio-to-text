@@ -217,7 +217,7 @@ export function buildGraph(graph, options) {
       case 'SelectedPageMediaAudio':
         node = new SelectedPageMediaAudioNode({ onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'MicrophoneAudio':
-        node = new ExtensionMicrophoneAudioNode(options.microphoneStreams?.get(spec.id), { onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
+        node = new ExtensionMicrophoneAudioNode(options.microphoneStreams?.get(spec.id), { microphoneSourceFactory: options.microphoneSourceFactory, onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'FocusedInputTextOutputNode':
         node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active, severity) => options.onTargetState?.(spec.id, state, active, severity) }); break;
       case 'SpeechToTextParakeetV3':

@@ -14,7 +14,7 @@ export class TabSession {
   constructor(render, {
     onSourceEnded,
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
-    sourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory, modelLoadTimeoutMs,
+    sourceFactory, microphoneSourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph({ enabled: false }), graphId = null, graphName = 'Saved graph',
     textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, onSynthesizedAudio = () => {}, speakerContextFactory,
@@ -27,7 +27,7 @@ export class TabSession {
     this.parakeetWorkerFactory = parakeetWorkerFactory; this.moonshineWorkerFactory = moonshineWorkerFactory;
     this.whisperWorkerFactory = whisperWorkerFactory; this.zipformerWorkerFactory = zipformerWorkerFactory;
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
-    this.pageConnectionFactory = pageConnectionFactory; this.outputTarget = null;
+    this.microphoneSourceFactory = microphoneSourceFactory; this.pageConnectionFactory = pageConnectionFactory; this.outputTarget = null;
     this.nodeErrors = new Map();
     this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation; this.prepareTranslateGemma = prepareTranslateGemma;
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
@@ -204,7 +204,7 @@ export class TabSession {
         session.speakers.set(spec.id, node);
         node.enable();
       }
-      if (microphones.length) {
+      if (microphones.length && !this.microphoneSourceFactory) {
         // Request directly from the explicit Start action.
         let stream;
         try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false }); }
@@ -252,7 +252,7 @@ export class TabSession {
             speakerNeedsActivation: Object.values(session.speakerStates).some(value => value.needsActivation) });
         },
         speakers: session.speakers,
-        tabId: session.tabId, outputTarget: session.outputTarget, microphoneStreams: session.microphoneStreams, pageConnectionFactory: this.pageConnectionFactory,
+        tabId: session.tabId, outputTarget: session.outputTarget, microphoneStreams: session.microphoneStreams, microphoneSourceFactory: this.microphoneSourceFactory, pageConnectionFactory: this.pageConnectionFactory,
         onTargetState: (id, state, active, severity) => {
           if (this.ownsRuntime(session) && state) {
             session.targetStates[id] = state;

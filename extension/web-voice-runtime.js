@@ -1,3 +1,4 @@
+import { WebVoicePCM } from './web-voice-pcm.js';
 import { TabSession } from './session.js';
 import { PageConnection } from './page-target.js';
 import { readLibrary, LIBRARY_KEY } from './graph-library.js';
@@ -5,7 +6,7 @@ import { launchLibrary } from './launch-library.js';
 import { webVoiceGraph } from './web-voice-graph.js';
 
 // Chrome permits one offscreen document per profile. Only this inert host is
-// shared: every owner has its own graph, models, tracks and output connection.
+// shared: every owner has its own graph, models, PCM source and output connection.
 const port = chrome.runtime.connect({ name: 'web-voice-host' });
 const owners = new Map();
 let disconnected = false, lastHeartbeat = Date.now();
@@ -26,8 +27,6 @@ async function finish(owner, cancel = false, error = '') {
     return;
   }
   owner.ending = true; owner.canceling = cancel;
-  owner.permission?.removeEventListener('change', owner.permissionChanged);
-  owner.resumePermission?.();
   try {
     if (owner.session) {
       owner.session.livePreparation = false;
@@ -47,19 +46,7 @@ async function start(owner, target, entry) {
     // The coordinator captured this validated graph at the explicit Start.
     // Revalidate the detached snapshot without rereading a later library edit.
     const snapshot = webVoiceGraph(entry.graph);
-    const permission = owner.permission = await navigator.permissions.query({ name: 'microphone' });
-    if (owner.ending) return;
-    if (permission.state === 'prompt') {
-      const ready = new Promise(resolve => { owner.resumePermission = resolve; });
-      send(owner, { type: 'permission-needed' });
-      await ready;
-    }
-    if (owner.ending) return;
-    if (permission.state !== 'granted') throw Error('Microphone permission is blocked. Allow this extension in Chrome microphone settings, then click the field mic to retry.');
-    owner.permissionChanged = () => {
-      if (permission.state !== 'granted') void finish(owner, true, 'Microphone permission removed. Allow it in Chrome settings and click the field mic to retry.');
-    };
-    permission.addEventListener('change', owner.permissionChanged);
+    owner.pcm = new WebVoicePCM();
     owner.session = new TabSession(view => {
       if (owner.ending) return;
       if (view.error) {
@@ -67,7 +54,7 @@ async function start(owner, target, entry) {
         publish(owner, 'error', owner.failure);
         queueMicrotask(() => { void finish(owner, true, owner.failure); });
       } else publish(owner, view.state === 'running' ? 'recording' : view.state === 'stopping' ? 'stopping' : 'preparing');
-    }, { graph: snapshot, graphId: entry.id, graphName: entry.name,
+    }, { microphoneSourceFactory: audio => owner.pcm.source(audio), graph: snapshot, graphId: entry.id, graphName: entry.name,
       pageConnectionFactory: (target, onEvent) => new PageConnection(target, onEvent,
         chrome.runtime.connect({ name: `web-voice-output:${owner.token}` })),
       onSourceEnded: () => { void finish(owner, true, 'Microphone ended or permission was removed. Click the mic to start a new session.'); } });
@@ -75,10 +62,9 @@ async function start(owner, target, entry) {
     await owner.session.prepareModels();
     if (owner.ending) return;
     if (owner.session.view.modelState !== 'ready') throw Error(owner.session.view.error || 'Models unavailable. Save the graph or open Models to recover cached files.');
-    // Permission was already granted, either previously or in the setup page.
-    // The explicit field click authorizes capture; offscreen never prompts.
+    // The original page owns site permission and capture; only PCM arrives here.
     await owner.session.start(target.tabId, { microphoneGesture: true });
-    if (!owner.ending && owner.session.view.state !== 'running') throw Error(owner.session.view.error || 'Microphone could not start. Check Chrome microphone permission.');
+    if (!owner.ending && owner.session.view.state !== 'running') throw Error(owner.session.view.error || 'The local microphone graph could not start. Click the field mic to retry.');
   } catch (error) {
     if (!owner.ending) { publish(owner, 'error', error.message); await finish(owner, true, error.message); }
   }
@@ -99,7 +85,11 @@ port.onMessage.addListener(message => {
   const owner = owners.get(message.token);
   if (message.type === 'abort' && owner) { void finish(owner, true, message.error); return; }
   if (message.type === 'stop' && owner) { void finish(owner, owner.state !== 'recording'); return; }
-  if (message.type === 'permission-ready' && owner) { owner.resumePermission?.(); return; }
+  if (message.type === 'pcm' && owner && !owner.ending) {
+    try { owner.pcm.receive(message); send(owner, { type: 'pcm-ack', sequence: message.sequence }); }
+    catch (error) { void finish(owner, true, error.message); }
+    return;
+  }
   if (message.type !== 'initialize' || owner || disconnected) return;
   if (message.stopRequested) { send({ token: message.token }, { type: 'ended' }); return; }
   const next = { token: message.token, state: 'preparing' };

@@ -10,7 +10,7 @@ const test = base.extend({
   voice: async ({}, use, info) => {
     const temporary = await mkdtemp(path.join(tmpdir(), 'web-voice-')), root = path.join(temporary, 'bundle');
     const server = createServer((request, response) => {
-      response.writeHead(200, { 'Content-Type': 'text/html' });
+      response.writeHead(200, { 'Content-Type': 'text/html', ...(request.url.includes('policy-blocked') ? { 'Permissions-Policy': 'microphone=()' } : {}), ...(request.url.includes('strict-csp') ? { 'Content-Security-Policy': "script-src 'none'; worker-src 'none'; object-src 'none'" } : {}) });
       response.end(`<title>Voice fields</title><form><input id="first" value="before after"><textarea id="second">left right</textarea><button type="submit">Send</button></form>
         <input id="password" type="password"><input id="otp" autocomplete="one-time-code"><input id="card" autocomplete="cc-number"><input id="readonly" readonly><input id="disabled" disabled>
         <div contenteditable="true" id="basic">hello world</div><iframe src="/frame"></iframe>
@@ -41,8 +41,22 @@ const test = base.extend({
           if(data.type==='decode'){postMessage({type:data.final?'final':'partial',text:data.final?'${role === 'whisper' ? 'whisper fixture' : 'confirmed fixture'}':'pending fixture',session:data.session,id:data.id});postMessage({type:'decoded',session:data.session});}
         };`);
       }
+      if (info.title.includes('transport measurements')) {
+        // Add a render-clock marker to the existing offscreen/Live capture
+        // fixture. Filter it before the unchanged resampler/ASR audio path.
+        const workletFile = path.join(root, 'web/capture-worklet.js'), audioFile = path.join(root, 'web/audio.js');
+        await writeFile(workletFile, (await readFile(workletFile, 'utf8')).replace('this.port.postMessage(block, [block.buffer]);',
+          "this.port.postMessage({ captureClock: currentTime }); this.port.postMessage(block, [block.buffer]);"));
+        await writeFile(audioFile, (await readFile(audioFile, 'utf8'))
+          .replace('this.source = this.context.createMediaStreamSource', 'this.probeClock = performance.timeOrigin + performance.now() - this.context.currentTime * 1000; this.source = this.context.createMediaStreamSource')
+          .replace('this.node.port.onmessage = ({ data }) => onChunk(data);', `this.node.port.onmessage = ({ data }) => {
+            if (data.captureClock !== undefined) { (globalThis.baselineDelays ??= []).push(performance.timeOrigin + performance.now() - (this.probeClock + data.captureClock*1000)); }
+            else onChunk(data);
+          };`));
+      }
       const launch = () => chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
-        ignoreDefaultArgs: ['--disable-extensions', ...(info.title.includes('back-forward cache') ? ['--disable-back-forward-cache'] : [])], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream',
+        ignoreDefaultArgs: ['--disable-extensions', ...(info.title.includes('back-forward navigation') ? ['--disable-back-forward-cache'] : [])], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream',
+          ...(info.title.includes('first site grant') ? ['--use-fake-ui-for-media-stream'] : []),
           ...(real ? [`--use-file-for-fake-audio-capture=${path.resolve('tests/fixtures/ordinary-english.wav')}${info.title.includes('overlap') ? '' : '%noloop'}`] : [])] });
       context = await launch();
       context.on('serviceworker', worker => worker.on('console', message => { if (message.type() === 'warning') console.log(message.text()); }));
@@ -57,9 +71,11 @@ const test = base.extend({
       await cdp.send('Extensions.loadUnpacked', { path: root });
       const url = `chrome-extension://${id}/extension/`;
       const instrument = () => {
-        if (location.protocol !== 'chrome-extension:') return;
+        if (!navigator.mediaDevices || window.voiceResources) return;
         window.voiceFinals = [];
-        window.voiceResources = { workers: [], streams: [], audioSamples: 0 };
+        window.voiceResources = { workers: [], streams: [], audioSamples: 0, arrivals: [], contexts: [] };
+        const NativeContext = AudioContext;
+        window.AudioContext = class extends NativeContext { constructor(...args) { super(...args); voiceResources.contexts.push(this); } };
         const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
         navigator.mediaDevices.getUserMedia = async options => {
           const stream = await getUserMedia(options); window.voiceResources.streams.push(stream); return stream;
@@ -72,7 +88,7 @@ const test = base.extend({
             this.addEventListener('message', ({ data }) => { if (data.type === 'final') { const item = { id: data.id, text: data.text }; window.voiceFinals.push(item); console.debug('voice-test-final:' + JSON.stringify(item)); } });
           }
           postMessage(data, ...rest) {
-            if (data.type === 'vad-audio') window.voiceResources.audioSamples += data.audio.length;
+            if (data.type === 'vad-audio') { window.voiceResources.audioSamples += data.audio.length; if (voiceResources.arrivals.length < 2000) voiceResources.arrivals.push(performance.timeOrigin + performance.now()); }
             if (window.voiceDelay && ['load', 'vad-stop'].includes(data.type)) { setTimeout(() => super.postMessage(data, ...rest), window.voiceDelay); return; }
             return super.postMessage(data, ...rest);
           }
@@ -81,6 +97,11 @@ const test = base.extend({
       };
       await context.addInitScript(instrument);
       await writeFile(path.join(root, 'extension/voice-test-probe.js'), `(${instrument.toString()})();`);
+      const captureJS = path.join(root, 'extension/web-voice-capture.js');
+      await writeFile(captureJS, `(${instrument.toString()})();\n` + await readFile(captureJS, 'utf8') + `\n(() => { if (globalThis.captureInstrumented) return; globalThis.captureInstrumented = true; const NativeCapture = WebVoiceCapture; globalThis.WebVoiceCapture = class extends NativeCapture {
+        constructor(...args) { super(...args); globalThis.captureProbe = this; this.measurements = { encodeMs: 0, messages: 0, bytes: 0, peakPending: 0 }; }
+        chunk(...args) { const before = performance.now(); super.chunk(...args); const m = this.measurements; m.encodeMs += performance.now()-before; m.messages++; m.bytes += (args[0]?.length || 0)*4; m.peakPending = Math.max(m.peakPending, this.pending.size); }
+      }; })();`);
       const runtimeHTML = path.join(root, 'extension/web-voice-runtime.html');
       await writeFile(runtimeHTML, (await readFile(runtimeHTML, 'utf8')).replace('<body>', '<body><script src="voice-test-probe.js"></script>'));
       context.on('page', page => page.on('pageerror', error => pageErrors.push(error.message)));
@@ -182,8 +203,25 @@ async function enable(t) {
   await expect(t.library.locator('#web-voice-status')).toContainText('ON', { timeout: 10000 });
   await expect.poll(() => t.library.evaluate(async () => (await chrome.permissions.getAll()).origins)).toEqual(['http://*/*', 'https://*/*']);
 }
+async function pageCapture(t, action = 'info') {
+  return t.library.evaluate(async ({ url, action }) => {
+    const tab = (await chrome.tabs.query({})).find(tab => tab.url === url);
+    const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: 'ISOLATED', args: [action], func: action => {
+      if (action === 'stall') captureProbe.ack = () => {};
+      if (action === 'fallback') Object.defineProperty(AudioContext.prototype, 'audioWorklet', { get: () => undefined, configurable: true });
+      if (action === 'end') voiceResources.streams[0].getTracks()[0].dispatchEvent(new Event('ended'));
+      if (action === 'fail') navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Controlled missing microphone', 'NotFoundError'));
+      if (action === 'delay') {
+        const native = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = async options => { const stream = await native(options); await new Promise(r => setTimeout(r, 1000)); return stream; };
+      }
+      return { transport: globalThis.captureProbe?.measurements, worklet: !!globalThis.captureProbe?.node?.port, pending: globalThis.captureProbe?.pending.size, streams: voiceResources.streams.filter(s => s.active).length, contexts: voiceResources.contexts.map(c => c.state) };
+    } });
+    return result.result;
+  }, { url: t.website.url(), action });
+}
 async function permission(t, setting) {
-  await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting, origin: t.url.replace(/\/extension\/$/, '') });
+  await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting, origin: new URL(t.website.url()).origin });
 }
 async function start(t, selector = '#first', grant = 'granted') {
   if (grant) await permission(t, grant);
@@ -202,6 +240,7 @@ async function idle(t) { await expect.poll(() => offscreenCount(t)).toBe(0); }
 async function stop(t) {
   await t.website.bringToFront(); await mic(t.website);
   await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
+  const capture = await pageCapture(t); expect(capture.streams).toBe(0); expect(capture.contexts.every(state => state === 'closed')).toBe(true);
 }
 async function noVisibleRuntime(t, pages) {
   expect(t.context.pages().filter(p => /web-voice-(runtime|permission)\.html/.test(p.url()))).toHaveLength(0);
@@ -315,6 +354,7 @@ async function assignLiveMicrophone(t) {
   });
 }
 async function openLive(t) {
+  await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting: 'granted', origin: t.url.replace(/\/extension\/$/, '') });
   const live = await t.context.newPage(); await live.goto(t.url + 'recorder.html');
   await expect(live.locator('#model-status')).toHaveText('Ready');
   return live;
@@ -725,46 +765,35 @@ test('already granted input and textarea dictation stays in place, drains exactl
     evidence, remoteRequests: t.remote, errors: t.pageErrors }, null, 2));
 });
 
-test('first grant uses explicit permission-only setup once; subsequent use creates no visible page', async ({ voice: t }) => {
-  test.skip(real);
-  await enable(t); await permission(t, 'prompt');
-  const setupCreated = t.context.waitForEvent('page', { predicate: p => p.url().includes('web-voice-permission.html') });
-  await start(t, '#first', null);
-  const setup = await setupCreated;
-  await expect(setup.getByRole('heading')).toHaveText('Allow microphone for in-page dictation');
-  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
-  expect(await setup.evaluate(() => navigator.permissions.query({ name: 'microphone' }).then(p => p.state))).toBe('prompt');
-  expect(await setup.evaluate(() => voiceResources.streams.length)).toBe(0);
-  expect(await setup.evaluate(() => voiceResources.workers.length)).toBe(0);
-  // CDP controls the native permission decision. This does not click Chrome's
-  // permission bubble; the setup button still calls real getUserMedia.
-  await permission(t, 'granted');
-  await setup.getByRole('button', { name: 'Allow microphone', exact: true }).click();
-  await expect.poll(() => setup.isClosed()).toBe(true); await recording(t);
-  await expect(t.website.locator('#first')).toBeFocused();
-  await noVisibleRuntime(t); await t.website.waitForTimeout(600); await stop(t); await idle(t);
+test('first site grant and already granted capture create zero visible pages', async ({ voice: t }) => {
+  test.skip(real); await enable(t); await permission(t, 'prompt');
+  expect(await t.website.evaluate(() => navigator.permissions.query({ name: 'microphone' }).then(p => p.state))).toBe('prompt');
   const pages = t.context.pages().length;
+  await start(t, '#first', null);
+  await recording(t);
+  // Fake UI accepts the first native request without persisting a site grant.
+  // Explicit site-scoped CDP grant covers the already-granted second request.
+  await permission(t, 'granted');
+  await noVisibleRuntime(t, pages); await t.website.waitForTimeout(650); await stop(t); await idle(t);
   await start(t, '#second', null); await recording(t); await noVisibleRuntime(t, pages);
-  await t.website.waitForTimeout(600); await stop(t); await idle(t);
+  await t.website.waitForTimeout(650); await stop(t); await idle(t);
 });
 
-for (const action of ['deny', 'cancel in page', 'close setup', 'navigate target']) test(`initial microphone setup: ${action} ends pending capture without inserting`, async ({ voice: t }) => {
-  test.skip(real); await enable(t); await permission(t, 'prompt');
-  const created = t.context.waitForEvent('page', { predicate: p => p.url().includes('web-voice-permission.html') });
-  await start(t, '#first', null); const setup = await created;
-  await expect(setup.locator('#allow-microphone')).toBeVisible();
-  if (action === 'deny') { await permission(t, 'denied'); await setup.locator('#allow-microphone').click(); }
-  if (action === 'cancel in page') { await t.website.bringToFront(); await mic(t.website); }
-  if (action === 'close setup') await setup.close();
+for (const action of ['deny', 'cancel in page', 'navigate target']) test(`pending site microphone permission: ${action} releases capture without inserting`, async ({ voice: t }) => {
+  test.skip(real); await enable(t);
+  const pages = t.context.pages().length;
+  if (action === 'deny') await permission(t, 'denied');
+  else { await permission(t, 'granted'); await pageCapture(t, 'delay'); }
+  await start(t, '#first', null);
+  if (action !== 'deny') await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
+  if (action === 'cancel in page') await mic(t.website);
   if (action === 'navigate target') await t.website.reload();
-  await idle(t); await expect.poll(() => setup.isClosed()).toBe(true);
+  await idle(t); expect(t.context.pages()).toHaveLength(pages);
   await expect(t.website.locator('#first')).toHaveValue('before after');
   if (action !== 'navigate target') await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error');
-  // A denied existing grant is actionable and must not repeatedly open setup.
-  if (action === 'deny') {
-    await start(t, '#first', null); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error');
-    await idle(t); expect(t.context.pages().some(p => p.url().includes('web-voice-permission.html'))).toBe(false);
-  }
+  await t.website.waitForTimeout(1200);
+  if (action !== 'navigate target') expect((await pageCapture(t)).streams).toBe(0);
+  await expect(t.website.locator('#first')).toHaveValue('before after');
 });
 
 test('multiple Web sessions share one offscreen document and stop independently with fixed targets', async ({ voice: t }) => {
@@ -773,14 +802,14 @@ test('multiple Web sessions share one offscreen document and stop independently 
   const second = { ...t, website: other };
   await start(second); await recording(second); await noVisibleRuntime(t);
   expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(4);
-  expect(await r.evaluate(() => voiceResources.streams.filter(s => s.active).length)).toBe(2);
+  expect((await pageCapture(t)).streams).toBe(1); expect((await pageCapture(second)).streams).toBe(1);
   await t.website.locator('#second').focus(); await t.website.waitForTimeout(650);
   await stop(t); await recording(second);
   expect(await offscreenCount(t)).toBe(1);
   await expect(t.website.locator('#first')).toHaveValue('before confirmed fixtureafter');
   await expect(t.website.locator('#second')).toHaveValue('left right');
   expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
-  expect(await r.evaluate(() => voiceResources.streams.filter(s => s.active).length)).toBe(1);
+  expect((await pageCapture(t)).streams).toBe(0);
   // OFF preserves finals already committed and does not drain provisional text.
   await t.library.locator('#web-voice-enabled').uncheck(); await idle(t);
   await expect(widget(other)).toHaveCount(0);
@@ -819,7 +848,7 @@ test('Live and Web overlap Ready, recording, Stop, restart, OFF and close indepe
 
 for (const reason of ['worker failure', 'device end', 'field removal', 'navigation', 'tab close', 'cancel preparing']) test(`${reason} cleans one Web owner and preserves Live and another Web session`, async ({ voice: t }) => {
   test.skip(real); await enable(t); await assignLiveMicrophone(t);
-  const live = await openLive(t); await permission(t, 'granted'); await live.locator('#start').click(); await expectLiveRecording(live);
+  const live = await openLive(t); await permission(t, 'granted'); await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting: 'granted', origin: t.url.replace(/\/extension\/$/, '') }); await live.locator('#start').click(); await expectLiveRecording(live);
   if (reason === 'cancel preparing') await bootstrap(t, 'window.voiceDelay = 1000;');
   await start(t);
   if (reason !== 'cancel preparing') await recording(t);
@@ -828,7 +857,7 @@ for (const reason of ['worker failure', 'device end', 'field removal', 'navigati
   const peer = { ...t, website: other };
   await start(peer); await recording(peer);
   if (reason === 'worker failure') await r.evaluate(() => voiceResources.workers[0].dispatchEvent(new ErrorEvent('error', { message: 'Controlled model failure' })));
-  if (reason === 'device end') await r.evaluate(() => voiceResources.streams[0].getTracks()[0].dispatchEvent(new Event('ended')));
+  if (reason === 'device end') await pageCapture(t, 'end');
   if (reason === 'field removal') await t.website.locator('#first').evaluate(e => e.remove());
   if (reason === 'navigation') await t.website.reload();
   if (reason === 'tab close') await t.website.close();
@@ -840,7 +869,8 @@ for (const reason of ['worker failure', 'device end', 'field removal', 'navigati
   }
   if (!['navigation', 'tab close'].includes(reason)) await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error');
   await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
-  await expect.poll(() => r.evaluate(() => voiceResources.streams.filter(s => s.active).length)).toBe(1);
+  expect((await pageCapture(peer)).streams).toBe(1);
+  if (!t.website.isClosed()) expect((await pageCapture(t)).streams).toBe(0);
   await recording(peer); await expectLiveRecording(live);
   if (!['field removal', 'tab close', 'cancel preparing'].includes(reason)) await expect(t.website.locator('#first')).toHaveValue('before after');
   await stop(peer); await idle(t); await expectLiveRecording(live); await r.detach();
@@ -950,7 +980,7 @@ test('basic editable, continued manual editing and idle target refresh stay boun
   await expect(t.website.locator('#second')).toHaveValue('left confirmed fixtureright');
 });
 
-test('missing verified translation cache fails before microphone capture and never downloads weights', async ({ voice: t }) => {
+test('missing verified translation cache fails before PCM streaming and releases page capture without downloads', async ({ voice: t }) => {
   test.skip(real); await enable(t);
   await t.library.evaluate(async id => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js'), { graphNode, edge } = await import('./graph.js');
@@ -960,6 +990,7 @@ test('missing verified translation cache fails before microphone capture and nev
   }, t.graphId);
   await start(t); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error'); await idle(t);
   await expect(widget(t.website)).toHaveAttribute('title', /Models|cached|files|fetch/i);
+  const capture = await pageCapture(t); expect(capture.streams).toBe(0); expect(capture.contexts.every(state => state === 'closed')).toBe(true);
   await expect(t.website.locator('#first')).toHaveValue('before after');
 });
 
@@ -989,7 +1020,7 @@ test('all visual states preserve focus and keep keyboard Stop visible when the t
   ui = await controlUI(t); expectIcon(ui, 'error'); expect(ui.title).toContain('Chrome');
 });
 
-test('back-forward cache restores idle controls without resuming capture or bypassing consent', async ({ voice: t }) => {
+test('back-forward navigation restores idle controls without resuming capture or bypassing consent', async ({ voice: t }) => {
   test.skip(real); await enable(t); await start(t); await recording(t);
   await t.website.evaluate(() => {
     window.cachedVoiceDocument = true;
@@ -997,7 +1028,9 @@ test('back-forward cache restores idle controls without resuming capture or bypa
   });
   const original = t.website.url(); await t.website.goto(original + '?away'); await idle(t);
   await t.website.goBack({ waitUntil: 'commit' });
-  await expect.poll(() => t.website.evaluate(() => window.cachedVoiceDocument && window.voiceRestored)).toBe(true);
+  // Chrome may exclude a document that used native gUM from BFCache. Both a
+  // restored document and a fresh navigation must recheck consent and stay idle.
+  await t.website.waitForLoadState('domcontentloaded');
   await t.website.locator('#second').focus(); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
   await expect(t.website.locator('#first')).toHaveValue('before after');
   await start(t, '#second'); await recording(t);
@@ -1006,7 +1039,7 @@ test('back-forward cache restores idle controls without resuming capture or bypa
   await expect(t.website.locator('#second')).toHaveValue('left confirmed fixtureright');
   await t.website.goto(original + '?away-again'); await t.library.locator('#web-voice-enabled').uncheck();
   await t.website.goBack({ waitUntil: 'commit' });
-  await expect.poll(() => t.website.evaluate(() => window.voiceRestored)).toBe(true);
+  await t.website.waitForLoadState('domcontentloaded');
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0); await idle(t);
 });
 
@@ -1020,18 +1053,17 @@ test('cancel while stopping releases only that owner without draining into a rem
   await t.website.locator('#first').evaluate(e => { window.removedVoiceField = e; e.remove(); });
   await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error');
   await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
-  await expect.poll(() => r.evaluate(() => voiceResources.streams.filter(s => s.active).length)).toBe(1);
+  expect((await pageCapture(peer)).streams).toBe(1);
+  if (!t.website.isClosed()) expect((await pageCapture(t)).streams).toBe(0);
   expect(await t.website.evaluate(() => removedVoiceField.value)).toBe(previous);
   await recording(peer); await stop(peer); await idle(t); await r.detach();
 });
 
 test('device startup failure is actionable and preserves another Web owner', async ({ voice: t }) => {
   test.skip(real); await enable(t);
-  await bootstrap(t, `const nativeGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    let requests = 0; navigator.mediaDevices.getUserMedia = options => ++requests === 2
-      ? Promise.reject(new DOMException('Controlled missing microphone', 'NotFoundError')) : nativeGetUserMedia(options);`);
   await start(t); await recording(t); const r = await runtime(t);
   const other = await t.context.newPage(); await other.goto(t.website.url() + '?device'); const peer = { ...t, website: other };
+  await pageCapture(peer, 'fail');
   await start(peer); await expect(widget(other)).toHaveAttribute('data-voice-state', 'error');
   await expect(widget(other)).toHaveAttribute('title', /microphone|device/i); await recording(t);
   await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
@@ -1210,4 +1242,88 @@ test('Web microphone remains revocable while the graph library needs storage rec
   await t.library.locator('#web-voice-enabled').uncheck(); await idle(t);
   await expect(widget(t.website)).toHaveCount(0);
   expect(await t.library.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe('{broken library');
+});
+
+for (const fixture of ['ordinary', 'busy']) test(`page PCM transport measurements: ${fixture}`, async ({ voice: t }, info) => {
+  test.skip(real); test.setTimeout(45000);
+  await assignLiveMicrophone(t); await enable(t);
+  await bootstrap(t, `import('./web-voice-pcm.js').then(({ WebVoicePCM }) => {
+    window.relayProbe = { delays: [], arrivals: [], decodeMs: 0, messages: 0, base64Bytes: 0 };
+    const receive = WebVoicePCM.prototype.receive;
+    WebVoicePCM.prototype.receive = function(message) {
+      const before = performance.now(), now = performance.timeOrigin + before, m = relayProbe;
+      m.delays.push(now - message.capturedAt); m.arrivals.push(now); m.base64Bytes += message.pcm.length; m.messages++;
+      receive.call(this, message); m.decodeMs += performance.now() - before;
+    };
+  });`);
+  await start(t); await recording(t); const r = await runtime(t);
+  const live = await openLive(t); await live.locator('#start').click(); await expectLiveRecording(live);
+  const pageCDP = await t.context.newCDPSession(t.website); await pageCDP.send('Performance.enable');
+  const metrics = async () => Object.fromEntries((await pageCDP.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
+  await t.website.bringToFront();
+  const before = await metrics();
+  if (fixture === 'busy') await t.website.evaluate(() => { window.busyFixture = setInterval(() => { const until = performance.now() + 35; while (performance.now() < until) {} }, 100); });
+  await t.website.waitForTimeout(8000);
+  if (fixture === 'busy') await t.website.evaluate(() => clearInterval(busyFixture));
+  const after = await metrics(), capture = await pageCapture(t), relay = await r.evaluate(() => relayProbe);
+  const baseline = await live.evaluate(() => ({ arrivals: voiceResources.arrivals, samples: voiceResources.audioSamples, delays: baselineDelays }));
+  const summarize = values => {
+    const sorted = [...values].sort((a,b) => a-b);
+    return { min: sorted[0], mean: values.reduce((a,b) => a+b,0)/values.length, p95: sorted[Math.floor(sorted.length*.95)], max: sorted.at(-1) };
+  };
+  const intervals = arrivals => arrivals.slice(1).map((time,i) => time-arrivals[i]);
+  const report = { fixture, environment: { os: process.platform, arch: process.arch, browser: t.context.browser().version(), microphone: 'Chrome fake device', inference: 'controlled VAD/ASR Worker replies', permission: 'site-scoped native CDP decision' },
+    capture, relay: { messages: relay.messages, base64Bytes: relay.base64Bytes, decodeMs: relay.decodeMs,
+      captureToRuntimeMs: summarize(relay.delays), interarrivalMs: summarize(intervals(relay.arrivals)),
+      absoluteJitterMs: summarize(intervals(relay.arrivals).map(value => Math.abs(value-80))) },
+    baseline: { location: 'concurrent Live extension microphone; existing BrowserAudioSource, no runtime PCM relay', samples: baseline.samples, captureToRuntimeMs: summarize(baseline.delays), interarrivalMs: summarize(intervals(baseline.arrivals)) },
+    pageMetrics: { taskSeconds: after.TaskDuration-before.TaskDuration, heapBefore: before.JSHeapUsedSize, heapAfter: after.JSHeapUsedSize },
+    limits: '8-second fixtures; render-clock estimate at chunk emission, excludes device ADC and chunk collection; no physical mic or real model inference; heap/task values include page and test instrumentation' };
+  expect(capture.worklet).toBe(true); expect(capture.transport.peakPending).toBeLessThanOrEqual(8);
+  expect(relay.messages).toBeGreaterThan(85); expect(report.relay.captureToRuntimeMs.p95).toBeLessThan(120);
+  expect(report.relay.captureToRuntimeMs.p95 - report.baseline.captureToRuntimeMs.p95).toBeLessThan(100);
+  expect(await r.evaluate(() => voiceResources.streams.length)).toBe(0);
+  await stop(t); await idle(t); await live.locator('#stop').click();
+  await writeFile(info.outputPath('transport.json'), JSON.stringify(report, null, 2));
+  await pageCDP.detach(); await r.detach();
+});
+
+test('stalled audio acknowledgments stop bounded capture and release page resources', async ({ voice: t }) => {
+  test.skip(real); await enable(t); await start(t); await recording(t);
+  await pageCapture(t, 'stall');
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error'); await idle(t);
+  const capture = await pageCapture(t);
+  expect(capture.streams).toBe(0); expect(capture.contexts.every(state => state === 'closed')).toBe(true);
+  expect(capture.transport.peakPending).toBe(8);
+  await expect(t.website.locator('#first')).toHaveValue('before after');
+});
+
+test('native fallback still streams and drains when AudioWorklet is unavailable', async ({ voice: t }) => {
+  test.skip(real); await enable(t); await pageCapture(t, 'fallback');
+  await start(t); await recording(t); expect((await pageCapture(t)).worklet).toBe(false);
+  await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await expect(t.website.locator('#first')).toHaveValue('before confirmed fixtureafter');
+});
+
+test('site Permissions Policy blocks microphone locally without opening UI', async ({ voice: t }) => {
+  test.skip(real); await enable(t); await t.website.goto(t.website.url() + '?policy-blocked');
+  const pages = t.context.pages().length;
+  await start(t); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error');
+  await expect(widget(t.website)).toHaveAttribute('title', /Permissions Policy/);
+  await idle(t); expect(t.context.pages()).toHaveLength(pages); expect((await pageCapture(t)).streams).toBe(0);
+});
+
+test('strict site CSP retains isolated capture without exposing an audio bridge', async ({ voice: t }) => {
+  test.skip(real); await enable(t); await t.website.goto(t.website.url() + '?strict-csp');
+  const pages = t.context.pages().length;
+  await start(t); await recording(t);
+  expect(await t.website.evaluate(() => ({ adapter: typeof WebVoiceCapture, streams: voiceResources.streams.length }))).toEqual({ adapter: 'undefined', streams: 0 });
+  // Website scripts have no access to the extension-only audio/control Ports.
+  await t.website.evaluate(() => {
+    window.postMessage({ type: 'stop' }, '*');
+    window.postMessage({ type: 'pcm', sequence: 0, pcm: 'AAAAAA==' }, '*');
+  });
+  await recording(t); await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await expect(t.website.locator('#first')).toHaveValue('before confirmed fixtureafter');
+  expect(t.context.pages()).toHaveLength(pages);
 });
