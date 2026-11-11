@@ -50,7 +50,7 @@ async function start(owner, target, entry) {
     owner.session = new TabSession(view => {
       if (owner.ending) return;
       if (view.error) {
-        owner.failure = view.error.replaceAll('Retry models in Live', 'click the field mic to retry');
+        owner.failure = view.error.replaceAll('Retry models in this window', 'click the field mic to retry');
         publish(owner, 'error', owner.failure);
         queueMicrotask(() => { void finish(owner, true, owner.failure); });
       } else publish(owner, view.state === 'running' ? 'recording' : view.state === 'stopping' ? 'stopping' : 'preparing');

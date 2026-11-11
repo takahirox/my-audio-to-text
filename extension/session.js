@@ -82,7 +82,7 @@ export class TabSession {
     if (this.prepared !== owner || owner.failed) return;
     owner.failed = true;
     this.update({ modelState: 'error', modelStatus: 'Models unavailable', modelRecovery: true,
-      error: [...new Set([this.view.error, `${error.message || error} Save the graph to prepare files, or recover in Models; check browser/GPU support and free memory, then Retry models in Live.`].filter(Boolean))].join('\n') });
+      error: [...new Set([this.view.error, `${error.message || error} Save the graph to prepare files, or recover in Models; check browser/GPU support and free memory, then Retry models in this window.`].filter(Boolean))].join('\n') });
     // Keep the failed owner until retry so replacement waits for all teardown.
     void owner.pipeline?.dispose().catch(() => {});
   }
@@ -176,7 +176,7 @@ export class TabSession {
       this.update({ error: 'Invoke the toolbar action on the target tab before starting tab capture.' }); return;
     }
     if (microphones.length && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.', prompt: 'Press Start to request microphone permission.' }); return; }
-    if (speakers.length && !speakerGesture) { this.update({ tabId, status: 'Speaker selected. Press Start to enable audio. Keep this Live window open.', prompt: 'Press Start to enable speaker audio.' }); return; }
+    if (speakers.length && !speakerGesture) { this.update({ tabId, status: 'Speaker selected. Press Start to enable audio. Keep this window open.', prompt: 'Press Start to enable speaker audio.' }); return; }
     const session = this.prepared || { speakers: new Map(), speakerStates: Object.create(null), microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
     this.prepared = null;
     session.tabId = tabId;

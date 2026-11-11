@@ -46,6 +46,7 @@ test('native action menu separates launch/default, filters drafts, refreshes nam
   const first = await clickAction(f, 41), second = await open(f, b, 42), third = await open(f, a, 43);
   await expect(first.locator('#live-graph-name')).toHaveText('A');
   await expect(second.locator('#live-graph-name')).toHaveText('B');
+  for (const [page, name] of [[first, 'A'], [second, 'B'], [third, 'A']]) await expect(page).toHaveTitle(name);
   expect((await library(f.page)).assignments.live).toBe(a);
   const states = await Promise.all([first, second, third].map(page => page.evaluate(async () => ({
     url: location.href, windowId: (await chrome.windows.getCurrent()).id,
@@ -61,6 +62,8 @@ test('native action menu separates launch/default, filters drafts, refreshes nam
     await new GraphLibrary(localStorage).rename(id, 'Renamed B', '', entry.revision);
   }, b);
   await waitMenu(f, 'live-run:' + b, 'Open Renamed B');
+  await expect(second.getByRole('heading', { level: 1 })).toHaveText('Renamed B');
+  await expect(second).toHaveTitle('Renamed B');
   await menu(f, 'live-default:' + b);
   await expect.poll(async () => (await library(f.page)).assignments.live).toBe(b);
   await first.reload(); await expect(first.locator('#live-graph-name')).toHaveText('A');
@@ -68,6 +71,15 @@ test('native action menu separates launch/default, filters drafts, refreshes nam
   const badge = editor.locator('.graph-toolbar .graph-activity');
   await first.locator('#start').click(); await third.locator('#start').click();
   await expect(badge).toBeVisible();
+  // Changing the launch default must not relabel any existing window.
+  await menu(f, 'live-default:' + a);
+  await expect.poll(async () => (await library(f.page)).assignments.live).toBe(a);
+  for (const [page, name] of [[first, 'A'], [second, 'Renamed B'], [third, 'A']]) {
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
+    await expect(page).toHaveTitle(name);
+  }
+  await menu(f, 'live-default:' + b);
+  await expect.poll(async () => (await library(f.page)).assignments.live).toBe(b);
   await first.locator('#stop').click(); await expect(badge).toBeVisible();
   await editor.reload(); await expect(badge).toBeVisible();
   await third.close(); await expect(badge).toBeHidden();

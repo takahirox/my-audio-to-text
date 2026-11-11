@@ -1,7 +1,7 @@
 // Shared layout acceptance against the production recorder and model-free graph.
 export async function installLiveUIGraph(page) {
   await page.evaluate(async () => {
-    const { graphNode, edge, GRAPH_KEY, GRAPH_VERSION } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
+    const { graphNode, edge, GRAPH_KEY, GRAPH_VERSION } = await import('./graph.js'); const { saveLiveGraphData, readLiveGraph, GraphLibrary } = await import('./graph-library.js');
     const { TabSession } = await import('./session.js');
     const update = TabSession.prototype.update;
     TabSession.prototype.update = function(...args) { window.liveUISession = this; return update.apply(this, args); };
@@ -18,11 +18,20 @@ export async function installLiveUIGraph(page) {
       edge('source', 'value', 'held-notes', 'input'), edge('notes', 'trigger', 'held-notes', 'trigger'), edge('held-notes', 'value', 'main', 'input3'),
     ] };
     await saveLiveGraphData(localStorage, graph);
+    const entry = readLiveGraph(localStorage);
+    await new GraphLibrary(localStorage).rename(entry.id, 'Meeting Assistant', '', entry.revision);
     dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
   });
 }
 
 export async function checkLiveUI(page, expect, screenshot) {
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Meeting Assistant');
+  await expect(page).toHaveTitle('Meeting Assistant');
+  await expect(page.locator('main > p').filter({ hasText: /^Graph:/ })).toHaveCount(0);
+  await expect(page.getByRole('navigation').locator(':scope > *')).toHaveText(['Library', 'Graph', 'Models']);
+  await expect(page.getByRole('link', { name: 'Library', exact: true })).toHaveAttribute('href', 'graph-library.html');
+  await expect(page.getByRole('navigation').getByRole('link', { name: 'Graph', exact: true })).toHaveAttribute('href', /graph-editor\.html\?id=.+/);
+  await expect(page.getByRole('navigation').getByRole('link', { name: 'Models', exact: true })).toHaveAttribute('href', 'model-cache.html');
   await expect(page.locator('#session-state')).toHaveText('Idle');
   await expect(page.locator('#start')).toBeEnabled();
   await expect(page.locator('#stop')).toBeDisabled();
@@ -69,9 +78,24 @@ export async function checkLiveUI(page, expect, screenshot) {
   await expect(page.locator('[data-port=input2] .display-content')).toContainText('Read the current text');
   await expect(content).toBeHidden();
   await expect(page.locator('.live-text-region:visible')).toHaveCount(1);
+  // A saved rename belongs to the next session, while both window labels
+  // continue to identify the graph snapshot that is actually running.
+  await page.evaluate(async () => {
+    const { GraphLibrary, readSelectedGraph, LIBRARY_KEY } = await import('./graph-library.js');
+    const entry = readSelectedGraph(localStorage, new URLSearchParams(location.search).get('graph'));
+    await new GraphLibrary(localStorage).rename(entry.id, 'Updated Meeting Assistant', '', entry.revision);
+    dispatchEvent(new StorageEvent('storage', { key: LIBRARY_KEY }));
+  });
+  await expect(page.locator('#saved-state')).toContainText('Next session: Updated Meeting Assistant');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Meeting Assistant');
+  await expect(page).toHaveTitle('Meeting Assistant');
   await page.locator('#stop').click();
   await expect(page.locator('#session-state')).toHaveText('Completed');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Updated Meeting Assistant');
+  await expect(page).toHaveTitle('Updated Meeting Assistant');
   await page.locator('#start').click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Updated Meeting Assistant');
+  await expect(page).toHaveTitle('Updated Meeting Assistant');
   // A graph Button named Cancel remains an ordinary graph action.
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
@@ -83,6 +107,8 @@ export async function checkLiveUI(page, expect, screenshot) {
   for (const [state, label] of [['loading', 'Loading'], ['starting', 'Starting'], ['stopping', 'Stopping']]) {
     await page.evaluate(state => liveUISession.update({ state, status: 'Controlled lifecycle progress' }), state);
     await expect(page.locator('#session-state')).toHaveText(label);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Updated Meeting Assistant');
+    await expect(page).toHaveTitle('Updated Meeting Assistant');
     await expect(page.locator('#start')).toBeDisabled();
     await expect(page.locator('#stop')).toBeEnabled({ enabled: state !== 'stopping' });
   }
@@ -98,8 +124,8 @@ export async function checkLiveUI(page, expect, screenshot) {
     await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes: [graphNode('Text', 'only-source')], edges: [] });
     dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
   });
-  await expect(page.locator('#graph-action-area')).toBeHidden();
   // Retained completed output clears on reload even for a graph with no path.
   await page.reload();
+  await expect(page.locator('#graph-action-area')).toBeHidden();
   await expect(page.locator('#no-live-displays')).toBeVisible();
 }
