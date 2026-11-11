@@ -37,55 +37,7 @@
   const value = element => native(element) ? element.value : element.textContent;
   let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle', inserting = false;
   let listeners, menu, menuCaret, choices = [], defaultId = null, selectionPending = false;
-  let placementFrame, obstacleElements = [], obstaclesDirty = true;
-  let shadowCandidates = [], shadowCursor = 0, observedShadowRoots = new WeakSet();
-  // Include native, ARIA and common custom controls, even when disabled or
-  // pointer-events:none: their visual area still belongs to the website.
-  const controls = 'button,a,input,textarea,select,option,label,summary,details,dialog,iframe,object,embed,video,audio,[contenteditable],[tabindex],[role],[onclick],[onpointerdown],[onmousedown],[aria-haspopup],:popover-open';
-  // The extension API can inspect closed roots without exposing them to page
-  // scripts. Host bounds/scroll extents cannot bound fixed or thin descendants.
-  const shadowRoot = element => element instanceof HTMLElement ? chrome.dom.openOrClosedShadowRoot(element) : null;
-  function pageObstacles() {
-    if (!obstaclesDirty) return obstacleElements;
-    obstaclesDirty = false;
-    const found = new Set(), candidates = [];
-    const visit = root => {
-      for (const element of root.querySelectorAll('*')) {
-        if (element === host) continue;
-        if (element instanceof HTMLElement) candidates.push(element);
-        const shadow = shadowRoot(element);
-        if (element.matches(controls) || element.localName.includes('-') || shadow ||
-            !element.children.length || getComputedStyle(element).cursor === 'pointer') found.add(element);
-        if (shadow) {
-          if (observer && !observedShadowRoots.has(shadow)) {
-            observer.observe(shadow, { childList: true, subtree: true, attributes: true, characterData: true });
-            observedShadowRoots.add(shadow);
-          }
-          visit(shadow);
-        }
-      }
-    };
-    visit(document);
-    obstacleElements = [...found];
-    shadowCandidates = candidates;
-    return obstacleElements;
-  }
-  function discoverShadowRoots() {
-    if (!host || obstaclesDirty || !shadowCandidates.length) return;
-    // attachShadow() emits no mutation. Rotate through cached elements in
-    // bounded batches, including ordinary/zero-sized hosts and nested roots,
-    // without querying the whole page or reading layout on every timer tick.
-    for (let count = Math.min(128, shadowCandidates.length); count > 0; count--) {
-      shadowCursor %= shadowCandidates.length;
-      const element = shadowCandidates[shadowCursor++];
-      if (!element.isConnected) continue;
-      const shadow = shadowRoot(element);
-      if (shadow && !observedShadowRoots.has(shadow)) {
-        obstaclesDirty = true; // Next placement discovers and observes its contents.
-        return;
-      }
-    }
-  }
+  let placementFrame;
   function schedulePosition() {
     if (placementFrame || !enabled) return;
     placementFrame = requestAnimationFrame(() => { placementFrame = null; position(); });
@@ -118,25 +70,20 @@
       else removeWidget();
       return;
     }
-    // Measure without our own hit target or top-layer popover affecting the
-    // result. No intermediate placement is painted before this call returns.
-    host.style.setProperty('visibility', 'hidden', 'important');
     const rect = target.getBoundingClientRect(), viewport = window.visualViewport;
     const bounds = { left: (viewport?.offsetLeft || 0) + viewportInset, top: (viewport?.offsetTop || 0) + viewportInset,
       right: (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth) - viewportInset,
       bottom: (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) - viewportInset };
-    // Only the active modal admits interactions. DOM order is unrelated to
-    // showModal() order; hit-testing its backdrop also identifies it outside
-    // the dialog's rectangle. Document hits retarget shadow dialogs to their
-    // hosts, so descend even closed roots at the same point in stacking order. Guard
-    // against roots returning outer elements again. Move only our widget.
+    // Keep active Stop/Cancel outside the page's inert subtree when a modal
+    // opens. Inspect only the viewport center, descending shadow roots there
+    // to find the topmost modal; this is not obstacle discovery.
     const visited = new Set();
     const modalAt = root => {
       if (visited.has(root)) return null;
       visited.add(root);
       for (const element of root.elementsFromPoint((bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2)) {
         if (element === host) continue;
-        const shadow = shadowRoot(element);
+        const shadow = element instanceof HTMLElement && chrome.dom.openOrClosedShadowRoot(element);
         const modal = (shadow && modalAt(shadow)) || element.closest('dialog:modal');
         if (modal) return modal;
       }
@@ -146,108 +93,14 @@
     const parent = modal || document.documentElement;
     if (host.parentElement !== parent) parent.append(host);
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    const box = (x, y, width = controlSize, height = controlSize) => ({ left: x, top: y, right: x + width, bottom: y + height });
-    // Reserve the shadow and keyboard focus ring as well as the hit target.
-    const paintInset = 6;
-    const painted = candidate => ({ left: candidate.left - paintInset, top: candidate.top - paintInset,
-      right: candidate.right + paintInset, bottom: candidate.bottom + paintInset });
-    const fits = candidate => candidate.left >= bounds.left && candidate.right <= bounds.right && candidate.top >= bounds.top && candidate.bottom <= bounds.bottom;
-    const visible = { left: Math.max(rect.left, bounds.left), top: Math.max(rect.top, bounds.top),
-      right: Math.min(rect.right, bounds.right), bottom: Math.min(rect.bottom, bounds.bottom) };
-    const visibleTarget = overlaps(rect, bounds) && [visible.left + 1, (visible.left + visible.right) / 2, visible.right - 1].some(x =>
-      [visible.top + 1, (visible.top + visible.bottom) / 2, visible.bottom - 1].some(y => {
-        const hit = document.elementsFromPoint(x, y).find(element => element !== host);
-        return hit && (hit === target || target.contains(hit));
-      }));
-    const obstacles = [];
-    // Snapshot geometry once per placement, never once per candidate. Keep full
-    // rectangles for clipped/transformed controls; false negatives are worse
-    // than hiding an idle utility. Discovery is cached between DOM changes.
-    for (const element of pageObstacles()) {
-      if (!element.isConnected || element === host) continue;
-      const style = getComputedStyle(element);
-      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') continue;
-      const areas = [...element.getClientRects()];
-      for (const area of areas) if (area.width && area.height && overlaps(area, bounds)) obstacles.push(area);
-    }
-    if (overlaps(rect, bounds)) obstacles.push(rect);
-    const area = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
-    const collisionArea = candidate => obstacles.reduce((sum, obstacle) => sum + area(candidate, obstacle), 0);
-    // Exclude only our widget and non-control containers of the focused field.
-    // Geometry catches thin/partial overlaps that a point grid cannot detect;
-    // hit-testing catches overlays and unknown custom UI, including stacking.
-    const pageClear = candidate => {
-      for (const x of [candidate.left + 1, (candidate.left + candidate.right) / 2, candidate.right - 1]) {
-        for (const y of [candidate.top + 1, (candidate.top + candidate.bottom) / 2, candidate.bottom - 1]) {
-          for (const element of document.elementsFromPoint(x, y)) {
-            if (element === host || element === document.documentElement || element === document.body) continue;
-            if (!element.contains(target) || element.matches(controls)) return false;
-          }
-        }
-      }
-      return true;
+    // Stay beside the field: right first, left only at the viewport edge.
+    // Crowded pages must never suppress an otherwise available idle mic.
+    let left = rect.right + gap;
+    if (left + controlSize > bounds.right) left = rect.left - gap - controlSize;
+    const anchor = {
+      left: clamp(left, bounds.left, bounds.right - controlSize),
+      top: clamp((rect.top + rect.bottom - controlSize) / 2, bounds.top, bounds.bottom - controlSize),
     };
-    const safe = candidate => fits(painted(candidate)) && !collisionArea(painted(candidate)) && pageClear(painted(candidate));
-    const x = clamp(rect.right - controlSize, bounds.left + paintInset, bounds.right - controlSize - paintInset);
-    const y = clamp((rect.top + rect.bottom - controlSize) / 2, bounds.top + paintInset, bounds.bottom - controlSize - paintInset);
-    const limit = candidate => box(clamp(candidate.left, bounds.left + paintInset, bounds.right - controlSize - paintInset),
-      clamp(candidate.top, bounds.top + paintInset, bounds.bottom - controlSize - paintInset));
-    const candidates = [gap, gap + controlSize + gap, gap + 2 * (controlSize + gap)].flatMap(distance => [
-      box(rect.right + distance, y), box(rect.left - distance - controlSize, y),
-      box(x, rect.top - distance - controlSize), box(x, rect.bottom + distance),
-      box(rect.left, rect.top - distance - controlSize), box(rect.left, rect.bottom + distance),
-    ]).map(limit);
-    let anchor = visibleTarget ? candidates.find(safe) : null;
-    if (!anchor && session) {
-      // Sweep horizontal free intervals at obstacle boundaries. This finds
-      // narrow pockets without a quadratic X/Y candidate product. Geometry is
-      // read above; this search does no layout reads except actual hit tests.
-      const minX = bounds.left + paintInset, maxX = bounds.right - controlSize - paintInset;
-      const minY = bounds.top + paintInset, maxY = bounds.bottom - controlSize - paintInset;
-      const ys = new Set([minY, maxY]);
-      for (const obstacle of obstacles) {
-        ys.add(obstacle.bottom + paintInset); ys.add(obstacle.top - controlSize - paintInset);
-      }
-      for (let y = minY; y <= maxY; y += controlSize + gap) ys.add(y);
-      search: for (const y of ys) {
-        if (y < minY || y > maxY) continue;
-        const intervals = obstacles.filter(obstacle => obstacle.top < y + controlSize + paintInset && obstacle.bottom > y - paintInset)
-          .map(obstacle => [obstacle.left - controlSize - paintInset, obstacle.right + paintInset]).sort((a, b) => a[0] - b[0]);
-        let x = minX;
-        for (const [left, right] of [...intervals, [maxX + 1, maxX + 1]]) {
-          if (right <= x) continue;
-          // Hit-testing may reject an unclassified overlay within a free
-          // geometric interval. Continue across that interval at bounded steps.
-          for (let testX = x; testX <= Math.min(left, maxX); testX += controlSize + gap) {
-            const candidate = box(testX, y);
-            if (safe(candidate)) { anchor = candidate; break search; }
-          }
-          x = Math.max(x, right);
-          if (x > maxX) break;
-        }
-      }
-      if (!anchor) {
-        // Only active sessions may overlap. Minimize overlap area among edge,
-        // corner and grid positions instead of hiding the only Stop/Cancel.
-        // Bound work on dense pages; do not score every pair of obstacle edges.
-        const fallback = [box(minX, minY), box(maxX, minY), box(minX, maxY), box(maxX, maxY)];
-        for (let y = minY; y <= maxY; y += controlSize + gap)
-          for (let x = minX; x <= maxX; x += controlSize + gap) fallback.push(box(x, y));
-        for (const obstacle of obstacles) for (const x of [obstacle.left - controlSize - paintInset, obstacle.right + paintInset])
-          for (const y of [obstacle.top - controlSize - paintInset, obstacle.bottom + paintInset]) fallback.push(limit(box(x, y)));
-        let minimum = Infinity;
-        for (const candidate of fallback) {
-          if (!fits(candidate)) continue;
-          const cost = collisionArea(painted(candidate));
-          if (cost < minimum) { anchor = candidate; minimum = cost; }
-        }
-      }
-      // A zoomed visual viewport may be smaller than the normal touch target.
-      // Keep the control reachable at its edge instead of ending the session.
-      anchor ||= box(bounds.left, bounds.top);
-    }
-    if (!anchor) return;
     const place = (left = anchor.left, top = anchor.top) => {
       host.style.setProperty('left', `${left}px`, 'important'); host.style.setProperty('top', `${top}px`, 'important');
       return host.getBoundingClientRect();
@@ -256,8 +109,8 @@
       Math.abs(rendered.width - controlSize) < .5 && Math.abs(rendered.height - controlSize) < .5;
     let rendered = place();
     // A transformed containing block changes fixed coordinates. Correct a
-    // translation once, then verify actual geometry. Other transforms fail
-    // closed while idle; an active control can escape via the top layer.
+    // translation once. An active control can escape other transforms via
+    // the top layer to keep Stop/Cancel reachable.
     if (!aligned(rendered)) rendered = place(2 * anchor.left - rendered.left, 2 * anchor.top - rendered.top);
     const promote = () => {
       host.popover = 'manual';
@@ -265,9 +118,8 @@
       host.showPopover();
       return place();
     };
-    if (session && !aligned(rendered)) rendered = promote();
-    if (!session && (!aligned(rendered) || !safe(box(rendered.left, rendered.top, rendered.width, rendered.height)))) return;
-    host.style.setProperty('visibility', 'visible', 'important');
+    if (session && !aligned(rendered)) promote();
+    host.style.setProperty('visibility', !session && (rect.bottom < bounds.top || rect.top > bounds.bottom || rect.right < bounds.left || rect.left > bounds.right) ? 'hidden' : 'visible', 'important');
     // A later site overlay can outrank even the maximum z-index. Promote this
     // same active control to the top layer only when actual hit-testing says
     // it is unreachable (and re-promote if a newer popover covered it).
@@ -276,22 +128,14 @@
     }
     const scheme = getComputedStyle(target).colorScheme;
     host.dataset.theme = scheme === 'dark' || (scheme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
-    // The status remains a live region even if its visual bubble has no safe
-    // position. It can never enlarge or intercept the button's hit target.
-    status.style.maxWidth = `${Math.max(1, Math.min(260, bounds.right - bounds.left - 2 * paintInset))}px`;
-    status.style.clipPath = 'inset(50%)';
+    // A non-interactive status bubble stays below the mic, or above it near
+    // the bottom edge. Clamp it independently of the button's hit target.
+    status.style.maxWidth = `${Math.max(1, Math.min(260, bounds.right - bounds.left))}px`;
     if (status.textContent) {
       const { width, height } = status.getBoundingClientRect();
-      const statusX = clamp(anchor.right - width, bounds.left + paintInset, bounds.right - width - paintInset);
-      const options = [box(statusX, anchor.bottom + gap, width, height), box(statusX, anchor.top - gap - height, width, height),
-        box(anchor.right + gap, anchor.top, width, height), box(anchor.left - gap - width, anchor.top, width, height)]
-        .map(candidate => box(clamp(candidate.left, bounds.left + paintInset, bounds.right - width - paintInset),
-          clamp(candidate.top, bounds.top + paintInset, bounds.bottom - height - paintInset), width, height));
-      const label = options.find(candidate => safe(candidate) && !overlaps(painted(candidate), anchor));
-      if (label) {
-        status.style.left = `${label.left - anchor.left}px`; status.style.top = `${label.top - anchor.top}px`;
-        status.style.clipPath = 'none';
-      }
+      const top = anchor.top + controlSize + gap;
+      status.style.left = `${clamp(anchor.left + controlSize - width, bounds.left, bounds.right - width) - anchor.left}px`;
+      status.style.top = `${clamp(top + height <= bounds.bottom ? top : anchor.top - gap - height, bounds.top, bounds.bottom - height) - anchor.top}px`;
     }
   }
   function removeWidget() { closeMenu(); host?.remove(); host = button = status = null; if (!session) target = null; }
@@ -464,8 +308,7 @@
     enabled = false; disposed = true; choices = []; defaultId = null; selectionPending = false;
     const owner = session, previous = control; session = null; control = null;
     observer?.disconnect(); observer = null; clearInterval(timer);
-    cancelAnimationFrame(placementFrame); placementFrame = null; obstacleElements = []; obstaclesDirty = true;
-    shadowCandidates = []; shadowCursor = 0; observedShadowRoots = new WeakSet();
+    cancelAnimationFrame(placementFrame); placementFrame = null;
     removeWidget();
     // Extension reload can invalidate messaging methods before disconnect is
     // delivered. Always remove the UI first, even in an invalidated context.
@@ -484,14 +327,13 @@
         enabled = true; focus();
         observer = new MutationObserver(records => {
           if (!records.some(record => record.target !== host && !host?.contains(record.target))) return;
-          obstaclesDirty = true; schedulePosition();
+          schedulePosition();
         });
-        observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
-        obstaclesDirty = true; schedulePosition();
-        // CSS animation, scrolling shadow trees and style-sheet changes need no
-        // light-DOM mutation. Bound these checks; never poll every animation frame.
+        observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true,
+          attributeFilter: ['disabled', 'readonly', 'hidden', 'type', 'contenteditable', 'autocomplete', 'name', 'aria-disabled', 'aria-readonly', 'class', 'style', 'open'] });
+        // Recheck layout/target validity without scanning the page for obstacles.
         let ticks = 0;
-        timer = setInterval(() => { discoverShadowRoots(); schedulePosition(); if (++ticks % 80 === 0) send({ type: 'heartbeat' }); }, 250);
+        timer = setInterval(() => { schedulePosition(); if (++ticks % 20 === 0) send({ type: 'heartbeat' }); }, 1000);
       }
       if (message.type === 'graphs') {
         const changed = JSON.stringify(choices) !== JSON.stringify(message.graphs) || defaultId !== message.defaultId;

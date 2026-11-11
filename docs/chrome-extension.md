@@ -255,10 +255,12 @@ The circular in-page control uses locally bundled Material Symbols Outlined SVGs
 Mic when idle, Stop while recording, an activity spinner while preparing/stopping,
 and Error for recovery. Spinner motion respects reduced-motion settings; light,
 dark and forced-color treatments preserve distinct icon shapes and accessible
-labels. The widget first looks for free space 6 px outside the field, then searches
-slightly farther out in crowded rows. It clamps the control and compact status to
-the viewport and keeps Stop visible when the recording field scrolls away.
-Completely occupied viewports can still require a best-effort placement.
+labels. The widget stays 6 px to the right of the field, falling back to the left
+when the right side does not fit in the viewport. It clamps the control and compact
+status to the viewport and keeps Stop/Cancel accessible when the recording field
+scrolls away. Crowded pages do not hide the idle mic or make it search for another
+position. Dense pages can still have overlaps; the widget does not modify website
+controls or layout.
 [Icon source, pinned revision and license](../extension/icons/material-symbols/README.md)
 and [Chrome UI validation](evidence/web-voice-249.md).
 
