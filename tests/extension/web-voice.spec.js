@@ -27,9 +27,16 @@ const test = base.extend({
       await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(tts-assets|correction-assets)(\/|$)/.test(source) && (real || !/\/vendor(\/|$)/.test(source)) });
       await cp('extension/manifest.json', path.join(root, 'manifest.json'));
       if (!real) {
-        for (const role of ['sherpa', 'silero', 'whisper']) await writeFile(path.join(root, `web/${role}-worker.js`), `self.onmessage=({data})=>{
+        // Modal tests recognize one utterance, regardless of Chromium's fake
+        // microphone tone/silence cycle or how long placement checks take.
+        const singleUtterance = /^(closed-shadow modal|stacked modal dialogs)/.test(info.title);
+        for (const role of ['sherpa', 'silero', 'whisper']) await writeFile(path.join(root, `web/${role}-worker.js`), `let samples=0;self.onmessage=({data})=>{
           if(data.type==='load')postMessage({type:'ready'});
-          if(data.type==='vad-audio')postMessage({type:'vad',session:data.session,frames:[{audio:data.audio,speaking:data.audio.some(x=>Math.abs(x)>.001)}]});
+          if(data.type==='vad-start')samples=0;
+          if(data.type==='vad-audio'){
+            const speaking=${singleUtterance ? 'samples < 8000' : 'data.audio.some(x=>Math.abs(x)>.001)'};samples+=data.audio.length;
+            postMessage({type:'vad',session:data.session,frames:[{audio:data.audio,speaking}]});
+          }
           if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});
           if(data.type==='decode'){postMessage({type:data.final?'final':'partial',text:data.final?'${role === 'whisper' ? 'whisper fixture' : 'confirmed fixture'}':'pending fixture',session:data.session,id:data.id});postMessage({type:'decoded',session:data.session});}
         };`);
@@ -122,6 +129,11 @@ async function mic(page) {
 // production-only test hooks. Activation still uses real pointer/key events.
 async function controlUI(t, focus = false) {
   await expect(widget(t.website)).toBeVisible();
+  return inspectControl(t, focus);
+}
+// A widget relocated into a site's closed-root modal is also opaque to
+// Playwright locators. Inspect it through DevTools, just like its own root.
+async function inspectControl(t, focus = false) {
   const cdp = await t.context.newCDPSession(t.website);
   try {
     const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
@@ -142,7 +154,7 @@ async function controlUI(t, focus = false) {
           circle:style.borderRadius, display:style.display, align:style.alignItems, justify:style.justifyContent,
           padding:style.padding, boxSizing:style.boxSizing, appearance:style.appearance, lineHeight:style.lineHeight,
           color:style.color, background:style.backgroundColor, fill:motion.fill, animation:motion.animationName,
-          outline:style.outlineStyle, focused:this.activeElement === button };
+          outline:style.outlineStyle, focused:this.activeElement === button, visibility:style.visibility };
       }` });
     return result.value;
   } finally { await cdp.detach(); }
@@ -510,7 +522,7 @@ test('transformed root placement verifies the rendered mic and preserves native 
   await expect(widget(t.website)).toBeVisible();
 });
 
-test('collapsed closed-shadow overflow cannot certify idle safety from sparse hit tests', async ({ voice: t }) => {
+test('collapsed closed-shadow overflow uses descendant geometry for idle safety', async ({ voice: t }) => {
   test.skip(real); await placementPage(t);
   for (const offset of [8, -8]) {
     await t.website.evaluate(offset => {
@@ -521,9 +533,11 @@ test('collapsed closed-shadow overflow cannot certify idle safety from sparse hi
       window.shadowClicks = 0; button.onclick = () => shadowClicks++;
       host.attachShadow({ mode:'closed' }).append(button);
     }, offset);
-    // Opaque overflowing contents have no inspectable rectangle. Hiding an
-    // idle utility is safer than inferring free space from a point grid.
-    await expect(widget(t.website)).toBeHidden();
+    await expect(async () => {
+      const ui = await controlUI(t);
+      expect(intersects({ x:ui.button.x-6,y:ui.button.y-6,width:48,height:48 },
+        { x:286+offset,y:120,width:2,height:36 })).toBe(false);
+    }).toPass();
     await t.website.mouse.click(287 + offset, 138);
     expect(await t.website.evaluate(() => shadowClicks)).toBe(1);
     await t.website.locator('#opaque').evaluate(e => e.remove());
@@ -532,22 +546,43 @@ test('collapsed closed-shadow overflow cannot certify idle safety from sparse hi
   }
 });
 
-test('noncollapsed closed-shadow overflow hides idle mic and preserves thin native button clicks', async ({ voice: t }) => {
+for (const variant of ['absolute', 'hidden light child', 'fixed']) test(`noncollapsed closed-shadow ${variant} preserves thin native button clicks`, async ({ voice: t }) => {
   test.skip(real); await placementPage(t);
   await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
-  await t.website.evaluate(() => {
+  await t.website.evaluate(variant => {
     const host = document.createElement('div'); host.id = 'opaque';
     host.style.cssText = 'position:absolute;left:0;top:0;width:10px;height:10px';
     const button = document.createElement('button');
-    button.style.cssText = 'position:absolute;left:294px;top:120px;width:2px;height:36px;padding:0;border:0';
+    button.style.cssText = `position:${variant === 'fixed' ? 'fixed' : 'absolute'};left:294px;top:120px;width:2px;height:36px;padding:0;border:0`;
     window.shadowClicks = 0; button.onclick = () => shadowClicks++;
-    host.attachShadow({ mode:'closed' }).append(button); document.body.append(host);
-  });
-  await expect(widget(t.website)).toBeHidden();
+    window.moveShadowButton = (left, top) => { button.style.left = `${left}px`; button.style.top = `${top}px`; };
+    host.attachShadow({ mode:'closed' }).append(button);
+    if (variant === 'hidden light child') {
+      const child = document.createElement('span'); child.hidden = true; host.append(child);
+    }
+    document.body.append(host);
+  }, variant);
+  await expect(async () => {
+    const ui = await controlUI(t);
+    expect(intersects({ x:ui.button.x-6,y:ui.button.y-6,width:48,height:48 },
+      { x:294,y:120,width:2,height:36 })).toBe(false);
+  }).toPass();
   await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
   await t.website.mouse.click(295, 138);
   expect(await t.website.evaluate(() => shadowClicks)).toBe(1);
   await idle(t);
+  if (variant === 'fixed') {
+    await t.website.locator('#field').focus();
+    const ui = await controlUI(t), native = { x:ui.button.x+8,y:ui.button.y,width:2,height:36 };
+    await t.website.evaluate(rect => moveShadowButton(rect.x, rect.y), native);
+    // Closed-root mutations must invalidate cached discovery/placement too.
+    await expect(async () => {
+      const moved = await controlUI(t);
+      expect(intersects({ x:moved.button.x-6,y:moved.button.y-6,width:48,height:48 }, native)).toBe(false);
+    }).toPass();
+    await t.website.mouse.click(native.x+1, native.y+18);
+    expect(await t.website.evaluate(() => shadowClicks)).toBe(2); await idle(t);
+  }
   await t.website.locator('#opaque').evaluate(e => e.remove());
   await t.website.locator('#field').focus();
   await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
@@ -698,6 +733,42 @@ for (const phase of ['preparing', 'recording']) test(`open-shadow modal keeps ${
   expect(await t.website.evaluate(() => siteClicks)).toBe(0);
 });
 
+for (const phase of ['preparing', 'recording']) test(`closed-shadow modal keeps ${phase === 'preparing' ? 'Cancel' : 'Stop'} reachable without replacing the control or session`, async ({ voice: t }) => {
+  test.skip(real); await placementPage(t);
+  if (phase === 'preparing') await bootstrap(t, 'window.voiceDelay = 3000;');
+  await start(t, '#field');
+  if (phase === 'recording') await recording(t);
+  else await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
+  const owner = await runtime(t);
+  // Stop drains transcription, so make recording output deterministic before
+  // opening the modal; preparation cancellation must not insert any text.
+  if (phase === 'recording') await expect.poll(() => owner.evaluate(() => voiceResources.audioSamples)).toBeGreaterThan(8000);
+  await t.website.evaluate(() => {
+    window.originalVoiceControl = document.querySelector('[data-local-web-voice]');
+    const outer = document.createElement('div'), inner = document.createElement('span');
+    const dialog = window.siteModal = document.createElement('dialog'); dialog.textContent = 'Site dialog';
+    inner.attachShadow({ mode:'closed' }).append(dialog);
+    outer.attachShadow({ mode:'closed' }).append(inner); document.body.append(outer); dialog.showModal();
+  });
+  await expect.poll(() => t.website.evaluate(() => originalVoiceControl.parentElement === siteModal)).toBe(true);
+  const ui = await inspectControl(t, true);
+  expect(ui.visibility).toBe('visible'); expect(ui.focused).toBe(true); expect(ui.disabled).toBe(false);
+  expect(ui.icon).toBe(phase === 'recording' ? 'stop' : 'progress_activity');
+  await t.website.evaluate(async () => {
+    window.dispatchEvent(new Event('scroll'));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  expect((await inspectControl(t)).focused).toBe(true);
+  expect(await t.website.evaluate(() => siteModal.querySelector('[data-local-web-voice]') === originalVoiceControl)).toBe(true);
+  const current = await runtime(t); expect(current.targetId).toBe(owner.targetId); await current.detach();
+  const reachable = await inspectControl(t);
+  await t.website.mouse.click(reachable.button.x + 18, reachable.button.y + 18);
+  await idle(t); await owner.detach();
+  await expect(t.website.locator('#field')).toHaveValue(phase === 'recording' ? 'before confirmed fixtureafter' : 'before after');
+  expect(await t.website.evaluate(() => siteClicks)).toBe(0);
+  await expect(widget(t.website)).toBeHidden();
+});
+
 for (const phase of ['preparing', 'recording']) test(`stacked modal dialogs keep ${phase === 'preparing' ? 'Cancel' : 'Stop'} in the active modal regardless of DOM order`, async ({ voice: t }) => {
   test.skip(real); await placementPage(t);
   if (phase === 'preparing') await bootstrap(t, 'window.voiceDelay = 3000;');
@@ -729,13 +800,17 @@ for (const phase of ['preparing', 'recording']) test(`stacked modal dialogs keep
   await t.website.locator('#first-modal').evaluate(e => e.close()); await inModal('second-modal');
   await expect(widget(t.website)).toHaveCount(1);
   await expect(widget(t.website)).toHaveAttribute('data-voice-state', phase);
-  const before = await t.website.locator('#field').inputValue();
+  if (phase === 'recording') {
+    const owner = await runtime(t);
+    await expect.poll(() => owner.evaluate(() => voiceResources.audioSamples)).toBeGreaterThan(8000);
+    await owner.detach();
+  }
   // Keyboard focus proves that the button is outside the inert subtree,
   // and a trusted click proves hit-testing reaches the same Cancel/Stop.
   await controlUI(t, true);
   expect((await controlUI(t)).focused).toBe(true);
   await mic(t.website); await idle(t);
-  expect(await t.website.locator('#field').inputValue()).toBe(before);
+  await expect(t.website.locator('#field')).toHaveValue(phase === 'recording' ? 'before confirmed fixtureafter' : 'before after');
   expect(await t.website.evaluate(() => siteClicks)).toBe(0);
 });
 

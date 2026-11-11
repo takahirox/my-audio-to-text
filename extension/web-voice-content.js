@@ -41,7 +41,9 @@
   // Include native, ARIA and common custom controls, even when disabled or
   // pointer-events:none: their visual area still belongs to the website.
   const controls = 'button,a,input,textarea,select,option,label,summary,details,dialog,iframe,object,embed,video,audio,[contenteditable],[tabindex],[role],[onclick],[onpointerdown],[onmousedown],[aria-haspopup],:popover-open';
-  const shadowHosts = 'article,aside,blockquote,div,footer,h1,h2,h3,h4,h5,h6,header,main,nav,p,section,span';
+  // The extension API can inspect closed roots without exposing them to page
+  // scripts. Host bounds/scroll extents cannot bound fixed or thin descendants.
+  const shadowRoot = element => element instanceof HTMLElement ? chrome.dom.openOrClosedShadowRoot(element) : null;
   function pageObstacles() {
     if (!obstaclesDirty) return obstacleElements;
     obstaclesDirty = false;
@@ -49,13 +51,12 @@
     const visit = root => {
       for (const element of root.querySelectorAll('*')) {
         if (element === host) continue;
-        // Opaque/closed shadow hosts must be treated as one obstruction. Open
-        // roots are also visited so overflowing children cannot escape checks.
-        if (element.matches(controls) || element.localName.includes('-') || element.shadowRoot ||
+        const shadow = shadowRoot(element);
+        if (element.matches(controls) || element.localName.includes('-') || shadow ||
             !element.children.length || getComputedStyle(element).cursor === 'pointer') found.add(element);
-        if (element.shadowRoot) {
-          observer?.observe(element.shadowRoot, { childList: true, subtree: true, attributes: true, characterData: true });
-          visit(element.shadowRoot);
+        if (shadow) {
+          observer?.observe(shadow, { childList: true, subtree: true, attributes: true, characterData: true });
+          visit(shadow);
         }
       }
     };
@@ -105,7 +106,7 @@
     // Only the active modal admits interactions. DOM order is unrelated to
     // showModal() order; hit-testing its backdrop also identifies it outside
     // the dialog's rectangle. Document hits retarget shadow dialogs to their
-    // hosts, so descend open roots at the same point in stacking order. Guard
+    // hosts, so descend even closed roots at the same point in stacking order. Guard
     // against roots returning outer elements again. Move only our widget.
     const visited = new Set();
     const modalAt = root => {
@@ -113,7 +114,8 @@
       visited.add(root);
       for (const element of root.elementsFromPoint((bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2)) {
         if (element === host) continue;
-        const modal = (element.shadowRoot && modalAt(element.shadowRoot)) || element.closest('dialog:modal');
+        const shadow = shadowRoot(element);
+        const modal = (shadow && modalAt(shadow)) || element.closest('dialog:modal');
         if (modal) return modal;
       }
       return null;
@@ -145,16 +147,6 @@
       const style = getComputedStyle(element);
       if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') continue;
       const areas = [...element.getClientRects()];
-      if (!element.shadowRoot && !element.children.length &&
-          (element.matches(shadowHosts) || element.localName.includes('-')) &&
-          (style.overflowX === 'visible' || style.overflowY === 'visible') &&
-          (element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight)) {
-        // An opaque host of any size can paint closed-shadow controls outside
-        // its border box. Scroll extents reveal overflow, but cannot
-        // bound negative/fixed descendants. A sparse grid cannot prove safety
-        // anywhere: hide idle UI; keep the explicit active-session fallback.
-        obstacles.push(bounds);
-      }
       for (const area of areas) if (area.width && area.height && overlaps(area, bounds)) obstacles.push(area);
     }
     if (overlaps(rect, bounds)) obstacles.push(rect);
