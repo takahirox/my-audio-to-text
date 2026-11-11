@@ -57,7 +57,7 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   for (const invalid of ['', 'fr', 'EN']) {
     await editor.getByLabel('language value', { exact: true }).fill(invalid); await editor.locator('#graph-save').click();
     await expect(editor.locator('#graph-save')).toBeEnabled();
-    await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(page.locator('#errors')).toContainText('Whisper.language must be en or ja');
     await expect(page.locator('#start')).toBeDisabled();
   }
@@ -96,7 +96,7 @@ test('MV3 Text literal and empty values round-trip and deliver once to an ordina
     )).toBe(value);
     await editor.reload(); await editor.getByRole('button', { name: 'Select text', exact: true }).click();
     await expect(editor.getByLabel('text value', { exact: true })).toHaveValue(value);
-    await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await startReadyLive(page);
     await expect(page.locator('#status')).toHaveText('Processing active');
     await expect(page.locator('.display-content')).toHaveText(value);
@@ -134,7 +134,7 @@ test('MV3 Whisper decode and missing model errors release workers and permit ret
   await startGraph(page); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   await writeFile(path.join(f.root, 'web/vendor/translation/transformers.js'), `export const env={backends:{onnx:{wasm:{}}}}; export async function pipeline(){throw Error('Missing packaged model');}`);
   await page.reload();
-  await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('#errors')).toContainText('Missing packaged model'); await expect(page.locator('#start')).toBeDisabled();
   expect(await page.evaluate(() => window.graphWorkers.every(w => w.released))).toBe(true);
 });

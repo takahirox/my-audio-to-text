@@ -96,11 +96,10 @@ function renderSelectedState() {
   element('check-cache').disabled = !!invalid || removed || state(entry) === 'Unknown · checking';
   element('cache-hint').textContent = removed ? 'This graph was deleted.' : invalid ? 'Repair and import this graph before checking model files.' : '';
   element('save-details').disabled = removed;
-  const assigned = library.assignments.live === entry.id;
   const parents = references(library, entry.id);
   const last = !library.graphs.some(other => other.id !== entry.id && usable(other, library));
-  element('delete').disabled = removed || assigned || last || parents.length > 0;
-  element('delete-hint').textContent = removed ? 'This graph was deleted.' : parents.length ? `Referenced by: ${parents.map(parent => parent.name).join(', ')}. Replace or remove instances and save those graphs before deleting.` : assigned ? 'Used by a launch setting; choose another graph in Launch settings first.' : last ? 'Keep at least one usable graph.' : '';
+  element('delete').disabled = removed || last || parents.length > 0;
+  element('delete-hint').textContent = removed ? 'This graph was deleted.' : parents.length ? `Referenced by: ${parents.map(parent => parent.name).join(', ')}. Replace or remove instances and save those graphs before deleting.` : last ? 'Keep at least one usable graph.' : '';
   element('graph-updated').textContent = new Date(entry.updatedAt).toLocaleString();
   element('graph-models').textContent = invalid ? 'Unknown · repair graph first' : models(entry).join(', ') || 'None';
   element('graph-cache').textContent = state(entry);
@@ -133,10 +132,10 @@ function preview(graph) {
   }
 }
 function render(replaceDetails = false) {
-  if (!selected() && (!dirty() || replaceDetails)) selectedId = library.assignments.live;
+  if (!selected() && (!dirty() || replaceDetails)) selectedId = library.graphs[0].id;
   const search = element('search').value.toLocaleLowerCase(), filter = element('filter').value;
   const rows = library.graphs.filter(entry => `${entry.name} ${entry.description} ${models(entry).join(' ')}`.toLocaleLowerCase().includes(search)
-    && (filter === 'all' || filter === 'subgraph' && entry.kind === 'subgraph' || filter === 'graph' && entry.kind !== 'subgraph' || filter === 'assigned' && Object.values(library.assignments).includes(entry.id) || filter === 'invalid' && entryError(entry, library)));
+    && (filter === 'all' || filter === 'subgraph' && entry.kind === 'subgraph' || filter === 'graph' && entry.kind !== 'subgraph' || filter === 'invalid' && entryError(entry, library)));
   rows.sort(element('sort').value === 'name' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name));
   const focusedRow = document.activeElement?.closest('#graph-list li');
   const focusedId = focusedRow?.dataset.id;
@@ -178,31 +177,11 @@ function render(replaceDetails = false) {
   element('empty').hidden = !!rows.length;
   if (replaceDetails || !dirty() && (detailsEntry?.id !== selectedId || detailsEntry?.revision !== selected()?.revision)) renderDetails();
   renderSelectedState();
-  renderLaunchSettings();
   refreshVoiceStatus();
   const changed = legacyChanged(localStorage, library);
   element('recovery').hidden = !changed;
   element('recover-legacy').hidden = !changed;
   element('recovery-message').textContent = changed ? 'The legacy graph changed after migration. Keep it as a separate entry before further edits. Both versions are preserved; no assignment will change.' : '';
-}
-function launchReason(entry) {
-  if (!entry) return 'Choose a saved graph.';
-  if (entry.kind === 'subgraph') return 'Choose a parent graph.';
-  return entryError(entry, library) ? 'Repair and import this graph first.' : !usable(entry, library) ? 'Connect an executable path in Graph Editor.' : '';
-}
-function renderLaunchSettings() {
-  for (const [target, prefix] of [['live', 'live']]) {
-    const select = element(`${prefix}-graph`), assignedId = library.assignments[target];
-    const options = library.graphs.filter(entry => entry.kind !== 'subgraph').map(entry => {
-      const reason = launchReason(entry);
-      const option = el('option', `${entry.name}${reason ? ` — ${reason}` : ''}`);
-      option.value = entry.id; option.disabled = !!reason; return option;
-    });
-    select.replaceChildren(...options); select.value = assignedId ?? '';
-    select.title = library.graphs.find(entry => entry.id === assignedId)?.name || 'Not assigned';
-    const reason = launchReason(library.graphs.find(entry => entry.id === assignedId));
-    element(`${prefix}-launch-status`).textContent = reason;
-  }
 }
 async function action(work, { selectNew = false, savedDetails = false, onError } = {}) {
   const controls = [...document.querySelectorAll('#new, main button, main input, main select, main textarea')].map(node => [node, node.disabled]);
@@ -229,7 +208,7 @@ try {
   const opened = await openLibrary(localStorage); library = opened.library;
   element('library-warning').textContent = opened.warning;
   selectedId = localStorage.getItem(selectionKey);
-  if (!library.graphs.some(entry => entry.id === selectedId)) selectedId = library.assignments.live;
+  if (!library.graphs.some(entry => entry.id === selectedId)) selectedId = library.graphs[0].id;
   render(true);
   // Per-tab drafts survive refresh without changing library data or revisions.
   try {
@@ -244,18 +223,17 @@ try {
   fatal = true; element('errors').textContent = error.message;
   element('recovery').hidden = false; element('recover-legacy').hidden = true;
   element('recovery-message').textContent = 'Original storage is available for export. No saved data has been overwritten.';
-  for (const node of document.querySelectorAll('#new, main button, main input, main select')) node.disabled = !['export-storage', 'export-legacy'].includes(node.id);
+  for (const node of document.querySelectorAll('#new, main button, main input, main select')) node.disabled = !['export-storage', 'export-legacy', 'web-voice-enabled', 'confirm-voice', 'cancel-voice'].includes(node.id);
   hideDetails();
 }
-if (!fatal) {
+// Consent remains revocable even if graph storage needs recovery.
+{
   const toggle = element('web-voice-enabled'), status = element('web-voice-status'), consent = element('voice-consent');
   let voiceMessage = '', hasWebsiteAccess = true;
   refreshVoiceStatus = () => {
     element('voice-switch-state').textContent = toggle.checked ? 'ON' : 'OFF';
-    const count = webVoiceChoices(library).length;
-    status.textContent = voiceMessage || (!count ? 'No compatible graphs. Connect MicrophoneAudio through final text processing to FocusedInputTextOutputNode in Graph Editor.'
-      : toggle.checked ? hasWebsiteAccess ? 'ON · left-click a field mic to start; right-click (or Shift+F10) to choose its default graph.' : 'Website access missing. Turn OFF, then ON to grant access.'
-      : 'Right-click a field mic to choose its default graph after turning ON.');
+    const count = library ? webVoiceChoices(library).length : null;
+    status.textContent = voiceMessage || (count === 0 ? 'No compatible graphs. Connect MicrophoneAudio through final text processing to FocusedInputTextOutputNode in Graph Editor.' : toggle.checked ? hasWebsiteAccess ? 'ON · click a field mic to start; right-click it to choose a default graph.' : 'Website access missing. Turn OFF, then ON to grant access.' : 'OFF · website microphone controls are disabled.');
   };
   toggle.checked = await readVoiceEnabled();
   const checkWebsiteAccess = async () => {
@@ -300,6 +278,8 @@ if (!fatal) {
   chrome.permissions.onRemoved.addListener(() => { void checkWebsiteAccess(); });
   chrome.permissions.onAdded.addListener(() => { void checkWebsiteAccess(); });
   refreshVoiceStatus(); toggle.disabled = false;
+}
+if (!fatal) {
   element('back-to-graphs').onclick = closeDetails;
   element('selected').addEventListener('cancel', event => {
     if (element('graph-more').open) {
@@ -355,28 +335,9 @@ if (!fatal) {
   element('delete').onclick = () => {
     const entry = selected(); if (!entry) return;
     if (confirm(`Delete “${entry.name}”? This cannot be undone.${dirty() ? ' Unsaved details will also be discarded.' : ''}`)) void action(() => store.delete(selectedId, library.revision)).then(success => {
-      if (success) { clearDraft(); selectedId = library.assignments.live; render(true); }
+      if (success) { clearDraft(); selectedId = library.graphs[0].id; render(true); }
     });
   };
-  for (const [target, prefix] of [['live', 'live']]) {
-    const select = element(`${prefix}-graph`), status = element(`${prefix}-launch-status`);
-    select.onchange = async () => {
-      const id = select.value || null, revision = library.revision;
-      const entry = library.graphs.find(entry => entry.id === id);
-      const reason = id && !entry ? 'Graph no longer exists. Choose another graph.' : launchReason(entry);
-      const failed = error => {
-        // Refresh bindings after conflicts without replacing an unsaved details draft.
-        let readError = '';
-        try { library = readLibrary(localStorage); } catch (error) { readError = ` ${error.message}`; }
-        render();
-        status.textContent = `${error.message} Launch setting was not saved. Review the current choice and try again.${readError}`;
-        status.focus();
-      };
-      if (reason) { failed(Error(reason)); return; }
-      const saved = await action(() => store.assign(target, id, revision), { onError: failed });
-      if (saved) { status.textContent = 'Saved · applies to the next session.'; select.focus(); }
-    };
-  }
   element('recover-legacy').onclick = () => { void action(() => store.recoverLegacy(library.revision)); };
   element('check-cache').onclick = async () => {
     const entry = selected(); if (!entry) return;

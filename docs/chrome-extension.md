@@ -107,7 +107,8 @@ loading it again is unnecessary.
    containing the generated root `manifest.json`).
 3. Pin **Local current-tab transcription** in Chrome's Extensions menu.
 4. Open a normal meeting/video/audio tab and click **Transcribe this tab** in
-   the toolbar. Live opens and shows **Preparing models…** while it initializes
+   the toolbar. A new independent Live window opens for the persisted default
+   graph and shows **Preparing models…** while it initializes
    models on the saved graph's executable paths. Start stays disabled until
    **Ready**. Press **Start** to capture the selected tab with those warm models;
    audio played before the active indication is not transcribed.
@@ -121,10 +122,14 @@ loading it again is unnecessary.
 
 **Start** retries the selected tab and clears the previous transcript.
 Stop releases used Workers and restores readiness before the next Start; Start
-uses the already prepared Workers without reloading. To capture another tab, stop first, then
-invoke the toolbar action on the new tab; it reuses the transcript window.
-An invocation during a live session focuses its window and leaves the session
-on its originally selected tab.
+uses the already prepared Workers without reloading. Each toolbar invocation
+creates a separate window bound to its graph ID and invoking tab, including while
+other windows are running. Right-click the extension toolbar icon for Chrome's
+native **Live graphs** menu: **Open <graph>** opens that graph without changing the
+default; **Default for left-click** changes only the persisted default. Existing
+windows keep their identities and running snapshots. See the
+[launch and Library guide](extension-graph.md#graph-library-243) and
+[Issue #267 validation](evidence/toolbar-launch-267.md).
 
 Tab navigation, closing the captured tab, or Chrome ending its stream finalizes
 the session. Stop during model preparation cancels before capture; use Retry models
@@ -203,14 +208,13 @@ See [target policies, named ports and browser limitations](extension-graph.md).
 
 ## Opt-in Web voice typing (#247)
 
-In **Graph Library → Launch Settings**, explicitly turn **Web Page Microphone**
-**ON**. Graph selection lives on the existing field-attached microphone: left-click
-starts the default and right-click opens a small menu of compatible saved graphs.
-Focus the mic and press Shift+F10 (or the context-menu key/Alt+Down) for the same
-keyboard menu; arrows/Home/End navigate, Enter selects, Escape dismisses.
-Selection only saves the default: it never starts recording, loads models or
-requests microphone permission. The original editable target and caret survive
-menu use. There is no Web graph dropdown in Launch Settings.
+In **Graph Library**, explicitly turn the compact **Web microphone** switch **ON**.
+Right-click an in-page mic (or focus it and press **Shift+F10**) to select a
+compatible saved default for its next recording. The context-menu key or Alt+Down
+also opens the menu; arrows/Home/End navigate, Enter selects, and Escape dismisses.
+Selection preserves the field and caret without recording, loading models or
+requesting microphone permission. Launch Settings and the graph assignment
+dropdowns have been removed.
 The preference defaults OFF on installation/upgrade, even with an existing
 `assignments.webVoice`. It is a separately validated versioned boolean in
 `chrome.storage.local`; graph JSON remains version 15. Assignment never grants
@@ -398,7 +402,8 @@ or revoke permission and confirm a useful error and released microphone.
 | `activeTab` | Temporary access to the specific tab where the user invokes the action; needed for `getMediaStreamId({targetTabId})`. |
 | `scripting` | Inject toolbar-authorized focused output, or dynamically register the Web voice adapter only after explicit enablement and optional host grant. |
 | `storage` | Persist and synchronize the separate Web voice enablement preference. |
-| `offscreen` | Host independent Web dictation sessions in one nonvisible DOM document (`USER_MEDIA`, `WORKERS`, `LOCAL_STORAGE`). |
+| `offscreen` | Host independent Web dictation sessions and serialized library reads/default writes in one nonvisible DOM document (`USER_MEDIA`, `WORKERS`, `LOCAL_STORAGE`). |
+| `contextMenus` | Native extension-action graph launcher and explicit left-click default submenu. |
 | Optional `http://*/*`, `https://*/*` | Requested only on Web voice opt-in, for top-frame mic controls. No required/global content script. |
 | `tabCapture` | Obtain that tab's audio stream, without the Web sharing picker. |
 | `script-src 'self' 'wasm-unsafe-eval'` | Execute packaged scripts and the existing local WASM runtime. |
@@ -435,8 +440,8 @@ AudioWorklet/fallback processing, the production ASR core with deterministic
 recognition workers, the actual shared pipeline graph, lifecycle/error/resource
 checks, delayed transcript delivery and disposal, and real pinned
 ReazonSpeech/Silero initialization and pipeline silence finalization under MV3 CSP.
-The real-toolbar test uses `Extensions.triggerAction` on a generated audio tab
-with native tab capture; deterministic decoding isolates capture behavior from
+The real-toolbar test uses `Extensions.triggerAction` on three generated audio tabs
+with simultaneous native tab capture and independent window cleanup; deterministic decoding isolates capture behavior from
 speech accuracy. A native permission check verifies that opening the extension
 page without invoking its action cannot capture an arbitrary tab. Unit tests
 also verify normalized PCM at 16/44.1/48 kHz,

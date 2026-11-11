@@ -57,7 +57,7 @@ for(const text of ['uncertain-fixture','error-fixture','long-token-fixture'])tes
 
 test('missing cache never downloads at Start; Cancel during Stop/restart has no stale output',async({graphExtension:f})=>{
  await conditionAssets(f);const page=await openGraph(f);await trackPipeline(page);await seedConditionGraph(page.editor);
- const count=f.requests.length;await page.evaluate(()=>window.graphInvoke({type:'invoke',tabId:42},{id:chrome.runtime.id}));
+ const count=f.requests.length;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await expect(page.locator('#errors')).toContainText('missing');await expect(page.locator('#start')).toBeDisabled();expect(f.requests.length).toBe(count);
  await save(page.editor);await expect(card(page.editor)).toHaveAttribute('data-state','Ready');
  await startGraph(page);await emitFinal(page,'slow-fixture yes-fixture');await page.locator('#stop').click();await expect(page.locator('#status')).toContainText('Finalizing');

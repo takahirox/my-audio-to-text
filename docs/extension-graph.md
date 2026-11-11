@@ -8,40 +8,57 @@ The active graph is an immutable snapshot; edits take effect at the next Start.
 ## Graph Library (#243)
 
 Open **Library** from Live, Graph or Models. Search names, descriptions or model
-names, sort by name/recent update, and filter assigned graphs or entries needing
-recovery. On wide windows, select a row on the left to inspect the graph on the
-right. On narrow windows, selection opens the details; **Back to graphs** returns
-to the list. Rows present graphs without launch-specific tags. Create, rename,
-describe, duplicate, import or export entries without starting inference. New
-graphs use the current default transcription layout; imported JSON uses the
-existing version-15 graph format.
+names, sort by name/recent update, and filter entries needing recovery. The single
+responsive graph workspace contains the list; selecting a row opens a detail
+dialog with preview, metadata and editing actions. **Back to graphs** restores
+focus to the invoking row. Selection never launches a session or changes a default.
+Create, rename, describe, duplicate, import or export entries without starting
+inference. New graphs use the current transcription layout; portable JSON remains
+the existing version-15 graph format. Models remains accessible in the header.
 
-**Launch settings**, below the list/detail area, chooses a saved graph by stable
-ID for each entry point. **Live window** always has an assignment and requires
-an executable graph. **Web page microphone button** requires a microphone-only
-executable path to one focused-field output; **Not assigned** clears only that
-binding. Incompatible options are disabled with a repair reason. A bound graph
-that becomes incompatible stays selected and reports recovery, with no fallback.
-Library selection changes neither binding. Other tabs update the selectors
-without discarding unsaved name/description edits; stale or failed writes restore
-the saved choice and focus an actionable error so the user can review and retry.
+**Launch Settings and its Live/Web graph dropdowns have been removed (#267).**
+Choose graphs where they launch:
 
-The independent **ON/OFF switch** in the Web page microphone button row controls
-website mic UI and starts OFF without explicit opt-in. Choosing a graph never
-enables website controls or requests permission; turning OFF preserves the
-assignment. Turning ON first opens a short consent dialog, then **Continue to website permission** requests Chrome
-access to all HTTP/HTTPS websites. Cancel or denial leaves the feature OFF.
-**Website access & microphone help** discloses exact permission patterns,
-click-only microphone capture, local processing, unsupported fields/pages, OFF behavior and Chrome Site access
-revocation. Missing permissions and incompatible assignments show recovery only
-when relevant. Live shows the exact
-named graph it prepares and runs. Changing the Live assignment while idle cancels
-obsolete preparation, disposes its resources and prepares the newly assigned
-saved graph. During a session its graph, ID and name remain immutable. The new
-assignment applies after normal Stop/Cancel, before the next Start. Editing,
-renaming or deleting an unassigned library entry cannot change an active session.
-An unavailable/corrupt assignment blocks Start and stale preparation; it does not
-silently select another graph.
+- Left-click the extension toolbar icon to open a new Live window for the saved
+  default graph and the invoking tab. Opening prepares models, but never starts
+  capture or requests microphone permission. Press **Start** when ready.
+- Right-click the toolbar icon for Chrome's native **Live graphs** submenu.
+  **Open <graph>** creates a separate window without changing the default.
+  **Default for left-click → <graph>** explicitly changes the persisted default
+  without launching anything. The single action-level submenu accommodates large
+  libraries and preserves Chrome's extension-management commands. Chrome's native
+  keyboard context-menu access is unchanged.
+- Every Live window keeps its launch graph ID and tab. Graph edits and renames
+  apply at its next Start; changing the global default never changes an existing
+  window. Active runs keep immutable snapshots, including Graph Actions and outputs.
+  Stop, close and failures release only that window's resources. Multiple Live and
+  Web microphone sessions can prepare and run together, subject to actual Chrome,
+  device, permission and RAM/GPU limits.
+- Only validated graphs with executable paths appear in the toolbar menu. Missing,
+  invalid or deleted choices never substitute an unrelated graph. An invalid default
+  selects the sole runnable graph if exactly one exists; otherwise Live shows an
+  actionable error directing the user to the toolbar default submenu or Library.
+  An existing window whose graph is deleted may finish its snapshot, but cannot
+  Start again until that same ID is restored. Open another graph from the toolbar.
+
+The compact **Web microphone ON/OFF** control above the workspace starts OFF
+without explicit opt-in. Turning ON opens the consent dialog; **Continue to
+website permission** requests the same optional access to all HTTP/HTTPS websites.
+Cancel or denial leaves controls OFF. Choosing a default never enables them or
+requests microphone access. Turn OFF to remove controls and cancel Web sessions;
+the saved Web default remains. OFF remains available even if library storage needs
+recovery. **Website access & microphone help** discloses permission patterns,
+unsupported fields/pages, local processing, microphone consent and Chrome Site
+access revocation. No website permissions are broadened by graph selection.
+
+On an enabled page mic, right-click (or focus it and press **Shift+F10**) to choose
+a compatible microphone-only graph as the saved default for the next recording.
+Arrow keys/Home/End navigate the menu; Escape dismisses it and restores mic focus.
+This page-widget menu is separate from Chrome's native toolbar menu. It filters
+with the existing Web voice graph rules; Live is never substituted when the Web
+default is missing or incompatible. Selecting a default during recording preserves
+the active snapshot. Click the page mic to start/stop local dictation; any required
+native microphone consent uses the existing one-time setup tab.
 
 **Edit graph** opens `graph-editor.html?id=<stable-id>`. Save, Load saved, Reset,
 Import and Export all concern that entry's draft. Save prepares required cached
@@ -57,12 +74,11 @@ per-tab sessionStorage across refresh with their original entry revision. A
 stale restored draft still cannot overwrite a concurrent save. **More → Load
 saved details** explicitly discards the draft after confirmation.
 
-**More** also holds Export JSON and Delete. Delete requires confirmation, rejects
-assigned entries until explicit reassignment in Launch settings, and keeps at
-least one usable graph. A corrupt entry stays visible with an error and its original JSON available for export; import a repaired copy
+**More** also holds Export JSON and Delete. Delete requires confirmation, clears
+any defaults pointing to that entry, and keeps at least one usable graph. A corrupt entry stays visible with an error and its original JSON available for export; import a repaired copy
 as a new entry. Its original is never overwritten by an editor recovery draft.
 
-See [Launch settings screenshots and validation](evidence/graph-library-253.md).
+See [toolbar launch and Library validation](evidence/toolbar-launch-267.md).
 
 **Models & saved information** in the detail panel holds timestamps, required
 models and **File cache**, distinct from Live's runtime/GPU readiness:
@@ -77,10 +93,12 @@ asset-identity cache and are not duplicated per library graph.
 
 The version-1 library envelope is stored atomically in one localStorage value,
 `processing-graph-library-v1`: graph IDs, names, descriptions, timestamps,
-per-entry revisions, graphs and the Live assignment. The legacy `webVoice`
-assignment remains readable for migration; the field microphone now chooses its
-profile-wide default in a right-click/Shift+F10 menu, stored separately as
-`web-microphone-default-v1` in `chrome.storage.local`. Graph metadata
+per-entry revisions, graphs and `{ live, webVoice }` legacy assignments. The
+`assignments.live` ID is retained as the toolbar default without changing identity.
+The legacy `assignments.webVoice` migrates on first use to the independent page-mic
+default, `web-microphone-default-v1` in `chrome.storage.local`; subsequent page-mic
+choices use that preference. Assignments may be null or dangling so deleted/invalid
+choices can be repaired without corrupting the library. Graph metadata
 never enters the portable version-15 executable graph JSON. Mutations share the
 existing `processing-graph-save` Web Lock and compare revisions; unsupported
 hosts without Web Locks stay read-only.
@@ -92,17 +110,31 @@ transcription**, with no Web voice assignment. Concurrent opens/reloads reuse th
 committed envelope. Failed quota/write attempts return the same deterministic
 graph/ID as a read-only fallback; a later open can commit migration. Malformed
 legacy data becomes a recoverable invalid entry and blocks Live until a new valid
-entry is assigned. Unsupported/corrupt library envelopes expose original storage
+entry is chosen from the toolbar. Unsupported/corrupt library envelopes expose original storage
 for export and fail closed. If an older page changes the legacy key after
 migration, saving/Live selection stop until **Keep changed legacy graph as new
 entry** preserves the changed source separately. This never changes assignments.
 
 `readGraph`/`saveGraph` in `graph.js` are now **legacy-only** and reject stores
 containing a library, so an old caller cannot silently edit a different graph.
-Use `GraphLibrary.save(id, revision, graph)` for drafts, `readLiveGraph` for the
-Live target, or the explicitly named async `saveLiveGraphData` and
+Use `GraphLibrary.save(id, revision, graph)` for drafts, `readSelectedGraph(storage, id)`
+for a particular Live window, or the explicitly named async `saveLiveGraphData` and
 `readLiveGraphData` compatibility helpers for automation deliberately targeting
 the current saved Live default. They never refer to the Library/editor selection.
+These compatibility helpers allow incomplete saved drafts to be repaired; window
+launch validation separately requires an executable path.
+
+MV3 workers cannot access localStorage. Toolbar list/default requests use the
+existing offscreen DOM host and Web Locks, sharing its serialized lifecycle with
+Web dictation. A library-only request closes the inert host when finished; it
+never closes a host with pending reads or active Web owners. No parallel storage
+mirror can race with library saves. Commits notify the worker to refresh native
+menu definitions; install/update, startup and each worker generation also refresh.
+Window URLs carry an explicit graph ID, invocation tab and independent session ID.
+The launch handler retains the event's tab through asynchronous library reads;
+focused-field authorization is prepared before the popup takes focus. Editors
+aggregate activity by session ID, so one window's idle/close notification cannot
+clear another window's activity.
 
 ## Live model lifecycle (#239)
 
@@ -284,8 +316,8 @@ including self or indirect cycles, fail explicitly before saving/importing.
 
 Every next execution resolves current saved definitions and expands instances
 into separate ordinary runtime nodes. Parent entries/revisions are not rewritten
-and need no re-save. Live reloads this snapshot at Start; Web dictation resolves
-its own assigned graph at Start. Each already-started session retains its own
+and need no re-save. Each Live window resolves its chosen graph at Start; Web
+dictation resolves its own selected graph at Start. Each already-started session retains its own
 settings, worker ownership and queues. Direct expanded connections preserve
 atomic output families and Hold sampling; ordinary typed and cycle validation
 runs again on the expansion. Shared models, including parked nodes, participate

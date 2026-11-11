@@ -139,10 +139,8 @@ export const test = base.extend({
     } finally { await context?.close(); for (const response of connections) response.destroy(); await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); }
   },
 });
-export async function openGraph(f, { live = true } = {}) {
+export async function openGraph(f, { live = true, tabId = 42 } = {}) {
   await f.context.addInitScript(() => {
-    const add = chrome.runtime.onMessage.addListener.bind(chrome.runtime.onMessage);
-    chrome.runtime.onMessage.addListener = listener => { window.graphInvoke = listener; add(listener); };
     const NativeWorker = window.Worker; window.graphWorkers = [];
     document.addEventListener('click', event => {
       if (event.target.closest('#start')) window.lastSessionWorkers = window.graphWorkers.filter(worker => !worker.released);
@@ -159,7 +157,7 @@ export async function openGraph(f, { live = true } = {}) {
   });
   // Direct runtime tests use an inert extension host, so they own only the
   // graph they construct rather than a second, independently prepared Live.
-  const page = await f.context.newPage(); await page.goto(live ? f.url : f.url.replace('recorder.html', 'model-cache.html'));
+  const page = await f.context.newPage(); await page.goto(live ? `${f.url}${tabId === null ? '' : `?tab=${tabId}`}` : f.url.replace('recorder.html', 'model-cache.html'));
   await page.evaluate(async () => {
     // Retain internal cancellation/replacement coverage after removing the UI control.
     const { TabSession } = await import('./session.js'), sessionStart = TabSession.prototype.start;
@@ -176,8 +174,8 @@ export async function openGraph(f, { live = true } = {}) {
   return page;
 }
 export async function startGraph(page, timeout = 30000) {
-  // Send through the recorder's registered production invocation listener.
-  await page.evaluate(async () => { window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }); });
+  // The window keeps its launch tab; focus rechecks its own saved graph.
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await startReadyLive(page, { timeout });
   await expect(page.locator('#status')).toHaveText('Transcription active', { timeout });
 }

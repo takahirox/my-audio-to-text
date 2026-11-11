@@ -116,9 +116,9 @@ test('revisions reject stale edits to the same graph; independent concurrent gra
   assert.equal(s.getItem(LIBRARY_KEY), before); assert.equal(ga.nodes[0].position.x, 31);
 });
 
-test('Live assignment blocks deletion; deleting a legacy Web default clears its assignment', async () => {
+test('deleting a default clears it explicitly; last usable graph and invalid choices remain protected', async () => {
   const { store, s, library } = await fixture(), a = entry(library);
-  await assert.rejects(store.delete(a.id), /Reassign/);
+  await assert.rejects(store.delete(a.id), /Keep at least one usable/);
   await store.create({ graph: { version: 15, nodes: [graphNode('Text', 'parked')], edges: [] } });
   let current = readLibrary(s), b = current.graphs.at(-1);
   await assert.rejects(store.assign('live', b.id), /executable path/);
@@ -141,9 +141,9 @@ test('a corrupt graph cannot break browsing, replace a valid entry, or overwrite
   await assert.rejects(store.duplicate(bad.id)); assert.equal(s.getItem(LIBRARY_KEY), before);
 });
 
-test('duplicate graph IDs, malformed metadata and dangling assignments fail closed without overwrites', async () => {
+test('duplicate graph IDs, malformed metadata and unsupported versions fail closed without overwrites', async () => {
   const { s, lock, library } = await fixture();
-  for (const corrupt of [ { ...library, graphs: [...library.graphs, library.graphs[0]] }, { ...library, assignments: { live: 'missing', webVoice: null } }, { ...library, version: 99 } ]) {
+  for (const corrupt of [ { ...library, graphs: [...library.graphs, library.graphs[0]] }, { ...library, assignments: { live: 42, webVoice: null } }, { ...library, version: 99 } ]) {
     const raw = JSON.stringify(corrupt); s.setItem(LIBRARY_KEY, raw);
     assert.throws(() => validateLibrary(corrupt)); await assert.rejects(openLibrary(s, lock)); assert.equal(s.getItem(LIBRARY_KEY), raw);
   }
@@ -205,14 +205,15 @@ test('explicit Live compatibility saves can initialize an unopened library witho
   assert.equal(readLibrary(s).graphs.length, 1);
 });
 
-test('a disconnected coordinator cannot make a committed library change report failure', async () => {
-  const { store, s } = await fixture(), previous = globalThis.chrome;
+test('an invalidated extension messaging context cannot report a committed graph save as failed', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'chrome');
+  Object.defineProperty(globalThis, 'chrome', { configurable: true, value: { runtime: { sendMessage() { throw Error('Extension context invalidated'); } } } });
   try {
-    globalThis.chrome = { runtime: { sendMessage() { throw Error('Extension context invalidated'); } } };
-    const saved = await store.create({ name: 'Saved while coordinator restarted' });
-    assert.equal(readLibrary(s).revision, saved.revision);
-    assert.equal(saved.graphs.at(-1).name, 'Saved while coordinator restarted');
+    const { s, store } = await fixture();
+    const next = await store.create({ name: 'Committed graph' });
+    assert.equal(next.graphs.at(-1).name, 'Committed graph');
+    assert.equal(readLibrary(s).revision, next.revision);
   } finally {
-    if (previous === undefined) delete globalThis.chrome; else globalThis.chrome = previous;
+    if (previous) Object.defineProperty(globalThis, 'chrome', previous); else delete globalThis.chrome;
   }
 });

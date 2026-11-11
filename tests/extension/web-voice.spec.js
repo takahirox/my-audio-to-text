@@ -920,3 +920,16 @@ test('zero compatible graphs can stay explicitly enabled; adding a saved path re
   expect((await graphMenu(t)).map(({ name, selected }) => ({ name, selected }))).toEqual([{ name: 'New dictation', selected: true }]);
   await t.website.keyboard.press('Escape'); await idle(t);
 });
+
+test('Web microphone remains revocable while the graph library needs storage recovery', async ({ voice: t }) => {
+  test.skip(real, 'Storage recovery does not require real inference.');
+  await enable(t); await start(t); await recording(t);
+  await t.library.evaluate(() => localStorage.setItem('processing-graph-library-v1', '{broken library'));
+  await t.library.reload();
+  await expect(t.library.locator('#errors')).not.toBeEmpty();
+  await expect(t.library.locator('#web-voice-enabled')).toBeEnabled();
+  await expect(t.library.locator('#web-voice-enabled')).toBeChecked();
+  await t.library.locator('#web-voice-enabled').uncheck(); await idle(t);
+  await expect(widget(t.website)).toHaveCount(0);
+  expect(await t.library.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe('{broken library');
+});

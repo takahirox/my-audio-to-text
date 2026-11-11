@@ -37,7 +37,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     const page = await openGraph(f), requests = [];
     page.on('request', request => requests.push({ url: request.url(), method: request.method(), body: request.postData() }));
     f.mode('error'); await addAudioPath(page, type); await expect(page.editor.locator('#graph-models .model-status')).toHaveText('Error');
-    await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(page.locator('#tts-status')).toContainText('assets missing');
     await expect(page.locator('#errors')).toContainText('assets missing');
     await expect(page.locator('#model-recovery')).toBeVisible();
@@ -103,9 +103,13 @@ test('saved cycles, type mismatches, unknown ports/types refuse invocation befor
     const graph = structuredClone(valid); edit(graph);
     await corruptSavedGraph(page, JSON.stringify(graph)); await page.reload(); await page.editor.reload();
     await expect(page.locator('#errors')).toContainText(label);
-    await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     expect(await page.evaluate(() => window.graphWorkers.length)).toBe(0);
-    await recoverAsNew(page.editor, valid); await expect(page.locator('#errors')).toBeEmpty();
+    await recoverAsNew(page.editor, valid);
+    await expect(page.locator('#errors')).toContainText(label); // This window keeps the invalid ID.
+    const recovered = new URL(page.editor.url()).searchParams.get('id');
+    await page.goto(`${f.url}?graph=${recovered}&tab=42`);
+    await expect(page.locator('#errors')).toBeEmpty();
   }
   expect(f.requests).toEqual([]);
 });

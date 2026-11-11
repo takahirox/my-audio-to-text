@@ -121,13 +121,15 @@ async function openEditor() {
     } catch (error) { conflict = true; preparation.clear(); element('errors').textContent = `Saved graph changed but is unavailable: ${error.message} Your draft has been kept; export it from Graph actions.`; }
   });
   const stateChannel = new BroadcastChannel('live-graph-state');
-  stateChannel.onmessage = ({ data }) => editor.setActive(data.graphId === id ? data.graph : null, data.graphId === id ? data.state : 'idle', data.tabId);
-  async function refreshActive() {
-    try {
-      const live = await chrome.runtime.sendMessage({ type: 'get-live-graph-state' });
-      editor.setActive(live?.graphId === id ? live.graph : null, live?.graphId === id ? live.state : 'idle', live?.tabId);
-    } catch { editor.setActive(null, 'idle'); }
-  }
+  const liveWindows = new Map();
+  stateChannel.onmessage = ({ data }) => {
+    if (!data.sessionId) return;
+    if (data.state === 'idle') liveWindows.delete(data.sessionId);
+    else liveWindows.set(data.sessionId, data);
+    const live = [...liveWindows.values()].find(live => live.graphId === id);
+    editor.setActive(live?.graph || null, live?.state || 'idle', live?.tabId);
+  };
+  function refreshActive() { stateChannel.postMessage({ type: 'get-live-graph-state' }); }
   window.addEventListener('focus', () => { void refreshActive(); });
   window.addEventListener('pagehide', () => stateChannel.close());
   void refreshActive();

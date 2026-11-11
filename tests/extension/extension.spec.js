@@ -9,7 +9,9 @@ const test = base.extend({
   extension: async ({}, use) => {
     const temporary = await mkdtemp(path.join(tmpdir(), 'local-asr-extension-'));
     const root = path.join(temporary, 'extension');
-    await cp(bundle, root, { recursive: true, filter: source => !source.includes(`${path.sep}vendor`) });
+    await cp('extension', path.join(root, 'extension'), { recursive: true });
+    await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(vendor|tts-assets|correction-assets)(\/|$)/.test(source) });
+    await cp('extension/manifest.json', path.join(root, 'manifest.json'));
     for (const role of ['sherpa', 'silero']) {
       await writeFile(path.join(root, 'web', `${role}-worker.js`), `
         self.onmessage = ({data}) => {
@@ -102,7 +104,7 @@ async function setup(extension, { mode = 'audio', fallback = false } = {}) {
     }
   }, { mode, fallback });
   const page = await context.newPage();
-  await page.goto(url);
+  await page.goto(`${url}?tab=42`);
   await observePipeline(page, new URL('../web/', url).href);
   await page.evaluate(async () => {
     // Delay the current graph's committed TEXT path, not the retired accumulator.
@@ -116,7 +118,6 @@ async function setup(extension, { mode = 'audio', fallback = false } = {}) {
       if (!context.signal.aborted) return receiveInputs.call(this, values, context);
     };
   });
-  await page.evaluate(() => window.invoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
   if (mode !== 'loading') {
     await expect(page.locator('#model-status')).toHaveText('Ready');
     expect(await page.evaluate(() => window.requests)).toEqual([]);
@@ -367,100 +368,52 @@ test('native tab capture requires the user-invoked tab grant', async ({ extensio
   expect(await recorder.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).length)).toBe(0);
 });
 
-test('real toolbar invocation captures the current tab without a picker, repeats, retargets and releases on navigation/close', async ({ extension }) => {
+test('real toolbar actions open independent windows with simultaneous native tab captures and scoped cleanup', async ({ extension }) => {
   const { context, cdp, id } = extension;
   await context.route('https://meeting.test/**', route => route.fulfill({ contentType: 'text/html', body: `
     <button id="play">Play controlled tab audio</button>
-    <script>
-      document.querySelector('#play').onclick = () => {
-        const context = new AudioContext();
-        const oscillator = context.createOscillator(); oscillator.frequency.value = 440;
-        const gain = context.createGain(); gain.gain.value = 0.05;
-        oscillator.connect(gain); gain.connect(context.destination); oscillator.start();
-        context.resume();
-      };
-    </script>` }));
-  const meeting = await context.newPage(); await meeting.goto('https://meeting.test/');
-  await meeting.locator('#play').click();
-  const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
-  const target = targetInfos.find(target => target.url === meeting.url());
-  expect(target).toBeDefined();
-  const [recorder] = await Promise.all([
-    context.waitForEvent('page'),
-    cdp.send('Extensions.triggerAction', { id, targetId: target.targetId }),
-  ]);
-  await expect(recorder.locator('#status')).not.toBeEmpty();
-  await expect(recorder.locator('#errors')).toHaveText('');
-  await expect(recorder.locator('#model-status')).toHaveText('Ready');
-  expect(await recorder.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);
-  await recorder.locator('#start').click();
-  await expect(recorder.locator('#status')).toHaveText('Transcription active');
-  await expect(recorder.locator('#signal')).toHaveText('audio: Audio signal detected.');
-  await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-  await expect(recorder.locator('#errors')).toBeEmpty();
-  // Another toolbar invocation during capture focuses the existing window and
-  // retains the original native tab grant and stream.
+    <script>document.querySelector('#play').onclick = () => {
+      const audio = new AudioContext(), oscillator = audio.createOscillator(), gain = audio.createGain();
+      oscillator.frequency.value = 440; gain.gain.value = 0.05;
+      oscillator.connect(gain); gain.connect(audio.destination); oscillator.start(); audio.resume();
+    };</script>` }));
   const worker = context.serviceWorkers().find(worker => worker.url().includes(id));
-  const captured = () => worker.evaluate(async () =>
-    (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').map(tab => tab.tabId));
-  const originalTabs = await captured(); expect(originalTabs).toHaveLength(1);
-  await recorder.evaluate(() => {
-    window.invocations = [];
-    chrome.runtime.onMessage.addListener(message => {
-      if (message.type === 'invoke') window.invocations.push(message.tabId);
-    });
-  });
-  const second = await context.newPage(); await second.goto('https://meeting.test/second');
-  const invocationTargets = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
-  await cdp.send('Extensions.triggerAction', { id,
-    targetId: invocationTargets.targetInfos.find(target => target.url === second.url()).targetId });
-  await expect.poll(() => recorder.evaluate(() => window.invocations.length)).toBe(1);
-  await expect(recorder.locator('#status')).toHaveText('Transcription active');
-  expect(await captured()).toEqual(originalTabs);
-  expect(context.pages().filter(page => page.url().includes('/extension/recorder.html'))).toHaveLength(1);
-  await recorder.locator('#stop').click();
-  await expect(recorder.locator('#status')).toContainText('Stopped');
-  await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-  await recorder.locator('#start').click();
-  await expect(recorder.locator('#status')).toHaveText('Transcription active');
-  await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-  // Returning focus to the meeting must leave the capture/window alive.
-  await meeting.bringToFront();
-  await expect(recorder.locator('#status')).toHaveText('Transcription active');
-  await meeting.goto('https://meeting.test/next');
-  await expect(recorder.locator('#status')).toContainText('Stopped');
-  await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-  await expect(recorder.locator('#errors')).toBeEmpty();
-  // Toolbar invocation on a new tab reuses the same window after Stop.
-  await second.bringToFront();
-  await second.locator('#play').click();
-  const targets = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
-  const next = targets.targetInfos.find(target => target.url === second.url());
-  await cdp.send('Extensions.triggerAction', { id, targetId: next.targetId });
-  await expect.poll(() => recorder.evaluate(() => window.invocations.at(-1))).not.toBe(originalTabs[0]);
-  await recorder.locator('#start').click();
-  await expect(recorder.locator('#status')).toHaveText('Transcription active');
-  await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-  const retargetedTabs = await captured();
-  expect(retargetedTabs).toEqual([await recorder.evaluate(() => window.invocations.at(-1))]);
-  expect(retargetedTabs).not.toEqual(originalTabs);
-  expect(context.pages().filter(page => page.url().includes('/extension/recorder.html'))).toHaveLength(1);
-  await second.close();
-  await expect(recorder.locator('#status')).toContainText('Stopped');
-  await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-  await expect(recorder.locator('#errors')).toBeEmpty();
-  // Closing the transcript window releases an active native capture too.
-  await meeting.bringToFront();
-  await meeting.locator('#play').click();
-  const finalTargets = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
-  await cdp.send('Extensions.triggerAction', { id,
-    targetId: finalTargets.targetInfos.find(target => target.url === meeting.url()).targetId });
-  await expect.poll(() => recorder.evaluate(() => window.invocations.at(-1))).toBe(originalTabs[0]);
-  await recorder.locator('#start').click();
-  await expect(recorder.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-  await recorder.close();
-  await expect.poll(async () => worker.evaluate(async () =>
-    (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').length)).toBe(0);
+  const captured = () => worker.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).filter(tab => tab.status === 'active').map(tab => tab.tabId));
+  const launch = async tab => {
+    await tab.bringToFront();
+    const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{ type: 'tab', exclude: false }] });
+    const opened = context.waitForEvent('page', { predicate: page => page.url().includes('recorder.html') });
+    await cdp.send('Extensions.triggerAction', { id, targetId: targetInfos.find(info => info.url === tab.url()).targetId });
+    const live = await opened;
+    await expect(live.locator('#start')).toBeEnabled();
+    await expect(live.locator('#session-state')).toHaveText('Idle');
+    return live;
+  };
+  const tabs = [], windows = [];
+  for (let index = 0; index < 3; index++) {
+    const tab = await context.newPage(); await tab.goto(`https://meeting.test/${index}`); await tab.locator('#play').click(); tabs.push(tab);
+    const live = await launch(tab); windows.push(live);
+    expect(await captured()).toHaveLength(index);
+    await live.locator('#start').click();
+    await expect(live.locator('#status')).toHaveText('Transcription active');
+    await expect(live.locator('#signal')).toHaveText('audio: Audio signal detected.');
+  }
+  expect(await captured()).toHaveLength(3);
+  const windowIds = await Promise.all(windows.map(page => page.evaluate(async () => (await chrome.windows.getCurrent()).id)));
+  expect(new Set(windowIds).size).toBe(3);
+  await windows[1].locator('#stop').click(); await expect.poll(async () => (await captured()).length).toBe(2);
+  await expect(windows[0].locator('#status')).toHaveText('Transcription active');
+  await expect(windows[2].locator('#status')).toHaveText('Transcription active');
+  await windows[0].close(); await expect.poll(async () => (await captured()).length).toBe(1);
+  await expect(windows[2].locator('#status')).toHaveText('Transcription active');
+  await tabs[2].goto('https://meeting.test/navigated');
+  await expect(windows[2].locator('#status')).toContainText('Stopped');
+  await expect.poll(async () => (await captured()).length).toBe(0);
+  const repeated = await launch(tabs[1]);
+  expect(context.pages().filter(page => page.url().includes('recorder.html'))).toHaveLength(3);
+  await repeated.locator('#start').click(); await expect(repeated.locator('#status')).toHaveText('Transcription active');
+  await tabs[1].close(); await expect(repeated.locator('#status')).toContainText('Stopped');
+  await expect.poll(async () => (await captured()).length).toBe(0);
 });
 
 base('packaged extension initializes the real pinned ReazonSpeech/Silero workers under MV3 CSP', async () => {
@@ -509,8 +462,11 @@ test('Live navigation opens separate extension pages without stopping or retarge
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   for (const [name, file] of [['Graph', 'graph-editor.html'], ['Models', 'model-cache.html']]) {
     const [opened] = await Promise.all([extension.context.waitForEvent('page'), page.getByRole('link', { name, exact: true }).click()]);
-    await opened.waitForURL(`**/extension/${file}`);
-    await expect(opened.getByRole('heading', { name: name === 'Graph' ? 'Graph Editor' : name, exact: true })).toBeVisible();
+    await opened.waitForURL(url => url.pathname === `/extension/${file}`);
+    if (name === 'Graph') {
+      expect(new URL(opened.url()).searchParams.get('id')).toBe('default-live');
+      await expect(opened.getByRole('heading', { name: 'Graph Editor Live transcription', exact: true })).toBeVisible();
+    } else await expect(opened.getByRole('heading', { name, exact: true })).toBeVisible();
     await opened.getByRole('button', { name: 'Live' }).click();
     await expect(page.locator('#status')).toHaveText('Transcription active');
     expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);

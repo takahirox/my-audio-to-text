@@ -29,7 +29,7 @@ test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauth
     chrome.tabs.connect = () => { window.pageAllocations.push('connection'); throw Error('Inactive output opened a connection'); };
     return graph;
   });
-  await page.evaluate(() => window.graphInvoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await startReadyLive(page);
   await expect(page.locator('#status')).toHaveText('Transcription active');
   expect(await page.evaluate(() => window.pageAllocations)).toEqual([]);
@@ -78,7 +78,7 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
   });
   await expect(page.editor.locator('#graph-errors')).toBeEmpty();
   for (const mode of ['branch-end', 'stop', 'cancel']) {
-    await page.evaluate(() => window.graphInvoke({type:'invoke',tabId:42},{id:chrome.runtime.id}));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(page.locator('#model-status')).toHaveText('Ready');
     // No auto-permission request and no active resources from the toolbar invocation.
     const before = await page.evaluate(() => window.mediaRequests.length);
@@ -130,7 +130,7 @@ test('MV3 drafts save/reload, optional warnings default off and persist, empty e
   await clickGraphAction(editor,'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Warning:');
   await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  await page.evaluate(() => window.graphInvoke({type:'invoke',tabId:42},{id:chrome.runtime.id}));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('#errors')).toContainText('No executable path');
   expect(await page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(0);
 });

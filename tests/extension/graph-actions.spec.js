@@ -50,8 +50,6 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     const page = await context.newPage(), errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.addInitScript(() => {
-      const add = chrome.runtime.onMessage.addListener.bind(chrome.runtime.onMessage);
-      chrome.runtime.onMessage.addListener = listener => { window.invoke = listener; add(listener); };
       window.summaryWorkers = []; window.requests = []; window.violations = [];
       addEventListener('securitypolicyviolation', e => violations.push(e.violatedDirective));
       const NativeWorker = window.Worker;
@@ -65,7 +63,7 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
         terminate() { this.released = true; super.terminate(); }
       };
     });
-    await page.goto(base + 'recorder.html');
+    await page.goto(base + 'recorder.html?tab=42');
     await page.evaluate(async () => {
       const { TabSession } = await import('./session.js');
       const start = TabSession.prototype.start;
@@ -83,8 +81,6 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     const action = page.locator('#graph-action-buttons button[data-node-id=generate]');
     await expect(action).toHaveText('Generate summary'); await expect(action).toBeDisabled();
     await expect(page.locator('#graph-action-status')).toContainText('Start a session');
-    // Enter through the recorder's registered production toolbar listener.
-    await page.evaluate(() => invoke({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }, () => {}));
     await expect(page.locator('#model-status')).toHaveText('Ready');
     expect(await page.evaluate(() => summaryWorkers.length)).toBe(1);
     await page.locator('#start').click();

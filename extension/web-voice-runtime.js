@@ -1,6 +1,7 @@
 import { TabSession } from './session.js';
 import { PageConnection } from './page-target.js';
 import { readLibrary, LIBRARY_KEY } from './graph-library.js';
+import { launchLibrary } from './launch-library.js';
 import { webVoiceGraph } from './web-voice-graph.js';
 
 // Chrome permits one offscreen document per profile. Only this inert host is
@@ -84,6 +85,12 @@ async function start(owner, target, entry) {
 }
 port.onMessage.addListener(message => {
   if (message.type === 'heartbeat') { lastHeartbeat = Date.now(); return; }
+  if (message.type === 'launch-library') {
+    void launchLibrary(localStorage, message.operation, message.id).then(
+      result => port.postMessage({ type: 'launch-library-result', request: message.request, result }),
+      error => port.postMessage({ type: 'launch-library-result', request: message.request, error: error.message }));
+    return;
+  }
   if (message.type === 'library-read') {
     try { port.postMessage({ type: 'library', request: message.request, library: readLibrary(localStorage) }); }
     catch (error) { port.postMessage({ type: 'library', request: message.request, error: error.message }); }

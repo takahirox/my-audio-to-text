@@ -2,6 +2,7 @@ import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_KEY, WEB_VOICE_ORIGINS, vo
 import { webVoiceChoices, webVoiceDefault } from './web-voice-graph.js';
 
 const defaultKey = 'web-microphone-default-v1';
+const launchRequests = new Map();
 const libraryRequests = new Map(), hostWaiters = new Set();
 let choices = [], defaultId = null, selectionWork = Promise.resolve();
 const scriptId = 'web-voice-typing';
@@ -22,7 +23,7 @@ async function closeDocument() {
   if (contexts.some(context => context.documentUrl?.split(/[?#]/)[0] === chrome.runtime.getURL('extension/web-voice-runtime.html'))) await chrome.offscreen.closeDocument();
 }
 function idleCleanup() {
-  void serialize(async () => { if (!sessions.size && !libraryRequests.size && !hostWaiters.size) await closeDocument(); }).catch(() => {});
+  void serialize(async () => { if (!sessions.size && !libraryRequests.size && !hostWaiters.size && !launchRequests.size) await closeDocument(); }).catch(() => {});
 }
 function end(owner, reason = '') {
   if (!owner || !current(owner)) return;
@@ -57,6 +58,23 @@ async function ensureRuntime(owner) {
       } catch (error) { hostURL = null; throw error; }
     }
     if (owner) initialize(owner);
+  });
+}
+// Share the offscreen lifecycle; a toolbar read must never close a Web session.
+export function requestLaunchLibrary(operation, id) {
+  const request = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    const finish = (error, result) => {
+      const pending = launchRequests.get(request);
+      if (!pending) return;
+      clearTimeout(pending.timer); launchRequests.delete(request);
+      if (error) reject(Error(error)); else resolve(result);
+      idleCleanup();
+    };
+    const pending = { dispatch() { if (host && !this.sent) { this.sent = true; post(host, this.message); } }, message: { type: 'launch-library', request, operation, id }, finish,
+      timer: setTimeout(() => finish('Graph Library did not respond. Reopen the toolbar to retry.'), 15000) };
+    launchRequests.set(request, pending);
+    void ensureRuntime().then(() => { if (launchRequests.has(request)) pending.dispatch(); }, error => finish(error.message));
   });
 }
 // Read canonical localStorage in the offscreen DOM. This never queries mic
@@ -188,9 +206,11 @@ chrome.runtime.onConnect.addListener(port => {
     host = port;
     for (const waiter of hostWaiters) waiter.resolve();
     hostWaiters.clear();
+    for (const pending of launchRequests.values()) pending.dispatch();
     for (const owner of sessions.values()) initialize(owner);
     port.onMessage.addListener(message => {
       if (host !== port) return;
+      if (message.type === 'launch-library-result') { launchRequests.get(message.request)?.finish(message.error, message.result); return; }
       if (message.type === 'library') {
         const pending = libraryRequests.get(message.request);
         if (pending) {
@@ -211,7 +231,9 @@ chrome.runtime.onConnect.addListener(port => {
       if (host !== port) return;
       for (const pending of libraryRequests.values()) { clearTimeout(pending.timer); pending.reject(Error('Graph library disconnected. Click the mic to retry.')); }
       libraryRequests.clear();
-      host = null; endAll('Voice runtime disconnected. Click the mic to retry.');
+      host = null;
+      for (const pending of launchRequests.values()) pending.finish('Graph Library disconnected. Reopen the toolbar to retry.');
+      endAll('Voice runtime disconnected. Click the mic to retry.');
       // Invalidate this generation even if a retry reserves a new session before
       // idle cleanup runs. A disconnected host must never be reused.
       void serialize(closeDocument).catch(() => {});

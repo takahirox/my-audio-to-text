@@ -40,7 +40,7 @@ test('save conflicts and an earlier active graph stay visible with compact state
     await second.evaluate(async () => {
       const { defaultGraph } = await import('/extension/graph.js');
       const channel = new BroadcastChannel('live-graph-state');
-      channel.postMessage({ graphId: new URLSearchParams(location.search).get('id'), graph: defaultGraph(), state: 'recording', tabId: 42 }); channel.close();
+      channel.postMessage({ sessionId: 'conflict-live-window', graphId: new URLSearchParams(location.search).get('id'), graph: defaultGraph(), state: 'recording', tabId: 42 }); channel.close();
     });
     await expect(page.locator('.graph-toolbar .graph-activity')).toBeVisible();
     await expect(page.locator('.graph-state-notice')).toContainText('earlier graph; saved edits apply next session');
@@ -60,7 +60,7 @@ test('save conflicts and an earlier active graph stay visible with compact state
     await expect(page.locator('#graph-errors')).toBeEmpty();
     await second.evaluate(() => {
       const channel = new BroadcastChannel('live-graph-state');
-      channel.postMessage({ graphId: new URLSearchParams(location.search).get('id'), graph: null, state: 'idle' }); channel.close();
+      channel.postMessage({ sessionId: 'conflict-live-window', state: 'idle' }); channel.close();
     });
     await expect(page.locator('.graph-state-notice')).toBeHidden();
     await expect(page.locator('.graph-activity')).toBeHidden();

@@ -81,7 +81,7 @@ const test = base.extend({
   },
 });
 async function openRecorder(f) {
-  const page = await f.context.newPage(); await page.goto(f.url);
+  const page = await f.context.newPage(); await page.goto(`${f.url}?tab=42`);
   await page.evaluate(async () => {
     const { SpeechToTextNode } = await import('../web/transcription-nodes.js');
     const start = SpeechToTextNode.prototype.start;
@@ -96,7 +96,7 @@ async function openRecorder(f) {
   return page;
 }
 async function start(page) {
-  await page.evaluate(() => window.invokeListener({ type: 'invoke', tabId: 42 }, { id: chrome.runtime.id }));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await startReadyLive(page, { workers: 'ownedWorkers' });
   await expect(page.locator('#status')).toHaveText('Transcription active');
 }
