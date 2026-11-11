@@ -264,44 +264,56 @@ controls or layout.
 [Icon source, pinned revision and license](../extension/icons/material-symbols/README.md)
 and [Chrome UI validation](evidence/web-voice-249.md).
 
-A single **nonvisible extension-owned offscreen document** hosts Web dictation.
-Each page document gets an independent existing `TabSession`, graph snapshot,
-Workers, Web Audio and microphone stream. There is no visible recording window,
-tab or popup in the already-authorized path, and no inference in the Content
-Script or service worker. The same page mic shows Preparing, Recording,
-Stopping/Idle or an actionable Error; its fixed target and caret remain bound
-when focus moves or the field scrolls away.
+The original page’s mic click calls native `getUserMedia` synchronously in Chrome’s
+**ISOLATED content-script world**, so the current website owns microphone consent.
+First use can show Chrome’s site-scoped permission prompt. There is no extension
+permission tab, popup, side panel or fallback recording window. HTTPS (or localhost)
+is required; denied site permission, Permissions Policy restrictions, unavailable
+APIs and hardware failures produce recovery instructions beside the original field.
+The website can block capture; the extension never works around that policy.
 
-Chrome's offscreen `USER_MEDIA` reason does **not** provide a first-use permission
-UI. Our Chromium probe returned `NotAllowedError: Permission dismissed` for
-`prompt`, succeeded for an existing grant without user activation, and rejected
-a denied grant. When permission is `prompt`, the explicit field click opens a
-clearly labeled **one-time microphone permission setup tab**. Its Allow microphone
-button invokes native `getUserMedia`, immediately stops the test stream and
-returns to the original page; the setup page never loads models or transcribes.
-Dictation then proceeds offscreen. Later clicks skip setup while permission
-remains granted. Denial shows Chrome/OS/device recovery instructions beside the
-original field. Closing setup, canceling from the page or navigating aborts only
-that request. A revoked grant can require setup again; a blocked grant needs
-Chrome microphone settings changed before retry. The old recording window is
-never a fallback.
+Page-side Web Audio uses a mono 16 kHz AudioContext (native device resampling) and
+an AudioWorklet with 80 ms / 1280-sample chunks. Contexts that cannot load a worklet
+use a native ScriptProcessor fallback with the same output chunks. No worklet URL
+or audio is placed in the DOM or a page-world message channel. Models, Workers,
+VAD/ASR and output remain in the **nonvisible extension-owned offscreen document**,
+with one independent existing `TabSession` and graph snapshot per page document.
+The PCM source adapter feeds the ordinary `MicrophoneAudio.audio` port. Live keeps
+its existing microphone acquisition and visible UI. Model preparation and the
+site permission request run concurrently; PCM begins once both are ready. The mic
+shows Preparing until capture can feed the graph, with Cancel available throughout.
+
+Chrome runtime Ports use JSON serialization, so audio travels as base64 Float32
+bytes, not transferable ArrayBuffers. Worklet-to-content messages do transfer their
+buffers. The coordinator checks the exact control Port, top frame/document and
+per-session field capability, sequence and size, then routes only to the current
+authenticated offscreen generation. Each runtime receipt acknowledges one chunk.
+At most eight chunks (640 ms / 40 KiB raw PCM, about 54 KiB base64 per hop) can be in
+flight; worklet and main-thread queues are bounded separately. An overloaded or
+unresponsive relay fails visibly, releases capture, and rejects late audio instead
+of silently dropping words or growing memory. The existing ASR backlog limit still
+applies downstream. See [#275 measurements and test limits](evidence/web-voice-275.md).
+
+Stop closes the physical microphone immediately, flushes the last short audio block,
+waits for runtime acknowledgments, then drains the existing graph’s finalized output.
+Cancel during preparation or drain discards pending audio. Cancellation, target
+invalidation, permission revocation, navigation/pagehide, Web OFF and lost connections
+close tracks and AudioContext, disconnect audio nodes, remove listeners and release
+that owner’s Workers. A late permission resolution stops its stream immediately.
+The fixed target/caret and exactly-once insertion rules remain in force when focus
+moves. Native page capture can make a document ineligible for Chrome’s back-forward
+cache; back navigation still reinstalls idle controls after checking consent.
 
 Chrome permits one offscreen document per profile and exposes only `runtime`
 extension APIs there ([Chrome offscreen API](https://developer.chrome.com/docs/extensions/reference/api/offscreen)).
-The service worker serializes document creation/closing, multiplexes independently
-owned sessions, checks current Web opt-in and website permissions, and relays each
-output connection to its authenticated original tab/document. The offscreen host
-uses native localStorage for the existing Library, with no graph schema changes.
-A generation nonce, session tokens, exact extension sender URLs, field capability
-and edit sequences reject stale or forged messages. Last-session cleanup closes
-the offscreen document; peer sessions keep their own tracks/Workers. A disconnected
-coordinator cancels capture, with heartbeat acknowledgments as a backup. A restarted
-worker closes any previous offscreen owner before accepting a new generation;
-sessions never silently resume. Live retains its existing visible UI and lifetime.
-
-See [Chrome feasibility, implementation and validation evidence for #263](evidence/web-voice-263.md)
-for the native permission probe, real WASM inference, concurrent-session checks
-and the limits of headless permission/GPU testing.
+The service worker serializes its lifecycle, checks Web opt-in and website access,
+and relays output only to the authenticated original document. Native localStorage
+retains the existing Graph Library without schema changes. Last-session cleanup
+closes offscreen; peers retain independent sources and Workers. A disconnected or
+restarted coordinator closes the old generation and never silently resumes capture.
+Page scripts cannot address these extension-only ports, read isolated-world variables,
+or synthesize trusted mic clicks; there is no new `window.postMessage` bridge. Sites
+can still alter the shared DOM or read text inserted into their own fields, as before.
 
 The assigned graph is snapshotted at session start. Only **one executable
 FocusedInputTextOutputNode and its complete typed ancestors** run; optional Live,
@@ -317,7 +329,8 @@ effects; it does not change general Graph/Live semantics or schema/ports.
 
 Model preparation uses #239's actual runtime initialization with verified local
 cached/package assets. Missing files/GPU support fail visibly with Models/Graph
-recovery, before microphone capture, without downloading while recording.
+recovery, before PCM streaming, without downloading while recording. A page may
+already hold a gesture-acquired stream while models prepare; failure closes it.
 Live windows and Web microphone sessions run independently, including overlapping
 preparation, Ready/idle, recording and Stop. Each graph execution owns its own
 Pipeline, Nodes, model Workers, audio streams, output connection and cancellation;
@@ -339,7 +352,7 @@ never stopped automatically to make room.
 Web microphones on different tabs/documents can record simultaneously. Within one
 document the existing single widget owns one fixed field/session; duplicate Start
 cannot replace it or insert twice. Stop, Cancel, navigation, target removal and
-closing its setup tab affect that document only. Web voice OFF or website-permission removal
+tab close affect that document only. Web voice OFF or website-permission removal
 cancels all Web sessions and leaves Live running. Live selection and the Web microphone default remain
 separate, and Library edits affect future sessions only. No graph schema changes
 are required. This concurrency behavior supersedes #247's earlier exclusion.
@@ -367,10 +380,10 @@ WEB_VOICE_REAL=1 npx playwright test --config playwright.extension.config.js tes
 The regular suite uses a real unpacked MV3 extension with production source and
 manifest, native host access/injection, gUM, worklets, production Nodes and Pipeline,
 replacing only inference Worker replies. It inspects the actual offscreen CDP
-target without opening it as a tab. Coverage includes explicit first setup,
-subsequent invisible capture, denial, setup cancellation/close, default OFF and
+target without opening it as a tab. Coverage includes first-use site capture,
+already-granted capture, site denial, pending acquisition cancellation, default OFF and
 consent synchronization, sensitive fields, fixed-target/caret insertion, exactly-once
-finals, no submit, multiple Web owners in one document, overlapping Live/Web
+finals, no submit, multiple Web documents, overlapping Live/Web
 preparation and capture, independent teardown, late-event rejection, model/cache
 and device errors, permission removal, navigation/target removal, back-forward
 cache, native service-worker stop/restart, offscreen loss and extension reload.
@@ -382,20 +395,22 @@ mode assembles the current source with the pinned ReazonSpeech/Silero bundle fro
 `prepare:assets`, without requiring unrelated optional model packages. It runs
 actual CPU/WASM inference on `ordinary-english.wav` supplied by Chrome's fake
 microphone device. It compares final events with text inserted in native input
-and textarea, and runs concurrent Live/Web sessions. Current results and source
-hashes are in [#263 evidence](evidence/web-voice-263.md); earlier evidence remains
-historical.
+and textarea, and runs concurrent Live/Web sessions. Historical real-model results and source hashes are in
+[#263 evidence](evidence/web-voice-263.md); they exercised the former offscreen
+capture design. Current page-capture checks are recorded in
+[#275 evidence](evidence/web-voice-275.md).
 
 Native permission-bubble buttons are outside this automated suite. Website grants
 use a disposable installation/upgrade fixture, restored to the production
-optional-only manifest before feature tests. Microphone decisions use native
-`Browser.setPermission`; the setup page still calls actual gUM from its button.
-No physical microphone, native bubble-button automation or real GPU-model run is
-claimed. To manually check a fresh profile, save a compatible graph, opt in, click a
-page mic and then Allow microphone on the setup page. Allow Chrome's native
-request, confirm return to the original field, speak and Stop from the same mic.
-The next recording should start without any setup or recording tab/window. Deny
-or revoke permission and confirm a useful error and released microphone.
+optional-only manifest before feature tests. Microphone decisions use site-scoped native
+`Browser.setPermission`; the first-use case uses Chrome’s fake permission UI, and
+pending-acquisition cancellation delays a native stream’s promise in a test-only
+isolated-world wrapper. These do not automate Chrome’s native permission bubbles.
+No physical microphone or real GPU-model run is claimed. Optional owner verification
+after merge: save a compatible graph, opt in, click a page mic, allow Chrome’s native
+site request, speak and Stop on the same page. Deny/revoke permission and confirm an
+actionable local error and released microphone. This owner check is non-blocking for
+#275 implementation review, merge, closure and Project Done, as explicitly approved.
 
 ## Permissions and local execution
 
@@ -404,7 +419,7 @@ or revoke permission and confirm a useful error and released microphone.
 | `activeTab` | Temporary access to the specific tab where the user invokes the action; needed for `getMediaStreamId({targetTabId})`. |
 | `scripting` | Inject toolbar-authorized focused output, or dynamically register the Web voice adapter only after explicit enablement and optional host grant. |
 | `storage` | Persist and synchronize the separate Web voice enablement preference. |
-| `offscreen` | Host independent Web dictation sessions and serialized library reads/default writes in one nonvisible DOM document (`USER_MEDIA`, `WORKERS`, `LOCAL_STORAGE`). |
+| `offscreen` | Host independent Web dictation sessions and serialized library reads/default writes in one nonvisible DOM document (`WORKERS`, `LOCAL_STORAGE`). |
 | `contextMenus` | Native extension-action graph launcher and explicit left-click default submenu. |
 | Optional `http://*/*`, `https://*/*` | Requested only on Web voice opt-in, for top-frame mic controls. No required/global content script. |
 | `tabCapture` | Obtain that tab's audio stream, without the Web sharing picker. |
@@ -414,7 +429,7 @@ or revoke permission and confirm a useful error and released microphone.
 No required host or `tabs` permission is requested. The `offscreen` permission
 adds a nonvisible extension runtime without broader website access. Optional hosts
 are requested only for Web voice opt-in. Microphone uses native getUserMedia after
-explicit Start or a field mic click; initial Web permission uses the setup button. Basic
+explicit Start in Live, or the field mic click for the current website. Basic
 tab IDs and lifecycle events are available without the `tabs` permission. All
 scripts, translation runtimes and ASR weights are packaged locally; no remote code
 is loaded. The

@@ -42,7 +42,7 @@
     if (placementFrame || !enabled) return;
     placementFrame = requestAnimationFrame(() => { placementFrame = null; position(); });
   }
-  function send(message) { try { control?.postMessage(message); } catch { disable(); } }
+  function send(message) { try { control?.postMessage({ capability: session?.capability, ...message }); } catch { disable(); } }
   function stateUI(next, error = '') {
     state = next;
     if (session) closeMenu();
@@ -209,11 +209,29 @@
     if (session?.cancelRequested) return;
     if (session) {
       session.cancelRequested = true;
+      void session.capture?.stop(false).catch(() => {});
       send({ type: 'cancel', error });
       try { session.connection?.disconnect(); } catch { /* Context may have been revoked. */ }
     }
     // Keep ownership until the runtime acknowledges track/Worker cleanup.
+    if (session && !session.admitted) session = null;
     stateUI('error', error);
+  }
+  async function stopCapture(owner) {
+    if (owner.stopping) return;
+    owner.stopping = true;
+    const cancel = state !== 'recording';
+    stateUI('stopping');
+    if (cancel) {
+      owner.cancelRequested = true;
+      void owner.capture.stop(false).catch(() => {});
+      send({ type: 'cancel', error: 'Preparation canceled. Click the mic to retry.' });
+      return;
+    }
+    try {
+      await owner.capture.stop(true);
+      if (session === owner && !owner.cancelRequested) send({ type: 'stop' });
+    } catch (error) { if (session === owner) abort(error.message); }
   }
   function widget(element) {
     target = element;
@@ -281,8 +299,7 @@
         closeMenu(true);
         if (session) {
           if (session.cancelRequested || state === 'error') return;
-          if (state === 'preparing') { session.cancelRequested = true; stateUI('stopping'); send({ type: 'cancel', error: 'Preparation canceled. Click the mic to retry.' }); }
-          else { stateUI('stopping'); send({ type: 'stop' }); }
+          void stopCapture(session);
           return;
         }
         if (!defaultId) { stateUI('error', 'Right-click the mic (or press Shift+F10) to choose a voice graph first.'); return; }
@@ -290,7 +307,13 @@
           if (!editable(target)) throw Error('Focus a supported writable field first.');
           const owner = { element: target, capability: crypto.randomUUID(), last: -1 };
           saveCaret(owner); session = owner; stateUI('preparing');
-          send({ type: 'start', capability: owner.capability });
+          owner.capture = new WebVoiceCapture(
+            message => { if (session === owner && !owner.cancelRequested) send(message); },
+            error => { if (session === owner) abort(error); });
+          // Site-owned getUserMedia begins within this trusted click. No await,
+          // extension document or page-world messaging participates in consent.
+          void owner.capture.acquire();
+          if (session === owner && !owner.cancelRequested) { owner.admitted = true; send({ type: 'start', capability: owner.capability }); }
         } catch (error) { abort(error.message); }
       });
       shadow.append(style, button, status); document.documentElement.append(host);
@@ -312,6 +335,7 @@
     removeWidget();
     // Extension reload can invalidate messaging methods before disconnect is
     // delivered. Always remove the UI first, even in an invalidated context.
+    void owner?.capture?.stop(false).catch(() => {});
     try { owner?.connection?.disconnect(); } catch {}
     try { previous?.disconnect(); } catch {}
   }
@@ -344,9 +368,21 @@
         selectionPending = false;
         if (!session) stateUI(message.error ? 'error' : 'idle', message.error || '');
       }
-      if (message.type === 'state' && session) stateUI(message.state, message.error);
+      if (message.type === 'pcm-ack' && session && message.capability === session.capability) session.capture.ack(message.sequence);
+      if (message.type === 'state' && session) {
+        const owner = session;
+        if (message.state === 'recording') {
+          void owner.capture.start().then(() => {
+            if (session === owner && !owner.cancelRequested && !owner.stopping) stateUI('recording');
+          }).catch(error => { if (session === owner) abort(error.message); });
+        } else if (!owner.stopping && !owner.cancelRequested) {
+          if (message.state === 'error' || message.state === 'stopping') void owner.capture.stop(false).catch(() => {});
+          stateUI(message.state, message.error);
+        }
+      }
       if (message.type === 'ended') {
         if (!session) return;
+        void session.capture?.stop(false).catch(() => {});
         session?.connection?.disconnect(); session = null;
         // Only active sessions stay bound to the original field. Reconcile
         // focus before offering another start, including hiding idle controls

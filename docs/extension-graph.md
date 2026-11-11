@@ -58,7 +58,10 @@ This page-widget menu is separate from Chrome's native toolbar menu. It filters
 with the existing Web voice graph rules; Live is never substituted when the Web
 default is missing or incompatible. Selecting a default during recording preserves
 the active snapshot. Click the page mic to start/stop local dictation; any required
-native microphone consent uses the existing one-time setup tab.
+native microphone consent belongs to the current website. Capture runs on that
+page and streams mono 16 kHz PCM to the extension’s existing graph without opening
+a tab or window. Use HTTPS (or localhost); a site’s Permissions Policy can block
+capture, in which case the mic reports a local error.
 
 **Edit graph** opens `graph-editor.html?id=<stable-id>`. Save, Load saved, Reset,
 Import and Export all concern that entry's draft. Save prepares required cached

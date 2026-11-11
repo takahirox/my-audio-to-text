@@ -31,7 +31,6 @@ function end(owner, reason = '') {
   post(owner.control, { type: 'ended', error: reason });
   runtimePost(owner, { type: 'abort', error: reason });
   owner.output?.disconnect(); owner.relay?.disconnect();
-  if (owner.setupTab) void chrome.tabs.remove(owner.setupTab).catch(() => {});
   idleCleanup();
 }
 function cancelSession(owner, reason) {
@@ -53,8 +52,8 @@ async function ensureRuntime(owner) {
     if (!hostURL) {
       hostURL = chrome.runtime.getURL(`extension/web-voice-runtime.html#${crypto.randomUUID()}`);
       try {
-        await chrome.offscreen.createDocument({ url: hostURL, reasons: ['USER_MEDIA', 'WORKERS', 'LOCAL_STORAGE'],
-          justification: 'Run explicitly requested local Web dictation with independently owned microphone, graph and model Workers.' });
+        await chrome.offscreen.createDocument({ url: hostURL, reasons: ['WORKERS', 'LOCAL_STORAGE'],
+          justification: 'Run explicitly requested local Web dictation with independently owned page PCM source, graph and model Workers.' });
       } catch (error) { hostURL = null; throw error; }
     }
     if (owner) initialize(owner);
@@ -121,14 +120,6 @@ function refreshCatalog() {
     choices = []; defaultId = null; for (const port of controls) catalog(port);
   });
 }
-async function permissionSetup(owner) {
-  if (!current(owner) || owner.setupPending) return;
-  owner.setupPending = true;
-  post(owner.control, { type: 'state', state: 'preparing', error: 'Complete the one-time microphone permission setup, or click this mic to cancel.' });
-  const tab = await chrome.tabs.create({ url: chrome.runtime.getURL(`extension/web-voice-permission.html#${owner.token}`), active: true });
-  if (current(owner)) owner.setupTab = tab.id;
-  else await chrome.tabs.remove(tab.id);
-}
 function reconcile() {
   return reconciling = reconciling.catch(() => {}).then(async () => {
     const enabled = await authorized();
@@ -141,12 +132,12 @@ function reconcile() {
       return;
     }
     if (!registered) await chrome.scripting.registerContentScripts([{ id: scriptId, matches: WEB_VOICE_ORIGINS,
-      js: ['extension/web-voice-content.js'], runAt: 'document_idle', allFrames: false, persistAcrossSessions: false }]);
+      js: ['extension/web-voice-capture.js', 'extension/web-voice-content.js'], runAt: 'document_idle', allFrames: false, persistAcrossSessions: false }]);
     // Registration handles future navigations; existing authorized tabs need an
     // explicit one-time install. No query/injection runs for an OFF user.
     const tabs = await chrome.tabs.query({ url: WEB_VOICE_ORIGINS });
     await Promise.allSettled(tabs.map(tab => chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] },
-      files: ['extension/web-voice-content.js'], world: 'ISOLATED' })));
+      files: ['extension/web-voice-capture.js', 'extension/web-voice-content.js'], world: 'ISOLATED' })));
   });
 }
 chrome.runtime.onConnect.addListener(port => {
@@ -167,6 +158,13 @@ chrome.runtime.onConnect.addListener(port => {
     });
     port.onMessage.addListener(message => {
       const existing = sessions.get(owner.documentId);
+      if (message.type === 'pcm') {
+        if (!existing || existing.control !== port || existing.stopRequested || !existing.recording || message.capability !== existing.target.capability) return;
+        if (message.sequence !== (existing.sequence || 0) || typeof message.pcm !== 'string' || !message.pcm.length || message.pcm.length > 6828 ||
+            (existing.sequence || 0) - (existing.acknowledged || 0) >= 8) { cancelSession(existing, 'Invalid or overloaded microphone audio relay. Click the mic to retry.'); return; }
+        existing.sequence = message.sequence + 1;
+        runtimePost(existing, { type: 'pcm', sequence: message.sequence, pcm: message.pcm, capturedAt: message.capturedAt }); return;
+      }
       if (message.type === 'cancel' && existing?.control === port) { cancelSession(existing, message.error || 'Voice typing canceled.'); return; }
       if (message.type === 'stop' && existing?.control === port) {
         existing.stopRequested = true; runtimePost(existing, { type: 'stop' });
@@ -223,8 +221,12 @@ chrome.runtime.onConnect.addListener(port => {
       if (message.type === 'heartbeat') { post(port, { type: 'heartbeat' }); return; }
       const owner = [...sessions.values()].find(owner => owner.token === message.token);
       if (!owner) return;
+      if (message.type === 'pcm-ack') {
+        if (message.sequence !== (owner.acknowledged || 0) || message.sequence >= (owner.sequence || 0)) { cancelSession(owner, 'Invalid microphone audio acknowledgment.'); return; }
+        owner.acknowledged = message.sequence + 1; post(owner.control, { type: 'pcm-ack', sequence: message.sequence, capability: owner.target.capability }); return;
+      }
+      if (message.type === 'state' && message.state === 'recording') owner.recording = true;
       if (message.type === 'state' && ['preparing', 'recording', 'stopping', 'error'].includes(message.state)) post(owner.control, message);
-      if (message.type === 'permission-needed') void permissionSetup(owner).catch(error => end(owner, error.message));
       if (message.type === 'ended') end(owner, message.error || owner.cancelError || '');
     });
     port.onDisconnect.addListener(() => {
@@ -256,20 +258,6 @@ chrome.runtime.onConnect.addListener(port => {
   }
 });
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  if (message.type === 'web-voice-permission-result' && extensionPage(sender, 'web-voice-permission.html')) {
-    const owner = [...sessions.values()].find(owner => sender.url?.split('#')[1] === owner.token && owner.setupTab === sender.tab?.id);
-    if (!owner) { respond({ error: 'This microphone setup was canceled. Return to the field and click its mic again.' }); return; }
-    void (async () => {
-      if (!await authorized() || !current(owner)) throw Error('Web voice typing was disabled.');
-      if (message.error) { end(owner, message.error); respond({ ok: true }); return; }
-      const tabId = owner.setupTab;
-      await chrome.tabs.update(owner.target.tabId, { active: true });
-      owner.setupTab = null;
-      if (current(owner)) runtimePost(owner, { type: 'permission-ready' });
-      respond({ ok: true }); await chrome.tabs.remove(tabId).catch(() => {});
-    })().catch(error => { end(owner, error.message); respond({ error: error.message }); });
-    return true;
-  }
   if (message.type === 'web-voice-library-changed' && sender?.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL('extension/'))) {
     refreshCatalog(); respond({ ok: true }); return;
   }
@@ -287,7 +275,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 chrome.permissions.onRemoved.addListener(() => { endAll('Website access removed.'); void reconcile().catch(() => {}); });
 chrome.tabs.onRemoved.addListener(id => {
-  for (const owner of sessions.values()) if (owner.target.tabId === id || owner.setupTab === id) end(owner, owner.setupTab === id ? 'Microphone setup closed. Click the mic to retry.' : 'Target tab closed.');
+  for (const owner of sessions.values()) if (owner.target.tabId === id) end(owner, 'Target tab closed.');
 });
 chrome.tabs.onUpdated.addListener((id, change) => {
   if (change.status === 'loading') for (const owner of sessions.values()) if (owner.target.tabId === id) end(owner, 'Target page navigated.');

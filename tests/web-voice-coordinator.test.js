@@ -59,7 +59,7 @@ test('one authenticated offscreen host multiplexes independent documents and rej
   a.onMessage.emit({ type: 'start', capability: randomUUID() });
   b.onMessage.emit({ type: 'start', capability: randomUUID() });
   await turn(); assert.equal(f.created.length, 1);
-  assert.deepEqual([...f.created[0].reasons], ['USER_MEDIA', 'WORKERS', 'LOCAL_STORAGE']);
+  assert.deepEqual([...f.created[0].reasons], ['WORKERS', 'LOCAL_STORAGE']);
   assert.equal((await f.host(f.created[0].url.replace('web-voice-runtime.html', 'recorder.html'))).disconnected, true);
   assert.equal((await f.host(f.created[0].url.replace(/#.*/, '#wrong'))).disconnected, true);
   const host = await f.host(), [sa, sb] = host.sent;
@@ -120,18 +120,32 @@ test('cancel while offscreen creation is pending cannot tear down a queued repla
   timeout(); assert.equal(host.sent.length, 1);
 });
 
-test('permission setup completion is restricted to its session URL and tab; canceled results cannot resume capture', async t => {
-  const f = await fixture(t), a = f.control(1); await turn(); await f.start(a);
-  const host = await f.host(), session = host.sent[0]; host.onMessage.emit({ type: 'permission-needed', token: session.token }); await turn();
-  assert.equal(f.setups.length, 1); const tab = f.setups[0];
-  let response;
-  f.chrome.runtime.onMessage.emit({ type: 'web-voice-permission-result' }, { id: 'extension', url: tab.url, tab: { id: tab.id + 1 } }, value => { response = value; });
-  assert.match(response.error, /canceled/);
-  a.onMessage.emit({ type: 'cancel' }); host.onMessage.emit({ type: 'ended', token: session.token });
-  f.chrome.runtime.onMessage.emit({ type: 'web-voice-permission-result' }, { id: 'extension', url: tab.url, tab: { id: tab.id } }, value => { response = value; });
-  assert.match(response.error, /canceled/); await turn(); assert.deepEqual(f.removed, [tab.id]); assert.equal(f.closed(), 1);
+test('page PCM is authenticated, ordered and acknowledged only by its current host', async t => {
+  const f = await fixture(t), a = f.control(1), b = f.control(2); await turn();
+  await f.start(a); await f.start(b); const host = await f.host(), [sa, sb] = host.sent;
+  host.onMessage.emit({ type: 'state', token: sa.token, state: 'recording' });
+  host.onMessage.emit({ type: 'state', token: sb.token, state: 'recording' });
+  const chunk = { type: 'pcm', sequence: 0, pcm: 'AAAAAA==', capability: sa.target.capability };
+  b.onMessage.emit(chunk); assert.equal(host.sent.length, 2);
+  a.onMessage.emit(chunk); assert.equal(host.sent.at(-1).type, 'pcm'); assert.equal(host.sent.at(-1).token, sa.token);
+  host.onMessage.emit({ type: 'pcm-ack', token: sa.token, sequence: 0 });
+  assert.equal(a.sent.at(-1).type, 'pcm-ack'); assert.equal(a.sent.at(-1).capability, sa.target.capability);
+  // A replay cannot enter the graph a second time.
+  a.onMessage.emit(chunk); assert.equal(host.sent.at(-1).type, 'abort');
+  assert.equal(host.sent.at(-1).token, sa.token);
+  host.onMessage.emit({ type: 'ended', token: sa.token });
+  a.onMessage.emit({ ...chunk, sequence: 1 }); assert.equal(host.sent.at(-1).type, 'abort');
+  assert.equal(f.setups.length, 0);
 });
 
+test('an unacknowledged relay stops at eight chunks and cannot overrun the host', async t => {
+  const f = await fixture(t), a = f.control(1); await turn(); await f.start(a);
+  const host = await f.host(), session = host.sent[0];
+  host.onMessage.emit({ type: 'state', token: session.token, state: 'recording' });
+  for (let sequence = 0; sequence < 9; sequence++) a.onMessage.emit({ type: 'pcm', sequence, pcm: 'AAAAAA==', capability: session.target.capability });
+  assert.equal(host.sent.filter(m => m.type === 'pcm').length, 8);
+  assert.equal(host.sent.at(-1).type, 'abort'); assert.equal(f.setups.length, 0);
+});
 
 test('startup discards a previous offscreen generation before accepting capture', async t => {
   const f = await fixture(t, { existingDocument: true }); assert.equal(f.closed(), 1);
@@ -149,15 +163,6 @@ test('an immediate retry after host disconnect creates a fresh generation', asyn
   assert.equal(host.sent.length, 1);
 });
 
-
-test('failed return to the target closes the permission setup and its capture owner', async t => {
-  const f = await fixture(t), a = f.control(1); await turn(); await f.start(a);
-  const host = await f.host(), session = host.sent[0]; host.onMessage.emit({ type: 'permission-needed', token: session.token }); await turn();
-  const tab = f.setups[0]; f.chrome.tabs.update = async () => { throw Error('Target tab is gone'); };
-  let response;
-  f.chrome.runtime.onMessage.emit({ type: 'web-voice-permission-result' }, { id: 'extension', url: tab.url, tab: { id: tab.id } }, value => { response = value; });
-  await turn(); assert.match(response.error, /Target tab/); assert.deepEqual(f.removed, [tab.id]); assert.equal(f.closed(), 1);
-});
 
 test('selection is storage-only; active and stopping controls cannot switch while another document can choose independently', async t => {
   const f = await fixture(t), a = f.control(1); await turn(); await f.start(a);
