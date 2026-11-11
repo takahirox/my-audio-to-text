@@ -2,23 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Live · Local processing</title><link rel="stylesheet" href="recorder.css"><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="live.css">
+  <title></title><link rel="stylesheet" href="recorder.css"><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="live.css">
 </head>
 <body class="app-page live-page">
-  <header class="page-header"><h1><svg class="live-icon" aria-hidden="true" viewBox="0 0 32 32" fill="none"><path d="M5 13v6m5-12v18m6-22v26m6-20v14m5-10v6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>Live</h1><nav aria-label="View"><span aria-current="page">Live</span><a href="graph-library.html" data-page="graph-library.html">Library</a><a href="graph-editor.html" data-page="graph-editor.html">Graph</a><a href="model-cache.html" data-page="model-cache.html">Models</a></nav></header>
+  <header class="page-header"><h1 id="live-graph-name"></h1><nav aria-label="View"><a href="graph-library.html" data-page="graph-library.html">Library</a><a href="graph-editor.html" data-page="graph-editor.html">Graph</a><a href="model-cache.html" data-page="model-cache.html">Models</a></nav></header>
   <main>
-    <p>Graph: <strong id="live-graph-name"></strong></p><p id="library-warning" role="status"></p>
+    <p id="library-warning" role="status"></p>
     <section class="panel capture-panel" aria-label="Recording">
       <div class="recording-heading"><p id="session-state" class="session-pill" role="status">Idle</p><div class="actions"><button id="start" class="primary" disabled><span aria-hidden="true">▶</span> Start</button><button id="stop" title="Stop capture and finalize pending text" disabled><span aria-hidden="true">■</span> Stop</button></div></div>
       <section id="graph-action-area" aria-label="Graph Actions" hidden><h2>Graph Actions</h2><div id="graph-action-buttons"></div></section>
       <p id="model-status" class="muted" role="status" aria-live="polite">Preparing models…</p><button id="retry-models" hidden>Retry models</button>
       <p id="session-prompt" class="muted" role="status"></p><p id="errors" role="alert" aria-atomic="true"></p>
       <p id="saved-state" role="status" class="muted"></p>
-      <p id="model-recovery" hidden>Model recovery: <a href="graph-editor.html" data-page="graph-editor.html">Save in Graph</a> or <a href="model-cache.html" data-page="model-cache.html">prepare or retry in Models</a>, then Retry models in Live.</p>
+      <p id="model-recovery" hidden>Model recovery: <a href="graph-editor.html" data-page="graph-editor.html">Save in Graph</a> or <a href="model-cache.html" data-page="model-cache.html">prepare or retry in Models</a>, then Retry models in this window.</p>
     </section>
     <div id="live-displays" aria-label="Graph text displays"></div>
-    <p id="no-live-displays" class="muted" hidden>No Live text displays in this graph. <a href="graph-editor.html" data-page="graph-editor.html">Edit outputs</a></p>
-    <section id="tts-output" class="panel" hidden aria-label="Generated audio"><h2>Generated audio</h2><p id="speaker-hint" class="muted" hidden>Speaker plays through the browser default audio output. Keep this Live window open.</p><button id="enable-speaker" hidden>Enable speaker</button><ol id="audio-outputs"></ol></section>
+    <p id="no-live-displays" class="muted" hidden>No text displays in this graph. <a href="graph-editor.html" data-page="graph-editor.html">Edit outputs</a></p>
+    <section id="tts-output" class="panel" hidden aria-label="Generated audio"><h2>Generated audio</h2><p id="speaker-hint" class="muted" hidden>Speaker plays through the browser default audio output. Keep this window open.</p><button id="enable-speaker" hidden>Enable speaker</button><ol id="audio-outputs"></ol></section>
     <section class="live-status" aria-label="Session details"><details id="diagnostics"><summary>Session details</summary>
       <p id="status"></p><p id="tab-status" class="muted"></p>
       <div class="session-diagnostics"><p id="graph-action-status"></p><p id="signal"></p><p id="translation-status"></p><p id="summary-status"></p><p id="condition-status"></p><p id="hold-status"></p><p id="tts-status"></p><p id="speaker-status"></p><p id="output-status"></p></div>

@@ -17,9 +17,8 @@ body.live-page {
   flex-direction: column;
   gap: .8rem;
 }
-.live-page .page-header { margin-bottom: .5rem; flex-wrap: nowrap; }
-.live-page h1 { display: flex; align-items: center; gap: .6rem; font-size: 1.5rem; }
-.live-page .live-icon { width: 32px; height: 32px; color: var(--accent); }
+.live-page .page-header { margin-bottom: .5rem; }
+.live-page h1 { font-size: 1.5rem; }
 .live-page .capture-panel { padding: 0; margin: 0; border: 0; background: transparent; }
 .live-page .recording-heading { display: block; }
 .live-page .session-pill {

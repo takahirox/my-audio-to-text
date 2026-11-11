@@ -79,12 +79,12 @@ export class SpeakerOutputNode {
   pump() {
     if (this.disposed || this.blocked || this.audio?.state !== 'running') return;
     if (this.current) {
-      this.report('Playing through the default speaker. Keep this Live window open.');
+      this.report('Playing through the default speaker. Keep this window open.');
       return;
     }
     const clip = this.queue[0];
     if (!clip) {
-      this.report('Speaker ready. Keep this Live window open.');
+      this.report('Speaker ready. Keep this window open.');
       this.waiters.splice(0).forEach(resolve => resolve());
       return;
     }
@@ -106,7 +106,7 @@ export class SpeakerOutputNode {
         this.pump();
       };
       source.start();
-      this.report('Playing through the default speaker. Keep this Live window open.');
+      this.report('Playing through the default speaker. Keep this window open.');
     } catch (error) {
       if (source) { source.onended = null; source.disconnect(); source.buffer = null; }
       this.current = null;
@@ -218,7 +218,7 @@ export class StreamingSpeakerOutputNode extends SpeakerOutputNode {
           this.release(chunk); this.pump();
         };
         source.start(start); this.nextTime = chunk.end;
-        this.report('Streaming through the default speaker. Keep this Live window open.', false, {
+        this.report('Streaming through the default speaker. Keep this window open.', false, {
           type: 'scheduled', id: chunk.id, sequence: chunk.sequence,
           at: performance.timeOrigin + performance.now(), audioTime: start, duration: buffer.duration, underruns: this.underruns });
       } catch (error) {
@@ -227,7 +227,7 @@ export class StreamingSpeakerOutputNode extends SpeakerOutputNode {
       }
     }
     if (!this.queue.length) {
-      this.report('Streaming speaker ready. Keep this Live window open.');
+      this.report('Streaming speaker ready. Keep this window open.');
       this.waiters.splice(0).forEach(resolve => resolve());
     }
   }

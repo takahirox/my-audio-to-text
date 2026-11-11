@@ -65,7 +65,9 @@ function renderGraphActions(view) {
 function graphState(view) { return { sessionId, graph: view.activeSavedGraph, graphId: view.activeGraphId, state: view.state, tabId: view.tabId }; }
 const session = new TabSession(view => {
   renderGraphActions(view);
-  element('live-graph-name').textContent = view.state === 'idle' ? view.savedGraphName : view.activeGraphName;
+  const graphName = view.state === 'idle' ? view.savedGraphName : view.activeGraphName;
+  element('live-graph-name').textContent = graphName;
+  document.title = graphName;
   for (const link of document.querySelectorAll('[data-page="graph-editor.html"], [data-graph-editor]')) {
     const page = `graph-editor.html?id=${encodeURIComponent(view.state === 'idle' ? view.savedGraphId : view.activeGraphId)}`;
     link.dataset.graphEditor = ''; link.dataset.page = page; link.href = page;

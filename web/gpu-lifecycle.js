@@ -5,6 +5,6 @@
 export function watchGpuDevice(webgpu, onFailure) {
   if (!webgpu) return;
   Promise.resolve(webgpu.device).then(device => device?.lost?.then(info => {
-    onFailure(Error(`GPU device lost: ${info.message || info.reason || 'device unavailable'}. Check hardware acceleration and free GPU memory, then Retry models in Live.`));
+    onFailure(Error(`GPU device lost: ${info.message || info.reason || 'device unavailable'}. Check hardware acceleration and free GPU memory, then Retry models in this window.`));
   })).catch(onFailure);
 }

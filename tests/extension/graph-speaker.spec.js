@@ -48,7 +48,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     expect(await page.evaluate(() => window.speakerContexts.map(context => context.state))).toEqual(['closed']);
     await expect(page.locator('#audio-outputs audio')).toHaveCount(0);
     await expect(page.locator('#audio-outputs a')).toHaveCount(0);
-    await expect(page.locator('#speaker-hint')).toContainText('Keep this Live window open');
+    await expect(page.locator('#speaker-hint')).toContainText('Keep this window open');
     await expectPreparedIdle(page);
     expect(await page.evaluate(() => window.graphWorkers.flatMap(worker => worker.messages)
       .filter(message => message.type === 'generate').map(message => message.text))).toEqual(['First', 'Second', 'Third']);
