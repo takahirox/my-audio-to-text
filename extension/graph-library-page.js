@@ -40,41 +40,21 @@ function keepDraft() {
   } catch { element('details-state').textContent = 'Unsaved changes · refresh recovery unavailable; save before leaving.'; }
 }
 function clearDraft() { try { sessionStorage.removeItem(draftKey); } catch {} }
-let detailInvoker;
-function showDetails(invoker = document.activeElement) {
-  const dialog = element('selected');
-  if (!dialog.open) {
-    detailInvoker = !invoker || invoker === document.body ? { id: selectedId, menu: false } : invoker;
-    dialog.showModal();
-  }
-  element('selected-title').focus();
+function focusDetails() {
+  const title = element('selected-title');
+  title.focus();
+  if (matchMedia('(max-width: 900px)').matches) title.scrollIntoView({ block: 'start' });
 }
-function select(id, invoker) {
+function select(id, { focus = matchMedia('(max-width: 900px)').matches } = {}) {
   if (id !== selectedId && dirty() && !confirm('Discard unsaved graph name or description changes?')) return false;
   if (id !== selectedId) { clearDraft(); selectedId = id; render(true); }
   else render();
   try { localStorage.setItem(selectionKey, id); } catch { /* Selection is optional; graph writes report their own errors. */ }
-  showDetails(invoker);
+  if (focus) focusDetails();
   return true;
 }
-function closeDetails() {
-  // Closing preserves the draft; selecting another graph still warns before discarding it.
-  keepDraft();
-  hideDetails();
-}
-function hideDetails() {
-  const dialog = element('selected');
-  if (!dialog.open) return;
-  element('graph-more').open = false;
-  dialog.close();
-  const row = [...element('graph-list').children].find(row => row.dataset.id === (detailInvoker?.id || selectedId));
-  const target = detailInvoker instanceof HTMLElement && detailInvoker.isConnected ? detailInvoker
-    : row?.querySelector(detailInvoker?.menu ? 'summary' : 'button[data-id]');
-  // Restore once, before the queued close event can interrupt subsequent focus changes.
-  (target || element('search')).focus();
-}
 function renderDetails(entry = selected()) {
-  if (!entry) hideDetails();
+  element('selected').hidden = !entry;
   if (!entry) { detailsEntry = null; return; }
   detailsEntry = structuredClone(entry);
   element('selected-title').textContent = entry.name;
@@ -142,8 +122,9 @@ function render(replaceDetails = false) {
   const focusedMenu = document.activeElement?.tagName === 'SUMMARY';
   element('graph-list').replaceChildren(...rows.map(entry => {
     const row = el('li'), button = el('button'); row.dataset.id = entry.id; button.dataset.id = entry.id;
-    button.onclick = () => select(entry.id, { id: entry.id, menu: false });
-    button.setAttribute('aria-label', `Open details for ${entry.name}`); button.setAttribute('aria-controls', 'selected'); button.setAttribute('aria-haspopup', 'dialog');
+    button.onclick = () => select(entry.id);
+    button.setAttribute('aria-label', `Open details for ${entry.name}`); button.setAttribute('aria-controls', 'selected'); button.setAttribute('aria-pressed', String(entry.id === selectedId));
+    row.classList.toggle('selected', entry.id === selectedId);
     const name = el('span', `${entry.name}${entry.kind === 'subgraph' ? ' · Subgraph' : ''}`); name.className = 'graph-row-name'; button.append(name);
     if (entry.description) {
       const description = el('span', entry.description); description.className = 'graph-row-description';
@@ -157,8 +138,11 @@ function render(replaceDetails = false) {
       const actionButton = el('button', label);
       actionButton.onclick = () => {
         menu.open = false;
-        if (!select(entry.id, { id: entry.id, menu: true })) { summary.focus(); return; }
-        if (command) element(command).click();
+        if (!select(entry.id, { focus: !command })) { summary.focus(); return; }
+        if (command) {
+          element(command).click();
+          [...element('graph-list').children].find(row => row.dataset.id === entry.id)?.querySelector('summary').focus({ preventScroll: true });
+        }
       };
       actionButton.disabled = ['open', 'duplicate'].includes(command) && !!entryError(entry, library);
       commands.append(actionButton);
@@ -193,7 +177,7 @@ async function action(work, { selectNew = false, savedDetails = false, onError }
     if (selectNew || savedDetails) clearDraft();
     if (selectNew) { selectedId = next.graphs.at(-1).id; try { localStorage.setItem(selectionKey, selectedId); } catch {} }
     element('errors').textContent = ''; render(selectNew || savedDetails);
-    if (selectNew) showDetails();
+    if (selectNew) focusDetails();
     return true;
   } catch (error) {
     restore();
@@ -216,7 +200,7 @@ try {
     if (draft?.entry?.id && draft.entry.revision && typeof draft.entry.name === 'string' && typeof draft.entry.description === 'string' && typeof draft.name === 'string' && typeof draft.description === 'string') {
       selectedId = draft.entry.id; renderDetails(draft.entry);
       element('graph-name').value = draft.name; element('graph-description').value = draft.description;
-      updateDetailsState(); render(); showDetails();
+      updateDetailsState(); render(); focusDetails();
     }
   } catch { element('errors').textContent = 'Could not restore unsaved details. Saved graphs are unchanged.'; }
 } catch (error) {
@@ -224,7 +208,7 @@ try {
   element('recovery').hidden = false; element('recover-legacy').hidden = true;
   element('recovery-message').textContent = 'Original storage is available for export. No saved data has been overwritten.';
   for (const node of document.querySelectorAll('#new, main button, main input, main select')) node.disabled = !['export-storage', 'export-legacy', 'web-voice-enabled', 'confirm-voice', 'cancel-voice'].includes(node.id);
-  hideDetails();
+  element('selected').hidden = true;
 }
 // Consent remains revocable even if graph storage needs recovery.
 {
@@ -280,12 +264,6 @@ try {
   refreshVoiceStatus(); toggle.disabled = false;
 }
 if (!fatal) {
-  element('back-to-graphs').onclick = closeDetails;
-  element('selected').addEventListener('cancel', event => {
-    if (element('graph-more').open) {
-      event.preventDefault(); element('graph-more').open = false; element('graph-more').querySelector('summary').focus();
-    } else { event.preventDefault(); closeDetails(); }
-  });
   element('graph-list').onkeydown = event => {
     const buttons = [...element('graph-list').querySelectorAll('button[data-id]')], index = buttons.indexOf(event.target);
     if (index < 0 || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
@@ -296,7 +274,7 @@ if (!fatal) {
   const more = element('graph-more');
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
-    const menu = event.target.closest('.row-menu[open]');
+    const menu = event.target.closest('.row-menu[open], #graph-more[open]');
     if (menu) { event.preventDefault(); menu.open = false; menu.querySelector('summary').focus(); }
   });
   document.addEventListener('click', event => {
@@ -335,7 +313,7 @@ if (!fatal) {
   element('delete').onclick = () => {
     const entry = selected(); if (!entry) return;
     if (confirm(`Delete “${entry.name}”? This cannot be undone.${dirty() ? ' Unsaved details will also be discarded.' : ''}`)) void action(() => store.delete(selectedId, library.revision)).then(success => {
-      if (success) { clearDraft(); selectedId = library.graphs[0].id; render(true); }
+      if (success) { clearDraft(); selectedId = library.graphs[0].id; render(true); focusDetails(); }
     });
   };
   element('recover-legacy').onclick = () => { void action(() => store.recoverLegacy(library.revision)); };

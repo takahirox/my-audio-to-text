@@ -8,7 +8,7 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 .library-header h1 { overflow-wrap: anywhere; }
 .models-link { display: inline-flex; align-items: center; min-height: 44px; padding: .5rem .75rem; border-radius: var(--control-radius); }
 .models-link:hover { background: var(--surface-hover); }
-.library-workspace { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 1.75rem; }
+.library-workspace { display: grid; grid-template-columns: minmax(20rem, .85fr) minmax(0, 1.35fr); align-items: start; gap: 1.75rem; }
 .library-master { min-width: 0; padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--panel); box-shadow: var(--shadow); min-height: 440px; }
 #graphs-title { font-size: 1.3rem; margin: 0; overflow-wrap: anywhere; }
 #graph-count { margin-left: .25rem; font-weight: 400; }
@@ -26,6 +26,7 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 #graph-list li { display: flex; align-items: start; gap: .25rem; position: relative; margin: .75rem 0; border: 1px solid var(--border); border-radius: 9px; }
 .library-page #graph-list button[data-id] { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: .35rem; text-align: left; padding: 1rem; border: 0; background: transparent; }
 .library-page #graph-list button[data-id]:hover { background: var(--surface-subtle); }
+#graph-list li.selected { border-color: var(--accent); background: var(--surface-hover); box-shadow: inset 4px 0 var(--accent); }
 #graph-list button[data-id]:focus-visible { outline-offset: -3px; }
 .graph-row-name { font-weight: 650; overflow-wrap: anywhere; }
 .graph-row-hint { font-size: .8rem; color: var(--accent); }
@@ -41,11 +42,10 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 .row-commands { display: flex; flex-wrap: wrap; gap: .4rem; }
 .row-commands button { flex: 1 1 8rem; font-size: .85rem; }
 .library-page button.quiet { border-color: transparent; background: transparent; color: var(--accent); }
-.library-detail { color: inherit; padding: 1.5rem; width: min(44rem, calc(100% - 2rem)); max-height: 90dvh; overflow: auto; border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--panel); box-shadow: var(--popover-shadow); }
-.library-detail::backdrop, #voice-consent::backdrop { background: #202b4265; }
-#back-to-graphs { margin: -.25rem 0 .75rem -.5rem; }
+.library-detail { min-width: 0; padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--panel); box-shadow: var(--shadow); overflow-wrap: anywhere; }
+#voice-consent::backdrop { background: #202b4265; }
 #details-error:not(:empty) { padding: .6rem .75rem; color: var(--danger); background: var(--danger-bg); border-radius: var(--control-radius); }
-#selected-title { font-size: 1.3rem; }
+#selected-title { font-size: 1.3rem; margin-top: 0; }
 #preview-scroll { overflow: auto; border-radius: 8px; background: var(--surface-subtle); margin: 1rem 0; max-height: 230px; }
 #preview { display: block; min-width: 100%; height: 200px; }
 #preview rect { fill: white; stroke: #b8a4db; }
@@ -54,9 +54,9 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 .detail-actions { margin-bottom: 1.25rem; }
 .open-graph { display: inline-flex; align-items: center; min-height: 44px; padding: .5rem 1rem; border: 1px solid var(--accent); border-radius: var(--control-radius); text-decoration: none; background: var(--accent); color: white; font-weight: 650; }
 .open-graph:hover { background: #234f9b; }
-#graph-more { margin-left: auto; }
+#graph-more { margin-left: auto; position: relative; }
 #graph-more summary span { font-size: .85rem; margin-left: .3rem; }
-#graph-more .graph-command-list { box-shadow: var(--popover-shadow); }
+#graph-more .graph-command-list { left: auto; right: 0; box-shadow: var(--popover-shadow); }
 #graph-more p { font-size: .8rem; }
 #details-form label { display: flex; flex-direction: column; gap: .3rem; margin: .75rem 0; font-size: .9rem; }
 #details-form input, #details-form textarea { width: 100%; min-width: 0; resize: vertical; }
@@ -82,7 +82,7 @@ dd { margin: 0; overflow-wrap: anywhere; color: inherit; }
   .library-page main { padding: 1rem; }
   .library-workspace { grid-template-columns: minmax(0, 1fr); }
   .library-master { min-height: 0; }
-  #graph-list { max-height: none; }
+  #graph-list { max-height: 45dvh; }
 }
 @media (max-width: 480px) {
   .library-detail { padding: 1rem; }
@@ -91,6 +91,7 @@ dd { margin: 0; overflow-wrap: anywhere; color: inherit; }
   #graph-more .graph-command-list { width: 100%; left: 0; right: auto; }
 }
 @media (forced-colors: active) {
+  #graph-list li.selected { outline: 2px solid Highlight; outline-offset: -2px; }
   .voice-switch input { appearance: auto; }
   .voice-switch input::before { display: none; }
 }

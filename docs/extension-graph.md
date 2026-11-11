@@ -8,10 +8,14 @@ The active graph is an immutable snapshot; edits take effect at the next Start.
 ## Graph Library (#243)
 
 Open **Library** from Live, Graph or Models. Search names, descriptions or model
-names, sort by name/recent update, and filter entries needing recovery. The single
-responsive graph workspace contains the list; selecting a row opens a detail
-dialog with preview, metadata and editing actions. **Back to graphs** restores
-focus to the invoking row. Selection never launches a session or changes a default.
+names, sort by name/recent update, and filter entries needing recovery. The responsive
+workspace shows a selectable graph list on the left and persistent details on the
+right, including preview, metadata and editing actions (#279). Selecting a row
+updates the detail pane immediately; the active row is highlighted and announced
+as pressed. At narrow widths the panes stack, the list scrolls, and selection
+moves focus to the detail heading. On desktop, focus stays in the list for keyboard
+browsing; use Tab to reach the detail actions. Selection never launches a session
+or changes a default.
 Create, rename, describe, duplicate, import or export entries without starting
 inference. New graphs use the current transcription layout; portable JSON remains
 the existing version-15 graph format. Models remains accessible in the header.

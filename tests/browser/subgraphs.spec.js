@@ -174,12 +174,11 @@ test('shared library type filters, safe deletion hint, bundle export and atomic 
   await expect(page.locator('#graph-list')).toContainText('Shared formatting · Subgraph');
   await page.locator('#graph-list button[data-id]').click();
   await expect(page.locator('#delete')).toBeDisabled(); await expect(page.locator('#delete-hint')).toContainText('Live transcription');
-  await page.locator('#back-to-graphs').click(); await page.locator('#filter').selectOption('graph');
+  await page.locator('#filter').selectOption('graph');
   await page.locator('#graph-list button[data-id]').click(); await page.locator('#graph-more > summary').click();
   const downloading = page.waitForEvent('download'); await page.locator('#export').click(); const download = await downloading;
   const bundle = JSON.parse(await readFile(await download.path(), 'utf8'));
   expect(bundle.format).toBe('graph-bundle'); expect(bundle.root).toBe(ids.parent); expect(bundle.graphs).toHaveLength(2);
-  await page.locator('#back-to-graphs').click();
   await page.locator('#import-file').setInputFiles({ name: 'shared.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bundle)) });
   await expect(page.locator('#selected')).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).graphs.length)).toBe(4);
