@@ -27,9 +27,9 @@ const test = base.extend({
       await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(tts-assets|correction-assets)(\/|$)/.test(source) && (real || !/\/vendor(\/|$)/.test(source)) });
       await cp('extension/manifest.json', path.join(root, 'manifest.json'));
       if (!real) {
-        // Modal tests recognize one utterance, regardless of Chromium's fake
+        // Insertion assertions recognize one utterance, regardless of Chromium's fake
         // microphone tone/silence cycle or how long placement checks take.
-        const singleUtterance = /^(closed-shadow modal|stacked modal dialogs)/.test(info.title);
+        const singleUtterance = /^(active recording relocates|closed-shadow modal|stacked modal dialogs)/.test(info.title);
         for (const role of ['sherpa', 'silero', 'whisper']) await writeFile(path.join(root, `web/${role}-worker.js`), `let samples=0;self.onmessage=({data})=>{
           if(data.type==='load')postMessage({type:'ready'});
           if(data.type==='vad-start')samples=0;
@@ -544,6 +544,46 @@ test('collapsed closed-shadow overflow uses descendant geometry for idle safety'
     await t.website.locator('#field').focus();
     await expect(widget(t.website)).toBeVisible();
   }
+});
+
+for (const mode of ['open', 'closed']) test(`late ${mode} shadow attachment discovers thin controls and observes subsequent updates`, async ({ voice: t }) => {
+  test.skip(real);
+  // Put the existing host beyond one discovery batch to exercise cursor progress.
+  await placementPage(t, '<span style="display:none"></span>'.repeat(260) +
+    '<div id="late-shadow" style="position:absolute;left:286px;top:120px;width:0;height:0"></div>');
+  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
+  await t.website.evaluate(async () => {
+    // Drain initial light-DOM discovery before the otherwise unobservable attach.
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  await t.website.evaluate(mode => {
+    const root = document.querySelector('#late-shadow').attachShadow({ mode });
+    window.shadowClicks = 0;
+    window.addShadowButton = rect => {
+      const button = document.createElement('button');
+      button.style.cssText = `position:fixed;left:${rect.x}px;top:${rect.y}px;width:2px;height:36px;padding:0;border:0`;
+      button.onclick = () => shadowClicks++;
+      root.append(button);
+    };
+    addShadowButton({ x:294, y:120 });
+  }, mode);
+  const clear = async rect => {
+    await expect(async () => {
+      const ui = await controlUI(t);
+      expect(intersects({ x:ui.button.x-6,y:ui.button.y-6,width:48,height:48 }, rect)).toBe(false);
+    }).toPass({ timeout:4000 });
+  };
+  await clear({ x:294,y:120,width:2,height:36 });
+  await t.website.mouse.click(295,138);
+  expect(await t.website.evaluate(() => shadowClicks)).toBe(1);
+  await t.website.locator('#field').focus();
+  const ui = await controlUI(t), next = { x:ui.button.x+8,y:ui.button.y,width:2,height:36 };
+  // The discovered root must now invalidate obstacles on internal mutations.
+  await t.website.evaluate(rect => addShadowButton(rect), next);
+  await clear(next);
+  await t.website.mouse.click(next.x+1,next.y+18);
+  expect(await t.website.evaluate(() => shadowClicks)).toBe(2);
+  await idle(t);
 });
 
 for (const variant of ['absolute', 'hidden light child', 'fixed']) test(`noncollapsed closed-shadow ${variant} preserves thin native button clicks`, async ({ voice: t }) => {

@@ -38,6 +38,7 @@
   let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle', inserting = false;
   let listeners, menu, menuCaret, choices = [], defaultId = null, selectionPending = false;
   let placementFrame, obstacleElements = [], obstaclesDirty = true;
+  let shadowCandidates = [], shadowCursor = 0, observedShadowRoots = new WeakSet();
   // Include native, ARIA and common custom controls, even when disabled or
   // pointer-events:none: their visual area still belongs to the website.
   const controls = 'button,a,input,textarea,select,option,label,summary,details,dialog,iframe,object,embed,video,audio,[contenteditable],[tabindex],[role],[onclick],[onpointerdown],[onmousedown],[aria-haspopup],:popover-open';
@@ -47,22 +48,43 @@
   function pageObstacles() {
     if (!obstaclesDirty) return obstacleElements;
     obstaclesDirty = false;
-    const found = new Set();
+    const found = new Set(), candidates = [];
     const visit = root => {
       for (const element of root.querySelectorAll('*')) {
         if (element === host) continue;
+        if (element instanceof HTMLElement) candidates.push(element);
         const shadow = shadowRoot(element);
         if (element.matches(controls) || element.localName.includes('-') || shadow ||
             !element.children.length || getComputedStyle(element).cursor === 'pointer') found.add(element);
         if (shadow) {
-          observer?.observe(shadow, { childList: true, subtree: true, attributes: true, characterData: true });
+          if (observer && !observedShadowRoots.has(shadow)) {
+            observer.observe(shadow, { childList: true, subtree: true, attributes: true, characterData: true });
+            observedShadowRoots.add(shadow);
+          }
           visit(shadow);
         }
       }
     };
     visit(document);
     obstacleElements = [...found];
+    shadowCandidates = candidates;
     return obstacleElements;
+  }
+  function discoverShadowRoots() {
+    if (!host || obstaclesDirty || !shadowCandidates.length) return;
+    // attachShadow() emits no mutation. Rotate through cached elements in
+    // bounded batches, including ordinary/zero-sized hosts and nested roots,
+    // without querying the whole page or reading layout on every timer tick.
+    for (let count = Math.min(128, shadowCandidates.length); count > 0; count--) {
+      shadowCursor %= shadowCandidates.length;
+      const element = shadowCandidates[shadowCursor++];
+      if (!element.isConnected) continue;
+      const shadow = shadowRoot(element);
+      if (shadow && !observedShadowRoots.has(shadow)) {
+        obstaclesDirty = true; // Next placement discovers and observes its contents.
+        return;
+      }
+    }
   }
   function schedulePosition() {
     if (placementFrame || !enabled) return;
@@ -443,6 +465,7 @@
     const owner = session, previous = control; session = null; control = null;
     observer?.disconnect(); observer = null; clearInterval(timer);
     cancelAnimationFrame(placementFrame); placementFrame = null; obstacleElements = []; obstaclesDirty = true;
+    shadowCandidates = []; shadowCursor = 0; observedShadowRoots = new WeakSet();
     removeWidget();
     // Extension reload can invalidate messaging methods before disconnect is
     // delivered. Always remove the UI first, even in an invalidated context.
@@ -468,7 +491,7 @@
         // CSS animation, scrolling shadow trees and style-sheet changes need no
         // light-DOM mutation. Bound these checks; never poll every animation frame.
         let ticks = 0;
-        timer = setInterval(() => { schedulePosition(); if (++ticks % 80 === 0) send({ type: 'heartbeat' }); }, 250);
+        timer = setInterval(() => { discoverShadowRoots(); schedulePosition(); if (++ticks % 80 === 0) send({ type: 'heartbeat' }); }, 250);
       }
       if (message.type === 'graphs') {
         const changed = JSON.stringify(choices) !== JSON.stringify(message.graphs) || defaultId !== message.defaultId;
