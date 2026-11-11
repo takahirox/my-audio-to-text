@@ -104,9 +104,21 @@
       bottom: (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) - viewportInset };
     // Only the active modal admits interactions. DOM order is unrelated to
     // showModal() order; hit-testing its backdrop also identifies it outside
-    // the dialog's rectangle. Move only our widget, preserving field/session.
-    const modal = session && document.elementsFromPoint((bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2)
-      .map(element => element.closest('dialog:modal')).find(Boolean);
+    // the dialog's rectangle. Document hits retarget shadow dialogs to their
+    // hosts, so descend open roots at the same point in stacking order. Guard
+    // against roots returning outer elements again. Move only our widget.
+    const visited = new Set();
+    const modalAt = root => {
+      if (visited.has(root)) return null;
+      visited.add(root);
+      for (const element of root.elementsFromPoint((bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2)) {
+        if (element === host) continue;
+        const modal = (element.shadowRoot && modalAt(element.shadowRoot)) || element.closest('dialog:modal');
+        if (modal) return modal;
+      }
+      return null;
+    };
+    const modal = session && modalAt(document);
     const parent = modal || document.documentElement;
     if (host.parentElement !== parent) parent.append(host);
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -134,11 +146,11 @@
       if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') continue;
       const areas = [...element.getClientRects()];
       if (!element.shadowRoot && !element.children.length &&
-          (element.matches(shadowHosts) || element.localName.includes('-')) && areas.some(area => !area.width || !area.height) &&
+          (element.matches(shadowHosts) || element.localName.includes('-')) &&
           (style.overflowX === 'visible' || style.overflowY === 'visible') &&
           (element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight)) {
-        // A collapsed, opaque host can paint closed-shadow controls outside
-        // its empty border box. Scroll extents reveal overflow, but cannot
+        // An opaque host of any size can paint closed-shadow controls outside
+        // its border box. Scroll extents reveal overflow, but cannot
         // bound negative/fixed descendants. A sparse grid cannot prove safety
         // anywhere: hide idle UI; keep the explicit active-session fallback.
         obstacles.push(bounds);
@@ -245,7 +257,7 @@
     // A later site overlay can outrank even the maximum z-index. Promote this
     // same active control to the top layer only when actual hit-testing says
     // it is unreachable (and re-promote if a newer popover covered it).
-    if (session && document.elementFromPoint(anchor.left + controlSize / 2, anchor.top + controlSize / 2) !== host) {
+    if (session && host.getRootNode().elementFromPoint(anchor.left + controlSize / 2, anchor.top + controlSize / 2) !== host) {
       promote();
     }
     const scheme = getComputedStyle(target).colorScheme;

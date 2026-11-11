@@ -532,6 +532,27 @@ test('collapsed closed-shadow overflow cannot certify idle safety from sparse hi
   }
 });
 
+test('noncollapsed closed-shadow overflow hides idle mic and preserves thin native button clicks', async ({ voice: t }) => {
+  test.skip(real); await placementPage(t);
+  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
+  await t.website.evaluate(() => {
+    const host = document.createElement('div'); host.id = 'opaque';
+    host.style.cssText = 'position:absolute;left:0;top:0;width:10px;height:10px';
+    const button = document.createElement('button');
+    button.style.cssText = 'position:absolute;left:294px;top:120px;width:2px;height:36px;padding:0;border:0';
+    window.shadowClicks = 0; button.onclick = () => shadowClicks++;
+    host.attachShadow({ mode:'closed' }).append(button); document.body.append(host);
+  });
+  await expect(widget(t.website)).toBeHidden();
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
+  await t.website.mouse.click(295, 138);
+  expect(await t.website.evaluate(() => shadowClicks)).toBe(1);
+  await idle(t);
+  await t.website.locator('#opaque').evaluate(e => e.remove());
+  await t.website.locator('#field').focus();
+  await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
+});
+
 test('layout and CSS animation rechecks move idle mic away from newly occupied space', async ({ voice: t }) => {
   test.skip(real); await placementPage(t);
   await expect.poll(async () => (await controlUI(t)).button.x).toBe(286);
@@ -647,6 +668,35 @@ test('active Stop remains clickable above later maximum-z-index overlays, popove
   await expect(widget(t.website)).toBeHidden();
 });
 
+
+for (const phase of ['preparing', 'recording']) test(`open-shadow modal keeps ${phase === 'preparing' ? 'Cancel' : 'Stop'} clickable and keyboard focusable`, async ({ voice: t }) => {
+  test.skip(real); await placementPage(t);
+  if (phase === 'preparing') await bootstrap(t, 'window.voiceDelay = 3000;');
+  await start(t, '#field');
+  if (phase === 'recording') await recording(t);
+  else await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
+  await t.website.evaluate(() => {
+    const outer = document.createElement('div'), inner = document.createElement('span');
+    const dialog = document.createElement('dialog'); dialog.id = 'shadow-modal'; dialog.textContent = 'Site dialog';
+    inner.attachShadow({ mode:'open' }).append(dialog);
+    outer.attachShadow({ mode:'open' }).append(inner); document.body.append(outer);
+    dialog.showModal();
+  });
+  await expect.poll(() => widget(t.website).evaluate(e => e.parentElement.id)).toBe('shadow-modal');
+  await expect(widget(t.website)).toHaveCount(1);
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', phase);
+  await controlUI(t, true);
+  // A placement recheck must not re-promote a reachable shadow control and
+  // discard its keyboard focus just because document hits retarget its host.
+  await t.website.evaluate(async () => {
+    window.dispatchEvent(new Event('scroll'));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  expect((await controlUI(t)).focused).toBe(true);
+  await mic(t.website); await idle(t);
+  await expect(widget(t.website)).toBeHidden();
+  expect(await t.website.evaluate(() => siteClicks)).toBe(0);
+});
 
 for (const phase of ['preparing', 'recording']) test(`stacked modal dialogs keep ${phase === 'preparing' ? 'Cancel' : 'Stop'} in the active modal regardless of DOM order`, async ({ voice: t }) => {
   test.skip(real); await placementPage(t);
