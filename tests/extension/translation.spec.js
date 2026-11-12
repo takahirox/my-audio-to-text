@@ -70,6 +70,12 @@ const test = base.extend({
           translate.tokenizer=()=>({input_ids:{dims:[1,10]}});return translate;
         }`);
       context = await launch(profile); const id = await load(context, root);
+      for (const name of ['reazon', 'silero']) {
+        const file = path.join(root, 'extension', `${name}-assets.json`), spec = JSON.parse(await readFile(file, 'utf8')), body = Buffer.alloc(16);
+        await writeFile(path.join(root, 'extension', `${name}-fixture.bin`), body);
+        spec.files = [{ path: 'fixture.bin', bytes: body.length, sha256Chunks: [createHash('sha256').update(body).digest('hex')], sourceURL: `chrome-extension://${id}/extension/${name}-fixture.bin` }];
+        await writeFile(file, JSON.stringify(spec));
+      }
       const f = { context, requests, id, url: `chrome-extension://${id}/extension/recorder.html`,
         mode(value) { mode = value; }, async disableWasm(direction) {
           const file = path.join(root, direction === 'en-ja' ? 'web/opus-mt-en-ja-worker.js' : 'web/opus-mt-worker.js');
@@ -237,10 +243,11 @@ test('Models keeps both verified directions distinct across pages, deletion, ret
   const second = await f.context.newPage(); await second.goto(models.url());
   await expect(second.locator('#opus-ja-en .model-status')).toContainText('Ready');
   const count = f.requests.length;
+  await live.evaluate(() => dispatchEvent(new Event('pagehide'))); // release warm inference leases before deletion
   await models.locator('#opus-ja-en button:has-text("Delete cached assets")').click();
   await expect(models.locator('#opus-ja-en .model-status')).toHaveText('Not downloaded');
   await expect(second.locator('#opus-ja-en .model-status')).toHaveText('Not downloaded');
-  await prepare(live); expect(f.requests).toHaveLength(count + 7);
+  await prepare(live, { retry: false }); expect(f.requests).toHaveLength(count + 7);
   await expect(second.locator('#opus-ja-en .model-status')).toContainText('Ready');
   expect(await models.evaluate(() => window.ownedWorkers?.length || 0)).toBe(0);
 });

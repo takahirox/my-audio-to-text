@@ -225,7 +225,7 @@ for (const [oldType, type] of [['MeetingSummaryLfm2', 'TextSummaryLfm2'], ['Meet
 
 test('parked processors prepare both pinned asset sets and duplicates share storage only', () => {
   const g = defaultGraph(); g.nodes.push(...TEXT_SUMMARY_TYPES.map((type,i) => graphNode(type, `summary${i}`)), graphNode('TextSummaryLfm2', 'another'));
-  assert.deepEqual(graphModelRequirements(g).map(r => r.key), ['meeting-summary-lfm2', 'meeting-summary-qwen35']);
+  assert.deepEqual(graphModelRequirements(g).map(r => r.key), ['silero', 'reazon', 'meeting-summary-lfm2', 'meeting-summary-qwen35']);
 });
 test('concurrent processors own independent Workers, languages and notes while sharing TEXT fan-out', async () => {
   const g = summaryGraph('TextSummaryLfm2'), second = graphNode('TextSummaryQwen35', 'second');

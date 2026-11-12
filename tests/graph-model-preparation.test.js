@@ -3,25 +3,19 @@ import assert from 'node:assert/strict';
 import { graphModelRequirements, GraphModelPreparation, prepareGraphModelAssets } from '../extension/graph-model-preparation.js';
 import { defaultGraph, graphNode } from '../extension/graph.js';
 
-test('saved Nodes select only their direction and distinct weights/voices, including parked Nodes; ASR stays packaged', () => {
+test('all ASR dependencies and Japanese frontend are explicit and deduplicated, including parked Nodes', () => {
   const graph = defaultGraph();
-  graph.nodes.push(graphNode('SpeechToTextWhisper', 'whisper'), graphNode('SpeechToTextZipformerEn', 'zipformer'));
-  assert.deepEqual(graphModelRequirements(graph), []);
-  graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('OpusMtEnJa', 'repeat'));
-  assert.deepEqual(graphModelRequirements(graph).map(item => item.key), ['opus-en-ja']);
-  for (const [type, voice, language] of [['Supertonic3', 'F1', 'ja'], ['Supertonic3', 'F1', 'en'], ['Supertonic3', 'M1', 'en'], ['Kokoro', 'jf_alpha'], ['Kokoro', 'af_heart'], ['OpusMtJaEn']]) {
-    const node = graphNode(type, `node-${graph.nodes.length}`);
-    if (voice) node.settings.voice = voice;
-    if (language) node.settings.language = language;
-    graph.nodes.push(node);
-  }
-  const before = structuredClone(graph);
-  assert.deepEqual(graphModelRequirements(graph).map(item => item.key), ['opus-en-ja', 'supertonic3:F1', 'supertonic3:M1', 'kokoro:jf_alpha', 'kokoro:af_heart', 'opus-ja-en']);
-  assert.deepEqual(graph, before);
+  graph.nodes.push(graphNode('SpeechToTextWhisper', 'whisper'), graphNode('SpeechToTextZipformerEn', 'zipformer'), graphNode('SpeechToTextReazonSpeech', 'duplicate'));
+  assert.deepEqual(graphModelRequirements(graph).map(r => r.key), ['silero', 'reazon', 'whisper', 'zipformer']);
+  assert.deepEqual(graphModelRequirements({ nodes: [graphNode('SpeechToTextZipformerEn', 'zip')] }).map(r => r.key), ['zipformer']);
+  graph.nodes.push(graphNode('Kokoro', 'jp')); graph.nodes.at(-1).settings.voice = 'jf_alpha';
+  assert.deepEqual(graphModelRequirements(graph).map(r => r.key).slice(-2), ['kokoro-japanese', 'kokoro:jf_alpha']);
+  assert.deepEqual(graphModelRequirements(modelFreeGraph()), []);
 });
+const modelFreeGraph = () => ({ ...defaultGraph(), nodes: [graphNode('Text', 'text')] });
 
 const settled = async () => { await new Promise(resolve => setImmediate(resolve)); };
-const graph = () => { const graph = defaultGraph(); graph.nodes.push(graphNode('OpusMtEnJa', 'parked')); return graph; };
+const graph = () => { const graph = modelFreeGraph(); graph.nodes.push(graphNode('OpusMtEnJa', 'parked')); return graph; };
 
 test('blocking asset preparation skips download preparation for verified and model-free graphs', async () => {
   const originalFetch = globalThis.fetch;
@@ -32,7 +26,7 @@ test('blocking asset preparation skips download preparation for verified and mod
   try {
     const createCache = () => ({ inspect: async () => { inspections++; return { state: 'Ready' }; },
       prepare() { throw Error('Verified files must not need download preparation'); } });
-    await prepareGraphModelAssets(defaultGraph(), { createCache });
+    await prepareGraphModelAssets(modelFreeGraph(), { createCache });
     assert.equal(manifests, 0); assert.equal(inspections, 0);
     const selected = graph(); selected.nodes.push(graphNode('OpusMtEnJa', 'repeat'));
     await prepareGraphModelAssets(selected, { createCache });
@@ -72,7 +66,7 @@ test('no work until explicitly scheduled; manifests and preparation failures are
       prepared++; return { state: prepared === 1 ? 'Error' : 'Ready', downloadedBytes: 1, totalBytes: 1, error: prepared === 1 ? 'offline' : '' };
     } }) });
     assert.equal(fetched, 0);
-    preparation.replace(defaultGraph()); await settled(); assert.equal(fetched, 0);
+    preparation.replace(modelFreeGraph()); await settled(); assert.equal(fetched, 0);
     const saved = graph(), before = structuredClone(saved);
     preparation.replace(saved); await settled();
     assert.equal(preparation.entries[0].view.state, 'Error'); assert.equal(prepared, 0);
@@ -98,8 +92,8 @@ test('cancel, newer Save and teardown abort active/queued work and ignore late s
     assert.equal(entry.view.state, 'Canceled');
     const retry = preparation.run(entry); await settled(); finishes[1](); await retry; assert.equal(entry.view.state, 'Ready');
     preparation.replace(graph()); await settled(); assert.equal(signals.length, 2, 'same requirements retain the verified entry');
-    preparation.replace(defaultGraph()); preparation.replace(graph()); await settled(); const old = preparation.entries[0];
-    preparation.replace(defaultGraph()); assert.equal(signals[2].aborted, true);
+    preparation.replace(modelFreeGraph()); preparation.replace(graph()); await settled(); const old = preparation.entries[0];
+    preparation.replace(modelFreeGraph()); assert.equal(signals[2].aborted, true);
     finishes[2](); await settled(); assert.deepEqual(preparation.entries, []); assert.equal(old.view.state, 'Downloading');
     preparation.replace(graph()); await settled(); preparation.close(); const count = changes;
     assert.equal(signals[3].aborted, true); finishes[3](); await settled(); assert.equal(changes, count);

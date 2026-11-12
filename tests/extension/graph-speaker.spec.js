@@ -28,7 +28,7 @@ async function speakerGraph(f, type = 'Supertonic3') {
   }
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await settleAutoSave(editor);
-  await expect(editor.locator('#graph-models .model-status')).toContainText('Ready');
+  await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(await editor.locator('#graph-models .model-status').count()).fill('Ready · Cached and verified'));
   await editor.reload();
   await expect(editor.getByRole('button', { name: 'speakeroutput input audio', exact: true })).toBeVisible();
   return page;

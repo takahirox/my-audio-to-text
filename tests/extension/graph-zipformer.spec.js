@@ -15,7 +15,7 @@ async function runtime(f) {
       isReady(s){return s.ready;} decode(s){s.ready=false;}
       getResult(s){return {text:s.speech?'english '+s.count:''};} free(){}
     }`);
-  await writeFile(path.join(root, 'sherpa-onnx-wasm-main-asr.js'), 'Module.HEAPU8=new Uint8Array(1);Module.onRuntimeInitialized();');
+  await writeFile(path.join(root, 'sherpa-onnx-wasm-main-asr.js'), 'Module.FS_createDataFile=()=>{};Module.HEAPU8=new Uint8Array(1);Module.onRuntimeInitialized();');
 }
 
 test('MV3 searchable palette, typed audio/TEXT routes and help; production online Worker drains and repeats', async ({ graphExtension: f }) => {
@@ -35,7 +35,7 @@ test('MV3 searchable palette, typed audio/TEXT routes and help; production onlin
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await settleAutoSave(editor);
   await editor.getByRole('button', { name: 'Select speech', exact: true }).click();
-  await expect(editor.locator('.graph-inspector')).toContainText('real online CPU WASM');
+  await expect(editor.locator('.graph-inspector')).toContainText('Streaming Zipformer English ASR');
   for (let i = 0; i < 2; i++) {
     await startGraph(page);
     await page.evaluate(() => window.capture.emit('audio', new Float32Array(3200).fill(.1)));

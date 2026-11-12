@@ -17,7 +17,7 @@ async function download(page) {
 test('Models automatically inspects on open, focus and cross-page updates; corruption and eviction recover without a manual check', async ({ graphExtension: f }) => {
   const first = await openModels(f), second = await openModels(f);
   for (const page of [first, second]) {
-    await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(12);
+    await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(17);
     await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
   }
   expect(f.requests).toEqual([]);

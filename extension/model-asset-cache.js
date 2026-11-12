@@ -71,6 +71,24 @@ function validatedBody(response, file, onBytes = () => {}, signal, onFailure = (
   }));
 }
 
+// A Worker owns its leases until termination, including lazy runtime reads.
+// Web Locks releases them if it crashes/cancels. Deletion acquires every file
+// before touching any, so overlapping voice/dependency sets cannot be torn down.
+const workerLeases = new Map();
+const useKey = file => `model-use:${file.url}`;
+async function retainFiles(manifest, locks) {
+  if (!locks || typeof WorkerGlobalScope === 'undefined' || !(globalThis instanceof WorkerGlobalScope)) return;
+  for (const file of [...manifest.files].sort((a, b) => a.url.localeCompare(b.url))) {
+    const key = useKey(file);
+    if (!workerLeases.has(key)) workerLeases.set(key, new Promise((resolve, reject) => {
+      void locks.request(key, { mode: 'shared' }, () => {
+        resolve(); return new Promise(() => {});
+      }).catch(reject);
+    }));
+    await workerLeases.get(key);
+  }
+}
+
 export class ModelAssetCache {
   constructor(manifest, options = {}) {
     const { cacheStorage = globalThis.caches, fetchAsset = globalThis.fetch?.bind(globalThis),
@@ -129,7 +147,8 @@ export class ModelAssetCache {
     return files;
   }
 
-  inspect({ signal, onChange } = {}) {
+  async inspect({ signal, onChange, retain = false } = {}) {
+    if (retain) await retainFiles(this.manifest, this.locks);
     // Live observes progress while awaiting another preparation. Passive Models
     // status checks must not keep a canceled download alive on their own.
     if (this.shared) return this.sharedRequest('inspect', { signal, onChange, followPreparation: !!onChange });
@@ -247,11 +266,17 @@ export class ModelAssetCache {
   }
 
   remove() {
-    return this.exclusive(async () => {
+    const files = [...this.manifest.files].sort((a, b) => a.url.localeCompare(b.url));
+    const unused = (index, action) => !this.locks || index === files.length ? action()
+      : this.locks.request(useKey(files[index]), { ifAvailable: true }, lock => {
+        if (!lock) throw Error('Assets are in use by an inference session. Close its Live tab or cancel the session, then retry deletion.');
+        return unused(index + 1, action);
+      });
+    return this.exclusive(() => unused(0, async () => {
       const cache = await this.cacheStorage.open(MODEL_CACHE_NAME);
       for (const file of this.manifest.files) await cache.delete(file.url);
       return this.snapshot(await this.scan(cache));
-    }).catch(error => this.failure(error));
+    })).catch(error => this.failure(error));
   }
 }
 

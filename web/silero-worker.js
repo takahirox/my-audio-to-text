@@ -10,6 +10,9 @@ self.onmessage = ({ data }) => { sequence = sequence.then(() => handle(data)).ca
 // Reuse the pinned Silero runtime in its own worker. No ASR recognizer is created.
 async function load() {
   const { SILERO_CONFIG } = await import('./local-asr-config.js');
+  const { localModelAssets } = await import('./local-model-assets.js');
+  const { sherpaModelFiles } = await localModelAssets('silero', message => send('progress', { message }));
+  const installModels = await sherpaModelFiles('silero');
   const base = new URL('./vendor/sherpa-ja-en/', self.location.href);
   const script = new URL('sherpa-onnx-wasm-main-vad-asr.js', base).href;
   await new Promise((resolve, reject) => {
@@ -24,6 +27,7 @@ async function load() {
     };
     importScripts(new URL('sherpa-onnx-vad.js', base).href, script);
   });
+  installModels(self.Module);
   // The pinned wrapper fills in unused detector defaults on its config object.
   vad = createVad(self.Module, structuredClone(SILERO_CONFIG));
   if (!vad.handle) throw new Error('Silero VAD initialization failed');

@@ -50,7 +50,7 @@ and Models keep their dark appearance:
   model weights with progress, cancellation and retry. Models provides asset
   requirements and terms. Changes apply next session; external revisions retain recoverable drafts and offer Reload latest graph in recovery controls. Reset is undoable.
 - **Models** opens a dedicated tab from Graph Library, Graph Editor or Live, with
-  bundled ReazonSpeech/Silero labels and verified cache controls for both OPUS-MT
+  verified cache controls for ReazonSpeech, Silero, Whisper, Zipformer and both OPUS-MT
   directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Opening it never downloads weights.
 
 The execution window's **Library**, **Edit graph** and **Models** links open
@@ -78,22 +78,23 @@ It runs `npm ci`, `prepare:assets`, `prepare:translation-assets`,
 `prepare:whisper-assets`, `prepare:tts-assets`, `prepare:zipformer-assets`,
 `prepare:optional-asr-assets`, `prepare:text-summary-assets` and
 `build:extension` in that order, stopping at the first
-failure. ASR preparation recreates `web/vendor/`, so translation preparation
-must follow it. The individual npm scripts remain available.
+failure. Individual preparation commands remain available and preserve other runtime directories.
 
-Asset preparation needs network access on a fresh checkout: it downloads and
-verifies the pinned ASR models and runtimes, staging an approximately
-91 MB ReazonSpeech/Silero distribution, 44 MB Whisper weights and
-58 MB English online Zipformer distribution. Building copies the maintained Web pipeline,
-nodes, core, workers, configuration, capture helpers, models and license notices
-into `dist/chrome-extension/`. Translation preparation adds about 28 MB of
-checksum-pinned runtime JS/MJS/WASM. TTS preparation stages about 77 MB of reviewed
-runtimes/frontends plus corresponding source. Optional ASR preparation adds about
-41 MB of pinned runtimes, with the CSP adaptation and licenses described in
-[optional ASR setup](optional-asr-nodes.md); the 1.26 GB / 305 MB weights stay out of the bundle. Optional OPUS-MT / TranslateGemma translation and
-TTS and optional Parakeet/Moonshine ASR **weights** are prepared after a successful **Auto Save** for saved processor
-Nodes, or through **Download** or **Retry** in Models; setup does not download or bundle them. These generated files are
-ignored by Git.
+Setup prepares only pinned, weight-free runtime JS/WASM, linguistic frontends,
+configuration and license/source notices. ReazonSpeech/Silero and Zipformer
+runtimes come from the reproducible 6.9 MB `scripts/sherpa-runtime.tar.gz` package;
+no upstream model archive is downloaded during setup. Whisper uses the translation
+runtime. OpenJTalk's statistical HTS voice is downloaded only for a Japanese
+Kokoro graph, separately from its packaged dictionary and WASM frontend.
+
+Every model's weights follow successful **Auto Save** or explicit **Download** or
+**Retry** in Models. Setup/build does not prepare the model cache. Building copies
+only the reviewed runtime paths and verifies their hashes; obsolete weights left
+in `vendor`, `tts-assets`, or another generated directory cannot leak into the
+artifact. `dist/chrome-extension/asset-inventory.json` lists every packaged file,
+size and SHA-256 and records zero model weights. See the [audit and reproduction
+commands](model-assets.md). Generated runtime directories and developer `.cache/`
+files are ignored by Git.
 
 Once assets are prepared, use the quick packaging command after source changes:
 
@@ -407,8 +408,9 @@ cache, native service-worker stop/restart, offscreen loss and extension reload.
 The feasibility probe uses a disposable minimal extension and fresh offscreen
 context for each native permission state. It verifies AudioWorklet, isolated
 Worker/shared-memory WASM and records WebGPU adapter availability. Real-model
-mode assembles the current source with the pinned ReazonSpeech/Silero bundle from
-`prepare:assets`, without requiring unrelated optional model packages. It runs
+mode uses the weight-free runtime from `prepare:assets` and prepares the pinned
+ReazonSpeech/Silero assets through the verified cache, without requiring unrelated
+model packages. It runs
 actual CPU/WASM inference on `ordinary-english.wav` supplied by Chrome's fake
 microphone device. It compares final events with text inserted in native input
 and textarea, and runs concurrent Live/Web sessions. Historical real-model results and source hashes are in
@@ -447,7 +449,7 @@ adds a nonvisible extension runtime without broader website access. Optional hos
 are requested only for Web voice opt-in. Microphone uses native getUserMedia after
 explicit Start in Live, or the field mic click for the current website. Basic
 tab IDs and lifecycle events are available without the `tabs` permission. All
-scripts, translation runtimes and ASR weights are packaged locally; no remote code
+scripts and inference runtimes are packaged locally; verified model weights are cached on demand; no remote code
 is loaded. The
 Models page uses the existing extension-origin Cache Storage without adding permissions or changing the existing CSP. The toolbar
 invocation grants capture authority; opening a window by itself does not grant

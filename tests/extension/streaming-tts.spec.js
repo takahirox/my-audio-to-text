@@ -152,7 +152,7 @@ async function graph(f, language, text) {
   await settleAutoSave(editor);
   const prepare = editor.getByRole('button', { name: 'Retry preparation', exact: true });
   await expect(prepare).toBeEnabled(); await prepare.click();
-  await expect(editor.locator('#graph-models .model-status')).toContainText('Ready', { timeout: 120000 });
+  await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(await editor.locator('#graph-models .model-status').count()).fill('Ready · Cached and verified'), { timeout: 120000 });
   await editor.reload(); await expect(editor.getByRole('button', { name: 'speaker input stream', exact: true })).toBeVisible();
   return editor;
 }

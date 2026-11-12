@@ -2,6 +2,7 @@ import { writeSummaryAssetFixture } from './summary-asset-fixture.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 // Production extension pages, storage, editor and session. Only model inference
@@ -40,6 +41,15 @@ export const test = base.extend({
         viewport: { width: 1440, height: 1000 }, ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'] });
       context = await launch();
       const { id } = await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root });
+      // Persisted default ASR now has ordinary downloadable dependencies. These
+      // UI-only checks serve small verified data fixtures, without remote models.
+      for (const name of ['reazon', 'silero']) {
+        const file = path.join(root, 'extension', `${name}-assets.json`);
+        const manifest = JSON.parse(await readFile(file, 'utf8')), body = Buffer.from('UI-only ASR fixture');
+        await writeFile(path.join(root, 'extension', `${name}-fixture.bin`), body);
+        manifest.files = [{ path: 'fixture.bin', bytes: body.length, sha256Chunks: [createHash('sha256').update(body).digest('hex')], sourceURL: `chrome-extension://${id}/extension/${name}-fixture.bin` }];
+        await writeFile(file, JSON.stringify(manifest));
+      }
       const url = `chrome-extension://${id}/extension/`, errors = [], remote = [], allowedRemote = [];
       await writeSummaryAssetFixture(root, url);
       context.on('page', page => page.on('pageerror', error => errors.push(error.message)));

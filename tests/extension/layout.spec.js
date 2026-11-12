@@ -1,5 +1,7 @@
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.js';
-import { clickGraphAction } from './ui-controls.js';
+import { clickGraphAction, settleAutoSave } from './ui-controls.js';
 import { checkZoomRecovery } from '../fixtures/graph-zoom.js';
 
 test('MV3 Fit and low zoom retain a reachable editing port in a narrow window', async ({ graphExtension: f }, info) => {
@@ -47,6 +49,9 @@ test('MV3 palette search/categories, contextual settings, keyboard controls and 
 });
 
 test('MV3 compact controls precede live outputs; preview, current value and independent translation Nodes reflect the graph', async ({ graphExtension: f }) => {
+  // Layout coverage substitutes inference replies; asset preparation stays real.
+  for (const role of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(f.root, 'web', role), `
+    self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready',id:data.id});if(data.type==='translate')postMessage({type:'result',id:data.id,texts:[data.text]});if(data.type==='drain')postMessage({type:'drained',id:data.id});};`);
   const live = await openGraph(f), editor = live.editor;
   await live.evaluate(async () => {
     const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
@@ -59,6 +64,9 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
   await expect(editor.locator('[data-node=forward]')).toContainText('OPUS-MT Japanese → English');
   await expect(editor.locator('[data-node=reverse]')).toContainText('OPUS-MT English → Japanese');
   await expect(editor.locator('#graph-translation')).toHaveCount(0);
+  await editor.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
+  await settleAutoSave(editor);
+  await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(4).fill('Ready · Cached and verified'));
   await startGraph(live); await emitFinal(live, '<em>committed</em>');
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'pending' }));
   await expect(live.locator('[data-display="transcript"] tr td:first-child')).toHaveText(['<em>committed</em>', 'pending']);

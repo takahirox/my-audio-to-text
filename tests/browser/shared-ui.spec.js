@@ -24,8 +24,8 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await expect(page.locator('#navigation-status')).toHaveCount(0);
   await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
   await expect(library).toBeFocused();
-  await expect(page.locator('.model-card')).toHaveCount(12);
-  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(12);
+  await expect(page.locator('.model-card')).toHaveCount(17);
+  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(17);
   await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
   for (const card of await page.locator('.model-card').all()) {
     await expect(card.getByRole('button')).toHaveText(['Download', 'Delete cached assets']);

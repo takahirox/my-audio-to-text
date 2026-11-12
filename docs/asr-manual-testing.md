@@ -35,7 +35,7 @@ npm run serve
 
 Open `http://127.0.0.1:8000` for the Node Playground list, then select **Speech-to-Text (ReazonSpeech ja-en)** (direct URL: `http://127.0.0.1:8000/nodes/speech-to-text/`). Audio capture requires HTTPS or localhost. The speech page registers `web/isolation-worker.js` at the Web root, covering nested node pages and shared runtime assets. It enables cross-origin isolation on the static Pages host and local server; allow the initial reload. If isolation fails, close other playground tabs and reload, or serve with COOP/COEP headers. Keep the playground in the foreground for microphone capture. Browser-tab audio continues when you switch to the shared tab.
 
-Asset preparation checksum-verifies the epoch-35 ja-en weights and tokens at mirror revision `12b44671ff48b9aed622551d64e02fea9a2cf870`, pinned in [`scripts/reazon-ja-en-assets.json`](../scripts/reazon-ja-en-assets.json). It obtains sherpa-onnx 1.13.2 runtime files and Silero from the checksum-pinned upstream English Moonshine archive, discards its ASR weights, and replaces only the loader's preload table and data with ja-en/Silero. The runtime, wrappers, and Silero are byte-identical to those evaluated in #41. No Japanese-only ReazonSpeech archive is downloaded or staged. Only `web/vendor/sherpa-ja-en/` and its manifest are generated. Generated `web/vendor/` and `.cache/` are ignored by Git. The prepared distribution is about 91 MB. VAD uses a second worker with that same distribution, so browser memory use can be substantial. The preparation step rebuilds the generated vendor directory, removing obsolete staged assets from earlier experiments.
+Asset preparation stages the checksum-pinned, weight-free sherpa JS/WASM package and shared cache modules. It never downloads weights. The extension prepares ReazonSpeech (77,101,541 bytes) and Silero (643,854 bytes) independently after Auto Save or through Models. Model pins and semantics are unchanged; the ASR Worker reads only its verified files into MEMFS, and the separate VAD Worker reads only Silero. The Playground's explicit Load action prepares the same verified files in its own origin cache. See [asset packaging and lifecycle](model-assets.md).
 
 The existing [Pages workflow](../.github/workflows/pages.yml) prepares these assets and deploys `web/`. No server-side recognition is required, and captured audio stays in the browser. See [runtime/model notices](../web/third-party-notices.txt).
 
@@ -74,7 +74,7 @@ npm run test:reazon-ja-en
 
 Unit tests drive the PCM-to-events core with deterministic worker fixtures (no microphone required), including readiness, lifecycle, Stop, release, stale results, and errors. They also cover resampling continuity, pre-roll, provisional scheduling/coalescing, trailing silence, maximum duration, Stop draining, buffer caps, and evidence-based thread selection. Browser tests verify list navigation, direct speech-page access, return navigation, and a GitHub Pages repository prefix with isolation and shared assets. Tests in Chromium and WebKit exercise the real page and actual worker message/cleanup paths with controlled native initialization. They verify Load readiness for both workers, Start, provisional output, utterance finalization, Stop, Cancel, repeat, stale results, worker isolation, bounded inference, and errors. Capture tests use generated stereo Web Audio streams and the real microphone/tab pipelines, including worklet and fallback capture, flushing, permission denial, missing audio, pending permission cancellation, source end, source switching, background capture, and teardown. The tab picker API is replaced with a controlled stream fixture; these tests do not automate the native sharing picker. These deterministic tests do not establish human speech accuracy or physical-device performance.
 
-`npm run test:reazon-ja-en` downloads the three checksum-pinned #41 fixtures to `.cache/`, serves with COOP/COEP headers, and runs real inference in Chromium and WebKit. It verifies the packaged model hashes, manifest, unchanged runtime/Silero identity, absence of obsolete bundles and selectors, provisional text, trailing-silence finalization, Stop, Cancel, reload, and repeat. Japanese, English, and mixed input must produce nonempty final text with the expected scripts through one model load, without any language switching. JSON transcripts and model identity are attached to Playwright results. Fixtures are never included in the Pages artifact. Without the command's `ASR_REAZON_JA_EN` flag, this test is explicitly skipped in the ordinary lifecycle suite.
+`npm run test:reazon-ja-en` downloads the three checksum-pinned #41 fixtures to `.cache/`, serves with COOP/COEP headers, and runs real inference in Chromium and WebKit. It verifies pinned model hashes, unchanged runtime/Silero identity, absence of preload images and selectors, provisional text, trailing-silence finalization, Stop, Cancel, reload, and repeat. Japanese, English, and mixed input must produce nonempty final text with the expected scripts through one model load, without any language switching. JSON transcripts and model identity are attached to Playwright results. Fixtures are never included in the Pages artifact. Without the command's `ASR_REAZON_JA_EN` flag, this test is explicitly skipped in the ordinary lifecycle suite.
 
 Additional opt-in integration uses the actual pinned runtime/models and the page's utterance policy:
 
@@ -125,3 +125,23 @@ Human and physical-device checks are optional follow-up for Issue #45, not merge
 ## Historical evidence
 
 The [#18 publication/acceptance record](asr-acceptance.md) is historical. Earlier experimental behavior and testing instructions can be recovered from Git history. Retained evidence includes [#35 utterance handling](evidence/reazon-35.md), [#37 worker isolation](evidence/reazon-37.md), [#38 threading](evidence/reazon-38.md), and [#41 bilingual comparison](evidence/reazon-41.md). Those records describe experiments at their recorded revisions, not active backend choices.
+
+## On-demand extension ASR regression (#323)
+
+```sh
+npm run setup:extension
+# Explicit developer-only model/fixture download; not a setup/build dependency:
+python3 scripts/review-local-asr-assets.py
+python3 scripts/prepare-reazon-ja-en-fixtures.py
+LOCAL_ASR_SMOKE=1 npx playwright test --config playwright.extension.config.js tests/extension/local-asr-assets.spec.js
+npx playwright test --config playwright.extension.config.js tests/extension/local-asr-preparation.spec.js tests/extension/model-cache.spec.js tests/extension/graph-models.spec.js
+```
+
+The real smokes run production ReazonSpeech/Silero, Whisper/Silero and Zipformer
+Workers, using pinned speech in place of capture hardware. They check missing
+assets in a fresh offline profile, explicit verified preparation, same-length
+corruption/retry, exact dependency downloads, offline inference, provisional/final
+output, Stop/repeat and deletion protection in another tab. Closing/releasing the
+owning Worker makes deletion available again. The deterministic browser checks
+cover graph-only preparation without Workers, model-free offline execution,
+interrupted downloads, cancellation, quota errors, eviction and concurrent tabs.

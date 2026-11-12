@@ -1,5 +1,13 @@
 # my-audio-to-text
 
+The extension ships **no AI model weights**. All models, including ReazonSpeech,
+Silero VAD, Whisper and Zipformer, use the same verified on-demand cache.
+Auto Save prepares only the saved graph's dependencies; Models supports manual
+Download/retry, progress, cancellation, inspection and deletion. Live verifies
+cached assets before Start and never downloads during inference. Prepared assets
+work offline; model-free graphs need no downloads. See the [asset lifecycle and
+packaging audit](docs/model-assets.md).
+
 The Chrome extension also supports [local IfCondition branching](docs/if-condition-node.md):
 edit a natural-language condition and route the original TEXT to Yes or No with
 a small browser-local classifier. Auto Save prepares its verified 14 MB model.
@@ -112,10 +120,10 @@ provisional/final TEXT) Nodes. Auto Save prepares their optional verified weight
 See [setup, exact pins, licensing, limits and real-model tests](docs/optional-asr-nodes.md)
 and [packaged/native inference evidence](docs/evidence/optional-asr-121.md).
 
-Setup installs npm dependencies, downloads/verifies ReazonSpeech, Whisper and
-English Zipformer ASR models and prepares translation/TTS/text-summary runtimes, then produces `dist/chrome-extension/`. Optional
-translation/TTS, text-summary and optional ASR **weights** prepare after **Auto Save** for saved processor Nodes;
-Models provides **Download** or **Retry**, diagnostics and deletion. Open `chrome://extensions`, enable **Developer mode**, choose
+Setup installs npm dependencies and prepares pinned, weight-free runtimes, then
+produces `dist/chrome-extension/` without downloading model weights. Every model's
+**weights** prepare after **Auto Save** for saved processor Nodes; Models provides
+**Download** or **Retry**, diagnostics and deletion. Open `chrome://extensions`, enable **Developer mode**, choose
 **Load unpacked** and select `dist/chrome-extension`. With assets already
 prepared, run `npm run build:extension` after source changes, then click
 **Reload** on the extension's card. See the [extension guide](docs/chrome-extension.md)
