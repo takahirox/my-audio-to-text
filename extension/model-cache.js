@@ -10,6 +10,7 @@ import { ttsManifest } from './tts-cache.js';
 import { qwen3TtsManifest } from './qwen3-tts-cache.js';
 import { cosyVoice3Manifest } from './cosyvoice3-cache.js';
 import { readLibrary, entryGraph } from './graph-library.js';
+import { compareModelDefinitions } from './model-order.js';
 
 const el = (tag, text) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; };
 const channel = new BroadcastChannel('model-cache-updates');
@@ -176,7 +177,8 @@ class ModelCard {
     }
   }
 }
-for (const definition of definitions) cards.push(new ModelCard(definition));
+// Sort only the display copy, once. State updates keep these card instances in place.
+for (const definition of [...definitions].sort(compareModelDefinitions)) cards.push(new ModelCard(definition));
 channel.onmessage = ({ data }) => {
   for (const card of cards) if (card.definition.id === data.id) {
     if (typeof data.deletedKey === 'string') card.failures.delete(data.deletedKey);
