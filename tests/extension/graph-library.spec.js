@@ -28,6 +28,81 @@ async function rename(page, name, description = '') {
   await expect(page.locator('#selected-title')).toHaveText(`${name}`);
 }
 
+test('compact microphone header keeps Models last, help accessible and nominal status out of the workspace', async ({ libraryExtension: { page } }) => {
+  await expect(page.locator('#web-voice-status')).toBeVisible();
+  await expect(page.locator('#web-voice-status')).toContainText('No compatible graphs');
+  await expect(page.locator('#web-voice-status')).toHaveAttribute('role', 'status');
+  await create(page, 'Dictation', microphoneGraph()); await page.reload();
+  const toggle = page.getByRole('switch', { name: 'Show microphone buttons on web pages' });
+  const help = page.getByLabel('Website access and microphone help', { exact: true });
+  const models = page.locator('.library-header').getByRole('link', { name: 'Models', exact: true });
+  await expect(toggle).toBeEnabled();
+  await expect(page.locator('#web-voice-status')).toBeEmpty();
+  await expect(page.locator('#web-voice-status')).toBeHidden();
+  await expect(models).toHaveAttribute('href', 'model-cache.html');
+  await expect(models).toHaveAttribute('data-page', 'model-cache.html');
+  const titleBox = await page.getByRole('heading', { name: 'Graph Library', exact: true }).boundingBox();
+  const toggleBox = await page.locator('.web-microphone').boundingBox(), modelsBox = await models.boundingBox();
+  expect(titleBox.x + titleBox.width).toBeLessThan(toggleBox.x);
+  expect(toggleBox.x + toggleBox.width).toBeLessThan(modelsBox.x);
+  expect(Math.abs(titleBox.y + titleBox.height / 2 - modelsBox.y - modelsBox.height / 2)).toBeLessThan(1);
+  expect(await models.evaluate(node => node === node.parentElement.lastElementChild)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('compact-header-desktop.png') });
+  const workspaceTop = (await page.locator('.library-workspace').boundingBox()).y;
+  await toggle.focus(); await page.keyboard.press('Tab'); await expect(help).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#web-voice-help > div')).toBeVisible();
+  const accessibility = await page.context().newCDPSession(page);
+  const { nodes } = await accessibility.send('Accessibility.getFullAXTree');
+  expect(nodes.find(node => node.name?.value === 'Website access and microphone help')?.properties).toContainEqual({ name: 'expanded', value: { type: 'booleanOrUndefined', value: true } });
+  await expect(page.locator('#web-voice-help')).toContainText('current website requests Chrome’s native microphone permission');
+  expect((await page.locator('.library-workspace').boundingBox()).y).toBe(workspaceTop);
+  await page.keyboard.press('Escape'); await expect(help).toBeFocused();
+  await expect(page.locator('#web-voice-help > div')).toBeHidden();
+  await page.keyboard.press('Space'); await expect(page.locator('#web-voice-help > div')).toBeVisible();
+  await page.keyboard.press('Tab'); await expect(models).toBeFocused();
+  await page.getByRole('heading', { name: 'Graph Library', exact: true }).click();
+  await expect(page.locator('#web-voice-help > div')).toBeHidden();
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    if (width === 320) {
+      const box = await help.boundingBox();
+      await accessibility.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+      await accessibility.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] });
+      await accessibility.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } else await help.click();
+    for (const control of [toggle, help, models, page.locator('#web-voice-help > div')]) {
+      await expect(control).toBeVisible();
+      const box = await control.boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
+    }
+    expect((await help.boundingBox()).width).toBeGreaterThanOrEqual(44);
+    expect((await help.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width === 320) await page.screenshot({ path: test.info().outputPath('compact-header-touch-help.png') });
+    await page.keyboard.press('Escape');
+  }
+  await accessibility.detach();
+});
+
+test('microphone reconciliation errors remain visible even while OFF', async ({ libraryExtension: { page } }) => {
+  await create(page, 'Dictation', microphoneGraph()); await page.reload();
+  const toggle = page.locator('#web-voice-enabled'), status = page.locator('#web-voice-status');
+  await expect(toggle).toBeEnabled();
+  await page.evaluate(() => {
+    const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+    chrome.runtime.sendMessage = message => message.type === 'web-voice-reconcile' ? Promise.resolve({ error: 'Microphone setup failed. Retry by turning ON again.' }) : send(message);
+  });
+  await toggle.click(); await page.locator('#cancel-voice').click();
+  await expect(status).toBeEmpty();
+  // OFF reconciliation can fail too; the error must not disappear with the
+  // nominal OFF instructions.
+  await toggle.evaluate(node => { node.checked = true; });
+  await expect(toggle).toBeChecked(); await toggle.uncheck();
+  await expect(status).toBeVisible(); await expect(status).toContainText('Microphone setup failed. Retry');
+  await expect(toggle).not.toBeChecked(); await expect(toggle).toBeEnabled();
+});
+
 test('Library manages independent named graphs, portable JSON, persistent targets, safeguards and responsive preview', async ({ libraryExtension: f }) => {
   const { page } = f;
   await expect(page.locator('#launch-settings, #live-graph, #web-graph, #filter option[value=assigned]')).toHaveCount(0);

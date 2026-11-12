@@ -45,15 +45,20 @@ Choose graphs where they launch:
   An existing window whose graph is deleted may finish its snapshot, but cannot
   Start again until that same ID is restored. Open another graph from the toolbar.
 
-The compact **Web microphone ON/OFF** control above the workspace starts OFF
-without explicit opt-in. Turning ON opens the consent dialog; **Continue to
-website permission** requests the same optional access to all HTTP/HTTPS websites.
+The compact **Web microphone ON/OFF** control in the Library header, immediately
+before the rightmost **Models** link, starts OFF without explicit opt-in. Turning
+ON opens the consent dialog; **Continue to website permission** requests the same
+optional access to all HTTP/HTTPS websites.
 Cancel or denial leaves controls OFF. Choosing a default never enables them or
 requests microphone access. Turn OFF to remove controls and cancel Web sessions;
 the saved Web default remains. OFF remains available even if library storage needs
-recovery. **Website access & microphone help** discloses permission patterns,
-unsupported fields/pages, local processing, microphone consent and Chrome Site
-access revocation. No website permissions are broadened by graph selection.
+recovery. The adjacent **ⓘ** control (**Website access and microphone help**)
+discloses permission patterns, unsupported fields/pages, local processing,
+microphone consent and Chrome Site access revocation. Help opens by click,
+touch, Enter or Space and closes with Escape or an outside click. Only errors
+or required actions appear below the header; ordinary ON/OFF instructions stay
+out of the workspace. Opening help requests no permissions. No website
+permissions are broadened by graph selection.
 
 On an enabled page mic, right-click (or focus it and press **Shift+F10**) to choose
 a compatible microphone-only graph as the saved default for the next recording.

@@ -200,7 +200,10 @@ async function enable(t) {
   await t.library.locator('#web-voice-enabled').click();
   await expect(t.library.getByRole('dialog', { name: 'Show microphone buttons on web pages?' })).toBeVisible();
   await t.library.getByRole('button', { name: 'Continue to website permission' }).click();
-  await expect(t.library.locator('#web-voice-status')).toContainText('ON', { timeout: 10000 });
+  await expect(t.library.locator('#web-voice-enabled')).toBeChecked({ timeout: 10000 });
+  await expect(t.library.locator('#voice-switch-state')).toHaveText('ON');
+  await expect(t.library.locator('#web-voice-status')).toBeEmpty();
+  await expect(t.library.locator('#web-voice-status')).toBeHidden();
   await expect.poll(() => t.library.evaluate(async () => (await chrome.permissions.getAll()).origins)).toEqual(['http://*/*', 'https://*/*']);
 }
 async function pageCapture(t, action = 'info') {
@@ -321,6 +324,13 @@ test('fresh install has no site permission or injected scripts; assignment is no
     window.permissionCalls = [];
     chrome.permissions.request = async request => { permissionCalls.push({ request, gesture: navigator.userActivation.isActive }); return false; };
   });
+  const help = t.library.getByLabel('Website access and microphone help', { exact: true });
+  await help.click(); await expect(t.library.locator('#web-voice-help > div')).toBeVisible();
+  expect(await t.library.evaluate(() => permissionCalls)).toEqual([]);
+  expect(await t.library.evaluate(() => voiceResources.streams.length)).toBe(0);
+  await expect(t.library.locator('#voice-consent')).toBeHidden();
+  await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
+  await t.library.keyboard.press('Escape');
   await t.library.locator('#web-voice-enabled').click();
   await expect(t.library.locator('#voice-consent')).toBeVisible();
   await expect(t.library.locator('#consent-description')).toContainText('all HTTP and HTTPS websites');
@@ -338,10 +348,29 @@ test('fresh install has no site permission or injected scripts; assignment is no
   await expect(t.library.locator('#voice-consent')).toBeVisible();
   await t.library.locator('#confirm-voice').click();
   await expect(t.library.locator('#web-voice-status')).toContainText('Website access denied');
+  await expect(t.library.locator('#web-voice-status')).toBeVisible();
+  await expect(t.library.locator('#web-voice-status')).toHaveAttribute('role', 'status');
   expect(await t.library.evaluate(() => permissionCalls)).toEqual([{ request: { origins: ['http://*/*', 'https://*/*'] }, gesture: true }]);
   await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
   expect(await t.library.evaluate(async () => (await chrome.permissions.getAll()).origins)).toEqual([]);
   await t.website.reload(); await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0);
+});
+
+test('missing website access remains actionable ahead of graph compatibility guidance', async ({ voice: t }) => {
+  test.skip(real, 'Status presentation does not require real inference.');
+  await enable(t);
+  // Keep Chrome's real installation grant so the coordinator does not revoke
+  // opt-in; control only the Library page's permission inspection result.
+  await t.library.addInitScript(() => { chrome.permissions.contains = async () => false; });
+  await t.library.reload();
+  const status = t.library.locator('#web-voice-status');
+  await expect(t.library.locator('#web-voice-enabled')).toBeChecked();
+  await expect(status).toBeVisible(); await expect(status).toContainText('Website access missing. Turn OFF, then ON');
+  await t.library.evaluate(async id => { const { GraphLibrary } = await import('./graph-library.js'); await new GraphLibrary(localStorage).delete(id); }, t.graphId);
+  await t.library.reload();
+  await expect(status).toContainText('Website access missing. Turn OFF, then ON');
+  await t.library.locator('#web-voice-enabled').uncheck();
+  await expect(status).toBeVisible(); await expect(status).toContainText('No compatible graphs');
 });
 
 async function assignLiveMicrophone(t) {
