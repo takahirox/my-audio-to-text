@@ -1,5 +1,13 @@
 # my-audio-to-text
 
+The extension ships **no AI model weights**. All models, including ReazonSpeech,
+Silero VAD, Whisper and Zipformer, use the same verified on-demand cache.
+Auto Save prepares only the saved graph's dependencies; Models supports manual
+Download/retry, progress, cancellation, inspection and deletion. Live verifies
+cached assets before Start and never downloads during inference. Prepared assets
+work offline; model-free graphs need no downloads. See the [asset lifecycle and
+packaging audit](docs/model-assets.md).
+
 The Chrome extension also supports [local IfCondition branching](docs/if-condition-node.md):
 edit a natural-language condition and route the original TEXT to Yes or No with
 a small browser-local classifier. Auto Save prepares its verified 14 MB model.

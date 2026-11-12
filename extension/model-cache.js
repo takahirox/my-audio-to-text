@@ -1,3 +1,4 @@
+import { reazonManifest, sileroManifest, whisperManifest, zipformerManifest, japaneseFrontendManifest } from './local-asr-cache.js';
 import { textSummaryManifest } from './text-summary-cache.js';
 import { ModelAssetCache, storagePersistence } from './model-asset-cache.js';
 import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
@@ -18,6 +19,11 @@ try { savedNodes = readLibrary(localStorage).graphs.flatMap(entry => {
   try { return entryGraph(entry).nodes; } catch { return []; }
 }); } catch { /* Global asset recovery remains available with broken library storage. */ }
 const definitions = [
+  { id: 'reazon', title: 'ReazonSpeech ja-en', size: 'About 77 MB · Japanese/English speech recognition. Graph preparation also requires the shared Silero VAD entry.', manifest: reazonManifest, terms: 'ReazonSpeech / k2 · Apache 2.0 · pinned epoch 35 int8', url: '../web/third-party-notices.txt' },
+  { id: 'silero', title: 'Silero VAD', size: '644 KB · shared voice activity detection for ReazonSpeech and Whisper. Deleting this entry affects preparation of both ASR paths.', manifest: sileroManifest, terms: 'Silero · MIT', url: '../web/third-party-notices.txt' },
+  { id: 'whisper', title: 'Whisper tiny · multilingual q8', size: 'About 44 MB · requires shared Silero VAD for segmentation.', manifest: whisperManifest, terms: 'OpenAI / ONNX Community · MIT', url: '../web/third-party-notices.txt' },
+  { id: 'zipformer', title: 'Zipformer English · streaming', size: 'About 45 MB · owns segmentation; does not require Silero.', manifest: zipformerManifest, terms: 'k2 / icefall · Apache 2.0', url: '../web/third-party-notices.txt' },
+  { id: 'kokoro-japanese', title: 'Kokoro Japanese · OpenJTalk frontend voice', size: 'About 1 MB · statistical voice required only by the Japanese frontend, in addition to Kokoro weights.', manifest: japaneseFrontendManifest, terms: 'HTS voice · Creative Commons Attribution 3.0', url: '../web/licenses/kokoro-japanese.txt' },
   { id: 'qwen3-tts', title: 'Qwen3-TTS 0.6B CustomVoice · streaming', size: '690 MB shared by Japanese/English and both voices. Desktop Worker WebGPU required; allow 2 GB storage, 6 GB free RAM/GPU memory (planning estimate). No CPU/cloud fallback.', manifest: qwen3TtsManifest, terms: 'Qwen Team / Danyal Malik ONNX conversion · Apache 2.0. Includes a separately pinned Qwen speech decoder. Choose language and voice in Graph Node settings.', url: '../web/licenses/qwen3-tts.txt' },
   { id: 'cosyvoice3', title: 'CosyVoice3 0.5B · streaming', size: '917 MB shared by English/Japanese. Desktop Worker WebGPU; allow 3 GB storage and 6 GB free RAM/GPU per Node (planning estimates). One reviewed reference voice. No CPU/cloud fallback; other languages/mobile unqualified.', manifest: cosyVoice3Manifest, terms: 'FunAudioLLM / Danyal Malik ONNX conversion · Apache 2.0. LibriTTS-R reference features: Koizumi et al., speaker 4446, CC BY 4.0. Language follows input text; spell out numbers and symbols. See attribution and exact pins.', url: '../web/licenses/cosyvoice3.txt' },
   { id: 'meeting-summary-lfm2', title: 'Text Summary · LFM2.5 1.2B JP', size: '749 MB download; allow 2 GB storage and 4 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Summary history is lossy.', manifest: () => textSummaryManifest('TextSummaryLfm2'), terms: 'Liquid AI · LFM Open License 1.0. Commercial use above the $10M annual revenue threshold needs a separate license; redistribution requires the license and preserved notices.', url: '../web/licenses/meeting-summary-lfm2.txt' },
@@ -29,7 +35,7 @@ const definitions = [
   { id: 'opus-en-ja', title: 'OPUS-MT · English → Japanese', size: 'About 253 MB', manifest: englishToJapaneseOpusMtManifest, terms: 'Helsinki-NLP / Kadonox ONNX conversion · Apache 2.0', url: 'https://huggingface.co/Helsinki-NLP/opus-tatoeba-en-ja' },
   { id: 'translategemma', title: 'TranslateGemma 4B · English ↔ Japanese', size: '3.112 GB download shared by both directions; allow 7 GB free storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback.', manifest: translateGemmaManifest, terms: 'Google / ONNX Community · Gemma Terms of Use and Prohibited Use Policy apply to this conversion. Read before downloading or using.', url: '../web/licenses/gemma-notices.txt' },
   { id: 'supertonic3', type: 'Supertonic3', title: 'Supertonic 3', size: 'About 399 MB', voices: ['F1', 'M1'], terms: 'OpenRAIL-M weights and voices', url: '../web/licenses/tts-notices.txt' },
-  { id: 'kokoro', type: 'Kokoro', title: 'Kokoro 82M', size: 'About 93 MB', voices: ['jf_alpha', 'af_heart'], terms: 'Apache-2.0 weights; frontends have separate notices', url: '../web/licenses/tts-notices.txt' },
+  { id: 'kokoro', type: 'Kokoro', title: 'Kokoro 82M', size: 'About 93 MB. Japanese jf_alpha also needs the separate Kokoro Japanese frontend voice entry.', voices: ['jf_alpha', 'af_heart'], terms: 'Apache-2.0 weights; frontends have separate notices', url: '../web/licenses/tts-notices.txt' },
 ];
 class ModelCard {
   constructor(definition) {

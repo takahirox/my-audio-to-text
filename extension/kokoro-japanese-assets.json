@@ -1,0 +1,14 @@
+{
+  "id": "kokoro-japanese/frontend",
+  "revision": "16223a8fae6ae58f84b62ba457463a8369dd84e9f01050be3287b6833096f59e",
+  "files": [
+    {
+      "path": "openjtalk-voice.htsvoice",
+      "bytes": 862503,
+      "sha256Chunks": [
+        "f3be49a6838904a6c218790b64e07c3e83c1886e995dca284b413caab19184de"
+      ],
+      "sourceURL": "https://cdn.jsdelivr.net/npm/kokoro-js-jp@0.2.0/dist/openjtalk-voice.htsvoice"
+    }
+  ]
+}

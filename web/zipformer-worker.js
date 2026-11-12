@@ -9,6 +9,9 @@ self.onmessage = ({ data }) => {
   });
 };
 async function load() {
+  const { localModelAssets } = await import('./local-model-assets.js');
+  const { sherpaModelFiles } = await localModelAssets('zipformer', message => send('progress', { message }));
+  const installModels = await sherpaModelFiles('zipformer');
   const base = new URL('./vendor/zipformer-en/', self.location.href);
   const script = new URL('sherpa-onnx-wasm-main-asr.js', base).href;
   await new Promise((resolve, reject) => {
@@ -19,6 +22,7 @@ async function load() {
       onAbort: message => reject(new Error(String(message))), onRuntimeInitialized: resolve };
     importScripts(new URL('sherpa-onnx-asr.js', base).href, script);
   });
+  installModels(self.Module);
   recognizer = new OnlineRecognizer({
     featConfig: { sampleRate: 16000, featureDim: 80 },
     modelConfig: { transducer: { encoder: './encoder.onnx', decoder: './decoder.onnx', joiner: './joiner.onnx' },

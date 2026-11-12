@@ -1,0 +1,375 @@
+{
+  "description": "Reviewed weight-free runtime allowlist. Never include preload data, tensor weights, statistical voices or arbitrary vendor files. Source pins are in the prepare scripts. eSpeak rule tables, OpenJTalk dictionary and full matching GPL source are non-model frontend resources.",
+  "files": [
+    {
+      "path": "vendor/sherpa-ja-en/sherpa-onnx-asr.js",
+      "bytes": 53867,
+      "sha256": "d51ae8e8b756ee5e53423ffada0c9702973f154f561aca7984fe0b12f4060178"
+    },
+    {
+      "path": "vendor/sherpa-ja-en/sherpa-onnx-vad.js",
+      "bytes": 7822,
+      "sha256": "fecafc3f64a86b0dea5891cedabc553d3125029032643552c25383975064cdc3"
+    },
+    {
+      "path": "vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "bytes": 116530,
+      "sha256": "a42ac2d4732e36f4636bd91cd0c1a54088e4620e7efb0cb48167552899d55147"
+    },
+    {
+      "path": "vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.wasm",
+      "bytes": 12898602,
+      "sha256": "a1f3fb15701fad8c556af45d785ddd17dcfe8e25272aa1a02ba0369c9f2ce828"
+    },
+    {
+      "path": "vendor/zipformer-en/sherpa-onnx-asr.js",
+      "bytes": 53867,
+      "sha256": "d51ae8e8b756ee5e53423ffada0c9702973f154f561aca7984fe0b12f4060178"
+    },
+    {
+      "path": "vendor/zipformer-en/sherpa-onnx-wasm-main-asr.js",
+      "bytes": 113513,
+      "sha256": "a8185277d452ef9070f413d52ef05dbd94aed99435e06ab41caff90c3c62e8f2"
+    },
+    {
+      "path": "vendor/zipformer-en/sherpa-onnx-wasm-main-asr.wasm",
+      "bytes": 12434212,
+      "sha256": "2156352f91040ee972e784bb7ed8188b21e7732e3d3095cf8a2d1de535f64a12"
+    },
+    {
+      "path": "vendor/translation/ort-wasm-simd-threaded.asyncify.mjs",
+      "bytes": 48533,
+      "sha256": "32c0e5c315c7716ffd3dfd138269e0e71b3ba330f719cfbf1bdcb7ec71156358"
+    },
+    {
+      "path": "vendor/translation/ort-wasm-simd-threaded.asyncify.wasm",
+      "bytes": 27204649,
+      "sha256": "54bce16407fb2cccf8e44a093bf82364850c01c3a9d4d8a8731f0d570c46f47c"
+    },
+    {
+      "path": "vendor/translation/transformers-LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "vendor/translation/transformers.js",
+      "bytes": 506762,
+      "sha256": "cbc046a11e0fd29542e6f2d301c083080e3f9767c233dbd0b2a107db5baa0a81"
+    },
+    {
+      "path": "vendor/meeting-summary/ort-wasm-simd-threaded.asyncify.mjs",
+      "bytes": 47389,
+      "sha256": "5959c6733039619c9af710d8e1bae8d6e84402787990637be987c2b1bd6c5fa9"
+    },
+    {
+      "path": "vendor/meeting-summary/ort-wasm-simd-threaded.asyncify.wasm",
+      "bytes": 23567050,
+      "sha256": "e0c0c6d3e73d43b8a249972f8358f845b08cc16fec3c80efafdf8bed40366786"
+    },
+    {
+      "path": "vendor/meeting-summary/transformers-LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "vendor/meeting-summary/transformers.js",
+      "bytes": 558373,
+      "sha256": "e74bd32ed4453369ebb0edcaa27f6bc6204004a949a0233cdb87b62dda8d6978"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/agent-flow.js",
+      "bytes": 25486,
+      "sha256": "8435b476ef927c5422a20632b1b75b8ed83a896e6bb13af9b85ed5e4d3fadd24"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/asset-downloader.js",
+      "bytes": 7398,
+      "sha256": "1887c3895d4d05aefacd9c7d0ca638c3b209c30de537fe65cd56595ff732d42e"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/embedding-model.js",
+      "bytes": 5457,
+      "sha256": "17c60df8bc6efc52765221f71e67e9cf1892f5671d3e1fc3afbf5f9fff122f15"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/enums.js",
+      "bytes": 2058,
+      "sha256": "149edff4d610640fc268a18ae0d207b443a5e5d841045e555b39788f9db802ed"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/errors.js",
+      "bytes": 4712,
+      "sha256": "1f3abb56d6d28213adbb3f45e2c59eafecb48302d1e1a95164cdcb10c03576e0"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/events.js",
+      "bytes": 2105,
+      "sha256": "2dd5076fcc75d27d531df3de86e3fe4829e98cb39a9e9214b252ac7b10923faa"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/grapheme-to-phonemizer.js",
+      "bytes": 2095,
+      "sha256": "076f14e7d9d660eea1c44cd5d22eff36875cbe7db51705d3a4970ab4c1d8b1fe"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/index.js",
+      "bytes": 1733,
+      "sha256": "02ac8a34d1d9cf84cf8d9ed49fa3ed832610495c5aef5fd751b250681e8e62ea"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/intent-recognizer.js",
+      "bytes": 3733,
+      "sha256": "a0893eecbab1396e52c0364790fe515cf0e268c2c16b0a69f6529ab9066df74e"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/mic-transcriber.js",
+      "bytes": 13397,
+      "sha256": "cef76a39506424dc413e42be47f9a608fde376e2d086d68fc112518418e47d1f"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/microphone-transcriber.js",
+      "bytes": 5859,
+      "sha256": "487cf6c24370b44ae89382f4eb6ef6836c883bab0abb414e351088452b638e14"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/module.js",
+      "bytes": 4053,
+      "sha256": "76ac4333a21258c9d80cf27a0d7804865e8fe56314fd31baf20cf286d77d3534"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/moonshine.mjs",
+      "bytes": 155777,
+      "sha256": "a6ff5937467feea327842ef3affa251055b7c88f04116d136aa543a4343abbf2"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/moonshine.wasm",
+      "bytes": 13155937,
+      "sha256": "d0e783f661f8be68f7af48d859d3bbc7a6381a980b35b4128fc36344218a6682"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/stream.js",
+      "bytes": 6681,
+      "sha256": "443a90c0fa92f4a75d85015f9c109ab48f4201b7546bccae0749111a885fd21b"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/stt-worker-host.js",
+      "bytes": 7826,
+      "sha256": "4d44cc4c9a7a6f349e1b47955147b990cb1faf31e60bd8bf044a2222a056cef5"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/stt-worker-protocol.js",
+      "bytes": 352,
+      "sha256": "a321cf5a6cb323df23de1fcd2934239c95b6229943eba04f5486099db4a5b4be"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/stt-worker.js",
+      "bytes": 7573,
+      "sha256": "5a702ebd1bba145487a284daa7aa72ab5de3978e6a528b654f0f8065b4af1233"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/text-to-speech.js",
+      "bytes": 32049,
+      "sha256": "7235b7cafae9cc31988a8a6d06a6ed753b147bd363035c5aac8e8361c3d3cbad"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/transcriber.js",
+      "bytes": 10646,
+      "sha256": "7d18f6123a3a69a10a687c86662b3aa93748a27c95b26dc2f562ea34fe3f30d0"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/tts-worker-host.js",
+      "bytes": 4440,
+      "sha256": "9be81a3edc1b17a480fd35a1b043507fd293299f487f51285e194f57b08d5d0b"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/tts-worker-protocol.js",
+      "bytes": 343,
+      "sha256": "e6a83c0945e5c9c0d16725d60e4d0b15d72cee553798c5f055652bd9f94c5122"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/tts-worker.js",
+      "bytes": 2669,
+      "sha256": "f657d9468e59dc51ba7c2188082d7075b4cb2f7e2c522629693c7c413306c182"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/types.js",
+      "bytes": 2373,
+      "sha256": "7fb0bd0c6e9168b3f8b637e9267d799a570c2fb333a7fbdd69c0b067da7e2b85"
+    },
+    {
+      "path": "vendor/optional-asr/moonshine/voice-clone.js",
+      "bytes": 8568,
+      "sha256": "0dda9172452407fa7de9ff5bdfbe5b23b08b4566fb266f1d883505f48c49010f"
+    },
+    {
+      "path": "vendor/optional-asr/ort/ort-wasm-simd-threaded.asyncify.mjs",
+      "bytes": 48533,
+      "sha256": "dee69056fbfedf946ba0d9026e191c1361c5455895355e03f4346bf9308e58eb"
+    },
+    {
+      "path": "vendor/optional-asr/ort/ort-wasm-simd-threaded.asyncify.wasm",
+      "bytes": 27190919,
+      "sha256": "f33595b9f7ea51aa6f646dd5a2bde6fbb1c7bcde0b9d2b5f240011a09c1830d0"
+    },
+    {
+      "path": "vendor/optional-asr/ort/ort.webgpu.min.mjs",
+      "bytes": 67100,
+      "sha256": "c50f835ca8ee0999fef441f9319e507b0247923943aec034418b889904e94789"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet/backend.js",
+      "bytes": 4746,
+      "sha256": "9bed96798fee2b8d067c86e8e9f6c66927c915322f2f8efd0ad1e6291521aa4c"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet/hub.js",
+      "bytes": 17457,
+      "sha256": "867e5750016c6ff8d23cd6def18287076382353f0efc51d9e04c9400847b7c35"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet/index.js",
+      "bytes": 3465,
+      "sha256": "97a1b4f85764f27b705853b06be3962f4e835cd3b15e2c87514d744cc3abc8ed"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet/long_audio.js",
+      "bytes": 16746,
+      "sha256": "6123800dc5e75357bac355f9ca4a27ac14df9d81254ca3356ef0560adfbc6040"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet/mel.js",
+      "bytes": 30710,
+      "sha256": "5a1bdcbf1025bb16d7c792ffb485d0e739f3862aa2bf4f96b1339989336ea211"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet/models.js",
+      "bytes": 4076,
+      "sha256": "5dbd11534f05790eaac9e2545531530aa300f4669db7cfe16c0fdacf5c2e7817"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet/parakeet.js",
+      "bytes": 84684,
+      "sha256": "7963a7762752934bcd3ae32134e9886f5d35b35108cca5336926f7a2c8ba7062"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet/preprocessor.js",
+      "bytes": 4439,
+      "sha256": "a0d2d7b4d6ad1937271e158bf764eecdc7a1eae6784e16f0cb3e5f56dd419b18"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet/tokenizer.js",
+      "bytes": 3234,
+      "sha256": "f166b9fd5c65be9ca63c45df01ec059e6766e1f31cf80dff5bfa03ac312f5857"
+    },
+    {
+      "path": "vendor/optional-asr/parakeet.js-LICENSE",
+      "bytes": 1094,
+      "sha256": "524eeafb9e58a1e139032aa3c327b1a1d38e58f4ef2253329dc2c0a4279cef78"
+    },
+    {
+      "path": "tts-assets/open_jtalk_dic_utf_8-1.11.tar.gz",
+      "bytes": 23643819,
+      "sha256": "33e9cd251bc41aa2bd7ca36f57abbf61eae3543ca25ca892ae345e394cb10549"
+    },
+    {
+      "path": "tts-assets/openjtalk-NOTICES",
+      "bytes": 24348,
+      "sha256": "923965ed88e770a3e41407cc7f202c4216341065af6d6531e1256f2143e21e37"
+    },
+    {
+      "path": "tts-assets/openjtalk-wasm-wrapper-D6E3BSJO.js",
+      "bytes": 93921,
+      "sha256": "c9d86db89c2c472c0149044d490469309e68e62452cb0e033b2e66d0adaa333a"
+    },
+    {
+      "path": "tts-assets/openjtalk-wasm.wasm",
+      "bytes": 395024,
+      "sha256": "b7733926d488d28d3e80d9590e1d9fd286dc880e8c4b70505ca15bd10dcdca27"
+    },
+    {
+      "path": "tts-assets/ort-wasm-simd-threaded.jsep.mjs",
+      "bytes": 44484,
+      "sha256": "08fb86ec433c78bfb032c5d84a68b8e8e5a8d81268fa39e24314179a5767a5b9"
+    },
+    {
+      "path": "tts-assets/ort-wasm-simd-threaded.jsep.wasm",
+      "bytes": 21596019,
+      "sha256": "c46655e8a94afc45338d4cb2b840475f88e5012d524509916e505079c00bfa39"
+    },
+    {
+      "path": "tts-assets/ort-wasm-simd-threaded.mjs",
+      "bytes": 20856,
+      "sha256": "43c25054b6b9ac000f786c65545ff83a45f871e0e310e8c2f4d48a363bb66db4"
+    },
+    {
+      "path": "tts-assets/ort-wasm-simd-threaded.wasm",
+      "bytes": 11133407,
+      "sha256": "f061472c6e77d6d50d079aacdc0ff9b63fee287ddd2cbf46cf62438d3891de2b"
+    },
+    {
+      "path": "tts-assets/ort.bundle.min.mjs",
+      "bytes": 398170,
+      "sha256": "96e80b413dda387fbcefbd2bb0015f6708323767cc0dd5383260106582e77781"
+    },
+    {
+      "path": "tts-assets/ort.mjs",
+      "bytes": 48008,
+      "sha256": "0cb5ac5be2c414d5b9e361f857108630c6d6e24a5ab9be3cf5f761de55289e94"
+    },
+    {
+      "path": "tts-assets/phonemizer-engine.mjs",
+      "bytes": 1742316,
+      "sha256": "33c6fbc7c26e4860908909c4375ed836f97d0dad682ba2f5eeba17ef365eb28e"
+    },
+    {
+      "path": "tts-assets/phonemizer-source.tar.gz",
+      "bytes": 16315397,
+      "sha256": "fea21dd86c295475572b3abb86633bdbe2aed40b049ba6357d1d89ff99880b6f"
+    },
+    {
+      "path": "tts-assets/phonemizer.js",
+      "bytes": 840,
+      "sha256": "be5a08f07972b0a5f8f65b93c7653932009b97625af09ab0b5759d35387ee675"
+    },
+    {
+      "path": "tts-assets/qwen3/model-LICENSE",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "tts-assets/qwen3/ort-LICENSE",
+      "bytes": 1073,
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+    },
+    {
+      "path": "tts-assets/qwen3/ort-ThirdPartyNotices.txt",
+      "bytes": 338088,
+      "sha256": "143764b952fdb1a7c69ce653bfba74a7744d6a8a573bfb73e235fba356c83de3"
+    },
+    {
+      "path": "tts-assets/qwen3/ort-wasm-simd-threaded.asyncify.mjs",
+      "bytes": 53457,
+      "sha256": "59cf781530e1a16df2a291d78798e3ec1152467edaec402d6f9599d85047c302"
+    },
+    {
+      "path": "tts-assets/qwen3/ort-wasm-simd-threaded.asyncify.wasm",
+      "bytes": 28747738,
+      "sha256": "ca319e9539cd0f1e291cf56074760121eaf39650f5dbf84b6e52c07f4b2944ec"
+    },
+    {
+      "path": "tts-assets/qwen3/ort.webgpu.min.mjs",
+      "bytes": 70742,
+      "sha256": "329cd956772397a1aedd668e911195d39afefb182f6fc14aafa4f08ac8d8f379"
+    },
+    {
+      "path": "tts-assets/transformers-LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "tts-assets/transformers.js",
+      "bytes": 888173,
+      "sha256": "aa5002b70e789798da263f5f99c62bd3e8fcd0c119258a493c40c180648365fa"
+    }
+  ]
+}

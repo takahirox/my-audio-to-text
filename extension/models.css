@@ -4,13 +4,12 @@
 .models-page :is(.panel, .model-grid, .model-card, .model-heading, .actions) { min-width: 0; }
 .models-page :is(p, h2, h3, a, summary, label, li, button) { overflow-wrap: anywhere; }
 .models-page .panel { padding: 1.15rem 1.25rem; }
-.models-page .bundled-models h2 { margin: 0; }
 .models-page .model-grid { align-items: start; }
 .models-page .model-card { margin: 0; }
 .models-page .model-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .65rem; flex-wrap: wrap; }
 .models-page .model-heading h3 { flex: 1 1 13rem; margin: 0; font-size: 1.05rem; }
 .models-page .model-status { display: inline-block; margin: 0; padding: .2rem .6rem; border: 1px solid var(--border); border-radius: 20px; color: var(--muted); background: var(--surface-subtle); font-size: .8rem; }
-.models-page [data-state="Ready"] .model-status, .models-page .bundled-models .model-status { color: var(--success); background: var(--success-bg); border-color: #b8d8c3; }
+.models-page [data-state="Ready"] .model-status { color: var(--success); background: var(--success-bg); border-color: #b8d8c3; }
 .models-page [data-state="Downloading"] .model-status, .models-page [data-state="Checking"] .model-status { color: var(--accent); background: var(--surface-hover); border-color: #d8cbe9; }
 .models-page [data-state="Error"] .model-status { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 .models-page .model-metadata { color: var(--muted); font-size: .9rem; }

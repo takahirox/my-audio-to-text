@@ -26,8 +26,13 @@ export function japaneseFrontendToPhonemes(nodes) {
 export async function createJapanesePhonemizer() {
   const { default: factory } = await import('./tts-assets/openjtalk-wasm-wrapper-D6E3BSJO.js');
   const mod = await factory({ locateFile: file => new URL(`./tts-assets/${file}`, import.meta.url).href });
-  await mod.configure(undefined,
-    new URL('./tts-assets/openjtalk-voice.htsvoice', import.meta.url).href,
+  const { localModelAssets } = await import('./local-model-assets.js');
+  const { japaneseFrontendFiles } = await localModelAssets('japanese');
+  const files = await japaneseFrontendFiles();
+  const voice = URL.createObjectURL(new Blob([files.get('openjtalk-voice.htsvoice')]));
+  try { await mod.configure(undefined,
+    voice,
     new URL('./tts-assets/open_jtalk_dic_utf_8-1.11.tar.gz', import.meta.url).href);
+  } finally { URL.revokeObjectURL(voice); }
   return text => japaneseFrontendToPhonemes(mod.runFrontend(text));
 }

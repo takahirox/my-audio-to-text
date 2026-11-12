@@ -416,7 +416,7 @@ test('real toolbar actions open independent windows with simultaneous native tab
   await expect.poll(async () => (await captured()).length).toBe(0);
 });
 
-base('packaged extension initializes the real pinned ReazonSpeech/Silero workers under MV3 CSP', async () => {
+base('fresh packaged MV3 ASR startup reports actionable missing assets without downloads', async () => {
   base.setTimeout(180000);
   const profile = await mkdtemp(path.join(tmpdir(), 'local-asr-model-'));
   const context = await chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true,
@@ -427,31 +427,21 @@ base('packaged extension initializes the real pinned ReazonSpeech/Silero workers
     const page = await context.newPage();
     await page.goto(`chrome-extension://${id}/extension/model-cache.html`);
     expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+    const requests = [];
+    page.on('request', request => { if (/^https?:/.test(request.url())) requests.push(request.url()); });
     const result = await page.evaluate(async () => {
       const { TabSession } = await import('./session.js');
-      const { SpeechToTextNode } = await import('../web/transcription-nodes.js');
-      const events = [], receiveEvent = SpeechToTextNode.prototype.receiveEvent;
-      SpeechToTextNode.prototype.receiveEvent = function (event) {
-        if (event.type === 'configuration') events.push(event);
-        return receiveEvent.call(this, event);
-      };
-      const session = new TabSession(() => {}, { sourceFactory: (tabId, audio) => ({
-        start() { audio(new Float32Array(16037)); }, stop() {},
-      }) });
+      const session = new TabSession(() => {});
       try {
         await session.prepareModels();
-        if (session.view.modelState !== 'ready') throw Error(session.view.error);
-        const warm = session.prepared.pipeline;
-        await session.start(42);
-        if (session.session.pipeline !== warm) throw Error('Start replaced the prepared graph');
-        const graph = session.session?.pipeline;
-        await session.stop();
-        return { events, error: session.view.error || undefined,
-          stopped: graph?.state === 'disposed' && session.view.state === 'idle' && session.view.modelState === 'ready' };
-      } finally { await session.close(); SpeechToTextNode.prototype.receiveEvent = receiveEvent; }
+        return { state: session.view.modelState, error: session.view.error };
+      } finally { await session.close(); }
     });
-    expect(result.error).toBeUndefined(); expect(result.stopped).toBe(true);
-    expect(result.events).toContainEqual({ type: 'configuration', model: 'ja-en', modelName: 'ReazonSpeech ja-en', numThreads: 1 });
+    expect(result.state).toBe('error');
+    expect(result.error).toMatch(/missing|evicted/);
+    expect(result.error).toMatch(/Models|Retry preparation/);
+    expect(requests).toEqual([]);
+
   } finally { await context.close(); await rm(profile, { recursive: true, force: true }); }
 });
 
@@ -467,7 +457,7 @@ test('execution navigation opens separate extension pages without stopping or re
       expect(new URL(opened.url()).searchParams.get('id')).toBe('default-live');
       await expect(opened.getByRole('heading', { name: 'Graph Editor Live transcription', exact: true })).toBeVisible();
     } else await expect(opened.getByRole('heading', { name: name === 'Library' ? 'Graph Library' : name, exact: true })).toBeVisible();
-    if (name === 'Models') await opened.getByRole('button', { name: 'Live', exact: true }).click();
+    if (name === 'Models') await expect(opened.getByRole('link', { name: 'Library', exact: true })).toBeVisible();
     await expect(page.locator('#status')).toHaveText('Transcription active');
     expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);
     expect(await page.evaluate(() => window.streams.map(s => s.stops))).toEqual([0]);

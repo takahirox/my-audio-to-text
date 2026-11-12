@@ -11,22 +11,24 @@ Build/load the extension as described in [the extension guide](chrome-extension.
 Open **Models** from Live or Graph Editor, or **Extension options** from Chrome's
 extension menu. The options page manages real OPUS-MT Japanese → English,
 OPUS-MT English → Japanese, TranslateGemma 4B English ↔ Japanese, Supertonic 3, Kokoro, Parakeet v3 and Moonshine Medium English Streaming in the existing verified cache.
-ReazonSpeech ja-en and Silero VAD are labeled **Bundled** because their assets
-are packaged with the extension, with no optional download lifecycle.
+ReazonSpeech ja-en, Silero VAD, Whisper tiny, Zipformer English and the Japanese
+Kokoro frontend voice use these same controls. No model has a Bundled status.
+ReazonSpeech and Whisper declare Silero as a separate, shared dependency; Zipformer
+does not use it. Japanese Kokoro additionally prepares its frontend voice.
 The **Models** heading identifies the page; its header navigation contains only
 **Library**, which opens Graph Library in a separate tab and supports keyboard activation.
 Opening Models checks files only. A successful valid **Auto Save** in Graph Editor
-prepares the optional weights required by actual saved OPUS-MT/TranslateGemma/TTS/optional-ASR Node types and
+prepares the weights required by actual saved model Node types and
 voices, including parked Nodes. Repeated equivalent Nodes are deduplicated; each
 direction and voice remains independent, with shared verified files reused.
-Existing packaged ASR assets are unchanged. The optional [Parakeet v3 / Moonshine
+ASR is checked through the same manifests as other processors. The optional [Parakeet v3 / Moonshine
 Medium Streaming Nodes](optional-asr-nodes.md) prepare 1.26 GB / 305 MB after Auto Save;
 the editor shows memory, GPU and storage guidance before Auto Save. Opening a graph checks cached files only. Edits auto-save before preparation; failed validation or
 storage prevents preparation. Storage finishes before preparation; download
 failure does not roll it back. No capture, inference, Workers or remote executable
 code starts during Auto Save preparation. Live initialization and Start/inference
 remain cache-only; see the [Live model lifecycle](extension-graph.md#live-model-lifecycle-239).
-Each optional model has independent status, byte progress, error/retry, Cancel,
+Each model has independent status, byte progress, error/retry, Cancel,
 Check cache and Delete controls. TTS voice selectors are initialized from saved
 Nodes where present, and never change graph settings. Choose a matching voice
 in Graph Editor, Auto Save prepares its files after persistence for the next session. Language/voice and terms are
@@ -36,8 +38,7 @@ available for recovery after interruption. Supertonic F1/M1 support Japanese and
 Kokoro jf_alpha is Japanese and af_heart is English.
 
 The original #67 project-owned `config.json` (46 bytes) and `weights.bin`
-(16,384 bytes) remain on the separate `extension/cache-demo.html` test fixture
-page. These are **not usable models**. Their cache keys do not establish
+(16,384 bytes) are test-only fixtures at `extension/cache-demo.html`, excluded from the distributed extension. These are **not usable models**. Their cache keys do not establish
 readiness for any production model. They are not offered as installed models
 on the Models screen.
 
@@ -203,7 +204,7 @@ This verifies persistence in that test profile across that restart, not
 guaranteed long-term retention on every device.
 
 `tests/graph-model-preparation.test.js` covers saved-node selection, direction/voice
-deduplication, packaged ASR exclusion and stale-run cancellation.
+deduplication, explicit ASR/VAD dependencies and stale-run cancellation.
 `tests/extension/graph-models.spec.js` exercises direct UI composition, persistence
 before fetching, failed validation/storage, saved parked Nodes, shared weights,
 progress, cancellation, integrity failures/retry and Models recovery.
@@ -229,3 +230,10 @@ report hardware/memory guidance without fallback. Read [Gemma notice and
 upstream terms](../web/licenses/gemma-notices.txt) before download/use; the public
 ONNX conversion remains subject to Google Gemma Terms and Prohibited Use Policy.
 See [provenance, manifest review and smoke commands](translation-nodes.md#translategemma-in-the-extension-124).
+
+Model files used by an inference Worker have shared Web Locks for that Worker's
+lifetime. Delete acquires all exclusive file locks before removing any data; if
+an overlapping model or voice is in use, deletion fails visibly without partial
+deletion. Close Live or cancel/release its session to retry. A warm prepared idle
+session still owns its Workers. Browser cache eviction remains detectable on the
+next preparation/start. See the [complete packaging audit](model-assets.md).

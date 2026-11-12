@@ -63,36 +63,22 @@ fresh resources and empty display state.
   Runtime Web `1.25.0-dev.20260212-1a71a5f46e` distribution from
   [prepare-translation-assets.py](../scripts/prepare-translation-assets.py).
   CPU WASM, one thread, no proxy Worker or WebGPU requirement.
-- VAD: existing pinned Silero/sherpa WASM bundle. Its preload contains ReazonSpeech
-  weights even though the Whisper VAD Worker creates only a detector.
+- VAD: independently cached Silero (643,854 bytes). The separate VAD Worker
+  loads no ReazonSpeech assets.
 - License: OpenAI Whisper MIT, retained in [whisper.txt](../web/licenses/whisper.txt)
   and third-party notices. Existing runtime/VAD licenses continue to apply.
 
-`npm run setup:extension` prepares all three ASR models and runtimes then builds.
-For an existing checkout:
+`npm run setup:extension` prepares weight-free runtimes and builds the extension.
+Auto Save of a graph containing Whisper prepares only Whisper and shared Silero
+weights; both have ordinary Models cards. No ReazonSpeech download is required.
+`prepare:whisper-assets` is a compatibility no-op; it never downloads weights.
 
-```sh
-npm ci
-npm run prepare:assets
-npm run prepare:translation-assets
-npm run prepare:whisper-assets
-npm run prepare:zipformer-assets
-npm run prepare:tts-assets
-npm run build:extension
-```
-
-Run Whisper preparation **after** prepare:assets, which resets `web/vendor`.
-Preparation verifies every file before replacing a previously staged Whisper
-bundle, using an ignored `.cache/whisper/<revision>/` download cache. The build
-checks each Whisper file's size and checksum and packages the complete model.
-All executable runtime code is packaged under MV3's existing `self` and
-`wasm-unsafe-eval` CSP; no permission or remote-code exception is added.
-The Whisper module Worker disables remote models and browser model caches and
-loads only `web/vendor/whisper/tiny/`. No model fetching from the network happens
-during loading or recording. Missing/incompatible assets produce a visible
-error naming preparation and rebuild commands; Cancel/failed startup releases
-partially loaded workers. Optional translation/TTS model download behavior is
-unchanged.
+All executable runtime code remains packaged under MV3's existing `self` and
+`wasm-unsafe-eval` CSP. The module Worker verifies the cache, disables remote
+models and uses pinned custom-cache URLs only. Missing/corrupt/evicted files
+produce a recoverable Models/Graph Editor preparation error. Prepared graphs work
+offline; Stop, Cancel and per-session worker ownership are unchanged. See
+[packaging and ASR validation](model-assets.md).
 
 ## Tests and evidence
 

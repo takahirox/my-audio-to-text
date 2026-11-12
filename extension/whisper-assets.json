@@ -1,0 +1,102 @@
+{
+  "id": "onnx-community/whisper-tiny",
+  "revision": "ff4177021cc41f7db950912b73ea4fdf7d01d8e7",
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 2243,
+      "sha256Chunks": [
+        "46aeea0a406afbeb563fc8e59ca10609203df4299af6a83f73752fef369efd2d"
+      ]
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 3772,
+      "sha256Chunks": [
+        "f5c67e5a4f7102f8cb4d058bc95da276bbc19eeec997267c3bb0f25ef68facd1"
+      ]
+    },
+    {
+      "path": "preprocessor_config.json",
+      "bytes": 339,
+      "sha256Chunks": [
+        "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d"
+      ]
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 2480466,
+      "sha256Chunks": [
+        "1130668cab8c92d9d67cb4b134746f9ba1f28cfe7f357c37aa78adf5fb95d713",
+        "010b83f4cf2bd942eee19b6f36b1a50fccba233051e2bb309c5a219057b37ba2",
+        "0cd1612823bf0bc242c21ea6bf7ba220127dedda72a14621b18870a888ea064e"
+      ]
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 282683,
+      "sha256Chunks": [
+        "2a4c4281cf9f51ac6ccc406fdc711a087afe6530f671fa7b80953edc498275ce"
+      ]
+    },
+    {
+      "path": "special_tokens_map.json",
+      "bytes": 2194,
+      "sha256Chunks": [
+        "e67ae3a0aaa99abcd9f187138e12db1f65c16a14761c50ef10eef2c174a7a691"
+      ]
+    },
+    {
+      "path": "onnx/encoder_model_quantized.onnx",
+      "bytes": 10124990,
+      "sha256Chunks": [
+        "3ce08b5b6af01cc7f6572b43e5cf204f315be48443b69540d4ed997b3fc1a215",
+        "d92d4644c2ac08026efc5023e5c1afa89b569285c1a667b2baf018b2307654a7",
+        "4f451c38a39f545d43088d660ac095a469d769deb87bc41e8b519a5292ce68e7",
+        "441ec4d96f9bcae8348785804c814ff3fe4c03ba3127e4a26cbf8990e9272b94",
+        "063f231158b8d1d12994a777fbc0173af646abad9a7b07294c635d75c36e1002",
+        "2cb35a07349e450233bbd281853aafc215abedb220ba351eb7daa23fca02397f",
+        "637a7f59999900cebb15f52b434b7b1f3265c1a96b22ff5e85a802b9d6f57849",
+        "fa15f9e62410470c44a31bc4ca65527d6e1c9b54af2935231c65d64b8b357d6d",
+        "ec5992a9f504306f0a7909e60bf9ea22541251534d07324ae5822eb07df10476",
+        "66651bcac5aa5a66de3559f5a31e4a68ade1c84e6b8663850f6c2f8a7fe96dff"
+      ]
+    },
+    {
+      "path": "onnx/decoder_model_merged_quantized.onnx",
+      "bytes": 30719241,
+      "sha256Chunks": [
+        "a6498a4291115f376809bf13b42898abd14f461e519472fa6b759f64577a3c21",
+        "1aa0dd6d02768af702699c25527c9ef47ada09550778158e236243f437333cb4",
+        "aed1999524f3782ed8b7fb820b0feeaa536e0de5272c6f7b7debf08f3c624f2a",
+        "a02cb3d213dcb535b40463299101d953ce6206455acc58b00bfc91098b933774",
+        "be8b27412d94b8e6417ed659cfe0a28ad6d7c9e9b011d32554030266d1aed430",
+        "f4dc23a9764b37bf4c4d3e56df1f31a41fe47c5e47c2e10708fe8c037b3cf085",
+        "2c84a97aa14878cd11e54f7226efca0c76e73099ab229a0b480fd16362a593f5",
+        "4a2e6a6a280a932d8e6aca78b694fa099c1505a6bfa4aeeb718a4ccce22c7656",
+        "e39581ed5f95341e46687b1d10b568fb51d91296f55addc95b7d763c119208a9",
+        "d4426cc7abb4036d0a0ce754a56490744b4421418d5b0c61fced33ffdf2ebc08",
+        "38df5eee8535e4b98f3046f98d4d7dec48f82076c42b043cbe9774873fd60f31",
+        "96727877ec677d34fa8f43a98515e98850b14c35067ade593e580837da7db21e",
+        "308750311e68d80ae1694f7123387c7167f6199b7cce885fa7e29ba191996d29",
+        "baef6508de95ed3ddde59201eee98adb9990cf09ae94b4d325ed66375a9dd87d",
+        "86540b9e4d74d149705b6445cbfcf0df1b8529082b958e77cbcf611f88a5633f",
+        "b82601d4d93bf1923da3fc4aae20be4711801aed7a247cd83446690af6fb10bf",
+        "ece5b48e7fe308c2767201fdf7513ba8d1ee624c1263f53b2f0351ac90697db8",
+        "211ffc97188b43202600e158845b7d3cd2d31d38eef58298868d4f7fc79ecec6",
+        "52778afab0c0bc71fca398992a8aa7297c971d25005ff95f4b682a0f22d34cc6",
+        "9b7de09c5f78166f0f0858d3ece6075339e89d946a162474f1d62973e4064ab7",
+        "78da4ce9cc1d63250217358247b0754672e3c3b6bc1ef88d377e8cada94c9e25",
+        "5cdea8d2208b7a68c723e3f0d07fcd245c3f450c3dbc49b37e5d4f3e5828e6d9",
+        "66f930ec37e752eacd558a22ae24910ff8b7e199c8ca96d8a63450c1b4af679b",
+        "cd450d81728661ee4635ae9a907a70867c034421de4137052ad9e496e42e2320",
+        "31c0451eb22d9bc84de92a135523ceb9552bee966b5127669ded0b9e4ee15d8e",
+        "b7cc049590456607a65abf950bcfa54d8b68b316301a20619eb042276afee207",
+        "60fd0971f486d8ba436d0fc9cb6b662fb330616550a9ec9303a2392e989a073f",
+        "27ecbb6c8b88b4f2432a646d6d08b3fb569cc14abe471327c407fe412b40ad59",
+        "b173f867c49007a07bbf693b96ad281ee6ac7f796516555c91f904f2fea72b5b",
+        "c025d5b5ca0d284bd3b0c2fbf1a2cf617ba4aea43cc1f2de824bfa99eb14c76e"
+      ]
+    }
+  ]
+}

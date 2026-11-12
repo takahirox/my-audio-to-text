@@ -214,7 +214,7 @@ test('Library manages independent named graphs, portable JSON, persistent target
   await expect(page.locator('#web-voice-status')).toContainText('No compatible graphs');
   await expect(page.locator('#selected')).toBeHidden(); await expand(page);
   await expect(page.locator('#graph-models')).toBeVisible();
-  await expect(page.locator('#graph-models')).toHaveText('ReazonSpeech ja-en ASR');
+  await expect(page.locator('#graph-models')).toHaveText('Silero VAD · shared ReazonSpeech / Whisper dependency, ReazonSpeech ja-en · speech recognition');
   await expect(page.locator('#delete')).toBeVisible();
   await expect(page.locator('#delete')).toBeDisabled();
   await expect(page.locator('#delete')).toHaveAccessibleDescription('Keep at least one usable graph.');

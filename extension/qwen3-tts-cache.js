@@ -10,7 +10,7 @@ export async function qwen3TtsManifest() {
 // is used by Save, Models and the owned Worker, including the separate codec.
 export async function qwen3TtsAssets() {
   const manifest = await qwen3TtsManifest();
-  const view = await new ModelAssetCache(manifest).inspect();
+  const view = await new ModelAssetCache(manifest).inspect({ retain: true });
   if (view.state !== 'Ready') throw Error(view.error || 'Qwen3-TTS assets missing or evicted. Open Models and use Download / retry, then Start again.');
   const cache = await caches.open(MODEL_CACHE_NAME);
   const allowed = new Map(manifest.files.map(file => [file.path, file.url]));

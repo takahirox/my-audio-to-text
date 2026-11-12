@@ -285,7 +285,7 @@ test('two instances use distinct runtime nodes; model requirements include share
   const resolved = resolveSubgraphs(extracted, [definition]);
   const asrs = resolved.nodes.filter(node => node.type === 'SpeechToTextWhisper');
   assert.equal(asrs.length, 2); assert.notEqual(asrs[0].id, asrs[1].id);
-  assert.deepEqual(graphModelRequirements(resolved).map(model => model.key), ['meeting-summary-lfm2']);
+  assert.deepEqual(graphModelRequirements(resolved).map(model => model.key), ['silero', 'whisper', 'meeting-summary-lfm2']);
   assert.equal(executableGraph(resolved).nodes.some(node => node.type === 'TextSummaryLfm2'), false);
   const wrong = structuredClone(extracted); wrong.edges[0].from = ['second', 'out1'];
   assert.throws(() => resolveSubgraphs(wrong, [definition]), /Incompatible port types/);

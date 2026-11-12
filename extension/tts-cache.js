@@ -17,7 +17,7 @@ export async function ttsManifest(type, settings) {
 }
 export async function verifiedTtsCache(type, settings, signal) {
   const manifest = await ttsManifest(type, settings);
-  const view = await new ModelAssetCache(manifest).inspect({ signal });
+  const view = await new ModelAssetCache(manifest).inspect({ signal, retain: true });
   signal?.throwIfAborted();
   if (view.state !== 'Ready') throw new Error(view.error || `${type} assets missing or evicted. Open Models and use Download / retry for this model and voice.`);
   return manifest;

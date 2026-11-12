@@ -11,7 +11,9 @@ async function save(editor) {
   await settleAutoSave(editor);
   await expect(editor.locator('#graph-state')).toHaveText('Saved');
 }
-const cards = editor => editor.locator('#graph-models .model-card');
+// These translation/TTS tests scope controls to their processors. ASR dependency
+// preparation is covered explicitly in local-asr-preparation.spec.js.
+const cards = editor => editor.locator('#graph-models .model-card').filter({ hasNotText: /Silero VAD|ReazonSpeech ja-en/ });
 
 test('direct palette/canvas/settings use ordinary Text formatter; Graph actions has no translation preset', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
@@ -66,7 +68,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
   await expect(live.models.locator('#opus-ja-en .model-status')).toHaveText('Not downloaded');
 });
 
-test('no optional model requests on load, invalid Save, storage failure or a saved graph containing only packaged ASR', async ({ graphExtension: f }) => {
+test('no optional model requests on load, invalid Save, storage failure or unrelated saved model dependencies', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor, before = await saved(live);
   await save(editor); expect(f.requests).toEqual([]);
   await add(editor, 'OpusMtEnJa'); await add(editor, 'Number');
@@ -96,13 +98,13 @@ test('multiple parked model types and voices prepare distinct sets once and reus
     for (const [name, value] of Object.entries(settings)) await editor.getByLabel(`${id} ${name}`, { exact: true }).selectOption(value);
   }
   expect(f.requests).toEqual([]); await save(editor);
-  await expect(cards(editor)).toHaveCount(6);
-  await expect(cards(editor).locator('.model-status')).toHaveText(Array(6).fill('Ready · Cached and verified'));
+  await expect(cards(editor)).toHaveCount(7);
+  await expect(cards(editor).locator('.model-status')).toHaveText(Array(7).fill('Ready · Cached and verified'));
   expect(new Set(f.requests).size).toBe(f.requests.length);
   for (const voice of ['F1.json', 'M1.json', 'jf_alpha.bin', 'af_heart.bin']) expect(f.requests.some(url => url.endsWith(voice))).toBe(true);
   expect((await saved(live)).edges).toEqual(initial.edges);
   const count = f.requests.length; await save(editor);
-  await expect(cards(editor).locator('.model-status')).toHaveText(Array(6).fill('Ready · Cached and verified'));
+  await expect(cards(editor).locator('.model-status')).toHaveText(Array(7).fill('Ready · Cached and verified'));
   expect(f.requests).toHaveLength(count); expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
 });
 

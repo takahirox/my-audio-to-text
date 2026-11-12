@@ -134,8 +134,8 @@ models and **File cache**, distinct from Live's runtime/GPU readiness:
 model-bearing graphs initially show **Unknown**, not an unconditional Ready.
 **More → Check model files** inspects the selected graph's actual manifests without
 starting Workers, GPU work or downloads. It reports Ready (verified cached files),
-Needs preparation or Error; packaged ASR verification is left to Live and remains
-Unknown here. Graphs without model files can report Ready on that basis. Model
+Needs preparation or Error. ReazonSpeech, Silero, Whisper and Zipformer use the
+same manifest-based file checks as every other model. Graphs without model files can report Ready on that basis. Model
 cache notifications/focus invalidate old observations to Unknown. Models remains
 the global asset inspection/recovery screen; shared weights retain their existing
 asset-identity cache and are not duplicated per library graph.
@@ -716,3 +716,10 @@ Hold is available under **Constants / utilities**. Connect its readable value
 to a formatter alongside TextWindow, then route the summary back to Hold.input.
 Only TextWindow triggers the next update. [Importable example, limits and Stop /
 Cancel behavior](text-summary-nodes.md). Ordinary event cycles remain invalid.
+
+All ASR model files now follow the on-demand lifecycle described in
+[model assets](model-assets.md). ReazonSpeech and Whisper each require the shared
+Silero VAD entry; Zipformer owns segmentation and has no Silero dependency. Graph
+Auto Save and Models only inspect/download assets, without inference Workers.
+Live checks the executable nodes' assets again before enabling Start; missing,
+corrupt, offline or evicted data produces Models/Graph Editor retry guidance.

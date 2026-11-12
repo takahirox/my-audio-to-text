@@ -11,7 +11,7 @@ export async function translateGemmaManifest() {
 export async function verifiedTranslateGemmaCache(signal) {
   const manifest = await translateGemmaManifest();
   signal?.throwIfAborted();
-  const view = await new ModelAssetCache(manifest).inspect({ signal });
+  const view = await new ModelAssetCache(manifest).inspect({ signal, retain: true });
   signal?.throwIfAborted();
   if (view.state !== 'Ready') throw new Error(view.error || 'TranslateGemma weights missing or evicted. Use Retry preparation in Graph Editor or Download / retry for TranslateGemma 4B in Models.');
   return manifest;

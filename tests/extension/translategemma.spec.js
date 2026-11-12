@@ -10,7 +10,7 @@ async function add(editor, type) {
 async function save(editor) {
   await settleAutoSave(editor);
 }
-const card = editor => editor.locator('#graph-models .model-card');
+const card = editor => editor.locator('#graph-models .model-card').filter({ hasText: 'TranslateGemma 4B' });
 
 test('palette, Save and reload preserve current connected graph and parked directions; shared verified preparation and recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;

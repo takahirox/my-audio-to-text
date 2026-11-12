@@ -28,9 +28,9 @@ export async function checkLiveUI(page, expect, screenshot) {
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Meeting Assistant');
   await expect(page).toHaveTitle('Meeting Assistant');
   await expect(page.locator('main > p').filter({ hasText: /^Graph:/ })).toHaveCount(0);
-  await expect(page.getByRole('navigation').locator(':scope > *')).toHaveText(['Library', 'Graph', 'Models']);
+  await expect(page.getByRole('navigation').locator(':scope > *')).toHaveText(['Library', 'Edit graph', 'Models']);
   await expect(page.getByRole('link', { name: 'Library', exact: true })).toHaveAttribute('href', 'graph-library.html');
-  await expect(page.getByRole('navigation').getByRole('link', { name: 'Graph', exact: true })).toHaveAttribute('href', /graph-editor\.html\?id=.+/);
+  await expect(page.getByRole('navigation').getByRole('link', { name: 'Edit graph', exact: true })).toHaveAttribute('href', /graph-editor\.html\?id=.+/);
   await expect(page.getByRole('navigation').getByRole('link', { name: 'Models', exact: true })).toHaveAttribute('href', 'model-cache.html');
   await expect(page.locator('#session-state')).toHaveText('Idle');
   await expect(page.locator('#start')).toBeEnabled();

@@ -9,7 +9,7 @@ export async function ifConditionManifest() {
 export async function cacheOnlyIfConditionRuntime(env) {
   if (globalThis.location?.protocol !== 'chrome-extension:') throw new Error('IfCondition requires an extension-owned Worker.');
   const manifest = await ifConditionManifest(), assets = new ModelAssetCache(manifest);
-  const view = await assets.inspect();
+  const view = await assets.inspect({ retain: true });
   if (view.state !== 'Ready') throw new Error(view.error || 'IfCondition model assets missing or evicted. Use Retry preparation in Graph Editor or Models.');
   const cache = await caches.open(MODEL_CACHE_NAME), allowed = new Set(manifest.files.map(file => file.url));
   env.allowLocalModels = true; env.allowRemoteModels = false;

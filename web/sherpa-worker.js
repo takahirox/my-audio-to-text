@@ -9,6 +9,9 @@ async function load(requestedThreads) {
   const { ASR_CONFIG } = await import('./local-asr-config.js');
   sampleRate = ASR_CONFIG.sampleRate;
   const { selectReazonThreads } = await import('./reazon-config.js');
+  const { localModelAssets } = await import('./local-model-assets.js');
+  const { sherpaModelFiles } = await localModelAssets('reazon', message => send('progress', { message }));
+  const installModels = await sherpaModelFiles('reazon');
   const base = new URL('./vendor/sherpa-ja-en/', self.location.href);
   const script = new URL('sherpa-onnx-wasm-main-vad-asr.js', base).href;
   await new Promise((resolve, reject) => {
@@ -23,6 +26,7 @@ async function load(requestedThreads) {
     };
     importScripts(new URL('sherpa-onnx-asr.js', base).href, script);
   });
+  installModels(self.Module);
   const numThreads = selectReazonThreads({
     hardwareConcurrency: self.navigator.hardwareConcurrency,
     crossOriginIsolated: self.crossOriginIsolated,

@@ -8,6 +8,7 @@ import hashlib
 import io
 import gzip
 import json
+import runpy
 from pathlib import Path
 import tarfile
 import urllib.request
@@ -34,15 +35,24 @@ PACKAGES = [
          'dist/ort-wasm-simd-threaded.mjs': 'ort-wasm-simd-threaded.mjs',
          'dist/ort-wasm-simd-threaded.wasm': 'ort-wasm-simd-threaded.wasm',
      }),
-    ('kokoro-js-jp-0.2.0', 'https://registry.npmjs.org/kokoro-js-jp/-/kokoro-js-jp-0.2.0.tgz',
-     '16223a8fae6ae58f84b62ba457463a8369dd84e9f01050be3287b6833096f59e', {
-         'dist/openjtalk-wasm-wrapper-D6E3BSJO.js': 'openjtalk-wasm-wrapper-D6E3BSJO.js',
-         'dist/openjtalk-wasm.wasm': 'openjtalk-wasm.wasm',
-         'dist/open_jtalk_dic_utf_8-1.11.tar.gz': 'open_jtalk_dic_utf_8-1.11.tar.gz',
-         'dist/openjtalk-voice.htsvoice': 'openjtalk-voice.htsvoice',
-         'THIRD_PARTY_NOTICES.md': 'openjtalk-NOTICES',
-     }),
+
 ]
+# Fetch the frontend's weight-free files individually, excluding its HTS voice.
+FRONTEND_FILES = [
+    ('openjtalk-open_jtalk_dic_utf_8-1.11.tar.gz',
+     'https://cdn.jsdelivr.net/npm/kokoro-js-jp@0.2.0/dist/open_jtalk_dic_utf_8-1.11.tar.gz',
+     '33e9cd251bc41aa2bd7ca36f57abbf61eae3543ca25ca892ae345e394cb10549', 'open_jtalk_dic_utf_8-1.11.tar.gz'),
+    ('openjtalk-openjtalk-NOTICES',
+     'https://cdn.jsdelivr.net/npm/kokoro-js-jp@0.2.0/THIRD_PARTY_NOTICES.md',
+     '923965ed88e770a3e41407cc7f202c4216341065af6d6531e1256f2143e21e37', 'openjtalk-NOTICES'),
+    ('openjtalk-openjtalk-wasm-wrapper-D6E3BSJO.js',
+     'https://cdn.jsdelivr.net/npm/kokoro-js-jp@0.2.0/dist/openjtalk-wasm-wrapper-D6E3BSJO.js',
+     'c9d86db89c2c472c0149044d490469309e68e62452cb0e033b2e66d0adaa333a', 'openjtalk-wasm-wrapper-D6E3BSJO.js'),
+    ('openjtalk-openjtalk-wasm.wasm',
+     'https://cdn.jsdelivr.net/npm/kokoro-js-jp@0.2.0/dist/openjtalk-wasm.wasm',
+     'b7733926d488d28d3e80d9590e1d9fd286dc880e8c4b70505ca15bd10dcdca27', 'openjtalk-wasm.wasm'),
+]
+
 # The ORT npm archive omits notices. Stage the matching immutable source notices
 # alongside the binaries, and the conversion's own Apache-2.0 license.
 QWEN_NOTICES = [
@@ -101,8 +111,11 @@ def english_frontend(source):
             entry.size = len(data)
             entry.mode = 0o755 if name == 'build.sh' else 0o644
             archive.addfile(entry, io.BytesIO(data))
+    source_bundle = gzip.compress(buffer.getvalue(), mtime=0)
+    # Python 3.11/3.12 otherwise expose zlib's platform-specific gzip OS byte.
+    source_bundle = source_bundle[:9] + b'\xff' + source_bundle[10:]
     return {'phonemizer.js': members['phonemizer.js'], 'phonemizer-engine.mjs': engine,
-            'phonemizer-source.tar.gz': gzip.compress(buffer.getvalue(), mtime=0)}
+            'phonemizer-source.tar.gz': source_bundle}
 
 
 def main():
@@ -110,7 +123,7 @@ def main():
     files = {}
     for name, url, digest, members in PACKAGES:
         files.update(stage(fetch(name, url, digest), digest, members))
-    for name, url, digest, target in QWEN_NOTICES:
+    for name, url, digest, target in [*QWEN_NOTICES, *FRONTEND_FILES]:
         files[target] = fetch(name, url, digest)
     files.update(english_frontend(fetch(*ESPEAK_SOURCE)))
     for entry in json.loads((ROOT / 'scripts/qwen3-tts-runtime.json').read_text())['files']:
@@ -125,6 +138,8 @@ def main():
         (target / name).write_bytes(data)
     # Remove the former npm wrapper's notice when restaging an existing tree.
     (target / 'phonemizer-LICENSE').unlink(missing_ok=True)
+    (target / 'openjtalk-voice.htsvoice').unlink(missing_ok=True)
+    runpy.run_path(str(ROOT / 'scripts/prepare-model-cache.py'), run_name='__main__')
     print(f'Staged pinned TTS assets: {sum(map(len, files.values())):,} bytes')
 
 

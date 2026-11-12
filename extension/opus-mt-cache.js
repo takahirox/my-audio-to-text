@@ -1,21 +1,21 @@
 import { ModelAssetCache, MODEL_CACHE_NAME } from './model-asset-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 
-export async function verifiedOpusCache(signal, loadManifest = opusMtManifest) {
+export async function verifiedOpusCache(signal, loadManifest = opusMtManifest, label = 'OPUS-MT') {
   const manifest = await loadManifest();
   signal?.throwIfAborted();
   const assets = new ModelAssetCache(manifest);
-  const view = await assets.inspect({ signal });
+  const view = await assets.inspect({ signal, retain: true });
   signal?.throwIfAborted();
-  if (view.state !== 'Ready') throw new Error(view.error || 'OPUS-MT assets missing or evicted. Open Models and use Download / retry for this direction.');
+  if (view.state !== 'Ready') throw new Error(view.error || `${label} assets missing or evicted. Open Models and use Download / retry for this model.`);
   return manifest;
 }
 
 // Cache API belongs to the extension origin, even though its keys are pinned
 // HTTPS asset URLs. Runtime code and WASM remain packaged extension resources.
 // Transformers' optional lookups receive a local 404; no remote fallback.
-export async function cacheOnlyOpusRuntime(env, loadManifest = opusMtManifest) {
-  const manifest = await verifiedOpusCache(undefined, loadManifest);
+export async function cacheOnlyOpusRuntime(env, loadManifest = opusMtManifest, label = 'OPUS-MT') {
+  const manifest = await verifiedOpusCache(undefined, loadManifest, label);
   const cache = await caches.open(MODEL_CACHE_NAME);
   const allowed = new Set(manifest.files.map(file => file.url));
   env.allowLocalModels = true; env.allowRemoteModels = false;
@@ -26,7 +26,7 @@ export async function cacheOnlyOpusRuntime(env, loadManifest = opusMtManifest) {
       const url = typeof request === 'string' ? request : request.url;
       if (allowed.has(url)) {
         const response = await cache.match(url);
-        if (!response) throw new Error('OPUS-MT cache evicted during load. Open Models and retry OPUS-MT.');
+        if (!response) throw new Error(`${label} cache evicted during load. Open Models and retry preparation.`);
         return response;
       }
       return undefined; // Optional lookups use local 404, with remote models disabled.

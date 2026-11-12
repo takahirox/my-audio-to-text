@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 export async function selectWhisper(page, language) {
   await page.evaluate(async language => {
     const { graphNode, edge } = await import('./graph.js'); const { readLiveGraphData, saveLiveGraphData } = await import('./graph-library.js');
@@ -13,4 +14,6 @@ export async function selectWhisper(page, language) {
     ExtensionTabAudioNode.prototype.stop = function() {};
   }, language);
   await page.editor.reload();
+  await page.editor.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
+  await settleAutoSave(page.editor);
 }

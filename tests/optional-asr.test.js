@@ -98,7 +98,7 @@ for (const [type, Node, key, factoryKey, partial] of types) {
     const manifest = defineAssetSet(specification);
     assert.equal(manifest.bytes, specification.files.reduce((sum, file) => sum + file.bytes, 0));
     assert.equal(specification.files.every(file => /^[a-f0-9]{64}$/.test(file.sha256)), true);
-    const saved = defaultGraph(); saved.nodes.push(graphNode(type, 'parked'), graphNode(type, 'parked2'));
+    const saved = defaultGraph(); saved.nodes.find(n => n.type === 'SpeechToTextReazonSpeech').type = type; if (!partial) saved.edges = saved.edges.filter(e => !['provisional', 'provisionalId'].includes(e.from[1])); saved.nodes.push(graphNode(type, 'parked'), graphNode(type, 'parked2'));
     const original = structuredClone(saved), selected = graphModelRequirements(saved);
     assert.deepEqual(selected.map(item => item.key), [key]);
     assert.equal(executableGraph(saved).nodes.some(node => node.id === 'parked'), false);
@@ -117,7 +117,7 @@ for (const [type, Node, key, factoryKey, partial] of types) {
 }
 
 test('new independent paths retain Graph v11/default/migrations, save/reload exactly, bind production types and fan out plain TEXT', () => {
-  const original = defaultGraph(); assert.equal(original.version, 15); assert.deepEqual(graphModelRequirements(original), []);
+  const original = defaultGraph(); assert.equal(original.version, 15); assert.deepEqual(graphModelRequirements(original).map(r => r.key), ['silero', 'reazon']);
   const description = graph(); description.nodes.push(graphNode('TextFormatter', 'format'), graphNode('OpusMtEnJa', 'translate'), graphNode('FocusedInputTextOutputNode', 'field'));
   description.edges.push(edge('asr0', 'final', 'format', 'input1'), edge('asr1', 'final', 'translate', 'text'), edge('asr0', 'final', 'field', 'text'));
   assertGraph(description);

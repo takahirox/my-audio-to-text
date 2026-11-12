@@ -19,9 +19,9 @@ test('Gemma directions share a complete immutable q4 manifest, including both ex
     'chat_template.jinja', 'onnx/model_q4.onnx', 'onnx/model_q4.onnx_data', 'onnx/model_q4.onnx_data_1']);
   assert.ok(set.files.every(f => f.url.includes(TRANSLATE_GEMMA.revision)));
   const graph = defaultGraph(), before = structuredClone(graph);
-  assert.deepEqual(graphModelRequirements(graph), []);
+  assert.deepEqual(graphModelRequirements(graph).map(r => r.key), ['silero', 'reazon']);
   graph.nodes.push(graphNode('TranslateGemmaEnJa', 'en'), graphNode('TranslateGemmaJaEn', 'ja'), graphNode('TranslateGemmaEnJa', 'duplicate'));
-  assert.deepEqual(graphModelRequirements(graph).map(r => r.key), ['translategemma']);
+  assert.deepEqual(graphModelRequirements(graph).map(r => r.key), ['silero', 'reazon', 'translategemma']);
   assert.deepEqual(defaultGraph(), before);
 });
 
