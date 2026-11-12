@@ -17,9 +17,11 @@
 .models-page .model-card select { max-width: 100%; }
 .models-page .actions { margin-top: 1rem; gap: .5rem; }
 .models-page .actions .danger { margin-left: auto; }
-.models-page .model-card details { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .4rem; }
+.models-page .model-card details { margin-top: .75rem; }
 .models-page .model-card ul { padding-left: 1.25rem; }
 .models-page .model-license { margin: .75rem 0 0; font-size: .8rem; }
+.models-page .model-license details { margin: .25rem 0 0; }
+.models-page .model-license details p { margin: .25rem 0 0; }
 .models-page summary { align-content: center; }
 .models-page footer { padding: 1rem 1.25rem; border: 1px solid var(--warning-border); border-radius: var(--card-radius); color: var(--warning); background: var(--warning-bg); }
 @media (max-width: 800px) {

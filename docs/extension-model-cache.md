@@ -85,6 +85,14 @@ persistence. Models has no manual storage-control UI. This is a safeguard agains
 browser eviction, not a guarantee against all data loss, intentional deletion
 or extension uninstall. No `unlimitedStorage` permission is added.
 
+Each card keeps **Verified files and size** as an expandable file list and byte
+count, without a divider above it. Short **License & source**, **License**,
+**License / terms** or **Source** links describe the existing destination;
+**Attribution & notices** expands the full model attribution, conversion provenance
+and usage conditions. These notices remain separate from the link label.
+See the [desktop](evidence/ui-332-models-1440.png) and
+[narrow](evidence/ui-332-models-390.png) Models screenshots.
+
 Supertonic/Kokoro license links remain on their model cards. The Models footer
 also provides TTS terms/notices and the matching eSpeak NG source/build bundle,
 alongside the existing Gemma terms notice.
