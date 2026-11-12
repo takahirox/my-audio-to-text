@@ -71,6 +71,7 @@ async function openEditor() {
       catch (error) { element('errors').textContent = `Cannot navigate until Auto Save succeeds: ${error.message}. Repair, retry or export the draft.`; }
     }
   });
+  editor.noticeContent.append(element('errors'), controls); editor.updateNotices();
   function makeSession() {
     session?.close();
     session = new GraphDraftSession({ id, base, graph: editor.saved || editor.draft, storage: localStorage, sessionId: crypto.randomUUID(),

@@ -45,7 +45,7 @@ test('MV3 palette search/categories, contextual settings, keyboard controls and 
   await expect(editor.locator('[data-node="number"]')).toHaveCount(1);
   await clickGraphAction(editor, 'graph-reset'); await expect(editor.locator('[data-node="number"]')).toHaveCount(0);
   expect(await editor.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Draft valid');
+  await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-validation-output')).toContainText('Graph is valid');
 });
 
 test('MV3 compact controls precede live outputs; preview, current value and independent translation Nodes reflect the graph', async ({ graphExtension: f }) => {

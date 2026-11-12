@@ -114,7 +114,7 @@ for (const zoom of ['0.5', '0.75', '1', '1.25', '1.5']) {
     await expect(editor.locator('.graph-wire')).toHaveCount(before.edges.length - 1);
     await expect(editor.locator('.graph-node')).toHaveCount(before.nodes.length);
     await expect(editor.locator('#graph-errors')).toBeEmpty();
-    await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Draft valid.');
+    await clickGraphAction(editor, 'graph-validate'); await expect(editor.locator('#graph-validation-output')).toContainText('Graph is valid.');
     await save(editor);
     const after = await saved(live);
     expect(after.nodes).toEqual(before.nodes);

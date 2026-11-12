@@ -38,7 +38,7 @@ test('import, Save, Load saved and reset retain logical graph data independently
   await page.getByRole('button', { name: 'Select obstacle', exact: true }).press('ArrowDown');
   await page.locator('#graph-undo').click();
   await expect(page.locator('[data-node="obstacle"]')).toHaveCSS('top', `${imported.nodes[1].position.y}px`); await assertRoutingGeometry(page);
-  await clickGraphAction(page, 'graph-validate'); await expect(page.locator('#graph-errors')).not.toContainText('Error:');
+  await clickGraphAction(page, 'graph-validate'); await expect(page.locator('#graph-validation-output')).not.toContainText('Error:');
   expect(await page.evaluate(async () => { const { validateGraph } = await import('./graph.js'); return validateGraph((() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })()); })).toEqual([]);
   await clickGraphAction(page, 'graph-reset');
   await expect(page.locator('[data-node="source"]')).toHaveCount(0);
