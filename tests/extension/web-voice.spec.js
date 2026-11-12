@@ -234,6 +234,19 @@ const toolbarWorker = t => t.worker;
 async function toolbarVoiceState(t) {
   return toolbarWorker(t).evaluate(() => toolbarMenus['web-microphone']);
 }
+async function microphoneHierarchy(t) {
+  await expect.poll(() => toolbarWorker(t).evaluate(() => Object.values(toolbarMenus)
+    .filter(item => !item.parentId || item.parentId === 'microphone' || item.parentId === 'microphone-position')
+    .map(({ id, parentId, title, type }) => ({ id, parentId, title, type })))).toEqual([
+    { id: 'microphone', title: 'Microphone' },
+    { id: 'web-microphone', parentId: 'microphone', title: 'Enable', type: 'checkbox' },
+    { id: 'microphone-position', parentId: 'microphone', title: 'Icon position' },
+    { id: 'microphone-position:auto', parentId: 'microphone-position', title: 'Auto', type: 'radio' },
+    { id: 'microphone-position:left', parentId: 'microphone-position', title: 'Left', type: 'radio' },
+    { id: 'microphone-position:right', parentId: 'microphone-position', title: 'Right', type: 'radio' },
+    { id: 'live-graphs', title: 'Graphs' },
+  ]);
+}
 async function toolbarVoice(t, enabled) {
   await toolbarWorker(t).evaluate(checked => toolbarEvents.menu({ menuItemId: 'web-microphone', checked }), enabled);
   await expect.poll(async () => { const state = await toolbarVoiceState(t); return state?.enabled && state.checked === enabled; }).toBe(true);
@@ -380,16 +393,19 @@ test('pending toolbar permission ignores repeated clicks and external OFF cancel
 
 test('toolbar state survives graph rebuilds, external permission removal and restart without restoring opt-in', async ({ voice: t }) => {
   test.skip(real);
+  await microphoneHierarchy(t);
   await positionMenu(t, 'left'); await enable(t);
   const other = await t.context.newPage(); await other.goto(t.url + 'graph-library.html');
   const added = await addVoice(t, 'Rebuild menus');
   await expect.poll(() => toolbarWorker(t).evaluate(id => !!toolbarMenus['live-run:' + id], added)).toBe(true);
+  await microphoneHierarchy(t);
   expect((await toolbarVoiceState(t)).checked).toBe(true);
   expect(await toolbarWorker(t).evaluate(() => toolbarMenus['microphone-position:left'].checked)).toBe(true);
   await other.evaluate(() => chrome.permissions.remove({ origins: ['http://*/*', 'https://*/*'] }));
   await expect.poll(async () => (await toolbarVoiceState(t))?.checked).toBe(false);
   await expect.poll(() => other.evaluate(async () => (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1']?.enabled)).toBe(false);
   await t.restart();
+  await microphoneHierarchy(t);
   await expect.poll(async () => (await toolbarVoiceState(t))?.checked).toBe(false);
   expect(await toolbarWorker(t).evaluate(() => toolbarMenus['microphone-position:left'].checked)).toBe(true);
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0);

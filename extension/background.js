@@ -32,13 +32,14 @@ function refreshMenus() {
     await chrome.contextMenus.removeAll();
     let voice = { enabled: false, pending: false }, position = 'auto';
     try { voice = await readWebVoiceState(); position = await readVoicePosition(); } catch { /* Fail closed; a click can retry. */ }
-    await createMenu({ id: 'web-microphone', title: 'Web microphone', type: 'checkbox', checked: voice.enabled, enabled: !voice.pending && !microphonePending });
-    await createMenu({ id: 'microphone-position', title: 'Microphone position' });
+    await createMenu({ id: 'microphone', title: 'Microphone' });
+    await createMenu({ id: 'web-microphone', parentId: 'microphone', title: 'Enable', type: 'checkbox', checked: voice.enabled, enabled: !voice.pending && !microphonePending });
+    await createMenu({ id: 'microphone-position', parentId: 'microphone', title: 'Icon position' });
     for (const value of WEB_VOICE_POSITIONS) await createMenu({ id: 'microphone-position:' + value, parentId: 'microphone-position', title: value[0].toUpperCase() + value.slice(1), type: 'radio', checked: position === value });
     await syncMicrophoneMenus();
     let state, error;
     try { state = await requestLaunchLibrary('live-list'); } catch (failure) { error = failure.message; }
-    // Three action-level items stay below Chrome's menu capacity for large libraries.
+    // Two action-level groups stay below Chrome's menu capacity for large libraries.
     await createMenu({ id: root, title: 'Graphs' });
     await createMenu({ id: open, parentId: root, title: 'Open' });
     for (const graph of state?.graphs || []) await createMenu({ id: run + graph.id, parentId: open, title: graph.name, type: 'radio', checked: graph.id === state.defaultId });
