@@ -105,7 +105,15 @@ export class GraphEditor {
     validationHeader.append(validationTitle, button('Close', 'graph-validation-close', () => this.closeValidation()));
     this.validationState = el('p'); this.validationState.setAttribute('role', 'status');
     this.validationOutput = el('pre'); this.validationOutput.id = 'graph-validation-output'; this.validationOutput.tabIndex = 0; this.validationOutput.setAttribute('aria-label', 'Validation output');
-    this.validation.append(validationHeader, this.validationState, this.validationOutput, button('Validate graph', 'graph-revalidate', () => this.showValidation(false)));
+    const moveValidation = button('Move down', 'graph-validation-move', () => {
+      const bottom = this.validation.classList.toggle('graph-validation-bottom');
+      moveValidation.textContent = bottom ? 'Move up' : 'Move down';
+      moveValidation.setAttribute('aria-label', bottom ? 'Move results to top' : 'Move results to bottom');
+    });
+    moveValidation.setAttribute('aria-label', 'Move results to bottom');
+    const validationActions = el('div', undefined, 'graph-validation-actions');
+    validationActions.append(button('Validate graph', 'graph-revalidate', () => this.showValidation(false)), moveValidation);
+    this.validation.append(validationHeader, this.validationState, this.validationOutput, validationActions);
     this.workspace = el('div', undefined, 'graph-workspace');
     this.palette = el('aside', undefined, 'graph-palette'); this.palette.id = 'graph-palette'; this.palette.hidden = true;
     this.palette.setAttribute('role', 'dialog'); this.palette.setAttribute('aria-label', 'Add Node');

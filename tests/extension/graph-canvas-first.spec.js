@@ -1,4 +1,4 @@
-import { checkValidationPanel, checkStableSelection } from '../fixtures/graph-validation.js';
+import { checkValidationPanel, checkStableSelection, checkValidationPointer } from '../fixtures/graph-validation.js';
 import { test, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -25,6 +25,8 @@ test('MV3 canvas-first controls, inspector, zoom focus, connections and recovery
     await page.goto(url);
     for (const width of [1440, 390, 320]) { await checkCanvasFirst(page, width); await checkGraphActivity(page, width); }
     for (const width of [1440, 390, 320]) { await checkStableSelection(page, width); await checkValidationPanel(page, width); }
+    for (const width of [390, 320]) await checkValidationPointer(page, { width });
+    await checkValidationPointer(page, { touch: true });
     await page.setViewportSize({ width: 1440, height: 900 }); await checkLeanInspector(page);
     await page.evaluate(() => localStorage.clear());
     await page.goto(url); await checkGraphCommands(page);

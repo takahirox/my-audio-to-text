@@ -74,12 +74,17 @@
   background: var(--panel); box-shadow: var(--popover-shadow); overflow-wrap: anywhere;
 }
 .editor-page .graph-validation { top: .5rem; max-height: min(26rem, 48%); display: flex; flex-direction: column; gap: .5rem; }
+/* Let pointer and touch users uncover nodes without hiding the results.
+   Keep the lower placement above the canvas navigation controls. */
+.editor-page .graph-validation-bottom { top: auto; bottom: 5rem; }
+/* Persistent notices stay accessible without covering the moved panel's actions. */
+.editor-page .graph-validation-bottom:not([hidden]) ~ .graph-notices { top: .5rem; bottom: auto; }
 .editor-page .graph-validation[hidden], .editor-page .graph-notices[hidden] { display: none; }
 .editor-page .graph-validation-header { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-shrink: 0; }
 .editor-page .graph-validation h2 { margin: 0; font-size: 1rem; }
 .editor-page .graph-validation p { margin: 0; font-size: .85rem; }
 .editor-page .graph-validation pre { min-height: 0; overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; margin: 0; font-size: .85rem; }
-.editor-page .graph-validation > button { align-self: flex-start; flex-shrink: 0; }
+.editor-page .graph-validation-actions { display: flex; flex-wrap: wrap; gap: .5rem; flex-shrink: 0; }
 .editor-page .graph-notices { bottom: 5rem; max-height: 30%; overflow: auto; overscroll-behavior: contain; }
 .editor-page .graph-notices > summary { min-height: 44px; cursor: pointer; font-weight: 650; }
 .editor-page .graph-notices :is(p, pre) { margin: .5rem 0 0; white-space: pre-wrap; }

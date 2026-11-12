@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { clickGraphAction, settleAutoSave } from '../extension/ui-controls.js';
+import { clickGraphAction, settleAutoSave, recoverAsNew } from '../extension/ui-controls.js';
 
 const geometry = page => page.evaluate(() => {
   const box = selector => {
@@ -109,4 +109,62 @@ export async function checkStableSelection(page, width) {
   await second.press('Shift+Enter'); await expect(create).toBeDisabled();
   await expect(inspector).toContainText('Instance ID: audio');
   await first.press('Escape'); await expect(create).toBeDisabled();
+}
+
+export async function checkValidationPointer(page, { width = 390, touch = false } = {}) {
+  await page.setViewportSize({ width, height: 844 });
+  await settleAutoSave(page);
+  // Each case gets its own entry so earlier edits do not add recovery notices.
+  await recoverAsNew(page);
+  const panel = page.getByRole('region', { name: 'Validation results', exact: true });
+  const heading = page.getByRole('button', { name: 'Select audio', exact: true });
+  await clickGraphAction(page, 'graph-validate');
+  await expect(panel).toBeVisible();
+  const before = await geometry(page);
+  const results = await panel.locator('pre').textContent();
+  const headingBox = await heading.boundingBox(), panelBox = await panel.boundingBox();
+  // Reproduce the narrow-screen obstruction instead of selecting by keyboard.
+  expect(headingBox.y + headingBox.height / 2).toBeGreaterThan(panelBox.y);
+  expect(headingBox.y + headingBox.height / 2).toBeLessThan(panelBox.y + panelBox.height);
+  const move = panel.getByRole('button', { name: 'Move results to bottom', exact: true });
+  if (touch) await move.tap(); else await move.click();
+  expect(await geometry(page)).toEqual(before);
+  expect((await panel.boundingBox()).y).toBeGreaterThan(headingBox.y + headingBox.height);
+  if (touch) await heading.tap(); else await heading.click();
+  await expect(heading).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.graph-inspector')).toContainText('Instance ID: audio');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('pre')).toHaveText(results);
+  await expect(panel.getByRole('status')).toContainText('current graph');
+  if (!touch) {
+    const card = page.locator('[data-node="audio"]'), origin = await card.boundingBox();
+    const target = await heading.boundingBox();
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(target.x + target.width / 2 + 30, target.y + target.height / 2 + 20, { steps: 5 });
+    await page.mouse.up();
+    const moved = await card.boundingBox();
+    expect(moved.x).toBeCloseTo(origin.x + 30, 0);
+    expect(moved.y).toBeCloseTo(origin.y + 20, 0);
+    await expect(panel.getByRole('status')).toContainText('Outdated');
+  }
+  // Save/runtime notices must not cover the actions in the lower placement.
+  await clickGraphAction(page, 'graph-import');
+  await page.locator('input[type=file]').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{invalid') });
+  await expect(page.locator('#graph-errors')).toContainText('Cannot import graph');
+  await page.keyboard.press('Escape'); // Failed import leaves Graph actions open.
+  const notices = await page.locator('.graph-notices').boundingBox();
+  expect(notices.y + notices.height).toBeLessThan((await panel.boundingBox()).y);
+  await panel.getByRole('button', { name: 'Validate graph', exact: true }).click();
+  await expect(panel.getByRole('status')).toContainText('current graph');
+  await expect(panel).toHaveCount(1);
+  // Moving back is keyboard accessible and leaves the canvas geometry intact.
+  const afterEdit = await geometry(page);
+  await panel.getByRole('button', { name: 'Move results to top', exact: true }).press('Enter');
+  expect(await geometry(page)).toEqual(afterEdit);
+  await expect(panel.getByRole('button', { name: 'Move results to bottom', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(page.locator('#graph-errors')).toContainText('Cannot import graph');
+  await expect(page.locator('.graph-notices')).toBeVisible();
 }
