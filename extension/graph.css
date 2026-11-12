@@ -23,7 +23,12 @@
 .editor-page .graph-ports [data-side="input"] { border-left-color: #267565; }
 .editor-page .graph-ports .connected-input { background: #f0f7f4; }
 .editor-page .graph-ports :disabled { border-color: var(--border); }
-.editor-page .selected-node { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), var(--shadow); }
+.editor-page .selected-node { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent), var(--shadow); }
+.editor-page .selected-node .graph-heading::before { content: '✓ '; }
+.editor-page .graph-selection { border-bottom: 2px solid var(--border); padding-bottom: .75rem; margin-bottom: .75rem; }
+.editor-page .graph-selection p { margin: .25rem 0; }
+.editor-page .graph-selection [role="status"] { font-weight: 650; }
+.editor-page .graph-selection [role="alert"]:empty { display: none; }
 .editor-page .selected-port { outline-color: var(--accent); background: var(--surface-hover); }
 /* A solid, background-colored casing preserves #215's crossing gaps.
    Keep the continuous native hit paths and the routing geometry untouched. */
@@ -46,10 +51,13 @@
 .editor-page :is(.graph-palette, .graph-command-list) { box-shadow: var(--popover-shadow); }
 .editor-page .graph-node-list { max-height: 24rem; }
 .editor-page #graph-errors { white-space: pre-wrap; }
-.editor-page .graph-subgraph-dialog { width: min(42rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; box-sizing: border-box; }
+.editor-page .graph-subgraph-dialog { width: min(42rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--panel); color: inherit; }
 .editor-page .graph-subgraph-dialog::backdrop { background: #29263566; }
 .editor-page .graph-subgraph-dialog :is(input, select), .editor-page .graph-inspector fieldset { width: 100%; min-width: 0; box-sizing: border-box; }
 .editor-page .graph-subgraph-dialog fieldset { min-width: 0; }
+.editor-page .graph-subgraph-dialog > label { display: block; margin-bottom: .25rem; }
+.editor-page .graph-subgraph-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+.editor-page :is(.graph-selection, .graph-subgraph-dialog) [role="alert"] { color: var(--danger); }
 .editor-page :is(.graph-subgraph-dialog, .graph-inspector) fieldset > div { display: grid; gap: .4rem; margin-bottom: 1rem; }
 .editor-page :is(.graph-subgraph-dialog, .graph-inspector) fieldset > div > button { justify-self: start; }
 .editor-page #graph-models { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--panel); }
