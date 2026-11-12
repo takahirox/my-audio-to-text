@@ -59,7 +59,10 @@ export async function checkQuickAddInteraction(page) {
   await openQuickAdd(page);
   await expectNoPaletteStatus(page);
   await expect(page.getByRole('group', { name: 'Sources / inputs' })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Constants / utilities' })).toBeVisible();
+  for (const purpose of ['Speech Recognition', 'Translation', 'Text', 'Speech Synthesis']) {
+    await expect(page.getByRole('group', { name: `AI Models / ${purpose}`, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole('group', { name: 'Processors' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add selected node' })).toHaveCount(0);
   const options = page.getByRole('listbox', { name: 'Node types' }).getByRole('option');
   const initial = await snapshot(page);
@@ -124,7 +127,7 @@ export async function checkQuickAddInteraction(page) {
   await search(page).press('Shift+Tab');
   await expect(page.locator('#graph-palette')).toBeHidden();
   await openQuickAdd(page);
-  await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
+  await page.getByLabel('Node category', { exact: true }).selectOption('Sources / inputs');
   await expectPaletteSelection(page);
   await expectNoPaletteStatus(page);
   await search(page).press('ArrowDown');
@@ -136,7 +139,7 @@ export async function checkQuickAddInteraction(page) {
   await expect(options).toHaveCount(0); await expectPaletteSelection(page);
   await expect(page.locator('#graph-palette [role="status"]')).toHaveText('No matching nodes');
   await expect(page.locator('#graph-palette [role="status"]')).toBeVisible();
-  await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
+  await page.getByLabel('Node category', { exact: true }).selectOption('Sources / inputs');
   await expect(options).toHaveCount(1); await expectPaletteSelection(page);
   await expectNoPaletteStatus(page);
   await search(page).press('Enter'); await expect(page.locator('.graph-node')).toHaveCount(0);
@@ -160,7 +163,8 @@ export async function checkQuickAddInteraction(page) {
   await page.reload();
   await expect(page.locator('.graph-node')).toHaveCount(2);
   await openQuickAdd(page);
-  await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
+  await page.getByLabel('Node category', { exact: true }).selectOption('Sources / inputs');
+  await search(page).fill('Number');
   await search(page).press('ArrowDown');
   await expectPaletteSelection(page, options.filter({ hasText: /^Number$/ }));
   await search(page).press('Enter');

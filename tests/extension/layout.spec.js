@@ -18,7 +18,7 @@ test('MV3 palette search/categories, contextual settings, keyboard controls and 
   await expect(editor.locator('#graph-translation')).toHaveCount(0);
   await editor.getByRole('button', { name: 'Add Node', exact: true }).press('Enter');
   await expect(editor.getByLabel('Search nodes', { exact: true })).toBeFocused();
-  await editor.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
+  await editor.getByLabel('Node category', { exact: true }).selectOption('Sources / inputs');
   await editor.getByLabel('Search nodes', { exact: true }).fill('Number');
   await expect(editor.locator('#graph-node-type [role="option"]')).toHaveCount(1);
   if (process.env.UPDATE_UI_SCREENSHOTS) await editor.screenshot({ path: 'docs/evidence/ui-109-palette.png', fullPage: true });
