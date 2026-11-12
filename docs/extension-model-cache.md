@@ -225,6 +225,9 @@ deduplication, packaged ASR exclusion and stale-run cancellation.
 `tests/extension/graph-models.spec.js` exercises direct UI composition, persistence
 before fetching, failed validation/storage, saved parked Nodes, shared weights,
 progress, cancellation, integrity failures/retry and Models recovery.
+`tests/extension/model-inspection.spec.js` covers automatic Models inspection on
+opening, focus and cross-page updates, including corruption/eviction recovery and
+actionable inspection errors without a manual cache-check control.
 
 See [Issue #67 validation evidence](evidence/extension-model-cache-67.md).
 No post-merge human acceptance gate is required. Optional follow-up work can

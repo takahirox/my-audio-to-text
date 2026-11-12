@@ -111,6 +111,7 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   await page.setViewportSize({ width: 390, height: 844 });
   const card = page.locator('#opus-ja-en'), status = card.locator('.model-status');
   await expect(status).toHaveText('Not downloaded');
+  await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
   await card.getByText('Verified files and size', { exact: true }).click();
   await expect(card.locator('li').first()).toContainText('Missing');
   f.mode('hold');
@@ -119,6 +120,7 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   await expect(card.locator('progress')).toBeVisible();
   await expect(card.getByRole('button', { name: /^(Download|Retry)$/ })).toBeHidden();
   await expect(page.getByRole('button', { name: 'Check cache' })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Delete cached assets' })).toBeDisabled();
   await capture(page, info, 'models-downloading-390', true);
   await card.getByRole('button', { name: 'Cancel download' }).click();
   await expect(status).toHaveText('Error');

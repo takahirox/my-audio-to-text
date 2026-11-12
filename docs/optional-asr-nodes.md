@@ -54,8 +54,10 @@ Moonshine does not use the GPU. Both need a desktop Chrome version supporting
 their capabilities; packaged inference was tested on Chromium 153/macOS/Apple
 Silicon, not on Windows, Linux, mobile or low-memory hardware.
 
-Graph Editor and Models provide progress, Cancel, retry and automatic cache inspection,
-and model-specific errors. Models also offers Delete cached assets. Missing,
+Graph Editor and Models provide progress, cancellation, retry and model-specific
+errors. Graph Editor also offers Check cache. Models automatically checks cached
+files on opening, on focus and after relevant cache updates, and offers
+Download or Retry when needed and Delete cached assets. Missing,
 corrupt or evicted weights require **Auto Save/Retry preparation before Start**.
 Completed verified files survive a failed download and are reused on retry;
 partial files restart from their beginning. A failure does not roll back the

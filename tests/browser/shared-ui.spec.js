@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-test('Models wraps real manifests, licenses, expanded file paths and controls at narrow and wide widths', async ({ page }) => {
+test('Models wraps real manifests, licenses, expanded file paths and controls at narrow and wide widths', async ({ page, browserName }) => {
   await page.route('**/*', async route => {
     const pathname = new URL(route.request().url()).pathname;
     if (!/^\/(extension|web)\/[\w.-]+\.(js|html|css|json)$/.test(pathname)) return route.continue();
@@ -22,10 +22,17 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await expect(library).toHaveAttribute('href', 'graph-library.html');
   await expect(library).toHaveAttribute('data-page', 'graph-library.html');
   await expect(page.locator('#navigation-status')).toHaveCount(0);
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
   await expect(library).toBeFocused();
   await expect(page.locator('.model-card')).toHaveCount(12);
   await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(12);
+  await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
+  for (const card of await page.locator('.model-card').all()) {
+    await expect(card.getByRole('button')).toHaveText(['Download', 'Delete cached assets']);
+    await expect(card.getByRole('button', { name: 'Cancel download', includeHidden: true })).toBeHidden();
+    await expect(card.getByRole('status')).toHaveText('Not downloaded');
+    await expect(card.locator('.model-license a')).toBeVisible();
+  }
   const gemma = page.locator('#translategemma');
   await expect(gemma).toContainText('3.112 GB download shared by both directions');
   await expect(gemma).toContainText('Google / ONNX Community · Gemma Terms');
@@ -48,6 +55,14 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   }
   await expect(page.getByRole('button', { name: 'Check cache' })).toHaveCount(0);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  const download = gemma.getByRole('button', { name: 'Download', exact: true });
+  const remove = gemma.getByRole('button', { name: 'Delete cached assets', exact: true });
+  await download.focus(); await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+  await expect(remove).toBeFocused();
+  await remove.press('Enter');
+  await expect(remove).toBeEnabled();
+  await remove.focus(); await page.keyboard.press(browserName === 'webkit' ? 'Alt+Shift+Tab' : 'Shift+Tab');
+  await expect(download).toBeFocused();
   await expect(gemma.locator('.model-status')).toHaveText('Not downloaded');
   await expect(gemma.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
   await library.press('Enter');
