@@ -25,7 +25,7 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 #graph-list { list-style: none; padding: 0 .25rem; margin: 0 -.25rem; }
 #graph-list li { position: relative; margin: .75rem 0; border: 1px solid var(--border); border-radius: 9px; }
 .library-page #graph-list button[data-id] { display: flex; align-items: start; gap: .75rem; width: 100%; min-width: 0; text-align: left; padding: 1rem; border: 0; background: transparent; }
-.library-page #graph-list button[data-id]:hover { background: var(--surface-subtle); }
+.library-page #graph-list li:not(.selected) button[data-id]:hover { background: var(--surface-subtle); }
 #graph-list li.selected { border-color: var(--accent); background: var(--surface-hover); box-shadow: inset 4px 0 var(--accent); }
 #graph-list button[data-id]:focus-visible { outline-offset: -3px; }
 .graph-row-name { font-weight: 650; overflow-wrap: anywhere; }
