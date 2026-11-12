@@ -53,7 +53,7 @@ function assertHierarchy(f) {
   assert.deepEqual(items.filter(item => item.parentId === 'microphone').map(item => [item.id, item.title, item.type]), [['web-microphone', 'Enable', 'checkbox'], ['microphone-position', 'Icon position', undefined]]);
   assert.deepEqual(items.filter(item => item.parentId === 'microphone-position').map(item => [item.title, item.type]), [['Auto', 'radio'], ['Left', 'radio'], ['Right', 'radio']]);
   assert.equal(items.filter(item => item.parentId === 'microphone-position' && item.checked).length, 1);
-  assert.deepEqual(items.filter(item => item.parentId === 'live-graphs').map(item => [item.id, item.title]), [['live-open', 'Open'], ['live-library', 'Graph Library']]);
+  assert.deepEqual(items.filter(item => item.parentId === 'live-graphs').map(item => [item.id, item.title]), [['live-open', 'Launch'], ['live-library', 'Graph Library']]);
   assert.ok(items.every(item => item.contexts.join() === 'action'));
 }
 
