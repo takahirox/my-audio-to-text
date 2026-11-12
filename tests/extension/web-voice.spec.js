@@ -444,6 +444,58 @@ for (const failure of ['request throws', 'request rejects', 'permission check', 
   });
 }
 
+for (const failure of ['OFF write', 'ON rollback', 'OFF write and read']) {
+  test(`rejected ${failure} reports saved state, stops controls, and allows OFF retry`, async ({ voice: t }) => {
+    test.skip(real, 'Storage failure boundaries do not require real inference.');
+    const toggle = t.library.locator('#web-voice-enabled'), status = t.library.locator('#web-voice-status');
+    if (failure !== 'ON rollback') {
+      await enable(t); await start(t); await recording(t);
+      expect((await pageCapture(t)).streams).toBe(1);
+    }
+    await t.library.evaluate(failure => {
+      const set = chrome.storage.local.set.bind(chrome.storage.local), get = chrome.storage.local.get.bind(chrome.storage.local);
+      const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+      window.offWrites = 0;
+      window.restoreSettings = () => { chrome.storage.local.set = set; chrome.storage.local.get = get; chrome.runtime.sendMessage = send; };
+      chrome.storage.local.set = values => {
+        if (values['web-voice-typing-v1']?.enabled === false) {
+          offWrites++;
+          return Promise.reject(Error('Controlled OFF write failure'));
+        }
+        return set(values);
+      };
+      if (failure === 'ON rollback') {
+        chrome.runtime.sendMessage = async message => {
+          const reply = await send(message);
+          if (message.type === 'web-voice-reconcile' && !message.stop) throw Error('Controlled setup failure after registration');
+          return reply;
+        };
+      }
+      if (failure === 'OFF write and read') chrome.storage.local.get = () => Promise.reject(Error('Controlled settings read failure'));
+    }, failure);
+    await t.library.bringToFront(); await toggle.click();
+    await expect(toggle).toBeEnabled(); await expect(toggle).toBeChecked();
+    await expect(toggle).toBeFocused(); await expect(toggle).not.toHaveAttribute('aria-busy');
+    await expect(t.library.locator('#voice-switch-state')).toHaveText('ON');
+    await expect(status).toBeVisible(); await expect(status).toContainText('Could not save OFF');
+    await expect(status).not.toContainText('Web microphone is OFF');
+    await expect(status).toContainText(failure === 'OFF write and read' ? 'Could not verify saved settings' : 'still ON in saved settings');
+    expect(await t.library.evaluate(() => offWrites)).toBe(failure === 'ON rollback' ? 1 : 2);
+    await expect(widget(t.website)).toHaveCount(0); await idle(t);
+    expect((await pageCapture(t)).streams).toBe(0);
+    await t.library.evaluate(() => restoreSettings());
+    expect(await t.library.evaluate(async () => ({
+      enabled: (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled,
+      scripts: (await chrome.scripting.getRegisteredContentScripts()).length,
+      graph: (await chrome.storage.local.get('web-microphone-default-v1'))['web-microphone-default-v1'],
+      access: await chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] })
+    }))).toEqual({ enabled: true, scripts: 0, graph: t.graphId, access: true });
+    await toggle.click(); await expect(toggle).toBeEnabled(); await expect(toggle).not.toBeChecked();
+    expect(await t.library.evaluate(async () => (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled)).toBe(false);
+    await enable(t);
+  });
+}
+
 for (const interruption of ['another Library turns OFF', 'website access removed']) {
   test(`pending ON cannot override ${interruption}`, async ({ voice: t }) => {
     test.skip(real, 'Pending permission boundaries do not require real inference.');

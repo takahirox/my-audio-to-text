@@ -224,8 +224,8 @@ try {
     } catch { voiceMessage = 'Could not check website access. Turn ON to retry, or reload Graph Library.'; }
     refreshVoiceStatus();
   };
-  async function reconcileVoice() {
-    const reply = await chrome.runtime.sendMessage({ type: 'web-voice-reconcile' });
+  async function reconcileVoice(stop = false) {
+    const reply = await chrome.runtime.sendMessage({ type: 'web-voice-reconcile', stop });
     if (!reply?.ok) throw Error(reply?.error || 'Web microphone did not respond.');
   }
   async function changeVoice(enabled, permission) {
@@ -251,10 +251,20 @@ try {
       }
       toggle.checked = savedEnabled; voiceMessage = '';
     } catch (error) {
-      voiceMessage = `${error.message} Web microphone is OFF. Turn ON to retry, or reload Graph Library.`;
-      toggle.checked = false;
-      try { await setVoiceEnabled(false); await reconcileVoice(); }
-      catch (saveError) { voiceMessage += ` Could not finish disabling: ${saveError.message} Reload Graph Library to retry.`; }
+      let failure = error.message, stateKnown = true;
+      try { await setVoiceEnabled(false); }
+      catch (saveError) { failure += ` Could not save OFF: ${saveError.message}`; }
+      // Stop existing controls even if storage is unavailable. This cleanup is
+      // temporary until OFF is saved; a later reconciliation may restore ON.
+      try { await reconcileVoice(true); }
+      catch (stopError) { failure += ` Could not stop page controls: ${stopError.message} Close affected tabs to stop them.`; }
+      try { savedEnabled = await readVoiceEnabled(); }
+      catch { stateKnown = false; }
+      toggle.checked = savedEnabled;
+      voiceMessage = `${failure} ${!stateKnown
+        ? 'Could not verify saved settings. Web microphone may still be ON. Reload Graph Library to retry.'
+        : savedEnabled ? 'Web microphone is still ON in saved settings and may restart. Turn OFF to retry, or reload Graph Library.'
+          : 'Web microphone is OFF. Turn ON to retry, or reload Graph Library.'}`;
     } finally {
       voicePending = false; toggle.disabled = false; toggle.removeAttribute('aria-busy'); refreshVoiceStatus();
       if (restoreFocus && [document.body, toggle].includes(document.activeElement)) toggle.focus({ preventScroll: true });

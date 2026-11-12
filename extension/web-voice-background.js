@@ -120,9 +120,15 @@ function refreshCatalog() {
     choices = []; defaultId = null; for (const port of controls) catalog(port);
   });
 }
-function reconcile() {
+function reconcile(stop = false) {
+  if (stop) {
+    // A Library OFF/rollback write can fail. Release active capture without
+    // waiting for storage or queued registration work, even in that case.
+    endAll('Web voice typing stopped. Retry saving OFF in Graph Library.');
+    for (const port of controls) post(port, { type: 'disabled' });
+  }
   return reconciling = reconciling.catch(() => {}).then(async () => {
-    const enabled = await authorized();
+    const enabled = !stop && await authorized();
     const registered = (await chrome.scripting.getRegisteredContentScripts({ ids: [scriptId] })).length;
     if (!enabled) {
       endAll('Web voice typing disabled or website permission removed.');
@@ -130,7 +136,7 @@ function reconcile() {
       if (registered) await chrome.scripting.unregisterContentScripts({ ids: [scriptId] });
       // An earlier OFF snapshot may finish after the switch grants access and
       // saves ON. Clear opt-in only if website access is still actually missing.
-      if (await readVoiceEnabled() && !await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS })) await setVoiceEnabled(false);
+      if (!stop && await readVoiceEnabled() && !await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS })) await setVoiceEnabled(false);
       return;
     }
     if (!registered) await chrome.scripting.registerContentScripts([{ id: scriptId, matches: WEB_VOICE_ORIGINS,
@@ -264,7 +270,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     refreshCatalog(); respond({ ok: true }); return;
   }
   if (message.type !== 'web-voice-reconcile' || !extensionPage(sender, 'graph-library.html')) return;
-  void reconcile().then(() => respond({ ok: true }), error => respond({ error: error.message })); return true;
+  void reconcile(message.stop === true).then(() => respond({ ok: true }), error => respond({ error: error.message })); return true;
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[WEB_VOICE_KEY]) return;

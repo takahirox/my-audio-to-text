@@ -7,9 +7,12 @@ The compact header and adjacent help retain their existing placement.
 
 The switch stays OFF, disabled and `aria-busy` while permission/setup is pending.
 A confirmed grant precedes saving ON and requesting `web-voice-reconcile`.
-Failures save OFF and reconcile cleanup, with a live status message explaining
-how to retry. Repeated changes cannot start a second request. Completion restores
-switch focus when appropriate without taking focus from another active control.
+Failures attempt to save OFF and stop active controls independently of storage,
+with a live status message explaining how to retry. If OFF cannot be saved, the
+switch reflects the saved preference and warns that ON may restart; unreadable
+settings get explicit uncertainty feedback. Repeated changes cannot start a
+second request. Completion restores switch focus when appropriate without taking
+focus from another active control.
 
 Storage OFF and permission removal cancel an older pending ON, including changes
 during its final access check. Graph actions manage their own disabled controls
@@ -24,11 +27,15 @@ are unchanged.
 
 ## Validation
 
-- `npm test`: **945 passed**, including a deterministic coordinator regression
+- `npm test`: **946 passed**, including a deterministic coordinator regression
   that interleaves an earlier OFF reconciliation with a new ON write and verifies
   that actual host revocation still unregisters scripts and saves OFF.
+- Regression coverage rejects OFF/rollback writes and settings reads, verifies
+  recording/control cleanup and accurate saved-state feedback, then retries OFF.
+  Coordinator coverage verifies that only Graph Library can request temporary
+  cleanup, including while earlier registration work is pending.
 - `npx playwright test --config playwright.extension.config.js tests/extension/graph-library.spec.js tests/extension/web-voice.spec.js`:
-  **93 passed** in the final run.
+  **96 passed** in the final run.
 - Browser coverage includes an actual already-granted Chrome permission request
   from the switch's trusted synchronous handler, pending grant, denial, thrown
   and rejected APIs, permission inspection/storage/reconciliation failures,
