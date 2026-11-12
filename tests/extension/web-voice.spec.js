@@ -70,6 +70,21 @@ const test = base.extend({
       await writeFile(manifestPath, originalManifest);
       await cdp.send('Extensions.loadUnpacked', { path: root });
       const url = `chrome-extension://${id}/extension/`;
+      if (!real) {
+        // Mock Workers still use Live's real verified-asset preparation. Package
+        // tiny deterministic files so overlap/isolation checks never fetch weights.
+        for (const kind of ['reazon', 'silero', 'whisper']) {
+          const file = path.join(root, 'extension', `${kind}-assets.json`);
+          const manifest = JSON.parse(await readFile(file, 'utf8'));
+          manifest.revision = createHash('sha256').update(`web-voice-fixture-${kind}`).digest('hex');
+          for (const [index, asset] of manifest.files.entries()) {
+            const name = `voice-${kind}-${index}.bin`, bytes = Buffer.from(`controlled ${kind} ${asset.path}`);
+            await writeFile(path.join(root, 'extension', name), bytes);
+            Object.assign(asset, { bytes: bytes.length, sha256Chunks: [createHash('sha256').update(bytes).digest('hex')], sourceURL: url + name });
+          }
+          await writeFile(file, JSON.stringify(manifest));
+        }
+      }
       const instrument = () => {
         if (!navigator.mediaDevices || window.voiceResources) return;
         window.voiceFinals = [];

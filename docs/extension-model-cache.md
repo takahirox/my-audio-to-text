@@ -4,8 +4,9 @@
 have independent Auto Save preparation and Models cards (749 MB / 1.403 GB),
 including parked Nodes. Both require WebGPU shader-f16 and several GB of free
 RAM/GPU memory per active Node. LFM 1.0 commercial-use conditions apply; see the
-model card's packaged license. Live opening verifies cached assets and initializes
-executable models before enabling Start; neither Live nor Start downloads weights.
+model card's packaged license. Opening Live verifies cached assets, automatically
+downloads missing or invalid files for executable models, then initializes those
+models before enabling Start.
 
 Build/load the extension as described in [the extension guide](chrome-extension.md).
 Open **Models** from Graph Library, Graph Editor or Live.
@@ -23,11 +24,16 @@ voices, including parked Nodes. Repeated equivalent Nodes are deduplicated; each
 direction and voice remains independent, with shared verified files reused.
 ASR is checked through the same manifests as other processors. The optional [Parakeet v3 / Moonshine
 Medium Streaming Nodes](optional-asr-nodes.md) prepare 1.26 GB / 305 MB after Auto Save;
-the editor shows memory, GPU and storage guidance before Auto Save. Opening a graph checks cached files only. Edits auto-save before preparation; failed validation or
+the editor shows memory, GPU and storage guidance before Auto Save. Opening a graph
+in Graph Editor checks cached files only. Edits auto-save before preparation; failed validation or
 storage prevents preparation. Storage finishes before preparation; download
 failure does not roll it back. No capture, inference, Workers or remote executable
-code starts during Auto Save preparation. Live initialization and Start/inference
-remain cache-only; see the [Live model lifecycle](extension-graph.md#live-model-lifecycle-239).
+code starts during Auto Save preparation. Opening Live also prepares missing or
+invalid files for its chosen saved graph's executable paths, reusing the same
+verified cache and shared download locks. Start stays disabled until files are
+verified and model runtime initialization succeeds. Failures offer **Retry models**
+inside Live without another save or a visit to Models; see the
+[Live model lifecycle](extension-graph.md#live-model-lifecycle-239-327).
 Each model has independent status, byte progress, error/retry, Cancel
 and Delete controls. Cache inspection runs automatically; no manual check is
 needed. TTS voice selectors are initialized from saved Nodes where present, and never change graph settings. Choose a matching voice

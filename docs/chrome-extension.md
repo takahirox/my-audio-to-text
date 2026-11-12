@@ -144,9 +144,14 @@ without waiting for pending summarization or translation. Close Live to abandon
 a session; there is no built-in Cancel recording control. Internal
 `TabSession.cancel()` and `Pipeline.cancel()` still handle teardown and errors. Transcripts are held only in that window's
 memory.
-Preparation failures keep Start disabled and show per-Node errors. Recover missing
-files through Graph Editor preparation controls or Models, check browser/GPU support and free memory,
-then press **Retry models** in Live. See the [model lifecycle](extension-graph.md#live-model-lifecycle-239).
+Opening Live automatically downloads missing or invalid required model files for
+the chosen saved graph's executable paths, verifies them, then initializes the
+models before enabling Start. Preparation failures keep Start disabled and show
+the reason. After resolving network, storage or browser/GPU resource problems,
+press **Retry models** inside Live to recheck and reuse intact cached files and
+prepare the models again. Models remains available for manual cache management;
+another save or a visit to Models is not required. See the
+[model lifecycle](extension-graph.md#live-model-lifecycle-239-327).
 Session errors release failed resources and leave recovery available. If Chrome's
 temporary tab grant has expired (for example after navigating to another origin),
 invoke the toolbar action again on that tab. Chrome-internal pages and other
