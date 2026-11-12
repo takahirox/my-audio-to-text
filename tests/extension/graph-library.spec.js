@@ -18,7 +18,13 @@ async function assign(page, target, id) {
     await new GraphLibrary(localStorage).assign(target, id, readLibrary(localStorage).revision);
   }, { target, id });
 }
+async function expand(page, id) {
+  const row = id ? page.locator(`#graph-list button[data-id="${id}"]`) : page.locator('#graph-list button[data-id]').first();
+  if (await row.getAttribute('aria-expanded') !== 'true') await row.click();
+}
 async function moreAction(page, id) {
+  if (id === 'load-details') { await page.locator('#load-details').click(); return; }
+  if (id === 'check-cache') { await page.locator('#graph-metadata > summary').click(); await page.locator('#check-cache').click(); return; }
   if (!await page.locator('#graph-more').evaluate(node => node.open)) await page.locator('#graph-more > summary').click();
   await page.locator(`#${id}`).click();
 }
@@ -126,6 +132,7 @@ test('Library manages independent named graphs, portable JSON, persistent target
   await expect(page.locator('#launch-settings, #live-graph, #web-graph, #filter option[value=assigned]')).toHaveCount(0);
   await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
   await expect(page.locator('#web-voice-status')).toContainText('No compatible graphs');
+  await expect(page.locator('#selected')).toBeHidden(); await expand(page);
   await expect(page.locator('#graph-cache')).toHaveText('Unknown');
   await expect(page.locator('#delete')).toBeDisabled();
   await page.locator('#new').click(); await expect(page.locator('#selected-title')).toHaveText('Untitled graph'); await rename(page, 'Meeting Notes', 'Summarize meetings locally');
@@ -148,7 +155,7 @@ test('Library manages independent named graphs, portable JSON, persistent target
   expect((await library(page)).assignments).toEqual({ live: meeting.id, webVoice: voice.id });
   await page.reload(); await expect(page.locator('#selected-title')).toHaveText('Voice Typing');
   await expect(page.getByRole('button', { name: 'Open details for Meeting Notes', exact: true })).toContainText('Meeting Notes');
-  await page.locator('#search').fill('meet'); await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Meeting Notes']);
+  await page.locator('#search').fill('meet'); await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Voice Typing', 'Meeting Notes']);
   await page.locator('#search').fill(''); await tools(page); await page.locator('#sort').selectOption('name');
   await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Live transcription', 'Meeting Notes', 'Voice Typing']);
   await tools(page); await page.locator('#filter').selectOption('all');
@@ -266,6 +273,7 @@ test('migration preserves valid and malformed legacy sources; recovery never ove
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
     await page.reload(); expect(await library(page)).toEqual(migrated);
     if (raw.startsWith('{broken')) {
+      await expand(page, 'legacy-graph');
       await expect(page.locator('#selected-error')).toContainText('Invalid saved graph');
       const downloading = page.waitForEvent('download'); await moreAction(page, 'export');
       expect(await readFile(await (await downloading).path(), 'utf8')).toBe(raw);
@@ -283,6 +291,7 @@ test('migration preserves valid and malformed legacy sources; recovery never ove
 test('Library preserves conflicting metadata and explicitly recovers legacy edits from other pages', async ({ libraryExtension: f }) => {
   const { page, context, url } = f, original = await library(page), id = original.assignments.live;
   const other = await context.newPage(); await other.goto(url + 'graph-library.html');
+  await expand(page); await expand(other);
   await composition(page, 'start', 'My unsaved name');
   await rename(other, 'Saved elsewhere');
   await composition(page, 'end', 'My unsaved name');
@@ -344,7 +353,8 @@ test('metadata drafts survive filtering, cache refresh and reload with original 
   await composition(page, 'start', 'My unsaved name');
   await page.locator('#graph-description').fill('My unsaved description');
   await page.locator('#search').fill('Other');
-  await expect(page.locator('#graph-list button[data-id]')).toHaveCount(1);
+  await expect(page.locator('#graph-list button[data-id]')).toHaveCount(2);
+  await expect(page.locator('#selected')).toBeVisible();
   await page.getByRole('button', { name: 'Open details for Other graph', exact: true }).click();
   await expect(page.locator('#graph-name')).toHaveValue('My unsaved name');
   await tools(page); await page.locator('#filter').selectOption('invalid');
@@ -360,8 +370,8 @@ test('metadata drafts survive filtering, cache refresh and reload with original 
   page.once('dialog', dialog => dialog.accept()); await page.reload();
   await expect(page.locator('#graph-name')).toHaveValue('My unsaved name');
   await expect(page.locator('#graph-description')).toHaveValue('My unsaved description');
-  await expect(page.locator('#selected-title')).toBeFocused();
-  await expect(page.locator(`#graph-list button[data-id="${id}"]`)).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#graph-list button[aria-expanded="true"]')).toBeFocused();
+  await expect(page.locator(`#graph-list button[data-id="${id}"]`)).toHaveAttribute('aria-expanded', 'true');
   await page.locator('#graph-description').fill('Reviewed description');
   await expect(page.locator('#details-state')).toContainText('Load saved');
   expect((await library(page)).graphs.find(entry => entry.id === id).name).toBe('Saved elsewhere');
@@ -376,57 +386,59 @@ test('metadata drafts survive filtering, cache refresh and reload with original 
   expect(await page.evaluate(() => sessionStorage.getItem('graph-library-details-draft'))).toBeNull();
 });
 
-test('Library keeps both panes visible, marks selection and preserves browsing focus on desktop', async ({ libraryExtension: f }) => {
-  const { page } = f;
+test('Library expands one full-width inline row with keyboard controls and no collapsed actions', async ({ libraryExtension: { page } }) => {
   const a = await create(page, 'Graph A', simple('A')), b = await create(page, 'Graph B', simple('B'));
   await page.reload();
-  await expect(page.locator('dialog#selected, #back-to-graphs')).toHaveCount(0);
-  await expect(page.locator('#selected')).toBeVisible();
-  const list = await page.locator('#graphs').boundingBox(), detail = await page.locator('#selected').boundingBox();
-  expect(list.x + list.width).toBeLessThan(detail.x);
-  expect(list.y).toBe(detail.y);
-  expect(list.width).toBeGreaterThan(300); expect(detail.width).toBeGreaterThan(450);
+  await expect(page.locator('#selected')).toBeHidden();
+  await expect(page.locator('#graph-list details')).toHaveCount(0);
+  await expect(page.locator('#graph-list button[aria-expanded="true"]')).toHaveCount(0);
   const first = page.locator(`#graph-list button[data-id="${a}"]`), second = page.locator(`#graph-list button[data-id="${b}"]`);
-  await first.click();
-  await expect(first).toBeFocused(); await expect(first).toHaveAttribute('aria-pressed', 'true');
-  await expect(first).not.toHaveAttribute('aria-haspopup');
-  await expect(page.locator('#selected-title')).toHaveText('Graph A');
-  await first.press('ArrowUp'); await expect(second).toBeFocused(); await second.press('Enter');
-  await expect(second).toBeFocused(); await expect(second).toHaveAttribute('aria-pressed', 'true');
-  await expect(first).toHaveAttribute('aria-pressed', 'false');
+  await first.press('Enter');
+  await expect(first).toBeFocused(); await expect(first).toHaveAttribute('aria-expanded', 'true');
+  await expect(first).toHaveAttribute('aria-controls', 'selected');
+  await expect(page.locator(`#graph-list li[data-id="${a}"] > #selected`)).toBeVisible();
+  const workspace = await page.locator('.library-workspace').boundingBox(), row = await first.boundingBox();
+  expect(row.width).toBeGreaterThan(workspace.width * .9);
+  await expect(page.locator('#selected #open')).toHaveCount(1);
+  await expect(page.locator('#selected #duplicate')).toHaveCount(1);
+  await expect(page.locator('#graph-more button')).toHaveText(['Export JSON', 'Delete graph']);
+  await expect(page.locator('#load-details')).toBeHidden();
+  await first.press('ArrowUp'); await expect(second).toBeFocused(); await second.press('Space');
+  await expect(second).toHaveAttribute('aria-expanded', 'true');
+  await expect(first).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#graph-list li.selected')).toHaveCount(1);
-  await expect(page.locator('#selected-title')).toHaveText('Graph B');
-  await page.reload();
-  await expect(page.locator('#selected-title')).toHaveText('Graph B');
-  await expect(second).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('region', { name: 'Graph B', exact: true })).toBeVisible();
+  await page.reload(); await expect(second).toHaveAttribute('aria-expanded', 'true');
+  await second.press('Enter');
+  await expect(second).toBeFocused(); await expect(second).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#selected')).toBeHidden();
+  await page.reload(); await expect(page.locator('#selected')).toBeHidden();
   expect((await library(page)).assignments).toEqual({ live: 'default-live', webVoice: null });
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
 });
 
-test('switching graphs flushes pending details and row actions target the requested graph', async ({ libraryExtension: { page } }) => {
+test('rapid switching and collapsing wait for the latest pending details before unified actions', async ({ libraryExtension: { page } }) => {
   const a = await create(page, 'Graph A', simple('A')), b = await create(page, 'Graph B', simple('B'));
+  const c = await create(page, 'Graph C', simple('C'));
   await page.reload();
-  const first = page.locator(`#graph-list button[data-id="${a}"]`), second = page.locator(`#graph-list button[data-id="${b}"]`);
+  const first = page.locator(`#graph-list button[data-id="${a}"]`), second = page.locator(`#graph-list button[data-id="${b}"]`), third = page.locator(`#graph-list button[data-id="${c}"]`);
   await first.click(); await holdDetailsWrites(page);
-  await page.locator('#graph-name').fill('Saved A'); await second.click();
-  await expect(first).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#graph-name')).toBeEnabled(); await expect(page.locator('#graph-description')).toBeEnabled();
+  await page.locator('#graph-name').fill('Saved A'); await second.click(); await third.click();
+  await expect(first).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#graph-name')).toBeEnabled();
   await page.locator('#graph-description').fill('Latest description');
   await page.evaluate(() => releaseDetailsWrites());
-  await expect(second).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#graph-name')).toHaveValue('Graph B');
+  await expect(third).toHaveAttribute('aria-expanded', 'true');
+  await expect(second).toHaveAttribute('aria-expanded', 'false');
   const saved = (await library(page)).graphs.find(entry => entry.id === a);
   expect(saved.name).toBe('Saved A'); expect(saved.description).toBe('Latest description');
   expect(saved.graph).toEqual(simple('A'));
-  expect(await page.evaluate(() => sessionStorage.getItem('graph-library-details-draft'))).toBeNull();
-  await first.click(); await page.locator('#graph-name').fill('Renamed A');
-  await page.getByLabel('Actions for Graph B', { exact: true }).press('Enter');
-  await page.locator('.row-menu[open]').getByRole('button', { name: 'Duplicate', exact: true }).click();
+  await page.locator('#graph-name').fill('Renamed C'); await third.click();
+  await expect(page.locator('#selected')).toBeHidden();
+  expect((await library(page)).graphs.find(entry => entry.id === c).name).toBe('Renamed C');
+  await second.click(); await page.locator('#duplicate').click();
   await expect(page.locator('#selected-title')).toHaveText('Graph B copy');
-  const next = await library(page);
-  expect(next.graphs.find(entry => entry.id === a).name).toBe('Renamed A');
-  expect(next.graphs.at(-1).graph).toEqual(simple('B'));
-  expect(next.assignments).toEqual({ live: 'default-live', webVoice: null });
+  expect((await library(page)).graphs.at(-1).graph).toEqual(simple('B'));
   await moreAction(page, 'check-cache');
   await expect(page.locator('#graph-metadata')).toHaveAttribute('open', '');
   await expect(page.locator('#graph-cache')).toHaveText('Ready · cached files');
@@ -434,153 +446,148 @@ test('switching graphs flushes pending details and row actions target the reques
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
 });
 
-test('narrow Library stacks panes, keeps menus and consent accessible and has no overflow', async ({ libraryExtension: f }) => {
-  const { page } = f;
-  const long = await create(page, 'A long graph name that wraps on small screens', simple());
-  const mic = await create(page, 'A long microphone pipeline name that should fit within its selector', microphoneGraph());
-  await page.reload(); await assign(page, 'live', long); await assign(page, 'webVoice', mic);
-  for (const width of [768, 600, 500, 390, 320]) {
+test('subgraph rows retain their distinction and explain referenced-subgraph deletion safeguards', async ({ libraryExtension: { page } }) => {
+  await page.evaluate(async () => {
+    const { graphNode, edge } = await import('./graph.js');
+    const { GraphLibrary } = await import('./graph-library.js');
+    const { extractSubgraph } = await import('./subgraphs.js');
+    const extracted = extractSubgraph({ version: 15,
+      nodes: [graphNode('Text', 'source'), graphNode('TextFormatter', 'format'), graphNode('Display', 'display')],
+      edges: [edge('source', 'value', 'format', 'input1'), edge('format', 'text', 'display', 'input1')] }, ['format'], 'shared');
+    const store = new GraphLibrary(localStorage);
+    await store.create({ id: 'shared', name: 'Reusable formatter', kind: 'subgraph', graph: extracted.shared });
+    await store.create({ name: 'Parent graph', graph: extracted.parent });
+  });
+  await page.reload(); await tools(page); await page.locator('#filter').selectOption('subgraph');
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Reusable formatter · Subgraph']);
+  const row = page.getByRole('button', { name: 'Open details for Reusable formatter · Subgraph', exact: true });
+  await row.press('Enter'); await page.locator('#graph-more > summary').press('Enter');
+  await expect(page.getByRole('button', { name: 'Delete graph', exact: true })).toBeDisabled();
+  await expect(page.locator('#delete-hint')).toContainText('Referenced by: Parent graph. Replace or remove instances');
+  await page.keyboard.press('Escape'); await expect(page.locator('#graph-more > summary')).toBeFocused();
+  await row.click(); await page.locator('#filter').selectOption('graph');
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Parent graph', 'Live transcription']);
+});
+
+test('export waits for autosave, and a later selection cancels an earlier pending action', async ({ libraryExtension: { page } }) => {
+  const a = await create(page, 'Graph A', simple('A')), b = await create(page, 'Graph B', simple('B'));
+  await page.reload(); await expand(page, a); await holdDetailsWrites(page);
+  await page.locator('#graph-name').fill('Saved export name');
+  const downloads = []; page.on('download', download => downloads.push(download));
+  await moreAction(page, 'export');
+  expect(downloads).toHaveLength(0);
+  await page.evaluate(() => releaseDetailsWrites());
+  await expect.poll(() => downloads.length).toBe(1);
+  expect(downloads[0].suggestedFilename()).toBe('Saved export name.json');
+  expect(JSON.parse(await readFile(await downloads[0].path(), 'utf8'))).toEqual(simple('A'));
+  // Reinstall a gate and race the editor action against switching to B.
+  await holdDetailsWrites(page); await page.locator('#graph-description').fill('Latest export details');
+  await page.locator('#open').click(); await expand(page, b);
+  await page.evaluate(() => releaseDetailsWrites());
+  await expect(page.locator('#selected-title')).toHaveText('Graph B');
+  await expect(page).toHaveURL(/graph-library\.html$/);
+  expect((await library(page)).graphs.find(entry => entry.id === a).description).toBe('Latest export details');
+});
+
+test('inline accordion, More menu and consent fit desktop, mobile, zoom and forced colors', async ({ libraryExtension: { page } }) => {
+  const id = await create(page, 'A long graph name that wraps on small screens', simple());
+  await page.reload();
+  const row = page.locator(`#graph-list button[data-id="${id}"]`);
+  for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });
-    await expect(page.locator('#graphs')).toBeVisible(); await expect(page.locator('#selected')).toBeVisible();
-    await expect(page.locator('#launch-settings, #live-graph, #web-graph')).toHaveCount(0);
-    await expect(page.locator('aside, nav, [data-section]')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Open details for A long graph name that wraps on small screens', exact: true }).click();
-    await expect(page.locator('#selected-title')).toBeFocused();
-    await expect(page.locator('#open')).toBeInViewport();
-    const list = await page.locator('#graphs').boundingBox(), detail = await page.locator('#selected').boundingBox();
-    expect(detail.y).toBeGreaterThanOrEqual(list.y + list.height);
+    await expand(page, id); await expect(row).toBeFocused();
+    const header = await row.boundingBox(), detail = await page.locator('#selected').boundingBox();
+    expect(detail.y).toBeGreaterThanOrEqual(header.y + header.height);
+    expect(Math.abs(detail.x - header.x)).toBeLessThan(2);
+    expect(Math.abs(detail.width - header.width)).toBeLessThan(2);
     await page.locator('#graph-more > summary').press('Enter');
     const box = await page.locator('#graph-more .graph-command-list').boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#graph-more > summary')).toBeFocused();
+    await page.keyboard.press('Escape'); await expect(page.locator('#graph-more > summary')).toBeFocused();
     await expect(page.locator('#graph-more')).not.toHaveAttribute('open');
-    await expect(page.locator('#selected')).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    const menu = page.getByLabel('Actions for A long graph name that wraps on small screens', { exact: true });
-    await menu.press('Enter');
-    const commands = await page.locator('.row-menu[open] .row-commands').boundingBox();
-    expect(commands.x).toBeGreaterThanOrEqual(0); expect(commands.x + commands.width).toBeLessThanOrEqual(width);
-    await page.keyboard.press('Escape'); await expect(menu).toBeFocused();
-    await page.locator('#web-voice-enabled').focus();
-    await page.keyboard.press('Space'); await expect(page.locator('#voice-consent')).toBeVisible();
+    await expect(page.locator('.row-menu, dialog#selected, aside, nav, #launch-settings, #preview')).toHaveCount(0);
+    await page.locator('#web-voice-enabled').press('Space'); await expect(page.locator('#voice-consent')).toBeVisible();
     await page.keyboard.press('Escape'); await expect(page.locator('#web-voice-enabled')).toBeFocused();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: test.info().outputPath(`accordion-${width}.png`), fullPage: true });
+    await row.click(); await expect(page.locator('#selected')).toBeHidden();
   }
+  await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+  await page.setViewportSize({ width: 640, height: 1000 });
+  await page.emulateMedia({ forcedColors: 'active' }); await row.press('Enter');
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('selection and refresh keep keyboard access to the list without trapping focus in details', async ({ libraryExtension: f }) => {
-  const { page } = f;
-  await create(page, 'Focus regression', simple()); await page.reload();
-  const row = page.locator('#graph-list button[data-id]').filter({ hasText: 'Focus regression' });
-  await row.click(); await expect(row).toBeFocused();
-  await page.keyboard.press('Escape'); await expect(row).toBeFocused();
-  const menu = page.getByLabel('Actions for Focus regression', { exact: true });
-  await page.keyboard.press('Tab'); await expect(menu).toBeFocused();
-  await menu.press('Enter');
-  await page.locator('.row-menu[open]').getByRole('button', { name: 'Graph details', exact: true }).click();
-  await expect(page.locator('#selected-title')).toBeFocused();
-  await page.keyboard.press('Tab'); await expect(page.locator('#open')).toBeFocused();
-  await page.locator('#graph-name').fill('Unsaved focus regression');
-  await row.click(); await expect(page.locator('#graph-name')).toHaveValue('Unsaved focus regression');
-  await expect(row).toBeFocused();
+test('list refresh and autosave preserve input focus, caret, composition and row keyboard navigation', async ({ libraryExtension: { page } }) => {
+  const id = await create(page, 'Focus regression', simple()); await page.reload(); await expand(page, id);
+  const row = page.locator(`#graph-list button[data-id="${id}"]`);
+  await row.press('Tab'); await expect(page.locator('#open')).toBeFocused();
+  await page.locator('#graph-name').fill('Focus autosave');
+  await page.locator('#graph-name').press('ArrowLeft');
+  const caret = await page.locator('#graph-name').evaluate(node => node.selectionStart);
+  await expect(page.locator('#selected-title')).toHaveText('Focus autosave');
+  await expect(page.locator('#graph-name')).toBeFocused();
+  expect(await page.locator('#graph-name').evaluate(node => node.selectionStart)).toBe(caret);
+  await composition(page, 'start', '未確定');
   await page.evaluate(() => { const channel = new BroadcastChannel('model-cache-updates'); channel.postMessage({}); channel.close(); });
-  await expect(row).toBeFocused();
-  await page.locator('#graph-name').fill('Focus regression');
+  await expect(page.locator('#graph-name')).toBeFocused();
+  await row.click(); await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#details-state')).toContainText('finish composing');
+  await composition(page, 'end', '確定した名前');
+  await expect(page.locator('#selected-title')).toHaveText('確定した名前');
+  await row.click(); await expect(row).toBeFocused(); await expect(page.locator('#selected')).toBeHidden();
+  await row.press('Home'); await expect(page.locator('#graph-list button[data-id]').first()).toBeFocused();
+  await page.keyboard.press('End'); await expect(page.locator('#graph-list button[data-id]').last()).toBeFocused();
 });
 
-test('long lists scroll independently while selected details remain available', async ({ libraryExtension: f }) => {
-  const { page } = f;
+test('collapsing a filtered-out row saves edits and restores focus to search', async ({ libraryExtension: { page } }) => {
+  const id = await create(page, 'Filtered graph', simple()); await page.reload(); await expand(page, id);
+  await page.locator('#graph-description').fill('Keep the last edit');
+  await page.locator('#search').fill('no matching graph');
+  await expect(page.locator('#selected')).toBeVisible();
+  await expect(page.locator('#empty')).toBeVisible();
+  await page.locator(`#graph-list button[data-id="${id}"]`).click();
+  await expect(page.locator('#selected')).toBeHidden(); await expect(page.locator('#search')).toBeFocused();
+  await expect(page.locator('#graph-list li')).toHaveCount(0);
+  expect((await library(page)).graphs.find(entry => entry.id === id).description).toBe('Keep the last edit');
+});
+
+test('long lists scroll the document with details beneath the selected row', async ({ libraryExtension: { page } }) => {
   for (let i = 0; i < 24; i++) await create(page, `Graph ${String(i).padStart(2, '0')}`, simple());
   await page.reload(); await tools(page); await page.locator('#sort').selectOption('name');
   const row = page.getByRole('button', { name: 'Open details for Graph 23', exact: true });
-  await row.click();
+  await row.click(); await expect(row).toBeFocused();
   await expect(page.locator('#selected-title')).toHaveText('Graph 23');
-  expect(await page.locator('#graph-list').evaluate(node => node.scrollTop)).toBeGreaterThan(0);
-  await expect(row).toBeFocused();
-  await expect(page.locator('#open')).toBeInViewport();
+  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  expect(await page.locator('#graph-list').evaluate(node => node.scrollHeight <= node.clientHeight)).toBe(true);
+  await row.press('Tab'); await expect(page.locator('#open')).toBeFocused(); await expect(page.locator('#open')).toBeInViewport();
 });
 
-test('header Models utility and row actions work alongside persistent details at zoom and in forced colors', async ({ libraryExtension: f }) => {
-  const { page, context, url } = f;
-  const id = await create(page, 'Research notes', simple('Research'));
-  await page.reload();
-  await expect(page.locator('#selected')).toBeVisible();
-  await expect(page.locator('.library-header').getByRole('link')).toHaveCount(1);
-  await expect(page.getByRole('link', { name: 'Models', exact: true })).toHaveAttribute('href', 'model-cache.html');
-  const opened = context.waitForEvent('page');
-  await page.getByRole('link', { name: 'Models', exact: true }).click();
-  const models = await opened; await expect(models).toHaveURL(url + 'model-cache.html'); await models.close();
-  const menu = page.getByLabel('Actions for Research notes', { exact: true });
-  await menu.press('Enter');
-  await expect(page.locator('.row-menu[open]')).toHaveCount(1);
-  await page.keyboard.press('Escape'); await expect(menu).toBeFocused();
-  await expect(page.locator('.row-menu[open]')).toHaveCount(0);
-  await menu.press('Enter');
-  await page.locator('.row-menu[open]').getByRole('button', { name: 'Graph details', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Research notes', exact: true })).toBeVisible();
-  await expect(page.locator('#selected-title')).toBeFocused();
-  await page.locator('#graph-name').fill('Unfinished name');
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#graph-name')).toBeFocused();
-  await page.locator(`#graph-list button[data-id="${id}"]`).click();
-  await expect(page.locator('#graph-name')).toHaveValue('Unfinished name');
-  await expect(page.locator('#selected-title')).toHaveText('Unfinished name');
-  const renamedMenu = page.getByLabel('Actions for Unfinished name', { exact: true });
-  await renamedMenu.press('Enter');
-  const downloading = page.waitForEvent('download');
-  await page.locator('.row-menu[open]').getByRole('button', { name: 'Export JSON', exact: true }).click();
-  expect(JSON.parse(await readFile(await (await downloading).path(), 'utf8'))).toEqual(simple('Research'));
-  await expect(renamedMenu).toBeFocused();
-  await renamedMenu.press('Enter');
-  await page.locator('.row-menu[open]').getByRole('button', { name: 'Duplicate', exact: true }).click();
-  await expect(page.locator('#selected-title')).toHaveText('Unfinished name copy');
-  expect((await library(page)).assignments).toEqual({ live: 'default-live', webVoice: null });
-  // A 200% zoomed desktop has the same header and stacked panes as a narrow viewport.
-  await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
-  await page.setViewportSize({ width: 640, height: 1000 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.emulateMedia({ forcedColors: 'active' });
-  const row = page.getByRole('button', { name: 'Open details for Unfinished name', exact: true });
-  await row.click();
-  await expect(page.locator('#selected-title')).toBeFocused();
-  await expect(row).toHaveAttribute('aria-pressed', 'true');
-  await page.emulateMedia({ forcedColors: 'none' });
-  await page.evaluate(() => { document.documentElement.style.zoom = ''; });
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await renamedMenu.press('Enter');
-  await page.locator('.row-menu[open]').getByRole('button', { name: 'Edit graph', exact: true }).click();
-  await expect(page).toHaveURL(url + `graph-editor.html?id=${id}`);
-  await expect(page.locator('#graph-name')).toHaveText('Unfinished name');
-});
-
-test('detail and card Edit graph actions target the clicked graph independently of launch choices', async ({ libraryExtension: f }) => {
-  const { page, url } = f;
+test('Models utility and the expanded Edit graph action preserve launch choices', async ({ libraryExtension: { page, context, url } }) => {
   const a = await create(page, 'Graph A', simple('A')), b = await create(page, 'Graph B', microphoneGraph());
   await page.reload();
-  await page.getByRole('button', { name: 'Open details for Graph A', exact: true }).click();
-  await expect(page.locator('#open')).toHaveAttribute('href', `graph-editor.html?id=${a}`);
+  const opened = context.waitForEvent('page'); await page.getByRole('link', { name: 'Models', exact: true }).click();
+  const models = await opened; await expect(models).toHaveURL(url + 'model-cache.html'); await models.close();
+  await expand(page, a); await expect(page.locator('#open')).toHaveAttribute('href', `graph-editor.html?id=${a}`);
   await assign(page, 'live', b); await assign(page, 'webVoice', b);
-  await expect(page.locator('#selected-title')).toHaveText('Graph A');
   await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
-  await page.getByRole('link', { name: 'Edit graph', exact: true }).click();
+  // Edit graph waits for a pending rename before leaving the Library.
+  await holdDetailsWrites(page); await page.locator('#graph-name').fill('Renamed A');
+  await page.locator('#open').click(); await expect(page).toHaveURL(url + 'graph-library.html');
+  await page.evaluate(() => releaseDetailsWrites());
   await expect(page).toHaveURL(url + `graph-editor.html?id=${a}`);
-  await expect(page.locator('#graph-name')).toHaveText('Graph A');
+  await expect(page.locator('#graph-name')).toHaveText('Renamed A');
   await page.getByRole('link', { name: 'Library', exact: true }).click();
-  await expect(page).toHaveURL(url + 'graph-library.html');
-  await expect(page.locator('#selected-title')).toHaveText('Graph A');
-  // The menu belongs to B even though the last opened detail and saved selection were A.
-  await page.getByLabel('Actions for Graph B', { exact: true }).press('Enter');
-  await page.locator('.row-menu[open]').getByRole('button', { name: 'Edit graph', exact: true }).click();
+  await expect(page.locator('#selected-title')).toHaveText('Renamed A');
+  await expand(page, b); await page.locator('#open').click();
   await expect(page).toHaveURL(url + `graph-editor.html?id=${b}`);
   await expect(page.locator('#graph-name')).toHaveText('Graph B');
-  await page.getByRole('link', { name: 'Library', exact: true }).click();
   expect((await library(page)).assignments).toEqual({ live: b, webVoice: b });
-  await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
 });
 
 test('autosave waits for Japanese IME, rejects interim validation errors and shows only local status', async ({ libraryExtension: { page } }) => {
-  const original = await library(page);
+  const original = await library(page); await expand(page);
   await expect(page.locator('#preview-scroll, #preview, #save-details')).toHaveCount(0);
   await expect(page.locator('#details-state')).toBeEmpty();
   await page.locator('#graph-description').fill('Description before composition');
@@ -607,7 +614,7 @@ test('autosave waits for Japanese IME, rejects interim validation errors and sho
 });
 
 test('composition starting during a delayed save keeps its unfinished text out of storage', async ({ libraryExtension: { page } }) => {
-  await holdDetailsWrites(page);
+  await expand(page); await holdDetailsWrites(page);
   await page.locator('#graph-name').fill('Before IME');
   await expect.poll(() => page.evaluate(() => detailWrites.length)).toBe(1);
   await composition(page, 'start', 'へん');
@@ -623,7 +630,7 @@ test('composition starting during a delayed save keeps its unfinished text out o
 
 test('quota failures retain drafts, block selection and recover through an explicit retry', async ({ libraryExtension: { page } }) => {
   const other = await create(page, 'Other graph', simple()); await page.reload();
-  const before = await library(page), id = before.graphs[0].id;
+  const before = await library(page), id = before.graphs[0].id; await expand(page, id);
   await page.evaluate(async () => {
     const { GraphLibrary } = await import('./graph-library.js');
     const rename = GraphLibrary.prototype.rename, set = Storage.prototype.setItem;
@@ -639,11 +646,16 @@ test('quota failures retain drafts, block selection and recover through an expli
   await expect(page.locator('#details-state')).toContainText('quota exceeded');
   await expect(page.locator('#retry-details')).toBeVisible();
   await page.locator(`#graph-list button[data-id="${other}"]`).click();
+  await page.locator(`#graph-list button[data-id="${id}"]`).click();
+  await expect(page.locator('#selected')).toBeVisible();
+  await page.locator('#open').click();
+  await expect(page).toHaveURL(/graph-library\.html$/);
+  await expect(page.locator('#load-details')).toBeVisible();
   await page.locator('#new').click(); await page.locator('#duplicate').click();
   await page.waitForTimeout(650);
   expect(await page.evaluate(() => detailsAttempts)).toBe(1);
   expect(await library(page)).toEqual(before);
-  await expect(page.locator(`#graph-list button[data-id="${id}"]`)).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator(`#graph-list button[data-id="${id}"]`)).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#graph-name')).toHaveValue('Keep my name');
   await page.evaluate(() => { failDetails = false; }); await page.locator('#retry-details').click();
   await expect(page.locator('#selected-title')).toHaveText('Keep my name');
@@ -654,7 +666,7 @@ test('quota failures retain drafts, block selection and recover through an expli
 });
 
 test('reload and editor navigation recover pending details without unload-time writes', async ({ libraryExtension: { page, url } }) => {
-  const before = await library(page);
+  const before = await library(page); await expand(page);
   await holdDetailsWrites(page);
   await page.locator('#graph-name').fill('Recover after reload');
   await page.locator('#graph-description').fill('Recover description');
@@ -667,7 +679,7 @@ test('reload and editor navigation recover pending details without unload-time w
   await holdDetailsWrites(page);
   await page.locator('#graph-name').fill('Recover after navigation');
   await expect.poll(() => page.evaluate(() => detailWrites.length)).toBe(1);
-  page.once('dialog', dialog => dialog.accept()); await page.locator('#open').click();
+  page.once('dialog', dialog => dialog.accept()); await page.goto(url + `graph-editor.html?id=${before.graphs[0].id}`);
   await expect(page).toHaveURL(url + `graph-editor.html?id=${before.graphs[0].id}`);
   await page.getByRole('link', { name: 'Library', exact: true }).click();
   await expect(page.locator('#graph-name')).toHaveValue('Recover after navigation');
@@ -681,7 +693,7 @@ test('reload and editor navigation recover pending details without unload-time w
 
 test('delayed details writes reject concurrent editor changes but permit unrelated graph updates', async ({ libraryExtension: { page, context, url } }) => {
   const otherId = await create(page, 'Other graph', simple('Other'));
-  await page.reload(); const original = (await library(page)).graphs[0];
+  await page.reload(); await expand(page, (await library(page)).graphs[0].id); const original = (await library(page)).graphs[0];
   await holdDetailsWrites(page); await page.locator('#graph-name').fill('Local draft');
   await expect.poll(() => page.evaluate(() => detailWrites.length)).toBe(1);
   const editor = await context.newPage(); await editor.goto(url + `graph-editor.html?id=${original.id}`);
@@ -708,7 +720,7 @@ test('delayed details writes reject concurrent editor changes but permit unrelat
 });
 
 test('a remote commit arriving before local save completion keeps conflict feedback and the latest list', async ({ libraryExtension: { page, context, url } }) => {
-  const original = (await library(page)).graphs[0];
+  const original = (await library(page)).graphs[0]; await expand(page);
   await page.evaluate(async () => {
     const { GraphLibrary } = await import('./graph-library.js');
     const rename = GraphLibrary.prototype.rename;
