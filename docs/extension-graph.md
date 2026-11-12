@@ -7,11 +7,19 @@ The active graph is an immutable snapshot; edits take effect at the next Start.
 
 ## Graph Library (#243)
 
-Open **Library** from Live, Graph or Models. Search names, descriptions or model
-names, sort by name/recent update, and filter entries needing recovery. The workspace
-is one full-width graph list on desktop and mobile (#285). Click a row to expand
-its details directly beneath it; click again to collapse, or choose another row
-to switch. At most one graph is expanded. A chevron and `aria-expanded` announce
+Open **Library** from Live, Graph or Models. **Import JSON** sits beside
+**+ New Graph** in the Graphs heading, with **Search graphs…** on its own row
+directly below. Search matches names, descriptions or required-model names.
+Regular graphs, reusable subgraphs and entries needing recovery share one fixed
+name-ascending list, including search results (#297). Ordering uses Japanese
+locale-aware comparison for Latin names, hiragana/katakana and natural numeric
+order, with graph IDs breaking ties; kanji are not sorted by reading. The same
+ordering applies after edits, creation, import, duplication, refresh and external
+library updates. There are no sort or graph-kind filter controls.
+The workspace is one full-width graph list on desktop and mobile (#285).
+Click a row to expand its details directly beneath it; click again to collapse,
+or choose another row to switch. At most one graph is expanded. A chevron and
+`aria-expanded` announce
 its state. Enter/Space toggle expansion, Up/Down/Home/End move among row headers,
 and Tab reaches the expanded actions. Selection is remembered across refreshes;
 a fresh Library starts collapsed. Expanding never launches a session or changes
@@ -22,9 +30,10 @@ The expanded area has **Edit graph**, **Duplicate**, and one **More** menu for
 metadata and **Check model files**. Name and Description autosave with brief local
 status and no Save button. Switching, collapsing and actions wait for pending
 saves; validation errors, Japanese IME composition and save conflicts keep the
-current details open. Search and filters retain the expanded row so drafts remain
-reachable. Failed or interrupted edits survive refresh in a per-tab recovery
-draft, with **Retry saving** or **Load saved details** available when needed.
+current details open. Search retains the expanded row and its unsaved detail draft
+even when the entry no longer matches, so the draft remains reachable. Failed or
+interrupted edits survive refresh in a per-tab recovery draft, with **Retry saving**
+or **Load saved details** available when needed.
 
 Create, rename, describe, duplicate, import or export entries without starting
 inference. New graphs use the current transcription layout; portable JSON remains
@@ -91,7 +100,7 @@ before discarding. Concurrent edits to different entries merge under Web Locks;
 stale saves to the same entry are rejected and retain the draft for export or
 explicit Load saved. Library name/description forms likewise preserve unsaved
 input when another page changes storage. **Save details** saves the name and
-description; **Edit graph** edits Nodes. Unsaved details survive filtering and
+description; **Edit graph** edits Nodes. Unsaved details survive search and
 cache updates, warn before selection changes or navigation, and are retained in
 per-tab sessionStorage across refresh with their original entry revision. A
 stale restored draft still cannot overwrite a concurrent save. **More → Load
@@ -313,8 +322,9 @@ destinations stay on the parent canvas. The shared definition is saved in the
 existing Graph Library immediately; the parent replacement remains a draft
 until **Save**, like other graph edits.
 
-Library lists regular graphs and subgraphs together. **Filters & more** can
-filter either type. **Add Node** includes saved subgraphs under **Subgraphs**.
+Library lists regular graphs and subgraphs together in ascending name order;
+subgraphs are identified by **· Subgraph**. **Add Node** includes saved subgraphs
+under **Subgraphs**.
 Select an instance and choose **Edit Subgraph**, or double-click its heading,
 to open its definition on the same Graph Editor canvas. **Back to parent graph**
 restores the parent's draft, including an unsaved extraction. The draft is kept
