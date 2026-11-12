@@ -46,10 +46,10 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
       expect(box.height).toBeGreaterThanOrEqual(44);
     }
   }
-  const check = gemma.getByRole('button', { name: 'Check cache' });
-  await check.focus(); await check.press('Enter');
-  await expect(check).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Check cache' })).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(gemma.locator('.model-status')).toHaveText('Not downloaded');
+  await expect(gemma.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
   await library.press('Enter');
   expect(await page.evaluate(() => window.openedPages)).toEqual([{ url: new URL('/extension/graph-library.html', page.url()).href }]);
 });

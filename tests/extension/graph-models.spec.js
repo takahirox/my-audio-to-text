@@ -130,7 +130,7 @@ test('byte progress, Cancel, newer Save and page teardown preserve storage and a
   await expect.poll(() => cards(editor).locator('progress').evaluate(progress => progress.value)).toBeGreaterThan(0);
   await editor.close(); f.mode('normal');
   const models = live.models.locator('#opus-en-ja');
-  await models.getByRole('button', { name: 'Download / retry', exact: true }).click();
+  await models.getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
   await expect(models.locator('.model-status')).toContainText('Ready'); expect(await saved(live)).toEqual(before);
 });
 

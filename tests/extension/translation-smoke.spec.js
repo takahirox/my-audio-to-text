@@ -61,7 +61,10 @@ test(`real extension ${direction}: native tab audio → ASR.final → committed 
     const card = models.locator(`#opus-${direction}`);
     await loadTranslationFixture(editor, direction); await settleAutoSave(editor);
     await expect(editor.locator('#graph-state')).toHaveText('Saved');
-    await card.getByRole('button', { name: 'Download / retry', exact: true }).click();
+    await expect(editor.locator('#graph-models .model-status')).toHaveText(/^(Ready|Error)/, { timeout: 600000 });
+    await models.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(card).toHaveAttribute('data-state', /^(Ready|Not downloaded|Error)$/, { timeout: 600000 });
+    if (await card.getByRole('button', { name: /^(Download|Retry)$/ }).isVisible()) await card.getByRole('button', { name: /^(Download|Retry)$/ }).click();
     await expect(card.locator('.model-status')).toHaveText(/^(Ready|Error.*)/, { timeout: 600000 });
     cacheState = await card.locator('.model-status').textContent();
     expect(cacheState, 'Real remote asset download/CORS/COEP/quota failure').toContain('Ready');
@@ -77,7 +80,7 @@ test(`real extension ${direction}: native tab audio → ASR.final → committed 
         recorder.on('pageerror', error => errors.push(error.message));
         await expect(recorder.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
         await recorder.locator('#stop').click(); await expect(recorder.locator('#start')).toBeEnabled();
-        await card.getByRole('button', { name: 'Check cache', exact: true }).click();
+        await models.evaluate(() => window.dispatchEvent(new Event('focus')));
         await expect(card.locator('.model-status')).toContainText('Ready', { timeout: 30000 });
       }
       await recorder.locator('#start').click();

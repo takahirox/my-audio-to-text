@@ -33,7 +33,7 @@ const definitions = [
 ];
 class ModelCard {
   constructor(definition) {
-    this.definition = definition; this.ticket = 0; this.caches = new Map();
+    this.definition = definition; this.ticket = 0; this.caches = new Map(); this.failures = new Map();
     const root = el('section'); root.className = 'panel model-card'; root.id = definition.id;
     root.setAttribute('aria-label', definition.title); this.root = root;
     const heading = el('div'); heading.className = 'model-heading';
@@ -55,10 +55,9 @@ class ModelCard {
     this.files = el('ul'); const details = el('details'); details.append(el('summary', 'Verified files and size'), this.bytes, this.files);
     const controls = el('div'); controls.className = 'actions';
     const button = (text, action) => { const control = el('button', text); control.type = 'button'; control.onclick = action; controls.append(control); return control; };
-    this.prepare = button('Download / retry', () => { void this.run('prepare'); });
+    this.prepare = button('Download', () => { void this.run('prepare'); });
     this.prepare.className = 'primary';
     this.cancel = button('Cancel download', () => this.controller?.abort());
-    this.check = button('Check cache', () => { void this.inspect(); });
     this.remove = button('Delete cached assets', () => { void this.run('remove'); });
     this.remove.className = 'danger';
     const terms = el('a', definition.terms); terms.href = definition.url;
@@ -67,50 +66,93 @@ class ModelCard {
     document.getElementById('models').append(root); this.buttons(); void this.inspect();
   }
   settings() { return { language: 'ja', voice: this.voice?.value }; }
+  key() { return this.voice?.value || 'default'; }
   async cache() {
-    const key = this.voice?.value || 'default';
+    const key = this.key();
     if (!this.caches.has(key)) this.caches.set(key, (async () => new ModelAssetCache(await (this.definition.manifest ? this.definition.manifest() : ttsManifest(this.definition.type, this.settings()))))());
-    return this.caches.get(key);
+    try { return await this.caches.get(key); }
+    catch (error) { this.caches.delete(key); throw error; }
   }
   buttons() {
-    for (const control of [this.prepare, this.check, this.remove, this.voice].filter(Boolean)) control.disabled = !!this.busy;
-    if (!this.controller && document.activeElement === this.cancel) this.prepare.focus({ preventScroll: true });
+    const returnFocus = !this.controller && document.activeElement === this.cancel;
+    this.prepare.textContent = this.root.dataset.state === 'Error' ? 'Retry' : 'Download';
+    this.prepare.hidden = !!this.busy || !['Not downloaded', 'Error'].includes(this.root.dataset.state);
+    for (const control of [this.prepare, this.remove, this.voice].filter(Boolean)) control.disabled = !!this.busy;
     this.cancel.disabled = !this.controller;
     this.cancel.hidden = !this.controller;
+    if (returnFocus) (this.prepare.hidden ? this.remove : this.prepare).focus({ preventScroll: true });
+  }
+  state(state, text = state, error = '') {
+    this.root.dataset.state = state; this.status.textContent = text; this.error.textContent = error;
+    this.progress.hidden = !['Downloading', 'Checking'].includes(state);
+    this.buttons();
   }
   render(view) {
     if (closed) return;
-    this.status.textContent = view.state === 'Ready' ? 'Ready · Cached and verified' : view.state;
-    this.root.dataset.state = view.state; this.error.textContent = view.error;
+    if (view.state === 'Error') this.failures.set(this.key(), view.error);
+    if (view.state === 'Ready') this.failures.delete(this.key());
+    this.state(view.state, view.state === 'Ready' ? 'Ready · Cached and verified' : view.state, view.error);
     this.progress.max = view.totalBytes; this.progress.value = view.downloadedBytes;
-    this.progress.hidden = !['Downloading', 'Checking'].includes(view.state);
     this.bytes.textContent = `${view.downloadedBytes.toLocaleString()} / ${view.totalBytes.toLocaleString()} bytes · ${view.cachedBytes.toLocaleString()} bytes verified cached`;
     this.files.replaceChildren(...view.files.map(file => el('li', `${file.path}: ${file.cached ? 'Cached' : 'Missing'}`)));
   }
-  fail(error) { if (!closed) { this.status.textContent = 'Error'; this.root.dataset.state = 'Error'; this.error.textContent = `${error.message} Retry checking or rebuild the extension if its manifest is missing.`; } }
+  fail(error) {
+    if (closed) return;
+    const message = `${error.message} Retry to prepare assets; rebuild the extension if its manifest is missing.`;
+    this.failures.set(this.key(), message); this.state('Error', 'Error', message);
+  }
   async inspect() {
-    if (this.busy || closed) return;
+    if (closed) return;
+    if (this.busy) { this.pendingInspection = true; return; }
     const ticket = ++this.ticket;
-    this.status.textContent = 'Checking cached assets…'; this.root.dataset.state = 'Checking';
-    try { const cache = await this.cache(), view = await cache.inspect(); if (ticket === this.ticket && !this.busy) this.render(view); }
+    this.state('Checking', 'Checking cached assets…');
+    try {
+      const cache = await this.cache();
+      if (ticket !== this.ticket || closed) return;
+      const view = await cache.inspect();
+      if (ticket === this.ticket && !this.busy) {
+        // Inspection knows which files exist, but cannot recover a failed download.
+        // Keep its actionable error until preparation succeeds or assets are deleted.
+        const error = this.failures.get(this.key());
+        this.render(view.state === 'Not downloaded' && error ? { ...view, state: 'Error', error } : view);
+      }
+    }
     catch (error) { if (ticket === this.ticket) this.fail(error); }
   }
   async run(action) {
-    if (this.busy || closed) return;
+    if (this.busy || closed || (action === 'prepare' && this.prepare.hidden)) return;
     this.busy = true; ++this.ticket;
     if (action === 'prepare') this.controller = new AbortController();
-    this.buttons(); this.root.dataset.state = action === 'prepare' ? 'Downloading' : 'Deleting'; this.status.textContent = action === 'prepare' ? 'Downloading · verifying existing files…' : 'Deleting cached assets…';
+    this.state(action === 'prepare' ? 'Downloading' : 'Deleting', action === 'prepare' ? 'Downloading · verifying existing files…' : 'Deleting cached assets…');
     try {
       const cache = await this.cache(); this.controller?.signal.throwIfAborted();
-      this.render(await (action === 'prepare' ? cache.prepare({ signal: this.controller.signal, onChange: view => this.render(view) }) : cache.remove()));
+      if (action === 'prepare') {
+        let announced = false;
+        this.render(await cache.prepare({ signal: this.controller.signal, onChange: view => {
+          this.render(view);
+          // Notify once the cache lock is held, so other pages hide their action
+          // while their automatic inspection waits for this preparation.
+          if (!announced && !closed) { announced = true; channel.postMessage({ id: this.definition.id }); }
+        } }));
+      } else {
+        const view = await cache.remove();
+        if (view.state === 'Error') this.render(view);
+        else {
+          this.failures.delete(this.key());
+          this.state('Checking', 'Checking cached assets…');
+          this.render(await cache.inspect());
+        }
+      }
     } catch (error) { this.fail(error); }
     finally {
       this.busy = false; this.controller = null; this.buttons();
       if (!closed) { channel.postMessage({ id: this.definition.id }); for (const card of cards) if (card !== this && card.definition.id === this.definition.id) void card.inspect(); }
+      if (this.pendingInspection) { this.pendingInspection = false; void this.inspect(); }
     }
   }
 }
 for (const definition of definitions) cards.push(new ModelCard(definition));
 channel.onmessage = ({ data }) => { for (const card of cards) if (card.definition.id === data.id) void card.inspect(); };
 window.addEventListener('focus', () => { for (const card of cards) void card.inspect(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) for (const card of cards) void card.inspect(); });
 window.addEventListener('pagehide', () => { closed = true; for (const card of cards) { ++card.ticket; card.controller?.abort(); } channel.close(); });

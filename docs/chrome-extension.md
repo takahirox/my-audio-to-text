@@ -92,7 +92,7 @@ runtimes/frontends plus corresponding source. Optional ASR preparation adds abou
 41 MB of pinned runtimes, with the CSP adaptation and licenses described in
 [optional ASR setup](optional-asr-nodes.md); the 1.26 GB / 305 MB weights stay out of the bundle. Optional OPUS-MT / TranslateGemma translation and
 TTS and optional Parakeet/Moonshine ASR **weights** are prepared after a successful **Auto Save** for saved processor
-Nodes, or through **Download / retry** in Models; setup does not download or bundle them. These generated files are
+Nodes, or through **Download** or **Retry** in Models; setup does not download or bundle them. These generated files are
 ignored by Git.
 
 Once assets are prepared, use the quick packaging command after source changes:

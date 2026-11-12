@@ -29,7 +29,7 @@ for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'OpusMtJaEn']) {
         edges: [edge('source', 'value', 'processor', 'text'), edge('processor', streaming ? 'stream' : 'text', 'output', streaming ? 'stream' : 'input1')] });
     }, { type, streaming });
     if (!streaming) {
-      await live.models.locator('#opus-ja-en').getByRole('button', { name: 'Download / retry' }).click();
+      await live.models.locator('#opus-ja-en').getByRole('button', { name: /^(Download|Retry)$/ }).click();
       await expect(live.models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Ready');
       await live.locator('#retry-models').click();
     }

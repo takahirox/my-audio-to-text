@@ -26,9 +26,9 @@ storage prevents preparation. Storage finishes before preparation; download
 failure does not roll it back. No capture, inference, Workers or remote executable
 code starts during Auto Save preparation. Live initialization and Start/inference
 remain cache-only; see the [Live model lifecycle](extension-graph.md#live-model-lifecycle-239).
-Each optional model has independent status, byte progress, error/retry, Cancel,
-Check cache and Delete controls. TTS voice selectors are initialized from saved
-Nodes where present, and never change graph settings. Choose a matching voice
+Each optional model has independent status, byte progress, error/retry, Cancel
+and Delete controls. Cache inspection runs automatically; no manual check is
+needed. TTS voice selectors are initialized from saved Nodes where present, and never change graph settings. Choose a matching voice
 in Graph Editor, Auto Save prepares its files after persistence for the next session. Language/voice and terms are
 shown alongside preparation. Graph Editor also shows per-model status and byte
 progress with cancellation, retry and cache checking after Auto Save; Models remains
@@ -45,20 +45,25 @@ on the Models screen.
 
 - **Not downloaded** means at least one required file is absent or invalid.
   Each file is shown as Cached or Missing; a partial set is never Ready.
-- **Download / retry** checks existing files, fetches only missing/invalid
-  files, shows **Downloading** with byte progress, and reports **Ready · Cached and verified** after
+- **Download** appears for missing or partially cached models; **Retry** appears
+  after a recoverable error. Both check existing files and fetch only missing/invalid
+  files, show **Downloading** with byte progress, and report **Ready · Cached and verified** after
   every required file has passed size and hash validation and its write completed.
+- **Ready · Cached and verified** hides Download/Retry entirely. To deliberately
+  re-download, use **Delete cached assets**, then **Download**. During initial
+  inspection, voice changes and other asynchronous checks, Download/Retry stays
+  hidden until the selected cache state is known.
 - **Error** reports network, integrity, quota or storage access failures. Retry
   preserves valid completed files. An interrupted file is fetched from its start;
   there is no HTTP Range/resumable download protocol.
 - **Cancel download** or closing/reloading the page interrupts preparation. No
   background worker continues a multi-GB download. Chrome may finish an already
   completed write during teardown; the next inspection validates stored bytes.
-- **Check cache** revalidates all files; **Delete cached assets** removes only
+- **Delete cached assets** removes only
   this pinned asset set, leaving other models/revisions intact. Another open
-  Models page refreshes after preparation/deletion notifications, on focus, or
-  with Check cache after eviction. TTS voices share model files; deleting a
-  selected voice removes shared weights and may make other voices missing too.
+  Models page revalidates files after preparation/deletion notifications and
+  on return to the tab. Deletion re-inspects before showing Download again.
+  TTS voices share model files; deleting a selected voice removes shared weights and may make other voices missing too.
 
 Cache Storage belongs to this **extension origin and Chrome profile**, separate
 from the published Node Playground's website origin. Closing pages or restarting
