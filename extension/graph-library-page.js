@@ -210,6 +210,7 @@ try {
   document.addEventListener('click', event => { if (!help.contains(event.target)) help.open = false; });
   const toggle = element('web-voice-enabled'), status = element('web-voice-status');
   let voiceMessage = '', hasWebsiteAccess = true, voicePending = false, enableCanceled = false, savedEnabled = false, accessCheck = 0, preferenceChange = 0;
+  let observedPreference;
   refreshVoiceStatus = () => {
     element('voice-switch-state').textContent = toggle.checked ? 'ON' : 'OFF';
     const count = library ? webVoiceChoices(library).length : null;
@@ -230,6 +231,7 @@ try {
   async function changeVoice(enabled, permission) {
     const restoreFocus = document.activeElement === toggle;
     const operationId = crypto.randomUUID();
+    const previousOperationId = observedPreference?.operationId;
     voicePending = true; enableCanceled = false; toggle.disabled = true; toggle.checked = false;
     toggle.setAttribute('aria-busy', 'true');
     voiceMessage = enabled ? 'Requesting website access…' : 'Turning Web microphone OFF…'; refreshVoiceStatus();
@@ -260,14 +262,23 @@ try {
         // Serialize the ownership check, rollback and cleanup with other Library
         // writes. Even ON -> ON needs a unique owner so an older rejection cannot
         // erase a newer opt-in, including when both native prompts overlap.
-        if (enabled && !superseded) {
+        if (!superseded) {
+          let current;
           try {
-            const current = (await chrome.storage.local.get(WEB_VOICE_KEY))[WEB_VOICE_KEY];
-            superseded = voiceEnabled(current) && current.operationId !== operationId;
-          } catch { stateKnown = false; return; }
+            current = (await chrome.storage.local.get(WEB_VOICE_KEY))[WEB_VOICE_KEY];
+          } catch {
+            // Storage events still identify a newer opt-in when reads fail.
+            // Without one, continue rollback and cleanup rather than leaving
+            // this operation's partially enabled controls running.
+            stateKnown = false; current = observedPreference;
+          }
+          // A rejected OFF write can still see the original ON owner; only
+          // an intervening opt-in supersedes that OFF intent.
+          superseded = voiceEnabled(current) && current.operationId !== operationId
+            && (enabled || current.operationId !== previousOperationId);
         }
         if (superseded) return;
-        try { await setVoiceEnabled(false); }
+        try { await setVoiceEnabled(false); savedEnabled = false; }
         catch (saveError) { failure += ` Could not save OFF: ${saveError.message}`; }
         // Stop controls even if an OFF write fails; later reconciliation may
         // restore them until OFF can be saved successfully.
@@ -299,7 +310,8 @@ try {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[WEB_VOICE_KEY]) {
       ++preferenceChange;
-      savedEnabled = voiceEnabled(changes[WEB_VOICE_KEY].newValue);
+      observedPreference = changes[WEB_VOICE_KEY].newValue;
+      savedEnabled = voiceEnabled(observedPreference);
       if (voicePending && !savedEnabled) enableCanceled = true;
       if (!voicePending) { toggle.checked = savedEnabled; voiceMessage = ''; }
       refreshVoiceStatus();
@@ -308,8 +320,8 @@ try {
   chrome.permissions.onRemoved.addListener(() => { if (voicePending) enableCanceled = true; void checkWebsiteAccess(); });
   chrome.permissions.onAdded.addListener(() => { void checkWebsiteAccess(); });
   try {
-    const change = preferenceChange, enabled = await readVoiceEnabled();
-    if (change === preferenceChange) { savedEnabled = enabled; toggle.checked = savedEnabled; }
+    const change = preferenceChange, preference = (await chrome.storage.local.get(WEB_VOICE_KEY))[WEB_VOICE_KEY];
+    if (change === preferenceChange) { observedPreference = preference; savedEnabled = voiceEnabled(preference); toggle.checked = savedEnabled; }
   }
   catch { voiceMessage = 'Could not read Web microphone settings. Reload Graph Library to retry.'; }
   await checkWebsiteAccess();

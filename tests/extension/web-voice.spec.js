@@ -496,6 +496,92 @@ for (const failure of ['OFF write', 'ON rollback', 'OFF write and read']) {
   });
 }
 
+test('failed settings reads after ON registration still roll back and remove page controls', async ({ voice: t }) => {
+  test.skip(real, 'Settings recovery does not require real inference.');
+  await t.library.evaluate(() => {
+    const get = chrome.storage.local.get.bind(chrome.storage.local), send = chrome.runtime.sendMessage.bind(chrome.runtime);
+    window.cleanupCalls = 0;
+    window.restoreSettings = () => { chrome.storage.local.get = get; chrome.runtime.sendMessage = send; };
+    chrome.runtime.sendMessage = async message => {
+      if (message.type === 'web-voice-reconcile' && message.stop) cleanupCalls++;
+      const reply = await send(message);
+      if (message.type === 'web-voice-reconcile' && !message.stop) {
+        chrome.storage.local.get = () => Promise.reject(Error('Controlled settings read failure'));
+        await new Promise(resolve => { window.finishSetup = resolve; });
+      }
+      return reply;
+    };
+  });
+  const toggle = t.library.locator('#web-voice-enabled');
+  await toggle.click();
+  await expect.poll(() => t.library.evaluate(() => !!window.finishSetup)).toBe(true);
+  await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible();
+  expect(await t.library.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).length)).toBe(1);
+  await t.library.evaluate(() => finishSetup());
+  await expect(toggle).toBeEnabled(); await expect(toggle).not.toBeChecked();
+  await expect(toggle).not.toHaveAttribute('aria-busy');
+  await expect(t.library.locator('#web-voice-status')).toContainText('Could not verify saved settings');
+  expect(await t.library.evaluate(() => cleanupCalls)).toBe(1);
+  await expect(widget(t.website)).toHaveCount(0);
+  await t.library.evaluate(() => restoreSettings());
+  expect(await t.library.evaluate(async () => ({
+    enabled: (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled,
+    scripts: (await chrome.scripting.getRegisteredContentScripts()).length
+  }))).toEqual({ enabled: false, scripts: 0 });
+  await enable(t);
+});
+
+for (const unreadable of [false, true]) {
+  test(`older failed OFF preserves a newer ON with ${unreadable ? 'unavailable' : 'readable'} settings`, async ({ voice: t }) => {
+    test.skip(real, 'Concurrent settings recovery does not require real inference.');
+    await enable(t);
+    await t.library.evaluate(() => {
+      const set = chrome.storage.local.set.bind(chrome.storage.local), get = chrome.storage.local.get.bind(chrome.storage.local);
+      const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+      window.voiceWrites = []; window.voiceReconciles = []; window.latestPreference = null;
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes['web-voice-typing-v1']) latestPreference = changes['web-voice-typing-v1'].newValue;
+      });
+      window.restoreSettings = () => { chrome.storage.local.get = get; };
+      chrome.storage.local.set = values => { voiceWrites.push(values); return set(values); };
+      chrome.runtime.sendMessage = async message => {
+        if (message.type === 'web-voice-reconcile') voiceReconciles.push(message);
+        const reply = await send(message);
+        if (message.type === 'web-voice-reconcile' && !message.stop) {
+          await new Promise((resolve, reject) => { window.failEarlierOFF = () => reject(Error('Controlled older OFF failure')); });
+        }
+        return reply;
+      };
+    });
+    const toggle = t.library.locator('#web-voice-enabled');
+    await toggle.uncheck();
+    await expect.poll(() => t.library.evaluate(() => !!window.failEarlierOFF)).toBe(true);
+    const other = await t.context.newPage(); await other.goto(t.url + 'graph-library.html');
+    const newerToggle = other.locator('#web-voice-enabled');
+    await newerToggle.click(); await expect(newerToggle).toBeEnabled(); await expect(newerToggle).toBeChecked();
+    await expect.poll(() => t.library.evaluate(() => latestPreference?.enabled)).toBe(true);
+    await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible();
+    const callsBefore = await t.library.evaluate(() => ({ writes: voiceWrites.length, reconciles: voiceReconciles.length }));
+    await t.library.evaluate(unreadable => {
+      if (unreadable) chrome.storage.local.get = () => Promise.reject(Error('Controlled settings read failure'));
+      failEarlierOFF();
+    }, unreadable);
+    await expect(toggle).toBeEnabled(); await expect(toggle).toBeChecked();
+    await expect(toggle).not.toHaveAttribute('aria-busy');
+    if (unreadable) await expect(t.library.locator('#web-voice-status')).toContainText('Could not verify saved settings');
+    else await expect(t.library.locator('#web-voice-status')).toBeEmpty();
+    await t.library.evaluate(() => restoreSettings());
+    expect(await t.library.evaluate(async () => ({
+      enabled: (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled,
+      scripts: (await chrome.scripting.getRegisteredContentScripts()).length,
+      calls: { writes: voiceWrites.length, reconciles: voiceReconciles.length }
+    }))).toEqual({ enabled: true, scripts: 1, calls: callsBefore });
+    await expect(widget(t.website)).toBeVisible();
+    await newerToggle.uncheck(); await expect(newerToggle).toBeEnabled();
+    await expect(toggle).not.toBeChecked(); await expect(widget(t.website)).toHaveCount(0);
+  });
+}
+
 for (const interruption of ['another Library turns OFF', 'website access removed']) {
   test(`pending ON cannot override ${interruption}`, async ({ voice: t }) => {
     test.skip(real, 'Pending permission boundaries do not require real inference.');
@@ -572,7 +658,7 @@ test('OFF during the final access check cannot be overwritten by the earlier ON 
   expect(await t.library.evaluate(async () => (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled)).toBe(false);
 });
 
-for (const failure of ['permission rejection', 'permission denial', 'reconcile rejection', 'final access rejection']) {
+for (const failure of ['permission rejection', 'permission denial', 'reconcile rejection', 'final access rejection', 'settings read rejection']) {
   test(`concurrent ON preserves the newer opt-in after an older ${failure}`, async ({ voice: t }) => {
     test.skip(real, 'Concurrent opt-in boundaries do not require real inference.');
     const other = await t.context.newPage(); await other.goto(t.url + 'graph-library.html');
@@ -616,6 +702,15 @@ for (const failure of ['permission rejection', 'permission denial', 'reconcile r
           if (++checks === 2) await new Promise((resolve, reject) => { window.failEarlierON = () => reject(Error('Controlled older access failure')); });
           return granted;
         };
+      } else if (failure === 'settings read rejection') {
+        const get = chrome.storage.local.get.bind(chrome.storage.local);
+        window.restoreSettings = () => { chrome.storage.local.get = get; };
+        let first = true;
+        chrome.storage.local.get = () => {
+          if (!first) return Promise.reject(Error('Controlled settings read failure'));
+          first = false;
+          return new Promise((resolve, reject) => { window.failEarlierON = () => reject(Error('Controlled older settings read failure')); });
+        };
       }
     }, failure);
     const toggle = t.library.locator('#web-voice-enabled'), newerToggle = other.locator('#web-voice-enabled');
@@ -634,7 +729,10 @@ for (const failure of ['permission rejection', 'permission denial', 'reconcile r
       ? finishPermission(failure === 'permission rejection' ? 'reject' : 'deny') : failEarlierON(), failure);
     await expect(toggle).toBeEnabled(); await expect(toggle).toBeChecked();
     await expect(toggle).not.toHaveAttribute('aria-busy');
-    await expect(t.library.locator('#web-voice-status')).toBeEmpty();
+    if (failure === 'settings read rejection') {
+      await expect(t.library.locator('#web-voice-status')).toContainText('Could not verify saved settings');
+      await t.library.evaluate(() => restoreSettings());
+    } else await expect(t.library.locator('#web-voice-status')).toBeEmpty();
     await expect(newerToggle).toBeChecked();
     expect(await t.library.evaluate(async () => ({
       enabled: (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled,
