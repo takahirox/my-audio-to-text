@@ -51,6 +51,7 @@ async function setup(page, { hold = false, holdReady = null, emptyFinal = false 
       if (event.data.type === 'test-finish') unblock();
       else originalOnmessage(event);
     };`;
+  await page.context().route('**/local-model-assets.js', route => route.fulfill({ contentType: 'text/javascript', body: `export async function localModelAssets() { return { sherpaModelFiles: async () => () => {} }; }` }));
   const actualVadWorker = readFileSync(new URL('../../web/silero-worker.js', import.meta.url), 'utf8') + `
     self.importScripts = () => self.Module.onRuntimeInitialized();
     self.createVad = (module, config) => {

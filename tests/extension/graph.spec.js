@@ -37,7 +37,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
   test(`${type}: visual final-text/audio path uses production Workers, explicit preparation, playback, repeat, failure and cancellation (fixture inference)`, async ({ graphExtension: f }) => {
     const page = await openGraph(f), requests = [];
     page.on('request', request => requests.push({ url: request.url(), method: request.method(), body: request.postData() }));
-    f.mode('error'); await addAudioPath(page, type); await expect(page.editor.locator('#graph-models .model-status')).toHaveText('Error');
+    f.mode('error'); await addAudioPath(page, type); await expect(page.editor.locator('#graph-models .model-card').filter({ hasText: type === 'Supertonic3' ? 'Supertonic 3' : 'Kokoro ·' }).locator('.model-status')).toHaveText('Error');
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(page.locator('#tts-status')).toContainText('assets missing');
     await expect(page.locator('#errors')).toContainText('assets missing');
@@ -166,8 +166,9 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.setViewportSize({ width: 620, height: 900 });
   await live.editor.setViewportSize({ width: 1440, height: 1000 });
   await live.models.setViewportSize({ width: 1200, height: 1000 });
-  await expect(live.models.locator('.bundled-models').getByText('ReazonSpeech ja-en', { exact: true })).toBeVisible();
-  await expect(live.models.locator('.model-card .model-status')).toHaveText(Array(12).fill('Not downloaded'));
+  await expect(live.models.locator('#reazon').getByText('ReazonSpeech ja-en', { exact: true })).toBeVisible();
+  await expect(live.models.locator('.model-card')).toHaveCount(17);
+  await expect(live.models.locator('.model-card .model-status')).toHaveText(Array(17).fill('Not downloaded'));
   await expect(live.models.getByText('CosyVoice3 0.5B · streaming', { exact: true })).toBeVisible();
   expect(await live.models.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.editor.evaluate(() => window.graphWorkers.length)).toBe(0);

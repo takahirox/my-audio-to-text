@@ -1,7 +1,7 @@
 import { webVoiceChoices } from './web-voice-graph.js';
 import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_ORIGINS, WEB_VOICE_KEY, voiceEnabled } from './web-voice-preference.js';
 import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, resolvedEntryGraph, entryError, exportEntry, legacyChanged, usable, compareGraphNames } from './graph-library.js';
-import { GRAPH_KEY, ASR_TYPES, nodeDefinition } from './graph.js';
+import { GRAPH_KEY } from './graph.js';
 import { graphModelRequirements } from './graph-model-preparation.js';
 import { references } from './subgraphs.js';
 import { GraphDetailsAutosave, DETAILS_DRAFT_KEY } from './graph-library-details.js';
@@ -34,8 +34,7 @@ function selected() { return library.graphs.find(entry => entry.id === selectedI
 function models(entry) {
   if (entryError(entry, library)) return [];
   const graph = resolvedEntryGraph(entry, library), requirements = graphModelRequirements(graph);
-  return [...new Set([...requirements.map(requirement => requirement.title.split(' · ').filter(part => !/\d[\d.]* (?:MB|GB)|allow |WebGPU|CPU WASM|terms apply|Apache/.test(part)).slice(0, 2).join(' · ')),
-    ...graph.nodes.filter(node => ASR_TYPES.includes(node.type) && !['SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'].includes(node.type)).map(node => (nodeDefinition(node, graph, library.graphs)?.label || node.type))])];
+  return [...new Set(requirements.map(requirement => requirement.title.split(' · ').filter(part => !/\d[\d.]* (?:MB|GB)|allow |WebGPU|CPU WASM|terms apply|Apache/.test(part)).slice(0, 2).join(' · ')))];
 }
 function rowButton(id = selectedId) {
   return [...element('graph-list').querySelectorAll('button[data-id]')].find(button => button.dataset.id === id);

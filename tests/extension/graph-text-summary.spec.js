@@ -26,7 +26,7 @@ test('both text processors: parked Save persists, independent settings, cancella
     expect(await editor.locator('#graph-node-type [role="option"][data-type^="MeetingSummary"]').count()).toBe(0);
   }
   await editor.getByLabel('textsummaryqwen35 language', { exact: true }).selectOption('en');
-  const cards = editor.locator('#graph-models .model-card');
+  const cards = editor.locator('#graph-models .model-card').filter({ hasText: 'Text Summary' });
   const save = async () => { await settleAutoSave(editor);  };
   f.mode('corrupt'); await save();
   await expect(cards).toHaveCount(2);

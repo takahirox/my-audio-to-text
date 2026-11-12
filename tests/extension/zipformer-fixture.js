@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 export async function selectZipformer(page) {
   await page.evaluate(async () => {
     const { readLiveGraphData, saveLiveGraphData } = await import('./graph-library.js');
@@ -15,4 +16,6 @@ export async function selectZipformer(page) {
     };
   });
   await page.editor.reload();
+  await page.editor.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
+  await settleAutoSave(page.editor);
 }

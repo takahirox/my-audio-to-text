@@ -8,13 +8,12 @@ self.onmessage = ({ data }) => {
       if (data.type === 'load') {
         language = whisperLanguage(data.language);
         const { pipeline, env } = await translationRuntime();
-        env.allowRemoteModels = false;
-        env.allowLocalModels = true;
-        env.useBrowserCache = false;
-        env.localModelPath = new URL('./vendor/whisper/', import.meta.url).href;
-        recognizer = await pipeline('automatic-speech-recognition', WHISPER_MODEL.id, {
-          dtype: WHISPER_MODEL.dtype, device: WHISPER_MODEL.device,
-          progress_callback: event => self.postMessage({ type: 'progress', message: `Loading packaged Whisper: ${event.status}` }),
+        const { localModelAssets } = await import('./local-model-assets.js');
+        const { cacheOnlyWhisperRuntime } = await localModelAssets('whisper', message => self.postMessage({ type: 'progress', message }));
+        await cacheOnlyWhisperRuntime(env);
+        recognizer = await pipeline('automatic-speech-recognition', WHISPER_MODEL.source, {
+          dtype: WHISPER_MODEL.dtype, device: WHISPER_MODEL.device, revision: WHISPER_MODEL.revision,
+          progress_callback: event => self.postMessage({ type: 'progress', message: `Loading verified Whisper: ${event.status}` }),
         });
         self.postMessage({ type: 'configuration', model: 'whisper-tiny', modelName: 'Whisper tiny (multilingual, q8)', numThreads: 1 });
         self.postMessage({ type: 'ready' });
@@ -27,7 +26,7 @@ self.onmessage = ({ data }) => {
       } else throw new Error(`Unknown Whisper request: ${data.type}`);
     } catch (error) {
       self.postMessage({ type: 'error', session: data.session,
-        message: `Local Whisper failed: ${error.message}. Verify packaged models with npm run prepare:whisper-assets and rebuild the extension; retry with a fresh session.` });
+        message: `Local Whisper failed: ${error.message}. Open Models or Graph Editor and retry preparation, then start a fresh session.` });
     }
   });
 };

@@ -10,7 +10,10 @@ sherpa-onnx 1.13.2 and ReazonSpeech ja-en Zipformer (epoch 35)
 Silero VAD
   https://github.com/snakers4/silero-vad
   Copyright (c) 2020-present Silero Team. MIT License.
-  Model: silero_vad.onnx already embedded in the pinned sherpa-onnx 1.13.2 archive.
+  Model: silero_vad.onnx downloaded on demand, byte-identical to the former
+  sherpa-onnx 1.13.2 preload (SHA-256 9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6).
+  Pinned CORS mirror: https://huggingface.co/mobilebytesensei/betterflow-silero-vad/tree/0ae41137f2cd00de5e8a286fe01bdd5e3644f2da
+  The distributed JS/WASM package contains no model preload data.
   Browser wrapper from that same checksum-verified archive; scoped during staging
   to avoid colliding with ASR's global configuration cleanup helpers.
   License: ./licenses/silero-vad.txt

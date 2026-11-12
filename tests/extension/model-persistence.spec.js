@@ -15,7 +15,7 @@ const button = (page, id, name) => page.locator(`#${id}`).getByRole('button', { 
 
 test('Models removes storage controls and keeps discoverable legal links; model-free editing and Live never request persistence', async ({ graphExtension: f }) => {
   const calls = await trackPersistence(f), live = await openGraph(f), models = live.models;
-  await expect(models.locator('.model-card')).toHaveCount(12);
+  await expect(models.locator('.model-card')).toHaveCount(17);
   await expect(models.locator('#persist, #persistence, main > details')).toHaveCount(0);
   await expect(models.getByText('Storage and cache management', { exact: true })).toHaveCount(0);
   await expect(models.locator('footer')).toHaveCount(0);
@@ -81,7 +81,7 @@ test('Auto Save requests persistence only after saving a model-bearing graph; a 
   });
   await openPalette(editor); await editor.locator('#graph-node-type [data-type="OpusMtEnJa"]').click();
   await settleAutoSave(editor);
-  await expect(editor.locator('#graph-models .model-status')).toContainText('Ready');
+  await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(3).fill('Ready · Cached and verified'));
   expect(await editor.evaluate(() => window.savedBeforePersistence)).toBe(true);
   expect(operations(calls)).toEqual(['persisted', 'persist']);
   expect(calls.every(call => call.page.includes('graph-editor.html'))).toBe(true);

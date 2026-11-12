@@ -73,28 +73,31 @@ identifies English LibriSpeech training and this int8-encoder/int8-joiner plus
 float-decoder configuration. It is an older, small English read-speech model,
 chosen for a relatively small local CPU bundle, not a demonstrated accuracy win.
 
-| Packaged artifact | Bytes |
+| Cached model / packaged runtime | Bytes |
 | --- | ---: |
 | int8 encoder | 42,845,182 |
 | float decoder | 2,092,272 |
 | int8 joiner | 259,572 |
 | tokens | 5,048 |
-| packed model `.data` | 45,202,074 |
+| independently cached model files total | 45,202,074 |
 | online SIMD `.wasm` | 12,434,212 |
-| complete generated bundle, excluding manifest | 57,804,207 |
+| weight-free runtime total | 12,601,592 |
 
 Runtime: [sherpa-onnx v1.13.2 online English SIMD archive](https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.2/sherpa-onnx-wasm-simd-v1.13.2-en-asr-zipformer.tar.bz2),
 SHA-256 `0ae9f835b956e43200231ad6820e6ce3c8f2225411af55c51f017266d3552caa`.
-The archive download is 175,014,741 bytes because upstream includes larger
-weights; preparation discards those and rewrites only the Emscripten preload
-table with the selected 20M files. Online JS/WASM is preserved. Inference uses
+The upstream archive contains unrelated weights, so normal preparation uses the
+reviewed weight-free `scripts/sherpa-runtime.tar.gz` instead. The maintainer-only
+`review-sherpa-runtime.py` reproduces it from the original archive, discarding
+all preload data and removing the automatic preload invocation. The Worker writes
+only its verified cached model files into MEMFS before creating its recognizer.
+Inference uses
 16 kHz / 80-bin features, `modelType: zipformer`, greedy search, CPU, one thread,
 no endpointing, no WebGPU or multi-thread dependency. This is separate from the
 offline ReazonSpeech Worker. All source, runtime and generated bundle checksums
 are pinned in [zipformer-assets.json](../scripts/zipformer-assets.json).
 
 The runtime/model use [Apache-2.0](../web/licenses/sherpa-onnx.txt); existing
-ONNX Runtime and upstream dependency licenses also apply. The packaged model
+ONNX Runtime and upstream dependency licenses also apply. The pinned model
 card and [third-party notices](../web/third-party-notices.txt) retain provenance.
 Development WAV fixtures `test_wavs/0.wav` (6.625 s), `1.wav` (16.715 s) and their
 reference text are pinned from the same revision. They are upstream English
@@ -108,42 +111,13 @@ from LibriVox, CC BY 4.0. No WAVs are packaged or published by preparation.
 npm run setup:extension
 ```
 
-For an already prepared checkout, run `npm run prepare:zipformer-assets` **after**
-`prepare:assets` (which resets `web/vendor`), then `npm run build:extension`.
-The new preparer verifies the runtime archive, each source model/card/fixture,
-and every generated bundle file before writing the staged bundle. The extension
-build separately checks the pinned specification, file sizes and hashes and
-fails with preparation instructions for missing/invalid assets. The prepared
-bundle and complete source modules are copied into `dist/chrome-extension`.
-
-No executable code, model or inference service is fetched from the network at
-load or recording time. Worker `importScripts`, dynamic local imports, preload
-XHR and WASM instantiation use packaged extension URLs. The unchanged MV3 CSP
-uses `script-src 'self' 'wasm-unsafe-eval'` and `worker-src 'self'`; no host
-permission or remote-code exception is added. Missing/incompatible local files
-produce a visible startup failure. Optional translation/TTS downloads retain
-their existing explicit preparation policy.
-
-```sh
-npm test
-npm run test:browser
-npm run test:extension
-npm run test:zipformer-real
-```
-
-The real check is opt-in to avoid silently downloading large model assets in a
-normal test run. Preparation downloads and checksum-verifies its fixtures too;
-there is no manual deployment prerequisite. It launches the built extension
-under its actual CSP, substitutes pinned PCM only for capture hardware, and
-retains the production graph, Node, core, Worker, online runtime, model and Live
-sinks. It verifies changing partials before final, cap followed by a new stream,
-Stop tail including the final English phrase, silence, empty audio, repeat
-sessions, worker disposal and zero HTTP requests. Irregular accelerated chunks
-also exercise capture block boundaries independently of model decode chunks.
-Deterministic tests cover exact audio accounting, repeated equal finals,
-backlog, failure/crash cleanup, Cancel, warm transfer, typed connections,
-current saves/defaults and explicit unsupported-graph recovery. The deterministic recognizer
-is a fake and supplies no acoustic accuracy evidence.
+For an already prepared checkout, run `npm run prepare:zipformer-assets`, then
+`npm run build:extension`. Neither command downloads weights. Save a Zipformer
+graph or use Download / retry on Models to cache its four required files. It has
+no Silero dependency. Weights use the pinned manifest and streaming checksums;
+Live is cache-only and reports actionable retry guidance for missing/corrupt data.
+JS/WASM remains packaged under the existing MV3 CSP and permissions. See the
+[weight-free packaging audit and real offline smokes](model-assets.md).
 
 ## Measured behavior and limits
 
