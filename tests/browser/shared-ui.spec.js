@@ -52,6 +52,9 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await gemma.getByText('Verified files and size', { exact: true }).click();
   const spec = JSON.parse(await readFile('extension/translategemma-assets.json'));
   await expect(gemma.locator('li')).toHaveCount(spec.length);
+  await gemma.locator('summary').focus();
+  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+  await expect(gemma.getByRole('link', { name: 'Gemma terms & attribution', exact: true })).toBeFocused();
   for (const width of [320, 390, 800, 1440]) {
     await page.setViewportSize({ width, height: 844 });
     await page.evaluate(() => scrollTo(0, 0));
@@ -77,9 +80,6 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await remove.focus(); await page.keyboard.press(browserName === 'webkit' ? 'Alt+Shift+Tab' : 'Shift+Tab');
   await expect(download).toBeFocused();
   await expect(gemma.locator('.model-status')).toHaveText('Not downloaded');
-  await gemma.locator('summary').focus();
-  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
-  await expect(gemma.getByRole('link', { name: 'Gemma terms & attribution', exact: true })).toBeFocused();
   await library.press('Enter');
   expect(await page.evaluate(() => window.openedPages)).toEqual([{ url: new URL('/extension/graph-library.html', page.url()).href }]);
 });
