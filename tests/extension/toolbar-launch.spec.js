@@ -88,9 +88,14 @@ test('native action menu separates launch/default, filters drafts, refreshes nam
 
 test('Edit graph targets its own idle or running window independently of the toolbar default and other sessions', async ({ libraryExtension: f }) => {
   const a = await create(f.page, 'A', simple('A')), b = await create(f.page, 'B', simple('B'));
-  await menu(f, 'live-default:' + a);
+  const first = await open(f, a, 41), second = await open(f, b, 42);
+  // Opening B also selects it for the toolbar. Set A after both windows exist
+  // so this navigation regression keeps B distinct from the current selection.
+  await f.page.evaluate(async id => {
+    const { GraphLibrary } = await import('./graph-library.js');
+    await new GraphLibrary(localStorage).assign('live', id);
+  }, a);
   await expect.poll(async () => (await library(f.page)).assignments.live).toBe(a);
-  const first = await clickAction(f, 41), second = await open(f, b, 42);
   await expect(first.locator('#start')).toBeEnabled();
   await first.locator('#start').click();
   await expect(first.locator('#session-state')).toHaveText('Running');
