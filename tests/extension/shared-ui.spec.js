@@ -76,7 +76,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
       }
     }
   }
-  await checkContrast(models, '.model-heading h3, .model-status, .model-metadata, .model-license a, .actions button:not(:disabled)', '.model-card', 4.5);
+  await checkContrast(models, '.model-heading h3, .model-status, .model-metadata, .model-license a, .model-license summary, .model-license p, .actions button:not(:disabled)', '.model-card', 4.5);
   await checkContrast(graph, '.graph-heading, .graph-ports button:not(:disabled), .graph-ports small', '.graph-node', 4.5);
   await checkContrast(graph, '.wire-line', '.graph-scroll', 3);
   expect(await graph.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(original);
