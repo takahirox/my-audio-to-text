@@ -269,8 +269,8 @@ warning below the toolbar wraps in full: **earlier graph; saved edits apply next
 session** means Live is still running its immutable older snapshot. A saved graph
 changed elsewhere warning preserves your draft; export it if needed, then choose
 **Graph actions → Load saved** before saving. Both warnings remain readable when
-they occur together. Select a heading for settings and the **Node help and ports**
-disclosure; click it again, press Escape, or click blank canvas to clear selection. The Inspector identifies the
+they occur together. Select a heading for settings; click it again, press Escape,
+or click blank canvas to clear selection. The Inspector identifies the
 Node by type and Instance ID, with Remove Node beside Settings. Drag headings or use arrow
 keys to move Nodes. Connect an output to a compatible input; reconnecting replaces only that input's wire. Select a wire
 for details or Disconnect. Canvas navigation floats at the bottom-left: −, the
@@ -456,8 +456,8 @@ for independent ID/TEXT arrival semantics.
 
 ## Port display order
 
-Canvas rows, native keyboard tab order within each input/output column, and
-Inspector **Node help and ports** show payload above its matching numeric ID.
+Canvas rows and native keyboard tab order within each input/output column
+show payload above its matching numeric ID.
 Committed pairs precede provisional pairs, matching the default coalesce wiring:
 
 | Node | Inputs, top to bottom | Outputs, top to bottom |

@@ -96,10 +96,18 @@ for (const receiveStorageEvent of [true, false]) test(`open extraction rejects c
 
 test('extract, review port names, edit on the same canvas and return to an unsaved parent without losing it', async ({ page }) => {
   const ids = await extract(page);
+  const inspector = page.locator('.graph-inspector');
+  await expect(inspector.getByText('Node help and ports', { exact: true })).toHaveCount(0);
+  await expect(inspector.locator('details')).toHaveCount(0);
+  await expect(inspector.getByRole('button', { name: 'Remove subgraph', exact: true })).toBeVisible();
   await expect(page.locator('#graph-state')).toHaveText('Unsaved');
   await page.locator('#graph-edit-subgraph').click();
   await expect(page).toHaveURL(new RegExp(`id=${ids.shared}`));
   await expect(page.locator('.graph-node')).toHaveCount(2);
+  const exposedPorts = inspector.locator('details').filter({ has: page.getByText('Exposed ports', { exact: true }) });
+  await expect(exposedPorts).toHaveAttribute('open', '');
+  await expect(exposedPorts.getByLabel('inputs in1 name', { exact: true })).toHaveValue('Transcript');
+  await expect(exposedPorts.getByLabel('outputs out1 name', { exact: true })).toHaveValue('History');
   await page.getByRole('button', { name: 'Select format', exact: true }).click();
   await page.getByLabel('format template', { exact: true }).fill('After: {1}'); await save(page);
   await page.getByRole('link', { name: 'Back to parent graph' }).click();

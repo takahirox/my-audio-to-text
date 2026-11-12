@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { openPalette } from '../extension/ui-controls.js';
 
-test('KeyedTextCoalesce palette, independent wiring, node help, save/reload and runtime fan-out', async ({ page }) => {
+test('KeyedTextCoalesce palette, independent wiring, settings, save/reload and runtime fan-out', async ({ page }) => {
   // Exercise the real editor/runtime without capture APIs or model assets.
   await page.route('**/*', async route => {
     const pathname = new URL(route.request().url()).pathname;
@@ -25,7 +25,7 @@ test('KeyedTextCoalesce palette, independent wiring, node help, save/reload and 
   await page.getByLabel('Node category', { exact: true }).selectOption('Processors');
   await page.getByLabel('Search nodes').fill('KeyedTextCoalesce');
   await page.locator('#graph-node-type [data-type="KeyedTextCoalesce"]').click();
-  await expect(page.locator('.graph-inspector').getByText('Node help and ports', { exact: true })).toBeVisible();
+  await expect(page.locator('.graph-inspector').getByText('Node help and ports', { exact: true })).toHaveCount(0);
   await expect(page.locator('.graph-inspector input, .graph-inspector select, .graph-inspector textarea')).toHaveCount(0);
   const port = name => page.getByRole('button', { name, exact: true });
   await port('key output value').click();
@@ -45,9 +45,7 @@ test('KeyedTextCoalesce palette, independent wiring, node help, save/reload and 
   await page.reload();
   for (const name of ['id1', 'input1', 'id2', 'input2']) await expect(port(`keyedtextcoalesce input ${name}`)).toBeAttached();
   await page.getByRole('button', { name: 'Select keyedtextcoalesce', exact: true }).press('Enter');
-  await page.locator('.graph-inspector').getByText('Node help and ports', { exact: true }).press('Enter');
-  await expect(page.locator('.graph-inspector details')).toContainText('Input input1:');
-  await expect(page.locator('.graph-inspector details p').first()).toBeVisible();
+  await expect(page.locator('.graph-inspector details')).toHaveCount(0);
   const snapshots = await page.evaluate(async () => {
     const { readLiveGraphData } = await import('/extension/graph-library.js');
     const { buildGraph } = await import('/extension/graph-runtime.js');

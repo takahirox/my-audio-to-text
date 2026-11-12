@@ -651,12 +651,6 @@ export class GraphEditor {
       };
       label.append(control); this.inspector.append(label);
     }
-    const details = el('details'); details.append(el('summary', 'Node help and ports'));
-    if (definition.help) details.append(el('p', definition.help));
-    for (const side of ['input', 'output']) {
-      for (const [name, contract] of portDisplayEntries(definition, side)) details.append(el('p', `${side === 'input' ? 'Input' : 'Output'} ${name}: ${contract.name}`, 'muted'));
-    }
-    this.inspector.append(details);
     if (focused) [...this.inspector.querySelectorAll('[aria-label]')].find(control => control.getAttribute('aria-label') === focused)?.focus({ preventScroll: true });
   }
   removeNode(node) {

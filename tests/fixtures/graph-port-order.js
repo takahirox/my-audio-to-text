@@ -26,7 +26,7 @@ export async function loadPortOrderGraph(page) {
   return graph;
 }
 
-export async function checkPortOrderAndHelp(page, tabKey = 'Tab') {
+export async function checkPortOrderAndInspector(page, tabKey = 'Tab') {
   const graph = await loadPortOrderGraph(page);
   const expected = node => {
     if (asrTypes.includes(node.type)) return { output: ['final', 'finalId', ...(['SpeechToTextWhisper', 'SpeechToTextParakeetV3'].includes(node.type) ? [] : ['provisional', 'provisionalId'])] };
@@ -52,12 +52,8 @@ export async function checkPortOrderAndHelp(page, tabKey = 'Tab') {
       }
     }
     await page.getByRole('button', { name: `Select ${node.id}`, exact: true }).press('Enter');
-    const help = page.locator('.graph-inspector details');
-    await help.locator('summary').click();
-    for (const [side, names] of Object.entries(expected(node))) {
-      const prefix = side === 'input' ? 'Input' : 'Output';
-      expect(await help.locator('p.muted').allTextContents().then(rows => rows.filter(row => row.startsWith(`${prefix} `)).map(row => row.split(':')[0].slice(prefix.length + 1)))).toEqual(names);
-    }
+    await expect(page.locator('.graph-inspector')).toContainText(`Instance ID: ${node.id}`);
+    await expect(page.locator('.graph-inspector details')).toHaveCount(0);
   }
   expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   await expect(page.locator('#graph-state')).toHaveText('Saved');

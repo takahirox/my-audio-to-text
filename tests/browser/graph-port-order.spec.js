@@ -1,7 +1,7 @@
 import { test } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { checkPortOrderAndHelp, checkPortGeometryAndInteractions } from '../fixtures/graph-port-order.js';
+import { checkPortOrderAndInspector, checkPortGeometryAndInteractions } from '../fixtures/graph-port-order.js';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', async route => {
@@ -11,10 +11,10 @@ test.beforeEach(async ({ page }) => {
   });
   await page.goto('/extension/graph-editor.html');
 });
-test('all paired and dynamic ports share visual, keyboard and inspector order', async ({ page, browserName }) => {
+test('all paired and dynamic ports retain visual and keyboard order without Inspector help', async ({ page, browserName }) => {
   test.setTimeout(120000);
   // WebKit on macOS follows Safari's Option-Tab convention for buttons.
-  await checkPortOrderAndHelp(page, browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab');
+  await checkPortOrderAndInspector(page, browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab');
 });
 test('named wire attachments, crossing comparison and gestures survive reordered rows at four zooms', async ({ page }, info) => {
   test.setTimeout(120000);
