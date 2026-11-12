@@ -174,7 +174,7 @@ test('Live explains unavailable selected media without a selector and retains mi
   await expect(live.locator('#start')).toBeEnabled();
   await live.editor.evaluate(() => localStorage.setItem('processing-graph-v1', '{broken'));
   await expect(live.locator('#errors')).toBeVisible(); await expect(live.locator('#start')).toBeDisabled();
-  await expect(live.getByRole('link', { name: 'Graph', exact: true })).toBeVisible();
+  await expect(live.getByRole('link', { name: 'Edit graph', exact: true })).toBeVisible();
 });
 
 test('audio-only output keeps its player and download usable at narrow and wide sizes', async ({ graphExtension: f }) => {
@@ -212,8 +212,8 @@ test('Graph stays canvas-first and Models keeps preparation and legal notices se
     await expect(live.editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
     await expect(live.editor.locator('.graph-actions')).not.toHaveAttribute('open', '');
     await live.editor.locator('#graph-fit').click();
-    await live.editor.getByRole('button', { name: 'Live', exact: true }).focus();
-    await live.editor.keyboard.press('Tab');
+    await expect(live.editor.locator('nav button, nav [aria-current]')).toHaveCount(0);
+    await live.editor.getByRole('link', { name: 'Library', exact: true }).focus();
     await expect(live.editor.getByRole('link', { name: 'Library', exact: true })).toBeFocused();
     await live.editor.keyboard.press('Tab');
     await expect(live.editor.getByRole('link', { name: 'Models', exact: true })).toBeFocused();
