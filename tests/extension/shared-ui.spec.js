@@ -106,7 +106,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
   await capture(graph, info, 'wire-hover');
 });
 
-test('Models keeps real cache progress, cancellation, retry, error, deletion and persistence usable', async ({ graphExtension: f }, info) => {
+test('Models keeps real cache progress, cancellation, retry, error, deletion and legal notices usable', async ({ graphExtension: f }, info) => {
   const live = await openGraph(f), page = live.models;
   await page.setViewportSize({ width: 390, height: 844 });
   const card = page.locator('#opus-ja-en'), status = card.locator('.model-status');
@@ -139,10 +139,8 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   await expect(status).toHaveText('Ready · Cached and verified');
   await card.getByRole('button', { name: 'Delete cached assets' }).click();
   await expect(status).toHaveText('Not downloaded');
-  await page.getByText('Storage and cache management', { exact: true }).click();
-  await page.locator('#persist').click();
-  const persisted = await page.evaluate(() => navigator.storage.persisted());
-  await expect(page.locator('#persistence')).toHaveText(`Persistent storage: ${persisted ? 'granted' : 'denied'}.`);
+  await expect(page.locator('#persist, #persistence, main > details')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'TTS terms and notices', exact: true })).toBeVisible();
   await expect(page.locator('footer')).toContainText('Gemma Terms');
   await page.reload();
   await page.keyboard.press('Tab');
