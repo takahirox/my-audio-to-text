@@ -2,16 +2,44 @@ import { test, expect } from './graph-fixture.js';
 
 const action = card => card.getByRole('button', { name: /^(Download|Retry)$/ });
 async function open(f) {
-  const page = await f.context.newPage(); await page.goto(f.url.replace('recorder.html', 'model-cache.html')); return page;
+  const page = await f.context.newPage(); await page.goto(f.url.replace('recorder.html', 'model-cache.html'));
+  const titles = await page.locator('.model-card h3').allTextContents();
+  expect(titles.length).toBeGreaterThan(0);
+  expect(titles).toEqual([...titles].sort((a, b) => a.localeCompare(b, 'ja-JP', { numeric: true })));
+  await page.evaluate(() => {
+    window.initialModelCards = [...document.querySelectorAll('#models > .model-card')];
+    window.modelCardMoves = [];
+    new MutationObserver(records => window.modelCardMoves.push(...records))
+      .observe(document.getElementById('models'), { childList: true });
+  });
+  return page;
 }
 const focus = page => page.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+// Observe every action below, including intermediate states, cross-page updates,
+// voice switches and details toggles. Cards must retain both order and identity.
+test.afterEach(async ({ graphExtension: f }) => {
+  for (const page of f.context.pages()) {
+    if (!page.url().endsWith('/model-cache.html')) continue;
+    expect(await page.evaluate(() => {
+      const current = [...document.querySelectorAll('#models > .model-card')];
+      return window.modelCardMoves.length === 0 && current.length === window.initialModelCards.length
+        && current.every((card, index) => card === window.initialModelCards[index]);
+    })).toBe(true);
+  }
+});
 
 test('initial inspection hides Download; Ready hides it entirely; partial cache and delete allow download again', async ({ graphExtension: f }) => {
   await f.context.addInitScript(() => {
     let release; const gate = new Promise(resolve => { release = resolve; });
     window.releaseInspection = release;
-    const open = CacheStorage.prototype.open;
-    CacheStorage.prototype.open = async function(...args) { await gate; return open.apply(this, args); };
+    // Inspection runs in the shared asset worker; hold its request rather than
+    // Window CacheStorage, which no longer observes those cache reads.
+    const postMessage = MessagePort.prototype.postMessage;
+    MessagePort.prototype.postMessage = function(...args) {
+      if (args[0]?.type === 'inspect' && args[0]?.manifest) void gate.then(() => postMessage.apply(this, args));
+      else postMessage.apply(this, args);
+    };
   });
   const page = await open(f), card = page.locator('#opus-ja-en');
   await expect(card).toHaveAttribute('data-state', 'Checking');

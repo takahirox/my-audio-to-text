@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 import { parseHTML } from 'linkedom';
 
 const source = readFileSync(new URL('../extension/model-cache.js', import.meta.url), 'utf8');
-const cardSource = source.slice(source.indexOf('class ModelCard {'), source.indexOf('for (const definition of definitions)'));
+const cardSource = source.slice(source.indexOf('class ModelCard {'), source.indexOf('\nfor (const definition of '));
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const view = (state = 'Not downloaded', error = '') => ({ state, error,
