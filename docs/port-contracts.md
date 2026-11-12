@@ -14,7 +14,7 @@ runtime allocation remain specialized. See the [#134 audit](evidence/composition
 
 | Boundary | Public ports and values | Internal or observer bookkeeping |
 | --- | --- | --- |
-| Capture sources: microphone, browser tab, extension tab/selected media | `audio: MONO_16KHZ_PCM`, normalized mono 16 kHz Float32Array | Target, permission, resampler and diagnostics |
+| Capture sources: microphone, browser tab, extension tab | `audio: MONO_16KHZ_PCM`, normalized mono 16 kHz Float32Array | Target, permission, resampler and diagnostics |
 | Button | `trigger: NUMBER` (1), no inputs | One ordinary emission per accepted Live Graph Action; caption and session ownership stay in UI |
 | Hold | `input: TEXT`, optional sink-only `trigger: ANY`; sole `value: TEXT` output | Silent storage; sampled when trigger disconnected, ordinary emission on each trigger when connected |
 | Text | `value: TEXT`, any literal string, including empty | One ordinary emission at session start |

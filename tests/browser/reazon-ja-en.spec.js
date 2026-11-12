@@ -9,14 +9,8 @@ function verifyBundle() {
   const readAsset = (directory, file) => readFileSync(new URL(`../../web/vendor/${directory}/${file}`, import.meta.url));
   const stem = 'sherpa-onnx-wasm-main-vad-asr';
   const script = readAsset('sherpa-ja-en', `${stem}.js`).toString();
-  const table = JSON.parse(script.match(/loadPackage\((\{"files":.*?,"remote_package_size":\d+\})\)/)[1]);
-  const data = readAsset('sherpa-ja-en', `${stem}.data`);
-  expect(table.remote_package_size).toBe(data.length);
-  for (const model of specification.models) {
-    const entry = table.files.find(file => file.filename === model.virtualPath);
-    expect(entry, model.path).toBeDefined();
-    expect(createHash('sha256').update(data.subarray(entry.start, entry.end)).digest('hex')).toBe(model.sha256);
-  }
+  expect(script).not.toContain('loadPackage({files:');
+  expect(readdirSync(new URL('../../web/vendor/sherpa-ja-en/', import.meta.url)).some(name => name.endsWith('.data'))).toBe(false);
   // Hashes measured from #41's checksum-pinned sherpa 1.13.2 runtime.
   // Validate runtime identity without preparing a Japanese-only model bundle.
   const sha256 = data => createHash('sha256').update(data).digest('hex');
@@ -26,15 +20,12 @@ function verifyBundle() {
   expect(vad.startsWith('(function () {\n')).toBe(true);
   expect(vad.endsWith('\nself.createVad = createVad;\n})();\n')).toBe(true);
   expect(sha256(vad.slice('(function () {\n'.length, -'\nself.createVad = createVad;\n})();\n'.length))).toBe('893f01168d529add8318c0a6055cf725e788585fda9b81722564a8c3c3f60e34');
-  const stripTable = text => text.replace(/loadPackage\(\{.*?remote_package_size["']?:\d+\}\)/, 'loadPackage(TABLE)');
+  const stripTable = text => text.replace('/* Models are loaded from verified Cache Storage. */', 'loadPackage(TABLE)');
   expect(sha256(stripTable(script))).toBe('0065c146db35983b8c787b44b8d0d1e2e4d22c3205e8e1982c012c145e654295');
-  const silero = table.files.find(file => file.filename === '/silero_vad.onnx');
-  expect(sha256(data.subarray(silero.start, silero.end))).toBe('9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6');
-  expect(table.files.map(file => file.filename).sort()).toEqual([...specification.models.map(model => model.virtualPath), '/silero_vad.onnx'].sort());
-  expect(readdirSync(new URL('../../web/vendor/', import.meta.url)).sort()).toEqual(['manifest.json', 'sherpa-ja-en']);
-  const manifest = JSON.parse(readAsset('.', 'manifest.json'))['sherpa-ja-en'];
-  expect(manifest.revision).toBe(specification.revision);
-  expect(manifest.sha256).toBe(createHash('sha256').update(data).digest('hex'));
+  const cachedManifest = JSON.parse(readFileSync(new URL('../../extension/reazon-assets.json', import.meta.url)));
+  expect(cachedManifest.revision).toBe(specification.revision);
+  expect(cachedManifest.files.map(f => f.path)).toEqual(specification.models.map(f => f.path));
+
 }
 
 function readFixture(fixture) {
@@ -133,8 +124,8 @@ test('real ja-en model recognizes Japanese, English and mixed speech through the
   ]);
   expect(loadRequests.every(e => e.backend === undefined)).toBe(true);
   expect(loadRequests.find(e => new URL(e.worker).pathname.endsWith('/silero-worker.js')).backend).toBeUndefined();
-  expect(assetRequests).toContain(new URL('../../vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.data', page.url()).pathname);
-  expect(assetRequests.every(path => path.includes('/vendor/sherpa-ja-en/'))).toBe(true);
+  expect(assetRequests.some(path => path.endsWith('.data'))).toBe(false);
+  expect(assetRequests.every(path => /\/vendor\/(sherpa-ja-en|model-cache)\//.test(path))).toBe(true);
   await page.locator('#cancel').click(); await expect(page.locator('#load')).toBeEnabled();
   await expect(page.locator('#reazon-model')).toHaveText('—');
   await expect(page.locator('#final')).toBeEmpty();

@@ -49,7 +49,7 @@ export const test = base.extend({
       for (const role of (whisperReal || concurrentReal ? [] : ['sherpa', 'silero'])) await writeFile(path.join(root, `web/${role}-worker.js`), `
         self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready'});if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});};`);
       if (!real) {
-        for (const key of ['parakeet-v3', 'moonshine-medium-en']) {
+        for (const key of ['reazon', 'silero', 'whisper', 'zipformer', 'kokoro-japanese', 'parakeet-v3', 'moonshine-medium-en']) {
           const file = `${key}-assets.json`, spec = JSON.parse(await readFile(path.join(root, 'extension', file), 'utf8'));
           const body = Buffer.alloc(8192, 17); bodies.set(file, body);
           spec.files = [{ path: 'weights.bin', bytes: body.length, sha256Chunks: [createHash('sha256').update(body).digest('hex')], sourceURL: `http://127.0.0.1:${server.address().port}/${file}` }];
@@ -133,6 +133,13 @@ export const test = base.extend({
         await writeFile(path.join(root, 'web/kokoro-japanese.js'), 'export async function createJapanesePhonemizer(){return async text=>text;}');
       }
       context = await launch(); const id = await load();
+      if (!real) for (const key of ['reazon', 'silero', 'whisper', 'zipformer', 'kokoro-japanese']) {
+        const filename = path.join(root, 'extension', `${key}-assets.json`);
+        const spec = JSON.parse(await readFile(filename, 'utf8'));
+        await writeFile(path.join(root, 'extension', `${key}-fixture.bin`), Buffer.alloc(8192, 17));
+        spec.files[0].sourceURL = `chrome-extension://${id}/extension/${key}-fixture.bin`;
+        await writeFile(filename, JSON.stringify(spec));
+      }
       const f = { context, root, id, url: `chrome-extension://${id}/extension/recorder.html`, requests,
         asset(key, body) { bodies.set(key, body); return `http://127.0.0.1:${server.address().port}/${key}`; },
         mode(value) { mode = value; }, async restart() { await context.close(); context = await launch(); expect(await load()).toBe(id); this.context = context; } };

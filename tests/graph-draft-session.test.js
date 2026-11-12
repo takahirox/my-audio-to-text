@@ -50,7 +50,7 @@ test('checkpoint base advances only after confirmed persistence, including newer
 });
 function historyEditor() {
   const editor = Object.create(GraphEditor.prototype), changes = [];
-  Object.assign(editor, { draft: defaultGraph(), undoStack: [], redoStack: [], readOnly: false,
+  Object.assign(editor, { draft: defaultGraph(), multiSelection: new Set(), undoStack: [], redoStack: [], readOnly: false,
     markPending() {}, updateSummary() {}, updateHistory() {}, draw() {}, diagnostics() { return ''; }, errors: {}, onDraft: graph => changes.push(structuredClone(graph)) });
   editor.saved = structuredClone(editor.draft); return { editor, changes };
 }

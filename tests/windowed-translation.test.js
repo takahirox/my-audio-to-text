@@ -177,7 +177,7 @@ test('default and translation graphs save/reload with explicit NUMBER wiring and
   for (const g of [defaultGraph(), windowGraph('baseline'), windowGraph('window')]) {
     assert.deepEqual(validateGraph(g), []);
     saveGraph(storage, g); assert.deepEqual(readGraph(storage), g);
-    assert.deepEqual(graphModelRequirements(g).map(r => r.id), !g.nodes.some(n => n.id === 'translator') ? [] : ['translategemma']);
+    assert.deepEqual(graphModelRequirements(g).map(r => r.id), !g.nodes.some(n => n.id === 'translator') ? ['silero', 'reazon'] : ['translategemma']);
   }
   assert.deepEqual(graphModelRequirements({ nodes: [graphNode('TextWindow', 'w')] }), []);
   assert.equal(defaultGraph().version, GRAPH_VERSION);

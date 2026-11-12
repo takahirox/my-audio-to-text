@@ -16,7 +16,7 @@ import { summaryPrompt, DEFAULT_SUMMARY_PROMPT, MAX_INSTRUCTION_CHARS } from '..
 
 export const GRAPH_VERSION = 15;
 export const ASR_TYPES = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn', 'SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'];
-export const INPUT_TYPES = ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio'];
+export const INPUT_TYPES = ['ChromeTabAudio', 'MicrophoneAudio'];
 export const FIELD_TYPES = ['FocusedInputTextOutputNode'];
 export const GRAPH_KEY = 'processing-graph-v1';
 // Presentation only: committed data/ID first, then previews. Never reorder the
@@ -29,7 +29,6 @@ const TRANSLATION_OUTPUT_ORDER = Object.freeze(['text', 'id', 'source', 'error',
 // Fixed concrete production types and their public ports, not a model registry.
 export const NODE_TYPES = Object.freeze({
   ChromeTabAudio: { label: 'Chrome tab audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM } },
-  SelectedPageMediaAudio: { label: 'Selected page media audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Temporarily unavailable: Live no longer selects page media. Choose ChromeTabAudio for now. Selection on the target Web page is deferred to a separate task.' },
   MicrophoneAudio: { label: 'Microphone audio', inputs: {}, outputs: { audio: MONO_16KHZ_PCM }, help: 'Press Start in Live to request microphone permission.' },
   FocusedInputTextOutputNode: { label: 'Focused input text output', inputs: { text: TEXT }, outputs: {}, help: 'Append plain text to the user-focused editable field on the toolbar-invoked tab. Connect SpeechToTextReazonSpeech.final or a processor’s completed text output; no separate authorization or field picker.' },
   Button: { label: 'Button', inputs: {}, outputs: { trigger: NUMBER }, textSettings: { label: { default: 'Run action', maxLength: BUTTON_LABEL_MAX_LENGTH } }, help: 'Live → Graph Actions renders this button by stable Node ID. Each accepted click emits trigger: NUMBER (1), including repeated identical values. Caption may be blank (Run action). No audio permission required. Connect trigger to Hold.trigger to emit the latest held TEXT on demand. Actions are unavailable outside a running session or while overlapping downstream work is busy.' },

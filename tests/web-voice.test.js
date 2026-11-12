@@ -18,7 +18,6 @@ test('typed executable connectivity, not node presence, names or Live defaults',
   const disconnected = voice(); disconnected.edges.pop(); assert.ok(webVoiceError(disconnected));
   const wrongType = voice(); wrongType.edges[1].from[1] = 'finalId'; assert.ok(webVoiceError(wrongType));
   const otherSource = voice(); otherSource.nodes[0] = graphNode('ChromeTabAudio', 'mic'); assert.match(webVoiceError(otherSource), /capture/);
-  otherSource.nodes[0] = graphNode('SelectedPageMediaAudio', 'mic'); assert.match(webVoiceError(otherSource), /capture/);
 });
 test('final processors are allowed, snapshot is detached, and optional side effect branches never execute', () => {
   const graph = voice(); graph.nodes.push({ ...graphNode('TextFormatter', 'format'), settings: { template: 'Said: {1}', inputCount: 4 } }, graphNode('Display', 'display'));

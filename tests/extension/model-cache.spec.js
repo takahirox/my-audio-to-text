@@ -20,7 +20,7 @@ const test = base.extend({
     const root = path.join(temporary, 'extension'), profile = path.join(temporary, 'profile');
     const requests = [], responses = new Set(); let mode = 'normal';
     const assets = new Map(await Promise.all(['config.json', 'weights.bin'].map(async name =>
-      [name, await readFile(path.join(bundle, 'extension/cache-demo', name))])));
+      [name, await readFile(path.join('extension/cache-demo', name))])));
     const server = createServer((request, response) => {
       requests.push({ url: request.url, method: request.method });
       responses.add(response); response.on('close', () => responses.delete(response));
@@ -46,6 +46,7 @@ const test = base.extend({
     let context;
     try {
       await cp(bundle, root, { recursive: true, filter: source => !source.includes(`${path.sep}vendor`) });
+      for (const name of ['cache-demo', 'cache-demo.html', 'cache-demo.js', 'cache-demo-manifest.js']) await cp(path.join('extension', name), path.join(root, 'extension', name), { recursive: true });
       const file = path.join(root, 'extension/cache-demo-manifest.js');
       const source = await readFile(file, 'utf8');
       // Replace only the data source in the test copy. Actual scripts and CSP,
@@ -192,11 +193,13 @@ test('two cache pages coordinate preparation and deletion through extension-orig
   await second.locator('#check').click(); await expect(second.locator('#cache-status')).toHaveText('Not downloaded');
 });
 
-base('unmodified packaged cache fixture page prepares project-owned fixtures without capture, inference or remote requests', async () => {
+base('unmodified test-only cache fixture page prepares project-owned fixtures without capture, inference or remote requests', async () => {
   const profile = await mkdtemp(path.join(tmpdir(), 'packaged-cache-demo-'));
   const context = await launch(profile);
   try {
-    const id = await load(context, bundle), page = await context.newPage();
+    const root = path.join(profile, 'extension'); await cp(bundle, root, { recursive: true });
+    for (const name of ['cache-demo', 'cache-demo.html', 'cache-demo.js', 'cache-demo-manifest.js']) await cp(path.join('extension', name), path.join(root, 'extension', name), { recursive: true });
+    const id = await load(context, root), page = await context.newPage();
     const requests = [], errors = [];
     page.on('request', request => requests.push(request.url()));
     page.on('pageerror', error => errors.push(error.message));

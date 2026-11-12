@@ -153,19 +153,9 @@ test('Live keeps all routine and unknown diagnostics in Session details; structu
   await live.locator('#stop').click();
 });
 
-test('Live explains unavailable selected media without a selector and retains microphone and graph recovery', async ({ graphExtension: f }) => {
+test('Live enables microphone without a toolbar tab and retains graph recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { tabId: null });
   await expect(live.locator('#start')).toBeDisabled(); // No toolbar capture tab.
-  await live.editor.evaluate(async () => {
-    const { defaultGraph, graphNode } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
-    const graph = defaultGraph(); graph.nodes[0] = graphNode('SelectedPageMediaAudio', 'audio'); await saveLiveGraphData(localStorage, (graph));
-  });
-  await expect(live.locator('#targets, #target-status, #target-controls, .target-row, select')).toHaveCount(0);
-  await expect(live.locator('#start')).toBeEnabled();
-  await live.locator('#start').click();
-  await expect(live.locator('#errors')).toContainText('SelectedPageMediaAudio is temporarily unavailable');
-  await expect(live.locator('#errors')).toContainText('Choose ChromeTabAudio in Graph Editor');
-  await expect(live.locator('#start')).toBeEnabled();
   await live.editor.evaluate(async () => {
     const { defaultGraph, graphNode } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph(); graph.nodes[0] = graphNode('MicrophoneAudio', 'audio'); await saveLiveGraphData(localStorage, (graph));
@@ -181,7 +171,7 @@ test('Live explains unavailable selected media without a selector and retains mi
 test('audio-only output keeps its player and download usable at narrow and wide sizes', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
   await addAudioPath(live, 'Supertonic3');
-  await expect(live.editor.locator('#graph-models .model-status')).toContainText('Ready');
+  await expect(live.editor.locator('#graph-models .model-status')).toHaveText(Array(await live.editor.locator('#graph-models .model-status').count()).fill('Ready · Cached and verified'));
   await live.editor.evaluate(async () => {
     const { readLiveGraphData, saveLiveGraphData } = await import('./graph-library.js');
     const graph = readLiveGraphData(localStorage), displays = graph.nodes.filter(node => node.type === 'Display').map(node => node.id);

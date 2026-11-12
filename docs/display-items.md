@@ -115,7 +115,7 @@ unknown Node/port explicitly; Live disables Start and links to Graph Editor.
 The editor opens a valid current default draft and shows the original saved JSON
 under Graph actions → Saved JSON. Reading never rewrites stored data.
 
-Choose Reset draft to default or Import graph JSON, inspect the current graph,
+Choose Reset to default or Import graph JSON, inspect the current graph,
 then Auto Save persists the valid draft. Import validates before changing the draft;
 unsupported imports leave it intact. There is no automatic migration, rewiring,
 legacy mode or accumulating display variant.

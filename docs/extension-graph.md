@@ -134,8 +134,8 @@ models and **File cache**, distinct from Live's runtime/GPU readiness:
 model-bearing graphs initially show **Unknown**, not an unconditional Ready.
 **More → Check model files** inspects the selected graph's actual manifests without
 starting Workers, GPU work or downloads. It reports Ready (verified cached files),
-Needs preparation or Error; packaged ASR verification is left to Live and remains
-Unknown here. Graphs without model files can report Ready on that basis. Model
+Needs preparation or Error. ReazonSpeech, Silero, Whisper and Zipformer use the
+same manifest-based file checks as every other model. Graphs without model files can report Ready on that basis. Model
 cache notifications/focus invalidate old observations to Unknown. Models remains
 the global asset inspection/recovery screen; shared weights retain their existing
 asset-identity cache and are not duplicated per library graph.
@@ -305,7 +305,18 @@ Scroll or swipe to pan; controls stay in place and extra bottom scroll space
 lets the final ports move clear of them.
 Settings, essential port names and accessibility labels remain visible.
 
-Graph actions (…) provides Validate draft, Reset draft to default, and Import or
+Create Subgraph stays beside Add Node in the toolbar, enabled when two or more
+nodes are selected. Settings shows the last selected node; selection is indicated
+on the canvas. Subgraph definition editors omit Create Subgraph because nesting
+is prohibited.
+
+Validate graph opens a non-modal **Validation results** overlay with errors and
+optional warnings. Keep editing while it is open; edits mark its results outdated.
+Choose Validate graph again to refresh, or Close / Escape to dismiss. Persistent
+**Graph notices** are separate and retain automatic diagnostics, Auto Save errors,
+and recovery controls. Both panels scroll internally without shifting the canvas.
+
+Graph actions (…) provides Validate graph, Reset to default, and Import or
 Export graph JSON. Import and Reset are undoable and save automatically. Export
 includes the current draft, including invalid edits for repair. Invalid numbers,
 text and structural errors cannot replace the last good saved graph. A persistent
@@ -356,10 +367,10 @@ Click a node heading to select it and inspect its settings. **Shift+click** or
 and **Shift+Enter** toggle individual nodes in the selection. macOS Control+click
 retains native secondary-click behavior. A plain click selects one node; clicking
 that sole selected heading again, blank canvas, or **Escape** clears selection.
-Selected nodes show a checkmark and a thicker border, with a selection count in
-the Inspector. For two or more nodes, **Create Subgraph** appears there. Select
-one connected group of processing nodes; an ineligible selection is explained
-beside the action and remains selected so it can be corrected.
+Selected nodes show a checkmark and a thicker border on the canvas.
+**Create Subgraph** stays beside **Add Node** in the toolbar and is enabled for
+two or more selected nodes. Select one connected group of processing nodes; an ineligible selection is explained
+in **Graph notices** and remains selected so it can be corrected.
 
 The **Create Subgraph** dialog asks for a name and shows the actual included
 nodes, inferred input/output counts, and confirmation that connections are
@@ -611,7 +622,7 @@ payloads, startup configuration and correlation.
 
 | Nodes | Contracts and purpose |
 | --- | --- |
-| ChromeTabAudio, SelectedPageMediaAudio, MicrophoneAudio | Normalized mono 16 kHz PCM sources |
+| ChromeTabAudio, MicrophoneAudio | Normalized mono 16 kHz PCM sources |
 | SpeechToTextReazonSpeech, SpeechToTextZipformerEn, SpeechToTextMoonshineMediumEn | PCM → provisional/final TEXT and numeric IDs |
 | SpeechToTextWhisper, SpeechToTextParakeetV3 | PCM → final TEXT and numeric ID |
 | Text, Number | Literal TEXT and finite NUMBER constants |
@@ -633,10 +644,7 @@ payloads, startup configuration and correlation.
 ## Capture, output and lifecycle
 
 Whole-tab capture uses the toolbar-invoked tab. Microphone capture requires
-Start and browser permission. `SelectedPageMediaAudio` is
-temporarily unavailable because Live no longer provides an element selector; its
-source reports an actionable error and suggests `ChromeTabAudio`. An on-page
-selector is deferred to a separate task. Focused output still follows the
+Start and browser permission. Focused output follows the
 toolbar-invoked document automatically. Live shows only actionable Node errors;
 normal per-Node status stays in the optional Session details disclosure. One unavailable processor
 leaves independent healthy paths running. Repeated tab sources share capture;
@@ -736,3 +744,10 @@ Hold is available under **Constants / utilities**. Connect its readable value
 to a formatter alongside TextWindow, then route the summary back to Hold.input.
 Only TextWindow triggers the next update. [Importable example, limits and Stop /
 Cancel behavior](text-summary-nodes.md). Ordinary event cycles remain invalid.
+
+All ASR model files now follow the on-demand lifecycle described in
+[model assets](model-assets.md). ReazonSpeech and Whisper each require the shared
+Silero VAD entry; Zipformer owns segmentation and has no Silero dependency. Graph
+Auto Save and Models only inspect/download assets, without inference Workers.
+Live checks the executable nodes' assets again before enabling Start; missing,
+corrupt, offline or evicted data produces Models/Graph Editor retry guidance.

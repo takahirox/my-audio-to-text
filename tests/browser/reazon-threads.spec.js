@@ -5,16 +5,18 @@ import { REAZON_NUM_THREADS } from '../../web/reazon-config.js';
 async function configuration(page, { requested, cores = 16, shared = true } = {}) {
   // Stub native initialization inside the actual worker, so both browsers run
   // its real load/configuration path without importScripts interception.
+  await page.context().route('**/local-model-assets.js', route => route.fulfill({ contentType: 'text/javascript', body: `export async function localModelAssets() { return { sherpaModelFiles: async () => module => module.FS_createDataFile('/tokens.txt', null, new Uint8Array([1])) }; }` }));
   const source = readFileSync(new URL('../../web/sherpa-worker.js', import.meta.url), 'utf8');
   await page.context().route('**/sherpa-worker.js', route => route.fulfill({
     contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' }, body: source + `
       Object.defineProperty(self.navigator, 'hardwareConcurrency', {value:${cores}});
       self.importScripts = (...scripts) => {
-        postMessage({type:'test-assets', scripts, wasm:self.Module.locateFile('sherpa-onnx-wasm-main-vad-asr.wasm'), data:self.Module.locateFile('sherpa-onnx-wasm-main-vad-asr.data')});
+        postMessage({type:'test-assets', scripts, wasm:self.Module.locateFile('sherpa-onnx-wasm-main-vad-asr.wasm')});
         self.OfflineRecognizer = class {
           constructor(config) { this.handle = 1; postMessage({type:'test-config', config}); }
         };
         self.createVad = () => ({handle:1});
+        self.Module.FS_createDataFile = (path) => postMessage({ type: 'test-model-file', path });
         self.Module.HEAPU8 = new Uint8Array(new ${shared ? 'SharedArrayBuffer' : 'ArrayBuffer'}(8));
         postMessage({type:'test-environment', cores:self.navigator.hardwareConcurrency, isolated:self.crossOriginIsolated, shared:self.Module.HEAPU8.buffer instanceof SharedArrayBuffer});
         self.Module.onRuntimeInitialized();
@@ -43,7 +45,7 @@ test('selected thread count and ja-en assets reach the baseline recognizer', asy
   expect(events.find(e => e.type === 'test-config').config.modelConfig.numThreads).toBe(REAZON_NUM_THREADS);
   expect(events.find(e => e.type === 'configuration')).toMatchObject({ numThreads: REAZON_NUM_THREADS, model: 'ja-en', modelName: 'ReazonSpeech ja-en' });
   const assets = events.find(e => e.type === 'test-assets');
-  for (const url of [...assets.scripts, assets.wasm, assets.data]) expect(new URL(url).pathname).toContain('/vendor/sherpa-ja-en/');
+  for (const url of [...assets.scripts, assets.wasm]) expect(new URL(url).pathname).toContain('/vendor/sherpa-ja-en/');
   expect(events.find(e => e.type === 'test-config').config.modelConfig.transducer).toEqual({
     encoder: './transducer-encoder.onnx', decoder: './transducer-decoder.onnx', joiner: './transducer-joiner.onnx',
   });

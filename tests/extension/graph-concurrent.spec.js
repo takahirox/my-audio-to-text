@@ -114,7 +114,7 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
   expect(f.requests).toEqual([]);
 });
 
-test('MV3 drafts ignore the legacy warnings preference; Validate draft shows warnings and empty execution starts no resources', async ({ graphExtension: f }) => {
+test('MV3 drafts ignore the legacy warnings preference; Validate graph shows warnings and empty execution starts no resources', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
   const alternateId = await page.evaluate(async () => {
     const { GRAPH_VERSION, graphNode } = await import('./graph.js'); const { GraphLibrary, saveLiveGraphData } = await import('./graph-library.js');
@@ -141,17 +141,17 @@ test('MV3 drafts ignore the legacy warnings preference; Validate draft shows war
   await editor.keyboard.press('Escape');
   await clickGraphAction(editor, 'graph-validate');
   for (const message of ['Required connection missing: unfinished.audio', 'Unconnected output Node: parked', 'At least one output destination is required to run.', 'No executable path']) {
-    await expect(editor.locator('#graph-errors')).toContainText(`Warning: ${message}`);
+    await expect(editor.locator('#graph-validation-output')).toContainText(`Warning: ${message}`);
   }
   // The explicit result remains readable across frames and when selecting settings.
   await editor.getByRole('button', { name: 'Select duration', exact: true }).click();
   await editor.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  await expect(editor.locator('#graph-errors')).toContainText('No executable path');
+  await expect(editor.locator('#graph-validation-output')).toContainText('No executable path');
   await editor.getByLabel('duration value', { exact: true }).fill('');
   await expect(editor.locator('#graph-errors')).toContainText('Error:');
   await expect(editor.locator('#graph-errors')).not.toContainText('Warning:');
   await clickGraphAction(editor, 'graph-validate');
-  await expect(editor.locator('#graph-errors')).toContainText('Error:');
+  await expect(editor.locator('#graph-validation-output')).toContainText('Error:');
   await editor.getByLabel('duration value', { exact: true }).fill('2');
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await editor.getByRole('button', { name: 'Select duration', exact: true }).press('ArrowRight');
@@ -166,16 +166,16 @@ test('MV3 drafts ignore the legacy warnings preference; Validate draft shows war
   await editor.goto(alternateURL.href);
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await clickGraphAction(editor, 'graph-validate');
-  await expect(editor.locator('#graph-errors')).toContainText('No executable path');
+  await expect(editor.locator('#graph-validation-output')).toContainText('No executable path');
   expect(await editor.evaluate(() => window.legacyWarningAccess)).toEqual([]);
   await editor.goto(originalURL);
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  await clickGraphAction(editor,'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Warning:');
+  await clickGraphAction(editor,'graph-validate'); await expect(editor.locator('#graph-validation-output')).toContainText('Warning:');
   await settleAutoSave(editor);
   await expect(editor.locator('#graph-state')).toHaveText('Saved');
   await expect(editor.locator('#graph-save-error')).toBeEmpty();
   // Validation is inspection only; a no-op Auto Save keeps its result visible.
-  await expect(editor.locator('#graph-errors')).toContainText('Warning:');
+  await expect(editor.locator('#graph-validation-output')).toContainText('Warning:');
   expect(await editor.evaluate(() => window.legacyWarningAccess)).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('graph-show-optional-warnings'))).toBe('true');
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));

@@ -327,22 +327,6 @@ test('completed translations flow directly to TEXT fan-out and paired Live; prov
   await expect(t.page.locator('#errors')).toBeEmpty();
 });
 
-test('selected media reports its temporary limitation without discovering or capturing a page element', async ({ targets: t }) => {
-  await t.graph({ source: 'SelectedPageMediaAudio' }); await t.website.locator('#play').click(); await t.invoke();
-  await expect(t.page.locator('#errors')).toContainText('SelectedPageMediaAudio is temporarily unavailable');
-  await expect(t.page.locator('#errors')).toContainText('Choose ChromeTabAudio in Graph Editor');
-  await expect(t.page.locator('#start')).toBeEnabled();
-  await expect(t.page.locator('#targets, #target-controls, #target-status, .target-row, select')).toHaveCount(0);
-  expect(await t.page.evaluate(() => window.captured || [])).toEqual([]);
-  expect(await t.page.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).length)).toBe(0);
-  await t.page.locator('#start').click();
-  await expect(t.page.locator('#errors')).toContainText('SelectedPageMediaAudio');
-  expect((await t.page.locator('#errors').textContent()).split('\n')).toHaveLength(1);
-  await t.graph(); await t.invoke();
-  await expect(t.page.locator('#status')).toHaveText('Transcription active');
-  await expect(t.page.locator('#errors')).toBeEmpty();
-});
-
 test('microphone has an explicit Start gesture, native permission denial, fake-device normalized capture and cleanup', async ({ targets: t }) => {
   await t.graph({ source: 'MicrophoneAudio' }); await t.invoke(); await expect(t.page.locator('#model-status')).toHaveText('Ready');
   await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting: 'denied', origin: t.origin });

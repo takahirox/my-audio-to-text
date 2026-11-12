@@ -216,6 +216,23 @@ test('persistence support, existing grants, denials and exceptions are accuratel
   assert.equal(await storagePersistence({ persisted() { throw Error(); } }), 'unavailable');
 });
 
+test('deletion acquires every shared-file lease first and never partially deletes an active dependency set', async () => {
+  const f = fixture(); await f.manager.prepare();
+  let inUse = true;
+  const blockedKey = `model-use:${f.set.files[1].url}`;
+  f.dependencies.locks = { async request(key, options, action) {
+    if (options.ifAvailable && inUse && key === blockedKey) return action(null);
+    return action({ name: key });
+  } };
+  const view = await f.make().remove();
+  assert.equal(view.state, 'Error'); assert.match(view.error, /in use.*Close.*Live/);
+  assert.equal(f.entries.size, 2, 'even unleased files remain untouched when another file is in use');
+  assert.equal((await f.make().inspect()).state, 'Ready');
+  inUse = false;
+  assert.equal((await f.make().remove()).state, 'Not downloaded');
+  assert.equal(f.entries.size, 0);
+});
+
 for (const mode of ['granted', 'already granted', 'denied', 'unsupported', 'no persist', 'check throws', 'request throws']) {
   test(`automatic persistence: ${mode} does not interrupt verified downloads or repeat on deletion/retry`, async () => {
     const f = fixture(), calls = [];

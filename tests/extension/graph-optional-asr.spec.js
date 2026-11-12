@@ -1,6 +1,8 @@
 import { settleAutoSave } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
+import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
+import { accumulateDisplay } from '../fixtures/text-accumulator.js';
 import { openPalette } from './ui-controls.js';
 
 test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepares parked weights, retry survives failure and reload retains exact paths', async ({ graphExtension: f }) => {
@@ -29,10 +31,12 @@ test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepar
 
 test('parallel production Nodes fan out finals, preserve repeats, clear failed preview, drain/release and Start fresh', async ({ graphExtension: f }) => {
   const page = await openGraph(f);
-  await page.evaluate(async () => {
-    const { graphNode, edge, assertGraph } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
-
-  });
+  const graph = { version: GRAPH_VERSION,
+    nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextParakeetV3', 'parakeet'), graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('Display', 'p'), graphNode('Display', 'm'), graphNode('Display', 'formatted'), graphNode('TextFormatter', 'format')],
+    edges: [edge('audio', 'audio', 'parakeet', 'audio'), edge('audio', 'audio', 'moonshine', 'audio'), edge('parakeet', 'final', 'p', 'append'), edge('parakeet', 'final', 'format', 'input1'), edge('format', 'text', 'formatted', 'append'), edge('moonshine', 'provisional', 'm', 'input1')] };
+  for (const id of ['p', 'formatted']) accumulateDisplay(graph, id);
+  graph.nodes.find(n => n.id === 'format').settings.template = '{1}';
+  await page.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
   for (let repeat = 0; repeat < 2; repeat++) {
     await startGraph(page);
     expect(await page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(2);

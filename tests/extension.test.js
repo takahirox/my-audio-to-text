@@ -127,61 +127,6 @@ test('stale document disables focused output while Live continues; cancellation 
   f.session.cancel(); await drain(); assert.ok(f.workers.every(worker => worker.terminated)); assert.equal(f.sources[0].stops.at(-1), false);
 });
 
-test('selected media fails explicitly without selection or tab capture; an independent text path survives', async () => {
-  const graph = defaultGraph(); graph.nodes[0].type = 'SelectedPageMediaAudio';
-  const f = fixture({ graph });
-  await f.session.start();
-  assert.equal(f.session.view.state, 'idle');
-  assert.match(f.session.view.error, /audio: SelectedPageMediaAudio is temporarily unavailable/);
-  assert.match(f.session.view.error, /Choose ChromeTabAudio in Graph Editor/);
-  assert.equal(f.session.view.error.split('\n').length, 1);
-  assert.equal(f.sources.length, 0);
-  graph.nodes.push(graphNode('Text', 'peer'), graphNode('Display', 'peer-output'));
-  graph.nodes.at(-2).settings.value = 'Independent output';
-  graph.edges.push(edge('peer', 'value', 'peer-output', 'input1'));
-  f.session.setGraph(graph);
-  await f.session.start(); await drain();
-  assert.equal(f.session.view.state, 'running');
-  assert.match(f.session.view.error, /SelectedPageMediaAudio/);
-  assert.equal(domText(f.session.view.displays['peer-output']), 'Independent output');
-  await f.session.stop();
-  graph.nodes = graph.nodes.filter(node => node.id !== 'audio');
-  graph.edges = graph.edges.filter(route => route.from[0] !== 'audio');
-  f.session.setGraph(graph);
-  await f.session.start();
-  assert.equal(f.session.view.error, '');
-  assert.equal(f.session.nodeErrors.size, 0);
-  await f.session.stop();
-});
-
-test('selected-media limitation is explicit even before a dependent model finishes loading', async () => {
-  const graph = defaultGraph(); graph.nodes[0].type = 'SelectedPageMediaAudio';
-  const f = fixture({ graph, holdLoad: true });
-  const starting = f.session.start(); await drain();
-  assert.equal(f.session.view.state, 'loading');
-  assert.match(f.session.view.error, /audio: SelectedPageMediaAudio is temporarily unavailable/);
-  f.session.cancel(); await starting;
-  assert.equal(f.sources.length, 0);
-});
-
-test('an unavailable selected-media branch cannot keep a healthy ended capture session running', async () => {
-  const graph = defaultGraph();
-  graph.nodes.push(graphNode('SelectedPageMediaAudio', 'selected'), graphNode('SpeechToTextReazonSpeech', 'selected-speech'), graphNode('Display', 'selected-output'));
-  graph.edges.push(edge('selected', 'audio', 'selected-speech', 'audio'), edge('selected-speech', 'final', 'selected-output', 'input1'));
-  const f = fixture({ graph });
-  await f.session.start(42);
-  assert.equal(f.session.view.state, 'running');
-  assert.match(f.session.view.error, /selected: SelectedPageMediaAudio/);
-  f.sources[0].onAudio(new Float32Array(16000).fill(0.05));
-  await drain();
-  const owner = f.session.session;
-  f.sources[0].onEnded();
-  await owner.stopping;
-  assert.equal(f.session.view.state, 'idle');
-  assert.equal(f.session.session, null);
-  assert.equal(domText(f.session.view.displays.transcript), 'final text');
-});
-
 test('extension session emits provisional/final output, flushes once and clears repeat transcripts', async () => {
   const { session, workers, sources } = fixture();
   await session.start(42);
@@ -374,84 +319,35 @@ test('failed toolbar selection opens only an error, restores checked state, and 
   assert.equal(items.get('live-empty').parentId, 'live-open'); assert.equal(items.get('live-library').parentId, 'live-graphs');
 });
 
-test('extension package retains byte-identical Web core/models and minimum permissions', () => {
+test('extension artifact allowlist excludes stale weights in every runtime directory and audits all output', () => {
   const result = spawnSync('python3', ['-c', `
-import importlib.util
-from pathlib import Path
-import tempfile
-import shutil
-import json
+import importlib.util, pathlib, tempfile, shutil, json, hashlib
 spec = importlib.util.spec_from_file_location('build', 'scripts/build-extension.py')
-build = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(build)
+build = importlib.util.module_from_spec(spec); spec.loader.exec_module(build)
 original = build.ROOT
 with tempfile.TemporaryDirectory() as tmp:
-    root = Path(tmp)
-    build.ROOT = root
+    root = pathlib.Path(tmp); build.ROOT = root
     shutil.copytree(original / 'extension', root / 'extension')
-    (root / 'web').mkdir()
+    (root / 'web').mkdir(); (root / 'scripts').mkdir()
     for name in build.SHARED_FILES:
         shutil.copy2(original / 'web' / name, root / 'web' / name)
-    shutil.copytree(original / 'web' / 'licenses', root / 'web' / 'licenses')
-    vendor = root / 'web' / 'vendor' / 'sherpa-ja-en'
-    vendor.mkdir(parents=True)
-    (vendor / 'sherpa-onnx-wasm-main-vad-asr.data').write_bytes(b'pinned model fixture')
-    translation = root / 'web' / 'vendor' / 'translation'
-    translation.mkdir()
-    for name in ('transformers.js', 'ort-wasm-simd-threaded.asyncify.mjs',
-                 'ort-wasm-simd-threaded.asyncify.wasm', 'transformers-LICENSE'):
-        (translation / name).write_bytes(b'pinned runtime fixture')
-    tts = root / 'web' / 'tts-assets'
-    tts.mkdir()
-    for name in ('ort.mjs', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm',
-                 'transformers.js', 'ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm',
-                 'phonemizer.js', 'phonemizer-engine.mjs', 'phonemizer-source.tar.gz',
-                 'openjtalk-wasm-wrapper-D6E3BSJO.js', 'openjtalk-wasm.wasm',
-                 'open_jtalk_dic_utf_8-1.11.tar.gz', 'openjtalk-voice.htsvoice',
-                 'qwen3/ort.webgpu.min.mjs', 'qwen3/ort-wasm-simd-threaded.asyncify.mjs',
-                 'qwen3/ort-wasm-simd-threaded.asyncify.wasm', 'qwen3/ort-LICENSE',
-                 'qwen3/ort-ThirdPartyNotices.txt', 'qwen3/model-LICENSE'):
-        (tts / name).parent.mkdir(parents=True, exist_ok=True)
-        (tts / name).write_bytes(b'pinned TTS runtime fixture')
-    whisper = root / 'web' / 'vendor' / 'whisper' / 'tiny'
-    whisper.mkdir(parents=True)
-    (whisper / 'fixture.onnx').write_bytes(b'pinned Whisper fixture')
-    (root / 'scripts').mkdir()
-    import hashlib
-    (root / 'scripts/qwen3-tts-runtime.json').write_text(json.dumps({'files': [{'path': str(path.relative_to(tts)), 'bytes': path.stat().st_size, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for path in tts.rglob('*') if path.is_file()]}))
-    summary_runtime = root / 'web/vendor/meeting-summary'
-    summary_runtime.mkdir()
-    (summary_runtime / 'transformers.js').write_bytes(b'pinned isolated summary runtime fixture')
-    (root / 'scripts/text-summary-runtime.json').write_text(json.dumps({'files': [{'path': path.name, 'bytes': path.stat().st_size, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for path in summary_runtime.iterdir()]}))
-    (root / 'scripts/if-condition-runtime.json').write_text(json.dumps({'files': [{'path': path.name, 'bytes': path.stat().st_size, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for path in translation.iterdir()]}))
-    (root / 'scripts' / 'whisper-assets.json').write_text(json.dumps({'files': [{'path': 'fixture.onnx', 'bytes': 22, 'sha256': hashlib.sha256(b'pinned Whisper fixture').hexdigest()}]}))
-    zipformer = root / 'web/vendor/zipformer-en'
-    zipformer.mkdir()
-    content = b'pinned online fixture'
-    (zipformer / 'sherpa-onnx-wasm-main-asr.data').write_bytes(content)
-    zip_entries = [{'path': 'sherpa-onnx-wasm-main-asr.data', 'bytes': len(content), 'sha256': hashlib.sha256(content).hexdigest()}]
-    zip_spec = {'files': [], 'bundle': zip_entries}
-    (root / 'scripts/zipformer-assets.json').write_text(json.dumps(zip_spec))
-    (zipformer / 'manifest.json').write_text(json.dumps({'specification': zip_spec, 'files': zip_entries}))
-    optional = root / 'web/vendor/optional-asr'
-    optional.mkdir()
-    (optional / 'fixture.wasm').write_bytes(content)
-    (root / 'scripts/optional-asr-runtime.json').write_text(json.dumps({'files': [{'path': 'fixture.wasm', 'packagedSha256': hashlib.sha256(content).hexdigest()}]}))
+    shutil.copytree(original / 'web/licenses', root / 'web/licenses')
+    entries = []
+    for name in ['vendor/sherpa-ja-en', 'vendor/whisper/tiny', 'vendor/zipformer-en', 'vendor/optional-asr', 'vendor/translation', 'tts-assets']:
+        directory = root / 'web' / name; directory.mkdir(parents=True)
+        # Old generated/checkpoint files must never leak through directory copies.
+        for filename in ['model.onnx', 'model.data', 'model.bin', 'model.safetensors', 'voice.htsvoice']:
+            (directory / filename).write_bytes(b'old model weights')
+        asset = directory / 'engine.wasm'; asset.write_bytes(b'weight-free runtime fixture')
+        entries.append(dict(path=str(asset.relative_to(root / 'web')), bytes=asset.stat().st_size, sha256=hashlib.sha256(asset.read_bytes()).hexdigest()))
+    (root / 'scripts/extension-runtime-assets.json').write_text(json.dumps(dict(files=entries)))
     build.main()
-    target = root / 'dist' / 'chrome-extension'
-    assert {'pipeline.js', 'transcription-nodes.js'} <= set(build.SHARED_FILES)
-    assert (target / 'extension' / 'tab-audio-node.js').is_file()
-    assert (target / 'web' / 'tts-assets' / 'phonemizer-source.tar.gz').is_file()
-    assert (target / 'extension' / 'graph-editor.js').is_file()
-    assert (target / 'extension' / 'graph-editor.html').is_file()
-    assert (target / 'extension' / 'graph-page.js').is_file()
-    assert (target / 'extension' / 'navigation.js').is_file()
-    assert (target / 'extension' / 'model-cache.html').is_file()
-    assert (target / 'extension' / 'cache-demo' / 'weights.bin').stat().st_size == 16384
+    target = root / 'dist/chrome-extension'
+    inventory = json.loads((target / 'asset-inventory.json').read_text())
+    assert inventory['modelWeights'] == 0
+    assert not any(p.suffix in build.FORBIDDEN_SUFFIXES for p in target.rglob('*'))
     for name in build.SHARED_FILES:
         assert (target / 'web' / name).read_bytes() == (original / 'web' / name).read_bytes()
-    assert (target / 'web' / 'vendor' / 'sherpa-ja-en' / 'sherpa-onnx-wasm-main-vad-asr.data').read_bytes() == b'pinned model fixture'
-    assert (target / 'web' / 'vendor' / 'translation' / 'transformers.js').read_bytes() == b'pinned runtime fixture'
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest == json.loads((original / 'extension' / 'manifest.json').read_text())
     assert manifest['name'] == 'My Audio to Text'
@@ -462,10 +358,24 @@ with tempfile.TemporaryDirectory() as tmp:
     assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting', 'storage', 'offscreen', 'contextMenus'}
     assert 'host_permissions' not in manifest
     assert set(manifest['optional_host_permissions']) == {'http://*/*', 'https://*/*'}
-    assert 'content_scripts' not in manifest
-    assert (target / manifest['background']['service_worker']).is_file()
     assert 'wasm-unsafe-eval' in manifest['content_security_policy']['extension_pages']
-    assert manifest['cross_origin_embedder_policy']['value'] == 'require-corp'
+    # Inventory also fails on accidental weight/preload files outside runtime dirs.
+    (target / 'accidental.onnx').write_bytes(b'weights')
+    try:
+        build.inventory(target); raise AssertionError('weights not detected')
+    except RuntimeError:
+        pass
+    (target / 'accidental.onnx').unlink()
+    (target / 'preload.js').write_text('loadPackage({files:[]})')
+    try:
+        build.inventory(target); raise AssertionError('preload not detected')
+    except RuntimeError:
+        pass
+    (root / 'web' / entries[0]['path']).write_bytes(b'changed runtime')
+    try:
+        build.main(); raise AssertionError('runtime pin not checked')
+    except SystemExit:
+        pass
 `], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });

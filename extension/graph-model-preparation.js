@@ -1,3 +1,4 @@
+import { reazonManifest, sileroManifest, whisperManifest, zipformerManifest, japaneseFrontendManifest } from './local-asr-cache.js';
 import { textSummaryManifest } from './text-summary-cache.js';
 import { TEXT_SUMMARY_TYPES, textSummaryModel } from '../web/text-summary-models.js';
 import { ModelAssetCache } from './model-asset-cache.js';
@@ -11,11 +12,19 @@ import { qwen3TtsManifest } from './qwen3-tts-cache.js';
 import { cosyVoice3Manifest } from './cosyvoice3-cache.js';
 
 // Follow every saved model-bearing Node, including parked Nodes. Language does
-// not change Supertonic's weights; its voice does. Existing ASR assets stay packaged; optional ASR weights follow Auto Save.
+// not change Supertonic's weights; its voice does. Every ASR model follows Auto Save; Silero is a distinct shared dependency.
 export function graphModelRequirements(graph) {
   const requirements = new Map();
   for (const node of graph.nodes) {
     let requirement;
+    const add = (key, title, manifest) => requirements.set(key, { key, id: key, title, manifest });
+    if (['SpeechToTextReazonSpeech', 'SpeechToTextWhisper'].includes(node.type)) {
+      add('silero', 'Silero VAD · shared ReazonSpeech / Whisper dependency', sileroManifest);
+      if (node.type === 'SpeechToTextReazonSpeech') add('reazon', 'ReazonSpeech ja-en · speech recognition', reazonManifest);
+      else add('whisper', 'Whisper tiny · multilingual q8', whisperManifest);
+    }
+    if (node.type === 'SpeechToTextZipformerEn') add('zipformer', 'Zipformer English · streaming speech recognition', zipformerManifest);
+    if (node.type === 'Kokoro' && node.settings.voice === 'jf_alpha') add('kokoro-japanese', 'Kokoro Japanese · OpenJTalk frontend voice', japaneseFrontendManifest);
     if (TEXT_SUMMARY_TYPES.includes(node.type)) {
       const model = textSummaryModel(node.type), type = node.type;
       requirement = { key: model.key, id: model.key, title: model.label + (type === 'TextSummaryLfm2'

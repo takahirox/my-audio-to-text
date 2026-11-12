@@ -10,7 +10,7 @@ export async function textSummaryManifest(type) {
 export async function cacheOnlyTextSummaryRuntime(env, type) {
   if (globalThis.location?.protocol !== 'chrome-extension:') throw new Error('Text summary requires an extension-owned Worker.');
   const manifest = await textSummaryManifest(type);
-  const view = await new ModelAssetCache(manifest).inspect();
+  const view = await new ModelAssetCache(manifest).inspect({ retain: true });
   if (view.state !== 'Ready') throw new Error(view.error || 'Text summary model assets missing or evicted. Use Retry preparation in Graph Editor or Models.');
   const cache = await caches.open(MODEL_CACHE_NAME), allowed = new Set(manifest.files.map(file => file.url));
   env.allowLocalModels = true; env.allowRemoteModels = false;

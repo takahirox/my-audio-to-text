@@ -3,6 +3,11 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const legalLinks = [
+  ['reazon', 'License & source', '../web/third-party-notices.txt', 'ReazonSpeech / k2 · Apache 2.0 · pinned epoch 35 int8'],
+  ['silero', 'License & source', '../web/third-party-notices.txt', 'Silero · MIT'],
+  ['whisper', 'License & source', '../web/third-party-notices.txt', 'OpenAI / ONNX Community · MIT'],
+  ['zipformer', 'License & source', '../web/third-party-notices.txt', 'k2 / icefall · Apache 2.0'],
+  ['kokoro-japanese', 'License & source', '../web/licenses/kokoro-japanese.txt', 'HTS voice · Creative Commons Attribution 3.0'],
   ['qwen3-tts', 'License & source', '../web/licenses/qwen3-tts.txt', 'Qwen Team / Danyal Malik ONNX conversion'],
   ['cosyvoice3', 'License & source', '../web/licenses/cosyvoice3.txt', 'LibriTTS-R reference features: Koizumi et al., speaker 4446, CC BY 4.0'],
   ['meeting-summary-lfm2', 'License / terms', '../web/licenses/meeting-summary-lfm2.txt', 'Commercial use above the $10M annual revenue threshold needs a separate license'],
@@ -39,8 +44,8 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await expect(page.locator('#navigation-status')).toHaveCount(0);
   await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
   await expect(library).toBeFocused();
-  await expect(page.locator('.model-card')).toHaveCount(12);
-  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(12);
+  await expect(page.locator('.model-card')).toHaveCount(17);
+  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(17);
   await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
   for (const card of await page.locator('.model-card').all()) {
     await expect(card.getByRole('button')).toHaveText(['Download', 'Delete cached assets']);
@@ -80,7 +85,7 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
       expect((await response).ok()).toBe(true);
       expect((await page.locator('body').textContent()).length).toBeGreaterThan(100);
       await page.goBack();
-      await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(12);
+      await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(17);
     }
   }
   const gemma = page.locator('#translategemma');

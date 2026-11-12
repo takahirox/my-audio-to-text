@@ -8,10 +8,9 @@ English or Text-driven Japanese recognition; see [Whisper setup and testing](whi
 choose [Streaming Zipformer English ASR](zipformer-node.md), or opt into the independent
 [Parakeet v3 and Moonshine Medium Streaming Nodes](optional-asr-nodes.md). The default whole-tab
 graph needs no page injection or
-media picker. Optional microphone, selected media and page-field outputs are
+media picker. Optional microphone and page-field outputs are
 configured in Graph Editor. Focused output follows the toolbar tab automatically;
-microphone permission is requested by Start. Selected-page media is temporarily
-unavailable (see below).
+microphone permission is requested by Start.
 
 The extension uses the shared Node/Port runtime:
 
@@ -50,7 +49,7 @@ and Models keep their dark appearance:
   model weights with progress, cancellation and retry. Models provides asset
   requirements and terms. Changes apply next session; external revisions retain recoverable drafts and offer Reload latest graph in recovery controls. Reset is undoable.
 - **Models** opens a dedicated tab from Graph Library, Graph Editor or Live, with
-  bundled ReazonSpeech/Silero labels and verified cache controls for both OPUS-MT
+  verified cache controls for ReazonSpeech, Silero, Whisper, Zipformer and both OPUS-MT
   directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Opening it never downloads weights.
 
 The execution window's **Library**, **Edit graph** and **Models** links open
@@ -78,22 +77,23 @@ It runs `npm ci`, `prepare:assets`, `prepare:translation-assets`,
 `prepare:whisper-assets`, `prepare:tts-assets`, `prepare:zipformer-assets`,
 `prepare:optional-asr-assets`, `prepare:text-summary-assets` and
 `build:extension` in that order, stopping at the first
-failure. ASR preparation recreates `web/vendor/`, so translation preparation
-must follow it. The individual npm scripts remain available.
+failure. Individual preparation commands remain available and preserve other runtime directories.
 
-Asset preparation needs network access on a fresh checkout: it downloads and
-verifies the pinned ASR models and runtimes, staging an approximately
-91 MB ReazonSpeech/Silero distribution, 44 MB Whisper weights and
-58 MB English online Zipformer distribution. Building copies the maintained Web pipeline,
-nodes, core, workers, configuration, capture helpers, models and license notices
-into `dist/chrome-extension/`. Translation preparation adds about 28 MB of
-checksum-pinned runtime JS/MJS/WASM. TTS preparation stages about 77 MB of reviewed
-runtimes/frontends plus corresponding source. Optional ASR preparation adds about
-41 MB of pinned runtimes, with the CSP adaptation and licenses described in
-[optional ASR setup](optional-asr-nodes.md); the 1.26 GB / 305 MB weights stay out of the bundle. Optional OPUS-MT / TranslateGemma translation and
-TTS and optional Parakeet/Moonshine ASR **weights** are prepared after a successful **Auto Save** for saved processor
-Nodes, or through **Download** or **Retry** in Models; setup does not download or bundle them. These generated files are
-ignored by Git.
+Setup prepares only pinned, weight-free runtime JS/WASM, linguistic frontends,
+configuration and license/source notices. ReazonSpeech/Silero and Zipformer
+runtimes come from the reproducible 6.9 MB `scripts/sherpa-runtime.tar.gz` package;
+no upstream model archive is downloaded during setup. Whisper uses the translation
+runtime. OpenJTalk's statistical HTS voice is downloaded only for a Japanese
+Kokoro graph, separately from its packaged dictionary and WASM frontend.
+
+Every model's weights follow successful **Auto Save** or explicit **Download** or
+**Retry** in Models. Setup/build does not prepare the model cache. Building copies
+only the reviewed runtime paths and verifies their hashes; obsolete weights left
+in `vendor`, `tts-assets`, or another generated directory cannot leak into the
+artifact. `dist/chrome-extension/asset-inventory.json` lists every packaged file,
+size and SHA-256 and records zero model weights. See the [audit and reproduction
+commands](model-assets.md). Generated runtime directories and developer `.cache/`
+files are ignored by Git.
 
 Once assets are prepared, use the quick packaging command after source changes:
 
@@ -163,7 +163,7 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 
 ## Optional page and microphone workflows
 
-Edit a graph with whole-tab, selected-media and/or microphone Inputs and
+Edit a graph with whole-tab and/or microphone Inputs and
 one or more outputs. Multiple independent ASRs and displays run concurrently;
 parked or unfinished Nodes remain saved but inactive. See the
 [execution and permission policy](extension-graph.md). Graph Editor owns source
@@ -197,14 +197,6 @@ connections appear only in Session details. Page navigation, closure or permissi
 detaches the sink. Stop and invoke the page toolbar again to recover; a running
 session never retargets when another tab's action is invoked. Page targets are
 not persisted. Unsupported saved field/display ports require Reset or Import of a current graph and automatic persistence of a repaired graph copy.
-
-**Temporary selected-media limitation:** `SelectedPageMediaAudio` cannot capture
-until a replacement selection workflow exists. Live no longer offers discovery
-or element selection. Start reports an error naming the source and suggesting
-`ChromeTabAudio` in Graph Editor; it never guesses an element or silently captures
-whole-tab audio. Independent complete graph branches continue. Selection on the
-target Web page is explicitly deferred to a separate task. Saved graph topology
-is preserved.
 
 For microphone save **Microphone audio**
 and press Start to request browser permission; denied/canceled permission is
@@ -334,7 +326,7 @@ can still alter the shared DOM or read text inserted into their own fields, as b
 The assigned graph is snapshotted at session start. Only **one executable
 FocusedInputTextOutputNode and its complete typed ancestors** run; optional Live,
 speaker or other output branches are omitted, not initialized. Any executable
-ChromeTabAudio/SelectedPageMediaAudio path makes a graph incompatible. The
+ChromeTabAudio path makes a graph incompatible. The
 eligible field path starts at MicrophoneAudio, passes through an existing ASR's
 `final`, and may use TextFormatter, TextWindow, OPUS-MT, TranslateGemma or
 IfCondition or the existing text-summary Nodes. Number configuration and Text→ASR language / translation context configuration are allowed.
@@ -407,8 +399,9 @@ cache, native service-worker stop/restart, offscreen loss and extension reload.
 The feasibility probe uses a disposable minimal extension and fresh offscreen
 context for each native permission state. It verifies AudioWorklet, isolated
 Worker/shared-memory WASM and records WebGPU adapter availability. Real-model
-mode assembles the current source with the pinned ReazonSpeech/Silero bundle from
-`prepare:assets`, without requiring unrelated optional model packages. It runs
+mode uses the weight-free runtime from `prepare:assets` and prepares the pinned
+ReazonSpeech/Silero assets through the verified cache, without requiring unrelated
+model packages. It runs
 actual CPU/WASM inference on `ordinary-english.wav` supplied by Chrome's fake
 microphone device. It compares final events with text inserted in native input
 and textarea, and runs concurrent Live/Web sessions. Historical real-model results and source hashes are in
@@ -447,7 +440,7 @@ adds a nonvisible extension runtime without broader website access. Optional hos
 are requested only for Web voice opt-in. Microphone uses native getUserMedia after
 explicit Start in Live, or the field mic click for the current website. Basic
 tab IDs and lifecycle events are available without the `tabs` permission. All
-scripts, translation runtimes and ASR weights are packaged locally; no remote code
+scripts and inference runtimes are packaged locally; verified model weights are cached on demand; no remote code
 is loaded. The
 Models page uses the existing extension-origin Cache Storage without adding permissions or changing the existing CSP. The toolbar
 invocation grants capture authority; opening a window by itself does not grant
@@ -500,11 +493,7 @@ cross-browser extension support. No post-merge verification is required by #61.
 3. Cause a missing model, failed operation or denied permission. Verify one
    actionable error per Node appears in the alert (with Models recovery for
    optional models). Start a fresh healthy session: old errors must disappear.
-4. Connect SelectedPageMediaAudio to an output. Start remains available and
-   reports the temporary selection limitation with a ChromeTabAudio suggestion.
-   Add an independent text/capture path: that branch must still work. Nothing
-   should select an element, inject a picker or silently switch capture modes.
-   For focused output, invoke the toolbar on a normal page with a supported field
+4. For focused output, invoke the toolbar on a normal page with a supported field
    focused; successful connection/insertion counts belong in Session details,
    while unavailable output/permission errors remain visible.
 

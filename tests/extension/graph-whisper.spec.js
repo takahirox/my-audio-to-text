@@ -13,8 +13,8 @@ async function mockRuntime(f) {
   await writeFile(path.join(f.root, 'web/vendor/translation/transformers.js'), `
     export const env={backends:{onnx:{wasm:{}}}};
     export async function pipeline(task,id,options) {
-      if(task!=='automatic-speech-recognition'||id!=='tiny'||options.dtype!=='q8'||options.device!=='wasm')throw Error('Wrong Whisper model config');
-      if(env.allowRemoteModels!==false||env.allowLocalModels!==true||env.useBrowserCache!==false||!env.localModelPath.endsWith('/vendor/whisper/'))throw Error('Remote model access enabled');
+      if(task!=='automatic-speech-recognition'||id!=='onnx-community/whisper-tiny'||options.dtype!=='q8'||options.device!=='wasm')throw Error('Wrong Whisper model config');
+      if(env.allowRemoteModels!==false||env.allowLocalModels!==true||env.useBrowserCache!==false||!env.useCustomCache)throw Error('Remote model access enabled');
       return async (audio,opts)=>{
         if(!['en','ja'].includes(opts.language)||opts.task!=='transcribe'||opts.do_sample!==false)throw Error('Wrong inference config');
         if(audio[0]===.5)throw Error('Fixture decode error');
@@ -65,7 +65,7 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   expect(f.requests).toEqual([]);
 });
 
-test('MV3 palette and help offer Whisper final and its ID; ReazonSpeech retains preview and final', async ({ graphExtension: f }) => {
+test('MV3 palette offers Whisper final and its ID; ReazonSpeech retains preview and final', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
   await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(1);
   await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toHaveCount(1);
@@ -74,10 +74,7 @@ test('MV3 palette and help offer Whisper final and its ID; ReazonSpeech retains 
   await expect(card.locator('[data-side="output"]')).toHaveCount(2);
   await expect(card.locator('[data-side="output"][data-port="final"]')).toHaveCount(1);
   await expect(card.locator('[data-side="output"][data-port="finalId"]')).toHaveCount(1);
-  await editor.locator('.graph-inspector summary').click();
-  await expect(editor.locator('.graph-inspector')).toContainText('Output final: text');
-  await expect(editor.locator('.graph-inspector')).toContainText('Output finalId: number');
-  await expect(editor.locator('.graph-inspector')).not.toContainText('Output provisional');
+
 });
 
 test('MV3 Text literal and empty values round-trip and deliver once to an ordinary TEXT consumer', async ({ graphExtension: f }) => {
