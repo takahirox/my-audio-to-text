@@ -8,6 +8,55 @@ const libraryRequests = new Map(), hostWaiters = new Set();
 let choices = [], defaultId = null, selectionWork = Promise.resolve();
 const scriptId = 'web-voice-typing';
 const controls = new Set();
+let safetyStop = false, preferenceGeneration = 0, preferencePending = false;
+let consentAttempt, observedPreference, activePreferenceOperation;
+const preferenceListeners = new Set();
+export function onWebVoiceStateChanged(listener) { preferenceListeners.add(listener); }
+function preferenceChanged() { for (const listener of preferenceListeners) listener(); }
+export async function readWebVoiceState() {
+  const generation = preferenceGeneration;
+  const ready = await authorized() && (await chrome.scripting.getRegisteredContentScripts({ ids: [scriptId] })).length > 0;
+  return { enabled: ready && !safetyStop && !preferencePending && generation === preferenceGeneration, pending: preferencePending };
+}
+// Permission requests are started by the native click handler, before any await.
+// This coordinator is the sole UI writer of the canonical opt-in.
+export function changeWebVoiceEnabled(enabled, permission) {
+  if (preferencePending) return Promise.resolve();
+  preferencePending = true;
+  const generation = preferenceGeneration, operationId = crypto.randomUUID();
+  activePreferenceOperation = operationId;
+  const stopped = !enabled ? reconcile(true) : null;
+  stopped?.catch(() => {});
+  preferenceChanged();
+  return (async () => {
+    try {
+      if (enabled) {
+        if (!await permission) return;
+        if (generation !== preferenceGeneration || !await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS })) return;
+        if (generation !== preferenceGeneration) return;
+      }
+      await setVoiceEnabled(enabled, operationId);
+      if (enabled && generation !== preferenceGeneration) throw Error('Web microphone setting changed. Retry from the toolbar context menu.');
+      safetyStop = !enabled;
+      if (stopped) await stopped;
+      await reconcile();
+      if (enabled && (generation !== preferenceGeneration || !await authorized())) throw Error('Website access or Web microphone setting changed.');
+    } catch (error) {
+      // Roll back only our own write; a newer opt-in belongs to its caller.
+      const saved = (await chrome.storage.local.get(WEB_VOICE_KEY).catch(() => ({ [WEB_VOICE_KEY]: observedPreference })))[WEB_VOICE_KEY];
+      const superseded = voiceEnabled(saved) && saved.operationId !== operationId && (enabled || generation !== preferenceGeneration);
+      if (!superseded) {
+        const failures = [];
+        // Cleanup starts synchronously, even if every storage write fails.
+        const cleanup = reconcile(true);
+        try { await setVoiceEnabled(false); } catch (failure) { failures.push(`Could not save OFF: ${failure.message}. Saved settings may restart Web microphone. Retry OFF.`); }
+        try { await cleanup; } catch (failure) { failures.push(`Could not remove page controls: ${failure.message}.`); }
+        if (failures.length) error = Error(`${error.message} ${failures.join(' ')}`);
+      } else { safetyStop = false; await reconcile().catch(() => {}); }
+      throw error;
+    } finally { activePreferenceOperation = null; preferencePending = false; preferenceChanged(); }
+  })();
+}
 // One offscreen DOM document, with an independent TabSession per page document.
 const sessions = new Map();
 const tabCapture = installTabCaptureBridge({ ensureHost: async () => {
@@ -24,7 +73,7 @@ export const authorizeLiveTabCapture = (session, tabId, openWindow) => tabCaptur
 let reconciling = Promise.resolve(), host, hostURL, lifecycle = Promise.resolve();
 const post = (port, message) => { try { port?.postMessage(message); } catch {} };
 const extensionPage = (sender, name) => sender?.id === chrome.runtime.id && sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL(`extension/${name}`);
-const authorized = async () => await readVoiceEnabled() && await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS });
+const authorized = async () => !safetyStop && await readVoiceEnabled() && await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS }) && !safetyStop;
 const current = owner => sessions.get(owner.target.documentId) === owner;
 const runtimePost = (owner, message) => post(host, { ...message, token: owner.token });
 function serialize(operation) { return lifecycle = lifecycle.catch(() => {}).then(operation); }
@@ -134,9 +183,10 @@ function refreshCatalog() {
 }
 function reconcile(stop = false) {
   if (stop) {
-    // A Library OFF/rollback write can fail. Release active capture without
+    safetyStop = true;
+    // An OFF/rollback write can fail. Release active capture without
     // waiting for storage or queued registration work, even in that case.
-    endAll('Web voice typing stopped. Retry saving OFF in Graph Library.');
+    endAll('Web microphone stopped. Retry OFF in the toolbar context menu.');
     for (const port of controls) post(port, { type: 'disabled' });
   }
   return reconciling = reconciling.catch(() => {}).then(async () => {
@@ -146,7 +196,7 @@ function reconcile(stop = false) {
       endAll('Web voice typing disabled or website permission removed.');
       for (const port of controls) post(port, { type: 'disabled' });
       if (registered) await chrome.scripting.unregisterContentScripts({ ids: [scriptId] });
-      // An earlier OFF snapshot may finish after the switch grants access and
+      // An earlier OFF snapshot may finish after the menu grants access and
       // saves ON. Clear opt-in only if website access is still actually missing.
       if (!stop && await readVoiceEnabled() && !await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS })) await setVoiceEnabled(false);
       return;
@@ -208,7 +258,7 @@ chrome.runtime.onConnect.addListener(port => {
       sessions.set(owner.documentId, session);
       session.timer = setTimeout(() => end(session, 'Voice runtime did not respond. Click the mic to retry.'), 20000);
       void (async () => {
-        if (!await authorized()) throw Error('Enable Web voice typing and grant website access in Graph Library.');
+        if (!await authorized()) throw Error('Right-click the extension toolbar icon → Web microphone to enable website controls.');
         const selected = await refreshChoices();
         if (!selected) throw Error('Right-click the mic (or press Shift+F10) to choose a voice graph first.');
         session.graph = structuredClone(selected);
@@ -283,19 +333,36 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (message.type === 'web-voice-library-changed' && sender?.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL('extension/'))) {
     refreshCatalog(); respond({ ok: true }); return;
   }
-  if (message.type !== 'web-voice-reconcile' || !extensionPage(sender, 'graph-library.html')) return;
+  if (message.type === 'web-voice-consent-begin' && extensionPage(sender, 'web-voice-consent.html')) {
+    consentAttempt = { token: crypto.randomUUID(), generation: preferenceGeneration };
+    respond({ token: consentAttempt.token }); return;
+  }
+  if (message.type === 'web-voice-set-enabled' && extensionPage(sender, 'web-voice-consent.html')) {
+    if (preferencePending) { respond({ error: 'A Web microphone change is pending. Wait for it to finish, then retry.' }); return; }
+    if (message.enabled === true && (!consentAttempt || message.token !== consentAttempt.token || consentAttempt.generation !== preferenceGeneration)) {
+      respond({ error: 'Web microphone setting changed. Close this window and retry from the toolbar context menu.' }); return;
+    }
+    consentAttempt = null;
+    void changeWebVoiceEnabled(message.enabled === true, Promise.resolve(message.granted === true))
+      .then(() => respond({ ok: true }), error => respond({ error: error.message })); return true;
+  }
+  if (message.type !== 'web-voice-reconcile' || !extensionPage(sender, 'web-voice-consent.html')) return;
   void reconcile(message.stop === true).then(() => respond({ ok: true }), error => respond({ error: error.message })); return true;
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[WEB_VOICE_KEY]) return;
+  observedPreference = changes[WEB_VOICE_KEY].newValue;
+  if (voiceEnabled(observedPreference) && observedPreference.operationId !== activePreferenceOperation) ++preferenceGeneration;
   // OFF aborts immediately, before serialized registration work completes.
   if (!voiceEnabled(changes[WEB_VOICE_KEY].newValue)) {
+    ++preferenceGeneration;
     endAll('Web voice typing disabled.');
     for (const port of controls) post(port, { type: 'disabled' });
   }
-  void reconcile().catch(() => {});
+  void reconcile().catch(() => {}).finally(preferenceChanged);
 });
-chrome.permissions.onRemoved.addListener(() => { endAll('Website access removed.'); void reconcile().catch(() => {}); });
+chrome.permissions.onRemoved.addListener(() => { ++preferenceGeneration; endAll('Website access removed.'); for (const port of controls) post(port, { type: 'disabled' }); preferenceChanged(); void reconcile().catch(() => {}).finally(preferenceChanged); });
+chrome.permissions.onAdded.addListener(() => { void reconcile().catch(() => {}).finally(preferenceChanged); });
 chrome.tabs.onRemoved.addListener(id => {
   for (const owner of sessions.values()) if (owner.target.tabId === id) end(owner, 'Target tab closed.');
 });
@@ -305,4 +372,4 @@ chrome.tabs.onUpdated.addListener((id, change) => {
 // A restarted coordinator never adopts unknown capture. Closing its old DOM
 // owner releases all tracks/Workers before a new generation can be created.
 void serialize(closeDocument).catch(() => {});
-void reconcile().catch(() => {});
+void reconcile().catch(() => {}).finally(preferenceChanged);

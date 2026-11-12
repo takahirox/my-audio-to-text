@@ -38,7 +38,7 @@ or **Load saved details** available when needed.
 Create, rename, describe, duplicate, import or export entries without starting
 inference. New graphs use the current transcription layout; portable JSON remains
 the existing version-15 graph format. Models remains accessible at the right of
-the compact Web microphone header.
+the extension toolbar context menu.
 
 **Launch Settings and its Live/Web graph dropdowns have been removed (#267).**
 Choose graphs where they launch:
@@ -71,23 +71,21 @@ Choose graphs where they launch:
   may finish its snapshot, but cannot Start again until that same ID is restored.
   Open another graph from the toolbar.
 
-The compact **Web microphone ON/OFF** control in the Library header, immediately
-before the rightmost **Models** link, starts OFF without explicit opt-in. Turning
-ON directly requests Chrome’s optional access to all HTTP/HTTPS websites from
-the switch interaction, with no extension confirmation dialog or second click.
-If access is already granted, no extra prompt is needed. While Chrome’s native
-request or script registration is pending, the switch stays OFF and busy/disabled.
-Denial, dismissal or setup failure leaves controls OFF with retry guidance.
-Choosing a default never enables them or requests microphone access. Turn OFF to
-remove controls and cancel Web sessions; the saved Web default and previously
-granted website access remain. OFF remains available even if library storage
-needs recovery. The adjacent **ⓘ** control (**Website access and microphone help**)
-discloses permission patterns, unsupported fields/pages, local processing,
-microphone consent and Chrome Site access revocation. Help opens by click,
-touch, Enter or Space and closes with Escape or an outside click. Only errors
-or required actions appear below the header; ordinary ON/OFF instructions stay
-out of the workspace. Opening help requests no permissions. No website
-permissions are broadened by graph selection.
+Right-click the extension toolbar icon and use the native **Web microphone**
+checkbox to show or remove website microphones. It starts OFF. ON requests
+Chrome’s optional HTTP/HTTPS website access and registers page controls only
+after consent; it never starts recording. Denial leaves it OFF. If Chrome cannot
+show the permission prompt from the menu, a small Enable window offers a fresh
+user gesture. Setup errors offer a retry there. OFF cancels Web sessions and
+removes controls, even if graph storage needs recovery; previously granted website
+access and the saved graph default remain. Revoke website access through Chrome’s
+extension Site access controls. A revoked grant clears the opt-in.
+
+**Microphone position → Auto / Left / Right** chooses the side of the focused
+editable field. Auto defaults to right first. Left and Right prefer that side,
+falling back and clamping at viewport edges. Changes apply live without changing
+field focus or selection, can be saved while OFF, and survive restarts. Graph
+Library remains for graph management.
 
 On an enabled page mic, right-click (or focus it and press **Shift+F10**) to choose
 a compatible microphone-only graph as the saved default for the next recording.

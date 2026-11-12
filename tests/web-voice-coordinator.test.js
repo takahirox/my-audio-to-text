@@ -27,7 +27,7 @@ async function fixture(t, { existingDocument = false } = {}) {
   const chrome = {
     runtime: { id: 'extension', getURL: path => `chrome-extension://extension/${path}`, onConnect: event(), onMessage: event(), getContexts: async () => contexts },
     windows: { onRemoved: event() },
-    permissions: { contains: async () => true, onRemoved: event() }, storage: { session: { get: async () => ({}), remove: async () => {} }, onChanged: event(), local: { get: async key => ({ [key]: preferences[key] }), set: async value => Object.assign(preferences, value) } },
+    permissions: { contains: async () => true, onRemoved: event(), onAdded: event() }, storage: { session: { get: async () => ({}), remove: async () => {} }, onChanged: event(), local: { get: async key => ({ [key]: preferences[key] }), set: async value => Object.assign(preferences, value) } },
     scripting: { getRegisteredContentScripts: async () => [{}] },
     tabs: { query: async () => [], onRemoved: event(), onUpdated: event(),
       connect(tabId, options) { const port = makePort(options.name); relays.push({ tabId, ...options, port }); return port; },
@@ -38,7 +38,7 @@ async function fixture(t, { existingDocument = false } = {}) {
       closeDocument: async () => { contexts = []; closed++; },
     },
   };
-  const source = (await readFile(new URL('../extension/web-voice-background.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '').replace(/export (function|const)/g, '$1');
+  const source = (await readFile(new URL('../extension/web-voice-background.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '').replace(/export (async function|function|const)/g, '$1');
   const globals = { installTabCaptureBridge: options => installTabCaptureBridge(options, chrome), chrome, structuredClone, webVoiceChoices, webVoiceDefault, crypto: { randomUUID },
     setTimeout(callback) { timers.add(callback); return callback; }, clearTimeout: timer => timers.delete(timer),
     readVoiceEnabled: async () => true, setVoiceEnabled: async () => {}, voiceEnabled: value => value?.enabled === true,
@@ -62,7 +62,7 @@ test('an earlier OFF reconciliation cannot clear a newly granted ON preference',
   f.globals.setVoiceEnabled = async value => { enabled = value; };
   f.chrome.scripting.getRegisteredContentScripts = () => new Promise(resolve => { releaseInspection = () => resolve(registered); });
   const reconcile = () => new Promise(resolve => f.chrome.runtime.onMessage.emit({ type: 'web-voice-reconcile' },
-    { id: 'extension', url: 'chrome-extension://extension/extension/graph-library.html' }, resolve));
+    { id: 'extension', url: 'chrome-extension://extension/extension/web-voice-consent.html' }, resolve));
   const earlier = reconcile(); await turn();
   assert.equal(typeof releaseInspection, 'function');
   enabled = true; releaseInspection(); await earlier;
@@ -77,13 +77,13 @@ test('an earlier OFF reconciliation cannot clear a newly granted ON preference',
   assert.equal(enabled, false); assert.equal(registered.length, 0);
 });
 
-test('only Graph Library can stop controls without saving OFF, even behind pending reconciliation', async t => {
+test('only the consent window can stop controls without saving OFF, even behind pending reconciliation', async t => {
   const f = await fixture(t), control = f.control(1); await turn();
   await f.start(control); const host = await f.host();
   let registered = true, finishInspection;
   f.chrome.scripting.getRegisteredContentScripts = () => new Promise(resolve => { finishInspection = () => resolve([{}]); });
   f.chrome.scripting.unregisterContentScripts = async () => { registered = false; };
-  const sender = { id: 'extension', url: 'chrome-extension://extension/extension/graph-library.html' };
+  const sender = { id: 'extension', url: 'chrome-extension://extension/extension/web-voice-consent.html' };
   for (const untrusted of [{ ...sender, id: 'other' }, { ...sender, url: 'https://example.org/' }]) {
     f.chrome.runtime.onMessage.emit({ type: 'web-voice-reconcile', stop: true }, untrusted, () => assert.fail('Unauthorized stop replied'));
   }
@@ -263,4 +263,112 @@ test('library request pending during host startup is dispatched once and keeps t
   assert.equal(requests.length, 1); assert.equal(f.closed(), 0);
   host.onMessage.emit({ type: 'launch-library-result', request: requests[0].request, result: { graphs: [] } });
   await read; await turn(); assert.equal(f.closed(), 1);
+});
+
+async function settingsFixture(t) {
+  const f = await fixture(t);
+  let registered = [], granted = true;
+  f.preferences.voice = { version: 1, enabled: false };
+  f.globals.readVoiceEnabled = async () => f.preferences.voice?.enabled === true;
+  f.globals.setVoiceEnabled = async (enabled, operationId) => {
+    f.preferences.voice = { version: 1, enabled, operationId };
+    f.chrome.storage.onChanged.emit({ voice: { newValue: f.preferences.voice } }, 'local');
+  };
+  f.chrome.permissions.contains = async () => granted;
+  f.chrome.scripting.getRegisteredContentScripts = async () => registered;
+  f.chrome.scripting.registerContentScripts = async scripts => { registered = scripts; };
+  f.chrome.scripting.unregisterContentScripts = async () => { registered = []; };
+  f.chrome.scripting.executeScript = async () => {};
+  return { ...f, change: f.globals.changeWebVoiceEnabled, state: f.globals.readWebVoiceState,
+    grant(value) { granted = value; }, registered: () => registered };
+}
+
+test('toolbar first ON waits for consent and registers only after grant without creating capture', async t => {
+  const f = await settingsFixture(t);
+  let grant;
+  const enabling = f.change(true, new Promise(resolve => { grant = resolve; }));
+  await turn();
+  assert.equal((await f.state()).enabled, false); assert.equal((await f.state()).pending, true);
+  assert.equal(f.preferences.voice.enabled, false); assert.equal(f.registered().length, 0);
+  await f.change(true, Promise.resolve(true)); // repeated clicks do not spawn an operation
+  grant(true); await enabling;
+  assert.equal((await f.state()).enabled, true); assert.equal(f.registered().length, 1);
+  assert.equal(f.created.length, 0, 'enabling controls must never start capture or inference');
+  await f.change(false);
+  assert.equal(f.preferences.voice.enabled, false); assert.equal(f.registered().length, 0);
+  assert.equal((await f.state()).enabled, false);
+});
+
+for (const failure of ['denied', 'permission rejection', 'permission inspection', 'ON write', 'registration']) test(`toolbar ${failure} cannot display enabled and a retry succeeds`, async t => {
+  const f = await settingsFixture(t);
+  const save = f.globals.setVoiceEnabled, contains = f.chrome.permissions.contains, register = f.chrome.scripting.registerContentScripts;
+  if (failure === 'permission inspection') f.chrome.permissions.contains = async () => { throw Error('Permission inspection failed'); };
+  if (failure === 'ON write') f.globals.setVoiceEnabled = async (enabled, id) => { if (enabled) throw Error('Write failed'); await save(enabled, id); };
+  if (failure === 'registration') f.chrome.scripting.registerContentScripts = async () => { throw Error('Registration failed'); };
+  const permission = failure === 'permission rejection' ? Promise.reject(Error('Gesture required')) : Promise.resolve(failure !== 'denied');
+  const operation = f.change(true, permission);
+  if (failure === 'denied') await operation; else await assert.rejects(operation);
+  assert.equal((await f.state().catch(() => ({ enabled: false }))).enabled, false);
+  assert.equal(f.preferences.voice.enabled, false); assert.equal(f.registered().length, 0);
+  f.globals.setVoiceEnabled = save; f.chrome.permissions.contains = contains; f.chrome.scripting.registerContentScripts = register;
+  await f.change(true, Promise.resolve(true)); assert.equal((await f.state()).enabled, true);
+});
+
+for (const interruption of ['external OFF', 'permission removal']) test(`${interruption} cancels a pending toolbar grant`, async t => {
+  const f = await settingsFixture(t); let finish;
+  const enabling = f.change(true, new Promise(resolve => { finish = resolve; }));
+  if (interruption === 'external OFF') await f.globals.setVoiceEnabled(false, 'external');
+  else { f.grant(false); f.chrome.permissions.onRemoved.emit({ origins: ['https://*/*'] }); }
+  finish(true); await enabling;
+  assert.equal(f.preferences.voice.enabled, false); assert.equal(f.registered().length, 0);
+  assert.equal((await f.state()).enabled, false);
+});
+
+test('OFF aborts capture immediately even when persistence fails, unregisters, and permits retry', async t => {
+  const f = await settingsFixture(t); await f.change(true, Promise.resolve(true));
+  const control = f.control(1); await turn(); await f.start(control); const host = await f.host();
+  const save = f.globals.setVoiceEnabled;
+  f.globals.setVoiceEnabled = async () => { throw Error('Storage unavailable'); };
+  const disabling = f.change(false);
+  assert.equal(host.sent.at(-1).type, 'abort'); assert.equal(control.sent.at(-1).type, 'disabled');
+  await assert.rejects(disabling, /Could not save OFF/); await turn();
+  assert.equal(f.registered().length, 0); assert.equal((await f.state()).enabled, false);
+  assert.equal(f.preferences.voice.enabled, true, 'a failed write must not be claimed as persisted OFF');
+  f.globals.setVoiceEnabled = save; await f.change(false);
+  assert.equal(f.preferences.voice.enabled, false); assert.equal((await f.state()).pending, false);
+});
+
+test('a newer opt-in is preserved when an older toolbar permission request fails', async t => {
+  const f = await settingsFixture(t); let reject;
+  const enabling = f.change(true, new Promise((_, fail) => { reject = fail; }));
+  await f.globals.setVoiceEnabled(true, 'newer-owner');
+  reject(Error('Old request failed')); await assert.rejects(enabling, /Old request failed/);
+  assert.equal(f.preferences.voice.enabled, true); assert.equal(f.preferences.voice.operationId, 'newer-owner');
+});
+
+test('consent fallback rejects forged, stale and worker-restart tokens', async t => {
+  const f = await settingsFixture(t);
+  const sender = { id: 'extension', url: 'chrome-extension://extension/extension/web-voice-consent.html' };
+  const message = (message, from = sender) => new Promise(resolve => f.chrome.runtime.onMessage.emit(message, from, resolve));
+  assert.match((await message({ type: 'web-voice-set-enabled', enabled: true, granted: true, token: 'old-worker' })).error, /setting changed/);
+  const { token } = await message({ type: 'web-voice-consent-begin' });
+  await f.globals.setVoiceEnabled(false, 'newer-off');
+  assert.match((await message({ type: 'web-voice-set-enabled', enabled: true, granted: true, token })).error, /setting changed/);
+  const fresh = await message({ type: 'web-voice-consent-begin' });
+  assert.equal((await message({ type: 'web-voice-set-enabled', enabled: true, granted: true, token: fresh.token })).ok, true);
+  assert.equal((await f.state()).enabled, true);
+});
+
+for (const unreadable of [false, true]) test(`a newer ON survives an older failed OFF with ${unreadable ? 'unreadable' : 'readable'} storage`, async t => {
+  const f = await settingsFixture(t); await f.change(true, Promise.resolve(true));
+  const save = f.globals.setVoiceEnabled, get = f.chrome.storage.local.get;
+  let failOFF;
+  f.globals.setVoiceEnabled = () => new Promise((_, reject) => { failOFF = reject; });
+  const disabling = f.change(false); await turn();
+  await save(true, 'newer-on');
+  if (unreadable) f.chrome.storage.local.get = async () => { throw Error('Read unavailable'); };
+  failOFF(Error('Older OFF failed')); await assert.rejects(disabling, /Older OFF failed/);
+  f.chrome.storage.local.get = get; f.globals.setVoiceEnabled = save;
+  assert.equal(f.preferences.voice.operationId, 'newer-on'); assert.equal(f.preferences.voice.enabled, true);
+  assert.equal((await f.state()).enabled, true);
 });
