@@ -76,7 +76,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
       }
     }
   }
-  await checkContrast(models, '.model-heading h3, .model-status, .model-metadata, .model-license a, .actions button:not(:disabled)', '.model-card', 4.5);
+  await checkContrast(models, '.model-heading h3, .model-status, .model-metadata, .model-license a, .model-license summary, .model-license p, .actions button:not(:disabled)', '.model-card', 4.5);
   await checkContrast(graph, '.graph-heading, .graph-ports button:not(:disabled), .graph-ports small', '.graph-node', 4.5);
   await checkContrast(graph, '.wire-line', '.graph-scroll', 3);
   expect(await graph.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(original);
@@ -144,7 +144,9 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   await expect(status).toHaveText('Not downloaded');
   await expect(page.locator('#persist, #persistence, main > details')).toHaveCount(0);
   await expect(page.locator('#kokoro a[href="../web/licenses/tts-notices.txt"]')).toBeVisible();
-  await expect(page.locator('#translategemma').getByRole('link', { name: 'Gemma terms & attribution', exact: true })).toBeVisible();
+  await expect(page.locator('#translategemma').getByRole('link', { name: /^Gemma terms & attribution for / })).toBeVisible();
+  await expect(page.locator('#translategemma > p.model-license')).toBeVisible();
+  await expect(page.locator('#kokoro').getByRole('link', { name: 'eSpeak NG source / build bundle (GPL-3.0-or-later)', exact: true })).toBeVisible();
   await expect(page.locator('footer')).toHaveCount(0);
   await page.reload();
   await page.keyboard.press('Tab');
