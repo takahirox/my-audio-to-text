@@ -518,8 +518,9 @@ for (const interruption of ['another Library turns OFF', 'website access removed
     await t.library.evaluate(() => finishPermission());
     await expect(toggle).toBeEnabled(); await expect(toggle).not.toBeChecked();
     await expect(t.library.locator('#web-voice-status')).toContainText('Turn ON');
+    // A canceled opt-in need not write the default-OFF preference at all.
     await expect.poll(() => t.library.evaluate(async () => ({
-      enabled: (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled,
+      enabled: (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1']?.enabled === true,
       scripts: (await chrome.scripting.getRegisteredContentScripts()).length
     }))).toEqual({ enabled: false, scripts: 0 });
     await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0);
@@ -570,6 +571,69 @@ test('OFF during the final access check cannot be overwritten by the earlier ON 
   await expect(t.library.locator('#web-voice-status')).toContainText('Turn ON to retry');
   expect(await t.library.evaluate(async () => (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled)).toBe(false);
 });
+
+for (const boundary of ['permission request', 'final access check', 'rejected final access check']) {
+  test(`superseded ON at ${boundary} preserves a newer completed OFF then ON decision`, async ({ voice: t }) => {
+    test.skip(real, 'Permission synchronization does not require real inference.');
+    await t.library.evaluate(boundary => {
+      const request = chrome.permissions.request.bind(chrome.permissions), contains = chrome.permissions.contains.bind(chrome.permissions);
+      const set = chrome.storage.local.set.bind(chrome.storage.local), send = chrome.runtime.sendMessage.bind(chrome.runtime);
+      window.voiceWrites = []; window.voiceReconciles = []; window.voiceChanges = [];
+      chrome.storage.local.set = values => { voiceWrites.push(values); return set(values); };
+      chrome.runtime.sendMessage = message => {
+        if (message.type === 'web-voice-reconcile') voiceReconciles.push(message);
+        return send(message);
+      };
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes['web-voice-typing-v1']) voiceChanges.push(changes['web-voice-typing-v1'].newValue.enabled);
+      });
+      if (boundary === 'permission request') {
+        chrome.permissions.request = options => {
+          const grant = request(options);
+          return new Promise(resolve => { window.finishEarlierON = async () => resolve(await grant); });
+        };
+      } else {
+        let checks = 0;
+        chrome.permissions.contains = async options => {
+          const granted = await contains(options);
+          if (++checks === 2) {
+            await new Promise((resolve, reject) => {
+              window.finishEarlierON = () => boundary === 'rejected final access check' ? reject(Error('Controlled late access failure')) : resolve();
+            });
+          }
+          return granted;
+        };
+      }
+    }, boundary);
+    const toggle = t.library.locator('#web-voice-enabled');
+    await toggle.click();
+    await expect.poll(() => t.library.evaluate(() => !!window.finishEarlierON)).toBe(true);
+    const other = await t.context.newPage(); await other.goto(t.url + 'graph-library.html');
+    const newerToggle = other.locator('#web-voice-enabled');
+    // A final-check pause has already saved ON; a native-request pause has not.
+    if (boundary === 'permission request') { await newerToggle.click(); await expect(newerToggle).toBeEnabled(); }
+    await expect(newerToggle).toBeChecked();
+    await newerToggle.uncheck(); await expect(newerToggle).toBeEnabled();
+    await expect.poll(() => t.library.evaluate(() => voiceChanges.at(-1))).toBe(false);
+    await newerToggle.click(); await expect(newerToggle).toBeEnabled(); await expect(newerToggle).toBeChecked();
+    await expect.poll(() => t.library.evaluate(() => voiceChanges.at(-1))).toBe(true);
+    await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible();
+    const callsBefore = await t.library.evaluate(() => ({ writes: voiceWrites.length, reconciles: voiceReconciles.length }));
+    await t.library.evaluate(() => finishEarlierON());
+    await expect(toggle).toBeEnabled(); await expect(toggle).toBeChecked();
+    await expect(toggle).not.toHaveAttribute('aria-busy');
+    await expect(newerToggle).toBeChecked();
+    await expect(t.library.locator('#web-voice-status')).toBeEmpty();
+    expect(await t.library.evaluate(async () => ({
+      enabled: (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled,
+      scripts: (await chrome.scripting.getRegisteredContentScripts()).length,
+      calls: { writes: voiceWrites.length, reconciles: voiceReconciles.length }
+    }))).toEqual({ enabled: true, scripts: 1, calls: callsBefore });
+    await expect(widget(t.website)).toBeVisible();
+    await newerToggle.uncheck(); await expect(newerToggle).toBeEnabled();
+    await expect(toggle).not.toBeChecked(); await expect(widget(t.website)).toHaveCount(0);
+  });
+}
 
 test('graph actions cannot restore a stale disabled state after a pending microphone request finishes', async ({ voice: t }) => {
   test.skip(real, 'Independent Library controls do not require real inference.');

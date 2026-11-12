@@ -251,16 +251,23 @@ try {
       toggle.checked = savedEnabled; voiceMessage = '';
     } catch (error) {
       let failure = error.message, stateKnown = true;
-      try { await setVoiceEnabled(false); }
-      catch (saveError) { failure += ` Could not save OFF: ${saveError.message}`; }
+      // An OFF decision or removed grant supersedes this pending ON. Another
+      // Library may already have opted in again; only roll back our own failure.
+      if (!enabled || !enableCanceled) {
+        try { await setVoiceEnabled(false); }
+        catch (saveError) { failure += ` Could not save OFF: ${saveError.message}`; }
+      }
       // Stop existing controls even if storage is unavailable. This cleanup is
       // temporary until OFF is saved; a later reconciliation may restore ON.
-      try { await reconcileVoice(true); }
-      catch (stopError) { failure += ` Could not stop page controls: ${stopError.message} Close affected tabs to stop them.`; }
+      // Superseded ON operations leave cleanup to the newer decision instead.
+      if (!enabled || !enableCanceled) {
+        try { await reconcileVoice(true); }
+        catch (stopError) { failure += ` Could not stop page controls: ${stopError.message} Close affected tabs to stop them.`; }
+      }
       try { savedEnabled = await readVoiceEnabled(); }
       catch { stateKnown = false; }
       toggle.checked = savedEnabled;
-      voiceMessage = `${failure} ${!stateKnown
+      voiceMessage = enabled && enableCanceled && stateKnown && savedEnabled ? '' : `${failure} ${!stateKnown
         ? 'Could not verify saved settings. Web microphone may still be ON. Reload Graph Library to retry.'
         : savedEnabled ? 'Web microphone is still ON in saved settings and may restart. Turn OFF to retry, or reload Graph Library.'
           : 'Web microphone is OFF. Turn ON to retry, or reload Graph Library.'}`;
