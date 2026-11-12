@@ -90,11 +90,12 @@ const test = base.extend({
       const instrument = () => {
         if (!navigator.mediaDevices || window.voiceResources) return;
         window.voiceFinals = [];
-        window.voiceResources = { workers: [], streams: [], audioSamples: 0, arrivals: [], contexts: [] };
+        window.voiceResources = { workers: [], streams: [], acquisitions: [], audioSamples: 0, arrivals: [], contexts: [] };
         const NativeContext = AudioContext;
         window.AudioContext = class extends NativeContext { constructor(...args) { super(...args); voiceResources.contexts.push(this); } };
         const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
         navigator.mediaDevices.getUserMedia = async options => {
+          voiceResources.acquisitions.push({ active: navigator.userActivation.isActive });
           const stream = await getUserMedia(options); window.voiceResources.streams.push(stream); return stream;
         };
         const NativeWorker = Worker;
@@ -255,7 +256,7 @@ async function pageCapture(t, action = 'info') {
         const native = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
         navigator.mediaDevices.getUserMedia = async options => { const stream = await native(options); await new Promise(r => setTimeout(r, 1000)); return stream; };
       }
-      return { transport: globalThis.captureProbe?.measurements, worklet: !!globalThis.captureProbe?.node?.port, pending: globalThis.captureProbe?.pending.size, streams: voiceResources.streams.filter(s => s.active).length, contexts: voiceResources.contexts.map(c => c.state) };
+      return { acquisitions: voiceResources.acquisitions, transport: globalThis.captureProbe?.measurements, worklet: !!globalThis.captureProbe?.node?.port, pending: globalThis.captureProbe?.pending.size, streams: voiceResources.streams.filter(s => s.active).length, contexts: voiceResources.contexts.map(c => c.state) };
     } });
     return result.result;
   }, { url: t.website.url(), action });
@@ -1225,7 +1226,141 @@ async function addVoice(t, name, { disconnected = false, prefix = '' } = {}) {
 }
 const savedDefault = t => t.library.evaluate(async () => (await chrome.storage.local.get('web-microphone-default-v1'))['web-microphone-default-v1']);
 
-test('one automatic graph: right-click selection, keyboard and outside dismissal preserve field and caret without capture', async ({ voice: t }) => {
+async function holdGraphSave(t, id, fail = false) {
+  await toolbarWorker(t).evaluate(({ id, fail }) => {
+    const write = chrome.storage.local.set.bind(chrome.storage.local);
+    chrome.storage.local.set = async value => {
+      if (value['web-microphone-default-v1'] === id) {
+        await new Promise(resolve => { globalThis.releaseVoiceSave = resolve; });
+        chrome.storage.local.set = write;
+        if (fail) throw Error('Could not save default graph. Choose the graph again to retry.');
+      }
+      return write(value);
+    };
+  }, { id, fail });
+}
+async function chooseGraph(t, name, clickCount = 1) {
+  await rightMic(t);
+  const item = (await graphMenu(t)).find(x => x.name === name); expect(item).toBeTruthy();
+  await t.website.mouse.click(item.x + item.width / 2, item.y + item.height / 2, { clickCount });
+}
+// Retain read-only inspection after website access is revoked; extension
+// scripting APIs must no longer be able to inspect that document then.
+async function captureReader(t) {
+  const cdp = await t.context.newCDPSession(t.website), contexts = [];
+  cdp.on('Runtime.executionContextCreated', ({ context }) => contexts.push(context.id));
+  await cdp.send('Runtime.enable');
+  let contextId;
+  for (const id of contexts) {
+    const { result } = await cdp.send('Runtime.evaluate', { contextId: id, expression: 'typeof captureProbe !== "undefined"', returnByValue: true });
+    if (result.value) { contextId = id; break; }
+  }
+  expect(contextId).toBeDefined();
+  return {
+    async read() {
+      const { result } = await cdp.send('Runtime.evaluate', { contextId, returnByValue: true,
+        expression: '({streams:voiceResources.streams.filter(s=>s.active).length,contexts:voiceResources.contexts.map(c=>c.state)})' });
+      return result.value;
+    },
+    close: () => cdp.detach(),
+  };
+}
+
+test('graph-item click captures immediately during a slow save, executes the exact graph once and saves future clicks', async ({ voice: t }) => {
+  test.skip(real);
+  const b = await addVoice(t, 'Chosen graph', { prefix: 'B: ' });
+  await enable(t); await idle(t); await permission(t, 'granted');
+  await t.website.bringToFront(); await t.website.locator('#first').focus();
+  await t.website.locator('#first').evaluate(e => e.setSelectionRange(7, 7));
+  await expect(widget(t.website)).toBeVisible();
+  const pages = t.context.pages().length;
+  expect(await savedDefault(t)).toBe(t.graphId);
+  await holdGraphSave(t, b); await chooseGraph(t, 'Chosen graph', 2);
+  await expect.poll(() => toolbarWorker(t).evaluate(() => typeof releaseVoiceSave)).toBe('function');
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
+  await expect.poll(async () => (await pageCapture(t)).streams).toBe(1);
+  expect((await pageCapture(t)).acquisitions).toEqual([{ active: true }]);
+  expect(await savedDefault(t)).toBe(t.graphId);
+  expect(await graphMenu(t)).toEqual([]);
+  expect(await t.website.locator('#first').evaluate(e => [e.selectionStart, e.selectionEnd])).toEqual([7, 7]);
+  // Switching stays unavailable throughout the save, while Cancel stays usable.
+  await rightMic(t); expect(await graphMenu(t)).toEqual([]);
+  await toolbarWorker(t).evaluate(() => releaseVoiceSave());
+  await recording(t); await expect.poll(() => savedDefault(t)).toBe(b);
+  // The second click lands on the page after menu removal, so completion can
+  // hide the idle widget while the session still inserts into its original field.
+  await t.website.waitForTimeout(650); await mic(t.website); await idle(t);
+  const capture = await pageCapture(t);
+  expect(capture.streams).toBe(0); expect(capture.contexts.every(s => s === 'closed')).toBe(true);
+  await expect(t.website.locator('#first')).toHaveValue('before B: confirmed fixtureafter');
+  await start(t, '#second'); await recording(t);
+  await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await expect(t.website.locator('#second')).toHaveValue('left riB: confirmed fixtureght');
+  expect(t.context.pages()).toHaveLength(pages);
+  expect(await t.website.evaluate(() => submits)).toBe(0);
+});
+
+test('first site grant from a graph item starts at the original contenteditable selection', async ({ voice: t }) => {
+  test.skip(real); await enable(t); await idle(t); await permission(t, 'prompt');
+  expect(await t.website.evaluate(() => navigator.permissions.query({ name: 'microphone' }).then(p => p.state))).toBe('prompt');
+  await t.website.bringToFront(); await t.website.locator('#basic').focus();
+  await t.website.locator('#basic').evaluate(e => {
+    const range = document.createRange(); range.setStart(e.firstChild, 6); range.setEnd(e.firstChild, 11);
+    const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+  });
+  await expect(widget(t.website)).toBeVisible(); const pages = t.context.pages().length;
+  await chooseGraph(t, 'Dictation'); await recording(t);
+  await expect(t.website.locator('#basic')).toBeFocused();
+  expect((await pageCapture(t)).acquisitions).toEqual([{ active: true }]);
+  await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await expect(t.website.locator('#basic')).toHaveText('hello confirmed fixture');
+  expect(t.context.pages()).toHaveLength(pages);
+});
+
+for (const action of ['failed save', 'cancel', 'OFF', 'permission removal', 'target removed', 'disconnect']) test(`graph-item start during a slow save: ${action} releases audio without fallback`, async ({ voice: t }) => {
+  test.skip(real);
+  const b = await addVoice(t, 'Chosen graph');
+  await enable(t); await idle(t); await permission(t, 'granted');
+  await t.website.bringToFront(); await t.website.locator('#first').focus();
+  await expect(widget(t.website)).toBeVisible();
+  await holdGraphSave(t, b, action === 'failed save'); await chooseGraph(t, 'Chosen graph');
+  await expect.poll(() => toolbarWorker(t).evaluate(() => typeof releaseVoiceSave)).toBe('function');
+  await expect.poll(async () => (await pageCapture(t)).streams).toBe(1);
+  const reader = action === 'permission removal' ? await captureReader(t) : null;
+  if (action === 'cancel') await mic(t.website);
+  if (action === 'OFF') await toolbarVoice(t, false);
+  if (action === 'permission removal') await t.library.evaluate(() => chrome.permissions.remove({ origins: ['http://*/*', 'https://*/*'] }));
+  if (action === 'target removed') await t.website.locator('#first').evaluate(e => { e.disabled = true; });
+  if (action === 'disconnect') await t.website.reload();
+  await toolbarWorker(t).evaluate(() => releaseVoiceSave());
+  await idle(t);
+  const readCapture = () => reader ? reader.read() : pageCapture(t);
+  await expect.poll(async () => (await readCapture()).streams).toBe(0);
+  expect((await readCapture()).contexts.every(s => s === 'closed')).toBe(true);
+  await reader?.close();
+  await expect(t.website.locator('#first')).toHaveValue('before after');
+  if (action === 'failed save') {
+    expect(await savedDefault(t)).toBe(t.graphId);
+    await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error');
+    await expect(widget(t.website)).toHaveAttribute('title', /Could not save default graph/);
+  }
+});
+
+test('denied graph-item microphone permission releases capture and reports site-specific recovery', async ({ voice: t }) => {
+  test.skip(real); await enable(t); await idle(t); await permission(t, 'denied');
+  await t.website.bringToFront(); await t.website.locator('#first').focus();
+  await expect(widget(t.website)).toBeVisible(); await chooseGraph(t, 'Dictation');
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error');
+  await expect(widget(t.website)).toHaveAttribute('title', /Allow microphone access for this website/);
+  await idle(t);
+  const capture = await pageCapture(t);
+  expect(capture.acquisitions).toEqual([{ active: true }]); expect(capture.streams).toBe(0);
+  expect(capture.contexts.every(s => s === 'closed')).toBe(true);
+  await expect(t.website.locator('#first')).toHaveValue('before after');
+});
+
+test('one automatic graph: menu dismissal preserves caret and Enter immediately starts at the saved selection', async ({ voice: t }) => {
+  test.skip(real);
   await enable(t); await t.website.bringToFront();
   await t.website.locator('#first').focus(); await t.website.locator('#first').evaluate(e => e.setSelectionRange(3, 7));
   await expect(widget(t.website)).toBeVisible(); await idle(t);
@@ -1234,9 +1369,14 @@ test('one automatic graph: right-click selection, keyboard and outside dismissal
   await t.website.keyboard.press('Escape'); expect(await graphMenu(t)).toEqual([]);
   expect(await t.website.locator('#first').evaluate(e => [document.activeElement === e, e.selectionStart, e.selectionEnd])).toEqual([true, 3, 7]);
   await controlUI(t, true); await t.website.keyboard.press('Shift+F10'); expect(await graphMenu(t)).toHaveLength(1);
-  await t.website.keyboard.press('Enter'); await expect.poll(() => savedDefault(t)).toBe(t.graphId); await idle(t);
+  await permission(t, 'granted');
+  await t.website.keyboard.press('Enter'); await expect.poll(() => savedDefault(t)).toBe(t.graphId); await recording(t);
   expect(await graphMenu(t)).toEqual([]); await expect(t.website.locator('#first')).toHaveValue('before after');
   expect(await t.website.evaluate(() => [submits, edits.length])).toEqual([0, 0]);
+  expect(await t.website.locator('#first').evaluate(e => [document.activeElement === e, e.selectionStart, e.selectionEnd])).toEqual([true, 3, 7]);
+  expect((await pageCapture(t)).acquisitions).toEqual([{ active: true }]);
+  await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await expect(t.website.locator('#first')).toHaveValue('befconfirmed fixtureafter');
   await rightMic(t); await t.website.locator('#second').click(); expect(await graphMenu(t)).toEqual([]);
   await expect(t.website.locator('#second')).toBeFocused();
   // Menu dismissal with Tab returns to the ordinary tab order.
@@ -1251,7 +1391,7 @@ test('one automatic graph: right-click selection, keyboard and outside dismissal
   expect(await t.website.locator('#basic').evaluate(e => [document.activeElement === e, getSelection().anchorOffset])).toEqual([true, 3]);
 });
 
-test('multiple graphs require a choice; selection persists across tabs and reloads without capture; running sessions retain snapshots', async ({ voice: t }, info) => {
+test('multiple graphs require a choice; selection starts immediately and persists across tabs and reloads; running sessions retain snapshots', async ({ voice: t }, info) => {
   test.skip(real);
   const b = await addVoice(t, 'Formatted dictation', { prefix: 'B: ' });
   await addVoice(t, 'Disconnected microphone', { disconnected: true });
@@ -1266,9 +1406,12 @@ test('multiple graphs require a choice; selection persists across tabs and reloa
   expect((await graphMenu(t)).map(({ name, selected }) => ({ name, selected }))).toEqual([
     { name: 'Dictation', selected: false }, { name: 'Formatted dictation', selected: false }]);
   await t.website.screenshot({ path: info.outputPath('mic-graph-menu.png') });
-  await t.website.keyboard.press('End'); await t.website.keyboard.press('Enter');
-  await expect.poll(() => savedDefault(t)).toBe(b); await idle(t);
-  await expect(t.website.locator('#first')).toHaveValue('before after');
+  await permission(t, 'granted');
+  await t.website.keyboard.press('End'); await t.website.keyboard.press('Space');
+  await expect.poll(() => savedDefault(t)).toBe(b); await recording(t);
+  expect((await pageCapture(t)).acquisitions).toEqual([{ active: true }]);
+  await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await expect(t.website.locator('#first')).toHaveValue(/B: confirmed fixture/);
   const second = await t.context.newPage(); await second.goto(t.website.url());
   const peer = { ...t, website: second };
   await second.locator('#first').focus(); await expect(widget(second)).toBeVisible(); await rightMic(peer);
@@ -1303,14 +1446,17 @@ test('preparing and stopping reject right-click and keyboard switching until cle
 });
 
 test('deleting defaults requires reselection for multiple candidates; zero graphs hides icons while opt-in stays ON', async ({ voice: t }) => {
+  test.skip(real);
   await addVoice(t, 'Second'); const c = await addVoice(t, 'Third');
   await enable(t); await t.website.bringToFront(); await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible();
   await t.library.evaluate(async id => { const { GraphLibrary } = await import('./graph-library.js'); await new GraphLibrary(localStorage).delete(id); }, t.graphId);
   await expect.poll(() => savedDefault(t)).toBe(null);
   await mic(t.website); await expect(widget(t.website)).toHaveAttribute('title', /choose a voice graph/); await idle(t);
   await rightMic(t); expect((await graphMenu(t)).map(x => x.selected)).toEqual([false, false]);
+  await permission(t, 'granted');
   const item = (await graphMenu(t)).find(x => x.name === 'Third');
   await t.website.mouse.click(item.x + item.width / 2, item.y + item.height / 2); await expect.poll(() => savedDefault(t)).toBe(c);
+  await recording(t); await stop(t); await idle(t);
   await t.library.evaluate(async () => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js'), { defaultGraph } = await import('./graph.js');
     const store = new GraphLibrary(localStorage);
@@ -1321,10 +1467,12 @@ test('deleting defaults requires reselection for multiple candidates; zero graph
 });
 
 test('the selected default and explicit consent survive a full browser restart', async ({ voice: t }) => {
+  test.skip(real);
   const b = await addVoice(t, 'Saved default'); await positionMenu(t, 'left'); await enable(t);
   await t.website.bringToFront(); await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible();
+  await permission(t, 'granted');
   await rightMic(t); await t.website.keyboard.press('End'); await t.website.keyboard.press('Enter');
-  await expect.poll(() => savedDefault(t)).toBe(b); await idle(t);
+  await expect.poll(() => savedDefault(t)).toBe(b); await recording(t); await stop(t); await idle(t);
   await t.restart(); await expect.poll(async () => (await toolbarVoiceState(t))?.checked).toBe(true);
   await expect.poll(() => toolbarWorker(t).evaluate(() => toolbarMenus['microphone-position:left']?.checked)).toBe(true);
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible(); await rightMic(t);
