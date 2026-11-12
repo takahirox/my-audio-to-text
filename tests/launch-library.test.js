@@ -125,7 +125,7 @@ test('Web launch choices resolve shared ASR through the same compatibility bound
 });
 
 
-test('first-name fallback and Open use Japanese numeric ordering with stable ID ties, independently of storage order', async () => {
+test('first-name fallback and Launch use Japanese numeric ordering with stable ID ties, independently of storage order', async () => {
   const f = await fixture();
   for (const [id, name] of [['z', 'Same'], ['b', 'い'], ['a', 'あ'], ['n10', 'Graph 10'], ['n2', 'Graph 2'], ['a-tie', 'Same']]) {
     await f.store.create({ id, name, graph: simple() });
@@ -146,7 +146,7 @@ test('first-name fallback and Open use Japanese numeric ordering with stable ID 
   assert.equal((await f.launch('live-list')).defaultId, 'a');
 });
 
-test('ordinary refreshes, checks and repeated Open do not revise or notify storage; concurrent fallback writes once', async () => {
+test('ordinary refreshes, checks and repeated Launch do not revise or notify storage; concurrent fallback writes once', async () => {
   const f = await fixture();
   await f.store.create({ id: 'a', name: 'A', graph: simple() });
   await f.store.change(current => { current.assignments.live = null; });
@@ -203,7 +203,7 @@ test('explicit stale/invalid selections and failed commits never substitute or p
   assert.equal(other.storage.getItem(LIBRARY_KEY), unselected);
 });
 
-test('an explicit Open choice deleted before the selection lock is acquired fails without fallback', async () => {
+test('an explicit Launch choice deleted before the selection lock is acquired fails without fallback', async () => {
   const f = await fixture();
   await f.store.create({ id: 'chosen', name: 'A chosen', graph: simple() });
   const request = f.locks.request.bind(f.locks); let calls = 0, deleted;

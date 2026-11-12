@@ -33,13 +33,13 @@ async function save(page, id, graph) {
   }, { id, graph });
 }
 
-test('native Graphs → Open remembers selections, refreshes names and preserves independent invoking tabs', async ({ libraryExtension: f }) => {
+test('native Graphs → Launch remembers selections, refreshes names and preserves independent invoking tabs', async ({ libraryExtension: f }) => {
   const a = await create(f.page, 'A', simple('A')), b = await create(f.page, 'B', simple('B'));
   const draft = await create(f.page, 'Unconnected', { version: 15, nodes: [graphNode('Text', 'parked')], edges: [] });
   await waitMenu(f, 'live-run:' + a, 'A');
   await expect.poll(async () => (await choices(f)).filter(item => item.id.startsWith('live-')).map(({ id, parentId, title, type }) => ({ id, parentId, title, type }))).toEqual([
     { id: 'live-graphs', title: 'Graphs' },
-    { id: 'live-open', parentId: 'live-graphs', title: 'Open' },
+    { id: 'live-open', parentId: 'live-graphs', title: 'Launch' },
     { id: 'live-run:' + a, parentId: 'live-open', title: 'A', type: 'radio' },
     { id: 'live-run:' + b, parentId: 'live-open', title: 'B', type: 'radio' },
     { id: 'live-run:default-live', parentId: 'live-open', title: 'Live transcription', type: 'radio' },
@@ -193,7 +193,7 @@ test('three simultaneous sessions keep graph snapshots, independent workers, Sto
   await expect.poll(() => pages[2].evaluate(() => modelWorkers.every(worker => worker.released))).toBe(true);
 });
 
-test('missing/deleted/invalid selections fall back by name; stale Open IDs never substitute', async ({ libraryExtension: f }) => {
+test('missing/deleted/invalid selections fall back by name; stale Launch IDs never substitute', async ({ libraryExtension: f }) => {
   const a = await create(f.page, 'A', simple('A'));
   const b = await create(f.page, 'B', simple('B'));
   await f.page.evaluate(async () => {
@@ -223,7 +223,7 @@ test('missing/deleted/invalid selections fall back by name; stale Open IDs never
   expect((await library(f.page)).assignments.live).toBe('default-live');
 });
 
-test('unset selection uses the same numeric, kana and stable tie order as Open without writes on reads', async ({ libraryExtension: f }) => {
+test('unset selection uses the same numeric, kana and stable tie order as Launch without writes on reads', async ({ libraryExtension: f }) => {
   await f.page.evaluate(async graph => {
     const { GraphLibrary } = await import('./graph-library.js');
     const store = new GraphLibrary(localStorage);
@@ -259,7 +259,7 @@ test('unset selection uses the same numeric, kana and stable tie order as Open w
   expect((await library(f.page)).assignments.live).toBe('kana-a');
 });
 
-test('no runnable graphs keep Open empty, left-click errors visible and Graph Library reachable', async ({ libraryExtension: f }) => {
+test('no runnable graphs keep Launch empty, left-click errors visible and Graph Library reachable', async ({ libraryExtension: f }) => {
   await f.page.evaluate(async () => {
     const { GraphLibrary } = await import('./graph-library.js');
     await new GraphLibrary(localStorage).change(library => { library.graphs[0].graph = null; library.assignments.live = null; });
@@ -276,7 +276,7 @@ test('no runnable graphs keep Open empty, left-click errors visible and Graph Li
   await expect(page.locator('#graph-list button[data-id]')).toHaveCount(1);
 });
 
-test('last Open selection survives a browser/worker restart and the native menus are reconstructed', async ({ libraryExtension: f }) => {
+test('last Launch selection survives a browser/worker restart and the native menus are reconstructed', async ({ libraryExtension: f }) => {
   const id = await create(f.page, 'Persisted', simple('saved'));
   await open(f, id);
   await expect.poll(async () => (await library(f.page)).assignments.live).toBe(id);

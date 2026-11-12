@@ -231,7 +231,7 @@ test('stream end during pending capture setup settles startup and drains once', 
   assert.equal(f.session.view.state, 'idle');
 });
 
-test('toolbar Open remembers its selection and preserves invoking tabs in distinct windows', async () => {
+test('toolbar Launch remembers its selection and preserves invoking tabs in distinct windows', async () => {
   let invoke, menu; const created = [], items = [];
   const listener = () => ({ addListener() {} });
   let defaultId = 'a';
@@ -266,7 +266,7 @@ test('toolbar Open remembers its selection and preserves invoking tabs in distin
   invoke({ id: 77 }); await drain();
   assert.equal(new URL(created[3].url).searchParams.get('graph'), 'b');
   assert.ok(items.some(item => item.id === 'live-graphs' && item.title === 'Graphs'));
-  assert.ok(items.some(item => item.id === 'live-open' && item.parentId === 'live-graphs' && item.title === 'Open'));
+  assert.ok(items.some(item => item.id === 'live-open' && item.parentId === 'live-graphs' && item.title === 'Launch'));
   assert.ok(items.some(item => item.id === 'live-library' && item.parentId === 'live-graphs'));
   assert.ok(items.filter(item => item.id.startsWith('live-run:')).every(item => item.parentId === 'live-open' && item.type === 'radio' && ['A', 'B'].includes(item.title)));
   assert.ok(!items.some(item => /Live graphs|Default for left-click|Live default/.test(item.title)));
