@@ -73,8 +73,10 @@ in a compact Live window. The [Graph Library](docs/extension-graph.md#graph-libr
 graphs in a responsive workspace. Left-click the toolbar icon for its saved Live
 default; right-click for Chrome's native graph launcher and default submenu.
 Each launch opens an independent window, with capture beginning only on Start.
-The Library retains a compact, default-OFF Web microphone consent switch; choose
-its graph from the in-page mic's right-click menu (also Shift+F10). The page mic
+The Library retains a compact, default-OFF Web microphone switch. Turning ON
+directly requests Chrome’s optional website access, with a native prompt only if
+needed; denial leaves it OFF. Choose its graph from the in-page mic's right-click
+menu (also Shift+F10). The page mic
 requests the current website’s native microphone permission and captures there;
 mono PCM stays local and feeds the existing extension graph. No setup tab opens.
 HTTPS (or localhost) and a website policy allowing microphone capture are required.

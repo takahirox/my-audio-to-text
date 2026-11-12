@@ -128,7 +128,9 @@ function reconcile() {
       endAll('Web voice typing disabled or website permission removed.');
       for (const port of controls) post(port, { type: 'disabled' });
       if (registered) await chrome.scripting.unregisterContentScripts({ ids: [scriptId] });
-      if (await readVoiceEnabled()) await setVoiceEnabled(false);
+      // An earlier OFF snapshot may finish after the switch grants access and
+      // saves ON. Clear opt-in only if website access is still actually missing.
+      if (await readVoiceEnabled() && !await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS })) await setVoiceEnabled(false);
       return;
     }
     if (!registered) await chrome.scripting.registerContentScripts([{ id: scriptId, matches: WEB_VOICE_ORIGINS,

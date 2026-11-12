@@ -58,12 +58,15 @@ Choose graphs where they launch:
 
 The compact **Web microphone ON/OFF** control in the Library header, immediately
 before the rightmost **Models** link, starts OFF without explicit opt-in. Turning
-ON opens the consent dialog; **Continue to website permission** requests the same
-optional access to all HTTP/HTTPS websites.
-Cancel or denial leaves controls OFF. Choosing a default never enables them or
-requests microphone access. Turn OFF to remove controls and cancel Web sessions;
-the saved Web default remains. OFF remains available even if library storage needs
-recovery. The adjacent **ⓘ** control (**Website access and microphone help**)
+ON directly requests Chrome’s optional access to all HTTP/HTTPS websites from
+the switch interaction, with no extension confirmation dialog or second click.
+If access is already granted, no extra prompt is needed. While Chrome’s native
+request or script registration is pending, the switch stays OFF and busy/disabled.
+Denial, dismissal or setup failure leaves controls OFF with retry guidance.
+Choosing a default never enables them or requests microphone access. Turn OFF to
+remove controls and cancel Web sessions; the saved Web default and previously
+granted website access remain. OFF remains available even if library storage
+needs recovery. The adjacent **ⓘ** control (**Website access and microphone help**)
 discloses permission patterns, unsupported fields/pages, local processing,
 microphone consent and Chrome Site access revocation. Help opens by click,
 touch, Enter or Space and closes with Escape or an outside click. Only errors

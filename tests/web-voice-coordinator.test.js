@@ -50,8 +50,30 @@ async function fixture(t, { existingDocument = false } = {}) {
   function output(token, url = created.at(-1)?.url) { return connect(`web-voice-output:${token}`, { url }); }
   t.after(async () => { chrome.storage.onChanged.emit({ voice: { newValue: { enabled: false } } }, 'local'); await turn(); assert.equal(timers.size, 0); });
   await turn();
-  return { requestLibrary: globals.requestLaunchLibrary, chrome, library, preferences, control, start, host, output, connect, created, removed, timers, relays, setups, closed: () => closed };
+  return { globals, requestLibrary: globals.requestLaunchLibrary, chrome, library, preferences, control, start, host, output, connect, created, removed, timers, relays, setups, closed: () => closed };
 }
+
+test('an earlier OFF reconciliation cannot clear a newly granted ON preference', async t => {
+  const f = await fixture(t);
+  let enabled = false, releaseInspection, registered = [];
+  f.globals.readVoiceEnabled = async () => enabled;
+  f.globals.setVoiceEnabled = async value => { enabled = value; };
+  f.chrome.scripting.getRegisteredContentScripts = () => new Promise(resolve => { releaseInspection = () => resolve(registered); });
+  const reconcile = () => new Promise(resolve => f.chrome.runtime.onMessage.emit({ type: 'web-voice-reconcile' },
+    { id: 'extension', url: 'chrome-extension://extension/extension/graph-library.html' }, resolve));
+  const earlier = reconcile(); await turn();
+  assert.equal(typeof releaseInspection, 'function');
+  enabled = true; releaseInspection(); await earlier;
+  assert.equal(enabled, true);
+  f.chrome.scripting.getRegisteredContentScripts = async () => registered;
+  f.chrome.scripting.registerContentScripts = async scripts => { registered = scripts; };
+  f.chrome.scripting.unregisterContentScripts = async () => { registered = []; };
+  assert.equal((await reconcile()).ok, true);
+  assert.equal(registered.length, 1); assert.equal(enabled, true);
+  f.chrome.permissions.contains = async () => false;
+  assert.equal((await reconcile()).ok, true);
+  assert.equal(enabled, false); assert.equal(registered.length, 0);
+});
 
 test('one authenticated offscreen host multiplexes independent documents and rejects forged owners', async t => {
   const f = await fixture(t), a = f.control(1), b = f.control(2); await turn();

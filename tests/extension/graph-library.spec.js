@@ -117,8 +117,6 @@ test('microphone reconciliation errors remain visible even while OFF', async ({ 
     const send = chrome.runtime.sendMessage.bind(chrome.runtime);
     chrome.runtime.sendMessage = message => message.type === 'web-voice-reconcile' ? Promise.resolve({ error: 'Microphone setup failed. Retry by turning ON again.' }) : send(message);
   });
-  await toggle.click(); await page.locator('#cancel-voice').click();
-  await expect(status).toBeEmpty();
   // OFF reconciliation can fail too; the error must not disappear with the
   // nominal OFF instructions.
   await toggle.evaluate(node => { node.checked = true; });
@@ -489,7 +487,7 @@ test('export waits for autosave, and a later selection cancels an earlier pendin
   expect((await library(page)).graphs.find(entry => entry.id === a).description).toBe('Latest export details');
 });
 
-test('inline accordion, More menu and consent fit desktop, mobile, zoom and forced colors', async ({ libraryExtension: { page } }) => {
+test('inline accordion, More menu and microphone help fit desktop, mobile, zoom and forced colors', async ({ libraryExtension: { page } }) => {
   const id = await create(page, 'A long graph name that wraps on small screens', simple());
   await page.reload();
   const row = page.locator(`#graph-list button[data-id="${id}"]`);
@@ -506,8 +504,9 @@ test('inline accordion, More menu and consent fit desktop, mobile, zoom and forc
     await page.keyboard.press('Escape'); await expect(page.locator('#graph-more > summary')).toBeFocused();
     await expect(page.locator('#graph-more')).not.toHaveAttribute('open');
     await expect(page.locator('.row-menu, dialog#selected, aside, nav, #launch-settings, #preview')).toHaveCount(0);
-    await page.locator('#web-voice-enabled').press('Space'); await expect(page.locator('#voice-consent')).toBeVisible();
-    await page.keyboard.press('Escape'); await expect(page.locator('#web-voice-enabled')).toBeFocused();
+    await page.locator('#web-voice-help > summary').press('Space'); await expect(page.locator('#web-voice-help > div')).toBeVisible();
+    await page.keyboard.press('Escape'); await expect(page.locator('#web-voice-help > summary')).toBeFocused();
+    await expect(page.locator('dialog')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath(`accordion-${width}.png`), fullPage: true });
     await row.click(); await expect(page.locator('#selected')).toBeHidden();

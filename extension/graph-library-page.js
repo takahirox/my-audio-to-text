@@ -159,7 +159,7 @@ async function action(work, { selectNew = false, recover = false, onError } = {}
   if (actionPending) return false;
   actionPending = true; ++selectionRequest;
   if (!recover && !await details.flush()) { actionPending = false; return false; }
-  const controls = [...document.querySelectorAll('#new, main button, main input, main select, main textarea')].map(node => [node, node.disabled]);
+  const controls = [...document.querySelectorAll('#new, main button, main input:not(#web-voice-enabled), main select, main textarea')].map(node => [node, node.disabled]);
   for (const [node] of controls) node.disabled = true;
   const restore = () => { for (const [node, disabled] of controls) node.disabled = disabled; };
   try {
@@ -197,67 +197,96 @@ try {
   fatal = true; element('errors').textContent = error.message;
   element('recovery').hidden = false; element('recover-legacy').hidden = true;
   element('recovery-message').textContent = 'Original storage is available for export. No saved data has been overwritten.';
-  for (const node of document.querySelectorAll('#new, main button, main input, main select')) node.disabled = !['export-storage', 'export-legacy', 'web-voice-enabled', 'confirm-voice', 'cancel-voice'].includes(node.id);
+  for (const node of document.querySelectorAll('#new, main button, main input:not(#web-voice-enabled), main select')) node.disabled = !['export-storage', 'export-legacy'].includes(node.id);
   element('selected').hidden = true;
 }
 // Consent remains revocable even if graph storage needs recovery.
 {
   const help = element('web-voice-help');
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && help.open && !element('voice-consent').open) {
+    if (event.key === 'Escape' && help.open) {
       help.open = false; help.querySelector('summary').focus();
     }
   });
   document.addEventListener('click', event => { if (!help.contains(event.target)) help.open = false; });
-  const toggle = element('web-voice-enabled'), status = element('web-voice-status'), consent = element('voice-consent');
-  let voiceMessage = '', hasWebsiteAccess = true;
+  const toggle = element('web-voice-enabled'), status = element('web-voice-status');
+  let voiceMessage = '', hasWebsiteAccess = true, voicePending = false, enableCanceled = false, savedEnabled = false, accessCheck = 0, preferenceChange = 0;
   refreshVoiceStatus = () => {
     element('voice-switch-state').textContent = toggle.checked ? 'ON' : 'OFF';
     const count = library ? webVoiceChoices(library).length : null;
     status.textContent = voiceMessage || (toggle.checked && !hasWebsiteAccess ? 'Website access missing. Turn OFF, then ON to grant access.' : count === 0 ? 'No compatible graphs. Connect MicrophoneAudio through final text processing to FocusedInputTextOutputNode in Graph Editor.' : '');
   };
-  toggle.checked = await readVoiceEnabled();
   const checkWebsiteAccess = async () => {
-    hasWebsiteAccess = await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS }); refreshVoiceStatus();
+    const check = ++accessCheck;
+    try {
+      const granted = await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS });
+      if (check === accessCheck) hasWebsiteAccess = granted;
+    } catch { voiceMessage = 'Could not check website access. Turn ON to retry, or reload Graph Library.'; }
+    refreshVoiceStatus();
   };
-  await checkWebsiteAccess();
+  async function reconcileVoice() {
+    const reply = await chrome.runtime.sendMessage({ type: 'web-voice-reconcile' });
+    if (!reply?.ok) throw Error(reply?.error || 'Web microphone did not respond.');
+  }
   async function changeVoice(enabled, permission) {
-    toggle.disabled = true; voiceMessage = '';
+    const restoreFocus = document.activeElement === toggle;
+    voicePending = true; enableCanceled = false; toggle.disabled = true; toggle.checked = false;
+    toggle.setAttribute('aria-busy', 'true');
+    voiceMessage = enabled ? 'Requesting website access…' : 'Turning Web microphone OFF…'; refreshVoiceStatus();
     try {
       if (enabled) {
-        if (!await permission) throw Error('Website access denied. Microphone buttons remain OFF. Turn ON again to request access.');
+        if (!await permission) throw Error('Website access denied or dismissed.');
+        // A grant can be removed, or another Library can turn OFF, while the
+        // native prompt is pending. Never overwrite that newer OFF decision.
+        if (!await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS })) throw Error('Website access changed.');
         hasWebsiteAccess = true;
       }
-      await setVoiceEnabled(enabled); toggle.checked = enabled;
-      const reply = await chrome.runtime.sendMessage({ type: 'web-voice-reconcile' });
-      if (reply?.error) throw Error(reply.error);
+      if (enabled && enableCanceled) throw Error('Website access or opt-in changed.');
+      await setVoiceEnabled(enabled);
+      await reconcileVoice();
+      savedEnabled = await readVoiceEnabled();
+      if (enabled) {
+        const granted = await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS });
+        if (enableCanceled || !savedEnabled || !granted) throw Error('Website access or opt-in changed.');
+      }
+      toggle.checked = savedEnabled; voiceMessage = '';
     } catch (error) {
-      voiceMessage = error.message; toggle.checked = false;
-      try { await setVoiceEnabled(false); } catch (saveError) { voiceMessage += ` ${saveError.message}`; }
-    } finally { toggle.disabled = false; refreshVoiceStatus(); toggle.focus(); }
+      voiceMessage = `${error.message} Web microphone is OFF. Turn ON to retry, or reload Graph Library.`;
+      toggle.checked = false;
+      try { await setVoiceEnabled(false); await reconcileVoice(); }
+      catch (saveError) { voiceMessage += ` Could not finish disabling: ${saveError.message} Reload Graph Library to retry.`; }
+    } finally {
+      voicePending = false; toggle.disabled = false; toggle.removeAttribute('aria-busy'); refreshVoiceStatus();
+      if (restoreFocus && [document.body, toggle].includes(document.activeElement)) toggle.focus({ preventScroll: true });
+    }
   }
   toggle.onchange = () => {
-    voiceMessage = '';
+    if (voicePending) { toggle.checked = false; return; }
     if (!toggle.checked) { void changeVoice(false); return; }
-    toggle.checked = false;
-    refreshVoiceStatus(); consent.showModal();
-  };
-  element('confirm-voice').onclick = () => {
-    // Stay in this explicit user gesture for Chrome's native permission flow.
+    // Request synchronously in the switch gesture, before any storage read,
+    // contains check, messaging or await can consume Chrome's user activation.
     let permission;
     try { permission = chrome.permissions.request({ origins: WEB_VOICE_ORIGINS }); }
     catch (error) { permission = Promise.reject(error); }
-    consent.close(); void changeVoice(true, permission);
+    void changeVoice(true, permission);
   };
-  element('cancel-voice').onclick = () => consent.close();
-  consent.addEventListener('close', () => toggle.focus());
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[WEB_VOICE_KEY]) {
-      toggle.checked = voiceEnabled(changes[WEB_VOICE_KEY].newValue); refreshVoiceStatus();
+      ++preferenceChange;
+      savedEnabled = voiceEnabled(changes[WEB_VOICE_KEY].newValue);
+      if (voicePending && !savedEnabled) enableCanceled = true;
+      if (!voicePending) { toggle.checked = savedEnabled; voiceMessage = ''; }
+      refreshVoiceStatus();
     }
   });
-  chrome.permissions.onRemoved.addListener(() => { void checkWebsiteAccess(); });
+  chrome.permissions.onRemoved.addListener(() => { if (voicePending) enableCanceled = true; void checkWebsiteAccess(); });
   chrome.permissions.onAdded.addListener(() => { void checkWebsiteAccess(); });
+  try {
+    const change = preferenceChange, enabled = await readVoiceEnabled();
+    if (change === preferenceChange) { savedEnabled = enabled; toggle.checked = savedEnabled; }
+  }
+  catch { voiceMessage = 'Could not read Web microphone settings. Reload Graph Library to retry.'; }
+  await checkWebsiteAccess();
   refreshVoiceStatus(); toggle.disabled = false;
 }
 if (!fatal) {
