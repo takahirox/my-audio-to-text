@@ -8,10 +8,9 @@ English or Text-driven Japanese recognition; see [Whisper setup and testing](whi
 choose [Streaming Zipformer English ASR](zipformer-node.md), or opt into the independent
 [Parakeet v3 and Moonshine Medium Streaming Nodes](optional-asr-nodes.md). The default whole-tab
 graph needs no page injection or
-media picker. Optional microphone, selected media and page-field outputs are
+media picker. Optional microphone and page-field outputs are
 configured in Graph Editor. Focused output follows the toolbar tab automatically;
-microphone permission is requested by Start. Selected-page media is temporarily
-unavailable (see below).
+microphone permission is requested by Start.
 
 The extension uses the shared Node/Port runtime:
 
@@ -163,7 +162,7 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 
 ## Optional page and microphone workflows
 
-Edit a graph with whole-tab, selected-media and/or microphone Inputs and
+Edit a graph with whole-tab and/or microphone Inputs and
 one or more outputs. Multiple independent ASRs and displays run concurrently;
 parked or unfinished Nodes remain saved but inactive. See the
 [execution and permission policy](extension-graph.md). Graph Editor owns source
@@ -197,14 +196,6 @@ connections appear only in Session details. Page navigation, closure or permissi
 detaches the sink. Stop and invoke the page toolbar again to recover; a running
 session never retargets when another tab's action is invoked. Page targets are
 not persisted. Unsupported saved field/display ports require Reset or Import of a current graph and automatic persistence of a repaired graph copy.
-
-**Temporary selected-media limitation:** `SelectedPageMediaAudio` cannot capture
-until a replacement selection workflow exists. Live no longer offers discovery
-or element selection. Start reports an error naming the source and suggesting
-`ChromeTabAudio` in Graph Editor; it never guesses an element or silently captures
-whole-tab audio. Independent complete graph branches continue. Selection on the
-target Web page is explicitly deferred to a separate task. Saved graph topology
-is preserved.
 
 For microphone save **Microphone audio**
 and press Start to request browser permission; denied/canceled permission is
@@ -334,7 +325,7 @@ can still alter the shared DOM or read text inserted into their own fields, as b
 The assigned graph is snapshotted at session start. Only **one executable
 FocusedInputTextOutputNode and its complete typed ancestors** run; optional Live,
 speaker or other output branches are omitted, not initialized. Any executable
-ChromeTabAudio/SelectedPageMediaAudio path makes a graph incompatible. The
+ChromeTabAudio path makes a graph incompatible. The
 eligible field path starts at MicrophoneAudio, passes through an existing ASR's
 `final`, and may use TextFormatter, TextWindow, OPUS-MT, TranslateGemma or
 IfCondition or the existing text-summary Nodes. Number configuration and Text→ASR language / translation context configuration are allowed.
@@ -500,11 +491,7 @@ cross-browser extension support. No post-merge verification is required by #61.
 3. Cause a missing model, failed operation or denied permission. Verify one
    actionable error per Node appears in the alert (with Models recovery for
    optional models). Start a fresh healthy session: old errors must disappear.
-4. Connect SelectedPageMediaAudio to an output. Start remains available and
-   reports the temporary selection limitation with a ChromeTabAudio suggestion.
-   Add an independent text/capture path: that branch must still work. Nothing
-   should select an element, inject a picker or silently switch capture modes.
-   For focused output, invoke the toolbar on a normal page with a supported field
+4. For focused output, invoke the toolbar on a normal page with a supported field
    focused; successful connection/insertion counts belong in Session details,
    while unavailable output/permission errors remain visible.
 

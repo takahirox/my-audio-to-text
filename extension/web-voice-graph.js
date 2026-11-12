@@ -5,7 +5,7 @@ import { resolveSubgraphs } from './subgraphs.js';
 // speaker and other output branches never run in the page-mic workflow.
 export function webVoiceGraph(value) {
   const graph = executableGraph(assertGraph(value));
-  if (graph.nodes.some(n => ['ChromeTabAudio', 'SelectedPageMediaAudio'].includes(n.type))) throw Error('Web voice typing cannot run tab or selected-media capture. Use a microphone-only graph.');
+  if (graph.nodes.some(n => n.type === 'ChromeTabAudio')) throw Error('Web voice typing cannot run tab capture. Use a microphone-only graph.');
   const sinks = graph.nodes.filter(n => n.type === 'FocusedInputTextOutputNode');
   if (sinks.length !== 1) throw Error('Connect one executable MicrophoneAudio → ASR final → FocusedInputTextOutputNode path in Graph Editor.');
   const needed = new Set(), pending = [sinks[0].id];

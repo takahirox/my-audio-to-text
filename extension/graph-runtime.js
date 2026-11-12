@@ -14,7 +14,7 @@ import { ExtensionTab } from './tab-source.js';
 import { ExtensionTabAudioNode } from './tab-audio-node.js';
 import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
-import { SelectedPageMediaAudioNode, ExtensionMicrophoneAudioNode } from './media-source.js';
+import { ExtensionMicrophoneAudioNode } from './media-source.js';
 import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
 import { executableGraph, INPUT_TYPES, ASR_TYPES, nodeDefinition } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
@@ -214,8 +214,6 @@ export function buildGraph(graph, options) {
       case 'Number': node = new NumberNode(spec.settings); break;
       case 'ChromeTabAudio':
         node = new ExtensionTabAudioNode(options.tabId, { sourceFactory: tabSourceFactory, onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
-      case 'SelectedPageMediaAudio':
-        node = new SelectedPageMediaAudioNode({ onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'MicrophoneAudio':
         node = new ExtensionMicrophoneAudioNode(options.microphoneStreams?.get(spec.id), { microphoneSourceFactory: options.microphoneSourceFactory, onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'FocusedInputTextOutputNode':

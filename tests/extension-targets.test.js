@@ -57,7 +57,7 @@ test('toolbar preparation authorizes only executable focused outputs, leaving pa
 test('direct TEXT input accepts different producers and all audio sources; removed diagnostic ports cannot connect', () => {
   assert.deepEqual(NODE_TYPES.FocusedInputTextOutputNode.inputs, { text: TEXT });
   assert.equal(NODE_TYPES.SelectedFormFieldTextOutputNode, undefined);
-  for (const translated of [false, true]) for (const type of ['ChromeTabAudio', 'SelectedPageMediaAudio', 'MicrophoneAudio']) {
+  for (const translated of [false, true]) for (const type of ['ChromeTabAudio', 'MicrophoneAudio']) {
     const graph = fieldGraph(translated); graph.nodes[0].type = type;
     assert.deepEqual(validateGraph(graph), []); assert.ok(buildGraph(graph, { onTranscript() {}, onTranslation() {} }).pipeline);
     graph.edges.at(-1).from = ['speech', 'provisional'];

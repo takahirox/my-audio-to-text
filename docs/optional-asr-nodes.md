@@ -20,8 +20,8 @@ npm run build:extension
 ```
 
 Search Add Node for **Parakeet** or **Moonshine**. Both consume the unchanged
-`audio: MONO_16KHZ_PCM` (mono 16 kHz Float32Array) from Chrome tab, microphone or
-selected-media capture. Capture and resampling use the existing helpers.
+`audio: MONO_16KHZ_PCM` (mono 16 kHz Float32Array) from Chrome tab or microphone
+capture. Capture and resampling use the existing helpers.
 
 | Node | Outputs | Suggested wiring |
 | --- | --- | --- |

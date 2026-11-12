@@ -1,5 +1,5 @@
 import { graphModelRequirements } from './graph-model-preparation.js';
-import { SELECTED_MEDIA_UNAVAILABLE, microphoneCaptureError } from './media-source.js';
+import { microphoneCaptureError } from './media-source.js';
 import { authorizePage } from './page-target.js';
 import { buttonLabel } from '../web/button-node.js';
 import { verifiedOpusCache } from './opus-mt-cache.js';
@@ -185,12 +185,6 @@ export class TabSession {
     this.session = session;
     if (this.livePreparation) this.update({ modelState: 'active' });
     this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, activeGraphId: this.view.savedGraphId, activeGraphName: this.view.savedGraphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: session.translationEnabled ? 'Local translation ready' : 'Translation off', status: this.livePreparation ? 'Starting prepared graph…' : graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
-    // Explain this source limitation even if a dependent processor fails before
-    // Pipeline reaches the source's start hook. The source itself still fails
-    // through Pipeline, preserving ordinary branch isolation and topology.
-    for (const node of sources.filter(node => node.type === 'SelectedPageMediaAudio')) {
-      this.nodeEvent({ type: 'error', message: SELECTED_MEDIA_UNAVAILABLE }, node.id);
-    }
     try {
       for (const spec of speakers) {
         const Speaker = spec.type === 'StreamingSpeakerOutput' ? StreamingSpeakerOutputNode : SpeakerOutputNode;
@@ -352,7 +346,7 @@ export class TabSession {
     const sources = session.description.nodes.filter(node => INPUT_TYPES.includes(node.type)).map(node =>
       `${node.id}: ${session.sourceStates[node.id] || (node.type === 'MicrophoneAudio'
         ? 'No audio signal yet. Check microphone permission, input volume and device selection.'
-        : node.type === 'ChromeTabAudio' ? 'No audio signal yet. Play audio or check whether the tab is muted.' : 'No audio signal yet. Play the selected media.')}`);
+        : 'No audio signal yet. Play audio or check whether the tab is muted.')}`);
     const waiting = [...session.speechNodes].filter(([, node]) => node.waitingConfiguration && !node.disposed)
       .map(([id, node]) => `${id}: Waiting for startup ${node.configurationPort}; model has not started.`);
     return [...sources, ...waiting].join('\n');
