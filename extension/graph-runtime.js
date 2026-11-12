@@ -84,10 +84,10 @@ function sharedTabCapture(factory, stopping) {
           const listeners = new Set();
           const shared = { listeners };
           shared.source = factory(tabId,
-            audio => { for (const item of listeners) item.onAudio(audio); },
-            () => {
+            audio => { for (const item of listeners) item.onAudio(audio.slice()); },
+            error => {
               shared.ended = true;
-              for (const item of [...listeners]) item.onEnded();
+              for (const item of [...listeners]) item.onEnded(error);
             });
           capture = shared;
         }
@@ -195,8 +195,8 @@ export function buildGraph(graph, options) {
   const tabSources = description.nodes.filter(spec => spec.type === 'ChromeTabAudio');
   // Toolbar-tab navigation ends every tab subscriber even while a microphone
   // keeps the Pipeline running. Flush before detaching any of those subscribers.
-  // Share only among tab-source Nodes inside this execution. Another graph
-  // gets a fresh capture factory, nodes, Workers and Pipeline.
+  // Repeated Nodes share one subscription inside this execution. The offscreen
+  // owner shares only native tab PCM across windows, never graphs or Workers.
   const tabSourceFactory = sharedTabCapture(options.sourceFactory || ((...args) => new ExtensionTab(...args)),
     () => pipeline.state === 'stopping' || tabSources.every(spec => nodes[spec.id].endRequested));
   for (const spec of description.nodes) {

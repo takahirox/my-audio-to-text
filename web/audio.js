@@ -59,24 +59,28 @@ export class BrowserAudioSource {
       // Display capture requires video, but only its audio enters Web Audio.
       this.source = this.context.createMediaStreamSource(new MediaStream(tracks));
       this.resampler = new Resampler(this.context.sampleRate);
-      const onChunk = (chunk) => {
+      const onChunk = (chunk, capturedAt) => {
+        const startTime = capturedAt + (this.resampler.position - this.resampler.tail.length) / this.context.sampleRate;
         const audio = this.resampler.push(chunk);
-        if (audio.length) this.onAudio(audio);
+        if (audio.length) {
+          this.onAudio(audio, this.captureTimestamps ? { capturedAt: startTime } : undefined);
+          this.nextAudioTime = startTime + audio.length / 16000;
+        }
       };
       if (this.context.audioWorklet) {
         await this.context.audioWorklet.addModule(this.workletURL || new URL('./capture-worklet.js', import.meta.url).href);
         this.checkCanceled();
-        this.node = new AudioWorkletNode(this.context, 'capture');
-        this.node.port.onmessage = ({ data }) => onChunk(data);
+        this.node = new AudioWorkletNode(this.context, 'capture', { processorOptions: { timestamps: !!this.captureTimestamps } });
+        this.node.port.onmessage = ({ data }) => this.captureTimestamps ? onChunk(data.audio, data.capturedAt) : onChunk(data);
       } else {
         this.node = this.context.createScriptProcessor(2048, tracks[0].getSettings().channelCount || 2, 1);
-        this.node.onaudioprocess = ({ inputBuffer }) => {
+        this.node.onaudioprocess = ({ inputBuffer, playbackTime }) => {
           const mono = new Float32Array(inputBuffer.length);
           for (let channel = 0; channel < inputBuffer.numberOfChannels; channel++) {
             const samples = inputBuffer.getChannelData(channel);
             for (let i = 0; i < mono.length; i++) mono[i] += samples[i] / inputBuffer.numberOfChannels;
           }
-          onChunk(mono);
+          onChunk(mono, (playbackTime ?? this.context.currentTime) - mono.length / this.context.sampleRate);
         };
       }
       this.gain = this.context.createGain(); this.gain.gain.value = 0;
@@ -125,7 +129,7 @@ export class BrowserAudioSource {
       this.finishFlush = null;
       if (flush && !this.discard && this.resampler) {
         const tail = this.resampler.flush();
-        if (tail.length) this.onAudio(tail);
+        if (tail.length) this.onAudio(tail, this.captureTimestamps ? { capturedAt: this.nextAudioTime } : undefined);
       }
     } finally {
       this.finishFlush?.(); this.finishFlush = null;

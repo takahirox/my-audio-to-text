@@ -4,7 +4,17 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { BrowserTab, Microphone, Resampler, joinAudio } from '../web/audio.js';
 import { LocalAsrCore } from '../web/local-asr-core.js';
-import { ExtensionTab } from '../extension/tab-source.js';
+import { CapturedTabSource } from '../extension/tab-capture-source.js';
+// Native capture tests exercise the offscreen source; subscriptions have their
+// own transport/coordinator tests.
+class ExtensionTab extends CapturedTabSource {
+  constructor(tabId, audio, ended) {
+    super(tabId, audio, ended, async tabId => {
+      if (!globalThis.chrome?.tabCapture?.getMediaStreamId) throw Error('Tab capture unavailable');
+      return chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+    });
+  }
+}
 import { ExtensionTabAudioNode } from '../extension/tab-audio-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { createTabTranscriptionPipeline, MicrophoneAudioNode, SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
@@ -27,7 +37,7 @@ function browser(t, { rate = 48000, worklet = true, permission, module } = {}) {
   const node = () => ({ connections: [], connect(target) { this.connections.push(target); }, disconnect() { this.disconnected = true; } });
   let Processor;
   runInNewContext(readFileSync(new URL('../web/capture-worklet.js', import.meta.url), 'utf8'), {
-    Float32Array,
+    Float32Array, sampleRate: rate, currentFrame: 0,
     AudioWorkletProcessor: class { constructor() { this.port = {}; } },
     registerProcessor(name, cls) { assert.equal(name, 'capture'); Processor = cls; },
   });
@@ -49,8 +59,8 @@ function browser(t, { rate = 48000, worklet = true, permission, module } = {}) {
       createScriptProcessor() { return node(); }
     },
     AudioWorkletNode: class {
-      constructor() {
-        Object.assign(this, node()); this.processor = new Processor();
+      constructor(context, name, options) {
+        Object.assign(this, node()); this.processor = new Processor(options);
         this.port = { postMessage: data => this.processor.port.onmessage({ data }) };
         this.processor.port.postMessage = data => this.port.onmessage?.({ data });
       }
@@ -102,7 +112,7 @@ for (const kind of ['tab', 'microphone', 'extension']) for (const rate of [16000
         } } });
         t.after(() => delete globalThis.chrome);
       }
-      const source = kind === 'extension' ? new ExtensionTabAudioNode(42) : new MicrophoneAudioNode();
+      const source = kind === 'extension' ? new ExtensionTabAudioNode(42, { sourceFactory: (...args) => new ExtensionTab(...args) }) : new MicrophoneAudioNode();
       const speech = new SpeechToTextNode(options), transcript = new TranscriptOutputNode(options.onTranscript);
       flow = { source, speech, transcript, pipeline: new Pipeline({ nodes: { source, speech, transcript }, connections: [
         { from: ['source', 'audio'], to: ['speech', 'audio'] },
@@ -311,3 +321,13 @@ for (const mode of ['api-error', 'no-audio', 'unavailable']) {
     else assert.equal(b.requests.length, 0);
   });
 }
+
+for (const rate of [16000,44100,48000]) test(`offscreen PCM timestamps preserve fractional resampler continuity at ${rate} Hz`, async t => {
+  browser(t,{rate}); const chunks=[];
+  const source = new CapturedTabSource(42,(audio,timing)=>chunks.push({audio,timing}),()=>{},async()=> 'id');
+  await source.start();
+  for (let index=0;index<3;index++) source.node.port.onmessage({data:{audio:new Float32Array(2048),capturedAt:1+index*2048/rate}});
+  assert.equal(chunks[0].timing.capturedAt,1);
+  for(let index=1;index<chunks.length;index++) assert.ok(Math.abs(chunks[index].timing.capturedAt-chunks[index-1].timing.capturedAt-chunks[index-1].audio.length/16000)<1e-10);
+  await source.stop(false);
+});

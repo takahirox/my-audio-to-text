@@ -1,5 +1,7 @@
+import { writeSummaryAssetFixture } from './summary-asset-fixture.js';
 import { test as base, expect, chromium } from '@playwright/test';
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { observePipeline, graphTypes } from '../browser/pipeline-observer.js';
@@ -35,6 +37,16 @@ const test = base.extend({
     try {
       const cdp = await context.browser().newBrowserCDPSession();
       const { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
+      // These are capture/lifecycle tests, with fixture Workers. Keep model
+      // preparation deterministic as well, rather than downloading real weights.
+      for (const name of ['reazon', 'silero']) {
+        const file = path.join(root, 'extension', `${name}-assets.json`), spec = JSON.parse(await readFile(file, 'utf8'));
+        const body = Buffer.from('capture lifecycle model fixture');
+        await writeFile(path.join(root, 'extension', `${name}-fixture.bin`), body);
+        spec.files = [{ path:'fixture.bin', bytes:body.length, sha256Chunks:[createHash('sha256').update(body).digest('hex')], sourceURL:`chrome-extension://${id}/extension/${name}-fixture.bin` }];
+        await writeFile(file, JSON.stringify(spec));
+      }
+      await writeSummaryAssetFixture(root, `chrome-extension://${id}/extension/`);
       // loadUnpacked may return before the service worker registers onClicked.
       const worker = context.serviceWorkers().find(worker => worker.url().includes(id)) || await context.waitForEvent('serviceworker');
       await expect.poll(() => worker.evaluate(() => chrome.action.onClicked.hasListeners())).toBe(true);
@@ -107,6 +119,14 @@ async function setup(extension, { mode = 'audio', fallback = false } = {}) {
   await page.goto(`${url}?tab=42`);
   await observePipeline(page, new URL('../web/', url).href);
   await page.evaluate(async () => {
+    const { ExtensionTab } = await import('./tab-source.js');
+    const { CapturedTabSource } = await import('./tab-capture-source.js');
+    ExtensionTab.prototype.start = function() {
+      this.native = new CapturedTabSource(this.tabId, this.onAudio, this.onEnded,
+        tabId => chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }));
+      return this.native.start();
+    };
+    ExtensionTab.prototype.stop = function(flush = true) { return this.native?.stop(flush); };
     // Delay the current graph's committed TEXT path, not the retired accumulator.
     const { KeyedTextCoalesceNode } = await import('../web/keyed-text-coalesce-node.js');
     const receiveInputs = KeyedTextCoalesceNode.prototype.receiveInputs;
@@ -363,7 +383,7 @@ test('native tab capture requires the user-invoked tab grant', async ({ extensio
   await expect(recorder.locator('#start')).toBeEnabled();
   await recorder.locator('#start').click();
   await expect(recorder.locator('#status')).toContainText('Transcription failed');
-  await expect(recorder.locator('#errors')).toContainText(/invoked|permission|capture/i);
+  await expect(recorder.locator('#errors')).toContainText(/authorized|invoked|permission|capture/i);
   await expect(recorder.locator('#start')).toBeEnabled();
   expect(await recorder.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).length)).toBe(0);
 });
@@ -433,7 +453,7 @@ base('fresh packaged MV3 ASR startup reports actionable missing assets without d
       const { TabSession } = await import('./session.js');
       const session = new TabSession(() => {});
       try {
-        await session.prepareModels();
+        await session.prepareModels({ download: false });
         return { state: session.view.modelState, error: session.view.error };
       } finally { await session.close(); }
     });

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 import { webVoiceChoices, webVoiceDefault } from '../extension/web-voice-graph.js';
 import { graphNode, edge } from '../extension/graph.js';
+import { installTabCaptureBridge } from '../extension/tab-capture-background.js';
 import { randomUUID } from 'node:crypto';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
@@ -25,7 +26,8 @@ async function fixture(t, { existingDocument = false } = {}) {
     }, disconnect() { if (this.disconnected) return; this.disconnected = true; this.onDisconnect.emit(); } });
   const chrome = {
     runtime: { id: 'extension', getURL: path => `chrome-extension://extension/${path}`, onConnect: event(), onMessage: event(), getContexts: async () => contexts },
-    permissions: { contains: async () => true, onRemoved: event() }, storage: { onChanged: event(), local: { get: async key => ({ [key]: preferences[key] }), set: async value => Object.assign(preferences, value) } },
+    windows: { onRemoved: event() },
+    permissions: { contains: async () => true, onRemoved: event() }, storage: { session: { get: async () => ({}), remove: async () => {} }, onChanged: event(), local: { get: async key => ({ [key]: preferences[key] }), set: async value => Object.assign(preferences, value) } },
     scripting: { getRegisteredContentScripts: async () => [{}] },
     tabs: { query: async () => [], onRemoved: event(), onUpdated: event(),
       connect(tabId, options) { const port = makePort(options.name); relays.push({ tabId, ...options, port }); return port; },
@@ -36,8 +38,8 @@ async function fixture(t, { existingDocument = false } = {}) {
       closeDocument: async () => { contexts = []; closed++; },
     },
   };
-  const source = (await readFile(new URL('../extension/web-voice-background.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '').replace('export function', 'function');
-  const globals = { chrome, structuredClone, webVoiceChoices, webVoiceDefault, crypto: { randomUUID },
+  const source = (await readFile(new URL('../extension/web-voice-background.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '').replace(/export (function|const)/g, '$1');
+  const globals = { installTabCaptureBridge: options => installTabCaptureBridge(options, chrome), chrome, structuredClone, webVoiceChoices, webVoiceDefault, crypto: { randomUUID },
     setTimeout(callback) { timers.add(callback); return callback; }, clearTimeout: timer => timers.delete(timer),
     readVoiceEnabled: async () => true, setVoiceEnabled: async () => {}, voiceEnabled: value => value?.enabled === true,
     WEB_VOICE_KEY: 'voice', WEB_VOICE_ORIGINS: ['http://*/*', 'https://*/*'],
@@ -105,7 +107,7 @@ test('one authenticated offscreen host multiplexes independent documents and rej
   a.onMessage.emit({ type: 'start', capability: randomUUID() });
   b.onMessage.emit({ type: 'start', capability: randomUUID() });
   await turn(); assert.equal(f.created.length, 1);
-  assert.deepEqual([...f.created[0].reasons], ['WORKERS', 'LOCAL_STORAGE']);
+  assert.deepEqual([...f.created[0].reasons], ['WORKERS', 'LOCAL_STORAGE', 'USER_MEDIA']);
   assert.equal((await f.host(f.created[0].url.replace('web-voice-runtime.html', 'recorder.html'))).disconnected, true);
   assert.equal((await f.host(f.created[0].url.replace(/#.*/, '#wrong'))).disconnected, true);
   const host = await f.host(), [sa, sb] = host.sent;
