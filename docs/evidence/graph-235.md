@@ -1,7 +1,8 @@
 # Issue #235: canvas-first Graph Editor
 
 The primary toolbar now stays on one 44px row, with Saved / Unsaved, Add Node,
-Save, the Graph actions overflow (…), and Help (?). Saving is announced through
+Save and the Graph actions overflow (…). The global Help button was later removed
+in #300. Saving is announced through
 the status indicator without widening the Save button. Active-session details,
 earlier-active-graph warnings, conflicting saves, validation and preparation
 errors remain available. The existing native disclosure retains its commands,

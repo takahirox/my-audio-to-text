@@ -107,8 +107,6 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .graph-command-list { max-height: 75dvh; overflow: auto; }
 .graph-recovery select, .graph-recovery textarea { width: 100%; min-width: 0; }
 .graph-recovery textarea { min-height: 10rem; }
-.graph-help { color: inherit; background: var(--panel); border: 1px solid var(--border); border-radius: .75rem; max-width: 38rem; max-height: 85dvh; padding: 1.5rem; }
-.graph-help::backdrop { background: #0009; }
 .graph-heading { min-height: 44px; }
 .graph-ports button { min-height: 44px; border-color: #647693; }
 .graph-ports [data-side="output"] { text-align: right; border-right: 3px solid var(--accent); }

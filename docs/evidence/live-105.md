@@ -7,7 +7,7 @@ and the built MV3 page. Graph-configured display regions, recording and copy
 controls, capture/processing status and actionable errors retain their existing
 markup and behavior. Runtime JavaScript and shared styles are unchanged.
 
-Detailed replace/append and session guidance remains in Graph Editor help and
+Detailed replace/append and session guidance remains in
 `docs/extension-graph.md`; capture-window and copy-before-close guidance remains
 in `docs/chrome-extension.md`. The checked-in [Live screenshot](ui-77-live.png)
 was regenerated with the existing deterministic MV3 screenshot test.

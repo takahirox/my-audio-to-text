@@ -96,32 +96,8 @@ export class GraphEditor {
     };
     warningLabel.append(this.warningPreference, ' Show optional warnings'); commands.append(warningLabel);
     this.actions.append(commands);
-    this.assetNotice = el('details'); this.assetNotice.id = 'graph-asset-notice';
-    this.assetRequirements = el('p');
-    const modelsLink = el('a', 'Models for preparation, recovery and model license/terms');
-    modelsLink.href = 'model-cache.html'; modelsLink.target = '_blank'; modelsLink.rel = 'noopener';
-    this.assetNotice.append(el('summary', 'Model requirements and terms'), this.assetRequirements, modelsLink);
-    this.help = el('dialog', undefined, 'graph-help'); this.help.setAttribute('aria-label', 'Graph Editor help');
-    this.help.append(el('h2', 'Graph Editor help'), this.assetNotice,
-      el('p', 'Save applies to the next session. Start runs complete paths to outputs; incomplete Nodes remain in the draft. Graph actions provides validation, Load saved and Reset.'),
-      el('p', 'Saved / Unsaved describes this editor’s draft. Active in the toolbar means this graph is running in Live; hover it for the capture tab ID. An earlier-graph warning means saved edits apply only to the next session. If the saved graph changes elsewhere, export your draft if needed, then use Graph actions → Load saved before saving.'),
-      el('p', 'Add Node opens a nearby searchable list. Choose a result to add it in the visible canvas; arrow keys navigate, Enter adds and Escape dismisses. Save applies the draft. Select a node heading for settings and optional node help; select it again to clear selection. Drag a heading or use arrow keys to move it.'),
-      el('p', 'Connect by clicking an output then a matching input, or drag from an output to an input. Reconnecting replaces only that input’s wire. Drag a connected input into blank canvas to detach its wire, or to a matching input to move it. Select a wire for connection details and Disconnect in the inspector. Keyboard: Enter or Space selects, Tab reaches Disconnect, Delete or Backspace removes a focused wire. Escape or blank canvas clears selection.'),
-      el('p', 'Ctrl + wheel or trackpad pinch over the canvas zooms at the pointer; ordinary scroll or swipe pans. Use − and + for 10 percentage point steps, the Canvas zoom chooser for presets, or Fit for an overview (1%–150%). Choose 100% to return focus to the element you were editing. Touch: tap ports to connect and tap a wire for Disconnect in the inspector.'),
-      el('p', 'Wires use separate lanes and crossing gaps. At a crossing, the continuous line passes over the interrupted line; this is not a junction. Short shared branches at one output are fan-out. Dotted wires and a notice indicate crowded lanes that could not be separated. Move cards apart to give them more room.'),
-      el('p', 'Display renders each complete input snapshot safely. Connect any TEXT output directly to Display.input1. TextAccumulator retains exact completed segments; TextFormatter builds text snapshots. Hold stores TEXT silently. With trigger disconnected, value is sampled with the next ordinary input. Connect Button.trigger → Hold.trigger for on-demand emission of the latest TEXT through value. Live Graph Actions uses each Button caption and disables overlapping work while busy; no audio source is required. Compose TextWindow → TextFormatter → Text Summary → Hold, with Hold.value → a second formatter input, for serialized incremental summaries. Set the rolling-update instruction explicitly in Text Summary Settings.prompt; its default simply summarizes each input. language supplies a default that an explicit prompt language can override. Save prepares required model weights; Models provides asset recovery.'),
-      el('p', 'Ports show data above its matching ID, with committed pairs before provisional pairs. Canvas rows, keyboard navigation and Inspector port help use the same display order. Context and translation source/error ports keep their separate roles; display order does not change delivery or saved connections.'),
-      el('p', 'For continuous ASR/translation rows, connect ASR final/finalId → KeyedTextCoalesce.input1/id1 and provisional/provisionalId → input2/id2. Also connect ASR final/finalId directly to translator.text/id. Connect coalesce.text/id → KeyedTextPair.input1/id1 and translator.text/id → KeyedTextPair.input2/id2, then KeyedTextPair.pair → KeyedPairedTextAccumulator.pair, then pairs → Display.input1. Originals appear immediately; late translations replace their own row. KeyedTextPair pairs only by numeric ID. KeyedPairedTextAccumulator owns portable ordered pair history, replacing each ID in arrival order. Each Display is one tabbed view: its input ports are switchable tabs accepting TEXT, KEYED_PAIRED_TEXT or KEYED_PAIRED_TEXT_LIST from any producer. Only the selected input is visible; hidden inputs keep their latest snapshots. Set per-input tab labels and Add input / Remove last input in Settings. For plain text, connect any TEXT output directly to Display.input1.'),
-      el('p', 'KeyedTextCoalesce selects nonempty input1, otherwise input2, separately for each numeric ID. Connect Number.value to id1/id2 and independent preferred/backup TEXT sources to input1/input2, then text → Display.input1. Only the exact empty string is empty. Each branch uses its latest ID; text before the first ID waits. ID-only changes never replay old text. Grouped ID/text updates stay atomic, and each selection emits id/text together.'),
-      el('p', 'TextWindow batches exact incoming TEXT for any consumer. Optional maxChars and maxWaitSeconds NUMBER inputs default to 600 and 1.5 seconds. Connect ASR.final → TextWindow.text → translator.text → TextAccumulator.append, then TextAccumulator.text → Display.input1. Translator.text can also feed Display.input1 directly. For optional previews, connect a deliberate TEXT snapshot source → translator.provisional and translator.provisionalText → a separate Display.input1; previews clear on final input, Stop and Cancel. For ID-scoped bilingual history, use KeyedTextCoalesce / KeyedTextPair / KeyedPairedTextAccumulator. Batching does not retain conversation-wide context.'),
-      el('p', 'TranslateGemma 4B English → Japanese: connect English ASR.final or Text.value → text, then text → TextAccumulator.append, or source/text/error → TextFormatter inputs. Both directions share a 3.112 GB download; allow 7 GB free storage and several GB free RAM/GPU memory. Requires Worker WebGPU; no fallback. Saving a graph containing either direction prepares these weights, including parked Nodes. Google Gemma Terms of Use and Prohibited Use Policy apply to use of this public ONNX conversion.'),
-      (() => { const link = el('a', 'TranslateGemma terms, prohibited-use policy and attribution'); link.href = '../web/licenses/gemma-notices.txt'; return link; })(),
-      button('Close help', null, () => this.help.close()));
     this.paletteButton = button('Add Node', 'graph-palette-toggle', () => this.togglePalette()); this.paletteButton.setAttribute('aria-haspopup', 'dialog'); this.paletteButton.setAttribute('aria-expanded', 'false'); this.paletteButton.setAttribute('aria-controls', 'graph-palette');
-    this.helpButton = button('?', 'graph-help', () => { this.actions.open = false; this.help.showModal(); });
-    this.helpButton.setAttribute('aria-label', 'Help'); this.helpButton.title = 'Graph Editor help';
-    this.help.onclose = () => this.helpButton.focus();
-    toolbar.append(status, this.paletteButton, this.saveButton, this.actions, this.helpButton);
+    toolbar.append(status, this.paletteButton, this.saveButton, this.actions);
     // Only exceptional states get a row; routine Live activity stays in the toolbar.
     this.stateNotice = el('p', undefined, 'graph-state-notice'); this.stateNotice.setAttribute('role', 'status'); this.stateNotice.setAttribute('aria-atomic', 'true'); this.stateNotice.hidden = true;
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
@@ -216,7 +192,7 @@ export class GraphEditor {
     const fit = button('Fit', 'graph-fit', () => this.fit()); fit.setAttribute('aria-label', 'Fit graph'); fit.title = 'Fit graph in the canvas';
     viewportActions.append(this.zoomOut, this.zoomControl, this.zoomIn, fit);
     surface.append(this.scroll, viewportActions); viewport.append(surface); this.workspace.append(viewport, this.inspector, this.palette);
-    root.replaceChildren(toolbar, this.stateNotice, this.errors, this.workspace, this.help);
+    root.replaceChildren(toolbar, this.stateNotice, this.errors, this.workspace);
     root.addEventListener('keydown', event => {
       const wire = event.target.closest('.graph-wire');
       if (event.key === 'Escape') {
@@ -542,10 +518,6 @@ export class GraphEditor {
     let savedSnapshot = this.saved;
     try { if (this.saved) savedSnapshot = resolveSubgraphs(this.saved, this.definitions); } catch { /* Show the pending warning if a dependency becomes invalid. */ }
     const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(savedSnapshot);
-    let nodes = this.draft.nodes;
-    try { nodes = resolveSubgraphs(this.draft, this.definitions).nodes; } catch { /* Diagnostics explains unavailable dependencies. */ }
-    const notices = [...new Set(nodes.map(node => NODE_TYPES[node.type]?.preparationNotice).filter(Boolean))];
-    this.assetRequirements.textContent = notices.join(' ') || 'No model preparation notices for Nodes in the current draft.';
     const summary = this.isDirty() ? 'Unsaved' : 'Saved';
     if (this.summary.textContent !== summary) this.summary.textContent = summary;
     if (this.activity.textContent !== 'Active') this.activity.textContent = 'Active';

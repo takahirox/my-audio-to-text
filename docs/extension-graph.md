@@ -261,7 +261,7 @@ dismisses the list and clears selection. Adding keeps the current
 zoom and pan, selects and focuses the new Node, and leaves changes unsaved until
 Save. The compact toolbar shows Saved / Unsaved for the editor draft and a separate
 green **Active** indicator only when this graph is running in Live, alongside Add
-Node, Save, Graph actions (…) and Help (?). Hover Active for the capture tab ID;
+Node, Save and Graph actions (…). Hover Active for the capture tab ID;
 the number does not occupy canvas space. Idle and routine active sessions have no
 status row below the toolbar. At the narrowest widths, draft and Live status stack
 within the same toolbar height, keeping every action available. An exceptional
@@ -269,8 +269,8 @@ warning below the toolbar wraps in full: **earlier graph; saved edits apply next
 session** means Live is still running its immutable older snapshot. A saved graph
 changed elsewhere warning preserves your draft; export it if needed, then choose
 **Graph actions → Load saved** before saving. Both warnings remain readable when
-they occur together. Select a heading for settings and help; click it again, press
-Escape, or click blank canvas to clear selection. The Inspector identifies the
+they occur together. Select a heading for settings and the **Node help and ports**
+disclosure; click it again, press Escape, or click blank canvas to clear selection. The Inspector identifies the
 Node by type and Instance ID, with Remove Node beside Settings. Drag headings or use arrow
 keys to move Nodes. Connect an output to a compatible input; reconnecting replaces only that input's wire. Select a wire
 for details or Disconnect. Canvas navigation floats at the bottom-left: −, the
