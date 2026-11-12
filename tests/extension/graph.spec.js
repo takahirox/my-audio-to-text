@@ -44,10 +44,10 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     await expect(page.locator('#model-recovery')).toBeVisible();
     await expect(page.locator('#start')).toBeDisabled();
     expect(f.requests.length).toBeGreaterThan(0);
-    f.mode('error'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Download / retry' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Error');
-    f.mode('hold'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Download / retry' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Downloading');
-    await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Cancel download' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Download / retry' })).toBeEnabled();
-    f.mode('normal'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Download / retry' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Ready');
+    f.mode('error'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: /^(Download|Retry)$/ }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Error');
+    f.mode('hold'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: /^(Download|Retry)$/ }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Downloading');
+    await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: 'Cancel download' }).click(); await expect(page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: /^(Download|Retry)$/ })).toBeEnabled();
+    f.mode('normal'); await page.models.locator(`#${type.toLowerCase()} button`).filter({ hasText: /^(Download|Retry)$/ }).click(); await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Ready');
     const count = f.requests.length;
     // Abort a production TTS load RPC while startup is pending.
     await page.evaluate(() => { window.holdTtsLoad = true; });
@@ -197,10 +197,10 @@ for (const [id, voice, other] of [['supertonic3', 'F1', 'M1'], ['kokoro', 'jf_al
     const live = await openGraph(f), models = live.models, card = models.locator(`#${id}`), initialGraph = await saved(live);
     await card.locator('select').selectOption(voice);
     await expect(card.locator('.model-status')).toHaveText('Not downloaded');
-    await card.getByRole('button', { name: 'Download / retry', exact: true }).click();
+    await card.getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
     await expect(card.locator('.model-status')).toContainText('Ready'); const firstCount = f.requests.length;
     await card.locator('select').selectOption(other); await expect(card.locator('.model-status')).toHaveText('Not downloaded');
-    await card.getByRole('button', { name: 'Download / retry', exact: true }).click();
+    await card.getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
     await expect(card.locator('.model-status')).toContainText('Ready');
     expect(f.requests).toHaveLength(firstCount + 1); // Only the missing voice, shared weights reused.
     await models.reload(); await models.locator(`#${id} select`).selectOption(other);

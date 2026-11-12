@@ -104,7 +104,7 @@ const test = base.extend({
 test('real pinned CosyVoice3: causal flow and HiFT right context through the token limit', async ({ streaming: f }, info) => {
   test.skip(!real || !cosy, 'Requires explicitly prepared real CosyVoice3 assets and desktop WebGPU.'); test.setTimeout(180000);
   const page = await f.context.newPage(); await page.goto(f.url + 'model-cache.html');
-  await page.locator('#cosyvoice3').getByRole('button', { name: 'Download / retry' }).click();
+  await page.locator('#cosyvoice3').getByRole('button', { name: /^(Download|Retry)$/ }).click();
   await expect(page.locator('#cosyvoice3 .model-status')).toContainText('Ready', { timeout: 120000 });
   const result = await page.evaluate(() => new Promise((resolve, reject) => {
     const worker = new Worker('../web/cosyvoice3-prefix-worker.js', { type: 'module' });
@@ -124,7 +124,7 @@ test('real pinned CosyVoice3: causal flow and HiFT right context through the tok
 test('real pinned decoder: incremental prefixes preserve full-decode samples through the utterance limit', async ({ streaming: f }, info) => {
   test.skip(!real || cosy, 'Requires explicitly prepared real Qwen3-TTS assets and desktop WebGPU.'); test.setTimeout(180000);
   const page = await f.context.newPage(); await page.goto(f.url + 'model-cache.html');
-  await page.locator('#'+model).getByRole('button', { name: 'Download / retry' }).click();
+  await page.locator('#'+model).getByRole('button', { name: /^(Download|Retry)$/ }).click();
   await expect(page.locator('#qwen3-tts .model-status')).toContainText('Ready', { timeout: 120000 });
   const result = await page.evaluate(() => new Promise((resolve, reject) => {
     const worker = new Worker('../web/qwen3-decoder-reference-worker.js', { type: 'module' });

@@ -30,7 +30,9 @@ export const test = base.extend({
       if (mode === 'corrupt') { response.end(Buffer.alloc(body.length)); return; }
       if (mode === 'short') { response.end(body.subarray(0, 50)); return; }
       response.write(body.subarray(0, 100));
-      if (mode !== 'hold') response.end(body.subarray(100));
+      if (mode === 'hold' || (mode === 'hold-weights' && request.url.endsWith('.onnx'))) {
+        response.finishFixture = () => response.end(body.subarray(100));
+      } else response.end(body.subarray(100));
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const launch = () => chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true,
@@ -137,6 +139,7 @@ export const test = base.extend({
       if (!real) await writeSummaryAssetFixture(root, `chrome-extension://${id}/extension/`);
       const f = { context, root, id, url: `chrome-extension://${id}/extension/recorder.html`, requests,
         asset(key, body) { bodies.set(key, body); return `http://127.0.0.1:${server.address().port}/${key}`; },
+        release() { mode = 'normal'; for (const response of connections) response.finishFixture?.(); },
         mode(value) { mode = value; }, async restart() { await context.close(); context = await launch(); expect(await load()).toBe(id); this.context = context; } };
       await use(f);
     } finally { await context?.close(); for (const response of connections) response.destroy(); await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); }

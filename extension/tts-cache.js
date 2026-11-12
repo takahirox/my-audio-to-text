@@ -19,7 +19,7 @@ export async function verifiedTtsCache(type, settings, signal) {
   const manifest = await ttsManifest(type, settings);
   const view = await new ModelAssetCache(manifest).inspect({ signal });
   signal?.throwIfAborted();
-  if (view.state !== 'Ready') throw new Error(view.error || `${type} assets missing or evicted. Use Retry models in Live, or Download / retry for this model and voice in Models.`);
+  if (view.state !== 'Ready') throw new Error(view.error || `${type} assets missing or evicted. Use Retry models in Live, or Download or Retry for this model and voice in Models.`);
   return manifest;
 }
 export async function cacheOnlyKokoroRuntime(env, settings) {

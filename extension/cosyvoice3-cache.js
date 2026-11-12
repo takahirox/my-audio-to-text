@@ -11,7 +11,7 @@ export async function cosyVoice3Manifest() {
 export async function cosyVoice3Assets() {
   const manifest = await cosyVoice3Manifest();
   const view = await new ModelAssetCache(manifest).inspect();
-  if (view.state !== 'Ready') throw Error(view.error || 'CosyVoice3 assets missing or evicted. Use Retry models in Live, or Download / retry in Models.');
+  if (view.state !== 'Ready') throw Error(view.error || 'CosyVoice3 assets missing or evicted. Use Retry models in Live, or Download or Retry in Models.');
   const cache = await caches.open(MODEL_CACHE_NAME);
   const allowed = new Map(manifest.files.map(file => [file.path, file.url]));
   return async path => {

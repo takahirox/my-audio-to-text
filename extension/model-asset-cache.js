@@ -130,7 +130,9 @@ export class ModelAssetCache {
   }
 
   inspect({ signal, onChange } = {}) {
-    if (this.shared) return this.sharedRequest('inspect', { signal, onChange });
+    // Live observes progress while awaiting another preparation. Passive Models
+    // status checks must not keep a canceled download alive on their own.
+    if (this.shared) return this.sharedRequest('inspect', { signal, onChange, followPreparation: !!onChange });
     return this.exclusive(async () => {
       const cache = await this.cacheStorage.open(MODEL_CACHE_NAME);
       return this.snapshot(await this.scan(cache, signal));
@@ -204,7 +206,7 @@ export class ModelAssetCache {
 
   // A page owns only its subscription. The shared worker owns the fetch so
   // closing its first consumer cannot destroy a transfer another page needs.
-  sharedRequest(operation, { signal, onChange = () => {} }) {
+  sharedRequest(operation, { signal, onChange = () => {}, followPreparation = true }) {
     return new Promise(resolve => {
       let worker, finished = false;
       const finish = view => {
@@ -239,7 +241,7 @@ export class ModelAssetCache {
         };
         signal?.addEventListener('abort', cancel, { once: true });
         globalThis.addEventListener('pagehide', cancel, { once: true });
-        worker.port.postMessage({ type: operation, manifest: this.manifest });
+        worker.port.postMessage({ type: operation, manifest: this.manifest, followPreparation });
       } catch (error) { finish(this.failure(error)); }
     });
   }
