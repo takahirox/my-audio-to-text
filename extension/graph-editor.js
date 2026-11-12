@@ -3,6 +3,7 @@ import { assertSubgraphUpdate } from './graph-library.js';
 import { MAX_DISPLAY_INPUTS } from '../web/display-node.js';
 import { createWireRouter, reusableWireRoute, wireColor, wireDistance } from './graph-wire-router.js';
 import { compatiblePorts } from '../web/port-contracts.js';
+import { PALETTE_CATEGORIES, groupPaletteEntries } from './graph-palette.js';
 import { NODE_TYPES, nodeDefinition, portDisplayEntries, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
 
 const el = (tag, text, className) => {
@@ -121,7 +122,7 @@ export class GraphEditor {
     this.search.setAttribute('role', 'combobox'); this.search.setAttribute('aria-autocomplete', 'list');
     this.search.setAttribute('aria-controls', 'graph-node-type'); this.search.setAttribute('aria-expanded', 'false');
     this.category = el('select'); this.category.setAttribute('aria-label', 'Node category');
-    for (const name of ['All categories', 'Sources / inputs', 'Processors', 'Constants / utilities', 'Outputs', 'Subgraphs']) { const option = el('option', name); this.category.append(option); }
+    for (const name of ['All categories', ...PALETTE_CATEGORIES]) { const option = el('option', name); this.category.append(option); }
     this.types = el('div', undefined, 'graph-node-list'); this.types.id = 'graph-node-type';
     this.types.setAttribute('role', 'listbox'); this.types.setAttribute('aria-label', 'Node types');
     this.paletteStatus = el('p', undefined, 'graph-palette-status muted'); this.paletteStatus.setAttribute('role', 'status');
@@ -444,24 +445,21 @@ export class GraphEditor {
     }
   }
   filterPalette() {
-    const query = this.search.value.trim().toLowerCase(); this.types.replaceChildren();
-    const groups = new Map();
-    for (const [type, definition] of [...Object.entries(NODE_TYPES), ...(this.kind === 'subgraph' ? [] : (this.definitions || []).filter(entry => entry.kind === 'subgraph').map(entry => [`Subgraph:${entry.id}`, { label: entry.name, inputs: {}, outputs: {} }]))]) {
-      const category = type.startsWith('Subgraph:') ? 'Subgraphs' : ['Number', 'Text', 'TextFormatter', 'Hold'].includes(type) ? 'Constants / utilities'
-        : !Object.keys(definition.inputs).length ? 'Sources / inputs'
-        : !Object.keys(definition.outputs).length ? 'Outputs' : 'Processors';
-      if ((this.category.value !== 'All categories' && this.category.value !== category) || !`${type} ${definition.label}`.toLowerCase().includes(query)) continue;
-      if (!groups.has(category)) {
-        const group = el('div', undefined, 'graph-node-group'), heading = el('div', category, 'muted');
-        heading.id = `graph-category-${groups.size}`; group.setAttribute('role', 'group'); group.setAttribute('aria-labelledby', heading.id);
-        group.append(heading); groups.set(category, group); this.types.append(group);
+    this.types.replaceChildren();
+    const entries = [...Object.entries(NODE_TYPES), ...(this.kind === 'subgraph' ? [] : (this.definitions || []).filter(entry => entry.kind === 'subgraph').map(entry => [`Subgraph:${entry.id}`, { label: entry.name }]))];
+    const groups = groupPaletteEntries(entries, { query: this.search.value, category: this.category.value });
+    for (const [category, options] of groups) {
+      const group = el('div', undefined, 'graph-node-group'), heading = el('div', category, 'muted');
+      heading.id = `graph-category-${PALETTE_CATEGORIES.indexOf(category)}`; group.setAttribute('role', 'group'); group.setAttribute('aria-labelledby', heading.id);
+      group.append(heading); this.types.append(group);
+      for (const [type, definition] of options) {
+        const option = el('div', definition.label, 'graph-node-option'); option.id = `graph-option-${type}`;
+        option.dataset.type = type; option.setAttribute('role', 'option');
+        // Mouse keeps focus in search; touch must retain its native click path.
+        option.onpointerdown = event => { if (event.pointerType === 'mouse') event.preventDefault(); };
+        option.onclick = () => this.addNode(type);
+        group.append(option);
       }
-      const option = el('div', definition.label, 'graph-node-option'); option.id = `graph-option-${type}`;
-      option.dataset.type = type; option.setAttribute('role', 'option');
-      // Mouse keeps focus in search; touch must retain its native click path.
-      option.onpointerdown = event => { if (event.pointerType === 'mouse') event.preventDefault(); };
-      option.onclick = () => this.addNode(type);
-      groups.get(category).append(option);
     }
     // Rendering results never selects one; search and arrow navigation do so explicitly.
     this.highlightPalette();

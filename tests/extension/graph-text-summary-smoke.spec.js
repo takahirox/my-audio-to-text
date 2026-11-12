@@ -81,7 +81,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
     await editor.reload();
     // Both options are production palette entries and remain after a reload.
     await editor.locator('#graph-palette-toggle').click();
-    await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'Processors' });
+    await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'AI Models' });
     for (const option of TEXT_SUMMARY_TYPES) await expect(editor.locator(`#graph-node-type [role="option"][data-type="${option}"]`)).toHaveCount(1);
     await editor.keyboard.press('Escape');
     await settleAutoSave(editor);

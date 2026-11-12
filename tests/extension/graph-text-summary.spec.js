@@ -7,7 +7,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { TEXT_SUMMARY_TYPES, textSummaryModel } from '../../web/text-summary-models.js';
 
-test('both text processors: parked Save persists, independent settings, cancellation/retry, cache reuse and no inference', async ({ graphExtension: f }) => {
+test('both AI summary models: parked Save persists, independent settings, cancellation/retry, cache reuse and no inference', async ({ graphExtension: f }) => {
   for (const type of TEXT_SUMMARY_TYPES) {
     const model = textSummaryModel(type), body = Buffer.alloc(8192, 21);
     // Cache lifecycle fixture only; never used as a working inference model.
@@ -16,7 +16,7 @@ test('both text processors: parked Save persists, independent settings, cancella
   }
   const page = await openGraph(f), editor = page.editor;
   for (const type of TEXT_SUMMARY_TYPES) {
-    await openPalette(editor); await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'Processors' });
+    await openPalette(editor); await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'AI Models' });
     await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
     await expect(editor.getByLabel(type.toLowerCase() + ' language', { exact: true })).toHaveValue('ja');
     const prompt = editor.getByLabel(type.toLowerCase() + ' prompt', { exact: true });

@@ -303,13 +303,13 @@ test('canvas-first editor: search, categories, keyboard add/settings, fit and sa
   expect(canvas.width).toBeGreaterThan(600);
   await page.locator('#graph-palette-toggle').press('Enter');
   await expect(page.getByLabel('Search nodes', { exact: true })).toBeFocused();
-  await page.getByLabel('Node category', { exact: true }).selectOption('Processors');
+  await page.getByLabel('Node category', { exact: true }).selectOption('AI Models');
   await page.getByLabel('Search nodes', { exact: true }).fill('OPUS');
   await expect(page.locator('#graph-node-type [role="option"]')).toHaveCount(2);
   await page.getByLabel('Search nodes', { exact: true }).fill('no matching type');
   await expect(page.getByRole('listbox', { name: 'Node types' }).getByRole('option')).toHaveCount(0);
   await expect(page.getByRole('status').filter({ hasText: 'No matching nodes' })).toBeVisible();
-  await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
+  await page.getByLabel('Node category', { exact: true }).selectOption('Sources / inputs');
   await page.getByLabel('Search nodes', { exact: true }).fill('Number');
   await page.getByLabel('Search nodes', { exact: true }).press('Enter');
   await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();

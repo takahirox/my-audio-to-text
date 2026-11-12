@@ -281,7 +281,15 @@ to `test-results`; retained validation is in
 
 ## Editor and saved graphs
 
-Use Add Node to open a searchable list beside the toolbar button. Search or
+Use Add Node to open a searchable list beside the toolbar button. Categories
+always appear in this order: **Sources / inputs** (including Text and Number),
+**AI Models** (ASR, translation, summaries, condition AI and TTS inference),
+**Processors** (deterministic transformations, including Text formatter and Hold),
+**Outputs**, then **Subgraphs**. Within each category, displayed names sort
+automatically in Japanese-aware alphabetical / kana order with natural numbers.
+**All categories** shows all groups; a category filter and search can be combined.
+New built-in Node types must be classified in `extension/graph-palette.js`;
+saved subgraphs join the sorted Subgraphs group automatically. Search or
 filter by category, then click/tap a result to add it immediately near the center
 of the visible canvas. Opening the list leaves every result unselected. Typing a
 nonempty search highlights its first match; clearing search or changing category
@@ -761,7 +769,7 @@ See [Graph Actions](graph-actions.md) and the [example graph](examples/manual-te
 
 ## Incremental summaries with Hold
 
-Hold is available under **Constants / utilities**. Connect its readable value
+Hold is available under **Processors**. Connect its readable value
 to a formatter alongside TextWindow, then route the summary back to Hold.input.
 Only TextWindow triggers the next update. [Importable example, limits and Stop /
 Cancel behavior](text-summary-nodes.md). Ordinary event cycles remain invalid.
