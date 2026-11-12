@@ -24,11 +24,11 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await expect(page.locator('#navigation-status')).toHaveCount(0);
   await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
   await expect(library).toBeFocused();
-  await expect(page.locator('.model-card')).toHaveCount(12);
-  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(12);
+  await expect(page.locator('.model-card')).toHaveCount(17);
+  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(17);
   await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
   for (const card of await page.locator('.model-card').all()) {
-    await expect(card.getByRole('button')).toHaveText(['Download / retry', 'Delete cached assets']);
+    await expect(card.getByRole('button')).toHaveText(['Download', 'Delete cached assets']);
     await expect(card.getByRole('button', { name: 'Cancel download', includeHidden: true })).toBeHidden();
     await expect(card.getByRole('status')).toHaveText('Not downloaded');
     await expect(card.locator('.model-license a')).toBeVisible();
@@ -53,7 +53,9 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
       expect(box.height).toBeGreaterThanOrEqual(44);
     }
   }
-  const download = gemma.getByRole('button', { name: 'Download / retry', exact: true });
+  await expect(page.getByRole('button', { name: 'Check cache' })).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  const download = gemma.getByRole('button', { name: 'Download', exact: true });
   const remove = gemma.getByRole('button', { name: 'Delete cached assets', exact: true });
   await download.focus(); await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
   await expect(remove).toBeFocused();
@@ -62,6 +64,7 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await remove.focus(); await page.keyboard.press(browserName === 'webkit' ? 'Alt+Shift+Tab' : 'Shift+Tab');
   await expect(download).toBeFocused();
   await expect(gemma.locator('.model-status')).toHaveText('Not downloaded');
+  await expect(gemma.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
   await library.press('Enter');
   expect(await page.evaluate(() => window.openedPages)).toEqual([{ url: new URL('/extension/graph-library.html', page.url()).href }]);
 });

@@ -87,8 +87,8 @@ no upstream model archive is downloaded during setup. Whisper uses the translati
 runtime. OpenJTalk's statistical HTS voice is downloaded only for a Japanese
 Kokoro graph, separately from its packaged dictionary and WASM frontend.
 
-Every model's weights follow successful **Auto Save** or explicit **Download /
-retry** in Models. Setup/build does not prepare the model cache. Building copies
+Every model's weights follow successful **Auto Save** or explicit **Download** or
+**Retry** in Models. Setup/build does not prepare the model cache. Building copies
 only the reviewed runtime paths and verifies their hashes; obsolete weights left
 in `vendor`, `tts-assets`, or another generated directory cannot leak into the
 artifact. `dist/chrome-extension/asset-inventory.json` lists every packaged file,

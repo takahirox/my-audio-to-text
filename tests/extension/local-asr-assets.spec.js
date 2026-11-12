@@ -65,7 +65,7 @@ for (const kind of ['reazon', 'whisper', 'zipformer']) test(`verified ${kind} ca
       await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(2).fill('Ready · Cached and verified'), { timeout: 120000 });
       expect(editorWorkers).toEqual([]); await editor.close();
     } else for (const name of names) {
-      await page.locator(`#${name} button`, { hasText: 'Download / retry' }).click();
+      await page.locator(`#${name}`).getByRole('button', { name: /^(Download|Retry)$/ }).click();
       await expect(page.locator(`#${name}`)).toHaveAttribute('data-state', 'Ready', { timeout: 120000 });
     }
     expect(requests).toHaveLength(assets.size);
@@ -80,7 +80,7 @@ for (const kind of ['reazon', 'whisper', 'zipformer']) test(`verified ${kind} ca
     }, kind);
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(page.locator(`#${kind}`)).toHaveAttribute('data-state', 'Not downloaded');
-    await page.locator(`#${kind} button`, { hasText: 'Download / retry' }).click();
+    await page.locator(`#${kind}`).getByRole('button', { name: /^(Download|Retry)$/ }).click();
     await expect(page.locator(`#${kind}`)).toHaveAttribute('data-state', 'Ready', { timeout: 120000 });
     expect(requests).toHaveLength(assets.size + 1);
     await context.setOffline(true);
@@ -182,7 +182,7 @@ test('Japanese Kokoro frontend loads its verified statistical voice offline and 
     const card = page.locator('#kokoro-japanese');
     await expect(card).toHaveAttribute('data-state', 'Not downloaded');
     expect(requests).toBe(0);
-    await card.getByRole('button', { name: 'Download / retry' }).click();
+    await card.getByRole('button', { name: /^(Download|Retry)$/ }).click();
     await expect(card).toHaveAttribute('data-state', 'Ready'); expect(requests).toBe(1);
     await context.setOffline(true);
     const result = await page.evaluate(() => new Promise((resolve, reject) => {

@@ -10,7 +10,7 @@ const state = (page, value) => expect(card(page)).toHaveAttribute('data-state', 
 // Headless Chrome does not send window focus events when switching tabs.
 const focus = page => page.evaluate(() => window.dispatchEvent(new Event('focus')));
 async function download(page) {
-  await card(page).getByRole('button', { name: 'Download / retry', exact: true }).click();
+  await card(page).getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
   await state(page, 'Ready');
 }
 
@@ -57,7 +57,7 @@ test('Models automatically inspects on open, focus and cross-page updates; corru
   await expect(card(first).locator('li')).toHaveText(Array(7).fill(/: Missing$/));
 });
 
-test('Models inspection errors give actionable recovery through focus and Download / retry', async ({ graphExtension: f }) => {
+test('Models inspection errors give actionable recovery through focus and Retry', async ({ graphExtension: f }) => {
   const page = await openModels(f);
   await state(page, 'Not downloaded');
   await page.evaluate(async () => {
@@ -67,11 +67,13 @@ test('Models inspection errors give actionable recovery through focus and Downlo
     window.restoreInspection = () => { ModelAssetCache.prototype.inspect = inspect; };
   });
   await focus(page); await state(page, 'Error');
-  await expect(card(page).getByRole('alert')).toContainText('Return to Models to check again automatically');
-  await expect(card(page).getByRole('alert')).toContainText('Download / retry');
-  await expect(card(page).getByRole('button', { name: 'Download / retry', exact: true })).toBeEnabled();
+  await expect(card(page).getByRole('alert')).toContainText('Fixture inspection failure.');
+  await expect(card(page).getByRole('alert')).toContainText('Retry to prepare assets');
+  await expect(card(page).getByRole('button', { name: /^(Download|Retry)$/, exact: true })).toBeEnabled();
   await page.evaluate(() => window.restoreInspection());
-  await focus(page); await state(page, 'Not downloaded');
+  await focus(page); await state(page, 'Error');
+  await expect(card(page).getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+  await download(page);
   await expect(card(page).locator('.model-error')).toBeEmpty();
-  await download(page); expect(f.requests).toHaveLength(7);
+  expect(f.requests).toHaveLength(7);
 });

@@ -28,6 +28,7 @@ test('Models removes storage controls and keeps discoverable legal links; model-
   }
   await expect(models.locator('#supertonic3 .model-license')).toContainText('OpenRAIL-M');
   await expect(models.locator('#kokoro .model-license')).toContainText('Apache-2.0');
+  await models.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Not downloaded');
   // Load an existing, genuinely model-free graph through the same saved library.
   await live.editor.evaluate(async () => {
@@ -49,8 +50,8 @@ test('concurrent manual downloads on separate Models pages request once; denial 
   const calls = await trackPersistence(f), live = await openGraph(f), first = live.models;
   const second = await f.context.newPage(); await second.goto(first.url());
   await Promise.all([
-    button(first, 'opus-ja-en', 'Download / retry').click(),
-    button(second, 'opus-en-ja', 'Download / retry').click(),
+    button(first, 'opus-ja-en', 'Download').click(),
+    button(second, 'opus-en-ja', 'Download').click(),
   ]);
   await expect(first.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Ready');
   await expect(second.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Ready');
@@ -59,7 +60,7 @@ test('concurrent manual downloads on separate Models pages request once; denial 
   await first.close(); await second.reload();
   await button(second, 'opus-en-ja', 'Delete cached assets').click();
   await expect(second.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Not downloaded');
-  await button(second, 'opus-en-ja', 'Download / retry').click();
+  await button(second, 'opus-en-ja', 'Download').click();
   await expect(second.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Ready');
   expect(f.requests).toHaveLength(21);
   expect(operations(calls)).toEqual(['persisted', 'persist']);
@@ -82,7 +83,7 @@ test('Auto Save requests persistence only after saving a model-bearing graph; a 
   expect(await editor.evaluate(() => window.savedBeforePersistence)).toBe(true);
   expect(operations(calls)).toEqual(['persisted', 'persist']);
   expect(calls.every(call => call.page.includes('graph-editor.html'))).toBe(true);
-  await button(live.models, 'opus-ja-en', 'Download / retry').click();
+  await button(live.models, 'opus-ja-en', 'Download').click();
   await expect(live.models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Ready');
   expect(operations(calls)).toEqual(['persisted', 'persist']);
   expect(f.requests).toHaveLength(14);

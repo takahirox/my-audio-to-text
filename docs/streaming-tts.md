@@ -18,7 +18,7 @@ Text.value / ASR.final / committed translation.text
 Choose language (`japanese`/`english`) and voice (`ono_anna`/`ryan`) explicitly
 in the TTS inspector. Match the voice's native language for best pronunciation.
 Auto Save prepares the same 690 MB asset set for either voice/language, including
-parked Nodes. The existing Models page provides Download / retry, verification
+parked Nodes. The existing Models page provides Download or Retry, verification
 and deletion. Press Start in Live to activate audio and keep Live open. Start
 reads verified cached weights only. Missing/evicted assets require Models
 preparation; no recording-time download, server, Python process, remote code or

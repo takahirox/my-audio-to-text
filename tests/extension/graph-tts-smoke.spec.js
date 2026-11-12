@@ -27,7 +27,11 @@ for (const type of ['Supertonic3', 'Kokoro']) {
         else await page.editor.getByLabel('kokoro voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');
         await settleAutoSave(page.editor);
         if (type === 'Kokoro') await page.models.getByLabel('Kokoro 82M voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');
-        await page.models.locator(`#${type.toLowerCase()} button:has-text("Download / retry")`).click();
+        await expect(page.editor.locator('#graph-models .model-status')).toHaveText(/^(Ready|Error)/, { timeout: 600000 });
+        await page.models.evaluate(() => window.dispatchEvent(new Event('focus')));
+        const card = page.models.locator(`#${type.toLowerCase()}`);
+        await expect(card).toHaveAttribute('data-state', /^(Ready|Not downloaded|Error)$/, { timeout: 600000 });
+        if (await card.getByRole('button', { name: /^(Download|Retry)$/ }).isVisible()) await card.getByRole('button', { name: /^(Download|Retry)$/ }).click();
         await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Ready', { timeout: 600000 });
         const begin = Date.now(), before = requests.length;
         await startGraph(page, 300000);
