@@ -354,11 +354,15 @@ with tempfile.TemporaryDirectory() as tmp:
     assert manifest['action']['default_title'] == 'Transcribe this tab'
     assert set(manifest['icons']) == {'16', '32', '48', '128'}
     assert manifest['action']['default_icon'] == manifest['icons']
+    assert len(set(manifest['icons'].values())) == 4
+    icon_hashes = set()
     for size, relative in manifest['icons'].items():
         assert relative == f'extension/icons/icon-{size}.png'
         data = (target / relative).read_bytes()
         assert data == (original / relative).read_bytes()
-        assert any(entry['path'] == relative for entry in inventory['files'])
+        digest = hashlib.sha256(data).hexdigest()
+        icon_hashes.add(digest)
+        assert dict(path=relative, bytes=len(data), sha256=digest) in inventory['files']
         assert data[:8] == bytes([137, 80, 78, 71, 13, 10, 26, 10])
         offset, image = 8, b''
         while offset < len(data):
@@ -376,6 +380,32 @@ with tempfile.TemporaryDirectory() as tmp:
         pixels = zlib.decompress(image)
         assert len(pixels) == int(size) * (1 + int(size) * 4)
         assert all(pixels[row * (1 + int(size) * 4)] <= 4 for row in range(int(size)))
+        # Undo PNG row filters so transparent/solid-color placeholders cannot pass.
+        stride = int(size) * 4
+        previous = bytearray(stride)
+        decoded = bytearray()
+        for offset in range(0, len(pixels), stride + 1):
+            filtering = pixels[offset]
+            row = bytearray(pixels[offset + 1:offset + 1 + stride])
+            for i in range(stride):
+                left = row[i - 4] if i >= 4 else 0
+                up = previous[i]
+                corner = previous[i - 4] if i >= 4 else 0
+                prediction = left + up - corner
+                distances = [abs(prediction - value) for value in (left, up, corner)]
+                paeth = (left, up, corner)[distances.index(min(distances))]
+                predictor = (0, left, up, (left + up) // 2, paeth)[filtering]
+                row[i] = (row[i] + predictor) & 255
+            decoded.extend(row)
+            previous = row
+        rgba = [tuple(decoded[i:i + 4]) for i in range(0, len(decoded), 4)]
+        assert any(pixel[3] == 0 for pixel in rgba), 'missing transparent corners'
+        opaque = [pixel[:3] for pixel in rgba if pixel[3] == 255]
+        assert len(opaque) > int(size) ** 2 // 2, 'empty or faint icon'
+        assert len(set(opaque)) > 1, 'solid-color placeholder'
+        assert sum(min(pixel) > 240 for pixel in opaque) > int(size) ** 2 // 10, 'missing foreground'
+        assert sum(max(pixel) < 100 for pixel in opaque) > int(size) ** 2 // 4, 'missing dark background'
+    assert len(icon_hashes) == 4
     assert (target / 'extension/icons/icon.svg').read_bytes() == (original / 'extension/icons/icon.svg').read_bytes()
     assert manifest['manifest_version'] == 3
     assert 'options_ui' not in manifest

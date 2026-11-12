@@ -1,5 +1,9 @@
 # Custom extension icon — Issue #343
 
+Historical report for the previous artwork. [Issue #345](extension-icon-345.md)
+replaces this design and supersedes the remaining human toolbar check below;
+human visual sign-off is not an acceptance requirement for the redesign.
+
 The original icon combines a mint waveform and white transcript lines inside a
 navy speech tile. A pale outline preserves the silhouette on dark themes. The
 small 16 px design grid keeps the artwork simple without lettering, external
