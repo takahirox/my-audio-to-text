@@ -39,12 +39,12 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 #details-error:not(:empty) { padding: .6rem .75rem; color: var(--danger); background: var(--danger-bg); border-radius: var(--control-radius); }
 #selected-title { font-size: 1.3rem; margin-top: 0; }
 .detail-actions { margin-bottom: 1.25rem; }
+.detail-actions > :is(a, button) { min-width: 0; max-width: 100%; }
+.detail-actions #delete { margin-inline-start: auto; }
+#delete-hint { font-size: .8rem; margin: -.75rem 0 1.25rem; }
+#delete-hint:empty { display: none; }
 .open-graph { display: inline-flex; align-items: center; min-height: 44px; padding: .5rem 1rem; border: 1px solid var(--accent); border-radius: var(--control-radius); text-decoration: none; background: var(--accent); color: white; font-weight: 650; }
 .open-graph:hover { background: #234f9b; }
-#graph-more { margin-left: auto; position: relative; }
-#graph-more summary span { font-size: .85rem; margin-left: .3rem; }
-#graph-more .graph-command-list { left: auto; right: 0; max-width: min(24rem, 70vw); box-shadow: var(--popover-shadow); }
-#graph-more p { font-size: .8rem; }
 #details-form label { display: flex; flex-direction: column; gap: .3rem; margin: .75rem 0; font-size: .9rem; }
 #details-form input, #details-form textarea { width: 100%; min-width: 0; resize: vertical; }
 #graph-metadata { font-size: .85rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 1rem; margin-bottom: 0; }
@@ -74,9 +74,6 @@ dd { margin: 0; overflow-wrap: anywhere; color: inherit; }
 }
 @media (max-width: 480px) {
   .library-detail { padding: 1rem; }
-  .detail-actions { position: relative; }
-  #graph-more { margin-left: 0; position: static; }
-  #graph-more .graph-command-list { width: 100%; left: 0; right: auto; }
 }
 @media (forced-colors: active) {
   #graph-list li.selected { outline: 2px solid Highlight; outline-offset: -2px; }

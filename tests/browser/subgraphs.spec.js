@@ -175,7 +175,7 @@ test('shared library type filters, safe deletion hint, bundle export and atomic 
   await page.locator('#graph-list button[data-id]').click();
   await expect(page.locator('#delete')).toBeDisabled(); await expect(page.locator('#delete-hint')).toContainText('Live transcription');
   await page.locator('#filter').selectOption('graph');
-  await page.locator('#graph-list button[data-id]').click(); await page.locator('#graph-more > summary').click();
+  await page.locator(`#graph-list button[data-id="${ids.parent}"]`).click();
   const downloading = page.waitForEvent('download'); await page.locator('#export').click(); const download = await downloading;
   const bundle = JSON.parse(await readFile(await download.path(), 'utf8'));
   expect(bundle.format).toBe('graph-bundle'); expect(bundle.root).toBe(ids.parent); expect(bundle.graphs).toHaveLength(2);
