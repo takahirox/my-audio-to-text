@@ -77,7 +77,7 @@ test(`real extension ${direction}: native tab audio → ASR.final → committed 
         recorder.on('pageerror', error => errors.push(error.message));
         await expect(recorder.locator('#status')).toHaveText('Transcription active', { timeout: 120000 });
         await recorder.locator('#stop').click(); await expect(recorder.locator('#start')).toBeEnabled();
-        await card.getByRole('button', { name: 'Check cache', exact: true }).click();
+        await models.evaluate(() => window.dispatchEvent(new Event('focus')));
         await expect(card.locator('.model-status')).toContainText('Ready', { timeout: 30000 });
       }
       await recorder.locator('#start').click();

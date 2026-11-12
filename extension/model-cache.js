@@ -58,7 +58,6 @@ class ModelCard {
     this.prepare = button('Download / retry', () => { void this.run('prepare'); });
     this.prepare.className = 'primary';
     this.cancel = button('Cancel download', () => this.controller?.abort());
-    this.check = button('Check cache', () => { void this.inspect(); });
     this.remove = button('Delete cached assets', () => { void this.run('remove'); });
     this.remove.className = 'danger';
     const terms = el('a', definition.terms); terms.href = definition.url;
@@ -73,7 +72,7 @@ class ModelCard {
     return this.caches.get(key);
   }
   buttons() {
-    for (const control of [this.prepare, this.check, this.remove, this.voice].filter(Boolean)) control.disabled = !!this.busy;
+    for (const control of [this.prepare, this.remove, this.voice].filter(Boolean)) control.disabled = !!this.busy;
     if (!this.controller && document.activeElement === this.cancel) this.prepare.focus({ preventScroll: true });
     this.cancel.disabled = !this.controller;
     this.cancel.hidden = !this.controller;
@@ -87,7 +86,7 @@ class ModelCard {
     this.bytes.textContent = `${view.downloadedBytes.toLocaleString()} / ${view.totalBytes.toLocaleString()} bytes · ${view.cachedBytes.toLocaleString()} bytes verified cached`;
     this.files.replaceChildren(...view.files.map(file => el('li', `${file.path}: ${file.cached ? 'Cached' : 'Missing'}`)));
   }
-  fail(error) { if (!closed) { this.status.textContent = 'Error'; this.root.dataset.state = 'Error'; this.error.textContent = `${error.message} Retry checking or rebuild the extension if its manifest is missing.`; } }
+  fail(error) { if (!closed) { this.status.textContent = 'Error'; this.root.dataset.state = 'Error'; this.error.textContent = `${error.message} Return to Models to check again automatically, or choose Download / retry. Rebuild the extension if its manifest is missing.`; } }
   async inspect() {
     if (this.busy || closed) return;
     const ticket = ++this.ticket;

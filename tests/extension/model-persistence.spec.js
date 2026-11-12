@@ -28,7 +28,6 @@ test('Models removes storage controls and keeps discoverable legal links; model-
   }
   await expect(models.locator('#supertonic3 .model-license')).toContainText('OpenRAIL-M');
   await expect(models.locator('#kokoro .model-license')).toContainText('Apache-2.0');
-  await button(models, 'opus-ja-en', 'Check cache').click();
   await expect(models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Not downloaded');
   // Load an existing, genuinely model-free graph through the same saved library.
   await live.editor.evaluate(async () => {

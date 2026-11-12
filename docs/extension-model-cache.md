@@ -26,8 +26,8 @@ storage prevents preparation. Storage finishes before preparation; download
 failure does not roll it back. No capture, inference, Workers or remote executable
 code starts during Auto Save preparation. Live initialization and Start/inference
 remain cache-only; see the [Live model lifecycle](extension-graph.md#live-model-lifecycle-239).
-Each optional model has independent status, byte progress, error/retry, Cancel,
-Check cache and Delete controls. TTS voice selectors are initialized from saved
+Each optional model has independent status, byte progress, error/retry, Cancel
+and Delete controls. TTS voice selectors are initialized from saved
 Nodes where present, and never change graph settings. Choose a matching voice
 in Graph Editor, Auto Save prepares its files after persistence for the next session. Language/voice and terms are
 shown alongside preparation. Graph Editor also shows per-model status and byte
@@ -54,11 +54,14 @@ on the Models screen.
 - **Cancel download** or closing/reloading the page interrupts preparation. No
   background worker continues a multi-GB download. Chrome may finish an already
   completed write during teardown; the next inspection validates stored bytes.
-- **Check cache** revalidates all files; **Delete cached assets** removes only
-  this pinned asset set, leaving other models/revisions intact. Another open
-  Models page refreshes after preparation/deletion notifications, on focus, or
-  with Check cache after eviction. TTS voices share model files; deleting a
-  selected voice removes shared weights and may make other voices missing too.
+- Models automatically revalidates all files when opened, when it regains focus,
+  and after relevant cache-update notifications from other extension pages.
+  Return to Models to detect missing, evicted or corrupt files, then use
+  **Download / retry** to recover them while reusing valid files.
+- **Delete cached assets** removes only this pinned asset set, leaving other
+  models/revisions intact, and updates open Models pages. TTS voices share model
+  files; deleting a selected voice removes shared weights and may make other
+  voices missing too.
 
 Cache Storage belongs to this **extension origin and Chrome profile**, separate
 from the published Node Playground's website origin. Closing pages or restarting
@@ -220,6 +223,9 @@ deduplication, packaged ASR exclusion and stale-run cancellation.
 `tests/extension/graph-models.spec.js` exercises direct UI composition, persistence
 before fetching, failed validation/storage, saved parked Nodes, shared weights,
 progress, cancellation, integrity failures/retry and Models recovery.
+`tests/extension/model-inspection.spec.js` covers automatic Models inspection on
+opening, focus and cross-page updates, including corruption/eviction recovery and
+actionable inspection errors without a manual cache-check control.
 
 See [Issue #67 validation evidence](evidence/extension-model-cache-67.md).
 No post-merge human acceptance gate is required. Optional follow-up work can
