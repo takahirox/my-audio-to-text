@@ -144,7 +144,7 @@ test('Edit graph targets its own idle or running window independently of the too
   await expect(second.locator('#live-displays')).not.toContainText('B edited');
   // The remaining editor destinations work through the existing navigation paths.
   const modelsOpened = f.context.waitForEvent('page');
-  await editor.getByRole('link', { name: 'Models', exact: true }).press('Enter');
+  await editor.getByRole('link', { name: 'Models', exact: true }).click();
   const models = await modelsOpened;
   await expect(models).toHaveURL(f.url + 'model-cache.html');
   await models.close();

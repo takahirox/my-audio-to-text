@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { defineAssetSet, ModelAssetCache, MODEL_CACHE_NAME, HASH_CHUNK_BYTES,
-  storagePersistence } from '../extension/model-asset-cache.js';
+  storagePersistence, requestStoragePersistence } from '../extension/model-asset-cache.js';
 
 const digest = data => createHash('sha256').update(data).digest('hex');
 const data = [Buffer.from('fixture configuration'), Buffer.from('fixture weights')];
@@ -231,4 +231,105 @@ test('deletion acquires every shared-file lease first and never partially delete
   inUse = false;
   assert.equal((await f.make().remove()).state, 'Not downloaded');
   assert.equal(f.entries.size, 0);
+});
+
+for (const mode of ['granted', 'already granted', 'denied', 'unsupported', 'no persist', 'check throws', 'request throws']) {
+  test(`automatic persistence: ${mode} does not interrupt verified downloads or repeat on deletion/retry`, async () => {
+    const f = fixture(), calls = [];
+    const storage = mode === 'unsupported' ? {} : {
+      async persisted() {
+        calls.push('persisted');
+        if (mode === 'check throws') throw Error('Unavailable');
+        return mode === 'already granted';
+      },
+      async persist() {
+        calls.push('persist');
+        if (mode === 'request throws') throw Error('Unavailable');
+        return mode === 'granted';
+      },
+    };
+    if (mode === 'no persist') delete storage.persist;
+    Object.assign(f.dependencies, { storage, persistenceSession: null });
+    await f.make().inspect(); await f.make().remove();
+    assert.deepEqual(calls, [], 'cache checks/deletion must not ask for persistence');
+    const fetch = f.dependencies.fetchAsset;
+    f.dependencies.fetchAsset = (...args) => {
+      if (mode !== 'unsupported') assert.equal(calls[0], 'persisted', 'check before download');
+      if (['granted', 'denied', 'request throws'].includes(mode)) assert.equal(calls[1], 'persist');
+      return fetch(...args);
+    };
+    assert.equal((await f.make().prepare()).state, 'Ready');
+    const expected = mode === 'unsupported' ? [] : ['persisted',
+      ...(['granted', 'denied', 'request throws'].includes(mode) ? ['persist'] : [])];
+    assert.deepEqual(calls, expected);
+    assert.equal((await f.make().prepare()).state, 'Ready');
+    assert.equal(f.calls.length, 2, 'fully cached preparation fetches nothing');
+    await f.make().remove();
+    assert.equal((await f.make().prepare()).state, 'Ready');
+    assert.equal(f.calls.length, 4); assert.deepEqual(calls, expected);
+  });
+}
+
+test('fully cached and already canceled preparation never requests persistence', async () => {
+  const f = fixture(); await f.manager.prepare();
+  let requests = 0;
+  f.dependencies.storage = { persisted() { requests++; return false; }, persist() { requests++; return true; } };
+  assert.equal((await f.make().prepare()).state, 'Ready');
+  await f.manager.remove();
+  const controller = new AbortController(); controller.abort();
+  assert.equal((await f.make().prepare({ signal: controller.signal })).state, 'Error');
+  assert.equal(requests, 0);
+});
+
+test('concurrent different model downloads share the pending persistence request; cancellation still prevents fetching', async () => {
+  let release, checks = 0, requests = 0;
+  const storage = { async persisted() { checks++; return false; }, persist() {
+    requests++; return new Promise(resolve => { release = resolve; });
+  } };
+  const a = fixture(), b = fixture(manifest({ id: 'test/other' }));
+  for (const f of [a, b]) Object.assign(f.dependencies, { storage, persistenceSession: null });
+  const controller = new AbortController();
+  const first = a.make().prepare(), second = b.make().prepare({ signal: controller.signal });
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(a.calls, []); assert.deepEqual(b.calls, []);
+  controller.abort(); release(false);
+  assert.equal((await first).state, 'Ready'); assert.equal((await second).state, 'Error');
+  assert.deepEqual(b.calls, []);
+  assert.equal((await b.make().prepare()).state, 'Ready');
+  assert.equal(checks, 1); assert.equal(requests, 1);
+});
+
+test('session marker and Web Lock coordinate separate realms and reopened pages after a denial', async () => {
+  const other = await import('../extension/model-asset-cache.js?separate-realm');
+  let queue = Promise.resolve(), checks = 0, requests = 0;
+  const markers = {};
+  const session = { async get() { return { ...markers }; }, async set(values) { Object.assign(markers, values); } };
+  const locks = { request(name, action) {
+    assert.equal(name, 'model-storage-persistence');
+    const pending = queue.then(action); queue = pending; return pending;
+  } };
+  const storage = () => ({ async persisted() { checks++; return false; }, async persist() { requests++; return false; } });
+  await Promise.all([requestStoragePersistence(storage(), { locks, session }),
+    other.requestStoragePersistence(storage(), { locks, session })]);
+  await other.requestStoragePersistence(storage(), { locks, session });
+  assert.equal(checks, 1); assert.equal(requests, 1);
+  // A new browser session may make another attempt.
+  for (const key of Object.keys(markers)) delete markers[key];
+  await requestStoragePersistence(storage(), { locks, session });
+  assert.equal(requests, 2);
+});
+
+test('coordination API failures are best effort and cannot fail model preparation', async () => {
+  const f = fixture();
+  f.dependencies.storage = { async persisted() { return false; }, async persist() { return false; } };
+  f.dependencies.persistenceSession = { get() { throw Error('Session unavailable'); } };
+  assert.equal((await f.make().prepare()).state, 'Ready');
+  await f.make().remove();
+  f.dependencies.storage = {};
+  // Model-level locks still work; only persistence coordination is unavailable.
+  f.dependencies.locks = { request(name, ...args) {
+    if (name === 'model-storage-persistence') throw Error('Lock unavailable');
+    return args.at(-1)();
+  } };
+  assert.equal((await f.make().prepare()).state, 'Ready');
 });

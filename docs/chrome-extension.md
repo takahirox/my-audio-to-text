@@ -49,7 +49,7 @@ and Models keep their dark appearance:
   groups reset, validation, import/export and optional warnings. Edits save automatically. Saving prepares required optional
   model weights with progress, cancellation and retry. Models provides asset
   requirements and terms. Changes apply next session; external revisions retain recoverable drafts and offer Reload latest graph in recovery controls. Reset is undoable.
-- **Models** opens a dedicated tab (also Chrome's Extension options page), with
+- **Models** opens a dedicated tab from Graph Library, Graph Editor or Live, with
   verified cache controls for ReazonSpeech, Silero, Whisper, Zipformer and both OPUS-MT
   directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Opening it never downloads weights.
 
@@ -109,7 +109,7 @@ loading it again is unnecessary.
 1. Open `chrome://extensions` and enable **Developer mode**.
 2. Choose **Load unpacked** and select **`dist/chrome-extension`** (the directory
    containing the generated root `manifest.json`).
-3. Pin **Local current-tab transcription** in Chrome's Extensions menu.
+3. Pin **My Audio to Text** in Chrome's Extensions menu.
 4. Open a normal meeting/video/audio tab and click **Transcribe this tab** in
    the toolbar. A new independent Live window opens for the persisted default
    graph and shows **Preparing models…** while it initializes
@@ -408,8 +408,9 @@ cache, native service-worker stop/restart, offscreen loss and extension reload.
 The feasibility probe uses a disposable minimal extension and fresh offscreen
 context for each native permission state. It verifies AudioWorklet, isolated
 Worker/shared-memory WASM and records WebGPU adapter availability. Real-model
-mode assembles the current source with the pinned ReazonSpeech/Silero bundle from
-`prepare:assets`, without requiring unrelated optional model packages. It runs
+mode uses the weight-free runtime from `prepare:assets` and prepares the pinned
+ReazonSpeech/Silero assets through the verified cache, without requiring unrelated
+model packages. It runs
 actual CPU/WASM inference on `ordinary-english.wav` supplied by Chrome's fake
 microphone device. It compares final events with text inserted in native input
 and textarea, and runs concurrent Live/Web sessions. Historical real-model results and source hashes are in
@@ -450,7 +451,7 @@ explicit Start in Live, or the field mic click for the current website. Basic
 tab IDs and lifecycle events are available without the `tabs` permission. All
 scripts and inference runtimes are packaged locally; verified model weights are cached on demand; no remote code
 is loaded. The
-Models options page uses the existing extension-origin Cache Storage without adding permissions or changing the existing CSP. The toolbar
+Models page uses the existing extension-origin Cache Storage without adding permissions or changing the existing CSP. The toolbar
 invocation grants capture authority; opening a window by itself does not grant
 access to an arbitrary tab. The persistent window avoids a toolbar popup's
 automatic teardown when the user returns to the meeting.

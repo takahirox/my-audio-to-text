@@ -90,11 +90,14 @@ async function retainFiles(manifest, locks) {
 
 export class ModelAssetCache {
   constructor(manifest, { cacheStorage = globalThis.caches, fetchAsset = globalThis.fetch?.bind(globalThis),
-    locks = globalThis.navigator?.locks } = {}) {
+    locks = globalThis.navigator?.locks, storage = globalThis.navigator?.storage,
+    persistenceSession = globalThis.chrome?.storage?.session } = {}) {
     this.manifest = manifest;
     this.cacheStorage = cacheStorage;
     this.fetchAsset = fetchAsset;
     this.locks = locks;
+    this.storage = storage;
+    this.persistenceSession = persistenceSession;
     this.queue = Promise.resolve();
   }
 
@@ -166,6 +169,9 @@ export class ModelAssetCache {
           onChange(this.snapshot(files, 'Downloading'));
           for (let i = 0; i < files.length; i++) {
             if (files[i].cached) continue;
+            controller.signal.throwIfAborted();
+            await requestStoragePersistence(this.storage, { locks: this.locks, session: this.persistenceSession });
+            controller.signal.throwIfAborted();
             activeFile = this.manifest.files[i];
             const completeBytes = this.snapshot(files).cachedBytes;
             const response = await this.fetchAsset(activeFile.sourceURL, {
@@ -219,8 +225,34 @@ export class ModelAssetCache {
 
 export async function storagePersistence(storage = globalThis.navigator?.storage, request = false) {
   try {
-    if (!storage?.persisted || (request && !storage.persist)) return 'unsupported';
+    if (!storage?.persisted) return 'unsupported';
     if (await storage.persisted()) return 'granted';
+    if (request && !storage.persist) return 'unsupported';
     return request ? (await storage.persist() ? 'granted' : 'denied') : 'not granted';
   } catch { return 'unavailable'; }
+}
+
+const persistenceRequests = new WeakMap();
+const PERSISTENCE_SESSION_KEY = 'model-storage-persistence-attempted';
+
+// Start only when a missing asset is about to be fetched. A shared promise covers
+// models in this realm; an origin-wide lock and extension session marker also
+// cover other pages and page recreation, including after a denial. The marker is
+// written before the request so closing the requesting page cannot cause spam.
+export function requestStoragePersistence(storage = globalThis.navigator?.storage,
+  { locks = globalThis.navigator?.locks, session = globalThis.chrome?.storage?.session } = {}) {
+  if (!storage || !['object', 'function'].includes(typeof storage)) return Promise.resolve('unsupported');
+  if (!persistenceRequests.has(storage)) {
+    const attempt = async () => {
+      try {
+        if ((await session?.get(PERSISTENCE_SESSION_KEY))?.[PERSISTENCE_SESSION_KEY]) return 'attempted';
+        await session?.set({ [PERSISTENCE_SESSION_KEY]: true });
+      } catch { /* Session coordination is optional; still try the storage API. */ }
+      return storagePersistence(storage, true);
+    };
+    const pending = Promise.resolve().then(() => locks
+      ? locks.request('model-storage-persistence', attempt) : attempt()).catch(() => 'unavailable');
+    persistenceRequests.set(storage, pending);
+  }
+  return persistenceRequests.get(storage);
 }

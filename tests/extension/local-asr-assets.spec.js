@@ -78,7 +78,7 @@ for (const kind of ['reazon', 'whisper', 'zipformer']) test(`verified ${kind} ca
       const file = manifest.files[0];
       await (await caches.open(MODEL_CACHE_NAME)).put(file.url, new Response(new Uint8Array(file.bytes)));
     }, kind);
-    await page.locator(`#${kind} button`, { hasText: 'Check cache' }).click();
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(page.locator(`#${kind}`)).toHaveAttribute('data-state', 'Not downloaded');
     await page.locator(`#${kind} button`, { hasText: 'Download / retry' }).click();
     await expect(page.locator(`#${kind}`)).toHaveAttribute('data-state', 'Ready', { timeout: 120000 });

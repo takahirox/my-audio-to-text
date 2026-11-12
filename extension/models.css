@@ -1,5 +1,4 @@
 .models-page { max-width: 78rem; padding: 1.25rem 1.75rem; }
-.models-page .page-subtitle { margin-top: 0; font-size: 1rem; }
 .models-page main { margin-top: 1.25rem; }
 .models-page :is(.panel, .model-grid, .model-card, .model-heading, .actions) { min-width: 0; }
 .models-page :is(p, h2, h3, a, summary, label, li, button) { overflow-wrap: anywhere; }
@@ -20,7 +19,6 @@
 .models-page .model-card details { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .4rem; }
 .models-page .model-card ul { padding-left: 1.25rem; }
 .models-page .model-license { margin: .75rem 0 0; font-size: .8rem; }
-.models-page main > details.panel { margin-top: 1rem; }
 .models-page summary { align-content: center; }
 .models-page footer { padding: 1rem 1.25rem; border: 1px solid var(--warning-border); border-radius: var(--card-radius); color: var(--warning); background: var(--warning-bg); }
 @media (max-width: 800px) {

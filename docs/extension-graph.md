@@ -351,14 +351,34 @@ older schema versions still fail explicitly. Current [example JSON](evidence/ite
 
 ## Reusable processing subgraphs
 
-Select a connected group of processing node headings with **Shift+click** or
-**Shift+Enter**, then choose **Graph actions → Create Subgraph**. Review the
-subgraph name and the inferred exposed input/output names before creating it.
+Click a node heading to select it and inspect its settings. **Shift+click** or
+**Ctrl+click** on Windows/Linux, **Shift+click** or **Command+click** on macOS,
+and **Shift+Enter** toggle individual nodes in the selection. macOS Control+click
+retains native secondary-click behavior. A plain click selects one node; clicking
+that sole selected heading again, blank canvas, or **Escape** clears selection.
+Selected nodes show a checkmark and a thicker border, with a selection count in
+the Inspector. For two or more nodes, **Create Subgraph** appears there. Select
+one connected group of processing nodes; an ineligible selection is explained
+beside the action and remains selected so it can be corrected.
+
+The **Create Subgraph** dialog asks for a name and shows the actual included
+nodes, inferred input/output counts, and confirmation that connections are
+preserved. No port editing is required. **Edit input / output ports** starts
+collapsed; expand it to rename ports, expose optional ports, or edit their
+internal endpoints. Connected inferred ports retain their IDs and endpoints:
+removing or rerouting one is rejected before storage changes, even when the new
+endpoint has the same type. Added optional ports can be edited or removed.
+Opening/closing the disclosure does not change the mapping. Cancel leaves both
+the canvas and library unchanged.
+
 Crossing connections become typed ports; repeated connections from the same
 internal output share one exposed port. Concrete capture nodes and output
 destinations stay on the parent canvas. The shared definition is saved in the
-existing Graph Library immediately; the parent replacement remains a draft
-until Auto Save completes, like other graph edits. Undo restores the parent nodes and wires; it never deletes the newly shared definition from Library.
+existing Graph Library together with the parent replacement in one revision-checked
+transaction. Creation waits for pending Auto Save edits first. Failed validation,
+revision checks or storage writes leave both entries unchanged. The replacement
+is one Undo/Redo edit; Auto Save persists Undo/Redo, and Undo never deletes the
+shared definition from Library, including when other graphs reuse it.
 
 Library lists regular graphs and subgraphs together in ascending name order;
 subgraphs are identified by **· Subgraph**. **Add Node** includes saved subgraphs

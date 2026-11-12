@@ -28,6 +28,18 @@ export function portContract(graph, side, port) {
   return nodeDefinition(graph.nodes.find(node => node.id === port.node), graph)[side][port.port];
 }
 
+// During extraction every inferred port already carries a parent connection.
+// Type compatibility alone cannot detect a same-type wire being rerouted.
+export function assertExtractionPorts(graph, inferred) {
+  for (const side of ['inputs', 'outputs']) for (const original of inferred[side]) {
+    const port = graph.interface?.[side]?.find(port => port.id === original.id);
+    if (!port || port.node !== original.node || port.port !== original.port) {
+      throw Error(`Keep connected ${side === 'inputs' ? 'input' : 'output'} ${original.id} mapped to ${original.node}.${original.port} to preserve parent connections. You can rename it or expose an additional port.`);
+    }
+  }
+  return graph;
+}
+
 // Expand into ordinary nodes once, before model selection or runtime creation.
 // Edges go directly to the real endpoints, preserving atomic output families,
 // sampled Hold semantics and the existing runtime's ownership/cleanup rules.

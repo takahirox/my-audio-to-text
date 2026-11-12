@@ -67,3 +67,28 @@ extension suite or qualification of every optional multi-GB model backend.
 
 No audio/text is uploaded, no model choice/graph format is changed, and no
 extension host permission or remote executable-code exception is added.
+
+## Publication integration
+
+Integrated `main` at `6b8bb1c805a1ab382e201331ff572be6dbfbc740` before
+publication. Conflict resolution preserves the extension name and removed Chrome
+Options entry, simplified Models page, automatic persistence before missing
+asset downloads, and automatic cache inspection from #307/#318/#324/#326/#329.
+The five newly downloadable model cards inherit these behaviors. No manual
+Check cache button or persistence controls are reintroduced.
+
+Validation after integration:
+
+- `npm test`: **978 passed**, zero failures/skips, including packaging inventory,
+  shared-file deletion leases and automatic persistence tests.
+- Chromium `local-asr-preparation.spec.js`, `model-inspection.spec.js`,
+  `model-persistence.spec.js` and `simple-layout.spec.js`: **14 distinct tests
+  passed** (13 on the initial sweep; all three persistence tests passed after
+  updating the readiness assertion for the additional ReazonSpeech/Silero cards).
+  Covers offline model-free execution, exact graph dependency preparation without
+  Workers, corruption/eviction recovery, cross-page inspection, concurrent
+  downloads/persistence, legal links, and narrow/wide layouts.
+- Real inference and the complete production setup/build were not repeated at
+  publication; the implementation results and broader-suite limitations above
+  remain the evidence for those checks. The real-ASR smoke's corruption step now
+  triggers the existing automatic focus inspection instead of the removed button.

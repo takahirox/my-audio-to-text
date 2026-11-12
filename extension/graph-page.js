@@ -54,7 +54,17 @@ async function openEditor() {
     onExport: graph => { try { return exportDraft(entry, graph, readLibrary(localStorage)); } catch { return JSON.stringify(graph, null, 2); } },
     onCreateSubgraph: async (definition, revision) => {
       if (!lease || conflict || legacyConflict) throw Error('Graph changed elsewhere. Export the draft or reload the latest graph before creating a subgraph.');
-      library = await store.create({ ...definition, replacementSource: { id, revision } }); return library;
+      library = await store.create({ ...definition, replacementSource: { id, revision } });
+      editor.definitions = library.graphs;
+      entry = library.graphs.find(item => item.id === id); base = entry.revision;
+      // Creation saved both entries in one transaction. Adopt that baseline
+      // without clearing editor history; applying the replacement is one edit.
+      editor.saved = entryGraph(entry, library); makeSession();
+      setTimeout(() => {
+        try { preparation.replace(resolvedEntryGraph(entry, library)); }
+        catch (error) { element('errors').textContent = `Graph saved; model preparation unavailable: ${error.message}. Open Models for recovery.`; }
+      }, 0);
+      return library;
     },
     onEditSubgraph: async sharedId => {
       try { await flush(); sessionStorage.setItem(`subgraph-parent-draft:${id}`, JSON.stringify({ base, graph: editor.draft })); location.href = `?id=${encodeURIComponent(sharedId)}&parent=${encodeURIComponent(id)}`; }

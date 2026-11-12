@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { domText } from './fixtures/dom.js';
 import { graphNode, defaultGraph, edge, assertGraph, nodeDefinition, executableGraph } from '../extension/graph.js';
-import { extractSubgraph, assertSubgraph, resolveSubgraphs, references } from '../extension/subgraphs.js';
+import { extractSubgraph, assertSubgraph, assertExtractionPorts, resolveSubgraphs, references } from '../extension/subgraphs.js';
 import { GraphLibrary, openLibrary, readLibrary, entryGraph, entryError, exportEntry, resolvedEntryGraph, readLiveGraph, LIBRARY_KEY } from '../extension/graph-library.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
 import { webVoiceGraph, webVoiceChoices } from '../extension/web-voice-graph.js';
@@ -39,6 +39,57 @@ function formatterChain() {
     edges: [edge('text', 'value', 'first', 'input1'), edge('first', 'text', 'second', 'input1'), edge('second', 'text', 'output', 'input1')] };
 }
 
+test('reviewed extraction preserves connected identities and endpoints, including same-type alternatives', () => {
+  const { shared } = extractSubgraph(formatterChain(), ['first', 'second'], 'formatters');
+  const inferred = structuredClone(shared.interface);
+  for (const side of ['inputs', 'outputs']) {
+    for (const mutate of [
+      graph => graph.interface[side].pop(),
+      graph => { graph.interface[side][0].id = 'replacement'; },
+      graph => { graph.interface[side][0].node = side === 'inputs' ? 'second' : 'first'; },
+      graph => { graph.interface[side][0].port = 'missing'; }
+    ]) {
+      const draft = structuredClone(shared); mutate(draft);
+      assert.throws(() => assertExtractionPorts(draft, inferred), /Keep connected.*to preserve parent connections/);
+    }
+  }
+  shared.interface.inputs[0].name = 'Transcript';
+  shared.interface.outputs[0].name = 'Formatted';
+  shared.interface.inputs.push({ id: 'optional', name: 'Optional context', node: 'first', port: 'input2' });
+  shared.interface.outputs.push({ id: 'preview', name: 'Intermediate text', node: 'first', port: 'text' });
+  assert.doesNotThrow(() => assertSubgraph(assertExtractionPorts(shared, inferred)));
+  shared.interface.inputs.at(-1).port = 'input3';
+  shared.interface.outputs.pop();
+  assert.doesNotThrow(() => assertSubgraph(assertExtractionPorts(shared, inferred)));
+});
+
+test('extraction preserves every edge and node value with zero or multiple boundary ports', () => {
+  for (const withBoundary of [false, true]) {
+    const graph = formatterChain();
+    if (withBoundary) {
+      graph.nodes.find(node => node.id === 'output').settings.inputCount = 2;
+      graph.nodes.push(graphNode('Text', 'context'), graphNode('Display', 'fanout'));
+      graph.edges.push(edge('context', 'value', 'first', 'input2'), edge('first', 'text', 'output', 'input2'), edge('second', 'text', 'fanout', 'input1'));
+    } else graph.edges = [edge('first', 'text', 'second', 'input1')];
+    const original = structuredClone(graph);
+    const { shared, parent, instance } = extractSubgraph(graph, ['first', 'second'], 'shared');
+    assert.deepEqual(graph, original);
+    assert.deepEqual(shared.nodes, graph.nodes.filter(node => ['first', 'second'].includes(node.id)));
+    assert.deepEqual(shared.edges, [edge('first', 'text', 'second', 'input1')]);
+    assert.equal(shared.interface.inputs.length, withBoundary ? 2 : 0);
+    assert.equal(shared.interface.outputs.length, withBoundary ? 2 : 0);
+    // Expand the remapped boundary using its interface and compare exact wires.
+    const endpoint = (value, side) => {
+      if (value[0] !== instance.id) return value;
+      const port = shared.interface[side].find(port => port.id === value[1]);
+      return [port.node, port.port];
+    };
+    const restored = [...shared.edges, ...parent.edges.map(route => ({ from: endpoint(route.from, 'outputs'), to: endpoint(route.to, 'inputs') }))];
+    assert.deepEqual(restored.map(JSON.stringify).sort(), graph.edges.map(JSON.stringify).sort());
+    assert.doesNotThrow(() => resolveSubgraphs(parent, [{ id: 'shared', kind: 'subgraph', graph: shared }]));
+  }
+});
+
 test('rejected extraction writes nothing and the same identity can be retried after repairing reviewed ports', async () => {
   const f = await fixture(), extracted = extractSubgraph(formatterChain(), ['first', 'second'], 'formatters');
   const output = extracted.shared.interface.outputs.pop(), before = f.storage.getItem(LIBRARY_KEY);
@@ -63,6 +114,30 @@ test('extraction checks its original parent revision after a queued concurrent s
   assert.equal(f.storage.getItem(LIBRARY_KEY), JSON.stringify(saved));
   assert.equal(find(f.current(), source.id).graph.nodes.find(node => node.id === 'text').settings.value, 'Saved concurrently');
   assert.equal(find(f.current(), 'formatters'), undefined);
+});
+
+test('extraction commits the definition and revision-checked parent in one write; failed writes and validation are atomic', async () => {
+  const f = await fixture();
+  const created = await f.store.create({ name: 'Parent', graph: formatterChain() }), source = created.graphs.at(-1);
+  const extracted = extractSubgraph(source.graph, ['first', 'second'], 'formatters');
+  const definition = { id: 'formatters', name: 'Formatters', kind: 'subgraph', graph: extracted.shared,
+    replacementGraph: extracted.parent, replacementSource: { id: source.id, revision: source.revision } };
+  const before = f.storage.getItem(LIBRARY_KEY), writes = [], set = f.storage.setItem;
+  f.storage.setItem = () => { throw Error('Storage full'); };
+  await assert.rejects(f.store.create(definition), /Storage full/);
+  assert.equal(f.storage.getItem(LIBRARY_KEY), before);
+  f.storage.setItem = (key, value) => { writes.push(value); set(key, value); };
+  const invalid = structuredClone(definition); invalid.graph.interface.outputs = [];
+  await assert.rejects(f.store.create(invalid), /Unknown port/);
+  assert.equal(f.storage.getItem(LIBRARY_KEY), before);
+  assert.equal(writes.length, 0);
+  const saved = await f.store.create(definition);
+  assert.equal(writes.length, 1);
+  const published = JSON.parse(writes[0]), parent = find(published, source.id);
+  assert.deepEqual(parent.graph, extracted.parent);
+  assert.notEqual(parent.revision, source.revision);
+  assert.deepEqual(find(published, 'formatters').graph, extracted.shared);
+  assert.deepEqual(f.current(), saved);
 });
 
 test('unchanged exposed contracts cannot silently disable complete or partial parent paths', async () => {

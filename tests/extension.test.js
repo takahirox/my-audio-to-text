@@ -404,8 +404,12 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in build.SHARED_FILES:
         assert (target / 'web' / name).read_bytes() == (original / 'web' / name).read_bytes()
     manifest = json.loads((target / 'manifest.json').read_text())
+    assert manifest == json.loads((original / 'extension' / 'manifest.json').read_text())
+    assert manifest['name'] == 'My Audio to Text'
+    assert manifest['action'] == {'default_title': 'Transcribe this tab'}
     assert manifest['manifest_version'] == 3
-    assert manifest['options_ui'] == dict(page='extension/model-cache.html', open_in_tab=True)
+    assert 'options_ui' not in manifest
+    assert 'options_page' not in manifest
     assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting', 'storage', 'offscreen', 'contextMenus'}
     assert 'host_permissions' not in manifest
     assert set(manifest['optional_host_permissions']) == {'http://*/*', 'https://*/*'}

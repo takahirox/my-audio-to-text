@@ -8,8 +8,8 @@ model card's packaged license. Live opening verifies cached assets and initializ
 executable models before enabling Start; neither Live nor Start downloads weights.
 
 Build/load the extension as described in [the extension guide](chrome-extension.md).
-Open **Models** from Live or Graph Editor, or **Extension options** from Chrome's
-extension menu. The options page manages real OPUS-MT Japanese → English,
+Open **Models** from Graph Library, Graph Editor or Live.
+The Models page manages real OPUS-MT Japanese → English,
 OPUS-MT English → Japanese, TranslateGemma 4B English ↔ Japanese, Supertonic 3, Kokoro, Parakeet v3 and Moonshine Medium English Streaming in the existing verified cache.
 ReazonSpeech ja-en, Silero VAD, Whisper tiny, Zipformer English and the Japanese
 Kokoro frontend voice use these same controls. No model has a Bundled status.
@@ -28,8 +28,8 @@ storage prevents preparation. Storage finishes before preparation; download
 failure does not roll it back. No capture, inference, Workers or remote executable
 code starts during Auto Save preparation. Live initialization and Start/inference
 remain cache-only; see the [Live model lifecycle](extension-graph.md#live-model-lifecycle-239).
-Each model has independent status, byte progress, error/retry, Cancel,
-Check cache and Delete controls. TTS voice selectors are initialized from saved
+Each model has independent status, byte progress, error/retry, Cancel
+and Delete controls. TTS voice selectors are initialized from saved
 Nodes where present, and never change graph settings. Choose a matching voice
 in Graph Editor, Auto Save prepares its files after persistence for the next session. Language/voice and terms are
 shown alongside preparation. Graph Editor also shows per-model status and byte
@@ -55,11 +55,14 @@ on the Models screen.
 - **Cancel download** or closing/reloading the page interrupts preparation. No
   background worker continues a multi-GB download. Chrome may finish an already
   completed write during teardown; the next inspection validates stored bytes.
-- **Check cache** revalidates all files; **Delete cached assets** removes only
-  this pinned asset set, leaving other models/revisions intact. Another open
-  Models page refreshes after preparation/deletion notifications, on focus, or
-  with Check cache after eviction. TTS voices share model files; deleting a
-  selected voice removes shared weights and may make other voices missing too.
+- Models automatically revalidates all files when opened, when it regains focus,
+  and after relevant cache-update notifications from other extension pages.
+  Return to Models to detect missing, evicted or corrupt files, then use
+  **Download / retry** to recover them while reusing valid files.
+- **Delete cached assets** removes only this pinned asset set, leaving other
+  models/revisions intact, and updates open Models pages. TTS voices share model
+  files; deleting a selected voice removes shared weights and may make other
+  voices missing too.
 
 Cache Storage belongs to this **extension origin and Chrome profile**, separate
 from the published Node Playground's website origin. Closing pages or restarting
@@ -71,18 +74,31 @@ Recheck before relying on offline availability; there is no permanent-retention
 promise. Offline asset availability also does not establish that future inference
 has its required packaged runtime, device capability or memory.
 
-**Request persistent storage** detects `navigator.storage.persisted()` and
-`persist()` support and reports the actual granted, denied, unsupported or
-unavailable result. It is an optional durability improvement, not a guarantee
-against eviction or user deletion. No `unlimitedStorage` permission is added.
+Immediately before fetching the first missing model asset, preparation checks
+`navigator.storage.persisted()` and makes a best-effort `persist()` request if
+needed. Concurrent models/pages share one attempt using Web Locks and an
+extension-session marker; a denial is not retried during that browser session,
+even after reopening Models. Where session coordination is unavailable, each
+running page still shares one attempt. Unsupported APIs, denials and errors do
+not block downloads. Opening Models, inspecting a cache, loading a graph,
+preparing fully cached models or using a model-free graph does not request
+persistence. Models has no manual storage-control UI. This is a safeguard against
+browser eviction, not a guarantee against all data loss, intentional deletion
+or extension uninstall. No `unlimitedStorage` permission is added.
+
+Supertonic/Kokoro license links remain on their model cards. The Models footer
+also provides TTS terms/notices and the matching eSpeak NG source/build bundle,
+alongside the existing Gemma terms notice.
 See [Chrome extension storage scope and persistence](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies)
 and the [StorageManager API](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist).
 
 ## Reusable asset description and API
 
-`extension/model-asset-cache.js` exports `defineAssetSet`, `ModelAssetCache` and
-`storagePersistence`. This is a concrete storage service with explicit manifest
-and dependency arguments; it introduces no Pipeline routing or global manager.
+`extension/model-asset-cache.js` exports `defineAssetSet`, `ModelAssetCache`,
+`storagePersistence` and `requestStoragePersistence`. The latter coordinates
+best-effort requests across preparation callers. This is a concrete storage
+service with explicit manifest and dependency arguments; it introduces no
+Pipeline routing or global manager.
 
 `defineAssetSet({ id, revision, files })` requires an immutable 40- or 64-character
 lowercase hex revision and unique relative file paths. Each required file declares
@@ -208,6 +224,9 @@ deduplication, explicit ASR/VAD dependencies and stale-run cancellation.
 `tests/extension/graph-models.spec.js` exercises direct UI composition, persistence
 before fetching, failed validation/storage, saved parked Nodes, shared weights,
 progress, cancellation, integrity failures/retry and Models recovery.
+`tests/extension/model-inspection.spec.js` covers automatic Models inspection on
+opening, focus and cross-page updates, including corruption/eviction recovery and
+actionable inspection errors without a manual cache-check control.
 
 See [Issue #67 validation evidence](evidence/extension-model-cache-67.md).
 No post-merge human acceptance gate is required. Optional follow-up work can

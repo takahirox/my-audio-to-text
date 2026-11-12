@@ -68,7 +68,6 @@ for (const width of [390, 1440]) {
   test(`node settings and Models terms remain accessible without help panels at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 844 });
     await context.route('**/*', serveExtension);
-    const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
     const preparationRequests = [];
     page.on('request', request => { if (new URL(request.url()).origin !== new URL(page.url()).origin) preparationRequests.push(request.url()); });
     await openPalette(page);
@@ -91,6 +90,10 @@ for (const width of [390, 1440]) {
       await expect(port).toHaveAttribute('title', `${side}: text (text)`);
     }
     expect(await inspector.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    // Adding the node is an Auto Save edit. Only Models navigation must leave
+    // the saved graph alone; take that baseline after the edit is persisted.
+    await settleAutoSave(page);
+    const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
     const models = page.getByRole('navigation').getByRole('link', { name: 'Models', exact: true });
     await expect(models).toBeVisible();
     await expect(models).toHaveAttribute('href', 'model-cache.html');
