@@ -108,7 +108,7 @@ loading it again is unnecessary.
 1. Open `chrome://extensions` and enable **Developer mode**.
 2. Choose **Load unpacked** and select **`dist/chrome-extension`** (the directory
    containing the generated root `manifest.json`).
-3. Pin **Local current-tab transcription** in Chrome's Extensions menu.
+3. Pin **My Audio to Text** in Chrome's Extensions menu.
 4. Open a normal meeting/video/audio tab and click **Transcribe this tab** in
    the toolbar. A new independent Live window opens for the persisted default
    graph and shows **Preparing models…** while it initializes

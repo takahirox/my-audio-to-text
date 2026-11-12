@@ -453,6 +453,9 @@ with tempfile.TemporaryDirectory() as tmp:
     assert (target / 'web' / 'vendor' / 'sherpa-ja-en' / 'sherpa-onnx-wasm-main-vad-asr.data').read_bytes() == b'pinned model fixture'
     assert (target / 'web' / 'vendor' / 'translation' / 'transformers.js').read_bytes() == b'pinned runtime fixture'
     manifest = json.loads((target / 'manifest.json').read_text())
+    assert manifest == json.loads((original / 'extension' / 'manifest.json').read_text())
+    assert manifest['name'] == 'My Audio to Text'
+    assert manifest['action'] == {'default_title': 'Transcribe this tab'}
     assert manifest['manifest_version'] == 3
     assert 'options_ui' not in manifest
     assert 'options_page' not in manifest
