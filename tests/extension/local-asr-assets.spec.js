@@ -1,5 +1,5 @@
 import { test, expect, chromium } from '@playwright/test';
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
@@ -62,7 +62,7 @@ for (const kind of ['reazon', 'whisper', 'zipformer']) test(`verified ${kind} ca
       await editor.goto(page.url().replace('model-cache.html', 'graph-editor.html'));
       await editor.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
       await settleAutoSave(editor);
-      await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(2).fill('Ready · Cached and verified'), { timeout: 120000 });
+      await expectGraphModelsReady(editor, { timeout: 180000 });
       expect(editorWorkers).toEqual([]); await editor.close();
     } else for (const name of names) {
       await page.locator(`#${name}`).getByRole('button', { name: /^(Download|Retry)$/ }).click();

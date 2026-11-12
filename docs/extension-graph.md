@@ -356,9 +356,11 @@ confirmed. Quota/storage failures remain visible; browser/device storage failure
 can still lose data, so export important drafts.
 
 After successful persistence, required model files (including parked model
-Nodes) prepare asynchronously. Opening a saved graph checks its cached requirements and offers preparation/retry when files are missing. Equivalent model/voice identities retain running or verified
-preparations across moves, text edits and Undo. Obsolete requirements are canceled;
-cache verification and retry are available in the model status UI and Models.
+Nodes) prepare asynchronously. Opening a saved graph checks its cached requirements
+without downloading. Equivalent model/voice identities retain running or verified
+preparations across moves, text edits and Undo. Obsolete requirements are canceled.
+Graph notices shows missing files and preparation errors without moving the workspace.
+The header Models link opens per-model progress, cancellation, retry and deletion.
 Graph editing and navigation do not wait for downloads. Active Live sessions
 retain their immutable runtime snapshot.
 

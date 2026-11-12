@@ -37,10 +37,12 @@ inside Live without another save or a visit to Models; see the
 Each model has independent status, byte progress, error/retry, Cancel
 and Delete controls. Cache inspection runs automatically; no manual check is
 needed. TTS voice selectors are initialized from saved Nodes where present, and never change graph settings. Choose a matching voice
-in Graph Editor, Auto Save prepares its files after persistence for the next session. Language/voice and terms are
-shown alongside preparation. Graph Editor also shows per-model status and byte
-progress with cancellation, retry and cache checking after Auto Save; Models remains
-available for recovery after interruption. Supertonic F1/M1 support Japanese and English;
+in Graph Editor; Auto Save prepares its files after persistence for the next session.
+Language/voice settings stay in Graph Editor; Models owns terms, per-model status,
+byte progress, cancellation, retry and deletion. Graph Editor prepares assets in the
+background after Auto Save and shows actionable failures in Graph notices, separately
+from persistence success. Its header Models link opens recovery after interruption.
+Supertonic F1/M1 support Japanese and English;
 Kokoro jf_alpha is Japanese and af_heart is English.
 
 The original #67 project-owned `config.json` (46 bytes) and `weights.bin`
@@ -241,7 +243,8 @@ guaranteed long-term retention on every device.
 deduplication, explicit ASR/VAD dependencies and stale-run cancellation.
 `tests/extension/graph-models.spec.js` exercises direct UI composition, persistence
 before fetching, failed validation/storage, saved parked Nodes, shared weights,
-progress, cancellation, integrity failures/retry and Models recovery.
+headless preparation, cancellation on requirement changes/close, integrity failures
+and Models recovery without shifting the editor workspace.
 `tests/extension/model-inspection.spec.js` covers automatic Models inspection on
 opening, focus and cross-page updates, including corruption/eviction recovery and
 actionable inspection errors without a manual cache-check control.

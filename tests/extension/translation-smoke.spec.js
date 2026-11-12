@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { loadTranslationFixture } from './ui-controls.js';
 import { test, expect, chromium } from '@playwright/test';
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
@@ -61,7 +61,7 @@ test(`real extension ${direction}: native tab audio → ASR.final → committed 
     const card = models.locator(`#opus-${direction}`);
     await loadTranslationFixture(editor, direction); await settleAutoSave(editor);
     await expect(editor.locator('#graph-state')).toHaveText('Saved');
-    await expect(editor.locator('#graph-models .model-status')).toHaveText(/^(Ready|Error)/, { timeout: 600000 });
+    await expectGraphModelsReady(editor, { timeout: 600000 });
     await models.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(card).toHaveAttribute('data-state', /^(Ready|Not downloaded|Error)$/, { timeout: 600000 });
     if (await card.getByRole('button', { name: /^(Download|Retry)$/ }).isVisible()) await card.getByRole('button', { name: /^(Download|Retry)$/ }).click();

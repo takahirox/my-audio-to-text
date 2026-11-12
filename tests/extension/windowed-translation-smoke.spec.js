@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { test, expect, chromium } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -29,10 +29,8 @@ test('real packaged TranslateGemma: direct translation, bounded batches and ASR 
     expect(evidence.capabilities.adapter, 'A missing GPU is a missing real-model check, not a passed experiment.').toBe(true);
     await editor.evaluate(async graph => { const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, graph); }, windowGraph('window'));
     await editor.reload(); await settleAutoSave(editor);
-    const card = editor.locator('#graph-models .model-card');
-    await expect(card).toHaveCount(1);
-    await expect(card.locator('.model-status')).toHaveText(/^(Ready.*|Error)$/, { timeout: 1200000 });
-    evidence.preparation = { status: await card.locator('.model-status').textContent(), error: await card.locator('.model-error').textContent() };
+    await expectGraphModelsReady(editor, { timeout: 1200000 });
+    evidence.preparation = { status: 'Ready', error: '' };
     expect(evidence.preparation.status, evidence.preparation.error).toContain('Ready');
     await context.setOffline(true);
     for (const mode of ['baseline', 'window', 'direct-asr']) {

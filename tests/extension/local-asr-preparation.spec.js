@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect } from './graph-fixture.js';
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { graphNode, edge, defaultGraph, GRAPH_VERSION } from '../../extension/graph.js';
 
 test('clean offline model-free graphs stay usable; Auto Save prepares exactly the shared ASR requirements without Workers', async ({ graphExtension: f }) => {
@@ -20,7 +20,7 @@ test('clean offline model-free graphs stay usable; Auto Save prepares exactly th
   await editor.getByRole('button', { name: 'Select text', exact: true }).click();
   await editor.getByLabel('text value', { exact: true }).fill('Edited offline');
   await settleAutoSave(editor);
-  await expect(editor.locator('#graph-models .model-card')).toHaveCount(0);
+  await expect(editor.locator('.model-card')).toHaveCount(0);
   expect(requests).toEqual([]); expect(workers).toEqual([]);
   const live = await f.context.newPage(); await live.goto(f.url);
   await expect(live.locator('#model-status')).toHaveText('Ready');
@@ -32,11 +32,11 @@ test('clean offline model-free graphs stay usable; Auto Save prepares exactly th
   const asr = defaultGraph(); asr.nodes.push(graphNode('SpeechToTextReazonSpeech', 'duplicate'), graphNode('SpeechToTextWhisper', 'parked'));
   await models.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), asr);
   const edit = await f.context.newPage(); await edit.goto(f.url.replace('recorder.html', 'graph-editor.html'));
-  await expect(edit.locator('#graph-models .model-card')).toHaveCount(3);
+  await expect(edit.locator('#graph-model-warning')).toContainText('needs model files');
   expect(requests).toEqual([]);
   await edit.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
   await settleAutoSave(edit);
-  await expect(edit.locator('#graph-models .model-status')).toHaveText(Array(3).fill('Ready · Cached and verified'));
+  await expectGraphModelsReady(edit);
   expect(workers).toEqual([]);
   expect([...f.requests].sort()).toEqual(['/reazon-assets.json', '/silero-assets.json', '/whisper-assets.json']);
   await expect(models.locator('#zipformer')).toHaveAttribute('data-state', 'Not downloaded');

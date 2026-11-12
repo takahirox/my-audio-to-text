@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph } from './graph-fixture.js';
@@ -10,7 +10,6 @@ async function add(editor, type) {
 async function save(editor) {
   await settleAutoSave(editor);
 }
-const card = editor => editor.locator('#graph-models .model-card').filter({ hasText: 'TranslateGemma 4B' });
 
 test('palette, Save and reload preserve current connected graph and parked directions; shared verified preparation and recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
@@ -20,7 +19,7 @@ test('palette, Save and reload preserve current connected graph and parked direc
   const modelsPage = await opened;
   await expect(modelsPage.getByRole('heading', { name: 'Models', exact: true })).toBeVisible();
   await expect(modelsPage.locator('#translategemma')).toContainText('3.112 GB');
-  const terms = modelsPage.getByRole('contentinfo').getByRole('link', { name: 'Google Gemma Terms, Prohibited Use Policy and attribution' });
+  const terms = modelsPage.locator('#translategemma').getByRole('link', { name: 'Gemma terms & attribution for TranslateGemma 4B · English ↔ Japanese' });
   await expect(terms).toBeVisible();
   await expect(terms).toHaveAttribute('href', '../web/licenses/gemma-notices.txt');
   await terms.click(); await expect(modelsPage.locator('body')).toContainText('Gemma Terms of Use');
@@ -31,14 +30,14 @@ test('palette, Save and reload preserve current connected graph and parked direc
     await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).press('Enter');
   }
   await save(editor);
-  await expect(card(editor)).toHaveCount(1); await expect(card(editor).locator('.model-status')).toContainText('Ready');
+  await expectGraphModelsReady(editor);
   expect(f.requests).toHaveLength(8); expect(f.requests.every(r => r.startsWith('/translategemma-assets.json/'))).toBe(true);
   const graph = await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(graph.version).toBe(15); expect(graph.nodes.some(n => n.type === 'TranslateGemmaJaEn')).toBe(true);
   expect(graph.edges).toContainEqual({ from: ['translategemmaenja', 'text'], to: ['display', 'input1'] });
   expect(graph.edges).toContainEqual({ from: ['text', 'value'], to: ['translategemmaenja', 'context'] });
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
-  await save(editor); await expect(card(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(8);
+  await save(editor); await expectGraphModelsReady(editor); expect(f.requests).toHaveLength(8);
   await editor.reload(); expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   await editor.evaluate(async () => {
     const { translateGemmaManifest } = await import('./translategemma-cache.js');
@@ -51,18 +50,19 @@ test('palette, Save and reload preserve current connected graph and parked direc
   expect(f.requests).toHaveLength(9);
 });
 
-for (const mode of ['error', 'short', 'corrupt', 'hold']) test(`Gemma Save survives ${mode}; Cancel and retry recover the same saved graph`, async ({ graphExtension: f }) => {
+for (const mode of ['error', 'short', 'corrupt', 'hold']) test(`Gemma Save survives ${mode}; Models recovers the same saved graph`, async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor; f.mode(mode);
   await add(editor, 'TranslateGemmaEnJa'); await save(editor);
   if (mode === 'hold') {
-    await expect(card(editor).locator('.model-status')).toHaveText('Downloading');
-    await card(editor).getByRole('button', { name: 'Cancel preparation', exact: true }).click();
-    await expect(card(editor).locator('.model-status')).toHaveText('Canceled');
-  } else await expect(card(editor).locator('.model-status')).toHaveText('Error');
+    await expect.poll(() => f.requests.length).toBeGreaterThan(0);
+    await editor.reload();
+  } else await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
   const before = await editor.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   expect(JSON.parse(before).graphs.find(entry => entry.id === new URL(editor.url()).searchParams.get('id')).graph.nodes.some(n => n.type === 'TranslateGemmaEnJa')).toBe(true);
-  f.mode('normal'); await card(editor).getByRole('button', { name: 'Retry preparation', exact: true }).click();
-  await expect(card(editor).locator('.model-status')).toContainText('Ready');
+  f.mode('normal');
+  await expect(live.models.locator('#translategemma')).toHaveAttribute('data-state', 'Not downloaded');
+  await live.models.locator('#translategemma').getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
+  await expectGraphModelsReady(editor);
   expect(await editor.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
 });
 
@@ -71,7 +71,7 @@ for (const mode of ['error', 'short', 'corrupt', 'hold']) test(`Gemma Save survi
 for (const mode of ['normal', 'missing-gpu', 'no-adapter', 'inference-error', 'cancel']) test(`packaged Gemma Worker/graph: ${mode}, repeat, grouped formatter and plain fan-out`, async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
   await add(editor, 'TranslateGemmaEnJa'); await save(editor);
-  await expect(card(editor).locator('.model-status')).toContainText('Ready');
+  await expectGraphModelsReady(editor);
   const file = path.join(f.root, 'web/translategemma-worker.js');
   const original = await readFile(file, 'utf8');
   if (mode === 'missing-gpu' || mode === 'no-adapter') await writeFile(file, original.replace('value: { requestAdapter: async () => ({}) }', `value: ${mode === 'missing-gpu' ? 'undefined' : '{ requestAdapter: async () => null }'}`));
@@ -114,7 +114,7 @@ for (const mode of ['normal', 'missing-gpu', 'no-adapter', 'inference-error', 'c
 for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']) test(`${type}: explicit context graph runs the production prompt Worker and clears to the official path`, async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
   await add(editor, type); await save(editor);
-  await expect(card(editor).locator('.model-status')).toContainText('Ready');
+  await expectGraphModelsReady(editor);
   const before = f.requests.length;
   await f.context.setOffline(true);
   const result = await live.evaluate(async type => {

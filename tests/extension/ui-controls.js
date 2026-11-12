@@ -51,3 +51,19 @@ export async function settleAutoSave(page) {
   const { expect } = await import('@playwright/test');
   await expect(page.locator('#graph-state')).toHaveText(/^(Saved|Save failed)$/);
 }
+
+// Verify the saved graph's assets through the shared cache, without an editor
+// progress surface or starting inference/downloads from the test.
+export async function expectGraphModelsReady(page, options = {}) {
+  const { expect } = await import('@playwright/test');
+  await expect.poll(() => page.evaluate(async () => {
+    const { readLibrary, resolvedEntryGraph } = await import('./graph-library.js');
+    const { graphModelRequirements } = await import('./graph-model-preparation.js');
+    const { ModelAssetCache } = await import('./model-asset-cache.js');
+    const library = readLibrary(localStorage), id = new URL(location.href).searchParams.get('id') || library.assignments.live;
+    const graph = resolvedEntryGraph(library.graphs.find(entry => entry.id === id), library);
+    const views = await Promise.all(graphModelRequirements(graph).map(async requirement =>
+      new ModelAssetCache(await requirement.manifest()).inspect()));
+    return views.every(view => view.state === 'Ready');
+  }), options).toBe(true);
+}

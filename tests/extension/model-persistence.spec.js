@@ -1,3 +1,4 @@
+import { expectGraphModelsReady } from './ui-controls.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
 import { openPalette, settleAutoSave } from './ui-controls.js';
@@ -93,7 +94,7 @@ test('Auto Save requests persistence only after saving a model-bearing graph; a 
   });
   await openPalette(editor); await editor.locator('#graph-node-type [data-type="OpusMtEnJa"]').click();
   await settleAutoSave(editor);
-  await expect(editor.locator('#graph-models .model-status')).toHaveText(['Ready · Cached and verified']);
+  await expectGraphModelsReady(editor);
   expect(await editor.evaluate(() => window.savedBeforePersistence)).toBe(true);
   expect(operations(calls)).toEqual(['persisted', 'persist']);
   expect(calls.every(call => call.page.includes('graph-editor.html'))).toBe(true);

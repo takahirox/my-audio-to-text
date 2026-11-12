@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { test, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -88,7 +88,7 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
     await editor.reload(); await settleAutoSave(editor);
 
     await expect(editor.locator('#graph-errors')).toBeEmpty();
-    await expect(editor.locator('#graph-models .model-card')).toHaveAttribute('data-state', 'Ready', { timeout: 180000 });
+    await expectGraphModelsReady(editor, { timeout: 180000 });
     expect(await editor.evaluate(() => graphWorkers.length)).toBe(0);
     await context.setOffline(true);
     context.on('request', request => { if (/^https?:/.test(request.url())) requests.push(request.url()); });

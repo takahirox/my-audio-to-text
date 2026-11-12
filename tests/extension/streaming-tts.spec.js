@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -150,9 +150,9 @@ async function graph(f, language, text) {
   await expect(editor.getByRole('button', { name: 'tts output stream', exact: true })).toBeVisible();
   await expect(editor.getByRole('button', { name: 'speaker input stream', exact: true })).toBeVisible();
   await settleAutoSave(editor);
-  const prepare = editor.getByRole('button', { name: 'Retry preparation', exact: true });
-  await expect(prepare).toBeEnabled(); await prepare.click();
-  await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(await editor.locator('#graph-models .model-status').count()).fill('Ready · Cached and verified'), { timeout: 120000 });
+  const models = await f.context.newPage(); await models.goto(f.url + 'model-cache.html');
+  await models.locator(`#${model}`).getByRole('button', { name: /^(Download|Retry)$/ }).click();
+  await expectGraphModelsReady(editor, { timeout: 120000 }); await models.close();
   await editor.reload(); await expect(editor.getByRole('button', { name: 'speaker input stream', exact: true })).toBeVisible();
   return editor;
 }
