@@ -223,14 +223,12 @@ test('Graph stays canvas-first and Models keeps preparation and legal notices se
     await expect(live.models.locator('#translategemma a')).toContainText('Gemma Terms');
     await expect(live.models.locator('#translategemma progress')).toBeHidden();
     await expect(live.models.locator('#translategemma').getByRole('button', { name: 'Cancel download', includeHidden: true })).toBeHidden();
-    await expect(live.models.locator('#persist')).toBeHidden();
+    await expect(live.models.locator('#persist, #persistence, main > details')).toHaveCount(0);
     if (process.env.UPDATE_UI_SCREENSHOTS) {
       await live.editor.screenshot({ path: `docs/evidence/ui-136-graph-${width}.png` });
       await live.models.screenshot({ path: `docs/evidence/ui-136-models-${width}.png` });
     }
   }
-  await live.models.getByText('Storage and cache management', { exact: true }).press('Enter');
-  await expect(live.models.locator('#persistence')).toBeVisible();
   await expect(live.models.getByRole('link', { name: 'TTS terms and notices', exact: true })).toBeVisible();
   expect(f.requests).toEqual([]);
 });

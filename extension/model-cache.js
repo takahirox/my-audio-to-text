@@ -1,5 +1,5 @@
 import { textSummaryManifest } from './text-summary-cache.js';
-import { ModelAssetCache, storagePersistence } from './model-asset-cache.js';
+import { ModelAssetCache } from './model-asset-cache.js';
 import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
@@ -114,11 +114,3 @@ for (const definition of definitions) cards.push(new ModelCard(definition));
 channel.onmessage = ({ data }) => { for (const card of cards) if (card.definition.id === data.id) void card.inspect(); };
 window.addEventListener('focus', () => { for (const card of cards) void card.inspect(); });
 window.addEventListener('pagehide', () => { closed = true; for (const card of cards) { ++card.ticket; card.controller?.abort(); } channel.close(); });
-async function showPersistence(request = false) {
-  const button = document.getElementById('persist'); button.disabled = true;
-  const result = await storagePersistence(navigator.storage, request);
-  document.getElementById('persistence').textContent = `Persistent storage: ${result}.`;
-  button.disabled = result === 'unsupported' || result === 'granted';
-}
-document.getElementById('persist').onclick = () => { void showPersistence(true); };
-void showPersistence();

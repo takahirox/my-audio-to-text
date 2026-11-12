@@ -70,18 +70,31 @@ Recheck before relying on offline availability; there is no permanent-retention
 promise. Offline asset availability also does not establish that future inference
 has its required packaged runtime, device capability or memory.
 
-**Request persistent storage** detects `navigator.storage.persisted()` and
-`persist()` support and reports the actual granted, denied, unsupported or
-unavailable result. It is an optional durability improvement, not a guarantee
-against eviction or user deletion. No `unlimitedStorage` permission is added.
+Immediately before fetching the first missing model asset, preparation checks
+`navigator.storage.persisted()` and makes a best-effort `persist()` request if
+needed. Concurrent models/pages share one attempt using Web Locks and an
+extension-session marker; a denial is not retried during that browser session,
+even after reopening Models. Where session coordination is unavailable, each
+running page still shares one attempt. Unsupported APIs, denials and errors do
+not block downloads. Opening Models, inspecting a cache, loading a graph,
+preparing fully cached models or using a model-free graph does not request
+persistence. Models has no manual storage-control UI. This is a safeguard against
+browser eviction, not a guarantee against all data loss, intentional deletion
+or extension uninstall. No `unlimitedStorage` permission is added.
+
+Supertonic/Kokoro license links remain on their model cards. The Models footer
+also provides TTS terms/notices and the matching eSpeak NG source/build bundle,
+alongside the existing Gemma terms notice.
 See [Chrome extension storage scope and persistence](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies)
 and the [StorageManager API](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist).
 
 ## Reusable asset description and API
 
-`extension/model-asset-cache.js` exports `defineAssetSet`, `ModelAssetCache` and
-`storagePersistence`. This is a concrete storage service with explicit manifest
-and dependency arguments; it introduces no Pipeline routing or global manager.
+`extension/model-asset-cache.js` exports `defineAssetSet`, `ModelAssetCache`,
+`storagePersistence` and `requestStoragePersistence`. The latter coordinates
+best-effort requests across preparation callers. This is a concrete storage
+service with explicit manifest and dependency arguments; it introduces no
+Pipeline routing or global manager.
 
 `defineAssetSet({ id, revision, files })` requires an immutable 40- or 64-character
 lowercase hex revision and unique relative file paths. Each required file declares
