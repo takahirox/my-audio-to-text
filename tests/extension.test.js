@@ -271,7 +271,7 @@ test('toolbar Launch remembers its selection and preserves invoking tabs in dist
   assert.ok(items.filter(item => item.id.startsWith('live-run:')).every(item => item.parentId === 'live-open' && item.type === 'radio' && ['A', 'B'].includes(item.title)));
   assert.ok(!items.some(item => /Live graphs|Default for left-click|Live default/.test(item.title)));
   assert.ok(items.every(item => item.contexts.join() === 'action'));
-  assert.ok(items.filter(item => !item.parentId).every(item => ['live-graphs', 'web-microphone', 'microphone-position'].includes(item.id)));
+  assert.deepEqual([...new Set(items.filter(item => !item.parentId).map(item => item.id))], ['microphone', 'live-graphs']);
 });
 
 test('failed toolbar selection opens only an error, restores checked state, and serializes refresh storms', async () => {

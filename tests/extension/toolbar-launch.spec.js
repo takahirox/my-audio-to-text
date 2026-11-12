@@ -47,7 +47,8 @@ test('native Graphs → Launch remembers selections, refreshes names and preserv
   ]);
   expect((await choices(f)).some(item => item.id === 'live-run:' + draft)).toBe(false);
   expect((await choices(f)).every(item => item.contexts.join() === 'action')).toBe(true);
-  expect((await choices(f)).filter(item => !item.parentId).map(item => [item.title, item.type])).toEqual([['Web microphone', 'checkbox'], ['Microphone position', undefined], ['Graphs', undefined]]);
+  expect((await choices(f)).filter(item => !item.parentId).map(item => [item.title, item.type])).toEqual([['Microphone', undefined], ['Graphs', undefined]]);
+  expect((await choices(f)).filter(item => item.parentId === 'microphone').map(item => [item.title, item.type])).toEqual([['Enable', 'checkbox'], ['Icon position', undefined]]);
   expect((await choices(f)).filter(item => item.parentId === 'microphone-position').map(item => [item.title, item.type, item.checked])).toEqual([['Auto', 'radio', true], ['Left', 'radio', false], ['Right', 'radio', false]]);
   // Building/reading menus never changes a valid selection or opens a window.
   expect((await library(f.page)).assignments.live).toBe('default-live');

@@ -71,7 +71,7 @@ Choose graphs where they launch:
   may finish its snapshot, but cannot Start again until that same ID is restored.
   Launch another graph from the toolbar.
 
-Right-click the extension toolbar icon and use the native **Web microphone**
+Right-click the extension toolbar icon and use the native **Microphone → Enable**
 checkbox to show or remove website microphones. It starts OFF. ON requests
 Chrome’s optional HTTP/HTTPS website access and registers page controls only
 after consent; it never starts recording. Denial leaves it OFF. If Chrome cannot
@@ -81,7 +81,7 @@ removes controls, even if graph storage needs recovery; previously granted websi
 access and the saved graph default remain. Revoke website access through Chrome’s
 extension Site access controls. A revoked grant clears the opt-in.
 
-**Microphone position → Auto / Left / Right** chooses the side of the focused
+**Microphone → Icon position → Auto / Left / Right** chooses the side of the focused
 editable field. Auto defaults to right first. Left and Right prefer that side,
 falling back and clamping at viewport edges. Changes apply live without changing
 field focus or selection, can be saved while OFF, and survive restarts. Graph
