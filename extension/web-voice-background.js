@@ -1,3 +1,4 @@
+import { installTabCaptureBridge } from './tab-capture-background.js';
 import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_KEY, WEB_VOICE_ORIGINS, voiceEnabled } from './web-voice-preference.js';
 import { webVoiceChoices, webVoiceDefault } from './web-voice-graph.js';
 
@@ -9,6 +10,17 @@ const scriptId = 'web-voice-typing';
 const controls = new Set();
 // One offscreen DOM document, with an independent TabSession per page document.
 const sessions = new Map();
+const tabCapture = installTabCaptureBridge({ ensureHost: async () => {
+  await ensureRuntime();
+  if (host) return;
+  await new Promise((resolve, reject) => {
+    const waiter = { resolve: () => { clearTimeout(timer); resolve(); }, reject };
+    const timer = setTimeout(() => { hostWaiters.delete(waiter); reject(Error('Tab audio host did not respond. Invoke the toolbar and retry.')); }, 15000);
+    hostWaiters.add(waiter);
+  });
+}, hostPost: message => post(host, message), idleCleanup });
+export const authorizeLiveTabCapture = (session, tabId, openWindow) => tabCapture.authorize(session, tabId, openWindow);
+
 let reconciling = Promise.resolve(), host, hostURL, lifecycle = Promise.resolve();
 const post = (port, message) => { try { port?.postMessage(message); } catch {} };
 const extensionPage = (sender, name) => sender?.id === chrome.runtime.id && sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL(`extension/${name}`);
@@ -23,7 +35,7 @@ async function closeDocument() {
   if (contexts.some(context => context.documentUrl?.split(/[?#]/)[0] === chrome.runtime.getURL('extension/web-voice-runtime.html'))) await chrome.offscreen.closeDocument();
 }
 function idleCleanup() {
-  void serialize(async () => { if (!sessions.size && !libraryRequests.size && !hostWaiters.size && !launchRequests.size) await closeDocument(); }).catch(() => {});
+  void serialize(async () => { if (!sessions.size && !libraryRequests.size && !hostWaiters.size && !launchRequests.size && !tabCapture.clients.size) await closeDocument(); }).catch(() => {});
 }
 function end(owner, reason = '') {
   if (!owner || !current(owner)) return;
@@ -52,8 +64,8 @@ async function ensureRuntime(owner) {
     if (!hostURL) {
       hostURL = chrome.runtime.getURL(`extension/web-voice-runtime.html#${crypto.randomUUID()}`);
       try {
-        await chrome.offscreen.createDocument({ url: hostURL, reasons: ['WORKERS', 'LOCAL_STORAGE'],
-          justification: 'Run explicitly requested local Web dictation with independently owned page PCM source, graph and model Workers.' });
+        await chrome.offscreen.createDocument({ url: hostURL, reasons: ['WORKERS', 'LOCAL_STORAGE', 'USER_MEDIA'],
+          justification: 'Own explicitly started shared tab audio capture, local Web dictation and graph library storage.' });
       } catch (error) { hostURL = null; throw error; }
     }
     if (owner) initialize(owner);
@@ -216,6 +228,7 @@ chrome.runtime.onConnect.addListener(port => {
     for (const owner of sessions.values()) initialize(owner);
     port.onMessage.addListener(message => {
       if (host !== port) return;
+      if (tabCapture.message(message)) return;
       if (message.type === 'launch-library-result') { launchRequests.get(message.request)?.finish(message.error, message.result); return; }
       if (message.type === 'library') {
         const pending = libraryRequests.get(message.request);
@@ -242,6 +255,7 @@ chrome.runtime.onConnect.addListener(port => {
       for (const pending of libraryRequests.values()) { clearTimeout(pending.timer); pending.reject(Error('Graph library disconnected. Click the mic to retry.')); }
       libraryRequests.clear();
       host = null;
+      tabCapture.disconnected();
       for (const pending of launchRequests.values()) pending.finish('Graph Library disconnected. Reopen the toolbar to retry.');
       endAll('Voice runtime disconnected. Click the mic to retry.');
       // Invalidate this generation even if a retry reserves a new session before

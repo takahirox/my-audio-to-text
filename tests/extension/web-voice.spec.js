@@ -42,17 +42,14 @@ const test = base.extend({
         };`);
       }
       if (info.title.includes('transport measurements')) {
-        // Add a render-clock marker to the existing offscreen/Live capture
-        // fixture. Filter it before the unchanged resampler/ASR audio path.
-        const workletFile = path.join(root, 'web/capture-worklet.js'), audioFile = path.join(root, 'web/audio.js');
-        await writeFile(workletFile, (await readFile(workletFile, 'utf8')).replace('this.port.postMessage(block, [block.buffer]);',
-          "this.port.postMessage({ captureClock: currentTime }); this.port.postMessage(block, [block.buffer]);"));
+        // Opt into the production worklet timestamps for the concurrent Live
+        // microphone baseline; no PCM markers or resampler changes are needed.
+        const audioFile = path.join(root, 'web/audio.js');
         await writeFile(audioFile, (await readFile(audioFile, 'utf8'))
-          .replace('this.source = this.context.createMediaStreamSource', 'this.probeClock = performance.timeOrigin + performance.now() - this.context.currentTime * 1000; this.source = this.context.createMediaStreamSource')
-          .replace('this.node.port.onmessage = ({ data }) => onChunk(data);', `this.node.port.onmessage = ({ data }) => {
-            if (data.captureClock !== undefined) { (globalThis.baselineDelays ??= []).push(performance.timeOrigin + performance.now() - (this.probeClock + data.captureClock*1000)); }
-            else onChunk(data);
-          };`));
+          .replace('this.source = this.context.createMediaStreamSource', 'this.captureTimestamps = true; this.probeClock = performance.timeOrigin + performance.now() - this.context.currentTime * 1000; this.source = this.context.createMediaStreamSource')
+          .replace('const onChunk = (chunk, capturedAt) => {', `const onChunk = (chunk, capturedAt) => {
+            (globalThis.baselineDelays ??= []).push(performance.timeOrigin + performance.now() -
+              (this.probeClock + (capturedAt + chunk.length / this.context.sampleRate) * 1000));`));
       }
       const launch = () => chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
         ignoreDefaultArgs: ['--disable-extensions', ...(info.title.includes('back-forward navigation') ? ['--disable-back-forward-cache'] : [])], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream',

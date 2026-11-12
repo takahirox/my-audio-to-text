@@ -1,4 +1,4 @@
-import { requestLaunchLibrary } from './web-voice-background.js';
+import { requestLaunchLibrary, authorizeLiveTabCapture } from './web-voice-background.js';
 
 const root = 'live-graphs', run = 'live-run:', open = 'live-open';
 let refreshing = Promise.resolve();
@@ -25,17 +25,19 @@ async function launch(tab, graphId) {
   if (!Number.isInteger(tab?.id)) return;
   // Retain the event's tab, never query the tab active after a focus change.
   const params = new URLSearchParams({ tab: String(tab.id), session: crypto.randomUUID() });
-  try {
-    if (graphId) {
-      try { await requestLaunchLibrary('live-open', graphId); }
-      catch (error) { throw Error(`Graph selection could not be confirmed: ${error.message} Open Graph Library from the toolbar context menu to repair or choose a runnable graph.`); }
-    } else graphId = (await requestLaunchLibrary('live-list')).defaultId;
-    if (!graphId) throw Error('No runnable graphs. Right-click the extension toolbar icon → Graphs → Graph Library to create or repair a graph.');
-    // Error-only windows have no graph ID, so later focus/storage refreshes
-    // cannot enable Start after a failed selection commit.
-    params.set('graph', graphId);
-  } catch (error) { params.set('error', error.message); }
-  await chrome.windows.create({ url: chrome.runtime.getURL(`extension/recorder.html?${params}`), type: 'popup', focused: false, width: 620, height: 800 });
+  await authorizeLiveTabCapture(params.get('session'), tab.id, async () => {
+    try {
+      if (graphId) {
+        try { await requestLaunchLibrary('live-open', graphId); }
+        catch (error) { throw Error(`Graph selection could not be confirmed: ${error.message} Open Graph Library from the toolbar context menu to repair or choose a runnable graph.`); }
+      } else graphId = (await requestLaunchLibrary('live-list')).defaultId;
+      if (!graphId) throw Error('No runnable graphs. Right-click the extension toolbar icon → Graphs → Graph Library to create or repair a graph.');
+      // Error-only windows have no graph ID, so later focus/storage refreshes
+      // cannot enable Start after a failed selection commit.
+      params.set('graph', graphId);
+    } catch (error) { params.set('error', error.message); }
+    return chrome.windows.create({ url: chrome.runtime.getURL(`extension/recorder.html?${params}`), type: 'popup', focused: false, width: 620, height: 800 });
+  });
   // Also restore the native radio state after a failed explicit selection.
   void refreshMenus();
 }

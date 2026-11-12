@@ -15,7 +15,7 @@ microphone permission is requested by Start.
 The extension uses the shared Node/Port runtime:
 
 ```text
-ExtensionTab (chrome.tabCapture) → ExtensionTabAudioNode.audio
+Shared offscreen tab capture → ExtensionTab subscription → ExtensionTabAudioNode.audio
   → SpeechToTextNode.audio
     ├─ provisional → TranscriptOutputNode.provisional
     └─ final       → TranscriptOutputNode.final
@@ -171,6 +171,78 @@ input is mixed to mono and resampled to 16 kHz using the Web helpers. Restored
 playback is never an additional ASR input. See Chrome's
 [tabCapture API](https://developer.chrome.com/docs/extensions/reference/api/tabCapture)
 and [capture in a new extension window](https://developer.chrome.com/docs/extensions/how-to/web-platform/screen-capture#record_audio_and_video_in_a_new_tab).
+
+## Concurrent Live windows capturing the same tab (#347)
+
+Invoke the toolbar on the same source tab for each Live window, select each
+window's saved graph through **Graphs → Open**, then press **Start** in each
+window. Two or more different graphs can process the same audio concurrently.
+Opening Live, downloading/preparing models, and reaching Ready never capture
+or subscribe to audio. Each window retains its graph snapshot, dedicated model
+Workers, displays, destinations and Start/Stop/Cancel lifecycle.
+
+The extension's existing offscreen document owns one native capture, one mono
+16 kHz resampler/worklet and one restored speaker-playback branch **per tab ID**.
+It also hosts Web dictation and graph-library operations under the same serialized
+creation/idle-cleanup lifecycle. Concurrent first starts share the same pending
+capture acquisition. Different tabs have separate native streams; repeated
+ChromeTabAudio Nodes within a graph share one graph subscription and receive
+separate PCM buffers. Microphone capture is unchanged.
+
+A Live window holds a private toolbar capability in session storage, bound to its
+original source tab. Manually constructing a recorder URL or invoking the toolbar
+on an unrelated tab does not authorize it. Navigation revokes old capabilities;
+invoke the toolbar on the source tab again to open an authorized window. Closing
+a Live window removes its capability. Browser restart clears these capabilities.
+No authorization silently changes to the current active tab.
+
+Chrome scopes stream IDs to the caller's renderer process when no consumer tab
+is specified ([tabCapture API](https://developer.chrome.com/docs/extensions/reference/api/tabCapture#usage_restrictions)).
+This extension preserves its COOP/COEP isolation for model Workers. Its isolated
+Live page mints the one-use stream ID on the coordinator's request, and the
+equally isolated offscreen document consumes it. Minting it in the service worker
+fails with “Error starting tab capture” in the tested isolated configuration.
+The Live page does not own the MediaStream, audio processing or playback: closing
+the issuing window after startup leaves other subscribers running.
+
+Subscribers receive ordered PCM from their actual joining point, with worklet
+sample timestamps trimming any buffered pre-join samples. There is no speech
+history/replay. Each port permits at most eight unacknowledged PCM blocks; a slow,
+failed or invalid consumer ends with an actionable error while its peers continue.
+Existing inference queues retain their own model-specific limits.
+
+Stop detaches only that graph at the normalized PCM boundary. The final subscriber
+flushes the worklet/resampler before receiving its terminal event; Cancel discards
+its pending PCM. The last detach stops tracks, disconnects audio nodes and closes
+the capture AudioContext. Teardown and pending media grants form a per-tab barrier
+before another capture can start. The offscreen document closes when tab clients,
+Web dictation sessions and library requests are all idle. Tab close/navigation,
+stream end and port loss affect only their owners. A disconnected/restarted host
+releases the old generation and reports connection loss; it never silently resumes
+capture. Browser/device/permission errors remain visible without fallback to
+another tab, microphone or graph.
+
+Validation: the coordinator, authorization and browser-audio Node test files
+cover races, fan-out, timestamp trimming, cancellation, authorization, bounded
+delivery and cleanup. Run them with:
+
+```sh
+node --test tests/tab-capture-coordinator.test.js tests/tab-capture-authorization.test.js tests/browser-audio.test.js
+``` Run the real Chrome MV3 smoke with:
+
+```sh
+npx playwright test --config playwright.extension.config.js tests/extension/shared-tab-capture.spec.js
+```
+
+The smoke uses actual toolbar invocation, native tab capture, offscreen worklet,
+ports and independent Live graph/model Workers. It verifies nonzero tone-derived
+outputs, one acquisition/playback branch for a shared tab, Stop/rejoin/close,
+fresh capture after last release, different tabs, scoped navigation and revoked
+capabilities. ASR replies use fixture Workers; this checks PCM delivery and
+ownership, not speech accuracy. Speaker restoration is verified by graph
+connections and stream teardown, not physical sound/echo measurements. Optional
+physical listening and meeting-site tests can supplement it. Set
+`TAB_CAPTURE_HEADED=1` to run the same smoke with visible Chrome windows.
 
 ## Optional page and microphone workflows
 
@@ -352,7 +424,7 @@ recovery, before PCM streaming, without downloading while recording. A page may
 already hold a gesture-acquired stream while models prepare; failure closes it.
 Live windows and Web microphone sessions run independently, including overlapping
 preparation, Ready/idle, recording and Stop. Each graph execution owns its own
-Pipeline, Nodes, model Workers, audio streams, output connection and cancellation;
+Pipeline, Nodes, model Workers, source subscriptions, output connection and cancellation;
 closing or failing one owner does not stop another. Live keeps its model preloading
 and re-prepares its own resources after Stop. There is no global inference lock,
 queue or application-imposed runtime count limit. Available RAM/GPU memory, browser

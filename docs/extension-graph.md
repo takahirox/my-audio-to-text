@@ -666,8 +666,10 @@ Whole-tab capture uses the toolbar-invoked tab. Microphone capture requires
 Start and browser permission. Focused output follows the
 toolbar-invoked document automatically. Live shows only actionable Node errors;
 normal per-Node status stays in the optional Session details disclosure. One unavailable processor
-leaves independent healthy paths running. Repeated tab sources share capture;
-processor state, queues and Workers remain independent. A source ending drains
+leaves independent healthy paths running. Repeated tab sources share one offscreen capture per target tab, including
+across independently started Live windows; each window retains its toolbar-tab
+authorization and subscription. See [shared capture lifecycle and validation](chrome-extension.md#concurrent-live-windows-capturing-the-same-tab-347).
+Processor state, queues and Workers remain independent. A source ending drains
 its downstream paths while unrelated sources may continue.
 
 FocusedInputTextOutputNode appends exact plain text to the user-focused editable

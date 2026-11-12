@@ -1,3 +1,4 @@
+import { createTabCaptureHost } from './tab-capture-host.js';
 import { WebVoicePCM } from './web-voice-pcm.js';
 import { TabSession } from './session.js';
 import { PageConnection } from './page-target.js';
@@ -8,6 +9,7 @@ import { webVoiceGraph } from './web-voice-graph.js';
 // Chrome permits one offscreen document per profile. Only this inert host is
 // shared: every owner has its own graph, models, PCM source and output connection.
 const port = chrome.runtime.connect({ name: 'web-voice-host' });
+const tabCapture = createTabCaptureHost(port);
 const owners = new Map();
 let disconnected = false, lastHeartbeat = Date.now();
 function send(owner, message) {
@@ -72,6 +74,7 @@ async function start(owner, target, entry) {
   }
 }
 port.onMessage.addListener(message => {
+  if (tabCapture.message(message)) return;
   if (message.type === 'heartbeat') { lastHeartbeat = Date.now(); return; }
   if (message.type === 'launch-library') {
     void launchLibrary(localStorage, message.operation, message.id).then(
@@ -100,7 +103,7 @@ port.onMessage.addListener(message => {
 });
 function disconnect() {
   if (disconnected) return;
-  disconnected = true; clearInterval(heartbeat);
+  disconnected = true; clearInterval(heartbeat); tabCapture.dispose();
   for (const owner of owners.values()) void finish(owner, true);
   // Invalidated coordinator generations can never reconnect or resume output.
   try { port.disconnect(); } catch {}

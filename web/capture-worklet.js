@@ -1,12 +1,16 @@
 class Capture extends AudioWorkletProcessor {
-  constructor() {
-    super(); this.buffer = new Float32Array(2048); this.used = 0;
-    this.port.onmessage = () => { this.stopped = true; this.flush(); this.port.postMessage('flushed'); };
+  constructor(options) {
+    super(); this.timestamps = options?.processorOptions?.timestamps; this.buffer = new Float32Array(2048); this.used = 0;
+    this.port.onmessage = ({ data }) => {
+      const drain = data?.type === 'drain';
+      if (!drain) this.stopped = true;
+      this.flush(); this.port.postMessage(drain ? { type: 'drained', id: data.id } : 'flushed');
+    };
   }
   flush() {
     if (this.used) {
       const block = this.buffer.slice(0, this.used);
-      this.port.postMessage(block, [block.buffer]); this.used = 0;
+      this.port.postMessage(this.timestamps ? { audio: block, capturedAt: this.startFrame / sampleRate } : block, [block.buffer]); this.used = 0;
     }
   }
   process(inputs) {
@@ -14,6 +18,7 @@ class Capture extends AudioWorkletProcessor {
     const channels = inputs[0];
     if (!channels.length) return true;
     for (let i = 0; i < channels[0].length; i++) {
+      if (this.timestamps && !this.used) this.startFrame = currentFrame + i;
       this.buffer[this.used++] = channels.reduce((sum, channel) => sum + channel[i], 0) / channels.length;
       if (this.used === this.buffer.length) this.flush();
     }

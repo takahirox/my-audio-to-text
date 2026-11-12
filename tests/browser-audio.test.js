@@ -4,7 +4,18 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { BrowserTab, Microphone, Resampler, joinAudio } from '../web/audio.js';
 import { LocalAsrCore } from '../web/local-asr-core.js';
-import { ExtensionTab } from '../extension/tab-source.js';
+import { CapturedTabSource } from '../extension/tab-capture-source.js';
+import { TabCaptureCoordinator } from '../extension/tab-capture-coordinator.js';
+// Native capture tests exercise the offscreen source; subscriptions have their
+// own transport/coordinator tests.
+class ExtensionTab extends CapturedTabSource {
+  constructor(tabId, audio, ended) {
+    super(tabId, audio, ended, async tabId => {
+      if (!globalThis.chrome?.tabCapture?.getMediaStreamId) throw Error('Tab capture unavailable');
+      return chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+    });
+  }
+}
 import { ExtensionTabAudioNode } from '../extension/tab-audio-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { createTabTranscriptionPipeline, MicrophoneAudioNode, SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
@@ -16,7 +27,7 @@ const deferred = () => {
 };
 
 // Run the production capture processor against controlled browser API fixtures.
-function browser(t, { rate = 48000, worklet = true, permission, module } = {}) {
+function browser(t, { rate = 48000, worklet = true, permission, module, asyncPort = false } = {}) {
   const tracks = ['audio', 'video'].map(kind => ({
     kind, readyState: 'live', stops: 0, onended: null,
     stop() { this.stops++; this.readyState = 'ended'; },
@@ -26,11 +37,12 @@ function browser(t, { rate = 48000, worklet = true, permission, module } = {}) {
   const requests = [], contexts = [];
   const node = () => ({ connections: [], connect(target) { this.connections.push(target); }, disconnect() { this.disconnected = true; } });
   let Processor;
-  runInNewContext(readFileSync(new URL('../web/capture-worklet.js', import.meta.url), 'utf8'), {
-    Float32Array,
+  const workletClock = {
+    Float32Array, sampleRate: rate, currentFrame: 0,
     AudioWorkletProcessor: class { constructor() { this.port = {}; } },
     registerProcessor(name, cls) { assert.equal(name, 'capture'); Processor = cls; },
-  });
+  };
+  runInNewContext(readFileSync(new URL('../web/capture-worklet.js', import.meta.url), 'utf8'), workletClock);
   const globals = {
     navigator: { mediaDevices: Object.fromEntries(['getDisplayMedia', 'getUserMedia'].map(api => [api, options => {
       requests.push({ api, options }); return permission || Promise.resolve(media);
@@ -49,10 +61,18 @@ function browser(t, { rate = 48000, worklet = true, permission, module } = {}) {
       createScriptProcessor() { return node(); }
     },
     AudioWorkletNode: class {
-      constructor() {
-        Object.assign(this, node()); this.processor = new Processor();
-        this.port = { postMessage: data => this.processor.port.onmessage({ data }) };
-        this.processor.port.postMessage = data => this.port.onmessage?.({ data });
+      constructor(context, name, options) {
+        Object.assign(this, node()); this.processor = new Processor(options);
+        const listeners = new Set();
+        const deliver = fn => asyncPort ? queueMicrotask(fn) : fn();
+        this.port = { postMessage: data => deliver(() => this.processor.port.onmessage({ data })),
+          addEventListener(type, listener) { listeners.add(listener); },
+          removeEventListener(type, listener) { listeners.delete(listener); },
+        };
+        this.processor.port.postMessage = data => deliver(() => {
+          this.port.onmessage?.({ data });
+          for (const listener of [...listeners]) listener({ data });
+        });
       }
     },
   };
@@ -61,8 +81,90 @@ function browser(t, { rate = 48000, worklet = true, permission, module } = {}) {
     Object.defineProperty(globalThis, key, { value, configurable: true });
     t.after(() => { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; });
   }
-  return { tracks, media, requests, contexts };
+  return { tracks, media, requests, contexts, workletClock };
 }
+
+for (const rate of [16000, 44100, 48000]) for (const simultaneous of [false, true]) {
+  test(`shared Stop drains a 128-sample partial worklet block at ${rate} Hz (${simultaneous ? 'simultaneous Stops' : 'peer continues'})`, async t => {
+    const b = browser(t, { rate, asyncPort: true }), sources = [], messages = [];
+    const c = new TabCaptureCoordinator((tabId, audio, ended) => {
+      const source = new CapturedTabSource(tabId, audio, ended, async () => 'id');
+      sources.push(source); return source;
+    }, (id, message) => {
+      messages.push({ id, ...message });
+      if (message.type === 'pcm') c.acknowledge(id, message.sequence);
+    });
+    await Promise.all([c.subscribe('a', 42), c.subscribe('b', 42)]);
+    const source = sources[0];
+    const first = Float32Array.from({ length: 128 }, (_, i) => i / 256);
+    const process = samples => {
+      source.node.processor.process([[samples]]); b.workletClock.currentFrame += samples.length;
+    };
+    const pcm = id => joinAudio(messages.filter(m => m.id === id && m.type === 'pcm').map(m => m.pcm));
+    const expected = samples => {
+      const resampler = new Resampler(rate);
+      return joinAudio([resampler.push(samples), resampler.flush()]);
+    };
+    process(first);
+    assert.equal(pcm('a').length, 0); assert.equal(pcm('b').length, 0);
+    const stopA = c.unsubscribe('a');
+    if (simultaneous) await Promise.all([stopA, c.unsubscribe('b')]);
+    else {
+      await stopA;
+      assert.deepEqual(pcm('a'), expected(first));
+      assert.equal(source.node.processor.stopped, undefined);
+      assert.ok(b.tracks.every(track => track.stops === 0));
+      assert.equal(source.context.state, 'running');
+      // Continue through full and partial blocks. The peer must match one
+      // uninterrupted resampling pass, including fractional interpolation.
+      const rest = Float32Array.from({ length: 2200 }, (_, i) => -(i + 1) / 4096);
+      for (let offset = 0; offset < rest.length; offset += 128) process(rest.slice(offset, offset + 128));
+      await new Promise(resolve => setImmediate(resolve));
+      assert.ok(pcm('b').length > expected(first).length);
+      await c.unsubscribe('b');
+      assert.deepEqual(pcm('b'), expected(joinAudio([first, rest])));
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(pcm('a'), expected(first));
+    if (simultaneous) assert.deepEqual(pcm('b'), expected(first));
+    for (const id of ['a', 'b']) {
+      const events = messages.filter(m => m.id === id);
+      assert.equal(events.at(-1).type, 'ended'); assert.equal(events.at(-1).error, '');
+      assert.equal(events.filter(m => m.type === 'ended').length, 1);
+    }
+    assert.equal(sources.length, 1); assert.equal(b.requests.length, 1);
+    assert.deepEqual(source.source.connections, [source.node, source.context.destination]);
+    assert.ok(b.tracks.every(track => track.stops === 1));
+    assert.equal(source.context.closes, 1);
+    assert.equal(c.tabs.size, 0); assert.equal(c.subscribers.size, 0);
+  });
+}
+
+test('Cancel during a shared drain and final Stop remove pending listeners without reviving a subscriber', async t => {
+  const b = browser(t, { rate: 16000 }), messages = []; let source;
+  const c = new TabCaptureCoordinator((tabId, audio, ended) => {
+    source = new CapturedTabSource(tabId, audio, ended, async () => 'id'); return source;
+  }, (id, message) => messages.push({ id, ...message }));
+  await Promise.all([c.subscribe('a', 42), c.subscribe('b', 42)]);
+  source.node.processor.process([[new Float32Array(128).fill(0.25)]]);
+  const postMessage = source.node.port.postMessage; let held;
+  source.node.port.postMessage = data => { if (data?.type === 'drain') held = data; else postMessage(data); };
+  const stopA = c.unsubscribe('a');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(held.type, 'drain');
+  await c.unsubscribe('a', false);
+  await c.unsubscribe('b'); await stopA;
+  assert.equal(source.cancelDrain, null); assert.equal(source.draining, null);
+  // A late worklet acknowledgment must have no listener left to resurrect A.
+  source.node.processor.port.postMessage({ type: 'drained', id: held.id });
+  assert.equal(messages.filter(m => m.id === 'a' && m.type === 'pcm').length, 0);
+  assert.equal(messages.filter(m => m.id === 'b' && m.type === 'pcm').reduce((sum, m) => sum + m.pcm.length, 0), 128);
+  for (const id of ['a', 'b']) {
+    const ends = messages.filter(m => m.id === id && m.type === 'ended');
+    assert.equal(ends.length, 1); assert.equal(ends[0].error, '');
+  }
+  assert.equal(c.tabs.size, 0); assert.ok(b.tracks.every(track => track.stops === 1));
+});
 
 for (const kind of ['tab', 'microphone', 'extension']) for (const rate of [16000, 44100, 48000]) {
   test(`Node pipeline composes real ${kind} capture/resampling, ASR and async output at ${rate} Hz`, async t => {
@@ -102,7 +204,7 @@ for (const kind of ['tab', 'microphone', 'extension']) for (const rate of [16000
         } } });
         t.after(() => delete globalThis.chrome);
       }
-      const source = kind === 'extension' ? new ExtensionTabAudioNode(42) : new MicrophoneAudioNode();
+      const source = kind === 'extension' ? new ExtensionTabAudioNode(42, { sourceFactory: (...args) => new ExtensionTab(...args) }) : new MicrophoneAudioNode();
       const speech = new SpeechToTextNode(options), transcript = new TranscriptOutputNode(options.onTranscript);
       flow = { source, speech, transcript, pipeline: new Pipeline({ nodes: { source, speech, transcript }, connections: [
         { from: ['source', 'audio'], to: ['speech', 'audio'] },
@@ -311,3 +413,13 @@ for (const mode of ['api-error', 'no-audio', 'unavailable']) {
     else assert.equal(b.requests.length, 0);
   });
 }
+
+for (const rate of [16000,44100,48000]) test(`offscreen PCM timestamps preserve fractional resampler continuity at ${rate} Hz`, async t => {
+  browser(t,{rate}); const chunks=[];
+  const source = new CapturedTabSource(42,(audio,timing)=>chunks.push({audio,timing}),()=>{},async()=> 'id');
+  await source.start();
+  for (let index=0;index<3;index++) source.node.port.onmessage({data:{audio:new Float32Array(2048),capturedAt:1+index*2048/rate}});
+  assert.equal(chunks[0].timing.capturedAt,1);
+  for(let index=1;index<chunks.length;index++) assert.ok(Math.abs(chunks[index].timing.capturedAt-chunks[index-1].timing.capturedAt-chunks[index-1].audio.length/16000)<1e-10);
+  await source.stop(false);
+});

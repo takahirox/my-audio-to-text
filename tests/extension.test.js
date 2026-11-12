@@ -244,6 +244,7 @@ test('toolbar Open remembers its selection and preserves invoking tabs in distin
   let seq = 0;
   runInNewContext(readFileSync('extension/background.js', 'utf8').replace(/^import .*\n/, ''), {
     chrome, URLSearchParams, crypto: { randomUUID: () => `session-${++seq}` },
+    authorizeLiveTabCapture: (session, tabId, openWindow) => openWindow(),
     requestLaunchLibrary: async (op, id) => {
       if (op === 'live-check') return id;
       if (op === 'live-open') defaultId = id;
@@ -291,6 +292,7 @@ test('failed toolbar selection opens only an error, restores checked state, and 
   };
   runInNewContext(readFileSync('extension/background.js', 'utf8').replace(/^import .*\n/, ''), {
     chrome, URLSearchParams, crypto: { randomUUID: () => 'session' },
+    authorizeLiveTabCapture: (session, tabId, openWindow) => openWindow(),
     requestLaunchLibrary: (op, id) => {
       if (op === 'live-open') return new Promise((resolve, reject) => { rejectSelection = reject; });
       return Promise.resolve({ defaultId: empty ? null : selected, graphs: empty ? [] : [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] });
