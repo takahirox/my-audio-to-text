@@ -9,9 +9,6 @@ const simple = (text = 'Graph output') => {
 const microphoneGraph = () => ({ version: 15,
   nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
   edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] });
-async function tools(page) {
-  if (!await page.locator('#library-tools').evaluate(node => node.open)) await page.locator('#library-tools > summary').click();
-}
 async function assign(page, target, id) {
   await page.evaluate(async ({ target, id }) => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js');
@@ -49,6 +46,92 @@ async function holdDetailsWrites(page) {
     };
   });
 }
+
+test('create and import share the heading above search at desktop and narrow widths', async ({ libraryExtension: { page } }) => {
+  await expect(page.locator('#library-tools, #sort, #filter')).toHaveCount(0);
+  await expect(page.getByText(/Filters & more|Sort graphs|Filter graphs/)).toHaveCount(0);
+  const heading = page.locator('#graphs > .section-heading');
+  const newGraph = heading.getByRole('button', { name: '+ New Graph', exact: true });
+  const importGraph = heading.getByRole('button', { name: 'Import JSON', exact: true });
+  const search = page.getByRole('searchbox', { name: 'Search graphs', exact: true });
+  for (const width of [1440, 390, 320, 640]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.evaluate(zoom => { document.documentElement.style.zoom = zoom; }, width === 640 ? '2' : '1');
+    for (const control of [newGraph, importGraph, search]) {
+      await expect(control).toBeVisible();
+      const box = await control.boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    const headingBox = await heading.boundingBox(), searchBox = await search.boundingBox();
+    expect(searchBox.y).toBeGreaterThanOrEqual(headingBox.y + headingBox.height);
+    const newBox = await newGraph.boundingBox(), importBox = await importGraph.boundingBox();
+    expect(importBox.y).toBe(newBox.y);
+    expect(importBox.x).toBeGreaterThanOrEqual(newBox.x + newBox.width);
+    expect(await search.evaluate(node => node.parentElement.previousElementSibling.classList.contains('section-heading'))).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await newGraph.focus();
+    for (const control of [newGraph, importGraph, search]) {
+      await expect(control).toBeFocused();
+      expect(await control.evaluate(node => {
+        const style = getComputedStyle(node);
+        return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0;
+      })).toBe(true);
+      await page.keyboard.press('Tab');
+    }
+  }
+});
+
+test('all graph kinds stay in natural Japanese name order through search, autosave and external updates', async ({ libraryExtension: { page, context, url } }) => {
+  await page.evaluate(async graph => {
+    const { LIBRARY_KEY, readLibrary } = await import('./graph-library.js');
+    const { extractSubgraph } = await import('./subgraphs.js');
+    const subgraph = extractSubgraph(graph, ['source'], 'alpha').shared;
+    const saved = readLibrary(localStorage), template = saved.graphs[0];
+    // Reverse insertion order, timestamps and kinds must not override names or ID ties.
+    saved.graphs.push(...[
+      ['zebra', 'Zebra'], ['twin-z', 'Twin'], ['twin-a', 'Twin'],
+      ['kana-z', 'アヒル'], ['dog', 'いぬ'], ['kana-a', 'あひる'],
+      ['ten', 'Graph 10'], ['two', 'Graph 2'], ['bravo', 'Bravo'], ['alpha', 'alpha'],
+    ].map(([id, name], index) => ({ ...template, id, name, description: 'Searchable description',
+      updatedAt: `2025-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+      ...(id === 'alpha' ? { kind: 'subgraph', graph: subgraph } : { graph: id === 'two' ? { version: 999 } : graph }) })));
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(saved));
+  }, simple());
+  await page.reload();
+  const names = page.locator('#graph-list .graph-row-name');
+  const initial = ['alpha · Subgraph', 'Bravo', 'Graph 2', 'Graph 10', 'Live transcription', 'Twin', 'Twin', 'Zebra', 'あひる', 'アヒル', 'いぬ'];
+  const tiedIds = () => page.locator('#graph-list button[data-id^="twin-"]').evaluateAll(nodes => nodes.map(node => node.dataset.id));
+  await expect(names).toHaveText(initial);
+  expect(await tiedIds()).toEqual(['twin-a', 'twin-z']);
+  await page.locator('#search').fill('sEaRcHaBlE');
+  await expect(names).toHaveText(initial.filter(name => name !== 'Live transcription'));
+  await page.locator('#search').fill('graph');
+  await expect(names).toHaveText(['Graph 2', 'Graph 10']);
+  await expand(page, 'two');
+  await expect(page.locator('#selected-error')).toContainText('Invalid saved graph');
+  await expect(page.locator('#export')).toBeEnabled();
+  await expect(page.locator('#duplicate')).toBeDisabled();
+  await page.locator('#search').fill(''); await expand(page, 'zebra');
+  await rename(page, 'Aardvark');
+  const renamed = ['Aardvark', ...initial.filter(name => name !== 'Zebra')];
+  await expect(names).toHaveText(renamed);
+  await page.reload(); await expect(names).toHaveText(renamed);
+  const other = await context.newPage(); await other.goto(url + 'graph-library.html');
+  await other.evaluate(async () => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const store = new GraphLibrary(localStorage);
+    for (const [id, name] of [['ten', 'Zulu'], ['twin-z', 'Twin']]) {
+      const entry = readLibrary(localStorage).graphs.find(entry => entry.id === id);
+      await store.rename(id, name, 'Updated elsewhere', entry.revision);
+    }
+  });
+  const refreshed = ['Aardvark', 'alpha · Subgraph', 'Bravo', 'Graph 2', 'Live transcription', 'Twin', 'Twin', 'Zulu', 'あひる', 'アヒル', 'いぬ'];
+  await expect(names).toHaveText(refreshed);
+  expect(await tiedIds()).toEqual(['twin-a', 'twin-z']);
+  await page.reload(); await expect(names).toHaveText(refreshed);
+  expect(await tiedIds()).toEqual(['twin-a', 'twin-z']);
+});
 
 test('compact microphone header keeps Models last, help accessible and nominal status out of the workspace', async ({ libraryExtension: { page } }) => {
   await expect(page.locator('#web-voice-status')).toBeVisible();
@@ -127,7 +210,7 @@ test('microphone reconciliation errors remain visible even while OFF', async ({ 
 
 test('Library manages independent named graphs, portable JSON, persistent targets, safeguards and responsive details', async ({ libraryExtension: f }) => {
   const { page } = f;
-  await expect(page.locator('#launch-settings, #live-graph, #web-graph, #filter option[value=assigned]')).toHaveCount(0);
+  await expect(page.locator('#launch-settings, #live-graph, #web-graph')).toHaveCount(0);
   await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
   await expect(page.locator('#web-voice-status')).toContainText('No compatible graphs');
   await expect(page.locator('#selected')).toBeHidden(); await expand(page);
@@ -138,8 +221,12 @@ test('Library manages independent named graphs, portable JSON, persistent target
   await expect(page.locator('#delete')).toHaveAccessibleDescription('Keep at least one usable graph.');
   await expect(page.locator('#delete-hint')).toBeVisible();
   await page.locator('#new').click(); await expect(page.locator('#selected-title')).toHaveText('Untitled graph'); await rename(page, 'Meeting Notes', 'Summarize meetings locally');
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Live transcription', 'Meeting Notes']);
   const meeting = (await library(page)).graphs.at(-1);
-  await page.locator('#duplicate').click(); await expect(page.locator('#selected-title')).toHaveText('Meeting Notes copy'); await rename(page, 'Voice Typing', 'Microphone dictation');
+  await page.locator('#duplicate').click(); await expect(page.locator('#selected-title')).toHaveText('Meeting Notes copy');
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Live transcription', 'Meeting Notes', 'Meeting Notes copy']);
+  await rename(page, 'Voice Typing', 'Microphone dictation');
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Live transcription', 'Meeting Notes', 'Voice Typing']);
   const voice = (await library(page)).graphs.at(-1);
   expect(voice.id).not.toBe(meeting.id); expect(voice.graph).toEqual(meeting.graph);
   await page.evaluate(async ({ id, revision, graph }) => {
@@ -157,18 +244,20 @@ test('Library manages independent named graphs, portable JSON, persistent target
   expect((await library(page)).assignments).toEqual({ live: meeting.id, webVoice: voice.id });
   await page.reload(); await expect(page.locator('#selected-title')).toHaveText('Voice Typing');
   await expect(page.getByRole('button', { name: 'Open details for Meeting Notes', exact: true })).toContainText('Meeting Notes');
-  await page.locator('#search').fill('meet'); await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Voice Typing', 'Meeting Notes']);
-  await page.locator('#search').fill(''); await tools(page); await page.locator('#sort').selectOption('name');
+  await page.locator('#search').fill('meet'); await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Meeting Notes', 'Voice Typing']);
+  await page.locator('#search').fill('');
   await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Live transcription', 'Meeting Notes', 'Voice Typing']);
-  await tools(page); await page.locator('#filter').selectOption('all');
   const beforeImport = await library(page);
-  await page.locator('#import-file').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{broken') });
+  const choosing = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Import JSON', exact: true }).press('Enter');
+  await (await choosing).setFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{broken') });
   await expect(page.locator('#errors')).toContainText('Cannot import'); expect(await library(page)).toEqual(beforeImport);
   await page.locator('#import-file').setInputFiles({ name: 'unsupported.json', mimeType: 'application/json', buffer: Buffer.from('{"version":999}') });
   await expect(page.locator('#errors')).toContainText('version'); expect(await library(page)).toEqual(beforeImport);
   const graph = simple('Imported output');
   await page.locator('#import-file').setInputFiles({ name: 'Imported.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(graph)) });
   await expect(page.locator('#selected-title')).toHaveText('Imported');
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Imported', 'Live transcription', 'Meeting Notes', 'Voice Typing']);
   expect((await library(page)).graphs.at(-1).graph).toEqual(graph);
   await expect(page.locator('#preview-scroll, #preview, #save-details')).toHaveCount(0);
   await expect(page.locator('#graph-models')).toBeVisible();
@@ -189,7 +278,6 @@ test('Library manages independent named graphs, portable JSON, persistent target
   await expect(page.locator('#graph-list button[data-id]')).toHaveCount(count - 1);
   await page.getByRole('button', { name: 'Open details for Meeting Notes', exact: true }).focus(); await page.keyboard.press('Enter');
   await expect(page.locator('#selected-title')).toHaveText('Meeting Notes');
-  await page.locator('#library-tools > summary').click();
   await page.screenshot({ path: test.info().outputPath('library-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -225,6 +313,8 @@ test('Required models stays visible through selection, model search and resolved
   await expect(page.locator('#selected')).not.toContainText(/Models & saved information|File cache|Check model files|Live verifies runtime readiness|Manage model files/);
   await expect(page.locator('#selected a[href="model-cache.html"]')).toHaveCount(0);
   expect(await value.evaluate(node => node.parentElement === document.querySelector('#selected').lastElementChild)).toBe(true);
+  await page.locator('#search').fill('opus-mt');
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Parent graph', 'Processing graph', 'Shared processor · Subgraph']);
   await page.locator('#search').fill(''); await expand(page, plainId);
   await expect(value).toBeVisible(); await expect(value).toHaveText('None');
   await expand(page, parentId);
@@ -406,7 +496,7 @@ test('concurrent migration, quota errors and corrupt envelopes keep originals re
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
 });
 
-test('metadata drafts survive filtering, library refresh and reload with original revision conflicts', async ({ libraryExtension: { page, context, url } }) => {
+test('metadata drafts survive search, library refresh and reload with original revision conflicts', async ({ libraryExtension: { page, context, url } }) => {
   const id = await create(page, 'Draft graph', simple('A')); await create(page, 'Other graph', simple('B'));
   await page.reload(); await page.locator(`#graph-list button[data-id="${id}"]`).click();
   await composition(page, 'start', 'My unsaved name');
@@ -416,7 +506,7 @@ test('metadata drafts survive filtering, library refresh and reload with origina
   await expect(page.locator('#selected')).toBeVisible();
   await page.getByRole('button', { name: 'Open details for Other graph', exact: true }).click();
   await expect(page.locator('#graph-name')).toHaveValue('My unsaved name');
-  await tools(page); await page.locator('#filter').selectOption('invalid');
+  await page.locator('#search').fill('no matching graph');
   await expect(page.locator('#empty')).toBeVisible();
   const other = await context.newPage(); await other.goto(url + 'graph-library.html');
   await other.evaluate(async id => {
@@ -463,7 +553,8 @@ test('Library expands one full-width inline row with keyboard controls and no co
   await expect(page.locator('.detail-actions > a, .detail-actions > button')).toHaveText(['Edit graph', 'Duplicate', 'Export JSON', 'Delete graph']);
   for (const id of ['open', 'duplicate', 'export', 'delete']) await expect(page.locator(`#${id}`)).toBeVisible();
   await expect(page.locator('#load-details')).toBeHidden();
-  await first.press('ArrowUp'); await expect(second).toBeFocused(); await second.press('Space');
+  await first.press('ArrowUp'); await expect(first).toBeFocused();
+  await first.press('ArrowDown'); await expect(second).toBeFocused(); await second.press('Space');
   await expect(second).toHaveAttribute('aria-expanded', 'true');
   await expect(first).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#graph-list li.selected')).toHaveCount(1);
@@ -559,8 +650,8 @@ test('subgraph rows retain their distinction and explain referenced-subgraph del
     await store.create({ id: 'shared', name: 'Reusable formatter', kind: 'subgraph', graph: extracted.shared });
     await store.create({ name: 'Parent graph', graph: extracted.parent });
   });
-  await page.reload(); await tools(page); await page.locator('#filter').selectOption('subgraph');
-  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Reusable formatter · Subgraph']);
+  await page.reload();
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Live transcription', 'Parent graph', 'Reusable formatter · Subgraph']);
   const row = page.getByRole('button', { name: 'Open details for Reusable formatter · Subgraph', exact: true });
   await row.press('Enter');
   await expect(page.getByRole('button', { name: 'Delete graph', exact: true })).toBeDisabled();
@@ -570,8 +661,8 @@ test('subgraph rows retain their distinction and explain referenced-subgraph del
   await expect(page.locator('#delete-hint')).toBeVisible();
   await page.locator('#export').focus(); await page.keyboard.press('Tab');
   await expect(page.locator('#graph-name')).toBeFocused();
-  await row.click(); await page.locator('#filter').selectOption('graph');
-  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Parent graph', 'Live transcription']);
+  await row.click();
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Live transcription', 'Parent graph', 'Reusable formatter · Subgraph']);
 });
 
 test('export waits for autosave, and a later selection cancels an earlier pending action', async ({ libraryExtension: { page } }) => {
@@ -663,10 +754,10 @@ test('list refresh and autosave preserve input focus, caret, composition and row
   const id = await create(page, 'Focus regression', simple()); await page.reload(); await expand(page, id);
   const row = page.locator(`#graph-list button[data-id="${id}"]`);
   await row.press('Tab'); await expect(page.locator('#open')).toBeFocused();
-  await page.locator('#graph-name').fill('Focus autosave');
+  await page.locator('#graph-name').fill('Z Focus autosave');
   await page.locator('#graph-name').press('ArrowLeft');
   const caret = await page.locator('#graph-name').evaluate(node => node.selectionStart);
-  await expect(page.locator('#selected-title')).toHaveText('Focus autosave');
+  await expect(page.locator('#selected-title')).toHaveText('Z Focus autosave');
   await expect(page.locator('#graph-name')).toBeFocused();
   expect(await page.locator('#graph-name').evaluate(node => node.selectionStart)).toBe(caret);
   await composition(page, 'start', '未確定');
@@ -697,7 +788,7 @@ test('collapsing a filtered-out row saves edits and restores focus to search', a
 
 test('long lists scroll the document with details beneath the selected row', async ({ libraryExtension: { page } }) => {
   for (let i = 0; i < 24; i++) await create(page, `Graph ${String(i).padStart(2, '0')}`, simple());
-  await page.reload(); await tools(page); await page.locator('#sort').selectOption('name');
+  await page.reload();
   const row = page.getByRole('button', { name: 'Open details for Graph 23', exact: true });
   await row.click(); await expect(row).toBeFocused();
   await expect(page.locator('#selected-title')).toHaveText('Graph 23');
@@ -794,6 +885,7 @@ test('quota failures retain drafts, block selection and recover through an expli
   await expect(page).toHaveURL(/graph-library\.html$/);
   await expect(page.locator('#load-details')).toBeVisible();
   await page.locator('#new').click(); await page.locator('#duplicate').click();
+  await page.locator('#import-file').setInputFiles({ name: 'blocked.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(simple())) });
   await page.waitForTimeout(650);
   expect(await page.evaluate(() => detailsAttempts)).toBe(1);
   expect(await library(page)).toEqual(before);
