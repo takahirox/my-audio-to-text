@@ -14,7 +14,7 @@ Text.value / ASR.final / committed translation.text
   → Speaker · streaming.stream
 ```
 
-Save prepares **916,881,956 model bytes**, including parked Nodes. Models provides
+Auto Save prepares **916,881,956 model bytes**, including parked Nodes. Models provides
 Download / retry, verification and deletion. Start reads verified cached bytes;
 missing, corrupt or evicted assets require preparation again. Keep Live open
 and press Start to activate Speaker. There is no recording-time model download,
@@ -145,7 +145,7 @@ STREAMING_TTS_MODEL=cosyvoice3 STREAMING_TTS_SMOKE=1 \
 ```
 
 `COSYVOICE3_MODEL_DIR` can select another directory containing the same reviewed
-files. The fixture serves weights over loopback only during explicit Save/Models
+files. The fixture serves weights over loopback only during explicit Auto Save/Models
 preparation, retaining production sizes/hashes. It then starts offline and checks
 that neither the page nor Worker downloads weights. The copied package keeps
 production inference, graph, cache and CSP code. Observation hooks record Worker

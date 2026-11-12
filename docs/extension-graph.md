@@ -101,13 +101,21 @@ page and streams mono 16 kHz PCM to the extension’s existing graph without ope
 a tab or window. Use HTTPS (or localhost); a site’s Permissions Policy can block
 capture, in which case the mic reports a local error.
 
-**Edit graph** opens `graph-editor.html?id=<stable-id>`. Save, Load saved, Reset,
-Import and Export all concern that entry's draft. Save prepares required cached
-files, including parked Nodes, after persistence. Other entries and execution
-assignments remain unchanged. Closing/navigating away from a dirty editor warns
-before discarding. Concurrent edits to different entries merge under Web Locks;
-stale saves to the same entry are rejected and retain the draft for export or
-explicit Load saved. Library name/description forms likewise preserve unsaved
+**Edit graph** opens `graph-editor.html?id=<stable-id>`. Every graph edit saves
+automatically after a short debounce. Undo / Redo affect only this editor session
+(up to 100 transactions); reopening starts with empty history. Continuous typing,
+IME composition, a pointer drag and a keyboard motion burst form logical steps.
+Use Ctrl+Z / Ctrl+Shift+Z (Cmd on macOS), or Ctrl+Y for Redo. Focused text fields
+keep native Undo/Redo. Undoing a saved change also saves the reverted graph.
+
+Only one tab/window can edit a particular graph. A second viewer is read-only,
+with inspection, navigation and export available. **Start editing** explicitly
+acquires the per-graph Web Lock after the first editor leaves, reloads the newest
+saved revision and starts fresh history. Different graph IDs can be edited
+concurrently. A separate short-lived library write lock and revision checks
+still reject stale writes from Library or older tabs. No automatic merge occurs.
+Export a conflicting local draft or use **Reload latest graph** in recovery
+controls. Library name/description forms likewise preserve unsaved
 input when another page changes storage. **Save details** saves the name and
 description; **Edit graph** edits Nodes. Unsaved details survive search and
 cache updates, warn before selection changes or navigation, and are retained in
@@ -179,7 +187,7 @@ clear another window's activity.
 
 ## Live model lifecycle (#239)
 
-Save prepares and verifies browser-local model **files**, including parked Nodes;
+Auto Save prepares and verifies browser-local model **files**, including parked Nodes;
 it never starts inference Workers or initializes GPU models. Opening Live selects
 only `executableGraph(savedGraph)` routes to output sinks and immediately
 initializes every required model instance, including models behind Button/Hold
@@ -221,13 +229,13 @@ runtime before re-enabling Start. Internal Cancel releases the old owner before
 the same idle restoration. Completed display output remains visible. Each Node
 keeps its own processing state and dedicated Workers; cached immutable files are
 shared, and Start never creates a second copy of its ready models. Repeated
-prepares/Starts coalesce. A Save during idle/preparation invalidates and tears down
+prepares/Starts coalesce. An Auto Save during idle/preparation invalidates and tears down
 the obsolete owner before preparing the new snapshot. Running sessions retain
 their immutable graph until Stop/Cancel. Closing Live releases both pending and
 active resources; verified Cache Storage files persist.
 
 Live initialization is cache-only: it cannot recover missing, corrupt or evicted
-optional weights by downloading. Save in Graph or use Models preparation, then
+optional weights by downloading. Edit the graph or use Models preparation, then
 **Retry models** in Live. Unsupported hardware, memory failures, initialization
 timeouts, Worker failures and observed GPU device loss invalidate readiness.
 There is no automatic retry loop or model substitution. Ordinary session branch
@@ -264,19 +272,18 @@ clears the highlight. From no selection, Arrow Down selects the first result and
 Arrow Up selects the last; further arrows navigate results. Enter adds only the
 highlighted Node and does nothing with no selection. Escape or clicking outside
 dismisses the list and clears selection. Adding keeps the current
-zoom and pan, selects and focuses the new Node, and leaves changes unsaved until
-Save. The compact toolbar shows Saved / Unsaved for the editor draft and a separate
+zoom and pan, selects and focuses the new Node, and saves changes automatically. The toolbar shows Saving… / Saved / Save failed for the editor draft and a separate
 green **Active** indicator only when this graph is running in Live, alongside Add
-Node, Save and Graph actions (…). Hover Active for the capture tab ID;
+Node, Undo, Redo and Graph actions (…). Hover Active for the capture tab ID;
 the number does not occupy canvas space. Idle and routine active sessions have no
 status row below the toolbar. At the narrowest widths, draft and Live status stack
-within the same toolbar height, keeping every action available. An exceptional
+within the toolbar; controls wrap as needed, keeping every action available. An exceptional
 warning below the toolbar wraps in full: **earlier graph; saved edits apply next
 session** means Live is still running its immutable older snapshot. A saved graph
 changed elsewhere warning preserves your draft; export it if needed, then choose
-**Graph actions → Load saved** before saving. Both warnings remain readable when
-they occur together. Select a heading for settings; click it again, press Escape,
-or click blank canvas to clear selection. The Inspector identifies the
+**Reload latest graph** in the recovery controls. Both warnings remain readable when
+they occur together. Select a heading for settings; click it again, press
+Escape, or click blank canvas to clear selection. The Inspector identifies the
 Node by type and Instance ID, with Remove Node beside Settings. Drag headings or use arrow
 keys to move Nodes. Connect an output to a compatible input; reconnecting replaces only that input's wire. Select a wire
 for details or Disconnect. Canvas navigation floats at the bottom-left: −, the
@@ -298,24 +305,46 @@ Scroll or swipe to pan; controls stay in place and extra bottom scroll space
 lets the final ports move clear of them.
 Settings, essential port names and accessibility labels remain visible.
 
-Graph actions (…) provides Validate draft, Load saved, Reset draft to default, and
-Import or Export graph JSON. Export downloads the validated current draft,
-including multiline settings. Import validates before replacing the draft. Save is required
-to apply an import or Reset. Save prepares the selected model assets, including
-parked model Nodes; opening or loading a graph does not download weights. Models
-provides preparation, retry, cache verification and license/terms information.
+Graph actions (…) provides Validate draft, Reset draft to default, and Import or
+Export graph JSON. Import and Reset are undoable and save automatically. Export
+includes the current draft, including invalid edits for repair. Invalid numbers,
+text and structural errors cannot replace the last good saved graph. A persistent
+**Save failed** message explains the problem; repair the draft or use **Retry
+Auto Save**. Graph persistence, model preparation and Live activity have separate
+status indicators.
+
+Each committed edit checkpoints a graph-ID, session-ID and base-revision keyed
+recovery copy in browser-local storage before the asynchronous save. Typing
+checkpoints at grouped transaction boundaries; lifecycle events checkpoint the
+remaining edit synchronously. App navigation (Library, Models, Live and
+parent/subgraph navigation) awaits graph persistence and blocks on failure.
+Page hiding/closing checkpoints and attempts a best-effort save; asynchronous
+unload completion is never assumed. Closing warns only if the latest edits
+cannot be safely persisted or checkpointed. On reopening, **Recoverable draft
+available** offers explicit restoration when its base still matches. Older-base
+drafts are available as JSON for importing as a new Library entry, and cannot
+overwrite newer saved revisions. Checkpoints clear only after persistence is
+confirmed. Quota/storage failures remain visible; browser/device storage failure
+can still lose data, so export important drafts.
+
+After successful persistence, required model files (including parked model
+Nodes) prepare asynchronously. Opening a saved graph checks its cached requirements and offers preparation/retry when files are missing. Equivalent model/voice identities retain running or verified
+preparations across moves, text edits and Undo. Obsolete requirements are canceled;
+cache verification and retry are available in the model status UI and Models.
+Graph editing and navigation do not wait for downloads. Active Live sessions
+retain their immutable runtime snapshot.
 
 Portable graph JSON retains schema version 15. The Library stores metadata and
 assignments separately, migrating the old `processing-graph-v1` key as above. Unsupported
 Nodes, ports and versions fail explicitly. Live disables Start and links to Graph
 Editor. The editor shows the error and a current default draft. Graph actions →
-Saved JSON exposes the rejected original for inspection/export. Save keeps that
+Saved JSON exposes the rejected original for inspection/export. Auto Save keeps that
 invalid original intact; repair and import a new Library entry instead.
 Existing version-15 `Display.input` edges are deliberately converted to
 `Display.input1`, with missing `settings.inputCount` initialized to 1 and
 `settings.title` to an empty string. IDs, positions, other settings and unrelated
 ports (including `Hold.input`) stay unchanged. Load, Import, validation and runtime
-selection use the same conversion; reading leaves stored JSON untouched. Save and
+selection use the same conversion; reading leaves stored JSON untouched. Auto Save and
 Export write the canonical numbered ports. Conflicting `input`/`input1` connections
 fail validation instead of replacing an edge. Removed display Node types and
 older schema versions still fail explicitly. Current [example JSON](evidence/item-198.json) can be imported directly.
@@ -345,27 +374,20 @@ the canvas and library unchanged.
 Crossing connections become typed ports; repeated connections from the same
 internal output share one exposed port. Concrete capture nodes and output
 destinations stay on the parent canvas. The shared definition is saved in the
-existing Graph Library immediately; the parent replacement remains a draft
-until **Save**, like other graph edits in this checkout. Creation checks the
-original parent revision inside the library lock and validates the replacement
-before writing. It first preserves the parent draft in tab session storage;
-failure to preserve it prevents creation. A library write failure leaves the
-canvas and library unchanged. Refresh restores an unsaved replacement and later
-edits, retaining its original revision so a stale recovery cannot overwrite a
-concurrent save. Saving or loading the saved graph clears the recovery draft.
-Shared definitions have independent identities and remain in Library if the
-parent replacement is discarded. Auto Save/Undo-Redo (#299) is not present in
-this checkout; creation applies the replacement through the normal draft
-notification path without coupling definition deletion to parent edits.
+existing Graph Library together with the parent replacement in one revision-checked
+transaction. Creation waits for pending Auto Save edits first. Failed validation,
+revision checks or storage writes leave both entries unchanged. The replacement
+is one Undo/Redo edit; Auto Save persists Undo/Redo, and Undo never deletes the
+shared definition from Library, including when other graphs reuse it.
 
 Library lists regular graphs and subgraphs together in ascending name order;
 subgraphs are identified by **· Subgraph**. **Add Node** includes saved subgraphs
 under **Subgraphs**.
 Select an instance and choose **Edit Subgraph**, or double-click its heading,
 to open its definition on the same Graph Editor canvas. **Back to parent graph**
-restores the parent's draft, including an unsaved extraction. The draft is kept
-in that tab's session storage; navigation is refused if it cannot be preserved.
-Changed parent revisions require **Load saved** before saving a restored draft.
+returns to the latest persisted parent. Both directions flush Auto Save before
+navigation. Existing older navigation drafts are still offered for recovery;
+changed parent revisions make those drafts export-only.
 Subgraphs can also be opened directly from Library.
 
 In a subgraph, **Graph actions → Edit exposed ports** opens the port controls in
@@ -390,7 +412,7 @@ dictation resolves its own selected graph at Start. Each already-started session
 settings, worker ownership and queues. Direct expanded connections preserve
 atomic output families and Hold sampling; ordinary typed and cycle validation
 runs again on the expansion. Shared models, including parked nodes, participate
-in Save preparation, cache inspection and resolved runtime requirements. Editing
+in Auto Save preparation, cache inspection and resolved runtime requirements. Editing
 or saving a definition never hot-swaps active workers or capture.
 
 Saves use the existing Web Lock and entry revisions. Changes in another
@@ -400,7 +422,7 @@ newer saved revision. Missing/corrupt external definitions produce visible
 errors and prevent execution/saving; original storage and drafts remain
 recoverable through JSON export.
 
-While saved parents reference a definition, Save blocks exposed port removal,
+While saved parents reference a definition, Auto Save blocks exposed port removal,
 type changes and additions, listing all affected parents **before storage is
 changed**. Additions are conservative because a new required internal input can
 deactivate existing paths. Label changes and same-type endpoint edits are
@@ -648,7 +670,7 @@ label**, stored in `settings.inputLabels` by port name, for example
 are optional strings up to 120 characters; blank/missing labels use `Input 1`,
 `Input 2`, etc. Duplicate labels remain separate tabs because identity belongs to
 `inputN`, not the label. `settings.title` names the display group for accessibility
-(blank uses `Display <Node ID>`). Save applies settings changes next session.
+(blank uses `Display <Node ID>`). Auto Save applies settings changes next session.
 
 Connect transcript history to Display.input1, translated text to Display.input2,
 and TextSummary.summary to Display.input3 on **one Display**. Import the
@@ -675,7 +697,7 @@ stays private to the host rendering boundary and never travels through graph por
 Existing #212 graphs retain their `input1…inputN` connections and now show input
 tabs without rewiring; missing labels use the numbered fallback. Version 15 and
 legacy `Display.input` → `input1` migration are unchanged. Reading retains original
-storage; Save/Export canonicalize it. Unsupported older schemas/types still use
+storage; Auto Save/Export canonicalize it. Unsupported older schemas/types still use
 the documented Saved JSON / Reset / Import recovery.
 
 See [corrected Display tabs validation](evidence/display-216.md) for checks,

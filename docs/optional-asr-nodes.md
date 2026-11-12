@@ -2,7 +2,7 @@
 
 These are independent Chrome extension processor Nodes. Add either or both in
 Graph Editor. Existing ReazonSpeech, Whisper tiny, Zipformer, default graph,
-Current graphs use portable display items; unsupported saved display routes require explicit Reset or Import and Save.
+Current graphs use portable display items; unsupported saved display routes require explicit Reset or Import and wait for Auto Save.
 Successful fixture recognition is **not a quality comparison**, WER/CER result,
 meeting-room validation or user acceptance.
 
@@ -33,8 +33,8 @@ OPUS-MT.text, focused text output or other TEXT consumers. Each Node owns a
 Worker/runtime; multiple instances can coexist. No model selector, global model
 registry or graph cardinality restriction is introduced.
 
-Before Save, the editor shows download/storage/memory guidance for these Nodes.
-**Save graph → prepare required weights** follows every saved model-bearing Node,
+Before Auto Save, the editor shows download/storage/memory guidance for these Nodes.
+**Auto Save graph → prepare required weights** follows every saved model-bearing Node,
 including disconnected/parked Nodes; repeated same-model Nodes share cached
 weights, not inference Workers. Merely adding, loading or editing a Node does
 not download weights. A parked Node does not allocate a runtime at Start.
@@ -56,7 +56,7 @@ Silicon, not on Windows, Linux, mobile or low-memory hardware.
 
 Graph Editor and Models provide progress, Cancel, Retry preparation, Check cache,
 and model-specific errors. Models also offers Delete cached assets. Missing,
-corrupt or evicted weights require **Save/Retry preparation before Start**.
+corrupt or evicted weights require **Auto Save/Retry preparation before Start**.
 Completed verified files survive a failed download and are reused on retry;
 partial files restart from their beginning. A failure does not roll back the
 saved graph. Free storage or delete unused cached models on quota errors. No
@@ -182,7 +182,7 @@ reads cached model bytes; it cannot fetch missing weights. No speech upload,
 remote inference, recording-time runtime download or silent model fallback.
 
 Deterministic validation: `npm test`, `npm run test:extension`; includes ports,
-Current defaults and unsupported-graph recovery, Save/reload, parked requirements, preparation retry,
+Current defaults and unsupported-graph recovery, Auto Save/reload, parked requirements, preparation retry,
 bounded input, repeat/deduplication, tails, native-stream renewal, Cancel, crashes,
 peer-path isolation and Worker release. Existing generic cache tests cover
 corruption, quota, cancellation, cross-page locks and reuse.
@@ -209,4 +209,4 @@ inference. Physical microphone, meeting audio, other devices, comparative
 accuracy and user acceptance remain untested/out of scope. There is no required
 post-merge verification for this Issue.
 
-Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and automatic persistence of a repaired graph copy.

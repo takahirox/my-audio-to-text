@@ -7,7 +7,7 @@ deliveries. Any compatible graph path can consume them; Button has no knowledge
 of text, summaries or models.
 
 Set `label` in the inspector (up to 120 UTF-16 characters). Blank/whitespace uses
-“Run action”. Save, Load saved, JSON Import and Export preserve the setting.
+“Run action”. Auto Save, Undo/Redo, JSON Import and Export preserve the setting.
 Live renders only Buttons in executable paths, in ascending Node ID order.
 IDs address actions; duplicate captions remain independent. Positions affect only
 the editor. Graph Actions wraps beside/below the recording controls; native
@@ -56,7 +56,7 @@ is incomplete does not disappear and silently change the Hold's mode.
 
 ## Manual summary example
 
-Import [manual-text-summary.json](examples/manual-text-summary.json), Save to
+Import [manual-text-summary.json](examples/manual-text-summary.json); Auto Save will
 prepare the LFM2 model, invoke the toolbar on the audio tab, then Start:
 
 ```text
@@ -78,7 +78,7 @@ weights and initializes the summary Worker/WebGPU resources before showing Ready
 and enabling Start. ASR, translation, conditions and TTS follow the same lifecycle.
 No inference or trigger runs during this preparation. The first Button action
 validates the 32,768 UTF-16 character bound and goes directly to inference with
-the ready Worker; Hold still controls when the snapshot is sent. Save prepares
+the ready Worker; Hold still controls when the snapshot is sent. Auto Save prepares
 files only. No Live/recording-time model download or silent truncation is
 introduced. Long recordings beyond the cap fail visibly; chunking/long-context
 summarization remains separate work.

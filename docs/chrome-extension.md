@@ -45,18 +45,21 @@ and Models keep their dark appearance:
   Live has no input/output target panel or selector.
 - **Graph Editor** opens a separate wide tab dominated by the typed-port canvas.
   **Add Node** opens search and categories; node settings appear only on
-  selection. Zoom and Fit graph stay visible, Save is primary, and Graph actions
-  groups load/reset/validation and optional warnings. Saving prepares required optional
-  model weights with progress, cancellation and retry. Detailed help
-  opens on demand. Drafts apply next session; external changes retain drafts and
-  require Load saved before saving. Load/reset confirm before discarding edits.
+  selection. Zoom and Fit graph stay visible; Undo and Redo sit in the toolbar. Graph actions
+  groups reset, validation, import/export and optional warnings. Edits save automatically. Saving prepares required optional
+  model weights with progress, cancellation and retry. Models provides asset
+  requirements and terms. Changes apply next session; external revisions retain recoverable drafts and offer Reload latest graph in recovery controls. Reset is undoable.
 - **Models** opens a dedicated tab (also Chrome's Extension options page), with
   bundled ReazonSpeech/Silero labels and verified cache controls for both OPUS-MT
   directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Opening it never downloads weights.
 
-Navigation opens auxiliary tabs while Live continues to own the active capture.
-**Live window** focuses the existing recorder without invoking capture. Closing
-auxiliary tabs does not end the session. A missing optional model links from Live
+The execution window's **Library**, **Edit graph** and **Models** links open
+separate tabs while capture continues. **Edit graph** opens this window's active
+session graph, or its selected saved graph when idle, regardless of the toolbar
+default. Graph Editor offers **Library** and **Models** navigation; Models retains
+its **Live** button to focus an existing execution window. Use the toolbar action
+to open a new execution window. Closing auxiliary tabs does not end the session.
+A missing optional model links from Live
 to Models for direction/voice-specific recovery; retry preparation, then start a new session.
 See [graph editing](extension-graph.md), [model caching](extension-model-cache.md)
 and [Live control validation/screenshots](evidence/live-225.md).
@@ -88,7 +91,7 @@ checksum-pinned runtime JS/MJS/WASM. TTS preparation stages about 77 MB of revie
 runtimes/frontends plus corresponding source. Optional ASR preparation adds about
 41 MB of pinned runtimes, with the CSP adaptation and licenses described in
 [optional ASR setup](optional-asr-nodes.md); the 1.26 GB / 305 MB weights stay out of the bundle. Optional OPUS-MT / TranslateGemma translation and
-TTS and optional Parakeet/Moonshine ASR **weights** are prepared after a successful **Save graph** for saved processor
+TTS and optional Parakeet/Moonshine ASR **weights** are prepared after a successful **Auto Save** for saved processor
 Nodes, or through **Download / retry** in Models; setup does not download or bundle them. These generated files are
 ignored by Git.
 
@@ -142,7 +145,7 @@ a session; there is no built-in Cancel recording control. Internal
 `TabSession.cancel()` and `Pipeline.cancel()` still handle teardown and errors. Transcripts are held only in that window's
 memory.
 Preparation failures keep Start disabled and show per-Node errors. Recover missing
-files through Graph Save or Models, check browser/GPU support and free memory,
+files through Graph Editor preparation controls or Models, check browser/GPU support and free memory,
 then press **Retry models** in Live. See the [model lifecycle](extension-graph.md#live-model-lifecycle-239).
 Session errors release failed resources and leave recovery available. If Chrome's
 temporary tab grant has expired (for example after navigating to another origin),
@@ -160,7 +163,7 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 
 ## Optional page and microphone workflows
 
-Save a graph with whole-tab, selected-media and/or microphone Inputs and
+Edit a graph with whole-tab, selected-media and/or microphone Inputs and
 one or more outputs. Multiple independent ASRs and displays run concurrently;
 parked or unfinished Nodes remain saved but inactive. See the
 [execution and permission policy](extension-graph.md). Graph Editor owns source
@@ -193,7 +196,7 @@ skip while other branches continue. Routine insertion counts and successful
 connections appear only in Session details. Page navigation, closure or permission loss
 detaches the sink. Stop and invoke the page toolbar again to recover; a running
 session never retargets when another tab's action is invoked. Page targets are
-not persisted. Unsupported saved field/display ports require Reset or Import of a current graph and an explicit Save.
+not persisted. Unsupported saved field/display ports require Reset or Import of a current graph and automatic persistence of a repaired graph copy.
 
 **Temporary selected-media limitation:** `SelectedPageMediaAudio` cannot capture
 until a replacement selection workflow exists. Live no longer offers discovery
@@ -618,12 +621,12 @@ For bilingual display, connect `source/text/error` directly to a `TextFormatter`
 and then Live. Japanese → English is a separate Node using the same weights.
 No preset or global language/model switch is added.
 
-Before Save/use, read the linked Gemma Terms and Prohibited Use Policy in
-**Models**. Save prepares **3.112 GB** of optional weights only when the
+Before using these Nodes, read the linked Gemma Terms and Prohibited Use Policy in
+**Models**. Auto Save prepares **3.112 GB** of optional weights only when the
 graph contains either Gemma Node, including parked Nodes; both directions reuse
 one verified cache. Allow **7 GB free storage**, several GB free RAM/GPU memory
 and supported **Worker WebGPU**. Each active Node owns a separate GPU session.
-Save remains successful if preparation fails; use Cancel/retry or Models for
+Auto Save remains successful if preparation fails; use Cancel/retry or Models for
 recovery. Recording never fetches weights. GPU/adapter/memory failures are visible;
 there is no CPU, OPUS-MT or remote fallback. The public ONNX conversion remains
 subject to Google's upstream terms. See [runtime, provenance, terms and real-test
@@ -631,4 +634,4 @@ commands](translation-nodes.md#translategemma-in-the-extension-124) and
 [#124 validation evidence](evidence/translation-124.md). No translation-quality
 superiority to OPUS-MT is assumed.
 
-Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and automatic persistence of a repaired graph copy.

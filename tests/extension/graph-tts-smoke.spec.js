@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './graph-fixture.js';
 import { writeFile } from 'node:fs/promises';
@@ -24,7 +25,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
       for (const language of ['ja', 'en', 'en']) {
         if (type === 'Supertonic3') await page.editor.getByLabel('supertonic3 language', { exact: true }).selectOption(language);
         else await page.editor.getByLabel('kokoro voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');
-        await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
+        await settleAutoSave(page.editor);
         if (type === 'Kokoro') await page.models.getByLabel('Kokoro 82M voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');
         await page.models.locator(`#${type.toLowerCase()} button:has-text("Download / retry")`).click();
         await expect(page.models.locator(`#${type.toLowerCase()} .model-status`)).toContainText('Ready', { timeout: 600000 });

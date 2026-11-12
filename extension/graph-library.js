@@ -11,7 +11,7 @@ function notifyVoiceLibrary() {
     if (globalThis.chrome?.runtime?.sendMessage) void chrome.runtime.sendMessage({ type: 'web-voice-library-changed' }).catch(() => {});
   } catch { /* An invalidated context must not turn a committed save into an error. */ }
 }
-const conflict = () => Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');
+const conflict = () => Error('Saved graph changed in another page. Export your draft or reload the latest graph using recovery controls; your draft has been kept.');
 const token = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 function notifyLibrary() {
@@ -181,8 +181,15 @@ export class GraphLibrary {
       if (id === undefined) do { id = token(); } while (library.graphs.some(entry => entry.id === id));
       if (!validText(name) || typeof description !== 'string') throw Error('Enter a graph name and description.');
       library.graphs.push({ id, kind, name: name.trim(), description, graph: validated, revision: token(), createdAt: stamp, updatedAt: stamp });
-      // Extraction must validate its replacement in the same storage transaction.
+      // Publish extraction and its parent replacement atomically. A failed
+      // revision, validation or storage write leaves both entries unchanged.
       if (replacementGraph) resolveSubgraphs(replacementGraph, library.graphs);
+      if (replacementSource) {
+        const source = library.graphs.find(entry => entry.id === replacementSource.id);
+        if (entryError(source, library)) throw Error('This saved parent graph is invalid. Recover it in Graph Library before creating a subgraph.');
+        source.graph = assertGraph(replacementGraph, library.graphs);
+        delete source.source; source.updatedAt = stamp; source.revision = token();
+      }
     }, { revision });
   }
   async save(id, revision, graph) {

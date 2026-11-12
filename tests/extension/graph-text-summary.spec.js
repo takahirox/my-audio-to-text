@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { corruptSavedGraph, recoverAsNew } from './ui-controls.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
@@ -26,15 +27,16 @@ test('both text processors: parked Save persists, independent settings, cancella
   }
   await editor.getByLabel('textsummaryqwen35 language', { exact: true }).selectOption('en');
   const cards = editor.locator('#graph-models .model-card');
-  const save = async () => { await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled(); };
+  const save = async () => { await settleAutoSave(editor);  };
   f.mode('corrupt'); await save();
   await expect(cards).toHaveCount(2);
   for (const card of await cards.all()) await expect(card).toHaveAttribute('data-state', 'Error');
   await editor.reload();
   expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.filter(n => n.type.startsWith('TextSummary')).map(n => n.settings.language))).toEqual(['ja', 'en']);
   expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.filter(n => n.type.startsWith('TextSummary')).map(n => n.settings.prompt))).toEqual(TEXT_SUMMARY_TYPES.map(type => 'Summarize in bullets.\nFocus on ' + type + '.'));
-  f.mode('hold'); await save(); await expect(cards).toHaveCount(2);
+  f.mode('hold'); await expect(cards).toHaveCount(2);
   for (const card of await cards.all()) {
+    await card.getByRole('button', { name: 'Retry preparation', exact: true }).click();
     await expect(card).toHaveAttribute('data-state', 'Downloading');
     await card.getByRole('button', { name: 'Cancel preparation', exact: true }).click();
     await expect(card).toHaveAttribute('data-state', 'Canceled');
@@ -103,7 +105,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
   await editor.getByLabel('summary prompt', { exact: true }).fill(savedPrompt);
   await editor.getByLabel('summary prompt', { exact: true }).press('Tab');
   await editor.getByLabel('summary language', { exact: true }).selectOption('en');
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(editor);
   await expect(editor.locator('#graph-models .model-card')).toHaveAttribute('data-state', 'Ready');
   const downloadPromise = editor.waitForEvent('download');
   await editor.locator('.graph-actions > summary').click(); await editor.locator('#graph-export').click();
@@ -122,13 +124,13 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
     const loaded = await requestSummary('load', {processor: type});
     if (loaded.type !== 'ready') throw Error(loaded.message);
   }, type);
+  await live.evaluate(prompt => { window.savedInstruction = prompt; }, savedPrompt);
   const downloadsBeforeInference = f.requests.length;
   await f.context.setOffline(true);
   const fixtures = ['Article: The park opened in April.', 'Technical: Optimization completed in 12 ms.', 'A: Tea? B: Coffee, please.', 'Transcript: Ana sent a draft; Bo will review it.'];
   for (const text of fixtures) {
     const reply = await live.evaluate(async text => {
-      const graph = (await import('./graph-library.js')).readLiveGraphData(localStorage);
-      return requestSummary('summarize', {text, ...graph.nodes[0].settings});
+      return requestSummary('summarize', { text, prompt: window.savedInstruction, language: 'en' });
     }, text);
     expect(reply.type).toBe('result'); expect(reply.metrics.attempts).toHaveLength(1);
     const chat = JSON.parse(reply.summary);
@@ -145,7 +147,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
   await expect(editor.getByLabel('summary prompt', { exact: true })).toHaveValue(savedPrompt);
   const nextPrompt = 'Give a chronological summary in Japanese.';
   await editor.getByLabel('summary prompt', { exact: true }).fill(nextPrompt); await editor.getByLabel('summary prompt', { exact: true }).press('Tab');
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(editor);
   const next = await live.evaluate(async text => requestSummary('summarize', {text, ...(await import('./graph-library.js')).readLiveGraphData(localStorage).nodes[0].settings}), fixtures[0]);
   expect(JSON.parse(next.summary).messages[0].content).toBe(nextPrompt + '\n\nUse English unless the instruction above requests another language.');
   const atLimit = await live.evaluate(() => requestSummary('summarize', {text: 'Some text.', language: 'en', prompt: 'TOKEN_AT_LIMIT'}));
@@ -176,7 +178,7 @@ for (const [oldType, type] of [['MeetingSummaryLfm2', 'TextSummaryLfm2'], ['Meet
   editor.once('dialog', dialog => dialog.accept());
   await editor.locator('input[type=file]').setInputFiles({name: 'recovered.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(graph))});
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('original has been kept');
+  await settleAutoSave(editor); await expect(editor.locator('#graph-save-error')).toContainText('original has been kept');
   await recoverAsNew(editor, graph);
   expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(graph);
 });

@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { checkRecovery, checkInputReconnect, checkStableInspector, checkInputDetach } from '../fixtures/graph-inspector.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -67,7 +68,6 @@ for (const width of [390, 1440]) {
   test(`node settings and Models terms remain accessible without help panels at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 844 });
     await context.route('**/*', serveExtension);
-    const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
     const preparationRequests = [];
     page.on('request', request => { if (new URL(request.url()).origin !== new URL(page.url()).origin) preparationRequests.push(request.url()); });
     await openPalette(page);
@@ -90,6 +90,10 @@ for (const width of [390, 1440]) {
       await expect(port).toHaveAttribute('title', `${side}: text (text)`);
     }
     expect(await inspector.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    // Adding the node is an Auto Save edit. Only Models navigation must leave
+    // the saved graph alone; take that baseline after the edit is persisted.
+    await settleAutoSave(page);
+    const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
     const models = page.getByRole('navigation').getByRole('link', { name: 'Models', exact: true });
     await expect(models).toBeVisible();
     await expect(models).toHaveAttribute('href', 'model-cache.html');
@@ -147,8 +151,8 @@ for (const width of [390, 1440]) {
     await expect(inspector.getByText('Instance ID: speech-second', { exact: true })).toBeVisible();
     await expect(page.locator('#graph-errors')).toBeEmpty();
     await expect(page.locator('#graph-state')).toContainText('Saved');
-    await page.locator('#graph-save').click();
-    await expect(page.locator('#graph-save')).toBeEnabled();
+    await settleAutoSave(page);
+
     expect(await savedGraphs()).toEqual(original);
     await page.reload();
     await expect(page.locator('.graph-heading')).toHaveText(labels);
@@ -211,7 +215,7 @@ for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
     await expect(page.locator('.graph-inspector')).toBeVisible();
     await expectInsideCanvas(heading);
     await page.keyboard.press('Escape');
-    await page.locator('#graph-save').click();
+    await settleAutoSave(page);
     await expect(page.locator('#graph-state')).toContainText('Saved');
     const saved = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
     expect(saved.edges).toEqual([...original.edges.slice(1), original.edges[0]]);
@@ -284,7 +288,7 @@ test('touch returns from an overview to connect typed ports, move a node and dis
   await page.mouse.move(box.x + 20, box.y + 20); await page.mouse.down();
   await page.mouse.move(box.x + 40, box.y + 40, { steps: 5 }); await page.mouse.up();
   await expect(page.locator('[data-node="speech"]')).toHaveCSS('left', '290px');
-  await page.locator('#graph-save').tap(); await expect(page.locator('#graph-state')).toContainText('Saved');
+  await settleAutoSave(page); await expect(page.locator('#graph-state')).toContainText('Saved');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await context.close();
 });
@@ -323,12 +327,15 @@ test('canvas-first editor: search, categories, keyboard add/settings, fit and sa
   await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
   await page.locator('.graph-actions > summary').click();
-  page.once('dialog', dialog => dialog.dismiss()); await page.locator('#graph-load').click();
+  await expect(page.locator('#graph-undo')).toBeEnabled();
   await expect(page.locator('[data-node="number"]')).toHaveCount(1);
-  page.once('dialog', dialog => dialog.accept()); await page.locator('#graph-load').click();
+  await page.locator('#graph-undo').click();
+  await page.getByRole('button', { name: 'Select number', exact: true }).press('Enter');
+  await expect(page.getByLabel('number value', { exact: true })).toHaveValue('6');
+  await page.locator('#graph-undo').click();
   await expect(page.locator('[data-node="number"]')).toHaveCount(0);
   await page.locator('.graph-actions > summary').click(); await page.locator('#graph-validate').click();
-  await expect(page.locator('#graph-errors')).toHaveText('Draft valid. Save to use next session.');
+  await expect(page.locator('#graph-errors')).toHaveText('Draft valid. Changes save automatically for the next session.');
   for (const width of [390, 700]) {
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -337,8 +344,9 @@ test('canvas-first editor: search, categories, keyboard add/settings, fit and sa
     const commands = await page.locator('.graph-command-list').boundingBox();
     expect(commands.x).toBeGreaterThanOrEqual(0); expect(commands.x + commands.width).toBeLessThanOrEqual(width);
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Tab'); await page.locator('#graph-save').focus();
-    expect(await page.locator('#graph-save').evaluate(button => getComputedStyle(button).outlineStyle)).toBe('solid');
+    await page.keyboard.press('Tab'); await page.locator('#graph-redo').focus();
+    await expect(page.locator('#graph-redo')).toBeFocused();
+    expect(await page.locator('#graph-redo').evaluate(button => getComputedStyle(button).outlineStyle)).toBe('solid');
   }
 });
 
@@ -370,7 +378,7 @@ for (const action of ['Select literal', 'Remove literal']) {
     await page.getByRole('button', { name: action, exact: true }).click();
     await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
     await expect(action === 'Select literal' ? page.getByRole('button', { name: action, exact: true }) : page.locator('.graph-scroll')).toBeFocused();
-    await expect(page.locator('#graph-state')).toContainText('Unsaved');
+    await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before.stored);
     const expected = structuredClone(before.graph);
     if (action === 'Select literal') {
@@ -387,7 +395,7 @@ for (const action of ['Select literal', 'Remove literal']) {
       // An incomplete draft is saveable; Start selects only executable paths.
       await expect(page.locator('#graph-errors')).toBeEmpty();
     }
-    await page.locator('#graph-save').click();
+    await settleAutoSave(page);
     await expect(page.locator('#graph-state')).toContainText('Saved');
     expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(expected);
   });

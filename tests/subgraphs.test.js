@@ -116,6 +116,30 @@ test('extraction checks its original parent revision after a queued concurrent s
   assert.equal(find(f.current(), 'formatters'), undefined);
 });
 
+test('extraction commits the definition and revision-checked parent in one write; failed writes and validation are atomic', async () => {
+  const f = await fixture();
+  const created = await f.store.create({ name: 'Parent', graph: formatterChain() }), source = created.graphs.at(-1);
+  const extracted = extractSubgraph(source.graph, ['first', 'second'], 'formatters');
+  const definition = { id: 'formatters', name: 'Formatters', kind: 'subgraph', graph: extracted.shared,
+    replacementGraph: extracted.parent, replacementSource: { id: source.id, revision: source.revision } };
+  const before = f.storage.getItem(LIBRARY_KEY), writes = [], set = f.storage.setItem;
+  f.storage.setItem = () => { throw Error('Storage full'); };
+  await assert.rejects(f.store.create(definition), /Storage full/);
+  assert.equal(f.storage.getItem(LIBRARY_KEY), before);
+  f.storage.setItem = (key, value) => { writes.push(value); set(key, value); };
+  const invalid = structuredClone(definition); invalid.graph.interface.outputs = [];
+  await assert.rejects(f.store.create(invalid), /Unknown port/);
+  assert.equal(f.storage.getItem(LIBRARY_KEY), before);
+  assert.equal(writes.length, 0);
+  const saved = await f.store.create(definition);
+  assert.equal(writes.length, 1);
+  const published = JSON.parse(writes[0]), parent = find(published, source.id);
+  assert.deepEqual(parent.graph, extracted.parent);
+  assert.notEqual(parent.revision, source.revision);
+  assert.deepEqual(find(published, 'formatters').graph, extracted.shared);
+  assert.deepEqual(f.current(), saved);
+});
+
 test('unchanged exposed contracts cannot silently disable complete or partial parent paths', async () => {
   const f = await fixture(), extracted = extractSubgraph(formatterChain(), ['first', 'second'], 'formatters');
   await f.store.create({ id: 'formatters', name: 'Formatters', kind: 'subgraph', graph: extracted.shared });

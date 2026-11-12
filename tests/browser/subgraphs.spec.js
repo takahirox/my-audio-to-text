@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -17,7 +18,7 @@ test.beforeEach(async ({ context, page }) => {
       permissions: { contains: async () => true, onRemoved: event, onAdded: event } };
   });
   await page.goto('/extension/graph-editor.html');
-  await expect(page.locator('#graph-save')).toBeVisible();
+  await expect(page.locator('#graph-undo')).toBeVisible();
   await page.evaluate(async () => {
     const { graphNode, edge } = await import('/extension/graph.js');
     const { saveLiveGraphData } = await import('/extension/graph-library.js');
@@ -30,6 +31,7 @@ test.beforeEach(async ({ context, page }) => {
 });
 
 async function openExtraction(page, advanced = true) {
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Select format', exact: true }).focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Select history', exact: true }).focus(); await page.keyboard.press('Shift+Enter');
   await expect(page.locator('.selected-node')).toHaveCount(2);
@@ -53,7 +55,7 @@ async function extract(page) {
     return { shared: library.graphs.find(entry => entry.kind === 'subgraph').id, parent: library.assignments.live };
   });
 }
-const save = async page => { await page.locator('#graph-save').click(); await expect(page.locator('#graph-state')).toHaveText('Saved'); };
+const save = async page => { await settleAutoSave(page); await expect(page.locator('#graph-state')).toHaveText('Saved'); };
 
 for (const receiveStorageEvent of [true, false]) test(`open extraction rejects concurrent parent saves (storage event ${receiveStorageEvent ? 'received' : 'pending'})`, async ({ page, context }) => {
   if (!receiveStorageEvent) {
@@ -71,8 +73,13 @@ for (const receiveStorageEvent of [true, false]) test(`open extraction rejects c
     }
   }, receiveStorageEvent);
   const other = await context.newPage(); await other.goto(page.url());
-  await other.getByRole('button', { name: 'Select source', exact: true }).click();
-  await other.getByLabel('source value', { exact: true }).fill('Saved concurrently'); await save(other);
+  await expect(other.locator('#graph-state')).toHaveText('Read-only');
+  await other.evaluate(async () => {
+    const { GraphLibrary, readLibrary, entryGraph } = await import('/extension/graph-library.js');
+    const library = readLibrary(localStorage), entry = library.graphs.find(entry => entry.id === new URLSearchParams(location.search).get('id'));
+    const graph = entryGraph(entry, library); graph.nodes.find(node => node.id === 'source').settings.value = 'Saved concurrently';
+    await new GraphLibrary(localStorage).save(entry.id, entry.revision, graph);
+  });
   if (receiveStorageEvent) await page.evaluate(() => globalThis.parentStorageEvent);
   const concurrent = await other.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   await dialog.locator('#graph-confirm-subgraph').click();
@@ -81,9 +88,9 @@ for (const receiveStorageEvent of [true, false]) test(`open extraction rejects c
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(concurrent);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   // Saving after rejecting the extraction must never restore its old snapshot.
-  await page.locator('#graph-save').click();
+  await settleAutoSave(page);
   if (receiveStorageEvent) await expect(page.locator('#graph-state')).toHaveText('Saved');
-  else await expect(page.locator('#graph-errors')).toContainText('Load saved before saving');
+  else await expect(page.getByLabel('source value', { exact: true })).toHaveCount(0);
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')));
   expect(stored.graphs).toHaveLength(1);
   expect(stored.graphs[0].graph.nodes.find(node => node.id === 'source').settings.value).toBe('Saved concurrently');
@@ -96,13 +103,13 @@ for (const receiveStorageEvent of [true, false]) test(`open extraction rejects c
   })).toBe('Saved concurrently');
 });
 
-test('extract, review port names, edit on the same canvas and return to an unsaved parent without losing it', async ({ page }) => {
+test('extract, review port names, edit on the same canvas and return to the saved parent', async ({ page }) => {
   const ids = await extract(page);
   const inspector = page.locator('.graph-inspector');
   await expect(inspector.getByText('Node help and ports', { exact: true })).toHaveCount(0);
   await expect(inspector.locator('details')).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Remove subgraph', exact: true })).toBeVisible();
-  await expect(page.locator('#graph-state')).toHaveText('Unsaved');
+  await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
   await page.locator('#graph-edit-subgraph').click();
   await expect(page).toHaveURL(new RegExp(`id=${ids.shared}`));
   await expect(page.locator('.graph-node')).toHaveCount(2);
@@ -114,7 +121,7 @@ test('extract, review port names, edit on the same canvas and return to an unsav
   await page.getByLabel('format template', { exact: true }).fill('After: {1}'); await save(page);
   await page.getByRole('link', { name: 'Back to parent graph' }).click();
   await expect(page.locator('.graph-node')).toHaveCount(3);
-  await expect(page.locator('#graph-state')).toHaveText('Unsaved'); await save(page);
+  await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/); await save(page);
   const result = await page.evaluate(async id => {
     const { readLibrary, resolvedEntryGraph } = await import('/extension/graph-library.js');
     const library = readLibrary(localStorage);
@@ -162,18 +169,25 @@ test('breaking ports list references before saving, and stale subgraph editors k
   await page.getByRole('button', { name: 'Select format', exact: true }).click();
   await page.getByLabel('format template', { exact: true }).fill('Stale draft: {1}');
   const other = await context.newPage(); await other.goto(`/extension/graph-editor.html?id=${ids.shared}`);
-  await other.getByRole('button', { name: 'Select format', exact: true }).click();
-  await other.getByLabel('format template', { exact: true }).fill('Saved elsewhere: {1}'); await save(other);
-  await expect(page.locator('.graph-state-notice')).toContainText('Saved graph changed elsewhere');
-  await page.locator('#graph-save').click();
-  await expect(page.locator('#graph-errors')).toContainText('Load saved before saving');
+  await expect(other.locator('#graph-state')).toHaveText('Read-only');
+  await other.evaluate(async () => {
+    const { GraphLibrary, readLibrary, entryGraph } = await import('/extension/graph-library.js');
+    const library = readLibrary(localStorage), entry = library.graphs.find(item => item.id === new URLSearchParams(location.search).get('id'));
+    const graph = entryGraph(entry, library); graph.nodes.find(node => node.id === 'format').settings.template = 'Saved elsewhere: {1}';
+    await new GraphLibrary(localStorage).save(entry.id, entry.revision, graph);
+  });
+  await expect(page.locator('#graph-save-error')).toContainText('changed elsewhere');
+  await settleAutoSave(page);
+  await expect(page.locator('#graph-save-error')).toContainText('reload the latest');
   await expect(page.getByLabel('format template', { exact: true })).toHaveValue('Stale draft: {1}');
+  await page.close();
+  await other.getByRole('button', { name: 'Start editing', exact: true }).click();
   await other.getByLabel('Graph actions', { exact: true }).click(); await other.locator('#graph-exposed-ports').click();
   await other.getByRole('button', { name: 'Remove out1', exact: true }).click();
-  await other.locator('#graph-save').click();
+  await settleAutoSave(other);
   await expect(other.locator('#graph-errors')).toContainText('Referenced by: Live transcription');
   await expect(other.locator('#graph-errors')).toContainText('Duplicate this subgraph');
-  await expect(other.locator('#graph-state')).toHaveText('Unsaved');
+  await expect(other.locator('#graph-state')).toHaveText('Save failed');
 });
 
 test('shared library lists all kinds with a safe deletion hint, bundle export and atomic import reuse existing screens', async ({ page }) => {
@@ -241,13 +255,13 @@ test('exporting a restored invalid migrated draft retains extraction and text ed
   await expect(page.getByRole('link', { name: 'Back to parent graph' })).toBeVisible();
   await page.evaluate(async id => {
     const { GraphLibrary, readLibrary } = await import('/extension/graph-library.js');
-    await new GraphLibrary(localStorage).delete(id, readLibrary(localStorage).revision);
+    await new GraphLibrary(localStorage).change(library => { library.graphs = library.graphs.filter(entry => entry.id !== id); });
   }, ids.shared);
   await page.getByRole('link', { name: 'Back to parent graph' }).click();
-  await expect(page.locator('#graph-errors')).toContainText('Missing or invalid subgraph');
+  await expect(page.locator('#errors')).toContainText('Missing or invalid subgraph');
   await page.getByLabel('Graph actions', { exact: true }).click();
-  const downloading = page.waitForEvent('download'); await page.locator('#graph-export').click();
-  const download = await downloading, draft = JSON.parse(await readFile(await download.path(), 'utf8'));
+  await page.getByText('Saved JSON', { exact: true }).click();
+  const draft = JSON.parse(await page.getByLabel('Original saved graph JSON').inputValue());
   expect(draft.nodes.find(node => node.type === 'Subgraph').subgraphId).toBe(ids.shared);
   expect(draft.nodes.find(node => node.id === 'source').settings.value).toBe('Preserve this draft');
 });
@@ -259,9 +273,9 @@ test('disconnecting shared processing reports affected parents in Validate and b
   await page.locator('.graph-wire').focus(); await page.keyboard.press('Delete');
   await page.getByLabel('Graph actions', { exact: true }).click(); await page.locator('#graph-validate').click();
   await expect(page.locator('#graph-errors')).toContainText('Cannot disable executable paths. Referenced by: Live transcription');
-  await page.locator('#graph-save').click();
+  await settleAutoSave(page);
   await expect(page.locator('#graph-errors')).toContainText('Restore the internal connections');
-  await expect(page.locator('#graph-state')).toHaveText('Unsaved');
+  await expect(page.locator('#graph-state')).toHaveText('Save failed');
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
 });
 
@@ -367,7 +381,7 @@ test('simple creation summarizes the selection, requires a name and preserves in
   await dialog.locator('#graph-confirm-subgraph').click();
   await expect(dialog).not.toBeVisible();
   await expect(page.getByRole('button', { name: 'Select subgraph', exact: true })).toBeFocused();
-  await expect(page.locator('#graph-state')).toHaveText('Unsaved');
+  await expect(page.locator('#graph-state')).toHaveText('Saved');
   await save(page);
   const graph = await page.evaluate(async () => {
     const { readLibrary, readLiveGraph } = await import('/extension/graph-library.js');
@@ -438,19 +452,58 @@ test('advanced review rejects same-type rerouting but permits labels and editabl
   await save(page);
 });
 
-for (const failingStorage of ['session', 'local']) test(`${failingStorage} storage failure keeps the parent and library unchanged and permits retry`, async ({ page }) => {
-  const dialog = await openExtraction(page, false);
+test('creation waits for the latest parent edit, and extraction is one separate Undo step', async ({ page }) => {
+  await page.getByRole('button', { name: 'Select source', exact: true }).click();
+  await page.getByLabel('source value', { exact: true }).fill('Pending parent edit');
+  const ids = await extract(page);
+  await page.locator('#graph-undo').click(); await save(page);
+  await expect(page.locator('.graph-node')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Select source', exact: true }).click();
+  await expect(page.getByLabel('source value', { exact: true })).toHaveValue('Pending parent edit');
+  await page.locator('#graph-undo').click(); await save(page);
+  await expect(page.getByLabel('source value', { exact: true })).toHaveValue('hello');
+  await page.locator('#graph-redo').click(); await save(page);
+  await page.locator('#graph-redo').click(); await save(page);
+  const library = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')));
+  expect(library.graphs.find(entry => entry.id === ids.parent).graph.nodes.find(node => node.id === 'source').settings.value).toBe('Pending parent edit');
+  expect(library.graphs.filter(entry => entry.kind === 'subgraph')).toHaveLength(1);
+});
+
+test('failed pending parent Auto Save blocks creation and retains its recoverable edit', async ({ page }) => {
   const before = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
-  await page.evaluate(kind => {
+  await page.evaluate(() => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function(key, value) {
-      if (kind === 'session' ? this === sessionStorage : this === localStorage) throw Error('Storage full');
+      if (key === 'processing-graph-library-v1') throw Error('Parent write denied');
+      return original.call(this, key, value);
+    };
+  });
+  await page.getByRole('button', { name: 'Select source', exact: true }).click();
+  await page.getByLabel('source value', { exact: true }).fill('Recover this edit');
+  await page.getByRole('button', { name: 'Select format', exact: true }).focus(); await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Select history', exact: true }).focus(); await page.keyboard.press('Shift+Enter');
+  await page.locator('#graph-create-subgraph').click();
+  await expect(page.locator('.graph-selection [role="alert"]')).toContainText('Parent write denied');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.selected-node')).toHaveCount(2);
+  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
+  const drafts = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.startsWith('processing-graph-draft:')).map(([, value]) => JSON.parse(value)));
+  expect(drafts.some(draft => draft.graph.nodes.find(node => node.id === 'source').settings.value === 'Recover this edit')).toBe(true);
+});
+
+test('failed creation storage write keeps both entries unchanged and permits retry', async ({ page }) => {
+  const dialog = await openExtraction(page, false);
+  const before = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (this === localStorage) throw Error('Storage full');
       return original.call(this, key, value);
     };
     globalThis.restoreStorage = () => { Storage.prototype.setItem = original; };
-  }, failingStorage);
+  });
   await dialog.locator('#graph-confirm-subgraph').click();
-  await expect(dialog.getByRole('alert')).toContainText(failingStorage === 'session' ? 'Cannot preserve the parent draft' : 'Storage full');
+  await expect(dialog.getByRole('alert')).toContainText('Storage full');
   await expect(page.locator('.graph-node')).toHaveCount(4);
   await expect(page.locator('.selected-node')).toHaveCount(2);
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
@@ -460,35 +513,52 @@ for (const failingStorage of ['session', 'local']) test(`${failingStorage} stora
   await expect(dialog).not.toBeVisible();
 });
 
-test('refresh recovers the unsaved replacement and later edits with its original revision', async ({ page, context }) => {
+test('creation persists both entries before refresh without depending on session storage', async ({ page }) => {
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (this === sessionStorage) throw Error('Session storage unavailable');
+      return original.call(this, key, value);
+    };
+  });
   const ids = await extract(page);
-  await page.getByRole('button', { name: 'Select source', exact: true }).click();
-  await page.getByLabel('source value', { exact: true }).fill('Recovered text');
+  await expect(page.locator('#graph-state')).toHaveText('Saved');
   await page.reload();
   await expect(page.locator('.graph-node')).toHaveCount(3);
-  await expect(page.locator('#graph-state')).toHaveText('Unsaved');
-  await page.getByRole('button', { name: 'Select source', exact: true }).click();
-  await expect(page.getByLabel('source value', { exact: true })).toHaveValue('Recovered text');
-  const other = await context.newPage(); await other.goto(`/extension/graph-editor.html?id=${ids.parent}`);
-  await other.getByRole('button', { name: 'Select source', exact: true }).click();
-  await other.getByLabel('source value', { exact: true }).fill('Concurrent text'); await save(other);
-  await expect(page.locator('.graph-state-notice')).toContainText('Saved graph changed elsewhere');
-  // Recovery redraws must not accidentally bless the stale draft's revision.
-  await page.reload(); await page.reload();
-  await page.locator('#graph-save').click();
-  await expect(page.locator('#graph-errors')).toContainText('Load saved before saving');
-  await expect(page.locator('.graph-node')).toHaveCount(3);
-  await page.getByRole('button', { name: 'Select source', exact: true }).click();
-  await expect(page.getByLabel('source value', { exact: true })).toHaveValue('Recovered text');
-  await page.getByRole('button', { name: 'Select subgraph', exact: true }).click();
-  await page.locator('#graph-edit-subgraph').click();
-  await page.getByRole('link', { name: 'Back to parent graph' }).click();
-  await page.locator('#graph-save').click();
-  await expect(page.locator('#graph-errors')).toContainText('Load saved before saving');
+  await expect(page.locator('#graph-state')).toHaveText('Saved');
+  await expect(page.locator('#graph-undo')).toBeDisabled();
+  expect(await page.evaluate(async ids => {
+    const { readLibrary } = await import('/extension/graph-library.js');
+    const library = readLibrary(localStorage);
+    return library.graphs.find(entry => entry.id === ids.parent).graph.nodes.find(node => node.type === 'Subgraph').subgraphId;
+  }, ids)).toBe(ids.shared);
 });
 
-test('pending creation stays open until its library transaction completes', async ({ page }) => {
-  const dialog = await openExtraction(page, false);
+test('failed Undo auto-save recovers the parent draft without changing the shared definition', async ({ page }) => {
+  const ids = await extract(page);
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === 'processing-graph-library-v1') throw Error('Library write denied');
+      return original.call(this, key, value);
+    };
+  });
+  await page.locator('#graph-undo').click();
+  await settleAutoSave(page);
+  await expect(page.locator('#graph-state')).toHaveText('Save failed');
+  const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
+  await page.reload();
+  await expect(page.locator('.graph-node')).toHaveCount(3);
+  await page.getByText('Recoverable draft available', { exact: true }).click();
+  await page.getByRole('button', { name: 'Restore draft', exact: true }).click();
+  await save(page);
+  await expect(page.locator('.graph-node')).toHaveCount(4);
+  const library = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')));
+  expect(library.graphs.find(entry => entry.id === ids.shared)).toEqual(JSON.parse(stored).graphs.find(entry => entry.id === ids.shared));
+});
+
+test('pending creation submits a validated port snapshot while preview controls keep changing', async ({ page }) => {
+  const dialog = await openExtraction(page);
   await page.evaluate(async () => {
     const { LIBRARY_LOCK } = await import('/extension/graph-library.js');
     await new Promise(acquired => {
@@ -499,9 +569,35 @@ test('pending creation stays open until its library transaction completes', asyn
   });
   await dialog.locator('#graph-confirm-subgraph').click();
   await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+  await dialog.getByLabel('outputs out1 endpoint').selectOption(JSON.stringify(['format', 'text']));
+  await dialog.getByLabel('outputs out1 name').fill('Unsubmitted rename');
+  await dialog.getByRole('button', { name: 'Remove in1', exact: true }).click();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeVisible();
   await page.evaluate(() => globalThis.releaseCreationLock());
   await expect(dialog).not.toBeVisible();
   await expect(page.locator('.graph-node')).toHaveCount(3);
+  await expect(page.locator('#graph-state')).toHaveText('Saved');
+  const shared = await page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).graphs.find(entry => entry.kind === 'subgraph').graph);
+  expect(shared.interface.inputs).toEqual([{ id: 'in1', name: 'Transcript', node: 'format', port: 'input1' }]);
+  expect(shared.interface.outputs).toEqual([{ id: 'out1', name: 'History', node: 'history', port: 'text' }]);
+});
+
+test('Undo/Redo of Create Subgraph auto-saves the parent and retains the shared definition', async ({ page }) => {
+  const before = await page.evaluate(async () => (await import('/extension/graph-library.js')).readLiveGraphData(localStorage));
+  const ids = await extract(page); await save(page);
+  const otherParent = await page.evaluate(async ids => {
+    const { GraphLibrary, readLibrary } = await import('/extension/graph-library.js');
+    const parent = readLibrary(localStorage).graphs.find(entry => entry.id === ids.parent);
+    return (await new GraphLibrary(localStorage).create({ name: 'Reusing parent', graph: parent.graph })).graphs.at(-1);
+  }, ids);
+  await page.locator('#graph-undo').click(); await save(page);
+  const undone = await page.evaluate(async () => (await import('/extension/graph-library.js')).readLibrary(localStorage));
+  expect(undone.graphs.find(entry => entry.id === ids.parent).graph).toEqual(before);
+  expect(undone.graphs.find(entry => entry.id === ids.shared).kind).toBe('subgraph');
+  expect(undone.graphs.find(entry => entry.id === otherParent.id)).toEqual(otherParent);
+  await page.locator('#graph-redo').click(); await save(page);
+  const redone = await page.evaluate(async () => (await import('/extension/graph-library.js')).readLibrary(localStorage));
+  expect(redone.graphs.find(entry => entry.id === ids.parent).graph.nodes.some(node => node.subgraphId === ids.shared)).toBe(true);
+  expect(redone.graphs.find(entry => entry.id === ids.shared)).toEqual(undone.graphs.find(entry => entry.id === ids.shared));
 });

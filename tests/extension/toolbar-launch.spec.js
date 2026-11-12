@@ -90,6 +90,77 @@ test('native Graphs → Open remembers selections, refreshes names and preserves
   const fourth = await clickAction(f, 45); await expect(fourth.locator('#live-graph-name')).toHaveText('A');
 });
 
+test('Edit graph targets its own idle or running window independently of the toolbar default and other sessions', async ({ libraryExtension: f }) => {
+  const a = await create(f.page, 'A', simple('A')), b = await create(f.page, 'B', simple('B'));
+  const first = await open(f, a, 41), second = await open(f, b, 42);
+  // Opening B also selects it for the toolbar. Set A after both windows exist
+  // so this navigation regression keeps B distinct from the current selection.
+  await f.page.evaluate(async id => {
+    const { GraphLibrary } = await import('./graph-library.js');
+    await new GraphLibrary(localStorage).assign('live', id);
+  }, a);
+  await expect.poll(async () => (await library(f.page)).assignments.live).toBe(a);
+  await expect(first.locator('#start')).toBeEnabled();
+  await first.locator('#start').click();
+  await expect(first.locator('#session-state')).toHaveText('Running');
+  const originalURL = second.url();
+  const edit = second.getByRole('link', { name: 'Edit graph', exact: true });
+  await expect(second.locator('nav a')).toHaveText(['Library', 'Edit graph', 'Models']);
+  const target = `graph-editor.html?id=${encodeURIComponent(b)}`;
+  async function assertTargets() {
+    // Includes error recovery and Edit outputs, even when those links are hidden.
+    for (const link of await second.locator('[data-graph-editor]').all()) {
+      await expect(link).toHaveAttribute('href', target);
+      await expect(link).toHaveAttribute('data-page', target);
+    }
+    await expect(edit).toHaveAttribute('href', target);
+  }
+  async function openEditor(keyboard = false) {
+    await assertTargets();
+    const opened = f.context.waitForEvent('page');
+    if (keyboard) { await edit.focus(); await edit.press('Enter'); }
+    else await edit.click();
+    const editor = await opened;
+    await expect(editor).toHaveURL(f.url + target);
+    await expect(editor.locator('#graph-name')).toHaveText('B');
+    await expect(editor.locator('nav a')).toHaveText(['Library', 'Models']);
+    await expect(editor.locator('nav button, nav [aria-current], #navigation-status')).toHaveCount(0);
+    expect(second.url()).toBe(originalURL);
+    await expect(first.locator('#session-state')).toHaveText('Running');
+    expect((await library(f.page)).assignments.live).toBe(a);
+    return editor;
+  }
+  // Idle B must not open A, even though A is both the default and first recorder.
+  const idleEditor = await openEditor(true);
+  await expect(second.locator('#session-state')).toHaveText('Idle');
+  await idleEditor.close();
+  await second.locator('#start').click();
+  await expect(second.locator('#session-state')).toHaveText('Running');
+  await expect(second.locator('#live-displays')).toContainText('B');
+  await save(f.page, b, simple('B edited'));
+  await expect(second.locator('#saved-state')).toContainText('Next session: B');
+  const editor = await openEditor();
+  await expect(second.locator('#session-state')).toHaveText('Running');
+  await expect(second.locator('#live-displays')).not.toContainText('B edited');
+  // The remaining editor destinations work through the existing navigation paths.
+  const modelsOpened = f.context.waitForEvent('page');
+  await editor.getByRole('link', { name: 'Models', exact: true }).press('Enter');
+  const models = await modelsOpened;
+  await expect(models).toHaveURL(f.url + 'model-cache.html');
+  await models.close();
+  await editor.getByRole('link', { name: 'Library', exact: true }).click();
+  await expect(editor).toHaveURL(f.url + 'graph-library.html');
+  await expect(first.locator('#session-state')).toHaveText('Running');
+  await expect(second.locator('#session-state')).toHaveText('Running');
+  await second.locator('#stop').click();
+  await expect(second.locator('#start')).toBeEnabled();
+  await assertTargets();
+  const stoppedEditor = await openEditor();
+  await expect(second.locator('#session-state')).toHaveText('Completed');
+  await stoppedEditor.close();
+  await first.locator('#stop').click();
+});
+
 test('three simultaneous sessions keep graph snapshots, independent workers, Stop, failure, and close cleanup', async ({ libraryExtension: f }) => {
   const ids = [];
   for (const text of ['A', 'B', 'C']) ids.push(await create(f.page, text, summary(text)));

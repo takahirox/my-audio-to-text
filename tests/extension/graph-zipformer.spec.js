@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { selectZipformer } from './zipformer-fixture.js';
@@ -32,7 +33,7 @@ test('MV3 searchable palette, typed audio/TEXT routes and help; production onlin
     await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).click();
   }
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(editor);
   await editor.getByRole('button', { name: 'Select speech', exact: true }).click();
   await expect(editor.locator('.graph-inspector')).toContainText('real online CPU WASM');
   for (let i = 0; i < 2; i++) {

@@ -28,7 +28,7 @@ export function graphModelStatus(root) {
         section.append(el('h3', entry.title), status, error, progress, bytes, controls); root.append(section);
         card = { root: section, status, error, progress, bytes, cancel, retry, check }; cards.set(entry.key, card);
       }
-      // A later Save can retain the same card but must target its new entry.
+      // A later Auto Save can retain the same card but must target its new entry.
       card.cancel.onclick = () => preparation.cancel(entry);
       card.retry.onclick = () => { void preparation.run(entry); };
       card.check.onclick = () => { void preparation.run(entry, true); };

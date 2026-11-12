@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { corruptSavedGraph, recoverAsNew } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { clickGraphAction, openPalette, loadTranslationFixture } from './ui-controls.js';
@@ -13,7 +14,7 @@ test('fresh install and Reset use current transcription; saved model requirement
   await emitFinal(page, 'fresh default'); await expect(page.locator('.display-content')).toHaveText('fresh default');
   const workers = await page.evaluate(() => window.graphWorkers.length);
   await loadTranslationFixture(page.editor); f.mode('error');
-  await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page.editor);
   expect(await page.evaluate(() => window.graphWorkers.length)).toBe(workers);
   await expect(page.locator('#saved-state')).toBeVisible();
   await emitFinal(page, 'active graph stays unchanged');
@@ -23,12 +24,12 @@ test('fresh install and Reset use current transcription; saved model requirement
   await expect(page.locator('#start')).toBeDisabled();
   await page.editor.getByRole('button', { name: 'Select translation', exact: true }).click();
   await page.editor.getByRole('button', { name: 'Remove translation', exact: true }).click();
-  await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page.editor);
   await startGraph(page); await expect(page.locator('#translation-status')).toHaveText('Translation off');
   await emitFinal(page, 'source visible'); await expect(page.locator('.display-content')).toHaveText('source visible');
   await page.locator('#stop').click(); await expectPreparedIdle(page);
   await clickGraphAction(page.editor, 'graph-reset');
-  await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page.editor);
   expect(await saved(page)).toEqual(minimal);
 });
 
@@ -116,7 +117,7 @@ test('saved cycles, type mismatches, unknown ports/types refuse invocation befor
 
 test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and preserved conflicting drafts', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
-  await loadTranslationFixture(editor); await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  await loadTranslationFixture(editor); await settleAutoSave(editor);
   await editor.setViewportSize({ width: 1440, height: 1000 });
   await openPalette(editor); await expect(editor.getByRole('dialog', { name: 'Add Node' })).toBeVisible();
   await editor.locator('#graph-palette-toggle').click();
@@ -137,28 +138,26 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await heading.scrollIntoViewIfNeeded();
   const box = await heading.boundingBox();
   await editor.mouse.move(box.x + 10, box.y + 10); await editor.mouse.down(); await editor.mouse.move(box.x + 40, box.y + 25); await editor.mouse.up();
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(editor);
   await expect.poll(async () => (await saved(live)).nodes.find(n => n.id === 'speech').position).toEqual({ x: 310, y: 50 });
   expect(await editor.locator('.graph-wires .wire-line').count()).toBe((await saved(live)).edges.length);
   expect(await editor.locator('#graph-canvas').evaluate(canvas => [...canvas.querySelectorAll('.graph-node')].every(card => card.offsetTop + card.offsetHeight <= canvas.offsetHeight))).toBe(true);
   await expect(editor.getByRole('button', { name: 'translation output source', exact: true })).toContainText('text');
   const second = await f.context.newPage(); await second.goto(editor.url());
-  // Both drafts diverge from the same saved graph; saving one keeps the other's draft.
+  await expect(second.locator('#graph-state')).toHaveText('Read-only');
+  await expect(second.locator('#graph-palette-toggle')).toBeDisabled();
   await editor.getByRole('button', { name: 'Select speech', exact: true }).press('ArrowRight');
   await second.getByRole('button', { name: 'Select speech', exact: true }).press('ArrowDown');
-  await second.locator('#graph-save').click(); await expect(second.locator('#graph-save')).toBeEnabled(); await expect(second.locator('#graph-state')).not.toContainText('Unsaved');
-  await expect(editor.locator('.graph-state-notice')).toContainText('draft kept');
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled(); await expect(editor.locator('#graph-errors')).toContainText('Load saved');
-  expect((await saved(live)).nodes.find(n => n.id === 'speech').position).toEqual({ x: 310, y: 60 });
-  await clickGraphAction(editor, 'graph-load'); await expect(editor.locator('#graph-state')).not.toContainText('Unsaved');
-  await expect(editor.locator('#graph-errors')).toBeEmpty();
+  await settleAutoSave(editor);
+  expect((await saved(live)).nodes.find(n => n.id === 'speech').position).toEqual({ x: 320, y: 50 });
+  await expect(editor.locator('#graph-save-error')).toBeEmpty();
   expect(f.requests).toHaveLength(7);
 });
 
 test('three screen layouts show actual provisional/final state and capture-free Models (deterministic screenshots)', async ({ graphExtension: f }) => {
   const live = await openGraph(f);
-  await loadTranslationFixture(live.editor, 'ja-en', false); await live.editor.locator('#graph-save').click();
-  await expect(live.editor.locator('#graph-state')).not.toContainText('Unsaved');
+  await loadTranslationFixture(live.editor, 'ja-en', false); await settleAutoSave(live.editor);
+  await expect(live.editor.locator('#graph-state')).toHaveText('Saved');
   await startGraph(live); await emitFinal(live, 'Completed fixture utterance.');
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'Current fixture utterance…' }));
   await expect(live.locator('[data-display="transcript"] .display-content')).toHaveCount(1);
@@ -185,9 +184,9 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.editor.setViewportSize({ width: 440, height: 800 });
   expect(await live.editor.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await live.emulateMedia({ reducedMotion: 'reduce' });
-  await live.getByRole('link', { name: 'Graph', exact: true }).focus();
+  await live.getByRole('link', { name: 'Edit graph', exact: true }).focus();
   await live.keyboard.press('Shift+Tab'); await live.keyboard.press('Tab');
-  expect(await live.getByRole('link', { name: 'Graph', exact: true }).evaluate(link => getComputedStyle(link).outlineStyle)).toBe('solid');
+  expect(await live.getByRole('link', { name: 'Edit graph', exact: true }).evaluate(link => getComputedStyle(link).outlineStyle)).toBe('solid');
   expect(f.requests).toEqual([]);
   await live.locator('#stop').click(); await expect(live.editor.locator('.graph-activity')).toBeHidden();
   await expect(live.editor.locator('#graph-state')).toHaveText('Saved');
