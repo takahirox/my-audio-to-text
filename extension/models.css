@@ -1,5 +1,4 @@
 .models-page { max-width: 78rem; padding: 1.25rem 1.75rem; }
-.models-page .page-subtitle { margin-top: 0; font-size: 1rem; }
 .models-page main { margin-top: 1.25rem; }
 .models-page :is(.panel, .model-grid, .model-card, .model-heading, .actions) { min-width: 0; }
 .models-page :is(p, h2, h3, a, summary, label, li, button) { overflow-wrap: anywhere; }
