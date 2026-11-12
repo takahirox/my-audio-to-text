@@ -110,7 +110,7 @@ test('revisions reject stale edits to the same graph; independent concurrent gra
   await Promise.all([store.save(a.id, a.revision, ga), second.save(b.id, b.revision, gb)]);
   assert.deepEqual(entry(readLibrary(s), a.id).graph, ga); assert.deepEqual(entry(readLibrary(s), b.id).graph, gb);
   const before = s.getItem(LIBRARY_KEY);
-  await assert.rejects(second.save(a.id, a.revision, defaultGraph()), /Load saved.*draft has been kept/);
+  await assert.rejects(second.save(a.id, a.revision, defaultGraph()), /reload the latest.*draft has been kept/);
   await assert.rejects(second.assign('live', b.id, current.revision), /changed/);
   await assert.rejects(second.rename(b.id, 'Stale', '', b.revision), /changed/);
   assert.equal(s.getItem(LIBRARY_KEY), before); assert.equal(ga.nodes[0].position.x, 31);

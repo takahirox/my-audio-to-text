@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { graphNode, edge, defaultGraph } from '../../extension/graph.js';
 import { writeFile } from 'node:fs/promises';
@@ -14,7 +15,7 @@ for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa'
       await editor.getByRole('button',{name:`${source} output ${output}`,exact:true}).press('Enter');
       await editor.getByRole('button',{name:`translator input ${input}`,exact:true}).press('Enter');
       await expect(editor.locator('#graph-errors')).toBeEmpty();
-      await editor.locator('#graph-save').click();await expect(editor.locator('#graph-save')).toBeEnabled();
+      await settleAutoSave(editor);
       await editor.reload();
       const saved=await editor.evaluate(()=>(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
       expect(saved.edges).toContainEqual(edge(source,output,'translator',input));

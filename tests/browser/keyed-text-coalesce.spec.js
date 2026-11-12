@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -39,7 +40,7 @@ test('KeyedTextCoalesce palette, independent wiring, settings, save/reload and r
   await port('keyedtextcoalesce output id').click(); await port('pair input id1').click();
   await port('keyedtextcoalesce output text').click(); await port('pair input input1').click();
   await port('keyedtextcoalesce output text').click(); await port('plain-display input input1').click();
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page);
   await expect(page.locator('#graph-errors')).toBeEmpty();
   const saved = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   await page.reload();

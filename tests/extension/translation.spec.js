@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { loadTranslationFixture } from './ui-controls.js';
 import { test as base, expect, chromium } from '@playwright/test';
@@ -203,7 +204,7 @@ test('saved processing direction applies next session; generic labels and existi
   await instrument(f); const page = await openRecorder(f); await setDirection(page, 'en-ja'); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toHaveText('Local translation ready');
   await setDirection(page, 'ja-en'); await emit(page, 'final', 'Hello'); await page.locator('#stop').click(); await expect(page.locator('#model-status')).toHaveText('Models unavailable'); await expect(page.locator('#start')).toBeDisabled(); await expect(pairText(page)).toHaveText('HelloJapanese: Hello');
   await prepare(page); expect(f.requests).toHaveLength(14); await start(page); await expect(pairText(page)).toHaveCount(0); await emit(page, 'final', '日本語'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('日本語English: 日本語');
-  await loadTranslationFixture(page.editor, 'ja-en', false); await page.editor.locator('#graph-save').click(); await expect(page.editor.locator('#graph-save')).toBeEnabled(); await f.context.setOffline(true); await start(page); await expect(page.locator('#translation-status')).toHaveText('Translation off'); await expect(page.locator('.live-text-region')).toHaveCount(1); await emit(page, 'final', 'Original only'); await expect(originalItems(page)).toHaveText('Original only'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(14);
+  await loadTranslationFixture(page.editor, 'ja-en', false); await settleAutoSave(page.editor);  await f.context.setOffline(true); await start(page); await expect(page.locator('#translation-status')).toHaveText('Translation off'); await expect(page.locator('.live-text-region')).toHaveCount(1); await emit(page, 'final', 'Original only'); await expect(originalItems(page)).toHaveText('Original only'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(14);
 });
 
 function model(page, selector) { return page.models.locator(`#opus-${page.direction} ${selector}`); }

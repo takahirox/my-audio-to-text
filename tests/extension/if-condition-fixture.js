@@ -34,13 +34,15 @@ export async function pipeline(id,model,options){
 }`);
 }
 
-export async function seedConditionGraph(editor) {
-  await editor.evaluate(async()=>{
+export async function seedConditionGraph(editor, { persisted = false } = {}) {
+  const graph = await editor.evaluate(async persisted=>{
     const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const g=defaultGraph();g.nodes.push(graphNode('IfCondition','condition',500,300),graphNode('Display','yes',850,300),graphNode('Display','no',850,600),graphNode('TextAccumulator','yes-acc'),graphNode('TextAccumulator','no-acc'));
 
     g.edges.push(edge('speech','final','condition','text'),edge('condition','yes','yes-acc','append'),edge('condition','no','no-acc','append'),edge('yes-acc','text','yes','input1'),edge('no-acc','text','no','input1'));
-    await saveLiveGraphData(localStorage, (g));
-  });
-  await editor.reload();
+    if (persisted) await saveLiveGraphData(localStorage, g);
+    return g;
+  }, persisted);
+  if (persisted) await editor.reload();
+  else await editor.locator('input[type=file]').setInputFiles({ name: 'condition.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(graph)) });
 }

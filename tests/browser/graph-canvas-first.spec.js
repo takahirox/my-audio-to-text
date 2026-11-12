@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -32,11 +33,11 @@ test('save conflicts and an earlier active graph stay visible with compact state
       const { defaultGraph } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
       const graph = defaultGraph(); graph.nodes[0].position.y += 20; await saveLiveGraphData(localStorage, graph);
     });
-    await expect(page.locator('#graph-state')).toHaveText('Unsaved');
-    await expect(page.locator('.graph-state-notice')).toContainText('draft kept. Load saved before saving.');
-    await page.locator('#graph-save').click();
-    await expect(page.locator('#graph-errors')).toContainText('Load saved before saving');
-    await expect(page.locator('#graph-save')).toBeEnabled();
+    await expect(page.locator('#graph-state')).toHaveText('Save failed');
+    await expect(page.locator('#graph-save-error')).toContainText('draft is kept');
+    await settleAutoSave(page);
+    await expect(page.locator('#graph-save-error')).toContainText('reload the latest');
+
     await second.evaluate(async () => {
       const { defaultGraph } = await import('/extension/graph.js');
       const channel = new BroadcastChannel('live-graph-state');
@@ -44,7 +45,7 @@ test('save conflicts and an earlier active graph stay visible with compact state
     });
     await expect(page.locator('.graph-toolbar .graph-activity')).toBeVisible();
     await expect(page.locator('.graph-state-notice')).toContainText('earlier graph; saved edits apply next session');
-    await expect(page.locator('.graph-state-notice')).toContainText('draft kept. Load saved before saving.');
+    await expect(page.locator('#graph-save-error')).toContainText('reload the latest');
     const warning = page.locator('.graph-state-notice');
     await expect(warning).toBeVisible(); await expect(warning).toHaveCSS('text-overflow', 'clip');
     expect(await warning.evaluate(el => el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -53,7 +54,7 @@ test('save conflicts and an earlier active graph stay visible with compact state
     if (process.env.UPDATE_GRAPH_STATUS_SCREENSHOTS && info.project.name === 'chromium') {
       await page.screenshot({ path: 'docs/evidence/graph-245-warnings-320.png', fullPage: true });
     }
-    await clickGraphAction(page, 'graph-load');
+    page.once('dialog', dialog => dialog.accept()); await page.getByRole('button', { name: 'Reload latest graph', exact: true }).click();
     await expect(page.locator('#graph-state')).toHaveText('Saved');
     await expect(page.locator('.graph-state-notice')).not.toContainText('draft kept');
     await expect(page.locator('.graph-state-notice')).toContainText('saved edits apply next session');

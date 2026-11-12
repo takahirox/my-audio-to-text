@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { clickGraphAction } from './ui-controls.js';
@@ -156,7 +157,8 @@ test('MV3 drafts ignore the legacy warnings preference; Validate draft shows war
   await editor.getByRole('button', { name: 'Select duration', exact: true }).press('ArrowRight');
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   expect(await editor.evaluate(() => window.legacyWarningAccess)).toEqual([]);
-  await clickGraphAction(editor, 'graph-load');
+  await settleAutoSave(editor);
+  await expect(editor.locator('#graph-state')).toHaveText('Saved');
   await editor.reload();
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   const originalURL = editor.url(), alternateURL = new URL(originalURL);
@@ -169,8 +171,11 @@ test('MV3 drafts ignore the legacy warnings preference; Validate draft shows war
   await editor.goto(originalURL);
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await clickGraphAction(editor,'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Warning:');
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  await expect(editor.locator('#graph-errors')).toBeEmpty();
+  await settleAutoSave(editor);
+  await expect(editor.locator('#graph-state')).toHaveText('Saved');
+  await expect(editor.locator('#graph-save-error')).toBeEmpty();
+  // Validation is inspection only; a no-op Auto Save keeps its result visible.
+  await expect(editor.locator('#graph-errors')).toContainText('Warning:');
   expect(await editor.evaluate(() => window.legacyWarningAccess)).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('graph-show-optional-warnings'))).toBe('true');
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));

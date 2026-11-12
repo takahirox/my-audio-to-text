@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { test, expect } from '@playwright/test';
 import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -44,7 +45,7 @@ test('detour hit target supports selection, keyboard deletion and persistence', 
   await page.getByRole('button', { name: 'source output value', exact: true }).press('Enter');
   await page.getByRole('button', { name: 'target input input1', exact: true }).press('Enter');
   await assertRoutingGeometry(page);
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page);
   expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(before);
   await page.reload(); await assertRoutingGeometry(page);
 });

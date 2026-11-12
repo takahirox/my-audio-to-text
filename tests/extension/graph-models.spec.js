@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
 
@@ -7,8 +8,8 @@ async function add(editor, type, settings = {}) {
   for (const [name, value] of Object.entries(settings)) await editor.getByLabel(`${type.toLowerCase()} ${name}`, { exact: true }).selectOption(value);
 }
 async function save(editor) {
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  await expect(editor.locator('#graph-state')).not.toContainText('Unsaved');
+  await settleAutoSave(editor);
+  await expect(editor.locator('#graph-state')).toHaveText('Saved');
 }
 const cards = editor => editor.locator('#graph-models .model-card');
 
@@ -70,7 +71,7 @@ test('no optional model requests on load, invalid Save, storage failure or a sav
   await save(editor); expect(f.requests).toEqual([]);
   await add(editor, 'OpusMtEnJa'); await add(editor, 'Number');
   await editor.getByLabel('number value', { exact: true }).fill('');
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('finite number');
+  await settleAutoSave(editor); await expect(editor.locator('#graph-errors')).toContainText('finite number');
   expect(await saved(live)).toEqual(before); expect(f.requests).toEqual([]); await expect(cards(editor)).toHaveCount(0);
   await editor.getByLabel('number value', { exact: true }).fill('6');
   await editor.evaluate(() => {
@@ -78,11 +79,11 @@ test('no optional model requests on load, invalid Save, storage failure or a sav
     Storage.prototype.setItem = function(key, value) { if (key === 'processing-graph-library-v1') throw Error('Fixture storage unavailable'); return set.call(this, key, value); };
     window.restoreStorage = () => { Storage.prototype.setItem = set; };
   });
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('storage unavailable');
+  await settleAutoSave(editor); await expect(editor.locator('#graph-save-error')).toContainText('storage unavailable');
   expect(await saved(live)).toEqual(before); expect(f.requests).toEqual([]); await expect(cards(editor)).toHaveCount(0);
   await editor.evaluate(() => window.restoreStorage());
   await save(editor); await expect(cards(editor).locator('.model-status')).toContainText('Ready');
-  const count = f.requests.length; await editor.reload(); expect(f.requests).toHaveLength(count); await expect(cards(editor)).toHaveCount(0);
+  const count = f.requests.length; await editor.reload(); await expect(cards(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(count);
 });
 
 test('multiple parked model types and voices prepare distinct sets once and reuse shared weights', async ({ graphExtension: f }) => {
@@ -133,25 +134,26 @@ test('byte progress, Cancel, newer Save and page teardown preserve storage and a
   await expect(models.locator('.model-status')).toContainText('Ready'); expect(await saved(live)).toEqual(before);
 });
 
-test('a Save in another editor cancels obsolete preparation without downloading on load or mutating a dirty draft', async ({ graphExtension: f }) => {
+test('an external revision cancels obsolete preparation and protects a dirty draft while the second editor is read-only', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor, initial = await saved(live);
   f.mode('hold'); await add(editor, 'OpusMtEnJa'); await save(editor);
   await expect.poll(() => cards(editor).locator('progress').evaluate(progress => progress.value)).toBeGreaterThan(0);
-  await add(editor, 'Text'); // Keep this unsaved draft across the external Save.
   const other = await f.context.newPage(); await other.goto(editor.url());
-  expect(f.requests).toHaveLength(1);
-  await other.getByRole('button', { name: 'Select opusmtenja', exact: true }).click();
-  await other.getByRole('button', { name: 'Remove opusmtenja', exact: true }).click();
-  await save(other); await expect(cards(editor)).toHaveCount(0);
-  await expect(editor.locator('.graph-state-notice')).toContainText('draft kept');
+  await expect(other.locator('#graph-state')).toHaveText('Read-only');
+  await add(editor, 'Text');
+  // Library and older clients are still defended by per-entry revisions.
+  await other.evaluate(async graph => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const library = readLibrary(localStorage), id = new URLSearchParams(location.search).get('id');
+    await new GraphLibrary(localStorage).save(id, library.graphs.find(entry => entry.id === id).revision, graph);
+  }, initial);
+  await expect(editor.locator('#graph-save-error')).toContainText('changed elsewhere');
+  await expect(cards(editor)).toHaveCount(0);
   await expect(editor.locator('[data-node=text]')).toHaveCount(1);
   await expect(editor.locator('[data-node=opusmtenja]')).toHaveCount(1);
   expect(await saved(live)).toEqual(initial);
-  await editor.locator('#graph-save').click();
-  await expect(editor.locator('#graph-errors')).toContainText('Load saved');
-  expect(f.requests).toHaveLength(1);
+  await settleAutoSave(editor); await expect(editor.locator('#graph-save-error')).toContainText('reload the latest');
 });
-
 
 test('formatter instances add inputs above four, preserve wires, validate edits and reload independently', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
@@ -170,7 +172,7 @@ test('formatter instances add inputs above four, preserve wires, validate edits 
   await editor.getByRole('button', { name: 'textformatter Remove last input', exact: true }).click();
   await expect(editor.locator('#graph-errors')).toContainText('Input {7} is not configured');
   await expect(template).toHaveValue('English: {1}\nJapanese: {7}\n{{literal}}');
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(editor);
   expect(await saved(live)).toEqual(before);
   await template.fill('{1}\n{6}'); await template.blur(); await save(editor);
   const graph = await saved(live);
@@ -178,7 +180,7 @@ test('formatter instances add inputs above four, preserve wires, validate edits 
   expect(graph.nodes.find(n => n.id === 'textformatter-1').settings.inputCount).toBe(4);
   expect(graph.edges).toContainEqual({ from: ['speech', 'final'], to: ['textformatter', 'input1'] });
   expect(graph.edges.some(e => e.to[1] === 'input7')).toBe(false);
-  await template.fill('{bad}'); await template.blur(); await editor.locator('#graph-save').click();
+  await template.fill('{bad}'); await template.blur(); await settleAutoSave(editor);
   await expect(editor.locator('#graph-errors')).toContainText('literal braces'); expect(await saved(live)).toEqual(graph);
   await editor.reload(); expect(await saved(live)).toEqual(graph);
   await expect(editor.locator('[data-node=textformatter] [data-side=input]')).toHaveCount(6);
@@ -196,7 +198,7 @@ test('named graphs share verified assets by identity; Save prepares only the ope
     return { id: next.graphs.at(-1).id, original };
   });
   const copy = await f.context.newPage(); const url = new URL(editor.url()); url.searchParams.set('id', id);
-  await copy.goto(url.href); await copy.locator('#graph-save').click(); await expect(copy.locator('#graph-save')).toBeEnabled();
+  await copy.goto(url.href); await settleAutoSave(copy);
   await expect(cards(copy).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(7);
   expect(await copy.evaluate(async id => (await import('./graph-library.js')).readLibrary(localStorage).graphs.find(entry => entry.id === id), original.id)).toEqual(original);
   expect(await copy.evaluate(() => window.graphWorkers.length)).toBe(0);

@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
@@ -10,7 +11,7 @@ test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepar
     await editor.getByRole('combobox', { name: 'Search nodes' }).fill(search);
     await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
     expect(f.requests).toHaveLength(before);
-    f.mode('error'); await editor.locator('#graph-save').click();
+    f.mode('error'); await settleAutoSave(editor);
     const card = editor.locator('#graph-models .model-card').filter({ has: editor.getByRole('heading', { name: new RegExp(search) }) });
     await expect(card).toHaveAttribute('data-state', 'Error');
     f.mode('normal'); await card.getByRole('button', { name: 'Retry preparation' }).click();

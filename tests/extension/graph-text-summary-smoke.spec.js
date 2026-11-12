@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -84,11 +85,11 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
     for (const option of TEXT_SUMMARY_TYPES) await expect(editor.locator(`#graph-node-type [role="option"][data-type="${option}"]`)).toHaveCount(1);
     await editor.keyboard.press('Escape');
     const card = editor.locator('#graph-models .model-card').filter({ hasText: spec.label });
-    await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+    await settleAutoSave(editor);
     await expect(card).toHaveAttribute('data-state', 'Ready', { timeout: 180000 });
     console.log(`${type}: Save verified ${files.reduce((n,f) => n+f.bytes,0)} model bytes`);
     const count = downloads.length;
-    await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled(); await expect(card).toHaveAttribute('data-state', 'Ready', { timeout: 60000 });
+    await settleAutoSave(editor);  await expect(card).toHaveAttribute('data-state', 'Ready', { timeout: 60000 });
     expect(downloads.length).toBe(count);
     await editor.reload();
     expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(summaryGraph(type));

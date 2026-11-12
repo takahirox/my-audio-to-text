@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { test, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -158,15 +159,14 @@ test('Button Sources palette, caption Save/Load/Import/Export, duplicate caption
     await editor.getByLabel('z label', { exact: true }).fill('Duplicate'); await editor.getByLabel('z label', { exact: true }).press('Tab');
     await editor.getByRole('button', { name: 'Select a', exact: true }).click();
     await editor.getByLabel('a label', { exact: true }).fill('Duplicate'); await editor.getByLabel('a label', { exact: true }).press('Tab');
-    await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+    await settleAutoSave(editor);
     await editor.reload();
     const saved = await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage));
     expect(saved.nodes.filter(n => ['a', 'z'].includes(n.id)).map(n => n.settings.label)).toEqual(['Duplicate', 'Duplicate']);
     await editor.getByRole('button', { name: 'Select z', exact: true }).click();
     await editor.getByLabel('z label', { exact: true }).fill('Unsaved'); await editor.getByLabel('z label', { exact: true }).press('Tab');
     await editor.locator('.graph-actions > summary').click();
-    editor.once('dialog', d => d.accept()); await editor.locator('#graph-load').click();
-    await editor.getByRole('button', { name: 'Select z', exact: true }).click();
+    await editor.locator('#graph-undo').click();
     await expect(editor.getByLabel('z label', { exact: true })).toHaveValue('Duplicate');
     await editor.locator('.graph-actions > summary').click();
     const downloadPromise = editor.waitForEvent('download'); await editor.locator('#graph-export').click();
@@ -175,7 +175,7 @@ test('Button Sources palette, caption Save/Load/Import/Export, duplicate caption
     await editor.locator('.graph-actions > summary').click();
     await editor.locator('input[type=file]').setInputFiles({ name: 'buttons.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
     await expect(editor.locator('#graph-errors')).toBeEmpty();
-    await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+    await settleAutoSave(editor);
     const page = await context.newPage(); await page.goto(base + 'recorder.html');
     const buttons = page.locator('#graph-action-buttons button');
     await expect(buttons).toHaveCount(2); expect(await buttons.evaluateAll(nodes => nodes.map(n => n.dataset.nodeId))).toEqual(['a', 'z']);
