@@ -47,9 +47,8 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 .open-graph:hover { background: #234f9b; }
 #details-form label { display: flex; flex-direction: column; gap: .3rem; margin: .75rem 0; font-size: .9rem; }
 #details-form input, #details-form textarea { width: 100%; min-width: 0; resize: vertical; }
-#graph-metadata { font-size: .85rem; color: var(--muted); padding-top: 1rem; margin-bottom: 0; }
-dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4rem 1rem; }
-dd { margin: 0; overflow-wrap: anywhere; color: inherit; }
+.required-models { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4rem 1rem; font-size: .85rem; color: var(--muted); margin: 1rem 0 0; }
+.required-models dd { margin: 0; overflow-wrap: anywhere; }
 
 .web-microphone { display: flex; align-items: center; margin-left: auto; gap: .25rem; }
 .voice-status { font-size: .85rem; color: var(--warning); margin: 0 0 1rem; overflow-wrap: anywhere; }
