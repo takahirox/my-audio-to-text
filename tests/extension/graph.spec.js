@@ -122,10 +122,10 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await openPalette(editor); await expect(editor.getByRole('dialog', { name: 'Add Node' })).toBeVisible();
   await editor.getByLabel('Node category', { exact: true }).selectOption('Sources / inputs');
   await editor.getByLabel('Search nodes', { exact: true }).fill('audio');
-  await expect(editor.getByRole('option')).toHaveText(['Chrome tab audio', 'Microphone audio']);
+  await expect(editor.getByRole('listbox', { name: 'Node types', exact: true }).getByRole('option')).toHaveText(['Chrome tab audio', 'Microphone audio']);
   await editor.getByLabel('Node category', { exact: true }).selectOption('All categories');
   await editor.getByLabel('Search nodes', { exact: true }).fill('media');
-  await expect(editor.getByRole('option')).toHaveCount(0);
+  await expect(editor.getByRole('listbox', { name: 'Node types', exact: true }).getByRole('option')).toHaveCount(0);
   await editor.locator('#graph-palette-toggle').click();
   await editor.getByRole('button', { name: 'Select transcript', exact: true }).click();
   await expect(editor.getByRole('complementary', { name: 'Graph details inspector' })).toContainText('Display');
