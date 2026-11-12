@@ -11,7 +11,7 @@ remains **pending**, so Issue #172 must remain open.
 Text.value / ASR.final / committed translation.text
   → CosyVoice3 0.5B · streaming.text
   → AUDIO_STREAM
-  → Speaker · streaming.stream
+  → Speaker.audio
 ```
 
 Auto Save prepares **916,881,956 model bytes**, including parked Nodes. Models provides

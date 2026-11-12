@@ -1,11 +1,11 @@
+import { inputUnion } from './port-contracts.js';
 import { SYNTHESIZED_AUDIO, validateSynthesizedAudio } from './synthesized-audio.js';
 import { AUDIO_STREAM, AUDIO_STREAM_LIMITS, validateAudioStream } from './audio-stream.js';
 
 // Limits include the currently playing clip. No WAVs or object URLs are needed.
 export const SPEAKER_LIMITS = Object.freeze({ clips: 32, seconds: 120, bytes: 32 * 1024 * 1024 });
 
-export class SpeakerOutputNode {
-  inputs = { audio: SYNTHESIZED_AUDIO };
+class CompletedSpeakerPlayback {
   outputs = {};
   constructor({ contextFactory = () => new AudioContext(), onState = () => {} } = {}) {
     this.contextFactory = contextFactory;
@@ -139,14 +139,10 @@ export class SpeakerOutputNode {
   }
 }
 
-// A separate typed input keeps completed clips and incremental streams explicit.
+// Audio engines retain their own buffering and boundary rules.
 // AudioBufferSource performs sample-rate conversion into the context's clock.
 export const STREAM_SPEAKER_LIMITS = Object.freeze({ chunks: 64, seconds: 8, bytes: 8 * 1024 * 1024 });
-export class StreamingSpeakerOutputNode extends SpeakerOutputNode {
-  inputs = { stream: AUDIO_STREAM };
-  constructor(options = {}) {
-    super(options); this.lastId = 0; this.nextTime = 0; this.underruns = 0;
-  }
+class StreamingSpeakerPlayback extends CompletedSpeakerPlayback {
   report(message, needsActivation = false, fields = {}) {
     if (this.disposed) return;
     const overflow = this.rejected ? ' Stream queue full; further audio rejected. Stop drains accepted audio, then Start again.' : '';
@@ -240,6 +236,61 @@ export class StreamingSpeakerOutputNode extends SpeakerOutputNode {
     if (this.disposed) return this.closing;
     for (const chunk of [...this.queue]) this.release(chunk, true);
     this.active = null;
+    return super.dispose();
+  }
+}
+
+export const SPEAKER_AUDIO = inputUnion(SYNTHESIZED_AUDIO, AUDIO_STREAM);
+
+// One input and one engine for the entire execution. Pipeline supplies the
+// concrete source identity, including after subgraph expansion. Direct users
+// without a Pipeline may select a kind only through complete payload validation.
+// Reuse engine methods on this owned instance so enable/start share the same
+// context even when activation occurs before the connected kind is selected.
+export class SpeakerOutputNode extends CompletedSpeakerPlayback {
+  inputs = { audio: SPEAKER_AUDIO };
+  constructor(options = {}) {
+    super(options);
+    this.lastId = 0; this.nextTime = 0; this.underruns = 0;
+  }
+  start(context) {
+    const contract = context.inputContracts?.audio;
+    if (contract) this.selectContract(contract);
+    super.start(context);
+  }
+  selectContract(contract) {
+    if (![SYNTHESIZED_AUDIO, AUDIO_STREAM].includes(contract)) throw TypeError('Unsupported Speaker audio contract.');
+    if (this.contract && this.contract !== contract) throw TypeError('Speaker audio kind cannot change during an execution.');
+    this.contract = contract;
+  }
+  receive(port, value, context) {
+    if (this.disposed || this.stopping || context.signal.aborted) return;
+    if (port !== 'audio') throw TypeError('Unknown audio input port.');
+    if (!this.contract) {
+      let clip = false, stream = false;
+      try { validateSynthesizedAudio(value); clip = true; } catch { /* Try the other concrete contract. */ }
+      try { validateAudioStream(value); stream = true; } catch { /* Reject invalid or ambiguous payloads below. */ }
+      if (clip === stream) throw TypeError('Speaker expects exactly one valid audio kind.');
+      this.selectContract(clip ? SYNTHESIZED_AUDIO : AUDIO_STREAM);
+    }
+    if (this.contract === AUDIO_STREAM) return StreamingSpeakerPlayback.prototype.receive.call(this, 'stream', value, context);
+    return super.receive(port, value, context);
+  }
+  report(...args) {
+    if (this.contract === AUDIO_STREAM) return StreamingSpeakerPlayback.prototype.report.call(this, ...args);
+    return super.report(...args);
+  }
+  pump() {
+    if (this.contract === AUDIO_STREAM) return StreamingSpeakerPlayback.prototype.pump.call(this);
+    return super.pump();
+  }
+  release(...args) { return StreamingSpeakerPlayback.prototype.release.call(this, ...args); }
+  stop() {
+    if (this.contract === AUDIO_STREAM) return StreamingSpeakerPlayback.prototype.stop.call(this);
+    return super.stop();
+  }
+  dispose() {
+    if (this.contract === AUDIO_STREAM) return StreamingSpeakerPlayback.prototype.dispose.call(this);
     return super.dispose();
   }
 }

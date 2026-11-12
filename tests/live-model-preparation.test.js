@@ -135,9 +135,9 @@ test('multi-model graph initializes every executable instance without inference/
     graph.nodes.push(graphNode(type, type));
     graph.edges.push(edge('source', 'value', type, 'text'));
     const output = ['Supertonic3', 'Kokoro'].includes(type) ? 'audio' : type.endsWith('Streaming') ? 'stream' : type === 'IfCondition' ? 'yes' : type.startsWith('TextSummary') ? 'summary' : 'text';
-    const sink = output === 'audio' ? 'AudioOutput' : output === 'stream' ? 'StreamingSpeakerOutput' : 'Display';
+    const sink = output === 'audio' ? 'AudioOutput' : output === 'stream' ? 'SpeakerOutput' : 'Display';
     graph.nodes.push(graphNode(sink, type + '-out'));
-    graph.edges.push(edge(type, output, type + '-out', sink === 'Display' ? 'input1' : output));
+    graph.edges.push(edge(type, output, type + '-out', sink === 'Display' ? 'input1' : 'audio'));
   }
   graph.nodes.push(graphNode('TextSummaryLfm2', 'parked'), graphNode('MicrophoneAudio', 'parked-mic'));
   const f = fixture(graph, { prepareTranslateGemma: async () => {} }); t.after(() => f.session.close());

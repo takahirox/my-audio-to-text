@@ -7,7 +7,7 @@ import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, Translat
 import { verifiedTranslateGemmaCache } from './translategemma-cache.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
 import { AudioOutputNode } from '../web/synthesized-audio.js';
-import { SpeakerOutputNode, StreamingSpeakerOutputNode } from '../web/speaker-output.js';
+import { SpeakerOutputNode } from '../web/speaker-output.js';
 import { Qwen3TtsNode } from '../web/qwen3-tts-node.js';
 import { CosyVoice3Node } from '../web/cosyvoice3-node.js';
 import { ExtensionTab } from './tab-source.js';
@@ -256,9 +256,6 @@ export function buildGraph(graph, options) {
         onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`, spec.id, event) }); break;
       case 'CosyVoice3Streaming': node = new CosyVoice3Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,
         onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`, spec.id, event) }); break;
-      case 'StreamingSpeakerOutput': node = options.speakers?.get(spec.id) || new StreamingSpeakerOutputNode({
-        contextFactory: options.speakerContextFactory, onState: state => options.onSpeakerState?.(state, spec.id),
-      }); break;
       case 'SpeakerOutput': node = options.speakers?.get(spec.id) || new SpeakerOutputNode({
         contextFactory: options.speakerContextFactory, onState: state => options.onSpeakerState?.(state, spec.id),
       }); break;

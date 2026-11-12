@@ -61,7 +61,7 @@ Cancel and WAV download. Run `npm run prepare:tts-assets` for local setup;
 model downloads start on Generate. See [TTS pins, terms and testing](docs/tts-nodes.md)
 and [real inference evidence](docs/evidence/tts-73.md). The extension also offers
 [Qwen3-TTS local streaming](docs/streaming-tts.md): committed text → incremental
-PCM → Speaker · streaming, with explicit preparation and cache-only Start.
+PCM → Speaker, with explicit preparation and cache-only Start.
 [CosyVoice3 local streaming](docs/cosyvoice3-streaming.md) uses repaired pinned
 flow/HiFT exports with the same stream and Speaker contracts. English/Japanese
 packaged Chrome evidence and hardware/resource limitations are recorded separately.

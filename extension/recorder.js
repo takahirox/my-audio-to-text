@@ -94,7 +94,7 @@ const session = new TabSession(view => {
   element('saved-state').textContent = pending ? `Next session: ${view.savedGraphName}. This session keeps ${view.activeGraphName}; changes apply on Start.` : '';
   renderTextRegions(element('live-displays'), view.activeGraph || nextGraph, view.displays);
   element('no-live-displays').hidden = !!element('live-displays').children.length;
-  const hasSpeaker = current.nodes.some(node => ['SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
+  const hasSpeaker = current.nodes.some(node => node.type === 'SpeakerOutput');
   element('speaker-hint').hidden = !hasSpeaker;
   element('enable-speaker').hidden = !view.speakerNeedsActivation;
   element('tts-output').hidden = !audioURLs.size && !hasSpeaker;

@@ -25,14 +25,15 @@ for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'OpusMtJaEn']) {
     await live.editor.evaluate(async ({ type, streaming }) => {
       const { GRAPH_VERSION, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
       await saveLiveGraphData(localStorage, { version: GRAPH_VERSION,
-        nodes: [graphNode('Text', 'source'), graphNode(type, 'processor'), graphNode(streaming ? 'StreamingSpeakerOutput' : 'Display', 'output')],
-        edges: [edge('source', 'value', 'processor', 'text'), edge('processor', streaming ? 'stream' : 'text', 'output', streaming ? 'stream' : 'input1')] });
+        nodes: [graphNode('Text', 'source'), graphNode(type, 'processor'), graphNode(streaming ? 'SpeakerOutput' : 'Display', 'output')],
+        edges: [edge('source', 'value', 'processor', 'text'), edge('processor', streaming ? 'stream' : 'text', 'output', streaming ? 'audio' : 'input1')] });
     }, { type, streaming });
     if (!streaming) {
       await live.models.locator('#opus-ja-en').getByRole('button', { name: /^(Download|Retry)$/ }).click();
       await expect(live.models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Ready');
-      await live.locator('#retry-models').click();
     }
+    await expect(live.locator('#model-status')).toHaveText(/Ready|Models unavailable/);
+    if (await live.locator('#retry-models').isVisible()) await live.locator('#retry-models').click();
     await expect(live.locator('#start')).toBeEnabled();
     await live.locator('#start').click();
     await expect(live.locator('#stop')).toBeEnabled();

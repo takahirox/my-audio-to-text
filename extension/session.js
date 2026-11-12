@@ -6,7 +6,7 @@ import { verifiedOpusCache } from './opus-mt-cache.js';
 import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
 import { assertGraph, executableGraph, defaultGraph, graphPreferences, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
-import { SpeakerOutputNode, StreamingSpeakerOutputNode } from '../web/speaker-output.js';
+import { SpeakerOutputNode } from '../web/speaker-output.js';
 
 // Each instance owns its graph, targeting and UI. Nodes own capture and
 // recognition; no mutable runtime is shared with another Live/Web session.
@@ -78,7 +78,7 @@ export class TabSession {
         if (this.prepared !== owner || this.closed || owner.failed) return;
         this.update({ modelStatus: 'Preparing models…' });
         this.createRuntime(owner, snapshot);
-        for (const spec of owner.description.nodes) if (['SpeakerOutput', 'StreamingSpeakerOutput'].includes(spec.type)) {
+        for (const spec of owner.description.nodes) if (spec.type === 'SpeakerOutput') {
           owner.speakers.set(spec.id, owner.pipeline.entries.get(spec.id).node);
         }
         await owner.prepareModels();
@@ -183,7 +183,7 @@ export class TabSession {
       if (!graph.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination in Graph Editor.');
     } catch (error) { this.update({ error: error.message }); return; }
     const preferences = graphPreferences(graph);
-    const speakers = graph.nodes.filter(node => ['SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
+    const speakers = graph.nodes.filter(node => node.type === 'SpeakerOutput');
     const sources = graph.nodes.filter(n => INPUT_TYPES.includes(n.type));
     const microphones = sources.filter(n => n.type === 'MicrophoneAudio');
     if (sources.some(node => node.type === 'ChromeTabAudio') && !Number.isInteger(tabId)) {
@@ -201,8 +201,7 @@ export class TabSession {
     this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, activeGraphId: this.view.savedGraphId, activeGraphName: this.view.savedGraphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: session.translationEnabled ? 'Local translation ready' : 'Translation off', status: this.livePreparation ? 'Starting prepared graph…' : graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
     try {
       for (const spec of speakers) {
-        const Speaker = spec.type === 'StreamingSpeakerOutput' ? StreamingSpeakerOutputNode : SpeakerOutputNode;
-        const node = session.speakers.get(spec.id) || new Speaker({ contextFactory: this.speakerContextFactory, onState: state => {
+        const node = session.speakers.get(spec.id) || new SpeakerOutputNode({ contextFactory: this.speakerContextFactory, onState: state => {
           if (this.session !== session) return;
           session.speakerStates[spec.id] = state;
           this.nodeEvent(state, spec.id);
@@ -244,7 +243,7 @@ export class TabSession {
   createRuntime(session, snapshot) {
     const graph = executableGraph(snapshot);
     const hasDisplay = graph.nodes.some(node => node.type === 'Display');
-    const hasAudioOutput = graph.nodes.some(node => ['AudioOutput', 'SpeakerOutput', 'StreamingSpeakerOutput'].includes(node.type));
+    const hasAudioOutput = graph.nodes.some(node => ['AudioOutput', 'SpeakerOutput'].includes(node.type));
     Object.assign(session, buildGraph(snapshot, {
         preload: this.livePreparation,
         modelLoadTimeoutMs: this.modelLoadTimeoutMs,

@@ -1,9 +1,12 @@
-import { portContract } from './pipeline.js';
+import { portContract } from './port-contracts.js';
 
 // Read-only mono Float32 PCM: { samples, sampleRate, channels: 1 }.
 // The single array is the mono channel, at the model's own sample rate.
 // This deliberately has a different identity from captured 16 kHz ASR PCM.
-export const SYNTHESIZED_AUDIO = portContract('synthesized-audio');
+export const SYNTHESIZED_AUDIO = portContract('synthesized-audio', value => {
+  const audio = validateSynthesizedAudio(value);
+  return { ...audio, samples: audio.samples.slice() };
+});
 
 export function validateSynthesizedAudio(audio) {
   if (!(audio?.samples instanceof Float32Array) || !audio.samples.length

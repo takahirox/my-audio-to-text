@@ -658,7 +658,7 @@ payloads, startup configuration and correlation.
 | FocusedInputTextOutputNode | Append TEXT to the user-focused editable field |
 | Supertonic3, Kokoro | Committed TEXT → completed synthesized audio |
 | Qwen3TtsStreaming, CosyVoice3Streaming | Committed TEXT → explicit audio stream events |
-| AudioOutput, SpeakerOutput, StreamingSpeakerOutput | Audio player/WAV and completed/streaming playback |
+| AudioOutput, SpeakerOutput | Audio player/WAV and Speaker playback (completed or streaming audio) |
 
 ## Capture, output and lifecycle
 
@@ -747,6 +747,20 @@ Run `npm test`, relevant Playwright browser/extension suites, and
 verify composition, safe rendering, persistence and lifecycle; they do not
 establish real inference quality. Real-model checks and setup requirements are
 documented with each feature.
+
+## Speaker playback
+
+Speaker has one `audio` input accepting `SYNTHESIZED_AUDIO | AUDIO_STREAM`.
+Connect Supertonic3/Kokoro completed audio or Qwen3-TTS/CosyVoice3 streaming
+output directly; the source contract selects playback automatically. Only one
+wire can connect to the input. Clips play in arrival order; streams retain their
+start/chunk/end/abort boundaries and sample clock. Clip limits are 32 clips,
+120 seconds or 32 MiB; streaming limits are 64 chunks, eight seconds or 8 MiB.
+Overflow is reported in Live. Press Start to enable audio and keep Live open;
+Enable speaker recovers paused playback. Stop drains accepted audio; Cancel
+clears playback and releases the context. Each execution owns fresh playback.
+Older `StreamingSpeakerOutput.stream` graphs load as `SpeakerOutput.audio`;
+saving or exporting writes that canonical representation without changing wires.
 
 ## Manual Graph Actions
 

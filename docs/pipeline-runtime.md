@@ -31,7 +31,7 @@ node's `stop()` promise. Implementations should observe `signal` and release
 background resources in `dispose()`; for example, pass it to `fetch()`.
 
 `portContract(name)` creates a small shared identity. Both endpoints must declare
-the **same token** (apart from the explicit ITEM union and input-only ANY wildcard), including agreement on payload format (for example PCM sample rate). Names are descriptive, not structural
+the **same token** (apart from the explicit input unions, specialized ITEM union and input-only ANY wildcard), including agreement on payload format (for example PCM sample rate). Names are descriptive, not structural
 schema matching. Tokens impose no fields on payloads and do not validate values
 at delivery time. Nodes own validation of their data contracts. Unknown nodes,
 unknown ports, incompatible tokens, duplicate connections, multiple incoming

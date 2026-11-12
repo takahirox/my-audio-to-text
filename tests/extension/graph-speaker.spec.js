@@ -19,6 +19,7 @@ async function speakerGraph(f, type = 'Supertonic3') {
       await editor.getByLabel('Node category', { exact: true }).selectOption('Outputs');
       await expect(editor.locator('#graph-node-type [role="option"][data-type="AudioOutput"]')).toHaveText('Audio player / WAV');
       await expect(editor.locator('#graph-node-type [role="option"][data-type="SpeakerOutput"]')).toHaveText('Speaker');
+      await expect(editor.locator('#graph-node-type [role="option"][data-type="StreamingSpeakerOutput"]')).toHaveCount(0);
     }
     await editor.locator(`#graph-node-type [data-type="${node}"]`).click();
   }
@@ -31,6 +32,7 @@ async function speakerGraph(f, type = 'Supertonic3') {
   await expectGraphModelsReady(editor);
   await editor.reload();
   await expect(editor.getByRole('button', { name: 'speakeroutput input audio', exact: true })).toBeVisible();
+  await expect(editor.locator('[data-node="speakeroutput"] [data-side="input"]')).toHaveCount(1);
   return page;
 }
 async function startSpeaker(page) {

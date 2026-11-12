@@ -52,7 +52,7 @@ export const test = base.extend({
       for (const role of (whisperReal || concurrentReal ? [] : ['sherpa', 'silero'])) await writeFile(path.join(root, `web/${role}-worker.js`), `
         self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready'});if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});};`);
       if (!real) {
-        for (const key of ['reazon', 'silero', 'whisper', 'zipformer', 'kokoro-japanese', 'parakeet-v3', 'moonshine-medium-en']) {
+        for (const key of ['reazon', 'silero', 'whisper', 'zipformer', 'kokoro-japanese', 'parakeet-v3', 'moonshine-medium-en', 'qwen3-tts', 'cosyvoice3']) {
           const file = `${key}-assets.json`, spec = JSON.parse(await readFile(path.join(root, 'extension', file), 'utf8'));
           const body = Buffer.alloc(8192, 17); bodies.set(file, body);
           spec.files = [{ path: 'weights.bin', bytes: body.length, sha256Chunks: [createHash('sha256').update(body).digest('hex')], sourceURL: `http://127.0.0.1:${server.address().port}/${file}` }];

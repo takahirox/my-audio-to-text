@@ -12,7 +12,7 @@ of each merged revision remains pending; no production verification is claimed.
 Text.value / ASR.final / committed translation.text
   → Qwen3-TTS 0.6B · streaming.text
   → stream: AUDIO_STREAM
-  → Speaker · streaming.stream
+  → Speaker.audio
 ```
 
 Choose language (`japanese`/`english`) and voice (`ono_anna`/`ryan`) explicitly
