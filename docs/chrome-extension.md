@@ -614,7 +614,7 @@ and then Live. Japanese → English is a separate Node using the same weights.
 No preset or global language/model switch is added.
 
 Before Save/use, read the linked Gemma Terms and Prohibited Use Policy in
-**Help / Models**. Save prepares **3.112 GB** of optional weights only when the
+**Models**. Save prepares **3.112 GB** of optional weights only when the
 graph contains either Gemma Node, including parked Nodes; both directions reuse
 one verified cache. Allow **7 GB free storage**, several GB free RAM/GPU memory
 and supported **Worker WebGPU**. Each active Node owns a separate GPU session.

@@ -1,9 +1,8 @@
 /* The workspace keeps the full window width; canvas overflow stays local. */
 .editor-page .page-header { flex-wrap: wrap; }
-.editor-page :is(.graph-viewport, .graph-toolbar, .graph-inspector, .graph-help, .graph-command-list) { min-width: 0; overflow-wrap: anywhere; }
+.editor-page :is(.graph-viewport, .graph-toolbar, .graph-inspector, .graph-command-list) { min-width: 0; overflow-wrap: anywhere; }
 .editor-page .graph-toolbar { gap: .5rem; }
 .editor-page #graph-state::before { content: 'Graph · '; }
-.editor-page #graph-help { min-width: 44px; padding-inline: .5rem; }
 @media (max-width: 600px) {
   .editor-page #graph-state::before { content: ''; }
   .editor-page .graph-toolbar { gap: .25rem; }
@@ -46,8 +45,6 @@
 .editor-page .graph-actions > summary:hover { background: var(--surface-hover); }
 .editor-page :is(.graph-palette, .graph-command-list) { box-shadow: var(--popover-shadow); }
 .editor-page .graph-node-list { max-height: 24rem; }
-.editor-page .graph-help { width: min(38rem, calc(100% - 2rem)); }
-.editor-page .graph-help::backdrop { background: #29263566; }
 .editor-page #graph-errors { white-space: pre-wrap; }
 .editor-page .graph-subgraph-dialog { width: min(42rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; box-sizing: border-box; }
 .editor-page .graph-subgraph-dialog::backdrop { background: #29263566; }

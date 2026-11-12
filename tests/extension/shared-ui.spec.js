@@ -56,13 +56,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
         await expect(page.getByRole('combobox', { name: 'Search nodes' })).toBeFocused();
         await capture(page, info, `palette-${width}`);
         await page.keyboard.press('Escape');
-        await page.locator('#graph-help').press('Enter');
-        const dialog = page.getByRole('dialog');
-        await expect(dialog).toBeVisible();
-        expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-        await capture(page, info, `help-${width}`);
-        await page.keyboard.press('Escape');
-        await expect(page.locator('#graph-help')).toBeFocused();
+        await expect(page.locator('#graph-palette-toggle')).toBeFocused();
       } else {
         await capture(page, info, `${name}-${width}`, name === 'models');
       }

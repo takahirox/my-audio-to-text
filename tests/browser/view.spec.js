@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { openPalette } from '../extension/ui-controls.js';
 
-test('portable pair accumulator and ITEM sink palette, independent editor connections, Help, save/reload and executable output', async ({ page }) => {
+test('portable pair accumulator and ITEM sink palette, independent editor connections, node help, save/reload and executable output', async ({ page }) => {
   await page.route('**/*', async route => {
     const pathname = new URL(route.request().url()).pathname;
     if (!/^\/(extension|web)\/[\w.-]+\.(js|html|css)$/.test(pathname)) return route.continue();
@@ -27,7 +27,7 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
       await expect(page.getByLabel('display title', { exact: true })).toHaveValue('');
       await expect(page.getByLabel('display Add input', { exact: true })).toBeEnabled();
     } else {
-      await expect(page.locator('.graph-inspector')).toContainText('This Node has no configurable settings.');
+      await expect(page.locator('.graph-inspector').getByText('Node help and ports', { exact: true })).toBeVisible();
       await expect(page.locator('.graph-inspector input, .graph-inspector select, .graph-inspector textarea')).toHaveCount(0);
     }
   }
@@ -60,9 +60,10 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
   const saved = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   await page.reload();
   await expect(port('keyedtextpair input id2')).toBeAttached(); await expect(port('display input input1')).toBeAttached();
-  await page.locator('#graph-help').click();
-  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Each Display is one tabbed view: its input ports are switchable tabs');
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Select display', exact: true }).press('Enter');
+  await page.locator('.graph-inspector').getByText('Node help and ports', { exact: true }).press('Enter');
+  await expect(page.locator('.graph-inspector details')).toContainText('Input input1:');
+  await expect(page.locator('.graph-inspector details p').first()).toBeVisible();
   const result = await page.evaluate(async () => {
     const { graphNode, edge, GRAPH_VERSION } = await import('/extension/graph.js'); const { readLiveGraphData } = await import('/extension/graph-library.js');
     const { buildGraph } = await import('/extension/graph-runtime.js');

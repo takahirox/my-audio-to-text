@@ -11,7 +11,7 @@ export async function checkCanvasFirst(page, width) {
   expect(bounds.height).toBe(44);
   for (const [selector, name, text] of [
     ['#graph-palette-toggle', 'Add Node', 'Add Node'], ['#graph-save', 'Save graph', 'Save'],
-    ['.graph-actions > summary', 'Graph actions', '…'], ['#graph-help', 'Help', '?'],
+    ['.graph-actions > summary', 'Graph actions', '…'],
   ]) {
     const control = page.locator(selector), box = await control.boundingBox();
     await expect(control).toHaveAccessibleName(name); await expect(control).toHaveText(text);
@@ -39,10 +39,15 @@ export async function checkCanvasFirst(page, width) {
   await expect(page.locator('#graph-validate')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.graph-actions > summary')).toBeFocused();
-  await page.locator('#graph-help').press('Enter');
-  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Choose 100%');
-  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Active in the toolbar means this graph is running in Live');
-  await page.keyboard.press('Escape'); await expect(page.locator('#graph-help')).toBeFocused();
+  await expect(page.locator('#graph-help, .graph-help, #graph-asset-notice')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Help', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toHaveCount(0);
+  // macOS WebKit needs Option+Tab to include native buttons in focus traversal.
+  const tab = process.platform === 'darwin' && page.context().browser()?.browserType().name() === 'webkit' ? 'Alt+Tab' : 'Tab';
+  await page.locator('#graph-palette-toggle').focus();
+  await page.keyboard.press(tab); await expect(page.locator('#graph-save')).toBeFocused();
+  await page.keyboard.press(tab); await expect(page.locator('.graph-actions > summary')).toBeFocused();
+  await page.keyboard.press(tab); await expect(scroll).toBeFocused();
   return { width, toolbar: bounds, canvas, controls };
 }
 
@@ -90,7 +95,7 @@ export async function checkGraphActivity(page, width, info) {
     expect(box.y).toBeGreaterThanOrEqual(bounds.y);
     expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height);
   }
-  for (const selector of ['#graph-palette-toggle', '#graph-save', '.graph-actions > summary', '#graph-help']) {
+  for (const selector of ['#graph-palette-toggle', '#graph-save', '.graph-actions > summary']) {
     const box = await page.locator(selector).boundingBox();
     expect(box.y).toBe(bounds.y); expect(box.height).toBeGreaterThanOrEqual(44);
     expect(box.x).toBeGreaterThanOrEqual(status.x + status.width);
