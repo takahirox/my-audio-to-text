@@ -8,6 +8,7 @@ import { GraphDetailsAutosave, DETAILS_DRAFT_KEY } from './graph-library-details
 
 const element = id => document.getElementById(id), store = new GraphLibrary(localStorage);
 const selectionKey = 'graph-library-selection';
+const nameCollator = new Intl.Collator('ja', { numeric: true });
 let library, selectedId, fatal = false, refreshVoiceStatus = () => {};
 let selectionRequest = 0, actionPending = false;
 const details = new GraphDetailsAutosave({ store, storage: sessionStorage,
@@ -83,14 +84,13 @@ function renderSelectedState() {
 }
 function render(replaceDetails = false) {
   if (selectedId && !selected() && (!dirty() || replaceDetails)) selectedId = null;
-  const search = element('search').value.toLocaleLowerCase(), filter = element('filter').value;
-  const rows = library.graphs.filter(entry => `${entry.name} ${entry.description} ${models(entry).join(' ')}`.toLocaleLowerCase().includes(search)
-    && (filter === 'all' || filter === 'subgraph' && entry.kind === 'subgraph' || filter === 'graph' && entry.kind !== 'subgraph' || filter === 'invalid' && entryError(entry, library)));
+  const search = element('search').value.toLocaleLowerCase();
+  const rows = library.graphs.filter(entry => `${entry.name} ${entry.description} ${models(entry).join(' ')}`.toLocaleLowerCase().includes(search));
   const matches = rows.length;
   // Keep the expanded row and its draft reachable even when it stops matching.
   const expanded = selected() || (dirty() ? details.entry : null);
   if (expanded && !rows.some(entry => entry.id === expanded.id)) rows.push(expanded);
-  rows.sort(element('sort').value === 'name' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name));
+  rows.sort((a, b) => nameCollator.compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const list = element('graph-list'), region = element('selected'), focused = document.activeElement;
   if (replaceDetails || !dirty() && (details.entry?.id !== selectedId || details.entry?.revision !== selected()?.revision)) renderDetails();
   const existing = new Map([...list.children].map(row => [row.dataset.id, row]));
@@ -256,7 +256,7 @@ if (!fatal) {
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
     buttons[next]?.focus();
   };
-  for (const id of ['search', 'sort', 'filter']) element(id).addEventListener(id === 'search' ? 'input' : 'change', () => render());
+  element('search').addEventListener('input', () => render());
   element('new').onclick = () => { void action(() => store.create({}, library.revision), { selectNew: true }); };
   element('import').onclick = () => element('import-file').click();
   element('import-file').onchange = async () => {

@@ -14,14 +14,11 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 #graph-count { margin-left: .25rem; font-weight: 400; }
 .library-page button.primary { background: var(--accent); border-color: var(--accent); }
 .library-page button.primary:hover:enabled { background: #234f9b; }
-.library-page :is(button, summary, select, input[type="search"]) { min-height: 44px; }
-.library-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.5rem 0 1rem; }
-.library-toolbar > input { flex: 1 1 12rem; width: 100%; min-width: 0; }
-#library-tools { margin: 0; flex: 1 1 auto; }
-#library-tools > summary { display: flex; align-items: center; justify-content: center; color: var(--muted); border: 1px solid var(--border); border-radius: var(--control-radius); padding: .5rem .75rem; }
-.library-tool-options { display: flex; flex-wrap: wrap; gap: .75rem; padding: .75rem 0; }
-.library-tool-options label { display: flex; flex: 1 1 9rem; flex-direction: column; gap: .25rem; font-size: .85rem; min-width: 0; }
-.library-tool-options select { min-width: 0; width: 100%; }
+.library-page :is(button, summary, input[type="search"]) { min-height: 44px; }
+.library-actions { min-width: 0; }
+.library-actions button { max-width: 100%; }
+.library-toolbar { margin: 1.5rem 0 1rem; }
+#search { display: block; width: 100%; min-width: 0; }
 #graph-list { list-style: none; padding: 0 .25rem; margin: 0 -.25rem; }
 #graph-list li { position: relative; margin: .75rem 0; border: 1px solid var(--border); border-radius: 9px; }
 .library-page #graph-list button[data-id] { display: flex; align-items: start; gap: .75rem; width: 100%; min-width: 0; text-align: left; padding: 1rem; border: 0; background: transparent; }
@@ -32,7 +29,6 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 .graph-row-chevron { flex-shrink: 0; font-size: 1.2rem; line-height: 1; color: var(--accent); }
 .graph-row-text { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
 .graph-row-description { font-size: .9rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.library-page button.quiet { border-color: transparent; background: transparent; color: var(--accent); }
 .library-detail { min-width: 0; padding: 0 1.5rem 1.5rem; overflow-wrap: anywhere; }
 .detail-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 #voice-consent::backdrop { background: #202b4265; }

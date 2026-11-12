@@ -13,17 +13,12 @@
     <p id="web-voice-status" class="voice-status" role="status"></p>
     <div class="library-workspace">
       <section id="graphs" class="library-list" aria-labelledby="graphs-title">
-        <div class="section-heading"><h2 id="graphs-title">Graphs <span id="graph-count" class="muted"></span></h2><button id="new" class="primary">+ New Graph</button></div>
+        <div class="section-heading">
+          <h2 id="graphs-title">Graphs <span id="graph-count" class="muted"></span></h2>
+          <div class="actions library-actions"><button id="new" class="primary">+ New Graph</button><button id="import">Import JSON</button></div>
+        </div>
         <div class="library-toolbar">
           <input id="search" type="search" aria-label="Search graphs" placeholder="Search graphs…">
-          <details id="library-tools">
-            <summary>Filters &amp; more</summary>
-            <div class="library-tool-options">
-              <label>Sort graphs<select id="sort"><option value="recent">Recently updated</option><option value="name">Name</option></select></label>
-              <label>Filter graphs<select id="filter"><option value="all">All graphs</option><option value="graph">Regular graphs</option><option value="subgraph">Reusable subgraphs</option><option value="invalid">Needs recovery</option></select></label>
-              <button id="import" class="quiet">Import JSON</button>
-            </div>
-          </details>
           <input id="import-file" type="file" accept=".json,application/json" hidden>
         </div>
         <ul id="graph-list" aria-label="Saved graphs"></ul>

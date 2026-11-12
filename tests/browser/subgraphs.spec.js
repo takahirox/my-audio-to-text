@@ -166,15 +166,12 @@ test('breaking ports list references before saving, and stale subgraph editors k
   await expect(other.locator('#graph-state')).toHaveText('Unsaved');
 });
 
-test('shared library type filters, safe deletion hint, bundle export and atomic import reuse existing screens', async ({ page }) => {
+test('shared library lists all kinds with a safe deletion hint, bundle export and atomic import reuse existing screens', async ({ page }) => {
   const ids = await extract(page); await save(page); await page.goto('/extension/graph-library.html');
   await expect(page.locator('#graph-list > li')).toHaveCount(2);
-  await page.locator('#library-tools > summary').click(); await page.locator('#filter').selectOption('subgraph');
-  await expect(page.locator('#graph-list > li')).toHaveCount(1);
-  await expect(page.locator('#graph-list')).toContainText('Shared formatting · Subgraph');
-  await page.locator('#graph-list button[data-id]').click();
+  await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Live transcription', 'Shared formatting · Subgraph']);
+  await page.locator(`#graph-list button[data-id="${ids.shared}"]`).click();
   await expect(page.locator('#delete')).toBeDisabled(); await expect(page.locator('#delete-hint')).toContainText('Live transcription');
-  await page.locator('#filter').selectOption('graph');
   await page.locator(`#graph-list button[data-id="${ids.parent}"]`).click();
   const downloading = page.waitForEvent('download'); await page.locator('#export').click(); const download = await downloading;
   const bundle = JSON.parse(await readFile(await download.path(), 'utf8'));
