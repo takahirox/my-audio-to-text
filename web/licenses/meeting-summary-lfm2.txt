@@ -1,3 +1,9 @@
+Text Summary: Liquid AI / LFM2.5-1.2B-JP-202606-ONNX, q4f16.
+Pinned revision: 01b5a0a33d22253d5ee52b367d2375eeb113b7cd.
+LFM Open License 1.0. Commercial use has a $10M annual revenue condition;
+see Section 5 below. Redistribution requires the license and preserved notices.
+Downloaded weights are unchanged.
+
 Source: https://huggingface.co/LiquidAI/LFM2.5-1.2B-JP-202606-ONNX/blob/01b5a0a33d22253d5ee52b367d2375eeb113b7cd/LICENSE
 Formatting note: line endings normalized to LF and trailing whitespace removed; license wording unchanged.
 

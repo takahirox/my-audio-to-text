@@ -19,7 +19,8 @@ test('palette, Save and reload preserve current connected graph and parked direc
   const modelsPage = await opened;
   await expect(modelsPage.getByRole('heading', { name: 'Models', exact: true })).toBeVisible();
   await expect(modelsPage.locator('#translategemma')).toContainText('3.112 GB');
-  const terms = modelsPage.locator('#translategemma').getByRole('link', { name: 'Gemma terms & attribution for TranslateGemma 4B · English ↔ Japanese' });
+  await modelsPage.locator('#translategemma summary').click();
+  const terms = modelsPage.locator('#translategemma').getByRole('link', { name: 'License / terms for TranslateGemma 4B · English ↔ Japanese', exact: true });
   await expect(terms).toBeVisible();
   await expect(terms).toHaveAttribute('href', '../web/licenses/gemma-notices.txt');
   await terms.click(); await expect(modelsPage.locator('body')).toContainText('Gemma Terms of Use');

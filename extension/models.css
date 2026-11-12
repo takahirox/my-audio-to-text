@@ -19,8 +19,7 @@
 .models-page .model-card details { margin-top: .75rem; }
 .models-page .model-card ul { padding-left: 1.25rem; }
 .models-page .model-license { margin: .75rem 0 0; font-size: .8rem; }
-.models-page .model-license details { margin: .25rem 0 0; }
-.models-page .model-license details p { margin: .25rem 0 0; }
+.models-page .model-details h4 { margin: .5rem 0; font-size: .9rem; }
 .models-page summary { align-content: center; }
 @media (max-width: 800px) {
   .models-page .model-grid { grid-template-columns: minmax(0, 1fr); }
