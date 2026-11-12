@@ -70,7 +70,6 @@ function renderDetails(entry = selected()) {
   details.load(entry);
   if (!entry) return;
   element('selected-title').textContent = entry.name;
-  element('graph-more').open = false;
   element('graph-metadata').open = false;
 }
 function renderSelectedState() {
@@ -307,18 +306,6 @@ if (!fatal) {
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
     buttons[next]?.focus();
   };
-  const more = element('graph-more');
-  document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape') return;
-    const menu = event.target.closest('#graph-more[open]');
-    if (menu) { event.preventDefault(); menu.open = false; menu.querySelector('summary').focus(); }
-  });
-  document.addEventListener('click', event => {
-    if (!more.contains(event.target)) more.open = false;
-  });
-  more.addEventListener('click', event => {
-    if (event.target.closest('button')) { more.open = false; more.querySelector('summary').focus(); }
-  });
   for (const id of ['search', 'sort', 'filter']) element(id).addEventListener(id === 'search' ? 'input' : 'change', () => render());
   element('new').onclick = () => { void action(() => store.create({}, library.revision), { selectNew: true }); };
   element('import').onclick = () => element('import-file').click();

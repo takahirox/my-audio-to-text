@@ -36,14 +36,10 @@
           <p id="selected-error" role="status"></p>
           <div class="actions detail-actions">
             <a id="open" class="open-graph primary" href="graph-editor.html">Edit graph</a><button id="duplicate">Duplicate</button>
-            <details id="graph-more" class="graph-actions">
-              <summary aria-label="More graph actions" title="More graph actions">⋯ <span>More</span></summary>
-              <div class="graph-command-list">
-                <button id="export">Export JSON</button>
-                <button id="delete" class="danger" aria-describedby="delete-hint">Delete graph</button><p id="delete-hint" class="muted"></p>
-              </div>
-            </details>
+            <button id="export">Export JSON</button>
+            <button id="delete" class="danger" aria-describedby="delete-hint">Delete graph</button>
           </div>
+          <p id="delete-hint" class="muted"></p>
           <form id="details-form">
             <label>Name<input id="graph-name" required maxlength="160" aria-describedby="details-state"></label>
             <label>Description<textarea id="graph-description" rows="2" maxlength="2000" aria-describedby="details-state"></textarea></label>

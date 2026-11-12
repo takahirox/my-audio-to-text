@@ -35,7 +35,7 @@ are unchanged.
   Coordinator coverage verifies that only Graph Library can request temporary
   cleanup, including while earlier registration work is pending.
 - `npx playwright test --config playwright.extension.config.js tests/extension/graph-library.spec.js tests/extension/web-voice.spec.js`:
-  **96 passed** in the final run.
+  **97 passed** after integrating `main` at `790b55b` for publication.
 - Browser coverage includes an actual already-granted Chrome permission request
   from the switch's trusted synchronous handler, pending grant, denial, thrown
   and rejected APIs, permission inspection/storage/reconciliation failures,
@@ -49,3 +49,7 @@ production optional-only manifest before feature interactions. Missing-access
 denial and delayed permission decisions are controlled at the permission API
 boundary; authorization, storage, registration and page injection use production
 code. Site microphone permission tests remain separate from extension host grants.
+
+Publication validation reran both suites on the merged implementation: 946 Node
+tests and 97 MV3 tests passed. The current Library direct actions and divider
+layout are preserved alongside direct Web microphone opt-in.
