@@ -4,11 +4,17 @@
 // port-count heuristic. Object order is the picker category order.
 const categoryTypes = {
   'Sources / inputs': ['ChromeTabAudio', 'MicrophoneAudio', 'Button', 'Text', 'Number'],
-  'AI Models': [
+  'AI Models / Speech Recognition': [
     'SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn',
     'SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn',
+  ],
+  'AI Models / Translation': [
     'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn',
+  ],
+  'AI Models / Text': [
     'TextSummaryLfm2', 'TextSummaryQwen35', 'IfCondition',
+  ],
+  'AI Models / Speech Synthesis': [
     'Supertonic3', 'Kokoro', 'Qwen3TtsStreaming', 'CosyVoice3Streaming',
   ],
   'Processors': [

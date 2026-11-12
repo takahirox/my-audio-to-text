@@ -303,7 +303,7 @@ test('canvas-first editor: search, categories, keyboard add/settings, fit and sa
   expect(canvas.width).toBeGreaterThan(600);
   await page.locator('#graph-palette-toggle').press('Enter');
   await expect(page.getByLabel('Search nodes', { exact: true })).toBeFocused();
-  await page.getByLabel('Node category', { exact: true }).selectOption('AI Models');
+  await page.getByLabel('Node category', { exact: true }).selectOption('AI Models / Translation');
   await page.getByLabel('Search nodes', { exact: true }).fill('OPUS');
   await expect(page.locator('#graph-node-type [role="option"]')).toHaveCount(2);
   await page.getByLabel('Search nodes', { exact: true }).fill('no matching type');

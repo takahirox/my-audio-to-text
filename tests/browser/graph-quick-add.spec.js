@@ -11,7 +11,7 @@ async function serveExtension(route) {
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', serveExtension); await page.goto('/extension/graph-editor.html');
 });
-test('five sorted categories combine search/filter and refresh dynamic Japanese/Latin subgraphs', async ({ page, context }) => {
+test('eight flat sorted categories combine search/filter and refresh dynamic Japanese/Latin subgraphs', async ({ page, context }) => {
   await seedQuickAdd(page);
   const storedGraph = await page.evaluate(() => {
     const library = JSON.parse(localStorage.getItem('processing-graph-library-v1'));
@@ -20,12 +20,26 @@ test('five sorted categories combine search/filter and refresh dynamic Japanese/
   await openQuickAdd(page);
   const category = page.getByLabel('Node category', { exact: true });
   await expect(category.locator('option')).toHaveText([
-    'All categories', 'Sources / inputs', 'AI Models', 'Processors', 'Outputs', 'Subgraphs',
+    'All categories', 'Sources / inputs', 'AI Models / Speech Recognition', 'AI Models / Translation',
+    'AI Models / Text', 'AI Models / Speech Synthesis', 'Processors', 'Outputs', 'Subgraphs',
   ]);
   await expect(page.getByRole('group', { name: 'Sources / inputs', exact: true }).getByRole('option')).toHaveText([
     'Button', 'Chrome tab audio', 'Microphone audio', 'Number', 'Text',
   ]);
-  await expect(page.getByRole('group', { name: 'AI Models', exact: true }).getByRole('option')).toHaveCount(16);
+  for (const [name, types] of [
+    ['AI Models / Speech Recognition', ['SpeechToTextMoonshineMediumEn', 'SpeechToTextParakeetV3', 'SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn']],
+    ['AI Models / Translation', ['OpusMtEnJa', 'OpusMtJaEn', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn']],
+    ['AI Models / Text', ['IfCondition', 'TextSummaryLfm2', 'TextSummaryQwen35']],
+    ['AI Models / Speech Synthesis', ['CosyVoice3Streaming', 'Kokoro', 'Qwen3TtsStreaming', 'Supertonic3']],
+  ]) {
+    const group = page.getByRole('group', { name, exact: true });
+    await category.selectOption(name);
+    await expect(page.getByRole('listbox').getByRole('group')).toHaveCount(1);
+    await expect(group.getByRole('option')).toHaveCount(types.length);
+    expect(await group.getByRole('option').evaluateAll(options => options.map(option => option.dataset.type).sort())).toEqual(types);
+  }
+  await category.selectOption('All categories');
+  await expect(page.getByRole('group', { name: 'AI Models', exact: true })).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Processors', exact: true }).getByRole('option')).toHaveText([
     'Hold', 'Keyed paired text accumulator', 'Keyed text coalesce', 'Keyed text pair',
     'Text accumulator', 'Text formatter', 'Text sliding window', 'Text window',
@@ -51,7 +65,8 @@ test('five sorted categories combine search/filter and refresh dynamic Japanese/
   const sortedNames = ['Alpha', 'beta', 'Model 2', 'Model 10', 'アオイ', 'あかね', 'いちご', 'さくら'];
   await expect(subgraphs).toHaveText(sortedNames);
   await expect(page.locator('.graph-node-group > .muted')).toHaveText([
-    'Sources / inputs', 'AI Models', 'Processors', 'Outputs', 'Subgraphs',
+    'Sources / inputs', 'AI Models / Speech Recognition', 'AI Models / Translation',
+    'AI Models / Text', 'AI Models / Speech Synthesis', 'Processors', 'Outputs', 'Subgraphs',
   ]);
   // Check every built-in group too, using displayed text independently of IDs.
   expect(await page.locator('.graph-node-group').evaluateAll(groups => {
@@ -71,9 +86,14 @@ test('five sorted categories combine search/filter and refresh dynamic Japanese/
     'Keyed paired text accumulator', 'Keyed text coalesce', 'Keyed text pair',
     'Text accumulator', 'Text formatter', 'Text sliding window', 'Text window',
   ]);
-  await category.selectOption('AI Models'); await search.fill('summary');
+  await category.selectOption('AI Models / Text'); await search.fill('summary');
   await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
     'Text Summary · LFM2.5 1.2B JP', 'Text Summary · Qwen3.5 2B',
+  ]);
+  await category.selectOption('AI Models / Translation'); await search.fill('OPUS');
+  await expect(page.locator('.graph-node-group > .muted')).toHaveText(['AI Models / Translation']);
+  await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
+    'OPUS-MT English → Japanese', 'OPUS-MT Japanese → English',
   ]);
   await category.selectOption('Outputs'); await search.fill('Number');
   await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(0);

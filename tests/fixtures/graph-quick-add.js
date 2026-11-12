@@ -59,7 +59,9 @@ export async function checkQuickAddInteraction(page) {
   await openQuickAdd(page);
   await expectNoPaletteStatus(page);
   await expect(page.getByRole('group', { name: 'Sources / inputs' })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'AI Models' })).toBeVisible();
+  for (const purpose of ['Speech Recognition', 'Translation', 'Text', 'Speech Synthesis']) {
+    await expect(page.getByRole('group', { name: `AI Models / ${purpose}`, exact: true })).toBeVisible();
+  }
   await expect(page.getByRole('group', { name: 'Processors' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add selected node' })).toHaveCount(0);
   const options = page.getByRole('listbox', { name: 'Node types' }).getByRole('option');

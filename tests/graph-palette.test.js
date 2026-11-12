@@ -7,12 +7,13 @@ test('every built-in has an explicit Add Node category; new types must be classi
   assert.deepEqual(Object.keys(NODE_PALETTE_CATEGORIES).sort(), Object.keys(NODE_TYPES).sort());
   const expected = {
     'Sources / inputs': ['Button', 'ChromeTabAudio', 'MicrophoneAudio', 'Number', 'Text'],
-    'AI Models': [
-      'CosyVoice3Streaming', 'IfCondition', 'Kokoro', 'OpusMtEnJa', 'OpusMtJaEn',
-      'Qwen3TtsStreaming', 'SpeechToTextMoonshineMediumEn', 'SpeechToTextParakeetV3',
+    'AI Models / Speech Recognition': [
+      'SpeechToTextMoonshineMediumEn', 'SpeechToTextParakeetV3',
       'SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn',
-      'Supertonic3', 'TextSummaryLfm2', 'TextSummaryQwen35', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn',
     ],
+    'AI Models / Translation': ['OpusMtEnJa', 'OpusMtJaEn', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn'],
+    'AI Models / Text': ['IfCondition', 'TextSummaryLfm2', 'TextSummaryQwen35'],
+    'AI Models / Speech Synthesis': ['CosyVoice3Streaming', 'Kokoro', 'Qwen3TtsStreaming', 'Supertonic3'],
     'Processors': ['Hold', 'KeyedPairedTextAccumulator', 'KeyedTextCoalesce', 'KeyedTextPair', 'TextAccumulator', 'TextFormatter', 'TextSlidingWindow', 'TextWindow'],
     'Outputs': ['AudioOutput', 'Display', 'FocusedInputTextOutputNode', 'SpeakerOutput', 'StreamingSpeakerOutput'],
     'Subgraphs': [],
@@ -35,7 +36,7 @@ test('category and label order are independent of registration order and port co
     ['IfCondition', { label: 'Ordinary utility', inputs: {}, outputs: {} }],
     ['Subgraph:ai', { label: 'Whisper ASR', inputs: {}, outputs: {} }],
   ];
-  assert.deepEqual([...groupPaletteEntries(misleading).keys()], ['AI Models', 'Processors', 'Subgraphs']);
+  assert.deepEqual([...groupPaletteEntries(misleading).keys()], ['AI Models / Text', 'Processors', 'Subgraphs']);
   assert.deepEqual(expected.get('Sources / inputs').map(([, definition]) => definition.label),
     ['Button', 'Chrome tab audio', 'Microphone audio', 'Number', 'Text']);
   assert.deepEqual(expected.get('Processors').map(([, definition]) => definition.label),
@@ -77,13 +78,17 @@ test('dynamic subgraph names, equivalent kana/case/numbers and equal names have 
 test('category/query filters combine, keep sorted groups, match types or labels and allow zero results', () => {
   const entries = [...Object.entries(NODE_TYPES), ['Subgraph:jp', { label: 'あかね' }]];
   const groups = groupPaletteEntries(entries, { query: '  TEXT  ' });
-  assert.deepEqual([...groups.keys()], ['Sources / inputs', 'AI Models', 'Processors', 'Outputs']);
-  const summary = groupPaletteEntries(entries, { query: 'text', category: 'AI Models' });
-  assert.deepEqual([...summary.keys()], ['AI Models']);
-  assert.ok(summary.get('AI Models').every(([type]) => type.startsWith('SpeechToText') || type.startsWith('TextSummary')));
+  assert.deepEqual([...groups.keys()], ['Sources / inputs', 'AI Models / Speech Recognition', 'AI Models / Text', 'Processors', 'Outputs']);
+  const summary = groupPaletteEntries(entries, { query: 'text', category: 'AI Models / Text' });
+  assert.deepEqual([...summary.keys()], ['AI Models / Text']);
+  assert.deepEqual(summary.get('AI Models / Text').map(([type]) => type), ['TextSummaryLfm2', 'TextSummaryQwen35']);
+  const translation = groupPaletteEntries(entries, { query: 'opus', category: 'AI Models / Translation' });
+  assert.deepEqual([...translation.keys()], ['AI Models / Translation']);
+  assert.deepEqual(translation.get('AI Models / Translation').map(([type]) => type), ['OpusMtEnJa', 'OpusMtJaEn']);
   const processors = groupPaletteEntries(entries, { query: 'text', category: 'Processors' });
   assert.deepEqual(processors.get('Processors'), groups.get('Processors'));
   assert.equal(groupPaletteEntries(entries, { query: 'あか', category: 'Subgraphs' }).get('Subgraphs')[0][0], 'Subgraph:jp');
   assert.equal(groupPaletteEntries(entries, { query: 'Number', category: 'Outputs' }).size, 0);
   assert.equal(groupPaletteEntries(entries, { category: 'Constants / utilities' }).size, 0);
+  assert.equal(groupPaletteEntries(entries, { category: 'AI Models' }).size, 0);
 });

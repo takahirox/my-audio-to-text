@@ -16,7 +16,7 @@ test('both AI summary models: parked Save persists, independent settings, cancel
   }
   const page = await openGraph(f), editor = page.editor;
   for (const type of TEXT_SUMMARY_TYPES) {
-    await openPalette(editor); await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'AI Models' });
+    await openPalette(editor); await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'AI Models / Text' });
     await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
     await expect(editor.getByLabel(type.toLowerCase() + ' language', { exact: true })).toHaveValue('ja');
     const prompt = editor.getByLabel(type.toLowerCase() + ' prompt', { exact: true });

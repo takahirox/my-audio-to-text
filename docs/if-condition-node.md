@@ -1,6 +1,6 @@
 # Local IfCondition
 
-Add **IfCondition · local AI** from the Graph Editor's Processors category. It
+Add **IfCondition · local AI** from the Graph Editor's **AI Models / Text** category. It
 accepts `text: TEXT`, has one editable natural-language `condition`, and exposes
 `yes: TEXT` / `no: TEXT`. For example, connect `SpeechToTextReazonSpeech.final`
 to `IfCondition.text`, set `Is this a question?`, and connect the two outputs to

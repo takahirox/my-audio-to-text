@@ -283,10 +283,12 @@ to `test-results`; retained validation is in
 
 Use Add Node to open a searchable list beside the toolbar button. Categories
 always appear in this order: **Sources / inputs** (including Text and Number),
-**AI Models** (ASR, translation, summaries, condition AI and TTS inference),
+**AI Models / Speech Recognition**, **AI Models / Translation**,
+**AI Models / Text** (summaries and condition AI), **AI Models / Speech Synthesis**,
 **Processors** (deterministic transformations, including Text formatter and Hold),
 **Outputs**, then **Subgraphs**. Within each category, displayed names sort
 automatically in Japanese-aware alphabetical / kana order with natural numbers.
+These eight categories are independent choices in the primary selector.
 **All categories** shows all groups; a category filter and search can be combined.
 New built-in Node types must be classified in `extension/graph-palette.js`;
 saved subgraphs join the sorted Subgraphs group automatically. Search or
