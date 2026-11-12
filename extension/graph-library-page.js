@@ -5,12 +5,10 @@ import { GRAPH_KEY, ASR_TYPES, nodeDefinition } from './graph.js';
 import { graphModelRequirements } from './graph-model-preparation.js';
 import { references } from './subgraphs.js';
 import { GraphDetailsAutosave, DETAILS_DRAFT_KEY } from './graph-library-details.js';
-import { ModelAssetCache } from './model-asset-cache.js';
 
 const element = id => document.getElementById(id), store = new GraphLibrary(localStorage);
 const selectionKey = 'graph-library-selection';
 let library, selectedId, fatal = false, refreshVoiceStatus = () => {};
-const states = new Map();
 let selectionRequest = 0, actionPending = false;
 const details = new GraphDetailsAutosave({ store, storage: sessionStorage,
   name: element('graph-name'), description: element('graph-description'), status: element('details-state'), retry: element('retry-details'),
@@ -39,10 +37,6 @@ function models(entry) {
   return [...new Set([...requirements.map(requirement => requirement.title.split(' · ').filter(part => !/\d[\d.]* (?:MB|GB)|allow |WebGPU|CPU WASM|terms apply|Apache/.test(part)).slice(0, 2).join(' · ')),
     ...graph.nodes.filter(node => ASR_TYPES.includes(node.type) && !['SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'].includes(node.type)).map(node => (nodeDefinition(node, graph, library.graphs)?.label || node.type))])];
 }
-function state(entry) {
-  if (entryError(entry, library)) return 'Error · needs recovery';
-  return states.get(JSON.stringify(resolvedEntryGraph(entry, library))) || (models(entry).length ? 'Unknown' : 'Ready · no model files');
-}
 function rowButton(id = selectedId) {
   return [...element('graph-list').querySelectorAll('button[data-id]')].find(button => button.dataset.id === id);
 }
@@ -70,7 +64,6 @@ function renderDetails(entry = selected()) {
   details.load(entry);
   if (!entry) return;
   element('selected-title').textContent = entry.name;
-  element('graph-metadata').open = false;
 }
 function renderSelectedState() {
   const current = selected(), entry = current || details.entry;
@@ -81,15 +74,11 @@ function renderSelectedState() {
   element('selected-error').textContent = removed ? 'This graph was deleted in another page. Unsaved details have been kept; copy them before selecting another graph. Export JSON still recovers the previous saved graph.'
     : invalid ? `Invalid saved graph: ${invalid} Export the original JSON, repair it, and import as new. The original is kept.` : '';
   element('duplicate').disabled = !!invalid || removed;
-  element('check-cache').disabled = !!invalid || removed || state(entry) === 'Unknown · checking';
-  element('cache-hint').textContent = removed ? 'This graph was deleted.' : invalid ? 'Repair and import this graph before checking model files.' : '';
   const parents = references(library, entry.id);
   const last = !library.graphs.some(other => other.id !== entry.id && usable(other, library));
   element('delete').disabled = removed || last || parents.length > 0;
   element('delete-hint').textContent = removed ? 'This graph was deleted.' : parents.length ? `Referenced by: ${parents.map(parent => parent.name).join(', ')}. Replace or remove instances and save those graphs before deleting.` : last ? 'Keep at least one usable graph.' : '';
-  element('graph-updated').textContent = new Date(entry.updatedAt).toLocaleString();
   element('graph-models').textContent = invalid ? 'Unknown · repair graph first' : models(entry).join(', ') || 'None';
-  element('graph-cache').textContent = state(entry);
   renderRecoveryAction();
 }
 function render(replaceDetails = false) {
@@ -312,23 +301,6 @@ if (!fatal) {
     });
   };
   element('recover-legacy').onclick = () => { void action(() => store.recoverLegacy(library.revision), { recover: true }); };
-  element('check-cache').onclick = async () => {
-    if (actionPending) return;
-    const request = ++selectionRequest, id = selectedId;
-    if (!await details.flush() || request !== selectionRequest || id !== selectedId) return;
-    const entry = selected(); if (!entry) return;
-    const key = JSON.stringify(resolvedEntryGraph(entry, library));
-    element('graph-metadata').open = true;
-    element('check-cache').disabled = true;
-    states.set(key, 'Unknown · checking'); render();
-    try {
-      const requirements = graphModelRequirements(resolvedEntryGraph(entry, library));
-      const views = await Promise.all(requirements.map(async requirement => new ModelAssetCache(await requirement.manifest()).inspect()));
-      const packaged = resolvedEntryGraph(entry, library).nodes.some(node => ASR_TYPES.includes(node.type) && !['SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'].includes(node.type));
-      states.set(key, views.some(view => view.state === 'Error') ? 'Error · open Models' : views.some(view => view.state !== 'Ready') ? 'Needs preparation' : packaged ? 'Unknown · packaged models checked by Live' : 'Ready · cached files');
-    } catch (error) { states.set(key, 'Error · open Models'); element('errors').textContent = error.message; }
-    finally { render(); }
-  };
   window.addEventListener('storage', event => {
     if (![LIBRARY_KEY, GRAPH_KEY, null].includes(event.key)) return;
     try {
@@ -338,10 +310,6 @@ if (!fatal) {
       render();
     } catch (error) { element('errors').textContent = `${error.message} Your changes have been kept.`; }
   });
-  const cacheUpdates = new BroadcastChannel('model-cache-updates');
-  const invalidateCache = () => { states.clear(); render(); };
-  cacheUpdates.onmessage = invalidateCache;
-  window.addEventListener('focus', invalidateCache);
-  window.addEventListener('pagehide', () => { details.keepDraft(); cacheUpdates.close(); });
+  window.addEventListener('pagehide', () => { details.keepDraft(); });
   window.addEventListener('beforeunload', event => { details.keepDraft(); if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
 }

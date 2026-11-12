@@ -24,7 +24,6 @@ async function expand(page, id) {
 }
 async function detailAction(page, id) {
   if (id === 'load-details') { await page.locator('#load-details').click(); return; }
-  if (id === 'check-cache') { await page.locator('#graph-metadata > summary').click(); await page.locator('#check-cache').click(); return; }
   await page.locator(`#${id}`).click();
 }
 async function rename(page, name, description = '') {
@@ -132,7 +131,8 @@ test('Library manages independent named graphs, portable JSON, persistent target
   await expect(page.locator('#web-voice-enabled')).not.toBeChecked();
   await expect(page.locator('#web-voice-status')).toContainText('No compatible graphs');
   await expect(page.locator('#selected')).toBeHidden(); await expand(page);
-  await expect(page.locator('#graph-cache')).toHaveText('Unknown');
+  await expect(page.locator('#graph-models')).toBeVisible();
+  await expect(page.locator('#graph-models')).toHaveText('ReazonSpeech ja-en ASR');
   await expect(page.locator('#delete')).toBeVisible();
   await expect(page.locator('#delete')).toBeDisabled();
   await expect(page.locator('#delete')).toHaveAccessibleDescription('Keep at least one usable graph.');
@@ -171,8 +171,8 @@ test('Library manages independent named graphs, portable JSON, persistent target
   await expect(page.locator('#selected-title')).toHaveText('Imported');
   expect((await library(page)).graphs.at(-1).graph).toEqual(graph);
   await expect(page.locator('#preview-scroll, #preview, #save-details')).toHaveCount(0);
-  await expect(page.locator('#graph-metadata')).not.toHaveAttribute('open');
-  await expect(page.locator('#graph-cache')).toHaveText('Ready · no model files');
+  await expect(page.locator('#graph-models')).toBeVisible();
+  await expect(page.locator('#graph-models')).toHaveText('None');
   const downloading = page.waitForEvent('download'); await detailAction(page, 'export');
   expect(JSON.parse(await readFile(await (await downloading).path(), 'utf8'))).toEqual(graph);
   const count = (await library(page)).graphs.length;
@@ -195,6 +195,52 @@ test('Library manages independent named graphs, portable JSON, persistent target
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.locator('#open')).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('library-narrow.png'), fullPage: true });
+  expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
+});
+
+test('Required models stays visible through selection, model search and resolved subgraph refreshes', async ({ libraryExtension: { page, context, url } }) => {
+  const graph = simple(); graph.nodes.push(graphNode('OpusMtJaEn', 'translate'), graphNode('IfCondition', 'condition'));
+  const modelId = await create(page, 'Processing graph', graph), plainId = await create(page, 'Plain graph', simple());
+  const parentId = await page.evaluate(async () => {
+    const { graphNode, edge } = await import('./graph.js');
+    const { GraphLibrary } = await import('./graph-library.js');
+    const { extractSubgraph } = await import('./subgraphs.js');
+    const extracted = extractSubgraph({ version: 15,
+      nodes: [graphNode('Text', 'source'), graphNode('OpusMtJaEn', 'translate'), graphNode('Display', 'display')],
+      edges: [edge('source', 'value', 'translate', 'text'), edge('translate', 'text', 'display', 'input1')] }, ['translate'], 'shared-translation');
+    const store = new GraphLibrary(localStorage);
+    await store.create({ id: 'shared-translation', name: 'Shared processor', kind: 'subgraph', graph: extracted.shared });
+    return (await store.create({ name: 'Parent graph', graph: extracted.parent })).graphs.at(-1).id;
+  });
+  await page.reload();
+  const original = await library(page), value = page.locator('#graph-models');
+  await page.locator('#search').fill('XtremeDistil');
+  await expect(page.locator('#graph-list button[data-id]')).toHaveCount(1);
+  await expand(page, modelId);
+  await expect(value).toBeVisible();
+  await expect(value).toHaveText('OPUS-MT · Japanese → English, IfCondition · XtremeDistil');
+  await expect(page.locator('#selected > dl > dt')).toHaveText('Required models');
+  await expect(value).toHaveRole('definition');
+  await expect(page.locator('#graph-metadata, #graph-updated, #graph-cache, #check-cache, #cache-hint, #selected details')).toHaveCount(0);
+  await expect(page.locator('#selected')).not.toContainText(/Models & saved information|File cache|Check model files|Live verifies runtime readiness|Manage model files/);
+  await expect(page.locator('#selected a[href="model-cache.html"]')).toHaveCount(0);
+  expect(await value.evaluate(node => node.parentElement === document.querySelector('#selected').lastElementChild)).toBe(true);
+  await page.locator('#search').fill(''); await expand(page, plainId);
+  await expect(value).toBeVisible(); await expect(value).toHaveText('None');
+  await expand(page, parentId);
+  await expect(value).toBeVisible(); await expect(value).toHaveText('OPUS-MT · Japanese → English');
+  expect(await library(page)).toEqual(original);
+  // Updating the shared definition in another page refreshes the selected parent.
+  const other = await context.newPage(); await other.goto(url + 'graph-library.html');
+  await other.evaluate(async () => {
+    const { GraphLibrary, readLibrary, entryGraph } = await import('./graph-library.js');
+    const entry = readLibrary(localStorage).graphs.find(entry => entry.id === 'shared-translation');
+    const graph = entryGraph(entry); graph.nodes.find(node => node.id === 'translate').type = 'OpusMtEnJa';
+    await new GraphLibrary(localStorage).save(entry.id, entry.revision, graph);
+  });
+  await expect(value).toHaveText('OPUS-MT · English → Japanese');
+  await page.reload(); await expect(value).toBeVisible(); await expect(value).toHaveText('OPUS-MT · English → Japanese');
+  expect((await library(page)).graphs.find(entry => entry.id === parentId)).toEqual(original.graphs.find(entry => entry.id === parentId));
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
 });
 
@@ -286,6 +332,8 @@ test('migration preserves valid and malformed legacy sources; recovery never ove
     if (raw.startsWith('{broken')) {
       await expand(page, 'legacy-graph');
       await expect(page.locator('#selected-error')).toContainText('Invalid saved graph');
+      await expect(page.locator('#graph-models')).toBeVisible();
+      await expect(page.locator('#graph-models')).toHaveText('Unknown · repair graph first');
       const downloading = page.waitForEvent('download'); await detailAction(page, 'export');
       expect(await readFile(await (await downloading).path(), 'utf8')).toBe(raw);
       const editor = await context.newPage(); await editor.goto(url + 'graph-editor.html?id=legacy-graph');
@@ -358,7 +406,7 @@ test('concurrent migration, quota errors and corrupt envelopes keep originals re
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-v1'))).toBe(raw);
 });
 
-test('metadata drafts survive filtering, cache refresh and reload with original revision conflicts', async ({ libraryExtension: { page, context, url } }) => {
+test('metadata drafts survive filtering, library refresh and reload with original revision conflicts', async ({ libraryExtension: { page, context, url } }) => {
   const id = await create(page, 'Draft graph', simple('A')); await create(page, 'Other graph', simple('B'));
   await page.reload(); await page.locator(`#graph-list button[data-id="${id}"]`).click();
   await composition(page, 'start', 'My unsaved name');
@@ -370,7 +418,6 @@ test('metadata drafts survive filtering, cache refresh and reload with original 
   await expect(page.locator('#graph-name')).toHaveValue('My unsaved name');
   await tools(page); await page.locator('#filter').selectOption('invalid');
   await expect(page.locator('#empty')).toBeVisible();
-  await page.evaluate(() => { const channel = new BroadcastChannel('model-cache-updates'); channel.postMessage({}); channel.close(); });
   const other = await context.newPage(); await other.goto(url + 'graph-library.html');
   await other.evaluate(async id => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js');
@@ -495,9 +542,7 @@ test('rapid switching and collapsing wait for the latest pending details before 
   await second.click(); await page.locator('#duplicate').click();
   await expect(page.locator('#selected-title')).toHaveText('Graph B copy');
   expect((await library(page)).graphs.at(-1).graph).toEqual(simple('B'));
-  await detailAction(page, 'check-cache');
-  await expect(page.locator('#graph-metadata')).toHaveAttribute('open', '');
-  await expect(page.locator('#graph-cache')).toHaveText('Ready · cached files');
+  await expect(page.locator('#graph-models')).toBeVisible();
   await expect(page.locator('#graph-models')).toHaveText('None');
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
 });
@@ -550,7 +595,8 @@ test('export waits for autosave, and a later selection cancels an earlier pendin
 });
 
 test('inline accordion, direct actions and consent fit desktop, mobile, zoom and forced colors', async ({ libraryExtension: { page } }) => {
-  const id = await create(page, 'A long graph name that wraps on small screens', simple());
+  const graph = simple(); graph.nodes.push(graphNode('OpusMtJaEn', 'translate'), graphNode('IfCondition', 'condition'));
+  const id = await create(page, 'A long graph name that wraps on small screens', graph);
   await page.reload();
   const row = page.locator(`#graph-list button[data-id="${id}"]`);
   for (const width of [1440, 390, 320]) {
@@ -584,6 +630,16 @@ test('inline accordion, direct actions and consent fit desktop, mobile, zoom and
       expect(deletion.x - boxes[2].x - boxes[2].width).toBeGreaterThan(16);
     }
     await page.keyboard.press('Tab'); await expect(page.locator('#graph-name')).toBeFocused();
+    await expect(page.locator('#graph-models')).toBeVisible();
+    await expect(page.locator('#graph-models')).toHaveText('OPUS-MT · Japanese → English, IfCondition · XtremeDistil');
+    const form = await page.locator('#details-form').boundingBox();
+    for (const field of [page.locator('.required-models dt'), page.locator('#graph-models')]) {
+      const box = await field.boundingBox();
+      expect(box.y).toBeGreaterThanOrEqual(form.y + form.height);
+      expect(box.x).toBeGreaterThanOrEqual(detail.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(detail.x + detail.width);
+      expect(await field.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    }
     await expect(page.locator('.row-menu, dialog#selected, aside, nav, #launch-settings, #preview')).toHaveCount(0);
     await page.locator('#web-voice-enabled').press('Space'); await expect(page.locator('#voice-consent')).toBeVisible();
     await page.keyboard.press('Escape'); await expect(page.locator('#web-voice-enabled')).toBeFocused();
@@ -603,7 +659,7 @@ test('inline accordion, direct actions and consent fit desktop, mobile, zoom and
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('list refresh and autosave preserve input focus, caret, composition and row keyboard navigation', async ({ libraryExtension: { page } }) => {
+test('list refresh and autosave preserve input focus, caret, composition and row keyboard navigation', async ({ libraryExtension: { page, context, url } }) => {
   const id = await create(page, 'Focus regression', simple()); await page.reload(); await expand(page, id);
   const row = page.locator(`#graph-list button[data-id="${id}"]`);
   await row.press('Tab'); await expect(page.locator('#open')).toBeFocused();
@@ -614,7 +670,9 @@ test('list refresh and autosave preserve input focus, caret, composition and row
   await expect(page.locator('#graph-name')).toBeFocused();
   expect(await page.locator('#graph-name').evaluate(node => node.selectionStart)).toBe(caret);
   await composition(page, 'start', '未確定');
-  await page.evaluate(() => { const channel = new BroadcastChannel('model-cache-updates'); channel.postMessage({}); channel.close(); });
+  const other = await context.newPage(); await other.goto(url + 'graph-library.html');
+  const added = await create(other, 'Added elsewhere', simple());
+  await expect(page.locator(`#graph-list button[data-id="${added}"]`)).toBeVisible();
   await expect(page.locator('#graph-name')).toBeFocused();
   await row.click(); await expect(row).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#details-state')).toContainText('finish composing');
