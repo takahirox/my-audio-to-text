@@ -47,7 +47,7 @@ test('palette, Save and reload preserve current connected graph and parked direc
   });
   const models = live.models.locator('#translategemma');
   await live.models.evaluate(() => window.dispatchEvent(new Event('focus'))); await expect(models.locator('.model-status')).toHaveText('Not downloaded');
-  await models.getByRole('button', { name: 'Download / retry', exact: true }).click(); await expect(models.locator('.model-status')).toContainText('Ready');
+  await models.getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click(); await expect(models.locator('.model-status')).toContainText('Ready');
   expect(f.requests).toHaveLength(9);
 });
 

@@ -13,7 +13,7 @@ export async function verifiedTranslateGemmaCache(signal) {
   signal?.throwIfAborted();
   const view = await new ModelAssetCache(manifest).inspect({ signal });
   signal?.throwIfAborted();
-  if (view.state !== 'Ready') throw new Error(view.error || 'TranslateGemma weights missing or evicted. Use Retry preparation in Graph Editor or Download / retry for TranslateGemma 4B in Models.');
+  if (view.state !== 'Ready') throw new Error(view.error || 'TranslateGemma weights missing or evicted. Use Retry preparation in Graph Editor or Download or Retry for TranslateGemma 4B in Models.');
   return manifest;
 }
 

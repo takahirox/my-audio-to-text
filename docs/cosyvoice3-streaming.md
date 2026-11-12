@@ -15,7 +15,7 @@ Text.value / ASR.final / committed translation.text
 ```
 
 Auto Save prepares **916,881,956 model bytes**, including parked Nodes. Models provides
-Download / retry, verification and deletion. Start reads verified cached bytes;
+Download or Retry, verification and deletion. Start reads verified cached bytes;
 missing, corrupt or evicted assets require preparation again. Keep Live open
 and press Start to activate Speaker. There is no recording-time model download,
 remote inference, remote code, Python process or whole-model CPU fallback.

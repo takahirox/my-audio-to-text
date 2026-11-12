@@ -115,7 +115,7 @@ and [packaged/native inference evidence](docs/evidence/optional-asr-121.md).
 Setup installs npm dependencies, downloads/verifies ReazonSpeech, Whisper and
 English Zipformer ASR models and prepares translation/TTS/text-summary runtimes, then produces `dist/chrome-extension/`. Optional
 translation/TTS, text-summary and optional ASR **weights** prepare after **Auto Save** for saved processor Nodes;
-Models provides **Download / retry**, diagnostics and deletion. Open `chrome://extensions`, enable **Developer mode**, choose
+Models provides **Download** or **Retry**, diagnostics and deletion. Open `chrome://extensions`, enable **Developer mode**, choose
 **Load unpacked** and select `dist/chrome-extension`. With assets already
 prepared, run `npm run build:extension` after source changes, then click
 **Reload** on the extension's card. See the [extension guide](docs/chrome-extension.md)

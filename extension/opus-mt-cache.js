@@ -7,7 +7,7 @@ export async function verifiedOpusCache(signal, loadManifest = opusMtManifest) {
   const assets = new ModelAssetCache(manifest);
   const view = await assets.inspect({ signal });
   signal?.throwIfAborted();
-  if (view.state !== 'Ready') throw new Error(view.error || 'OPUS-MT assets missing or evicted. Open Models and use Download / retry for this direction.');
+  if (view.state !== 'Ready') throw new Error(view.error || 'OPUS-MT assets missing or evicted. Open Models and use Download or Retry for this direction.');
   return manifest;
 }
 

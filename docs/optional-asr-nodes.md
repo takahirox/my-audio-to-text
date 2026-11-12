@@ -57,7 +57,7 @@ Silicon, not on Windows, Linux, mobile or low-memory hardware.
 Graph Editor and Models provide progress, cancellation, retry and model-specific
 errors. Graph Editor also offers Check cache. Models automatically checks cached
 files on opening, on focus and after relevant cache updates, and offers
-Download / retry and Delete cached assets. Missing,
+Download or Retry when needed and Delete cached assets. Missing,
 corrupt or evicted weights require **Auto Save/Retry preparation before Start**.
 Completed verified files survive a failed download and are reused on retry;
 partial files restart from their beginning. A failure does not roll back the

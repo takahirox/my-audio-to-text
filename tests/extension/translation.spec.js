@@ -8,7 +8,6 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-const bundle = path.resolve('dist/chrome-extension');
 const launch = profile => chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true,
   ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'] });
 const load = async (context, root) => (await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root })).id;
@@ -33,7 +32,9 @@ const test = base.extend({
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     try {
-      await cp(bundle, root, { recursive: true, filter: source => !source.includes(`${path.sep}vendor`) });
+      await cp('extension', path.join(root, 'extension'), { recursive: true });
+      await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(vendor|tts-assets|correction-assets)(\/|$)/.test(source) });
+      await cp('extension/manifest.json', path.join(root, 'manifest.json'));
       for (const direction of ['ja-en', 'en-ja']) {
         const entries = original.map(file => ({ path: file.path, bytes: 8192,
           sha256Chunks: [createHash('sha256').update(bodies.get(direction + '/' + file.path)).digest('hex')],
@@ -102,7 +103,7 @@ async function start(page) {
   await expect(page.locator('#status')).toHaveText('Transcription active');
 }
 async function prepare(page, { retry = true } = {}) {
-  await model(page, 'button:has-text("Download / retry")').click();
+  await model(page, 'button:text-matches("^(Download|Retry)$")').click();
   await expect(model(page, '.model-status')).toContainText('Ready');
   if (retry) {
     await expect(page.locator('#model-status')).toHaveText(/Ready|Models unavailable/);
@@ -151,11 +152,11 @@ for (const direction of ['ja-en', 'en-ja']) {
   });
 
   test(`${direction}: network, quota and preparation cancellation retry; inference failure leaves ASR active`, async ({ translationExtension: f }) => {
-    await instrument(f); const page = await open(f); f.mode('error'); await model(page, 'button:has-text("Download / retry")').click(); await expect(model(page, '.model-status')).toContainText('Error');
-    f.mode('hold'); await model(page, 'button:has-text("Download / retry")').click(); await expect.poll(() => model(page, 'progress').evaluate(p => p.value)).toBeGreaterThan(0); await model(page, 'button:has-text("Cancel download")').click(); await expect(model(page, '.model-status')).toContainText('Error');
-    await expect(model(page, 'button:has-text("Download / retry")')).toBeFocused();
+    await instrument(f); const page = await open(f); f.mode('error'); await model(page, 'button:text-matches("^(Download|Retry)$")').click(); await expect(model(page, '.model-status')).toContainText('Error');
+    f.mode('hold'); await model(page, 'button:text-matches("^(Download|Retry)$")').click(); await expect.poll(() => model(page, 'progress').evaluate(p => p.value)).toBeGreaterThan(0); await model(page, 'button:has-text("Cancel download")').click(); await expect(model(page, '.model-status')).toContainText('Error');
+    await expect(model(page, 'button:text-matches("^(Download|Retry)$")')).toBeFocused();
     f.mode('normal'); await page.models.evaluate(() => { const put = Cache.prototype.put; window.restorePut = () => { Cache.prototype.put = put; }; Cache.prototype.put = async function(key, response) { await response.body.cancel(); throw new DOMException('Full', 'QuotaExceededError'); }; });
-    await model(page, 'button:has-text("Download / retry")').click(); await expect(model(page, '.model-error')).toContainText('quota exceeded'); await page.models.evaluate(() => window.restorePut()); await prepare(page);
+    await model(page, 'button:text-matches("^(Download|Retry)$")').click(); await expect(model(page, '.model-error')).toContainText('quota exceeded'); await page.models.evaluate(() => window.restorePut()); await prepare(page);
     await start(page); await expect(page.locator('#translation-status')).toHaveText('Local translation ready'); await emit(page, 'final', 'fail'); await expect(page.locator('#translation-status')).toContainText('Controlled inference failure');
     await emit(page, 'final', '原文', 1); await expect(originalItems(page)).toHaveText(['fail', '原文']); await expect(page.locator('#errors')).toContainText('Controlled inference failure'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   });
