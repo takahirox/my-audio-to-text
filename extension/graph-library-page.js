@@ -229,6 +229,7 @@ try {
   }
   async function changeVoice(enabled, permission) {
     const restoreFocus = document.activeElement === toggle;
+    const operationId = crypto.randomUUID();
     voicePending = true; enableCanceled = false; toggle.disabled = true; toggle.checked = false;
     toggle.setAttribute('aria-busy', 'true');
     voiceMessage = enabled ? 'Requesting website access…' : 'Turning Web microphone OFF…'; refreshVoiceStatus();
@@ -241,7 +242,10 @@ try {
         hasWebsiteAccess = true;
       }
       if (enabled && enableCanceled) throw Error('Website access or opt-in changed.');
-      await setVoiceEnabled(enabled);
+      await navigator.locks.request(WEB_VOICE_KEY, async () => {
+        if (enabled && enableCanceled) throw Error('Website access or opt-in changed.');
+        await setVoiceEnabled(enabled, operationId);
+      });
       await reconcileVoice();
       savedEnabled = await readVoiceEnabled();
       if (enabled) {
@@ -251,23 +255,29 @@ try {
       toggle.checked = savedEnabled; voiceMessage = '';
     } catch (error) {
       let failure = error.message, stateKnown = true;
-      // An OFF decision or removed grant supersedes this pending ON. Another
-      // Library may already have opted in again; only roll back our own failure.
-      if (!enabled || !enableCanceled) {
+      let superseded = enabled && enableCanceled;
+      await navigator.locks.request(WEB_VOICE_KEY, async () => {
+        // Serialize the ownership check, rollback and cleanup with other Library
+        // writes. Even ON -> ON needs a unique owner so an older rejection cannot
+        // erase a newer opt-in, including when both native prompts overlap.
+        if (enabled && !superseded) {
+          try {
+            const current = (await chrome.storage.local.get(WEB_VOICE_KEY))[WEB_VOICE_KEY];
+            superseded = voiceEnabled(current) && current.operationId !== operationId;
+          } catch { stateKnown = false; return; }
+        }
+        if (superseded) return;
         try { await setVoiceEnabled(false); }
         catch (saveError) { failure += ` Could not save OFF: ${saveError.message}`; }
-      }
-      // Stop existing controls even if storage is unavailable. This cleanup is
-      // temporary until OFF is saved; a later reconciliation may restore ON.
-      // Superseded ON operations leave cleanup to the newer decision instead.
-      if (!enabled || !enableCanceled) {
+        // Stop controls even if an OFF write fails; later reconciliation may
+        // restore them until OFF can be saved successfully.
         try { await reconcileVoice(true); }
         catch (stopError) { failure += ` Could not stop page controls: ${stopError.message} Close affected tabs to stop them.`; }
-      }
+      });
       try { savedEnabled = await readVoiceEnabled(); }
       catch { stateKnown = false; }
       toggle.checked = savedEnabled;
-      voiceMessage = enabled && enableCanceled && stateKnown && savedEnabled ? '' : `${failure} ${!stateKnown
+      voiceMessage = superseded && stateKnown && savedEnabled ? '' : `${failure} ${!stateKnown
         ? 'Could not verify saved settings. Web microphone may still be ON. Reload Graph Library to retry.'
         : savedEnabled ? 'Web microphone is still ON in saved settings and may restart. Turn OFF to retry, or reload Graph Library.'
           : 'Web microphone is OFF. Turn ON to retry, or reload Graph Library.'}`;

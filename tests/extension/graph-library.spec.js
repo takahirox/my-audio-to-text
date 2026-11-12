@@ -547,8 +547,9 @@ test('export waits for autosave, and a later selection cancels an earlier pendin
   expect((await library(page)).graphs.find(entry => entry.id === a).description).toBe('Latest export details');
 });
 
-test('inline accordion, direct actions and microphone help fit desktop, mobile, zoom and forced colors', async ({ libraryExtension: { page } }) => {
-  const id = await create(page, 'A long graph name that wraps on small screens', simple());
+test('inline accordion, direct actions and consent fit desktop, mobile, zoom and forced colors', async ({ libraryExtension: { page } }) => {
+  const graph = simple(); graph.nodes.push(graphNode('OpusMtJaEn', 'translate'), graphNode('IfCondition', 'condition'));
+  const id = await create(page, 'A long graph name that wraps on small screens', graph);
   await page.reload();
   const row = page.locator(`#graph-list button[data-id="${id}"]`);
   for (const width of [1440, 390, 320]) {

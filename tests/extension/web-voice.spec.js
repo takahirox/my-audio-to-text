@@ -572,6 +572,81 @@ test('OFF during the final access check cannot be overwritten by the earlier ON 
   expect(await t.library.evaluate(async () => (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled)).toBe(false);
 });
 
+for (const failure of ['permission rejection', 'permission denial', 'reconcile rejection', 'final access rejection']) {
+  test(`concurrent ON preserves the newer opt-in after an older ${failure}`, async ({ voice: t }) => {
+    test.skip(real, 'Concurrent opt-in boundaries do not require real inference.');
+    const other = await t.context.newPage(); await other.goto(t.url + 'graph-library.html');
+    for (const page of [t.library, other]) {
+      await page.evaluate(() => {
+        const request = chrome.permissions.request.bind(chrome.permissions);
+        chrome.permissions.request = options => {
+          const grant = request(options);
+          return new Promise((resolve, reject) => {
+            window.finishPermission = async result => {
+              const granted = await grant;
+              if (result === 'reject') reject(Error('Controlled older permission failure'));
+              else resolve(result === 'deny' ? false : granted);
+            };
+          });
+        };
+        const set = chrome.storage.local.set.bind(chrome.storage.local), send = chrome.runtime.sendMessage.bind(chrome.runtime);
+        window.voiceWrites = []; window.voiceReconciles = [];
+        chrome.storage.local.set = values => { voiceWrites.push(values); return set(values); };
+        chrome.runtime.sendMessage = message => {
+          if (message.type === 'web-voice-reconcile') voiceReconciles.push(message);
+          return send(message);
+        };
+      });
+    }
+    await t.library.evaluate(failure => {
+      if (failure === 'reconcile rejection') {
+        const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+        chrome.runtime.sendMessage = async message => {
+          const reply = await send(message);
+          if (message.type === 'web-voice-reconcile' && !message.stop) {
+            await new Promise((resolve, reject) => { window.failEarlierON = () => reject(Error('Controlled older reconciliation failure')); });
+          }
+          return reply;
+        };
+      } else if (failure === 'final access rejection') {
+        const contains = chrome.permissions.contains.bind(chrome.permissions);
+        let checks = 0;
+        chrome.permissions.contains = async options => {
+          const granted = await contains(options);
+          if (++checks === 2) await new Promise((resolve, reject) => { window.failEarlierON = () => reject(Error('Controlled older access failure')); });
+          return granted;
+        };
+      }
+    }, failure);
+    const toggle = t.library.locator('#web-voice-enabled'), newerToggle = other.locator('#web-voice-enabled');
+    // Both switches start OFF and both requests overlap, with no OFF in between.
+    await toggle.click(); await newerToggle.click();
+    await expect(toggle).toBeDisabled(); await expect(newerToggle).toBeDisabled();
+    if (!failure.startsWith('permission')) {
+      await t.library.evaluate(() => finishPermission('grant'));
+      await expect.poll(() => t.library.evaluate(() => !!window.failEarlierON)).toBe(true);
+    }
+    await other.evaluate(() => finishPermission('grant'));
+    await expect(newerToggle).toBeEnabled(); await expect(newerToggle).toBeChecked();
+    await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible();
+    const callsBefore = await t.library.evaluate(() => ({ writes: voiceWrites.length, reconciles: voiceReconciles.length }));
+    await t.library.evaluate(failure => failure.startsWith('permission')
+      ? finishPermission(failure === 'permission rejection' ? 'reject' : 'deny') : failEarlierON(), failure);
+    await expect(toggle).toBeEnabled(); await expect(toggle).toBeChecked();
+    await expect(toggle).not.toHaveAttribute('aria-busy');
+    await expect(t.library.locator('#web-voice-status')).toBeEmpty();
+    await expect(newerToggle).toBeChecked();
+    expect(await t.library.evaluate(async () => ({
+      enabled: (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled,
+      scripts: (await chrome.scripting.getRegisteredContentScripts()).length,
+      calls: { writes: voiceWrites.length, reconciles: voiceReconciles.length }
+    }))).toEqual({ enabled: true, scripts: 1, calls: callsBefore });
+    await expect(widget(t.website)).toBeVisible();
+    await newerToggle.uncheck(); await expect(newerToggle).toBeEnabled();
+    await expect(toggle).not.toBeChecked(); await expect(widget(t.website)).toHaveCount(0);
+  });
+}
+
 for (const boundary of ['permission request', 'final access check', 'rejected final access check']) {
   test(`superseded ON at ${boundary} preserves a newer completed OFF then ON decision`, async ({ voice: t }) => {
     test.skip(real, 'Permission synchronization does not require real inference.');
