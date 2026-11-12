@@ -35,7 +35,6 @@
         <p id="details-error" role="alert"></p>
         <h2 id="selected-title" tabindex="-1"></h2>
         <p id="selected-error" role="status"></p>
-        <div id="preview-scroll" tabindex="0" role="region" aria-label="Graph preview; scroll to explore"><svg id="preview" role="img" aria-label="Selected graph preview"></svg></div>
         <div class="actions detail-actions">
           <a id="open" class="open-graph primary" href="graph-editor.html">Edit graph</a><button id="duplicate">Duplicate</button>
           <details id="graph-more" class="graph-actions">
@@ -49,9 +48,9 @@
           </details>
         </div>
         <form id="details-form">
-          <label>Name<input id="graph-name" required maxlength="160"></label>
-          <label>Description<textarea id="graph-description" rows="2" maxlength="2000"></textarea></label>
-          <div class="actions"><button type="submit" id="save-details">Save details</button><span id="details-state" role="status" class="muted"></span></div>
+          <label>Name<input id="graph-name" required maxlength="160" aria-describedby="details-state"></label>
+          <label>Description<textarea id="graph-description" rows="2" maxlength="2000" aria-describedby="details-state"></textarea></label>
+          <div class="details-save-status"><span id="details-state" role="status" class="muted"></span><button id="retry-details" type="button" hidden>Retry saving</button></div>
         </form>
         <details id="graph-metadata"><summary>Models &amp; saved information</summary><dl><dt>Updated</dt><dd id="graph-updated"></dd><dt>Required models</dt><dd id="graph-models"></dd><dt>File cache</dt><dd id="graph-cache" role="status"></dd></dl><p class="muted">File cache checks do not load models. Live verifies runtime readiness. <a href="model-cache.html">Manage model files</a></p></details>
       </section>
