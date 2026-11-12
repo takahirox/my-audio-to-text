@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
+import { installAssetQuotaFixture } from './model-asset-worker-fixture.js';
 
 export function summaryGraph() {
   const source = graphNode('Text', 'source'); source.settings.value = 'Evidence';
@@ -45,6 +46,7 @@ export async function liveModelFixture() {
     await cp('extension', path.join(root, 'extension'), { recursive: true });
     await cp('web', path.join(root, 'web'), { recursive: true, filter: file => !file.includes('/vendor') && !file.includes('/tts-assets') });
     await cp('extension/manifest.json', path.join(root, 'manifest.json'));
+    await installAssetQuotaFixture(root);
     const files = [...assets].map(([name, body]) => ({ path: name, bytes: body.length,
       sha256Chunks: [createHash('sha256').update(body).digest('hex')],
       sourceURL: `http://127.0.0.1:${server.address().port}/${name}` }));
@@ -75,6 +77,7 @@ export async function liveModelFixture() {
     });
     const editor = await context.newPage(); await editor.goto(base + 'graph-editor.html');
     return { context, base, editor, requests, assets, cleanup,
+      get activeTransfers() { return [...responses].filter(response => response.finishFixture && !response.destroyed).length; },
       mode(value) { mode = value; },
       release() { mode = 'normal'; for (const response of responses) response.finishFixture?.(); },
       async save(graph = summaryGraph()) {

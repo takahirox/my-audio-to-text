@@ -72,15 +72,21 @@ function validatedBody(response, file, onBytes = () => {}, signal, onFailure = (
 }
 
 export class ModelAssetCache {
-  constructor(manifest, { cacheStorage = globalThis.caches, fetchAsset = globalThis.fetch?.bind(globalThis),
+  constructor(manifest, options = {}) {
+    const { cacheStorage = globalThis.caches, fetchAsset = globalThis.fetch?.bind(globalThis),
     locks = globalThis.navigator?.locks, storage = globalThis.navigator?.storage,
-    persistenceSession = globalThis.chrome?.storage?.session } = {}) {
+    persistenceSession = globalThis.chrome?.storage?.session,
+    beforeDownload = () => requestStoragePersistence(storage, { locks, session: persistenceSession }),
+    shared = Object.keys(options).length === 0 && typeof globalThis.SharedWorker === 'function'
+      && globalThis.location?.protocol === 'chrome-extension:' && !!globalThis.document } = options;
     this.manifest = manifest;
     this.cacheStorage = cacheStorage;
     this.fetchAsset = fetchAsset;
     this.locks = locks;
     this.storage = storage;
     this.persistenceSession = persistenceSession;
+    this.beforeDownload = beforeDownload;
+    this.shared = shared;
     this.queue = Promise.resolve();
   }
 
@@ -123,7 +129,8 @@ export class ModelAssetCache {
     return files;
   }
 
-  inspect({ signal } = {}) {
+  inspect({ signal, onChange } = {}) {
+    if (this.shared) return this.sharedRequest('inspect', { signal, onChange });
     return this.exclusive(async () => {
       const cache = await this.cacheStorage.open(MODEL_CACHE_NAME);
       return this.snapshot(await this.scan(cache, signal));
@@ -138,6 +145,7 @@ export class ModelAssetCache {
   }
 
   async prepare({ onChange = () => {}, signal } = {}) {
+    if (this.shared) return this.sharedRequest('prepare', { onChange, signal });
     try {
       return await this.exclusive(async () => {
         let files, activeFile;
@@ -152,7 +160,7 @@ export class ModelAssetCache {
           for (let i = 0; i < files.length; i++) {
             if (files[i].cached) continue;
             controller.signal.throwIfAborted();
-            await requestStoragePersistence(this.storage, { locks: this.locks, session: this.persistenceSession });
+            await this.beforeDownload();
             controller.signal.throwIfAborted();
             activeFile = this.manifest.files[i];
             const completeBytes = this.snapshot(files).cachedBytes;
@@ -192,6 +200,48 @@ export class ModelAssetCache {
     } catch (error) {
       const result = this.failure(error); onChange(result); return result;
     }
+  }
+
+  // A page owns only its subscription. The shared worker owns the fetch so
+  // closing its first consumer cannot destroy a transfer another page needs.
+  sharedRequest(operation, { signal, onChange = () => {} }) {
+    return new Promise(resolve => {
+      let worker, finished = false;
+      const finish = view => {
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener('abort', cancel);
+        globalThis.removeEventListener('pagehide', cancel);
+        worker?.port.close();
+        resolve(view);
+      };
+      const cancel = () => {
+        worker?.port.postMessage({ type: 'cancel' });
+        finish(this.failure(signal?.reason || new DOMException('Preparation canceled.', 'AbortError')));
+      };
+      if (signal?.aborted) { cancel(); return; }
+      try {
+        worker = new SharedWorker(new URL('./model-asset-worker.js', import.meta.url), { type: 'module', name: 'model-assets' });
+        worker.onerror = event => {
+          event.preventDefault();
+          finish(this.failure(Error(event.message || 'Shared model asset worker failed.')));
+        };
+        worker.port.onmessage = async ({ data }) => {
+          if (finished) return;
+          if (data.type === 'progress') onChange(data.view);
+          if (data.type === 'result') finish(data.view);
+          if (data.type === 'persist') {
+            // persist() is a Window API. The existing origin-wide lock/session
+            // marker still makes this best effort and once per browser session.
+            await this.beforeDownload();
+            if (!finished) worker.port.postMessage({ type: 'persisted' });
+          }
+        };
+        signal?.addEventListener('abort', cancel, { once: true });
+        globalThis.addEventListener('pagehide', cancel, { once: true });
+        worker.port.postMessage({ type: operation, manifest: this.manifest });
+      } catch (error) { finish(this.failure(error)); }
+    });
   }
 
   remove() {

@@ -3,6 +3,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { installAssetQuotaFixture, setAssetQuota, setAssetOffline } from './model-asset-worker-fixture.js';
 
 const bundle = path.resolve('dist/chrome-extension');
 const launch = profile => chromium.launchPersistentContext(profile, {
@@ -46,6 +47,7 @@ const test = base.extend({
     let context;
     try {
       await cp(bundle, root, { recursive: true, filter: source => !source.includes(`${path.sep}vendor`) });
+      await installAssetQuotaFixture(root);
       const file = path.join(root, 'extension/cache-demo-manifest.js');
       const source = await readFile(file, 'utf8');
       // Replace only the data source in the test copy. Actual scripts and CSP,
@@ -116,11 +118,13 @@ test('actual MV3 cache UI streams downloads, reuses assets on page recreation an
   await prepare(page); expect(f.requests).toHaveLength(2);
   await f.restart(); page = await open(f);
   await expect(page.locator('#cache-status')).toHaveText('Ready');
+  await setAssetOffline(page, true);
   await f.context.setOffline(true); await prepare(page); expect(f.requests).toHaveLength(2);
   await page.locator('#delete').click();
   await expect(page.locator('#cache-status')).toHaveText('Not downloaded');
   await expect(page.locator('#files')).toContainText('config.json: Missing');
   await page.locator('#prepare').click(); await expect(page.locator('#cache-status')).toHaveText('Error');
+  await setAssetOffline(page, false);
   await f.context.setOffline(false); await prepare(page);
   expect(f.requests).toHaveLength(4);
 });
@@ -161,19 +165,10 @@ for (const mode of ['network', 'short', 'corrupt']) {
 test('quota fault injection and explicit cancellation show retryable errors in the real cache UI', async ({ cacheExtension: f }) => {
   const page = await open(f);
   await expect(page.locator('#cache-status')).toHaveText('Not downloaded');
-  await page.evaluate(() => {
-    const put = Cache.prototype.put;
-    Cache.prototype.put = async function(key, response) {
-      if (String(key).endsWith('weights.bin')) {
-        await response.body.cancel(); throw new DOMException('Fixture disk full', 'QuotaExceededError');
-      }
-      return put.call(this, key, response);
-    };
-    window.restoreCachePut = () => { Cache.prototype.put = put; };
-  });
+  await setAssetQuota(page, 'weights.bin');
   await page.locator('#prepare').click(); await expect(page.locator('#cache-status')).toHaveText('Error');
   await expect(page.locator('#cache-error')).toContainText('quota exceeded');
-  await page.evaluate(() => window.restoreCachePut());
+  await setAssetQuota(page);
   f.mode('hold'); await page.locator('#prepare').click();
   await expect.poll(() => page.locator('#progress').evaluate(element => element.value)).toBeGreaterThan(46);
   await page.locator('#cancel').click(); await expect(page.locator('#cache-status')).toHaveText('Error');
@@ -204,7 +199,8 @@ base('unmodified packaged cache fixture page prepares project-owned fixtures wit
     await expect(page.locator('#cache-status')).toHaveText('Not downloaded');
     await prepare(page);
     expect(requests.every(url => url.startsWith(`chrome-extension://${id}/`))).toBe(true);
-    expect(requests.some(url => /worker|vendor|recorder\.js/.test(url))).toBe(false);
+    expect(requests.filter(url => /worker|vendor|recorder\.js/.test(url))
+      .every(url => url.endsWith('/model-asset-worker.js'))).toBe(true);
     expect(errors).toEqual([]);
     await page.locator('#persist').click();
     const actual = await page.evaluate(() => navigator.storage.persisted());

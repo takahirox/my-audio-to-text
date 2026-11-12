@@ -28,14 +28,16 @@ test('direct palette/canvas/settings use ordinary Text formatter; Graph actions 
   await save(editor); expect(f.requests).toEqual([]);
 });
 
-test('Save prepares only saved English → Japanese Nodes once, after persistence, without capture or Workers; verified cache reuse and invalid cache retry', async ({ graphExtension: f }) => {
+test('Save prepares only saved English → Japanese Nodes once, after persistence, without capture or inference Workers; verified cache reuse and invalid cache retry', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor, initial = await saved(live);
   await editor.evaluate(() => {
     window.beforePersistence = [];
-    const nativeFetch = window.fetch;
-    window.fetch = (...args) => {
-      if (String(args[0]).startsWith('http://127.0.0.1')) window.beforePersistence.push(!(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'OpusMtEnJa'));
-      return nativeFetch(...args);
+    const persisted = navigator.storage.persisted.bind(navigator.storage);
+    // The shared asset worker asks a Window for persistence immediately before
+    // its first download; fetch itself no longer belongs to the editor.
+    navigator.storage.persisted = () => {
+      window.beforePersistence.push(!(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'OpusMtEnJa'));
+      return persisted();
     };
     navigator.mediaDevices.getUserMedia = () => { throw Error('Save must not capture'); };
   });
@@ -44,7 +46,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
   await save(editor); await expect(cards(editor)).toHaveCount(1);
   await expect(cards(editor).locator('.model-status')).toContainText('Ready');
   expect(f.requests).toHaveLength(7); expect(f.requests.every(url => url.startsWith('/opus-mt-en-ja-assets.json/'))).toBe(true);
-  expect(await editor.evaluate(() => window.beforePersistence)).toEqual(Array(7).fill(false));
+  expect(await editor.evaluate(() => window.beforePersistence)).toEqual([false]);
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.evaluate(() => window.graphWorkers.every(worker => /sherpa-worker|silero-worker/.test(worker.url)))).toBe(true);
   const before = await saved(live); expect(before.version).toBe(15); expect(before.edges).toEqual(initial.edges);

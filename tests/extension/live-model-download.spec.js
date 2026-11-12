@@ -1,6 +1,7 @@
 import { test as base, expect } from '@playwright/test';
 import { edge } from '../../extension/graph.js';
 import { liveModelFixture, summaryGraph } from './live-model-fixture.js';
+import { setAssetQuota, setAssetOffline } from './model-asset-worker-fixture.js';
 
 const test = base.extend({ live: async ({}, use) => {
   const fixture = await liveModelFixture();
@@ -86,17 +87,11 @@ test('explicit graph selection resolves subgraph requirements without downloadin
 
 for (const mode of ['network', 'corrupt', 'quota', 'offline']) test(`${mode} failure disables Start and Retry models recovers inside Live using intact files`, async ({ live: f }) => {
   await f.save();
-  if (mode === 'quota') await f.context.addInitScript(() => {
-    const put = Cache.prototype.put;
-    Cache.prototype.put = async function(key, response) {
-      if (String(key).endsWith('weights.bin')) {
-        await response.body.cancel(); throw new DOMException('Fixture disk full', 'QuotaExceededError');
-      }
-      return put.call(this, key, response);
-    };
-    window.restoreCachePut = () => { Cache.prototype.put = put; };
-  });
-  if (mode === 'offline') await f.context.setOffline(true);
+  if (mode === 'quota') await setAssetQuota(f.editor, 'weights.bin');
+  if (mode === 'offline') {
+    await setAssetOffline(f.editor, true);
+    await f.context.setOffline(true);
+  }
   else f.mode(mode);
   const page = await f.open();
   await expect(page.locator('#model-status')).toHaveText('Models unavailable');
@@ -104,7 +99,8 @@ for (const mode of ['network', 'corrupt', 'quota', 'offline']) test(`${mode} fai
   await expect(page.locator('#errors')).toContainText(mode === 'corrupt' ? 'Corrupt asset' : mode === 'quota' ? 'quota exceeded' : mode === 'network' ? 'Invalid response' : 'Failed to fetch');
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
   await expect(page.locator('#retry-models')).toBeVisible();
-  if (mode === 'quota') await page.evaluate(() => restoreCachePut());
+  if (mode === 'quota') await setAssetQuota(page);
+  if (mode === 'offline') await setAssetOffline(page, false);
   await f.context.setOffline(false); f.mode('normal');
   await page.locator('#retry-models').click(); await ready(page);
   expect(f.requests.filter(url => url.endsWith('config.json'))).toHaveLength(1);
@@ -115,7 +111,7 @@ test('two Live windows and Auto Save share one verified download; canceling a wa
   await f.save(); f.mode('hold'); const first = await f.open();
   await expect(first.locator('#model-status')).toContainText('Downloading model…');
   const second = await f.open();
-  await expect(second.locator('#model-status')).toContainText('Checking model files…');
+  await expect(second.locator('#model-status')).toContainText('Downloading model…');
   // Auto Save's file-only pipeline shares exactly the same origin/model locks.
   await f.editor.evaluate(async graph => {
     const { GraphModelPreparation } = await import('./graph-model-preparation.js');
@@ -134,6 +130,87 @@ test('two Live windows and Auto Save share one verified download; canceling a wa
   await first.close();
   await second.locator('#start').click();
   await expect(second.locator('#live-displays')).toContainText('Ready summary');
+});
+
+for (const action of ['stop', 'close', 'replace']) test(`${action} of the downloading owner preserves the single transfer for another Live and Auto Save`, async ({ live: f }) => {
+  await f.save(); f.mode('hold'); const first = await f.open();
+  await expect.poll(() => f.requests).toEqual(['/config.json', '/weights.bin']);
+  // A separate saved graph shares the manifest but must not follow replacement
+  // of the first window's graph.
+  const graphId = await f.editor.evaluate(async graph => {
+    const { GraphLibrary } = await import('./graph-library.js');
+    const library = await new GraphLibrary(localStorage).create({ name: 'Peer graph', graph });
+    return library.graphs.at(-1).id;
+  }, summaryGraph());
+  const second = await f.open({ graphId });
+  await expect(second.locator('#model-status')).toContainText('Downloading model…');
+  await f.editor.evaluate(async graph => {
+    const { GraphModelPreparation } = await import('./graph-model-preparation.js');
+    window.assetPreparation = new GraphModelPreparation();
+    graph.nodes = graph.nodes.filter(node => node.id !== 'parked');
+    assetPreparation.replace(graph);
+  }, summaryGraph());
+  await expect.poll(() => f.editor.evaluate(() => assetPreparation.entries[0].view.state)).toBe('Downloading');
+  if (action === 'close') await first.close();
+  else if (action === 'stop') {
+    await first.locator('#stop').click();
+    await expect(first.locator('#model-status')).toContainText('Preparation canceled');
+  } else {
+    const graph = summaryGraph(); graph.edges = [edge('source', 'value', 'display', 'input1')];
+    await f.save(graph); await ready(first);
+  }
+  // The server response must still belong to the original request after the
+  // owner's subscription is detached, including when its document is gone.
+  f.release(); await ready(second);
+  await expect.poll(() => f.editor.evaluate(() => assetPreparation.entries[0].view.state)).toBe('Ready');
+  expect(f.requests).toEqual(['/config.json', '/weights.bin']);
+  if (action === 'stop') {
+    await expect(first.locator('#start')).toBeDisabled();
+    expect(await first.evaluate(() => modelWorkers.length)).toBe(0);
+    await first.locator('#retry-models').click(); await ready(first);
+  } else if (action === 'replace') expect(await first.evaluate(() => modelWorkers.length)).toBe(0);
+  await second.locator('#start').click();
+  await expect(second.locator('#live-displays')).toContainText('Ready summary');
+  expect(f.requests).toEqual(['/config.json', '/weights.bin']);
+});
+
+for (const owner of ['manual', 'Auto Save']) test(`canceling the ${owner} downloading owner preserves Live's transfer`, async ({ live: f }) => {
+  await f.save(); f.mode('hold');
+  await f.editor.evaluate(async ({ graph, owner }) => {
+    if (owner === 'manual') {
+      const { ModelAssetCache } = await import('./model-asset-cache.js');
+      const { textSummaryManifest } = await import('./text-summary-cache.js');
+      window.downloadController = new AbortController();
+      void new ModelAssetCache(await textSummaryManifest('TextSummaryLfm2'))
+        .prepare({ signal: downloadController.signal });
+    } else {
+      const { GraphModelPreparation } = await import('./graph-model-preparation.js');
+      window.assetPreparation = new GraphModelPreparation();
+      graph.nodes = graph.nodes.filter(node => node.id !== 'parked');
+      assetPreparation.replace(graph);
+    }
+  }, { graph: summaryGraph(), owner });
+  await expect.poll(() => f.requests).toEqual(['/config.json', '/weights.bin']);
+  const page = await f.open();
+  await expect(page.locator('#model-status')).toContainText('Downloading model…');
+  await f.editor.evaluate(owner => {
+    if (owner === 'manual') downloadController.abort(); else assetPreparation.close();
+  }, owner);
+  f.release(); await ready(page);
+  expect(f.requests).toEqual(['/config.json', '/weights.bin']);
+});
+
+test('canceling the last consumer aborts the held transfer and Retry reuses completed files', async ({ live: f }) => {
+  await f.save(); f.mode('hold'); const page = await f.open();
+  await expect.poll(() => f.requests).toEqual(['/config.json', '/weights.bin']);
+  await page.locator('#stop').click();
+  await expect(page.locator('#model-status')).toContainText('Preparation canceled');
+  await expect.poll(() => f.activeTransfers).toBe(0);
+  // Retry must not wait for the abandoned stream to complete.
+  await page.locator('#retry-models').click();
+  await expect.poll(() => f.requests).toEqual(['/config.json', '/weights.bin', '/weights.bin']);
+  f.release(); await ready(page);
+  expect(f.requests).toEqual(['/config.json', '/weights.bin', '/weights.bin']);
 });
 
 for (const action of ['stop', 'close', 'replace']) test(`${action} while downloading suppresses stale completion and preserves verified files`, async ({ live: f }) => {

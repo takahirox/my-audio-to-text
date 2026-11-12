@@ -52,7 +52,9 @@ export async function prepareGraphModelAssets(graph, { signal, onChange = () => 
       const manifest = await requirement.manifest();
       signal?.throwIfAborted();
       const cache = createCache(manifest);
-      let view = await cache.inspect({ signal });
+      let view = await cache.inspect({ signal, onChange: view => {
+        if (!signal?.aborted) onChange(requirement, view);
+      } });
       signal?.throwIfAborted();
       // Cached graphs take the read-only fast path. A missing-file prepare
       // rechecks under the same lock in case another consumer finished first.
