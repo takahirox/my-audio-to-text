@@ -1,0 +1,80 @@
+{
+  "issue": 307,
+  "purpose": "Complete the production extension build validation requested in PR #308 review.",
+  "validatedAtUTC": "2026-11-12T06:32:23.785895+00:00",
+  "validatedCommit": "177453b9d14fca504cab61f5958ec0679464cf22",
+  "publishedPRHead": "ac18bb857cf57ae18e9f57dc9027e24c38d3197f",
+  "trackedSourceMatchesPublishedPRHead": true,
+  "setup": {
+    "command": "npm run setup:extension",
+    "exitCode": 0,
+    "completedSteps": [
+      "npm ci",
+      "prepare:assets",
+      "prepare:translation-assets",
+      "prepare:whisper-assets",
+      "prepare:tts-assets",
+      "prepare:zipformer-assets",
+      "prepare:optional-asr-assets",
+      "prepare:text-summary-assets",
+      "build:extension"
+    ],
+    "result": "Passed using the unmodified repository scripts and their pinned asset integrity checks; no fixture assets or build-check bypasses."
+  },
+  "productionBuild": {
+    "command": "npm run build:extension (final setup:extension step)",
+    "exitCode": 0,
+    "outputDirectory": "dist/chrome-extension",
+    "files": 271,
+    "bytes": 393329378,
+    "rootManifest": {
+      "path": "dist/chrome-extension/manifest.json",
+      "name": "My Audio to Text",
+      "action": {
+        "default_title": "Transcribe this tab"
+      },
+      "sha256": "98026ce00d0ddb9639e860bd8fcf280f3526bcf673f1377023ddbd6685d87ba9",
+      "byteIdenticalToSourceAndNestedManifest": true,
+      "onlyManifestChangeFromBeforeIssue307": "name"
+    },
+    "packagedFilesMatchSource": {
+      "extension": {
+        "result": "passed",
+        "files": 79,
+        "bytes": 1193268
+      },
+      "web/vendor": {
+        "result": "passed",
+        "files": 68,
+        "bytes": 285170516
+      },
+      "web/licenses": {
+        "result": "passed",
+        "files": 26,
+        "bytes": 255479
+      },
+      "web/tts-assets": {
+        "result": "passed",
+        "files": 22,
+        "bytes": 106441098
+      },
+      "sharedWebFiles": {
+        "result": "passed",
+        "files": 75
+      }
+    }
+  },
+  "unitTests": {
+    "command": "npm test",
+    "exitCode": 0,
+    "passed": 946,
+    "failed": 0,
+    "skipped": 0
+  },
+  "artifactPolicy": "Generated model/runtime assets, caches, dependencies and dist output remain Git-ignored; this record preserves the build result.",
+  "humanVerification": {
+    "status": "pending",
+    "question": "After rebuilding and reloading this revision in Chrome, does My Audio to Text appear in the extension list and at the top of the toolbar-icon right-click menu? Provide an observed result or screenshot and identify the tested revision.",
+    "result": null
+  }
+}
