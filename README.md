@@ -2,11 +2,11 @@
 
 The Chrome extension also supports [local IfCondition branching](docs/if-condition-node.md):
 edit a natural-language condition and route the original TEXT to Yes or No with
-a small browser-local classifier. Save prepares its verified 14 MB model.
+a small browser-local classifier. Auto Save prepares its verified 14 MB model.
 
 The extension also has independent [LFM2.5 1.2B JP and Qwen3.5 2B text-summary
 processors](docs/text-summary-nodes.md). Summarize arbitrary TEXT with a
-multiline prompt in Settings, using the existing Save-prepared local WebGPU
+multiline prompt in Settings, using the existing Auto Save-prepared local WebGPU
 models. Compose rolling updates explicitly with TextWindow, TextFormatter and
 Hold. For manual on-demand requests, use a [Live Button and triggered Hold](docs/graph-actions.md). Connect `summary → Display.input1`. Read the recorded accuracy
 limitations before relying on generated facts.
@@ -29,7 +29,7 @@ provisional / final transcript
 
 Capture helpers normalize audio to mono 16 kHz PCM before passing it to the [Local ASR Core](docs/local-asr-core.md). ReazonSpeech ja-en, sherpa-onnx, Silero VAD and the hayamimi-inspired simulated-streaming policy are the core's current implementation. This replaceable ASR baseline is one processing capability within the product vision.
 
-The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR or Text constants with optional OPUS-MT or TranslateGemma 4B (English → Japanese and Japanese → English) through the same scheduling adapter. TranslateGemma requires a 3.112 GB Save-time download, Worker WebGPU and several GB RAM/GPU memory; Google Gemma Terms and Prohibited Use Policy apply. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; the extension groups committed `source/text/error` and preview `provisionalSource/provisionalText/provisionalError` as separate TEXT families sharing one owned Worker. Committed `text` can feed history or TTS directly; `provisionalText` replaces a separate preview display and clears on final input, Stop and Cancel. Unsupported saved Nodes/ports require Reset or Import of a current graph and an explicit Save. See the [contract audit](docs/port-contracts.md). The generic [TextWindow batcher](docs/windowed-translation.md) concatenates exact TEXT and emits only at a character/time threshold or Stop, with optional NUMBER inputs (defaults 600 characters / 1.5 seconds) and one TEXT output. Old TextWindow ports/settings are unsupported; use the current contract. The extension supports bounded incremental text-summary drafts; persistent history storage and broader summary/history composition remain future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
+The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and Japanese → English TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR or Text constants with optional OPUS-MT or TranslateGemma 4B (English → Japanese and Japanese → English) through the same scheduling adapter. TranslateGemma requires a 3.112 GB Auto Save download, Worker WebGPU and several GB RAM/GPU memory; Google Gemma Terms and Prohibited Use Policy apply. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; the extension groups committed `source/text/error` and preview `provisionalSource/provisionalText/provisionalError` as separate TEXT families sharing one owned Worker. Committed `text` can feed history or TTS directly; `provisionalText` replaces a separate preview display and clears on final input, Stop and Cancel. Unsupported saved Nodes/ports require Reset or Import of a current graph and automatic persistence of a repaired graph copy. See the [contract audit](docs/port-contracts.md). The generic [TextWindow batcher](docs/windowed-translation.md) concatenates exact TEXT and emits only at a character/time threshold or Stop, with optional NUMBER inputs (defaults 600 characters / 1.5 seconds) and one TEXT output. Old TextWindow ports/settings are unsupported; use the current contract. The extension supports bounded incremental text-summary drafts; persistent history storage and broader summary/history composition remain future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
 
 ## Node Playground
 
@@ -83,7 +83,7 @@ HTTPS (or localhost) and a website policy allowing microphone capture are requir
 Live and Web microphone sessions can prepare and record independently, using
 the same or different saved graphs. Stopping or closing one leaves the other
 running; actual browser/device and memory limits can still cause session errors.
-Open a library entry in Graph Editor; Save updates that entry only. Graph Editor and Models tabs provide executable graph editing and verified optional model preparation without
+Open a library entry in Graph Editor; Auto Save updates that entry only. Graph Editor and Models tabs provide executable graph editing and verified optional model preparation without
 interrupting capture. Optional local OPUS-MT pairs committed
 Japanese transcripts with English or English transcripts with Japanese using
 independent direction-specific Nodes and editable TextFormatter templates. Saved
@@ -107,14 +107,14 @@ For provisional/final history, use the [keyed display path](docs/display-items.m
 
 The extension also offers independent **Parakeet TDT 0.6B v3** (WebGPU, final
 TEXT only) and **Moonshine Medium Streaming English 245M** (CPU WASM, real
-provisional/final TEXT) Nodes. Save prepares their optional verified weights
+provisional/final TEXT) Nodes. Auto Save prepares their optional verified weights
 (1.26 GB / 305 MB). Budget substantial memory, especially for both together.
 See [setup, exact pins, licensing, limits and real-model tests](docs/optional-asr-nodes.md)
 and [packaged/native inference evidence](docs/evidence/optional-asr-121.md).
 
 Setup installs npm dependencies, downloads/verifies ReazonSpeech, Whisper and
 English Zipformer ASR models and prepares translation/TTS/text-summary runtimes, then produces `dist/chrome-extension/`. Optional
-translation/TTS, text-summary and optional ASR **weights** prepare after **Save graph** for saved processor Nodes;
+translation/TTS, text-summary and optional ASR **weights** prepare after **Auto Save** for saved processor Nodes;
 Models provides **Download / retry**, diagnostics and deletion. Open `chrome://extensions`, enable **Developer mode**, choose
 **Load unpacked** and select `dist/chrome-extension`. With assets already
 prepared, run `npm run build:extension` after source changes, then click
@@ -242,7 +242,7 @@ including text summaries, connects directly to Display.input1.
 See [contracts and wiring](docs/display-items.md), the
 [importable graph](docs/evidence/item-198.json), and the
 [executable fixture](tests/fixtures/item-graph.js). Legacy `Display.input` edges
-convert to `input1` on Load/Import; Save writes the numbered form. Other removed
+convert to `input1` on Load/Import; Auto Save writes the numbered form. Other removed
 display Nodes and ports are unsupported. Graph Editor reports them visibly and
 keeps the original available for export. Repair it and import as a new Library
 entry; saving a recovery draft cannot overwrite an invalid original. Each Live region follows updates

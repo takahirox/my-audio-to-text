@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { test, expect, chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
@@ -77,7 +78,7 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
     }, fixtures[0].text);
     await editor.reload();
     const beforeSave = requests.length;
-    await editor.locator('#graph-save').click();
+    await settleAutoSave(editor);
     const card = editor.locator('#graph-models .model-card'); await expect(card).toHaveCount(1);
     await expect(card.locator('.model-status')).toHaveText(/^(Ready.*|Error)$/, { timeout: 1200000 });
     cacheState = { status: await card.locator('.model-status').textContent(), error: await card.locator('.model-error').textContent() };
@@ -87,7 +88,7 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
     const downloaded = requests.slice(beforeSave).filter(r => sources.has(r.url));
     expect(downloaded).toHaveLength(files.length);
     const beforeReuse = requests.length;
-    await editor.locator('#graph-save').click(); await expect(card.locator('.model-status')).toContainText('Ready', { timeout: 120000 });
+    await settleAutoSave(editor); await expect(card.locator('.model-status')).toContainText('Ready', { timeout: 120000 });
     reuseRequests = requests.slice(beforeReuse).filter(r => !r.url.startsWith('chrome-extension:'));
     expect(reuseRequests).toEqual([]);
     for (const [direction, offline] of [['en-ja', false], ['en-ja', true], ['ja-en', true]]) {

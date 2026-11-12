@@ -11,7 +11,7 @@ import { qwen3TtsManifest } from './qwen3-tts-cache.js';
 import { cosyVoice3Manifest } from './cosyvoice3-cache.js';
 
 // Follow every saved model-bearing Node, including parked Nodes. Language does
-// not change Supertonic's weights; its voice does. Existing ASR assets stay packaged; optional ASR weights follow Save.
+// not change Supertonic's weights; its voice does. Existing ASR assets stay packaged; optional ASR weights follow Auto Save.
 export function graphModelRequirements(graph) {
   const requirements = new Map();
   for (const node of graph.nodes) {
@@ -41,45 +41,60 @@ export function graphModelRequirements(graph) {
 }
 
 // Asset preparation only. Call replace only after validation and persistence.
-// Each run owns its signal, so a new Save or teardown cannot publish stale state.
+// Each run owns its signal, so new requirements or teardown cannot publish stale state.
 export class GraphModelPreparation {
   constructor({ createCache = manifest => new ModelAssetCache(manifest), onChange = () => {}, onComplete = () => {} } = {}) {
     Object.assign(this, { createCache, onChange, onComplete });
-    this.entries = []; this.closed = false;
+    this.entries = []; this.closed = false; this.runs = new Map();
   }
-  replace(graph) {
+  replace(graph, { inspect = false } = {}) {
     if (this.closed) return;
-    for (const entry of this.entries) entry.controller?.abort();
-    this.entries = graphModelRequirements(graph).map(requirement => ({ ...requirement, view: { state: 'Queued', downloadedBytes: 0, totalBytes: 0, error: '' } }));
+    const requirements = graphModelRequirements(graph), previous = new Map(this.entries.map(entry => [entry.key, entry]));
+    for (const entry of this.entries) if (!requirements.some(item => item.key === entry.key)) entry.controller?.abort();
+    this.entries = requirements.map(requirement => previous.get(requirement.key) || { ...requirement, view: { state: 'Queued', downloadedBytes: 0, totalBytes: 0, error: '' } });
     this.onChange(this.entries);
-    for (const entry of this.entries) void this.run(entry);
+    for (const entry of this.entries) {
+      if (!inspect && entry.inspecting) entry.wantsPrepare = true;
+      if (entry.view.state === 'Queued' || (!inspect && entry.view.state === 'Not downloaded')) void this.run(entry, inspect);
+    }
   }
   publish(entry, view) {
     if (this.closed || !this.entries.includes(entry)) return;
     entry.view = view; this.onChange(this.entries);
   }
   cancel(entry) { entry.controller?.abort(); }
-  async run(entry, inspect = false) {
+  run(entry, inspect = false) {
     if (this.closed || entry.controller || !this.entries.includes(entry)) return;
-    const controller = new AbortController(); entry.controller = controller;
-    this.publish(entry, { ...entry.view, state: 'Checking', error: '' });
-    try {
-      if (!entry.cache) entry.cache = this.createCache(await entry.manifest());
-      controller.signal.throwIfAborted();
-      const update = view => this.publish(entry, controller.signal.aborted ? { ...view, state: 'Canceled', error: 'Preparation canceled. Retry or open Models to recover.' } : view);
-      const view = await (inspect ? entry.cache.inspect({ signal: controller.signal })
-        : entry.cache.prepare({ signal: controller.signal, onChange: update }));
-      update(view);
-    } catch (error) {
-      this.publish(entry, { ...entry.view, state: controller.signal.aborted ? 'Canceled' : 'Error',
-        error: controller.signal.aborted ? 'Preparation canceled. Retry or open Models to recover.' : `${error.message} Retry or open Models to recover.` });
-    } finally {
-      entry.controller = null;
-      if (!this.closed && this.entries.includes(entry)) {
-        this.onChange(this.entries);
-        if (!inspect) this.onComplete(entry.id);
+    const controller = new AbortController(); entry.controller = controller; entry.inspecting = inspect;
+    const previous = this.runs.get(entry.key);
+    const task = (async () => {
+      this.publish(entry, { ...entry.view, state: 'Checking', error: '' });
+      try {
+        if (previous) await previous;
+        controller.signal.throwIfAborted();
+        if (!entry.cache) entry.cache = this.createCache(await entry.manifest());
+        controller.signal.throwIfAborted();
+        const update = view => this.publish(entry, controller.signal.aborted ? { ...view, state: 'Canceled', error: 'Preparation canceled. Retry or open Models to recover.' } : view);
+        const view = await (inspect ? entry.cache.inspect({ signal: controller.signal })
+          : entry.cache.prepare({ signal: controller.signal, onChange: update }));
+        update(view);
+      } catch (error) {
+        this.publish(entry, { ...entry.view, state: controller.signal.aborted ? 'Canceled' : 'Error',
+          error: controller.signal.aborted ? 'Preparation canceled. Retry or open Models to recover.' : `${error.message} Retry or open Models to recover.` });
+      } finally {
+        entry.controller = null;
+        const prepareNext = inspect && entry.wantsPrepare && entry.view.state === 'Not downloaded';
+        entry.inspecting = false; entry.wantsPrepare = false;
+        if (prepareNext) queueMicrotask(() => { void this.run(entry); });
+        if (!this.closed && this.entries.includes(entry)) {
+          this.onChange(this.entries);
+          if (!inspect) this.onComplete(entry.id);
+        }
       }
-    }
+    })();
+    this.runs.set(entry.key, task);
+    void task.finally(() => { if (this.runs.get(entry.key) === task) this.runs.delete(entry.key); });
+    return task;
   }
   inspect(id) {
     for (const entry of this.entries) if (!id || entry.id === id) void this.run(entry, true);

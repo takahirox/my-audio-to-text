@@ -42,3 +42,12 @@ export async function recoverAsNew(page, graph) {
   }, graph);
   const url = new URL(page.url()); url.searchParams.set('id', id); await page.goto(url.href);
 }
+
+// End a focused edit transaction and observe persistence, never sleep for a
+// guessed debounce interval. Failure assertions inspect #graph-save-error.
+export async function settleAutoSave(page) {
+  await page.evaluate(() => document.activeElement?.blur());
+  if (await page.locator('#graph-retry').isVisible()) await page.locator('#graph-retry').click();
+  const { expect } = await import('@playwright/test');
+  await expect(page.locator('#graph-state')).toHaveText(/^(Saved|Save failed)$/);
+}

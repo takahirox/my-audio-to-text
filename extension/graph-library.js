@@ -11,7 +11,7 @@ function notifyVoiceLibrary() {
     if (globalThis.chrome?.runtime?.sendMessage) void chrome.runtime.sendMessage({ type: 'web-voice-library-changed' }).catch(() => {});
   } catch { /* An invalidated context must not turn a committed save into an error. */ }
 }
-const conflict = () => Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');
+const conflict = () => Error('Saved graph changed in another page. Export your draft or reload the latest graph using recovery controls; your draft has been kept.');
 const token = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 function notifyLibrary() {

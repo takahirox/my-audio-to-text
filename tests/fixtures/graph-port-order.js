@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { expect } from '@playwright/test';
 import { assertRoutingGeometry } from './graph-routing.js';
 
@@ -148,7 +149,7 @@ export async function checkPortGeometryAndInteractions(page) {
     await page.getByRole('button', { name: `${id} Remove last input`, exact: true }).click();
     await expect(port(page, id, 'input', 'input13')).toHaveCount(0); await assertRoutingGeometry(page);
   }
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page);
   const saved = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   // Gesture order can change the edge array, but never its named connections.
   expect(saved.nodes).toEqual(graph.nodes); expect(saved.version).toBe(graph.version);

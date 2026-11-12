@@ -10,7 +10,7 @@ export async function cacheOnlyIfConditionRuntime(env) {
   if (globalThis.location?.protocol !== 'chrome-extension:') throw new Error('IfCondition requires an extension-owned Worker.');
   const manifest = await ifConditionManifest(), assets = new ModelAssetCache(manifest);
   const view = await assets.inspect();
-  if (view.state !== 'Ready') throw new Error(view.error || 'IfCondition model assets missing or evicted. Save graph or open Models and retry preparation.');
+  if (view.state !== 'Ready') throw new Error(view.error || 'IfCondition model assets missing or evicted. Use Retry preparation in Graph Editor or Models.');
   const cache = await caches.open(MODEL_CACHE_NAME), allowed = new Set(manifest.files.map(file => file.url));
   env.allowLocalModels = true; env.allowRemoteModels = false;
   env.localModelPath = new URL('./missing-if-condition-models/', import.meta.url).href;
@@ -20,9 +20,9 @@ export async function cacheOnlyIfConditionRuntime(env) {
       const url = typeof request === 'string' ? request : request.url;
       if (!allowed.has(url)) return undefined; // Optional lookup gets a local 404; no network fallback.
       const response = await cache.match(url);
-      if (!response) throw new Error('IfCondition cache evicted during load. Save graph and retry preparation.');
+      if (!response) throw new Error('IfCondition cache evicted during load. Use Retry preparation in Graph Editor or Models.');
       return response;
     },
-    async put() { /* Only verified Save-time preparation writes weights. */ },
+    async put() { /* Only verified Auto Save preparation writes weights. */ },
   };
 }

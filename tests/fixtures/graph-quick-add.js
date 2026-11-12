@@ -1,6 +1,8 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { expect } from '@playwright/test';
 
 export async function seedQuickAdd(page, large = false) {
+  await settleAutoSave(page);
   await page.evaluate(async large => {
     const { graphNode, GRAPH_VERSION } = await import(new URL('./graph.js', location.href)); const { saveLiveGraphData } = await import(new URL('./graph-library.js', location.href));
     // No model preparation is needed to exercise real Save and reload.
@@ -127,14 +129,14 @@ export async function checkQuickAddInteraction(page) {
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
   await expect(page.locator('.graph-inspector')).toContainText('Instance ID: number');
-  await expect(page.locator('#graph-state')).toContainText('Unsaved');
+  await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(stored);
   await openQuickAdd(page);
   await page.getByRole('listbox', { name: 'Node types' }).getByRole('option', { name: 'Hold', exact: true }).click();
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Select hold', exact: true })).toBeFocused();
   await expect(page.locator('#graph-errors')).toBeEmpty();
-  await page.locator('#graph-save').click();
+  await settleAutoSave(page);
   await expect(page.locator('#graph-state')).toContainText('Saved');
   const saved = await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(saved.nodes.map(node => node.type)).toEqual(['Number', 'Hold']);
@@ -198,7 +200,8 @@ export async function checkQuickAddPlacement(page, width, zoom, transformed = fa
     positions.push(geometry);
   }
   expect(new Set((await snapshot(page)).nodes.map(node => node.id)).size).toBe(4);
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(stored);
+  await settleAutoSave(page);
+  await expect(page.locator('#graph-state')).toHaveText('Saved');
   await expect(page.locator('#graph-errors')).toBeEmpty();
 }
 export async function checkQuickAddTouch(page) {

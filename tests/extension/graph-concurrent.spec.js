@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { clickGraphAction } from './ui-controls.js';
@@ -128,8 +129,8 @@ test('MV3 drafts save/reload, optional warnings default off and persist, empty e
   await editor.locator('.graph-actions > summary').click(); await editor.getByLabel('Show optional warnings').uncheck();
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await clickGraphAction(editor,'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Warning:');
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
-  await expect(editor.locator('#graph-errors')).toBeEmpty();
+  await settleAutoSave(editor);
+  await expect(editor.locator('#graph-save-error')).toBeEmpty();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('#errors')).toContainText('No executable path');
   expect(await page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(0);

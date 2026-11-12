@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { corruptSavedGraph, recoverAsNew } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { writeFile } from 'node:fs/promises';
@@ -15,7 +16,7 @@ test('MV3 portable ITEM graph keeps final rows visible through queued Worker rep
   const live = await openGraph(f), graph = itemGraph();
   await live.editor.evaluate(async graph => { const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, graph); }, graph);
   await live.editor.reload(); await expect(live.editor.locator('#graph-errors')).toBeEmpty();
-  await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(live.editor);
   expect(await live.editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   await live.evaluate(async () => { const { TabSession } = await import('./session.js'); const start = TabSession.prototype.prepareModels;
     TabSession.prototype.prepareModels = function(...args) { this.prepareTranslation = async () => {}; return start.apply(this, args); };
@@ -50,7 +51,7 @@ test('MV3 unsupported saved Nodes/ports fail visibly and recover as a new graph 
   await corruptSavedGraph(live.editor, raw);
   await live.reload(); await live.editor.reload();
   live.editor.on('dialog', dialog => dialog.accept());
-  await expect(live.editor.locator('#graph-state')).toContainText('Unsaved');
+  await expect(live.editor.locator('#graph-state')).toHaveText('Save failed');
   await expect(live.locator('#start')).toBeDisabled();
   await expect(live.editor.locator('#errors')).toContainText('Unknown Node type: ViewBuilder');
   await expect(live.editor.locator('#errors')).toContainText('Repair by importing a copy as a new graph');
@@ -66,11 +67,13 @@ test('MV3 unsupported saved Nodes/ports fail visibly and recover as a new graph 
   await expect(live.editor.locator('#graph-errors')).toBeEmpty();
   const outputs = await live.editor.locator('[data-node="pair"] [data-side="output"]').allTextContents();
   expect(outputs).toHaveLength(1); expect(outputs[0]).toContain('pair');
-  await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-errors')).toContainText('original has been kept');
+  await settleAutoSave(live.editor); await expect(live.editor.locator('#graph-save-error')).toContainText('original has been kept');
   await recoverAsNew(live.editor, itemGraph()); await expect(live.editor.locator('#errors')).toBeEmpty();
-  await live.reload(); await expect(live.locator('#errors')).toBeEmpty();
+  const recovered = new URL(live.editor.url()).searchParams.get('id');
+  const liveURL = new URL(live.url()); liveURL.searchParams.set('graph', recovered);
+  await live.goto(liveURL.href); await expect(live.locator('#errors')).toBeEmpty();
   await live.editor.reload(); await live.editor.locator('.graph-actions > summary').click();
   await live.editor.locator('#graph-reset').click();
-  await live.editor.locator('#graph-save').click(); await expect(live.editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(live.editor);
   expect(await live.editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'Display'))).toBe(true);
 });

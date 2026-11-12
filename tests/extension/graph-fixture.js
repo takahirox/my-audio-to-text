@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { openPalette, loadTranslationFixture } from './ui-controls.js';
 import { startReadyLive } from './live-lifecycle.js';
 import { test as base, expect, chromium } from '@playwright/test';
@@ -192,7 +193,7 @@ export async function addAudioPath(page, type) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).click();
     await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).click();
   }
-  await expect(editor.locator('#graph-errors')).toBeEmpty(); await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  await expect(editor.locator('#graph-errors')).toBeEmpty(); await settleAutoSave(editor);
 }
 export async function disconnectWire(editor, route) {
   const wire = editor.getByRole('button', { name: `Select connection ${route}`, exact: true });

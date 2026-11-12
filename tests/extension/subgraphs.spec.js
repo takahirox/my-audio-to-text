@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { test, expect, library } from './library-fixture.js';
 
 async function openParent(f, id, tabId) {
@@ -37,7 +38,7 @@ test('toolbar parent windows resolve shared edits on next Start while independen
   const shared = await context.newPage(); await shared.goto(url + 'graph-editor.html?id=shared');
   await shared.getByRole('button', { name: 'Select format', exact: true }).click();
   await shared.getByLabel('format template', { exact: true }).fill('After: {1}');
-  await shared.locator('#graph-save').click(); await expect(shared.locator('#graph-state')).toHaveText('Saved');
+  await settleAutoSave(shared); await expect(shared.locator('#graph-state')).toHaveText('Saved');
   await expect(live.locator('#live-displays')).toContainText('Before: A');
   await expect(other.locator('#live-displays')).toContainText('Before: B');
   await expect(live.locator('#saved-state')).toContainText('Next session: Parent A');

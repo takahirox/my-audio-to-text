@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -55,7 +56,7 @@ test('portable pair accumulator and ITEM sink palette, independent editor connec
   await expect(port('display input input1')).toBeEnabled();
   await expect(port('keyedpairedtextaccumulator input pair')).toBeDisabled();
   await port('left output value').press('Enter');
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page);
   await expect(page.locator('#graph-errors')).toBeEmpty();
   const saved = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   await page.reload();

@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { test, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -84,8 +85,8 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
         edges: [edge('text', 'value', 'hold', 'input'), edge('button', 'trigger', 'hold', 'trigger'), edge('hold', 'value', 'model', 'text'), edge('model', kind === 'held-summary' ? 'summary' : 'audio', 'output', kind === 'held-summary' ? 'input1' : 'audio')] };
     }
     await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
-    await editor.reload(); await editor.locator('#graph-save').click();
-    await expect(editor.locator('#graph-save')).toBeEnabled();
+    await editor.reload(); await settleAutoSave(editor);
+
     await expect(editor.locator('#graph-errors')).toBeEmpty();
     await expect(editor.locator('#graph-models .model-card')).toHaveAttribute('data-state', 'Ready', { timeout: 180000 });
     expect(await editor.evaluate(() => graphWorkers.length)).toBe(0);

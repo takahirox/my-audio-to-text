@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { readFile } from 'node:fs/promises';
 import { test, expect, library, create } from './library-fixture.js';
 import { graphNode, edge, defaultGraph } from '../../extension/graph.js';
@@ -332,41 +333,23 @@ test('Required models stays visible through selection, model search and resolved
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
 });
 
-test('selected editor saves only its ID, protects drafts across tabs and warns before leaving', async ({ libraryExtension: f }) => {
+test('selected editor Auto Saves only its ID, gives secondary pages read-only inspection and flushes navigation', async ({ libraryExtension: f }) => {
   const { page, context, url } = f;
   const a = await create(page, 'Graph A', simple('A')), b = await create(page, 'Graph B', simple('B'));
-  await page.reload(); const original = (await library(page)).graphs.find(entry => entry.id === b);
+  const original = (await library(page)).graphs.find(entry => entry.id === b);
   const editor = await context.newPage(); await editor.goto(url + `graph-editor.html?id=${a}`);
-  await expect(editor.locator('#graph-name')).toHaveText('Graph A');
-  await editor.getByRole('button', { name: 'Select source', exact: true }).press('ArrowRight');
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-state')).toHaveText('Saved');
+  await editor.getByRole('button', { name: 'Select source', exact: true }).press('ArrowRight'); await settleAutoSave(editor);
   expect((await library(page)).graphs.find(entry => entry.id === b)).toEqual(original);
-  expect((await library(page)).assignments.live).toBe('default-live');
   const second = await context.newPage(); await second.goto(editor.url());
-  await editor.getByRole('button', { name: 'Select source', exact: true }).press('ArrowRight');
-  await second.getByRole('button', { name: 'Select source', exact: true }).press('ArrowDown');
-  await second.locator('#graph-save').click(); await expect(second.locator('#graph-state')).toHaveText('Saved');
-  await expect(editor.locator('.graph-state-notice')).toContainText('draft kept');
-  const saved = await library(page);
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('Load saved');
-  expect(await library(page)).toEqual(saved);
-  // An unrelated graph save cannot clear the selected entry's conflict.
-  await page.evaluate(async id => {
-    const { GraphLibrary, readLibrary, entryGraph } = await import('./graph-library.js');
-    const entry = readLibrary(localStorage).graphs.find(entry => entry.id === id);
-    const graph = entryGraph(entry); graph.nodes[0].settings.value = 'B edited';
-    await new GraphLibrary(localStorage).save(id, entry.revision, graph);
-  }, b);
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('Load saved');
-  await editor.locator('.graph-actions > summary').click();
-  editor.once('dialog', dialog => dialog.accept()); await editor.locator('#graph-load').click();
-  await expect(editor.locator('#graph-state')).toHaveText('Saved');
-  await editor.getByRole('button', { name: 'Select source', exact: true }).press('ArrowRight');
-  let warned = false;
-  editor.once('dialog', async dialog => { warned = dialog.type() === 'beforeunload'; await dialog.dismiss(); });
-  await editor.goto(url + 'graph-library.html').catch(() => {}); expect(warned).toBe(true);
-  await expect(editor.locator('#graph-name')).toHaveText('Graph A');
-  await editor.close();
+  await expect(second.locator('#graph-state')).toHaveText('Read-only');
+  await expect(second.locator('#graph-palette-toggle')).toBeDisabled();
+  await editor.getByLabel('source value', { exact: true }).fill('Flushed before navigation');
+  await editor.getByRole('link', { name: 'Library', exact: true }).click(); await expect(editor).toHaveURL(/graph-library.html/);
+  await second.getByRole('button', { name: 'Start editing', exact: true }).click();
+  await expect(second.locator('#graph-state')).toHaveText('Saved');
+  await second.getByRole('button', { name: 'Select source', exact: true }).click();
+  await expect(second.getByLabel('source value', { exact: true })).toHaveValue('Flushed before navigation');
+  await expect(second.locator('#graph-undo')).toBeDisabled();
 });
 
 test('toolbar activity follows only the running graph ID across snapshot saves, reload and Stop', async ({ libraryExtension: f }) => {
@@ -388,9 +371,9 @@ test('toolbar activity follows only the running graph ID across snapshot saves, 
   await editorB.reload();
   await expect(badgeA).toBeVisible(); await expect(badgeB).toBeHidden();
   await editorA.getByRole('button', { name: 'Select source', exact: true }).press('ArrowRight');
-  await expect(editorA.locator('#graph-state')).toHaveText('Unsaved');
+  await expect(editorA.locator('#graph-state')).toHaveText(/Saving…|Saved/);
   await expect(editorA.locator('.graph-state-notice')).toBeHidden();
-  await editorA.locator('#graph-save').click();
+  await settleAutoSave(editorA);
   await expect(editorA.locator('#graph-state')).toHaveText('Saved');
   await expect(editorA.locator('.graph-state-notice')).toContainText('earlier graph; saved edits apply next session');
   await expect(badgeA).toBeVisible(); await expect(badgeB).toBeHidden();
@@ -425,7 +408,7 @@ test('migration preserves valid and malformed legacy sources; recovery never ove
       const downloading = page.waitForEvent('download'); await detailAction(page, 'export');
       expect(await readFile(await (await downloading).path(), 'utf8')).toBe(raw);
       const editor = await context.newPage(); await editor.goto(url + 'graph-editor.html?id=legacy-graph');
-      await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('original has been kept');
+      await settleAutoSave(editor); await expect(editor.locator('#graph-save-error')).toContainText('original has been kept');
       await page.locator('#new').click();
       await expect(page.locator('#selected-title')).toHaveText('Untitled graph');
       await assign(page, 'live', (await library(page)).graphs.at(-1).id);
@@ -931,7 +914,7 @@ test('delayed details writes reject concurrent editor changes but permit unrelat
   await expect.poll(() => page.evaluate(() => detailWrites.length)).toBe(1);
   const editor = await context.newPage(); await editor.goto(url + `graph-editor.html?id=${original.id}`);
   await editor.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-state')).toHaveText('Saved');
+  await settleAutoSave(editor); await expect(editor.locator('#graph-state')).toHaveText('Saved');
   const remote = await library(page);
   await page.locator('#graph-description').fill('Newer local text');
   await page.evaluate(() => releaseDetailsWrites());

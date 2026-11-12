@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph } from './graph-fixture.js';
@@ -7,7 +8,7 @@ async function add(editor, type) {
   await openPalette(editor); await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
 }
 async function save(editor) {
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(editor);
 }
 const card = editor => editor.locator('#graph-models .model-card');
 
@@ -21,16 +22,16 @@ test('palette, Save and reload preserve current connected graph and parked direc
   await expect(editor.locator('#graph-asset-notice')).toContainText('Gemma Terms');
   await editor.keyboard.press('Escape');
   for (const type of ['translategemmaenja', 'translategemmajaen']) await expect(editor.getByRole('button', { name: `${type} input context`, exact: true })).toBeVisible();
-  for (const [source, output, target, input] of [['text', 'value', 'translategemmaenja', 'text'], ['text', 'value', 'translategemmaenja', 'context'], ['translategemmaenja', 'text', 'texttodom', 'text'], ['texttodom','dom','livetextdisplay','dom']]) {
+  for (const [source, output, target, input] of [['text', 'value', 'translategemmaenja', 'text'], ['text', 'value', 'translategemmaenja', 'context'], ['translategemmaenja', 'text', 'display', 'input1']]) {
     await editor.getByRole('button', { name: `${source} output ${output}`, exact: true }).press('Enter');
     await editor.getByRole('button', { name: `${target} input ${input}`, exact: true }).press('Enter');
   }
-  expect(f.requests).toEqual([]); await save(editor);
+  await save(editor);
   await expect(card(editor)).toHaveCount(1); await expect(card(editor).locator('.model-status')).toContainText('Ready');
   expect(f.requests).toHaveLength(8); expect(f.requests.every(r => r.startsWith('/translategemma-assets.json/'))).toBe(true);
   const graph = await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(graph.version).toBe(15); expect(graph.nodes.some(n => n.type === 'TranslateGemmaJaEn')).toBe(true);
-  expect(graph.edges).toContainEqual({ from: ['translategemmaenja', 'text'], to: ['texttodom', 'text'] });
+  expect(graph.edges).toContainEqual({ from: ['translategemmaenja', 'text'], to: ['display', 'input1'] });
   expect(graph.edges).toContainEqual({ from: ['text', 'value'], to: ['translategemmaenja', 'context'] });
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   await save(editor); await expect(card(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(8);
@@ -55,7 +56,7 @@ for (const mode of ['error', 'short', 'corrupt', 'hold']) test(`Gemma Save survi
     await expect(card(editor).locator('.model-status')).toHaveText('Canceled');
   } else await expect(card(editor).locator('.model-status')).toHaveText('Error');
   const before = await editor.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
-  expect(JSON.parse(before).nodes.some(n => n.type === 'TranslateGemmaEnJa')).toBe(true);
+  expect(JSON.parse(before).graphs.find(entry => entry.id === new URL(editor.url()).searchParams.get('id')).graph.nodes.some(n => n.type === 'TranslateGemmaEnJa')).toBe(true);
   f.mode('normal'); await card(editor).getByRole('button', { name: 'Retry preparation', exact: true }).click();
   await expect(card(editor).locator('.model-status')).toContainText('Ready');
   expect(await editor.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
