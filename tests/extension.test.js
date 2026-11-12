@@ -242,8 +242,10 @@ test('toolbar Open remembers its selection and preserves invoking tabs in distin
     windows: { create: async options => created.push(options) },
   };
   let seq = 0;
-  runInNewContext(readFileSync('extension/background.js', 'utf8').replace(/^import .*\n/, ''), {
-    chrome, URLSearchParams, crypto: { randomUUID: () => `session-${++seq}` },
+  runInNewContext(readFileSync('extension/background.js', 'utf8').replace(/^import .*\n/gm, ''), {
+    WEB_VOICE_KEY: 'voice', WEB_VOICE_POSITION_KEY: 'position', WEB_VOICE_POSITIONS: ['auto', 'left', 'right'],
+    onWebVoiceStateChanged() {}, readWebVoiceState: async () => ({ enabled: false, pending: false }), readVoicePosition: async () => 'auto',
+    chrome: { ...chrome, storage: { onChanged: { addListener() {} } } }, URLSearchParams, crypto: { randomUUID: () => `session-${++seq}` },
     authorizeLiveTabCapture: (session, tabId, openWindow) => openWindow(),
     requestLaunchLibrary: async (op, id) => {
       if (op === 'live-check') return id;
@@ -269,7 +271,7 @@ test('toolbar Open remembers its selection and preserves invoking tabs in distin
   assert.ok(items.filter(item => item.id.startsWith('live-run:')).every(item => item.parentId === 'live-open' && item.type === 'radio' && ['A', 'B'].includes(item.title)));
   assert.ok(!items.some(item => /Live graphs|Default for left-click|Live default/.test(item.title)));
   assert.ok(items.every(item => item.contexts.join() === 'action'));
-  assert.ok(items.filter(item => !item.parentId).every(item => item.id === 'live-graphs'));
+  assert.ok(items.filter(item => !item.parentId).every(item => ['live-graphs', 'web-microphone', 'microphone-position'].includes(item.id)));
 });
 
 test('failed toolbar selection opens only an error, restores checked state, and serializes refresh storms', async () => {
@@ -290,8 +292,10 @@ test('failed toolbar selection opens only an error, restores checked state, and 
     runtime: { id: 'id', getURL: path => `chrome-extension://id/${path}`, onMessage: event('message'), onStartup: event('startup'), onInstalled: event('installed') },
     windows: { create: async options => windows.push(options) },
   };
-  runInNewContext(readFileSync('extension/background.js', 'utf8').replace(/^import .*\n/, ''), {
-    chrome, URLSearchParams, crypto: { randomUUID: () => 'session' },
+  runInNewContext(readFileSync('extension/background.js', 'utf8').replace(/^import .*\n/gm, ''), {
+    WEB_VOICE_KEY: 'voice', WEB_VOICE_POSITION_KEY: 'position', WEB_VOICE_POSITIONS: ['auto', 'left', 'right'],
+    onWebVoiceStateChanged() {}, readWebVoiceState: async () => ({ enabled: false, pending: false }), readVoicePosition: async () => 'auto',
+    chrome: { ...chrome, storage: { onChanged: { addListener() {} } } }, URLSearchParams, crypto: { randomUUID: () => 'session' },
     authorizeLiveTabCapture: (session, tabId, openWindow) => openWindow(),
     requestLaunchLibrary: (op, id) => {
       if (op === 'live-open') return new Promise((resolve, reject) => { rejectSelection = reject; });

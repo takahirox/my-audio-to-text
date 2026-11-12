@@ -1,5 +1,3 @@
-import { webVoiceChoices } from './web-voice-graph.js';
-import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_ORIGINS, WEB_VOICE_KEY, voiceEnabled } from './web-voice-preference.js';
 import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, resolvedEntryGraph, entryError, exportEntry, legacyChanged, usable, compareGraphNames } from './graph-library.js';
 import { GRAPH_KEY } from './graph.js';
 import { graphModelRequirements } from './graph-model-preparation.js';
@@ -8,7 +6,7 @@ import { GraphDetailsAutosave, DETAILS_DRAFT_KEY } from './graph-library-details
 
 const element = id => document.getElementById(id), store = new GraphLibrary(localStorage);
 const selectionKey = 'graph-library-selection';
-let library, selectedId, fatal = false, refreshVoiceStatus = () => {};
+let library, selectedId, fatal = false;
 let selectionRequest = 0, actionPending = false;
 const details = new GraphDetailsAutosave({ store, storage: sessionStorage,
   name: element('graph-name'), description: element('graph-description'), status: element('details-state'), retry: element('retry-details'),
@@ -135,7 +133,6 @@ function render(replaceDetails = false) {
   element('graph-count').textContent = matches;
   element('empty').hidden = !!matches;
   renderSelectedState();
-  refreshVoiceStatus();
   const changed = legacyChanged(localStorage, library);
   element('recovery').hidden = !changed;
   element('recover-legacy').hidden = !changed;
@@ -145,7 +142,7 @@ async function action(work, { selectNew = false, recover = false, onError } = {}
   if (actionPending) return false;
   actionPending = true; ++selectionRequest;
   if (!recover && !await details.flush()) { actionPending = false; return false; }
-  const controls = [...document.querySelectorAll('#new, main button, main input:not(#web-voice-enabled), main select, main textarea')].map(node => [node, node.disabled]);
+  const controls = [...document.querySelectorAll('#new, main button, main input, main select, main textarea')].map(node => [node, node.disabled]);
   for (const [node] of controls) node.disabled = true;
   const restore = () => { for (const [node, disabled] of controls) node.disabled = disabled; };
   try {
@@ -183,138 +180,8 @@ try {
   fatal = true; element('errors').textContent = error.message;
   element('recovery').hidden = false; element('recover-legacy').hidden = true;
   element('recovery-message').textContent = 'Original storage is available for export. No saved data has been overwritten.';
-  for (const node of document.querySelectorAll('#new, main button, main input:not(#web-voice-enabled), main select')) node.disabled = !['export-storage', 'export-legacy'].includes(node.id);
+  for (const node of document.querySelectorAll('#new, main button, main input, main select')) node.disabled = !['export-storage', 'export-legacy'].includes(node.id);
   element('selected').hidden = true;
-}
-// Consent remains revocable even if graph storage needs recovery.
-{
-  const help = element('web-voice-help');
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && help.open) {
-      help.open = false; help.querySelector('summary').focus();
-    }
-  });
-  document.addEventListener('click', event => { if (!help.contains(event.target)) help.open = false; });
-  const toggle = element('web-voice-enabled'), status = element('web-voice-status');
-  let voiceMessage = '', hasWebsiteAccess = true, voicePending = false, enableCanceled = false, savedEnabled = false, accessCheck = 0, preferenceChange = 0;
-  let observedPreference, pendingEnabled;
-  refreshVoiceStatus = () => {
-    element('voice-switch-state').textContent = toggle.checked ? 'ON' : 'OFF';
-    const count = library ? webVoiceChoices(library).length : null;
-    status.textContent = voiceMessage || (toggle.checked && !hasWebsiteAccess ? 'Website access missing. Turn OFF, then ON to grant access.' : count === 0 ? 'No compatible graphs. Connect MicrophoneAudio through final text processing to FocusedInputTextOutputNode in Graph Editor.' : '');
-  };
-  const checkWebsiteAccess = async () => {
-    const check = ++accessCheck;
-    try {
-      const granted = await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS });
-      if (check === accessCheck) hasWebsiteAccess = granted;
-    } catch { voiceMessage = 'Could not check website access. Turn ON to retry, or reload Graph Library.'; }
-    refreshVoiceStatus();
-  };
-  async function reconcileVoice(stop = false) {
-    const reply = await chrome.runtime.sendMessage({ type: 'web-voice-reconcile', stop });
-    if (!reply?.ok) throw Error(reply?.error || 'Web microphone did not respond.');
-  }
-  async function changeVoice(enabled, permission) {
-    const restoreFocus = document.activeElement === toggle;
-    const operationId = crypto.randomUUID();
-    const previousOperationId = observedPreference?.operationId;
-    // Keep the last confirmed state visible until persistence and reconciliation finish.
-    pendingEnabled = savedEnabled;
-    voicePending = true; enableCanceled = false; toggle.disabled = true; toggle.checked = pendingEnabled;
-    toggle.setAttribute('aria-busy', 'true');
-    refreshVoiceStatus();
-    try {
-      if (enabled) {
-        if (!await permission) throw Error('Website access denied or dismissed.');
-        // A grant can be removed, or another Library can turn OFF, while the
-        // native prompt is pending. Never overwrite that newer OFF decision.
-        if (!await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS })) throw Error('Website access changed.');
-        hasWebsiteAccess = true;
-      }
-      if (enabled && enableCanceled) throw Error('Website access or opt-in changed.');
-      await navigator.locks.request(WEB_VOICE_KEY, async () => {
-        if (enabled && enableCanceled) throw Error('Website access or opt-in changed.');
-        await setVoiceEnabled(enabled, operationId);
-      });
-      await reconcileVoice();
-      savedEnabled = await readVoiceEnabled();
-      if (enabled) {
-        const granted = await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS });
-        if (enableCanceled || !savedEnabled || !granted) throw Error('Website access or opt-in changed.');
-      }
-      toggle.checked = savedEnabled; voiceMessage = '';
-    } catch (error) {
-      let failure = error.message, stateKnown = true;
-      let superseded = enabled && enableCanceled;
-      await navigator.locks.request(WEB_VOICE_KEY, async () => {
-        // Serialize the ownership check, rollback and cleanup with other Library
-        // writes. Even ON -> ON needs a unique owner so an older rejection cannot
-        // erase a newer opt-in, including when both native prompts overlap.
-        if (!superseded) {
-          let current;
-          try {
-            current = (await chrome.storage.local.get(WEB_VOICE_KEY))[WEB_VOICE_KEY];
-          } catch {
-            // Storage events still identify a newer opt-in when reads fail.
-            // Without one, continue rollback and cleanup rather than leaving
-            // this operation's partially enabled controls running.
-            stateKnown = false; current = observedPreference;
-          }
-          // A rejected OFF write can still see the original ON owner; only
-          // an intervening opt-in supersedes that OFF intent.
-          superseded = voiceEnabled(current) && current.operationId !== operationId
-            && (enabled || current.operationId !== previousOperationId);
-        }
-        if (superseded) return;
-        try { await setVoiceEnabled(false); savedEnabled = false; }
-        catch (saveError) { failure += ` Could not save OFF: ${saveError.message}`; }
-        // Stop controls even if an OFF write fails; later reconciliation may
-        // restore them until OFF can be saved successfully.
-        try { await reconcileVoice(true); }
-        catch (stopError) { failure += ` Could not stop page controls: ${stopError.message} Close affected tabs to stop them.`; }
-      });
-      try { savedEnabled = await readVoiceEnabled(); }
-      catch { stateKnown = false; }
-      toggle.checked = savedEnabled;
-      voiceMessage = superseded && stateKnown && savedEnabled ? '' : `${failure} ${!stateKnown
-        ? 'Could not verify saved settings. Web microphone may still be ON. Reload Graph Library to retry.'
-        : savedEnabled ? 'Web microphone is still ON in saved settings and may restart. Turn OFF to retry, or reload Graph Library.'
-          : 'Web microphone is OFF. Turn ON to retry, or reload Graph Library.'}`;
-    } finally {
-      voicePending = false; toggle.disabled = false; toggle.removeAttribute('aria-busy'); refreshVoiceStatus();
-      if (restoreFocus && [document.body, toggle].includes(document.activeElement)) toggle.focus({ preventScroll: true });
-    }
-  }
-  toggle.onchange = () => {
-    if (voicePending) { toggle.checked = pendingEnabled; return; }
-    if (!toggle.checked) { void changeVoice(false); return; }
-    // Request synchronously in the switch gesture, before any storage read,
-    // contains check, messaging or await can consume Chrome's user activation.
-    let permission;
-    try { permission = chrome.permissions.request({ origins: WEB_VOICE_ORIGINS }); }
-    catch (error) { permission = Promise.reject(error); }
-    void changeVoice(true, permission);
-  };
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes[WEB_VOICE_KEY]) {
-      ++preferenceChange;
-      observedPreference = changes[WEB_VOICE_KEY].newValue;
-      savedEnabled = voiceEnabled(observedPreference);
-      if (voicePending && !savedEnabled) enableCanceled = true;
-      if (!voicePending) { toggle.checked = savedEnabled; voiceMessage = ''; }
-      refreshVoiceStatus();
-    }
-  });
-  chrome.permissions.onRemoved.addListener(() => { if (voicePending) enableCanceled = true; void checkWebsiteAccess(); });
-  chrome.permissions.onAdded.addListener(() => { void checkWebsiteAccess(); });
-  try {
-    const change = preferenceChange, preference = (await chrome.storage.local.get(WEB_VOICE_KEY))[WEB_VOICE_KEY];
-    if (change === preferenceChange) { observedPreference = preference; savedEnabled = voiceEnabled(preference); toggle.checked = savedEnabled; }
-  }
-  catch { voiceMessage = 'Could not read Web microphone settings. Reload Graph Library to retry.'; }
-  await checkWebsiteAccess();
-  refreshVoiceStatus(); toggle.disabled = false;
 }
 if (!fatal) {
   element('graph-list').onkeydown = event => {

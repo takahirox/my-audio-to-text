@@ -37,7 +37,7 @@ test('native Graphs → Open remembers selections, refreshes names and preserves
   const a = await create(f.page, 'A', simple('A')), b = await create(f.page, 'B', simple('B'));
   const draft = await create(f.page, 'Unconnected', { version: 15, nodes: [graphNode('Text', 'parked')], edges: [] });
   await waitMenu(f, 'live-run:' + a, 'A');
-  await expect.poll(async () => (await choices(f)).map(({ id, parentId, title, type }) => ({ id, parentId, title, type }))).toEqual([
+  await expect.poll(async () => (await choices(f)).filter(item => item.id.startsWith('live-')).map(({ id, parentId, title, type }) => ({ id, parentId, title, type }))).toEqual([
     { id: 'live-graphs', title: 'Graphs' },
     { id: 'live-open', parentId: 'live-graphs', title: 'Open' },
     { id: 'live-run:' + a, parentId: 'live-open', title: 'A', type: 'radio' },
@@ -47,11 +47,13 @@ test('native Graphs → Open remembers selections, refreshes names and preserves
   ]);
   expect((await choices(f)).some(item => item.id === 'live-run:' + draft)).toBe(false);
   expect((await choices(f)).every(item => item.contexts.join() === 'action')).toBe(true);
+  expect((await choices(f)).filter(item => !item.parentId).map(item => [item.title, item.type])).toEqual([['Web microphone', 'checkbox'], ['Microphone position', undefined], ['Graphs', undefined]]);
+  expect((await choices(f)).filter(item => item.parentId === 'microphone-position').map(item => [item.title, item.type, item.checked])).toEqual([['Auto', 'radio', true], ['Left', 'radio', false], ['Right', 'radio', false]]);
   // Building/reading menus never changes a valid selection or opens a window.
   expect((await library(f.page)).assignments.live).toBe('default-live');
   expect(f.context.pages().filter(page => page.url().includes('recorder.html'))).toHaveLength(0);
   const first = await open(f, a, 41), second = await open(f, b, 42), third = await clickAction(f, 43);
-  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:' + b]);
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked && item.id.startsWith('live-run:')).map(item => item.id)).toEqual(['live-run:' + b]);
   expect((await library(f.page)).assignments.live).toBe(b);
   for (const [page, name] of [[first, 'A'], [second, 'B'], [third, 'B']]) {
     await expect(page.locator('#live-graph-name')).toHaveText(name);
@@ -211,7 +213,7 @@ test('missing/deleted/invalid selections fall back by name; stale Open IDs never
   await expect(invalid.locator('#errors')).toContainText('cannot run');
   await expect(invalid.locator('#start')).toBeDisabled();
   await expect.poll(async () => (await library(f.page)).assignments.live).toBe(b);
-  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:' + b]);
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked && item.id.startsWith('live-run:')).map(item => item.id)).toEqual(['live-run:' + b]);
   await f.page.evaluate(async id => {
     const { GraphLibrary } = await import('./graph-library.js'); await new GraphLibrary(localStorage).delete(id);
   }, b);
@@ -229,10 +231,10 @@ test('unset selection uses the same numeric, kana and stable tie order as Open w
     }
     await store.change(library => { library.assignments.live = null; });
   }, simple('Ordered'));
-  await expect.poll(async () => (await choices(f)).filter(item => item.type === 'radio').map(item => item.id)).toEqual([
+  await expect.poll(async () => (await choices(f)).filter(item => item.type === 'radio' && item.id.startsWith('live-run:')).map(item => item.id)).toEqual([
     'live-run:n2', 'live-run:n10', 'live-run:default-live', 'live-run:a-tie', 'live-run:z-tie', 'live-run:kana-a', 'live-run:kana-i',
   ]);
-  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:n2']);
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked && item.id.startsWith('live-run:')).map(item => item.id)).toEqual(['live-run:n2']);
   expect((await library(f.page)).assignments.live).toBe('n2');
   const revision = (await library(f.page)).revision;
   const first = await clickAction(f, 56);
@@ -249,10 +251,10 @@ test('unset selection uses the same numeric, kana and stable tie order as Open w
       library.assignments.live = null;
     });
   });
-  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:kana-a']);
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked && item.id.startsWith('live-run:')).map(item => item.id)).toEqual(['live-run:kana-a']);
   const kana = await clickAction(f, 59); await expect(kana.locator('#live-graph-name')).toHaveText('あ');
   await f.restart();
-  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:kana-a']);
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked && item.id.startsWith('live-run:')).map(item => item.id)).toEqual(['live-run:kana-a']);
   expect((await library(f.page)).assignments.live).toBe('kana-a');
 });
 

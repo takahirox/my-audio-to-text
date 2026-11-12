@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { webVoiceGraph, webVoiceError, webVoiceChoices, webVoiceDefault } from '../extension/web-voice-graph.js';
-import { voiceEnabled } from '../extension/web-voice-preference.js';
+import { voiceEnabled, voicePosition } from '../extension/web-voice-preference.js';
 import { graphNode, edge, defaultGraph } from '../extension/graph.js';
 
 function voice() {
@@ -11,6 +11,10 @@ function voice() {
 test('enablement requires exact versioned boolean consent; assignment cannot enable it', () => {
   for (const value of [undefined, null, true, {}, { enabled: true }, { version: 1, enabled: 'true' }, { version: 2, enabled: true }, { version: 1, enabled: false }, { assignments: { webVoice: 'saved' } }]) assert.equal(voiceEnabled(value), false);
   assert.equal(voiceEnabled({ version: 1, enabled: true }), true);
+});
+test('microphone position accepts only Auto/Left/Right values and defaults safely', () => {
+  for (const value of ['auto', 'left', 'right']) assert.equal(voicePosition(value), value);
+  for (const value of [undefined, null, '', 'Left', 'bottom', {}, true, 1]) assert.equal(voicePosition(value), 'auto');
 });
 test('typed executable connectivity, not node presence, names or Live defaults', () => {
   assert.equal(webVoiceError(voice()), '');

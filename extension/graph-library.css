@@ -45,19 +45,6 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 .required-models { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4rem 1rem; font-size: .85rem; color: var(--muted); margin: 1rem 0 0; }
 .required-models dd { margin: 0; overflow-wrap: anywhere; }
 
-.web-microphone { display: flex; align-items: center; margin-left: auto; gap: .25rem; }
-.voice-status { font-size: .85rem; color: var(--warning); margin: 0 0 1rem; overflow-wrap: anywhere; }
-#web-voice-help { margin: 0; font-size: .85rem; color: var(--muted); }
-#web-voice-help summary { display: grid; place-items: center; width: 44px; min-height: 44px; border-radius: var(--control-radius); list-style: none; font-size: 1.2rem; }
-#web-voice-help summary::-webkit-details-marker { display: none; }
-#web-voice-help summary:hover, #web-voice-help[open] summary { background: var(--surface-hover); color: var(--accent); }
-#web-voice-help > div { position: absolute; z-index: 2; right: 0; top: 100%; width: min(40rem, 100%); max-height: 60dvh; overflow: auto; overflow-wrap: anywhere; padding: .5rem 1rem; border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--panel); box-shadow: var(--popover-shadow); }
-.voice-switch { display: flex; align-items: center; gap: .4rem; min-height: 44px; cursor: pointer; font-weight: 650; font-size: .85rem; white-space: nowrap; }
-.voice-switch input { appearance: none; width: 2.6rem; height: 1.5rem; min-height: 0; border: 1px solid var(--muted); border-radius: 1rem; padding: 2px; background: #d9dfe8; margin: 0; cursor: pointer; }
-.voice-switch input::before { content: ''; display: block; width: 1.1rem; height: 1.1rem; border-radius: 50%; background: white; box-shadow: 0 1px 3px #202b4240; }
-.voice-switch input:checked { background: var(--accent); border-color: var(--accent); }
-.voice-switch input:checked::before { transform: translateX(1.1rem); }
-.voice-switch input:disabled { opacity: .5; cursor: wait; }
 #recovery { margin-top: 1rem; }
 @media (max-width: 1050px) { .library-list { padding: 1rem; } .section-heading { align-items: flex-start; } }
 @media (max-width: 900px) {
@@ -69,8 +56,6 @@ body.library-page { max-width: none; padding: 0; min-height: 100dvh; }
 }
 @media (forced-colors: active) {
   #graph-list li.selected { outline: 2px solid Highlight; outline-offset: -2px; }
-  .voice-switch input { appearance: auto; }
-  .voice-switch input::before { display: none; }
 }
 
 .details-save-status { font-size: .85rem; margin-bottom: .75rem; }

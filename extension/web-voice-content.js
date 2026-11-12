@@ -37,6 +37,14 @@
   const value = element => native(element) ? element.value : element.textContent;
   let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle', inserting = false;
   let listeners, menu, menuCaret, choices = [], defaultId = null, selectionPending = false;
+  const positionKey = 'web-microphone-position-v1';
+  const validPosition = value => ['auto', 'left', 'right'].includes(value) ? value : 'auto';
+  let microphonePosition = 'auto', positionRevision = 0;
+  const initialPositionRevision = positionRevision;
+  void chrome.storage.local.get(positionKey).then(saved => {
+    if (positionRevision !== initialPositionRevision) return;
+    microphonePosition = validPosition(saved[positionKey]); schedulePosition();
+  }).catch(() => {});
   let placementFrame;
   function schedulePosition() {
     if (placementFrame || !enabled) return;
@@ -93,10 +101,13 @@
     const parent = modal || document.documentElement;
     if (host.parentElement !== parent) parent.append(host);
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    // Stay beside the field: right first, left only at the viewport edge.
-    // Crowded pages must never suppress an otherwise available idle mic.
-    let left = rect.right + gap;
-    if (left + controlSize > bounds.right) left = rect.left - gap - controlSize;
+    // Placement is a field-relative preference; the opposite side and viewport
+    // clamps keep idle microphones and active Stop/Cancel reachable at edges.
+    const right = rect.right + gap, leftSide = rect.left - gap - controlSize;
+    let left = microphonePosition === 'left' ? leftSide : right;
+    if (microphonePosition === 'left' ? left < bounds.left : left + controlSize > bounds.right) {
+      left = microphonePosition === 'left' ? right : leftSide;
+    }
     const anchor = {
       left: clamp(left, bounds.left, bounds.right - controlSize),
       top: clamp((rect.top + rect.bottom - controlSize) / 2, bounds.top, bounds.bottom - controlSize),
@@ -420,6 +431,11 @@
     listen(); connect();
   });
   chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[positionKey]) {
+      ++positionRevision;
+      microphonePosition = validPosition(changes[positionKey].newValue);
+      schedulePosition();
+    }
     if (area === 'local' && changes['web-voice-typing-v1'] && !(changes['web-voice-typing-v1'].newValue?.version === 1 && changes['web-voice-typing-v1'].newValue.enabled === true)) disable();
   });
   chrome.runtime.onConnect.addListener(port => {

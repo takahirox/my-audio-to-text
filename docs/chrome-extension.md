@@ -288,18 +288,24 @@ See [target policies, named ports and browser limitations](extension-graph.md).
 
 ## Opt-in Web voice typing (#247)
 
-In **Graph Library**, explicitly turn the compact **Web microphone** switch **ON**.
-The switch directly calls Chrome’s optional website-access request for
-`http://*/*` and `https://*/*`; there is no extension confirmation dialog. Chrome
-may prompt if access is missing. Only a confirmed grant enables and registers
-page controls. During ON/OFF changes, the switch stays busy/disabled and shows
-the last confirmed state until saving and reconciliation finish. Successful
-changes show no progress message or layout shift in the status area; actionable
-warnings and errors remain visible. Denial, dismissal or failure shows retry
-guidance. Turning OFF removes
-controls and cancels recording while retaining website access and the saved graph.
-This host grant is separate from the website’s microphone permission, which is
-requested only when you click its page mic.
+Right-click the extension toolbar icon and check **Web microphone**. The native
+checkbox requests Chrome’s optional `http://*/*` and `https://*/*` website access
+from that click. Only confirmed permission, persistence and script registration
+show ON. While a change is pending the checkbox is disabled. Denial or dismissal
+leaves it OFF. If Chrome rejects the menu permission request, a small explicit
+Enable window supplies a fresh user gesture; setup errors offer a retry there.
+Turning OFF immediately cancels Web recording and removes controls while retaining
+website access and the saved graph. Graph Library contains no microphone switch
+or permission help. Website microphone permission is requested only when you
+click its page mic.
+
+The toolbar **Microphone position → Auto / Left / Right** radio submenu stores
+`web-microphone-position-v1` independently of enablement. Auto (and invalid or
+missing values) defaults to right first, then left at an edge. Left and Right
+prefer that side of the editable field, falling back and clamping to the visual
+viewport. The position applies live, including safe active Stop/Cancel controls,
+without moving field focus or caret, and may be chosen while the feature is OFF.
+
 Right-click an in-page mic (or focus it and press **Shift+F10**) to select a
 compatible saved default for its next recording. The context-menu key or Alt+Down
 also opens the menu; arrows/Home/End navigate, Enter selects, and Escape dismisses.
@@ -510,7 +516,7 @@ actionable local error and released microphone. This owner check is non-blocking
 | --- | --- |
 | `activeTab` | Temporary access to the specific tab where the user invokes the action; needed for `getMediaStreamId({targetTabId})`. |
 | `scripting` | Inject toolbar-authorized focused output, or dynamically register the Web voice adapter only after explicit enablement and optional host grant. |
-| `storage` | Persist and synchronize the separate Web voice enablement preference. |
+| `storage` | Persist and synchronize Web microphone enablement, position and the selected voice graph. |
 | `offscreen` | Host independent Web dictation sessions and serialized library reads/default writes in one nonvisible DOM document (`WORKERS`, `LOCAL_STORAGE`). |
 | `contextMenus` | Native extension-action graph launcher and explicit left-click default submenu. |
 | Optional `http://*/*`, `https://*/*` | Requested only on Web voice opt-in, for top-frame mic controls. No required/global content script. |

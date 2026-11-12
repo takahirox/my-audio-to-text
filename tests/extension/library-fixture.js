@@ -1,3 +1,4 @@
+import { toolbarHarness } from './toolbar-harness.js';
 import { writeSummaryAssetFixture } from './summary-asset-fixture.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
@@ -18,17 +19,7 @@ export const test = base.extend({
       await cp('extension/manifest.json', path.join(root, 'manifest.json'));
       // Call the registered production event handlers while Chrome owns the real
       // menus, worker, offscreen DOM, windows and storage. Headless has no toolbar.
-      await writeFile(path.join(root, 'extension/toolbar-test-harness.js'), `
-        globalThis.toolbarEvents = {}; globalThis.toolbarMenus = {};
-        for (const [name, event] of [['action', chrome.action.onClicked], ['menu', chrome.contextMenus.onClicked]]) {
-          const add = event.addListener.bind(event);
-          event.addListener = listener => { toolbarEvents[name] = listener; add(listener); };
-        }
-        const create = chrome.contextMenus.create.bind(chrome.contextMenus);
-        chrome.contextMenus.create = (item, done) => { toolbarMenus[item.id] = item; return create(item, done); };
-        const remove = chrome.contextMenus.removeAll.bind(chrome.contextMenus);
-        chrome.contextMenus.removeAll = async () => { toolbarMenus = {}; return remove(); };
-      `);
+      await writeFile(path.join(root, 'extension/toolbar-test-harness.js'), toolbarHarness);
       const background = path.join(root, 'extension/background.js');
       await writeFile(background, "import './toolbar-test-harness.js';\n" + await readFile(background, 'utf8'));
 
