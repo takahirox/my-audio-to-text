@@ -1,15 +1,25 @@
 import { webVoiceChoices } from './web-voice-graph.js';
 import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_ORIGINS, WEB_VOICE_KEY, voiceEnabled } from './web-voice-preference.js';
-import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, resolvedEntryGraph, entryError, exportEntry, legacyChanged, usable } from './graph-library.js';
+import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, resolvedEntryGraph, entryError, exportEntry, legacyChanged, usable } from './graph-library.js';
 import { GRAPH_KEY, ASR_TYPES, nodeDefinition } from './graph.js';
 import { graphModelRequirements } from './graph-model-preparation.js';
 import { references } from './subgraphs.js';
+import { GraphDetailsAutosave, DETAILS_DRAFT_KEY } from './graph-library-details.js';
 import { ModelAssetCache } from './model-asset-cache.js';
 
 const element = id => document.getElementById(id), store = new GraphLibrary(localStorage);
-const selectionKey = 'graph-library-selection', draftKey = 'graph-library-details-draft';
-let library, selectedId, detailsEntry, fatal = false, refreshVoiceStatus = () => {};
+const selectionKey = 'graph-library-selection';
+let library, selectedId, fatal = false, refreshVoiceStatus = () => {};
 const states = new Map();
+let selectionRequest = 0, actionPending = false;
+const details = new GraphDetailsAutosave({ store, storage: sessionStorage,
+  name: element('graph-name'), description: element('graph-description'), status: element('details-state'), retry: element('retry-details'),
+  onSaved() {
+    library = readLibrary(localStorage);
+    if (selected()?.revision !== details.entry.revision) details.conflict();
+    element('selected-title').textContent = details.entry.name; render();
+  }
+});
 new MutationObserver(() => { element('details-error').textContent = element('errors').textContent; })
   .observe(element('errors'), { childList: true });
 const el = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
@@ -17,7 +27,7 @@ function download(text, filename) {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   const link = el('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function dirty() { return detailsEntry && (element('graph-name').value !== detailsEntry.name || element('graph-description').value !== detailsEntry.description); }
+function dirty() { return details.editing; }
 function selected() { return library.graphs.find(entry => entry.id === selectedId); }
 function models(entry) {
   if (entryError(entry, library)) return [];
@@ -29,25 +39,17 @@ function state(entry) {
   if (entryError(entry, library)) return 'Error · needs recovery';
   return states.get(JSON.stringify(resolvedEntryGraph(entry, library))) || (models(entry).length ? 'Unknown' : 'Ready · no model files');
 }
-function updateDetailsState() {
-  element('details-state').textContent = dirty() ? 'Unsaved changes' : '';
-}
-function keepDraft() {
-  updateDetailsState();
-  try {
-    if (dirty()) sessionStorage.setItem(draftKey, JSON.stringify({ entry: detailsEntry, name: element('graph-name').value, description: element('graph-description').value }));
-    else sessionStorage.removeItem(draftKey);
-  } catch { element('details-state').textContent = 'Unsaved changes · refresh recovery unavailable; save before leaving.'; }
-}
-function clearDraft() { try { sessionStorage.removeItem(draftKey); } catch {} }
 function focusDetails() {
   const title = element('selected-title');
   title.focus();
   if (matchMedia('(max-width: 900px)').matches) title.scrollIntoView({ block: 'start' });
 }
-function select(id, { focus = matchMedia('(max-width: 900px)').matches } = {}) {
-  if (id !== selectedId && dirty() && !confirm('Discard unsaved graph name or description changes?')) return false;
-  if (id !== selectedId) { clearDraft(); selectedId = id; render(true); }
+async function select(id, { focus = matchMedia('(max-width: 900px)').matches } = {}) {
+  if (actionPending) return false;
+  const request = ++selectionRequest;
+  if (id !== selectedId && !await details.flush()) return false;
+  if (request !== selectionRequest) return false;
+  if (id !== selectedId) { details.clearDraft(); selectedId = id; render(true); }
   else render();
   try { localStorage.setItem(selectionKey, id); } catch { /* Selection is optional; graph writes report their own errors. */ }
   if (focus) focusDetails();
@@ -55,17 +57,14 @@ function select(id, { focus = matchMedia('(max-width: 900px)').matches } = {}) {
 }
 function renderDetails(entry = selected()) {
   element('selected').hidden = !entry;
-  if (!entry) { detailsEntry = null; return; }
-  detailsEntry = structuredClone(entry);
+  details.load(entry);
+  if (!entry) return;
   element('selected-title').textContent = entry.name;
-  element('graph-name').value = entry.name; element('graph-description').value = entry.description;
   element('graph-more').open = false;
   element('graph-metadata').open = false;
-  updateDetailsState();
-  preview(entryError(entry, library) ? null : entryGraph(entry, library));
 }
 function renderSelectedState() {
-  const current = selected(), entry = current || detailsEntry;
+  const current = selected(), entry = current || details.entry;
   if (!entry) return;
   const invalid = entryError(entry, library), removed = !current;
   element('open').hidden = removed;
@@ -75,7 +74,6 @@ function renderSelectedState() {
   element('duplicate').disabled = !!invalid || removed;
   element('check-cache').disabled = !!invalid || removed || state(entry) === 'Unknown · checking';
   element('cache-hint').textContent = removed ? 'This graph was deleted.' : invalid ? 'Repair and import this graph before checking model files.' : '';
-  element('save-details').disabled = removed;
   const parents = references(library, entry.id);
   const last = !library.graphs.some(other => other.id !== entry.id && usable(other, library));
   element('delete').disabled = removed || last || parents.length > 0;
@@ -83,33 +81,6 @@ function renderSelectedState() {
   element('graph-updated').textContent = new Date(entry.updatedAt).toLocaleString();
   element('graph-models').textContent = invalid ? 'Unknown · repair graph first' : models(entry).join(', ') || 'None';
   element('graph-cache').textContent = state(entry);
-}
-function preview(graph) {
-  const root = element('preview'); root.replaceChildren();
-  root.setAttribute('aria-label', graph ? `Graph preview: ${graph.nodes.length} nodes, ${graph.edges.length} connections. ${graph.nodes.map(node => `${node.id}: ${(nodeDefinition(node, graph, library.graphs)?.label || node.type)}`).join('; ')}` : 'No preview available; repair this saved graph.');
-  if (!graph?.nodes.length) { root.setAttribute('viewBox', '0 0 300 100'); root.style.width = '100%'; root.style.height = '160px'; return; }
-  const svg = (tag, attributes) => {
-    const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
-    for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
-    return node;
-  };
-  const positions = new Map(graph.nodes.map((node, index) => [node.id, node.position || { x: index * 210, y: 0 }]));
-  const xs = [...positions.values()].map(p => p.x), ys = [...positions.values()].map(p => p.y);
-  root.style.width = `${Math.max(300, Math.max(...xs) - Math.min(...xs) + 200)}px`;
-  root.style.height = `${Math.max(160, Math.max(...ys) - Math.min(...ys) + 70)}px`;
-  root.setAttribute('viewBox', `${Math.min(...xs) - 10} ${Math.min(...ys) - 10} ${Math.max(...xs) - Math.min(...xs) + 200} ${Math.max(...ys) - Math.min(...ys) + 70}`);
-  for (const edge of graph.edges) {
-    const from = positions.get(edge.from[0]), to = positions.get(edge.to[0]);
-    const line = svg('line', { x1: from.x + 90, y1: from.y + 25, x2: to.x + 90, y2: to.y + 25 });
-    line.append(el('title', `${edge.from.join('.')} → ${edge.to.join('.')}`)); root.append(line);
-  }
-  for (const node of graph.nodes) {
-    const p = positions.get(node.id), group = svg('g', {});
-    group.append(svg('rect', { x: p.x, y: p.y, width: 180, height: 50, rx: 6 }));
-    const name = svg('text', { x: p.x + 8, y: p.y + 19 }); name.textContent = node.id;
-    const type = svg('text', { x: p.x + 8, y: p.y + 38 }); type.textContent = (nodeDefinition(node, graph, library.graphs)?.label || node.type);
-    group.append(name, type); root.append(group);
-  }
 }
 function render(replaceDetails = false) {
   if (!selected() && (!dirty() || replaceDetails)) selectedId = library.graphs[0].id;
@@ -136,9 +107,9 @@ function render(replaceDetails = false) {
     commands.className = 'row-commands';
     for (const [label, command] of [['Graph details', null], ['Edit graph', 'open'], ['Duplicate', 'duplicate'], ['Export JSON', 'export']]) {
       const actionButton = el('button', label);
-      actionButton.onclick = () => {
+      actionButton.onclick = async () => {
         menu.open = false;
-        if (!select(entry.id, { focus: !command })) { summary.focus(); return; }
+        if (!await select(entry.id, { focus: !command })) { summary.focus(); return; }
         if (command) {
           element(command).click();
           [...element('graph-list').children].find(row => row.dataset.id === entry.id)?.querySelector('summary').focus({ preventScroll: true });
@@ -159,7 +130,7 @@ function render(replaceDetails = false) {
   }
   element('graph-count').textContent = rows.length;
   element('empty').hidden = !!rows.length;
-  if (replaceDetails || !dirty() && (detailsEntry?.id !== selectedId || detailsEntry?.revision !== selected()?.revision)) renderDetails();
+  if (replaceDetails || !dirty() && (details.entry?.id !== selectedId || details.entry?.revision !== selected()?.revision)) renderDetails();
   renderSelectedState();
   refreshVoiceStatus();
   const changed = legacyChanged(localStorage, library);
@@ -167,16 +138,19 @@ function render(replaceDetails = false) {
   element('recover-legacy').hidden = !changed;
   element('recovery-message').textContent = changed ? 'The legacy graph changed after migration. Keep it as a separate entry before further edits. Both versions are preserved; no assignment will change.' : '';
 }
-async function action(work, { selectNew = false, savedDetails = false, onError } = {}) {
+async function action(work, { selectNew = false, recover = false, onError } = {}) {
+  if (actionPending) return false;
+  actionPending = true; ++selectionRequest;
+  if (!recover && !await details.flush()) { actionPending = false; return false; }
   const controls = [...document.querySelectorAll('#new, main button, main input, main select, main textarea')].map(node => [node, node.disabled]);
   for (const [node] of controls) node.disabled = true;
   const restore = () => { for (const [node, disabled] of controls) node.disabled = disabled; };
   try {
     const next = await work();
     restore(); library = next;
-    if (selectNew || savedDetails) clearDraft();
+    if (selectNew) details.clearDraft();
     if (selectNew) { selectedId = next.graphs.at(-1).id; try { localStorage.setItem(selectionKey, selectedId); } catch {} }
-    element('errors').textContent = ''; render(selectNew || savedDetails);
+    element('errors').textContent = ''; render(selectNew);
     if (selectNew) focusDetails();
     return true;
   } catch (error) {
@@ -184,7 +158,7 @@ async function action(work, { selectNew = false, savedDetails = false, onError }
     if (onError) onError(error);
     else element('errors').textContent = `${error.message} Nothing was overwritten. Reload or Load saved details to review current data.`;
     return false;
-  }
+  } finally { actionPending = false; }
 }
 element('export-storage').onclick = () => download(localStorage.getItem(LIBRARY_KEY) ?? 'null', 'graph-library-original.json');
 element('export-legacy').onclick = () => download(localStorage.getItem(GRAPH_KEY) ?? 'null', 'legacy-graph-original.json');
@@ -196,11 +170,10 @@ try {
   render(true);
   // Per-tab drafts survive refresh without changing library data or revisions.
   try {
-    const draft = JSON.parse(sessionStorage.getItem(draftKey));
+    const draft = JSON.parse(sessionStorage.getItem(DETAILS_DRAFT_KEY));
     if (draft?.entry?.id && draft.entry.revision && typeof draft.entry.name === 'string' && typeof draft.entry.description === 'string' && typeof draft.name === 'string' && typeof draft.description === 'string') {
       selectedId = draft.entry.id; renderDetails(draft.entry);
-      element('graph-name').value = draft.name; element('graph-description').value = draft.description;
-      updateDetailsState(); render(); focusDetails();
+      details.restore(draft); render(); focusDetails();
     }
   } catch { element('errors').textContent = 'Could not restore unsaved details. Saved graphs are unchanged.'; }
 } catch (error) {
@@ -291,39 +264,40 @@ if (!fatal) {
   more.addEventListener('click', event => {
     if (event.target.closest('button')) { more.open = false; more.querySelector('summary').focus(); }
   });
-  for (const id of ['graph-name', 'graph-description']) element(id).addEventListener('input', keepDraft);
   for (const id of ['search', 'sort', 'filter']) element(id).addEventListener(id === 'search' ? 'input' : 'change', () => render());
-  element('new').onclick = () => { if (!dirty() || confirm('Discard unsaved graph details?')) void action(() => store.create({}, library.revision), { selectNew: true }); };
+  element('new').onclick = () => { void action(() => store.create({}, library.revision), { selectNew: true }); };
   element('import').onclick = () => element('import-file').click();
   element('import-file').onchange = async () => {
     const file = element('import-file').files?.[0]; if (!file) return;
     try {
       const graph = JSON.parse(await file.text());
-      if (!dirty() || confirm('Discard unsaved graph details?')) await action(() => store.import(graph, file.name.replace(/\.json$/i, '') || 'Imported graph', library.revision), { selectNew: true });
+      await action(() => store.import(graph, file.name.replace(/\.json$/i, '') || 'Imported graph', library.revision), { selectNew: true });
     } catch (error) { element('errors').textContent = `Cannot import graph: ${error.message}. Existing graphs have been kept.`; }
     finally { element('import-file').value = ''; }
   };
-  element('details-form').onsubmit = event => {
-    event.preventDefault();
-    if (!selected()) return;
-    void action(() => store.rename(selectedId, element('graph-name').value, element('graph-description').value, detailsEntry.revision), { savedDetails: true });
+  element('details-form').onsubmit = event => { event.preventDefault(); void details.flush(); };
+  element('load-details').onclick = async () => {
+    if (actionPending) return;
+    actionPending = true; ++selectionRequest;
+    try {
+      if (details.pending) await details.pending;
+      if (dirty() && !confirm('Discard unsaved graph details and load saved details?')) return;
+      library = readLibrary(localStorage); details.clearDraft(); render(true); element('errors').textContent = '';
+    } catch (error) { element('errors').textContent = error.message; }
+    finally { actionPending = false; }
   };
-  element('load-details').onclick = () => {
-    if (dirty() && !confirm('Discard unsaved graph details and load saved details?')) return;
-    try { library = readLibrary(localStorage); clearDraft(); render(true); element('errors').textContent = ''; } catch (error) { element('errors').textContent = error.message; }
-  };
-  element('duplicate').onclick = () => { if (!dirty() || confirm('Discard unsaved graph details?')) void action(() => store.duplicate(selectedId, library.revision), { selectNew: true }); };
+  element('duplicate').onclick = () => { void action(() => store.duplicate(selectedId, library.revision), { selectNew: true }); };
   element('export').onclick = () => {
-    const entry = selected() || detailsEntry;
+    const entry = selected() || details.entry;
     download(exportEntry(entry, library), `${entry.name.replace(/[^\p{L}\p{N} _-]/gu, '_')}.json`);
   };
   element('delete').onclick = () => {
     const entry = selected(); if (!entry) return;
-    if (confirm(`Delete “${entry.name}”? This cannot be undone.${dirty() ? ' Unsaved details will also be discarded.' : ''}`)) void action(() => store.delete(selectedId, library.revision)).then(success => {
-      if (success) { clearDraft(); selectedId = library.graphs[0].id; render(true); focusDetails(); }
+    if (confirm(`Delete “${entry.name}”? This cannot be undone.`)) void action(() => store.delete(selectedId, library.revision)).then(success => {
+      if (success) { details.clearDraft(); selectedId = library.graphs[0].id; render(true); focusDetails(); }
     });
   };
-  element('recover-legacy').onclick = () => { void action(() => store.recoverLegacy(library.revision)); };
+  element('recover-legacy').onclick = () => { void action(() => store.recoverLegacy(library.revision), { recover: true }); };
   element('check-cache').onclick = async () => {
     const entry = selected(); if (!entry) return;
     const key = JSON.stringify(resolvedEntryGraph(entry, library));
@@ -343,7 +317,7 @@ if (!fatal) {
     try {
       library = readLibrary(localStorage);
       void chrome.runtime.sendMessage({ type: 'web-voice-library-changed' }).catch(() => {});
-      if (dirty()) element('errors').textContent = 'Library changed in another page. Unsaved details have been kept; Load saved details before saving if this graph changed.';
+      if (dirty() && details.entry?.revision !== selected()?.revision) details.conflict();
       render();
     } catch (error) { element('errors').textContent = `${error.message} Your changes have been kept.`; }
   });
@@ -351,6 +325,6 @@ if (!fatal) {
   const invalidateCache = () => { states.clear(); render(); };
   cacheUpdates.onmessage = invalidateCache;
   window.addEventListener('focus', invalidateCache);
-  window.addEventListener('pagehide', () => cacheUpdates.close());
-  window.addEventListener('beforeunload', event => { keepDraft(); if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
+  window.addEventListener('pagehide', () => { details.keepDraft(); cacheUpdates.close(); });
+  window.addEventListener('beforeunload', event => { details.keepDraft(); if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
 }
