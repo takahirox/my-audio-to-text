@@ -39,6 +39,8 @@ OPUS-MT Japanese to English
   https://huggingface.co/Helsinki-NLP/opus-mt-ja-en
   https://huggingface.co/onnx-community/opus-mt-ja-en/tree/05470cd69b62aa32e3ee64ccfd41279789ee4b1e
   https://creativecommons.org/licenses/by/4.0/
+  Retain Helsinki-NLP and ONNX Community attribution, the CC BY license link,
+  and the quantized ONNX conversion notice when redistributing this checkpoint.
   q8 encoder/merged decoder downloaded on Run, not mirrored in this project.
 
 OPUS-MT English to Japanese
@@ -129,6 +131,7 @@ Optional extension Moonshine Voice English Medium Streaming (245M)
   @moonshine-ai/moonshine-wasm 0.1.5, source commit
   234f60faa0eb388b01cdf7e60aca232af37aefda.
   https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/
+  Source: https://moonshine-voice.readthedocs.io/en/latest/models/available-models/
   License: ./licenses/moonshine.txt
   Bundled dependency notices and source availability (including unmodified
   MPL-covered Eigen): ./licenses/moonshine-third-party.txt

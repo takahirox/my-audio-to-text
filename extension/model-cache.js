@@ -20,23 +20,23 @@ try { savedNodes = readLibrary(localStorage).graphs.flatMap(entry => {
   try { return entryGraph(entry).nodes; } catch { return []; }
 }); } catch { /* Global asset recovery remains available with broken library storage. */ }
 const definitions = [
-  { id: 'reazon', linkLabel: 'License & source', title: 'ReazonSpeech ja-en', size: 'About 77 MB · Japanese/English speech recognition. Graph preparation also requires the shared Silero VAD entry.', manifest: reazonManifest, terms: 'ReazonSpeech / k2 · Apache 2.0 · pinned epoch 35 int8', url: '../web/third-party-notices.txt' },
-  { id: 'silero', linkLabel: 'License & source', title: 'Silero VAD', size: '644 KB · shared voice activity detection for ReazonSpeech and Whisper. Deleting this entry affects preparation of both ASR paths.', manifest: sileroManifest, terms: 'Silero · MIT', url: '../web/third-party-notices.txt' },
-  { id: 'whisper', linkLabel: 'License & source', title: 'Whisper tiny · multilingual q8', size: 'About 44 MB · requires shared Silero VAD for segmentation.', manifest: whisperManifest, terms: 'OpenAI / ONNX Community · MIT', url: '../web/third-party-notices.txt' },
-  { id: 'zipformer', linkLabel: 'License & source', title: 'Zipformer English · streaming', size: 'About 45 MB · owns segmentation; does not require Silero.', manifest: zipformerManifest, terms: 'k2 / icefall · Apache 2.0', url: '../web/third-party-notices.txt' },
-  { id: 'kokoro-japanese', linkLabel: 'License & source', title: 'Kokoro Japanese · OpenJTalk frontend voice', size: 'About 1 MB · statistical voice required only by the Japanese frontend, in addition to Kokoro weights.', manifest: japaneseFrontendManifest, terms: 'HTS voice · Creative Commons Attribution 3.0', url: '../web/licenses/kokoro-japanese.txt' },
-  { id: 'qwen3-tts', linkLabel: 'License & source', title: 'Qwen3-TTS 0.6B CustomVoice · streaming', size: '690 MB shared by Japanese/English and both voices. Desktop Worker WebGPU required; allow 2 GB storage, 6 GB free RAM/GPU memory (planning estimate). No CPU/cloud fallback.', manifest: qwen3TtsManifest, terms: 'Qwen Team / Danyal Malik ONNX conversion · Apache 2.0. Includes a separately pinned Qwen speech decoder. Choose language and voice in Graph Node settings.', url: '../web/licenses/qwen3-tts.txt' },
-  { id: 'cosyvoice3', linkLabel: 'License & source', title: 'CosyVoice3 0.5B · streaming', size: '917 MB shared by English/Japanese. Desktop Worker WebGPU; allow 3 GB storage and 6 GB free RAM/GPU per Node (planning estimates). One reviewed reference voice. No CPU/cloud fallback; other languages/mobile unqualified.', manifest: cosyVoice3Manifest, terms: 'FunAudioLLM / Danyal Malik ONNX conversion · Apache 2.0. LibriTTS-R reference features: Koizumi et al., speaker 4446, CC BY 4.0. Language follows input text; spell out numbers and symbols. See attribution and exact pins.', url: '../web/licenses/cosyvoice3.txt' },
-  { id: 'meeting-summary-lfm2', linkLabel: 'License / terms', title: 'Text Summary · LFM2.5 1.2B JP', size: '749 MB download; allow 2 GB storage and 4 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Summary history is lossy.', manifest: () => textSummaryManifest('TextSummaryLfm2'), terms: 'Liquid AI · LFM Open License 1.0. Commercial use above the $10M annual revenue threshold needs a separate license; redistribution requires the license and preserved notices.', url: '../web/licenses/meeting-summary-lfm2.txt' },
-  { id: 'meeting-summary-qwen35', linkLabel: 'License', title: 'Text Summary · Qwen3.5 2B', size: '1.403 GB download; allow 3 GB storage and 6 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Text-only ONNX Community optimized conversion of Qwen/Qwen3.5-2B; export card has no conversion details. Summary history is lossy.', manifest: () => textSummaryManifest('TextSummaryQwen35'), terms: 'Qwen Team · Apache 2.0 source license. See the text-summary documentation for pinned conversion provenance and evidence.', url: '../web/licenses/meeting-summary-qwen35.txt' },
-  { id: 'if-condition', linkLabel: 'License & source', title: 'IfCondition · XtremeDistil', size: '14 MB download; allow 40 MB storage and 250 MB free RAM per active Node. CPU WASM.', manifest: ifConditionManifest, terms: 'Moritz Laurer / Microsoft · MIT', url: '../web/licenses/if-condition-model.txt' },
-  { id: 'parakeet-v3', linkLabel: 'License & source', title: 'Parakeet TDT 0.6B v3', size: '1.26 GB download; allow 3 GB storage, 6 GB free RAM/GPU memory. WebGPU shader-f16 required.', manifest: parakeetManifest, terms: 'NVIDIA · CC BY 4.0 · ysdede/istupakov ONNX conversion', url: 'https://huggingface.co/ysdede/parakeet-tdt-0.6b-v3-onnx' },
-  { id: 'moonshine-medium-en', linkLabel: 'Source', title: 'Moonshine Medium Streaming English (245M)', size: '305 MB download; allow 700 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineManifest, terms: 'Moonshine AI / Useful Sensors · MIT', url: 'https://moonshine-voice.readthedocs.io/en/latest/models/available-models/' },
-  { id: 'opus-ja-en', linkLabel: 'License', title: 'OPUS-MT · Japanese → English', size: 'About 239 MB', manifest: opusMtManifest, terms: 'Helsinki-NLP / ONNX Community · CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
-  { id: 'opus-en-ja', linkLabel: 'License & source', title: 'OPUS-MT · English → Japanese', size: 'About 253 MB', manifest: englishToJapaneseOpusMtManifest, terms: 'Helsinki-NLP / Kadonox ONNX conversion · Apache 2.0', url: 'https://huggingface.co/Helsinki-NLP/opus-tatoeba-en-ja' },
-  { id: 'translategemma', title: 'TranslateGemma 4B · English ↔ Japanese', size: '3.112 GB download shared by both directions; allow 7 GB free storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback.', manifest: translateGemmaManifest, terms: 'Google / ONNX Community · Gemma Terms of Use and Prohibited Use Policy apply to this conversion. Read before downloading or using.', linkLabel: 'Gemma terms & attribution', url: '../web/licenses/gemma-notices.txt' },
-  { id: 'supertonic3', linkLabel: 'License & source', type: 'Supertonic3', title: 'Supertonic 3', size: 'About 399 MB', voices: ['F1', 'M1'], terms: 'OpenRAIL-M weights and voices', url: '../web/licenses/tts-notices.txt' },
-  { id: 'kokoro', linkLabel: 'License & source', type: 'Kokoro', title: 'Kokoro 82M', size: 'About 93 MB. Japanese jf_alpha also needs the separate Kokoro Japanese frontend voice entry.', voices: ['jf_alpha', 'af_heart'], terms: 'Apache-2.0 weights; frontends have separate notices', url: '../web/licenses/tts-notices.txt', links: [{ label: 'eSpeak NG source / build bundle (GPL-3.0-or-later)', url: '../web/tts-assets/phonemizer-source.tar.gz' }] },
+  { id: 'reazon', linkLabel: 'License & source', title: 'ReazonSpeech ja-en', size: 'About 77 MB · Japanese/English speech recognition', requirements: 'Graph preparation also requires the shared Silero VAD entry.', manifest: reazonManifest, url: '../web/third-party-notices.txt' },
+  { id: 'silero', linkLabel: 'License & source', title: 'Silero VAD', size: '644 KB · shared voice activity detection for ReazonSpeech and Whisper', requirements: 'Deleting this entry affects preparation of both ASR paths.', manifest: sileroManifest, url: '../web/third-party-notices.txt' },
+  { id: 'whisper', linkLabel: 'License & source', title: 'Whisper tiny · multilingual q8', size: 'About 44 MB', requirements: 'Requires shared Silero VAD for segmentation.', manifest: whisperManifest, url: '../web/third-party-notices.txt' },
+  { id: 'zipformer', linkLabel: 'License & source', title: 'Zipformer English · streaming', size: 'About 45 MB', requirements: 'Owns segmentation; does not require Silero.', manifest: zipformerManifest, url: '../web/third-party-notices.txt' },
+  { id: 'kokoro-japanese', linkLabel: 'License & source', title: 'Kokoro Japanese · OpenJTalk frontend voice', size: 'About 1 MB', requirements: 'Statistical voice required only by the Japanese frontend, in addition to Kokoro weights.', manifest: japaneseFrontendManifest, url: '../web/licenses/kokoro-japanese.txt' },
+  { id: 'qwen3-tts', linkLabel: 'License & source', title: 'Qwen3-TTS 0.6B CustomVoice · streaming', size: '690 MB', requirements: 'Shared by Japanese/English and both voices. Desktop Worker WebGPU required; allow 2 GB storage, 6 GB free RAM/GPU memory (planning estimate). No CPU/cloud fallback.', manifest: qwen3TtsManifest, url: '../web/licenses/qwen3-tts.txt' },
+  { id: 'cosyvoice3', linkLabel: 'License & source', title: 'CosyVoice3 0.5B · streaming', size: '917 MB', requirements: 'Shared by English/Japanese. Desktop Worker WebGPU; allow 3 GB storage and 6 GB free RAM/GPU per Node (planning estimates). One reviewed reference voice. No CPU/cloud fallback; other languages/mobile unqualified.', manifest: cosyVoice3Manifest, url: '../web/licenses/cosyvoice3.txt' },
+  { id: 'meeting-summary-lfm2', linkLabel: 'License / terms', title: 'Text Summary · LFM2.5 1.2B JP', size: '749 MB download', requirements: 'Allow 2 GB storage and 4 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Summary history is lossy.', manifest: () => textSummaryManifest('TextSummaryLfm2'), url: '../web/licenses/meeting-summary-lfm2.txt' },
+  { id: 'meeting-summary-qwen35', linkLabel: 'License & source', title: 'Text Summary · Qwen3.5 2B', size: '1.403 GB download', requirements: 'Allow 3 GB storage and 6 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Summary history is lossy.', manifest: () => textSummaryManifest('TextSummaryQwen35'), url: '../web/licenses/meeting-summary-qwen35.txt' },
+  { id: 'if-condition', linkLabel: 'License & source', title: 'IfCondition · XtremeDistil', size: '14 MB download', requirements: 'Allow 40 MB storage and 250 MB free RAM per active Node. CPU WASM.', manifest: ifConditionManifest, url: '../web/licenses/if-condition-model.txt' },
+  { id: 'parakeet-v3', linkLabel: 'License & source', title: 'Parakeet TDT 0.6B v3', size: '1.26 GB download', requirements: 'Allow 3 GB storage, 6 GB free RAM/GPU memory. WebGPU shader-f16 required.', manifest: parakeetManifest, url: '../web/third-party-notices.txt' },
+  { id: 'moonshine-medium-en', linkLabel: 'License & source', title: 'Moonshine Medium Streaming English (245M)', size: '305 MB download', requirements: 'Allow 700 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineManifest, url: '../web/third-party-notices.txt' },
+  { id: 'opus-ja-en', linkLabel: 'License & source', title: 'OPUS-MT · Japanese → English', size: 'About 239 MB', manifest: opusMtManifest, url: '../web/third-party-notices.txt' },
+  { id: 'opus-en-ja', linkLabel: 'License & source', title: 'OPUS-MT · English → Japanese', size: 'About 253 MB', manifest: englishToJapaneseOpusMtManifest, url: '../web/third-party-notices.txt' },
+  { id: 'translategemma', title: 'TranslateGemma 4B · English ↔ Japanese', size: '3.112 GB download shared by both directions', requirements: 'Allow 7 GB free storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback.', manifest: translateGemmaManifest, linkLabel: 'License / terms', url: '../web/licenses/gemma-notices.txt' },
+  { id: 'supertonic3', linkLabel: 'License & source', type: 'Supertonic3', title: 'Supertonic 3', size: 'About 399 MB', voices: ['F1', 'M1'], url: '../web/licenses/tts-notices.txt' },
+  { id: 'kokoro', linkLabel: 'License & source', type: 'Kokoro', title: 'Kokoro 82M', size: 'About 93 MB', requirements: 'Japanese jf_alpha also needs the separate Kokoro Japanese frontend voice entry.', voices: ['jf_alpha', 'af_heart'], url: '../web/licenses/tts-notices.txt', links: [{ label: 'eSpeak NG source / build bundle (GPL-3.0-or-later)', url: '../web/tts-assets/phonemizer-source.tar.gz' }] },
 ];
 class ModelCard {
   constructor(definition) {
@@ -53,13 +53,14 @@ class ModelCard {
       this.voice.value = savedNodes.find(node => node.type === definition.type)?.settings.voice || definition.voices[0];
       label.append(this.voice); root.append(label);
       this.voice.onchange = () => { void this.inspect(); };
-      root.append(el('p', 'Configure voice and language in Graph Node settings.'));
     }
     this.status = el('p', 'Checking cached assets…'); this.status.className = 'model-status'; this.status.setAttribute('role', 'status'); heading.append(this.status);
     this.error = el('p'); this.error.className = 'model-error'; this.error.setAttribute('role', 'alert');
     this.progress = el('progress'); this.progress.hidden = true; this.progress.max = 1; this.progress.value = 0; this.progress.setAttribute('aria-label', `${definition.title} download progress`);
     this.bytes = el('p'); this.bytes.className = 'muted';
-    this.files = el('ul'); const details = el('details'); details.append(el('summary', 'Verified files and size'), this.bytes, this.files);
+    this.files = el('ul'); const details = el('details'); details.className = 'model-details';
+    details.append(el('summary', 'Details'), el('h4', 'Verified files and size'), this.bytes, this.files);
+    if (definition.requirements) details.append(el('p', definition.requirements));
     const controls = el('div'); controls.className = 'actions';
     const button = (text, action) => { const control = el('button', text); control.type = 'button'; control.onclick = action; controls.append(control); return control; };
     this.prepare = button('Download', () => { void this.run('prepare'); });
@@ -71,20 +72,20 @@ class ModelCard {
     const linkLabel = definition.linkLabel || 'Source';
     const link = el('a', linkLabel); link.href = definition.url;
     link.setAttribute('aria-label', `${linkLabel} for ${definition.title}`);
-    const notices = el('details');
-    notices.append(el('summary', 'Attribution & notices'), el('p', definition.terms));
     const license = el('div'); license.className = 'model-license'; license.append(link);
     for (const extra of definition.links || []) {
       const anchor = el('a', extra.label); anchor.href = extra.url;
       license.append(' · ', anchor);
     }
-    license.append(notices);
+    details.append(license);
     // Keep the Gemma usage warning visible before the download controls.
     if (definition.id === 'translategemma') {
-      const notice = el('p', definition.terms); notice.className = 'model-license';
-      root.append(notice);
+      const notice = el('p', 'Google Gemma use restrictions apply. Read the '); notice.className = 'model-license';
+      const terms = el('a', 'Gemma Terms of Use'); terms.href = 'https://ai.google.dev/gemma/terms';
+      const policy = el('a', 'Prohibited Use Policy'); policy.href = 'https://ai.google.dev/gemma/prohibited_use_policy';
+      notice.append(terms, ' and ', policy, ' before downloading or using.'); root.append(notice);
     }
-    root.append(this.error, this.progress, controls, details, license);
+    root.append(this.error, this.progress, controls, details);
     document.getElementById('models').append(root); this.buttons(); void this.inspect();
   }
   settings() { return { language: 'ja', voice: this.voice?.value }; }

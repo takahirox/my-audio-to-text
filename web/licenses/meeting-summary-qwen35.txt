@@ -1,3 +1,12 @@
+Text Summary: Qwen Team / Qwen3.5-2B, Apache License 2.0.
+Source: https://huggingface.co/Qwen/Qwen3.5-2B/tree/15852e8c16360a2fea060d615a32b45270f8a8fc
+ONNX Community text-only q4f16 optimized conversion:
+https://huggingface.co/onnx-community/Qwen3.5-2B-ONNX-OPT/tree/ed446636739bf426e73c5a00714fd8e010d36c21
+The pinned conversion card provides no exporter/version details or separate
+license. Upstream Apache terms apply. Retain attribution and applicable notices,
+provide the license, and identify modifications when redistributing derivatives.
+This application does not modify the downloaded weights.
+
 Source: https://huggingface.co/Qwen/Qwen3.5-2B/blob/15852e8c16360a2fea060d615a32b45270f8a8fc/LICENSE
 Formatting note: line endings normalized to LF and trailing whitespace removed; license wording unchanged.
 

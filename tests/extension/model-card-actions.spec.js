@@ -31,15 +31,14 @@ test.afterEach(async ({ graphExtension: f }) => {
 
 test('initial inspection hides Download; Ready hides it entirely; partial cache and delete allow download again', async ({ graphExtension: f }) => {
   await f.context.addInitScript(() => {
-    let release; const gate = new Promise(resolve => { release = resolve; });
-    window.releaseInspection = release;
-    // Inspection runs in the shared asset worker; hold its request rather than
-    // Window CacheStorage, which no longer observes those cache reads.
-    const postMessage = MessagePort.prototype.postMessage;
+    // Inspection runs in the SharedWorker. Hold its requests at the page's
+    // port so the initial Checking state is deterministic without replacing it.
+    const send = MessagePort.prototype.postMessage, pending = []; let released = false;
     MessagePort.prototype.postMessage = function(...args) {
-      if (args[0]?.type === 'inspect' && args[0]?.manifest) void gate.then(() => postMessage.apply(this, args));
-      else postMessage.apply(this, args);
+      if (!released && args[0]?.type === 'inspect' && args[0]?.manifest) { pending.push([this, args]); return; }
+      return send.apply(this, args);
     };
+    window.releaseInspection = () => { released = true; for (const [port, args] of pending) send.apply(port, args); };
   });
   const page = await open(f), card = page.locator('#opus-ja-en');
   await expect(card).toHaveAttribute('data-state', 'Checking');
@@ -51,8 +50,9 @@ test('initial inspection hides Download; Ready hides it entirely; partial cache 
   await expect(card).toHaveAttribute('data-state', 'Ready');
   await expect(action(card)).toBeHidden();
   await expect(card.getByRole('button', { name: 'Delete cached assets' })).toBeEnabled();
+  await expect(card.locator('.model-license a')).toBeHidden();
+  await card.locator('summary').filter({ hasText: /^Details$/ }).click();
   await expect(card.locator('.model-license a')).toBeVisible();
-  await card.getByText('Verified files and size', { exact: true }).click();
   await expect(card.locator('li').first()).toContainText('Cached');
   const count = f.requests.length;
   await page.evaluate(async () => {
@@ -173,7 +173,7 @@ for (const [id, firstVoice, secondVoice] of [['supertonic3', 'F1', 'M1'], ['koko
     await card.getByRole('button', { name: 'Delete cached assets' }).click();
     await expect(otherCard.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
     await card.locator('select').selectOption(firstVoice);
-    await card.getByText('Verified files and size', { exact: true }).click();
+    await card.locator('summary').filter({ hasText: /^Details$/ }).click();
     await expect(card).toHaveAttribute('data-state', 'Not downloaded');
     await expect(card.locator('li').filter({ hasText: id === 'kokoro' ? 'voices/jf_alpha.bin: Cached' : 'voice_styles/F1.json: Cached' })).toHaveCount(1);
     await expect(unrelated).toHaveAttribute('data-state', 'Ready'); await expect(action(unrelated)).toBeHidden();

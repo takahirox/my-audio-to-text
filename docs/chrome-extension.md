@@ -50,7 +50,7 @@ and Models keep their dark appearance:
   requirements and terms. Changes apply next session; external revisions retain recoverable drafts and offer Reload latest graph in recovery controls. Reset is undoable.
 - **Models** opens a dedicated tab from Graph Library, Graph Editor or Live, with
   verified cache controls for ReazonSpeech, Silero, Whisper, Zipformer and both OPUS-MT
-  directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Opening it never downloads weights.
+  directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Each card has one collapsed **Details** disclosure for verified files, bytes, requirements and license/source notices. TranslateGemma also keeps its terms link before Download. Opening Models never downloads weights.
 
 The execution window's **Library**, **Edit graph** and **Models** links open
 separate tabs while capture continues. **Edit graph** opens this window's active

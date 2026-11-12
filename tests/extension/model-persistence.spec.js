@@ -32,17 +32,16 @@ test('Models removes storage controls and keeps discoverable legal links; model-
   await expect(models.locator('#persist, #persistence, main > details')).toHaveCount(0);
   await expect(models.getByText('Storage and cache management', { exact: true })).toHaveCount(0);
   await expect(models.locator('footer')).toHaveCount(0);
+  for (const id of ['supertonic3', 'kokoro', 'translategemma']) await models.locator(`#${id} summary`).click();
   for (const [id, name, href] of [
     ['supertonic3', 'License & source for Supertonic 3', '../web/licenses/tts-notices.txt'],
     ['kokoro', 'License & source for Kokoro 82M', '../web/licenses/tts-notices.txt'],
     ['kokoro', 'eSpeak NG source / build bundle (GPL-3.0-or-later)', '../web/tts-assets/phonemizer-source.tar.gz'],
-    ['translategemma', 'Gemma terms & attribution for TranslateGemma 4B · English ↔ Japanese', '../web/licenses/gemma-notices.txt'],
+    ['translategemma', 'License / terms for TranslateGemma 4B · English ↔ Japanese', '../web/licenses/gemma-notices.txt'],
   ]) {
     const link = models.locator(`#${id}`).getByRole('link', { name, exact: true });
     await expect(link).toBeVisible(); await expect(link).toHaveAttribute('href', href);
   }
-  await expect(models.locator('#supertonic3 .model-license')).toContainText('OpenRAIL-M');
-  await expect(models.locator('#kokoro .model-license')).toContainText('Apache-2.0');
   await models.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Not downloaded');
   // Load an existing, genuinely model-free graph through the same saved library.

@@ -11,6 +11,9 @@ Kokoro 82M v1.0
   https://huggingface.co/hexgrad/Kokoro-82M/tree/f3ff3571791e39611d31c381e3a41a3af07b4987
   ONNX Community conversion and voice embeddings:
   https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/tree/1939ad2a8e416c0acfeecc08a694d14ef25f2231
+  Selected voice embeddings: jf_alpha (Japanese) and af_heart (English),
+  downloaded unchanged from that pinned ONNX Community conversion. The Japanese
+  and English frontend notices below apply to their respective voice paths.
   Implementation / English normalization:
   https://github.com/hexgrad/kokoro/tree/dfb907a02bba8152ca444717ca5d78747ccb4bec/kokoro.js
 
