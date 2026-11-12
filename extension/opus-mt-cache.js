@@ -7,7 +7,7 @@ export async function verifiedOpusCache(signal, loadManifest = opusMtManifest, l
   const assets = new ModelAssetCache(manifest);
   const view = await assets.inspect({ signal, retain: true });
   signal?.throwIfAborted();
-  if (view.state !== 'Ready') throw new Error(view.error || `${label} assets missing or evicted. Open Models and use Download or Retry for this model.`);
+  if (view.state !== 'Ready') throw new Error(view.error || `${label} assets missing or evicted. Use Retry models in Live, or Download or Retry for this model in Models.`);
   return manifest;
 }
 
@@ -26,7 +26,7 @@ export async function cacheOnlyOpusRuntime(env, loadManifest = opusMtManifest, l
       const url = typeof request === 'string' ? request : request.url;
       if (allowed.has(url)) {
         const response = await cache.match(url);
-        if (!response) throw new Error(`${label} cache evicted during load. Open Models and retry preparation.`);
+        if (!response) throw new Error(`${label} cache evicted during load. Use Retry models in Live, or retry preparation in Models.`);
         return response;
       }
       return undefined; // Optional lookups use local 404, with remote models disabled.

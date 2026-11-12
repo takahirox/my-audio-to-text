@@ -38,21 +38,22 @@ export function defineAssetSet({ id, revision, files, origin = 'https://huggingf
 
 // One bounded hash buffer; one backpressured stream into Cache.put, never a tee
 // or whole-model arrayBuffer/blob. Chunk hashes also catch same-length corruption.
-function validatedBody(response, file, onBytes = () => {}, signal) {
+function validatedBody(response, file, onBytes = () => {}, signal, onFailure = () => {}) {
   if (response.status !== 200 || !response.body) throw new Error(`Invalid response for ${file.path}.`);
+  const fail = message => { const error = new Error(message); onFailure(error); throw error; };
   let bytes = 0, used = 0, index = 0;
   const buffer = new Uint8Array(Math.min(HASH_CHUNK_BYTES, file.bytes));
   const verify = async () => {
     const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer.subarray(0, used)));
     const hex = Array.from(hash, byte => byte.toString(16).padStart(2, '0')).join('');
-    if (hex !== file.sha256Chunks[index++]) throw new Error(`Corrupt asset: ${file.path}.`);
+    if (hex !== file.sha256Chunks[index++]) fail(`Corrupt asset: ${file.path}.`);
     used = 0;
   };
   return response.body.pipeThrough(new TransformStream({
     async transform(chunk, controller) {
       signal?.throwIfAborted();
       bytes += chunk.byteLength;
-      if (bytes > file.bytes) throw new Error(`Incorrect size: ${file.path}.`);
+      if (bytes > file.bytes) fail(`Incorrect size: ${file.path}.`);
       for (let offset = 0; offset < chunk.byteLength;) {
         const length = Math.min(buffer.length - used, chunk.byteLength - offset);
         buffer.set(chunk.subarray(offset, offset + length), used);
@@ -64,7 +65,7 @@ function validatedBody(response, file, onBytes = () => {}, signal) {
     },
     async flush() {
       signal?.throwIfAborted();
-      if (bytes !== file.bytes) throw new Error(`Incomplete asset: ${file.path}.`);
+      if (bytes !== file.bytes) fail(`Incomplete asset: ${file.path}.`);
       if (used) await verify();
     },
   }));
@@ -89,15 +90,21 @@ async function retainFiles(manifest, locks) {
 }
 
 export class ModelAssetCache {
-  constructor(manifest, { cacheStorage = globalThis.caches, fetchAsset = globalThis.fetch?.bind(globalThis),
+  constructor(manifest, options = {}) {
+    const { cacheStorage = globalThis.caches, fetchAsset = globalThis.fetch?.bind(globalThis),
     locks = globalThis.navigator?.locks, storage = globalThis.navigator?.storage,
-    persistenceSession = globalThis.chrome?.storage?.session } = {}) {
+    persistenceSession = globalThis.chrome?.storage?.session,
+    beforeDownload = () => requestStoragePersistence(storage, { locks, session: persistenceSession }),
+    shared = Object.keys(options).length === 0 && typeof globalThis.SharedWorker === 'function'
+      && globalThis.location?.protocol === 'chrome-extension:' && !!globalThis.document } = options;
     this.manifest = manifest;
     this.cacheStorage = cacheStorage;
     this.fetchAsset = fetchAsset;
     this.locks = locks;
     this.storage = storage;
     this.persistenceSession = persistenceSession;
+    this.beforeDownload = beforeDownload;
+    this.shared = shared;
     this.queue = Promise.resolve();
   }
 
@@ -140,8 +147,11 @@ export class ModelAssetCache {
     return files;
   }
 
-  async inspect({ signal, retain = false } = {}) {
+  async inspect({ signal, onChange, retain = false } = {}) {
     if (retain) await retainFiles(this.manifest, this.locks);
+    // Live observes progress while awaiting another preparation. Passive Models
+    // status checks must not keep a canceled download alive on their own.
+    if (this.shared) return this.sharedRequest('inspect', { signal, onChange, followPreparation: !!onChange });
     return this.exclusive(async () => {
       const cache = await this.cacheStorage.open(MODEL_CACHE_NAME);
       return this.snapshot(await this.scan(cache, signal));
@@ -156,6 +166,7 @@ export class ModelAssetCache {
   }
 
   async prepare({ onChange = () => {}, signal } = {}) {
+    if (this.shared) return this.sharedRequest('prepare', { onChange, signal });
     try {
       return await this.exclusive(async () => {
         let files, activeFile;
@@ -166,23 +177,27 @@ export class ModelAssetCache {
           signal?.throwIfAborted();
           const cache = await this.cacheStorage.open(MODEL_CACHE_NAME);
           files = await this.scan(cache, controller.signal);
-          onChange(this.snapshot(files, 'Downloading'));
+          if (files.some(file => !file.cached)) onChange(this.snapshot(files, 'Downloading'));
           for (let i = 0; i < files.length; i++) {
             if (files[i].cached) continue;
             controller.signal.throwIfAborted();
-            await requestStoragePersistence(this.storage, { locks: this.locks, session: this.persistenceSession });
+            await this.beforeDownload();
             controller.signal.throwIfAborted();
             activeFile = this.manifest.files[i];
             const completeBytes = this.snapshot(files).cachedBytes;
             const response = await this.fetchAsset(activeFile.sourceURL, {
               signal: controller.signal, credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer',
             });
+            let validationError;
             const body = validatedBody(response, activeFile, bytes => {
               onChange(this.snapshot(files, 'Downloading', completeBytes + bytes));
-            }, controller.signal);
+            }, controller.signal, error => { validationError = error; });
             await cache.put(activeFile.url, new Response(body, { status: 200,
               headers: { 'Content-Length': String(activeFile.bytes),
-                'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream' } }));
+                'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream' } }))
+              // Chromium masks a rejected body as a generic Cache.put network
+              // error. Preserve the actual integrity failure for recovery UI.
+              .catch(error => { throw validationError || error; });
             controller.signal.throwIfAborted();
             files[i].cached = true; activeFile = undefined;
             onChange(this.snapshot(files, 'Downloading'));
@@ -206,6 +221,48 @@ export class ModelAssetCache {
     } catch (error) {
       const result = this.failure(error); onChange(result); return result;
     }
+  }
+
+  // A page owns only its subscription. The shared worker owns the fetch so
+  // closing its first consumer cannot destroy a transfer another page needs.
+  sharedRequest(operation, { signal, onChange = () => {}, followPreparation = true }) {
+    return new Promise(resolve => {
+      let worker, finished = false;
+      const finish = view => {
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener('abort', cancel);
+        globalThis.removeEventListener('pagehide', cancel);
+        worker?.port.close();
+        resolve(view);
+      };
+      const cancel = () => {
+        worker?.port.postMessage({ type: 'cancel' });
+        finish(this.failure(signal?.reason || new DOMException('Preparation canceled.', 'AbortError')));
+      };
+      if (signal?.aborted) { cancel(); return; }
+      try {
+        worker = new SharedWorker(new URL('./model-asset-worker.js', import.meta.url), { type: 'module', name: 'model-assets' });
+        worker.onerror = event => {
+          event.preventDefault();
+          finish(this.failure(Error(event.message || 'Shared model asset worker failed.')));
+        };
+        worker.port.onmessage = async ({ data }) => {
+          if (finished) return;
+          if (data.type === 'progress') onChange(data.view);
+          if (data.type === 'result') finish(data.view);
+          if (data.type === 'persist') {
+            // persist() is a Window API. The existing origin-wide lock/session
+            // marker still makes this best effort and once per browser session.
+            await this.beforeDownload();
+            if (!finished) worker.port.postMessage({ type: 'persisted' });
+          }
+        };
+        signal?.addEventListener('abort', cancel, { once: true });
+        globalThis.addEventListener('pagehide', cancel, { once: true });
+        worker.port.postMessage({ type: operation, manifest: this.manifest, followPreparation });
+      } catch (error) { finish(this.failure(error)); }
+    });
   }
 
   remove() {

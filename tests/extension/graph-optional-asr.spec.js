@@ -57,4 +57,5 @@ test('parallel production Nodes fan out finals, preserve repeats, clear failed p
     await expectPreparedIdle(page);
     await expect(page.locator('[data-display="p"] .display-content')).toHaveText('repeat\nrepeat');
   }
+  expect(f.requests.sort()).toEqual(['/moonshine-medium-en-assets.json', '/parakeet-v3-assets.json']);
 });

@@ -4,9 +4,12 @@ Every model uses **Not downloaded → Downloading → Ready (cached and verified
 with recoverable Error/retry, progress, cancellation, cache inspection and deletion.
 Opening Models checks only; installation and background startup never download
 models. Auto Save persists the graph before preparing its required assets,
-including parked processors under the existing policy. Opening a graph only
-inspects files. Live's owning Workers verify executable dependencies before Start;
-no inference path downloads missing weights or uploads audio/text.
+including parked processors under the existing policy. Opening a graph in the
+editor only inspects files. Opening Live automatically prepares missing or invalid
+assets for executable paths, then its owning Workers verify and initialize the
+runtimes before Start becomes available. Failures offer **Retry models** inside
+Live. Inference workers read verified cache files without downloading weights;
+audio/text stays local.
 
 | Node / role | Required independently cached entries |
 | --- | --- |

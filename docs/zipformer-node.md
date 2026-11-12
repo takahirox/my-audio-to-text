@@ -112,10 +112,13 @@ npm run setup:extension
 ```
 
 For an already prepared checkout, run `npm run prepare:zipformer-assets`, then
-`npm run build:extension`. Neither command downloads weights. Save a Zipformer
-graph or use Download / retry on Models to cache its four required files. It has
-no Silero dependency. Weights use the pinned manifest and streaming checksums;
-Live is cache-only and reports actionable retry guidance for missing/corrupt data.
+`npm run build:extension`. Neither command downloads weights. Opening Live with a
+saved executable Zipformer graph automatically downloads any missing or invalid
+required files, verifies them, then initializes the model before enabling Start.
+For offline use, cache its four required files beforehand through Graph Editor
+Auto Save or Download / retry on Models. It has no Silero dependency. Weights use
+the pinned manifest and streaming checksums; failures offer **Retry models** inside
+Live, reusing intact cached files without another save or a visit to Models.
 JS/WASM remains packaged under the existing MV3 CSP and permissions. See the
 [weight-free packaging audit and real offline smokes](model-assets.md).
 

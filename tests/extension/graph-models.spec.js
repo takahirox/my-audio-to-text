@@ -11,12 +11,12 @@ async function save(editor) {
   await settleAutoSave(editor);
   await expect(editor.locator('#graph-state')).toHaveText('Saved');
 }
-// These translation/TTS tests scope controls to their processors. ASR dependency
-// preparation is covered explicitly in local-asr-preparation.spec.js.
+// Editor-only tests use an inert host so opening Live cannot prepare the default
+// graph first. ASR dependency preparation is covered in local-asr-preparation.spec.js.
 const cards = editor => editor.locator('#graph-models .model-card').filter({ hasNotText: /Silero VAD|ReazonSpeech ja-en/ });
 
 test('direct palette/canvas/settings use ordinary Text formatter; Graph actions has no translation preset', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
+  const live = await openGraph(f, { live: false }), editor = live.editor;
   await openPalette(editor);
   await expect(editor.locator('option[value=PairedTextFormatter]')).toHaveCount(0);
   await add(editor, 'TextFormatter');
@@ -30,14 +30,16 @@ test('direct palette/canvas/settings use ordinary Text formatter; Graph actions 
   await save(editor); expect(f.requests).toEqual([]);
 });
 
-test('Save prepares only saved English → Japanese Nodes once, after persistence, without capture or Workers; verified cache reuse and invalid cache retry', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor, initial = await saved(live);
+test('Save prepares only saved English → Japanese Nodes once, after persistence, without capture or inference Workers; verified cache reuse and invalid cache retry', async ({ graphExtension: f }) => {
+  const live = await openGraph(f, { live: false }), editor = live.editor, initial = await saved(live);
   await editor.evaluate(() => {
     window.beforePersistence = [];
-    const nativeFetch = window.fetch;
-    window.fetch = (...args) => {
-      if (String(args[0]).startsWith('http://127.0.0.1')) window.beforePersistence.push(!(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'OpusMtEnJa'));
-      return nativeFetch(...args);
+    const persisted = navigator.storage.persisted.bind(navigator.storage);
+    // The shared asset worker asks a Window for persistence immediately before
+    // its first download; fetch itself no longer belongs to the editor.
+    navigator.storage.persisted = () => {
+      window.beforePersistence.push(!(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'OpusMtEnJa'));
+      return persisted();
     };
     navigator.mediaDevices.getUserMedia = () => { throw Error('Save must not capture'); };
   });
@@ -46,7 +48,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
   await save(editor); await expect(cards(editor)).toHaveCount(1);
   await expect(cards(editor).locator('.model-status')).toContainText('Ready');
   expect(f.requests).toHaveLength(7); expect(f.requests.every(url => url.startsWith('/opus-mt-en-ja-assets.json/'))).toBe(true);
-  expect(await editor.evaluate(() => window.beforePersistence)).toEqual(Array(7).fill(false));
+  expect(await editor.evaluate(() => window.beforePersistence)).toEqual([false]);
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.evaluate(() => window.graphWorkers.every(worker => /sherpa-worker|silero-worker/.test(worker.url)))).toBe(true);
   const before = await saved(live); expect(before.version).toBe(15); expect(before.edges).toEqual(initial.edges);
@@ -69,7 +71,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
 });
 
 test('no optional model requests on load, invalid Save, storage failure or unrelated saved model dependencies', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor, before = await saved(live);
+  const live = await openGraph(f, { live: false }), editor = live.editor, before = await saved(live);
   await save(editor); expect(f.requests).toEqual([]);
   await add(editor, 'OpusMtEnJa'); await add(editor, 'Number');
   await editor.getByLabel('number value', { exact: true }).fill('');
@@ -89,7 +91,7 @@ test('no optional model requests on load, invalid Save, storage failure or unrel
 });
 
 test('multiple parked model types and voices prepare distinct sets once and reuse shared weights', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor, initial = await saved(live);
+  const live = await openGraph(f, { live: false }), editor = live.editor, initial = await saved(live);
   for (const [type, settings] of [['OpusMtJaEn', {}], ['OpusMtEnJa', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Kokoro', {}], ['Kokoro', {}]]) await add(editor, type, settings);
   // Individual inspector settings, including a different language with the same
   // voice, choose equivalent weights without modifying any routes.
@@ -109,7 +111,7 @@ test('multiple parked model types and voices prepare distinct sets once and reus
 });
 
 for (const mode of ['error', 'short', 'corrupt']) test(`Save remains persisted after ${mode} download failure; editor retry recovers`, async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
+  const live = await openGraph(f, { live: false }), editor = live.editor;
   f.mode(mode); await add(editor, 'OpusMtEnJa'); await save(editor);
   await expect(cards(editor).locator('.model-status')).toHaveText('Error');
   await expect(cards(editor).locator('.model-error')).not.toBeEmpty();
@@ -120,7 +122,7 @@ for (const mode of ['error', 'short', 'corrupt']) test(`Save remains persisted a
 });
 
 test('byte progress, Cancel, newer Save and page teardown preserve storage and allow Models recovery', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
+  const live = await openGraph(f, { live: false }), editor = live.editor;
   f.mode('hold'); await add(editor, 'OpusMtEnJa'); await save(editor);
   await expect.poll(() => cards(editor).locator('progress').evaluate(progress => progress.value)).toBeGreaterThan(0);
   const before = await saved(live);
@@ -137,7 +139,7 @@ test('byte progress, Cancel, newer Save and page teardown preserve storage and a
 });
 
 test('an external revision cancels obsolete preparation and protects a dirty draft while the second editor is read-only', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor, initial = await saved(live);
+  const live = await openGraph(f, { live: false }), editor = live.editor, initial = await saved(live);
   f.mode('hold'); await add(editor, 'OpusMtEnJa'); await save(editor);
   await expect.poll(() => cards(editor).locator('progress').evaluate(progress => progress.value)).toBeGreaterThan(0);
   const other = await f.context.newPage(); await other.goto(editor.url());
@@ -158,7 +160,7 @@ test('an external revision cancels obsolete preparation and protects a dirty dra
 });
 
 test('formatter instances add inputs above four, preserve wires, validate edits and reload independently', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
+  const live = await openGraph(f, { live: false }), editor = live.editor;
   await add(editor, 'TextFormatter'); await add(editor, 'TextFormatter');
   await editor.getByRole('button', { name: 'Select textformatter', exact: true }).click();
   for (let i = 0; i < 3; i++) await editor.getByRole('button', { name: 'textformatter Add input', exact: true }).click();
@@ -189,7 +191,7 @@ test('formatter instances add inputs above four, preserve wires, validate edits 
 });
 
 test('named graphs share verified assets by identity; Save prepares only the open entry', async ({ graphExtension: f }) => {
-  const live = await openGraph(f), editor = live.editor;
+  const live = await openGraph(f, { live: false }), editor = live.editor;
   await add(editor, 'OpusMtEnJa'); await save(editor);
   await expect(cards(editor).locator('.model-status')).toContainText('Ready');
   expect(f.requests).toHaveLength(7);

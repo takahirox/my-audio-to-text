@@ -51,7 +51,20 @@ test('first download emits byte progress, verifies every file, and survives mana
   assert.ok(f.events.some(event => event.state === 'Downloading' && event.downloadedBytes > 0 && event.downloadedBytes < f.set.bytes));
   assert.equal(f.events.at(-1).state, 'Ready'); assert.equal(f.calls.length, 2);
   assert.deepEqual((await f.make().inspect()).files.map(file => file.cached), [true, true]);
-  await f.make().prepare(); assert.equal(f.calls.length, 2);
+  f.events.length = 0;
+  await f.make().prepare({ onChange: f.onChange }); assert.equal(f.calls.length, 2);
+  assert.equal(f.events.some(event => event.state === 'Downloading'), false);
+});
+
+test('checksum failures retain their cause when Cache.put masks rejected streams as network errors', async () => {
+  const f = fixture(), put = f.cache.put;
+  f.cache.put = async (...args) => {
+    try { return await put(...args); } catch { throw TypeError('Cache.put network error'); }
+  };
+  f.dependencies.fetchAsset = async () => new Response(Buffer.alloc(data[0].length));
+  const result = await f.make().prepare();
+  assert.equal(result.state, 'Error'); assert.match(result.error, /Corrupt asset: file-0.bin/);
+  assert.equal(f.entries.size, 0);
 });
 
 test('partial cached sets never become Ready; failed second file preserves first for retry', async () => {

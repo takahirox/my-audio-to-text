@@ -1,5 +1,17 @@
 import { test, expect, openGraph } from './graph-fixture.js';
+import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
 import { openPalette, settleAutoSave } from './ui-controls.js';
+
+async function openModelFreeGraph(f) {
+  const seed = await f.context.newPage();
+  await seed.goto(f.url.replace('recorder.html', 'model-cache.html'));
+  await seed.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), {
+    version: GRAPH_VERSION, nodes: [graphNode('Text', 'source'), graphNode('Display', 'display')],
+    edges: [edge('source', 'value', 'display', 'input1')],
+  });
+  await seed.close();
+  return openGraph(f);
+}
 
 async function trackPersistence(f) {
   const calls = [];
@@ -14,7 +26,7 @@ const operations = calls => calls.map(call => call.operation);
 const button = (page, id, name) => page.locator(`#${id}`).getByRole('button', { name, exact: true });
 
 test('Models removes storage controls and keeps discoverable legal links; model-free editing and Live never request persistence', async ({ graphExtension: f }) => {
-  const calls = await trackPersistence(f), live = await openGraph(f), models = live.models;
+  const calls = await trackPersistence(f), live = await openModelFreeGraph(f), models = live.models;
   await expect(models.locator('.model-card')).toHaveCount(17);
   await expect(models.locator('#persist, #persistence, main > details')).toHaveCount(0);
   await expect(models.getByText('Storage and cache management', { exact: true })).toHaveCount(0);
@@ -49,7 +61,7 @@ test('Models removes storage controls and keeps discoverable legal links; model-
 });
 
 test('concurrent manual downloads on separate Models pages request once; denial survives retry and page recreation', async ({ graphExtension: f }) => {
-  const calls = await trackPersistence(f), live = await openGraph(f), first = live.models;
+  const calls = await trackPersistence(f), live = await openModelFreeGraph(f), first = live.models;
   const second = await f.context.newPage(); await second.goto(first.url());
   await Promise.all([
     button(first, 'opus-ja-en', 'Download').click(),
@@ -69,7 +81,7 @@ test('concurrent manual downloads on separate Models pages request once; denial 
 });
 
 test('Auto Save requests persistence only after saving a model-bearing graph; a later manual download shares the attempt', async ({ graphExtension: f }) => {
-  const calls = await trackPersistence(f), live = await openGraph(f), editor = live.editor;
+  const calls = await trackPersistence(f), live = await openModelFreeGraph(f), editor = live.editor;
   await settleAutoSave(editor); expect(calls).toEqual([]);
   await editor.evaluate(() => {
     const persist = navigator.storage.persist;
@@ -81,7 +93,7 @@ test('Auto Save requests persistence only after saving a model-bearing graph; a 
   });
   await openPalette(editor); await editor.locator('#graph-node-type [data-type="OpusMtEnJa"]').click();
   await settleAutoSave(editor);
-  await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(3).fill('Ready · Cached and verified'));
+  await expect(editor.locator('#graph-models .model-status')).toHaveText(['Ready · Cached and verified']);
   expect(await editor.evaluate(() => window.savedBeforePersistence)).toBe(true);
   expect(operations(calls)).toEqual(['persisted', 'persist']);
   expect(calls.every(call => call.page.includes('graph-editor.html'))).toBe(true);

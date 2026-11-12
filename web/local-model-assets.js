@@ -1,5 +1,5 @@
 // The Playground's explicit Load/Generate action prepares verified assets on its
-// own origin. Extension sessions remain cache-only after Auto Save/Models.
+// own origin. Extension workers use files prepared by Live, Auto Save or Models.
 export async function localModelAssets(kind, progress = () => {}) {
   const extension = globalThis.location.protocol === 'chrome-extension:';
   const module = await import(extension ? '../extension/local-asr-cache.js' : './vendor/model-cache/local-asr-cache.js');

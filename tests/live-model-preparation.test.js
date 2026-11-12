@@ -41,6 +41,7 @@ function fixture(graph, options = {}) {
   };
   const session = new TabSession(view => views.push(view), { graph, workerFactory, whisperWorkerFactory: workerFactory,
     textSummaryWorkerFactory: workerFactory, ifConditionWorkerFactory: workerFactory, translationWorkerFactory: workerFactory,
+    prepareModelAssets: async () => {},
     ttsWorkerFactory: workerFactory, prepareTranslation: async () => {}, prepareTts: async () => {},
     sourceFactory: id => ({ start() { captures.push(id); }, stop() {} }),
     onSynthesizedAudio: audio => outputs.push(audio), ...options });
@@ -70,6 +71,62 @@ test('hand-triggered summary is genuinely warm before Start; first Button action
   await f.session.stop();
   assert.equal(worker.released, true); assert.equal(f.session.view.modelState, 'ready');
   assert.equal(f.workers.length, 2); assert.equal(f.messages('summarize').length, 1);
+});
+
+test('file preparation precedes Worker allocation and Ready still waits for runtime initialization', async t => {
+  let finishFiles;
+  const graph = textGraph(); graph.nodes.push(graphNode('TextSummaryQwen35', 'parked'));
+  const f = fixture(graph, { prepareModelAssets: async (graph, { onChange }) => {
+    assert.equal(graph.nodes.some(node => node.id === 'parked'), false);
+    onChange({ title: 'Required model' }, { state: 'Downloading', downloadedBytes: 10, totalBytes: 20 });
+    await new Promise(resolve => { finishFiles = resolve; });
+  } });
+  t.after(() => f.session.close()); f.controls.hold = true;
+  const preparing = f.session.prepareModels(); await turn();
+  assert.match(f.session.view.modelStatus, /Downloading model… Required model · 10\/20 bytes/);
+  await f.session.start(); assert.equal(f.session.session, undefined);
+  assert.deepEqual(f.workers, []); assert.deepEqual(f.captures, []); assert.deepEqual(f.outputs, []);
+  finishFiles(); await turn();
+  assert.equal(f.session.view.modelState, 'preparing'); assert.equal(f.workers.length, 1);
+  assert.deepEqual(f.messages('summarize'), []);
+  f.workers[0].reply(f.workers[0].messages[0]); await preparing;
+  assert.equal(f.session.view.modelState, 'ready');
+});
+
+test('graph replacement aborts its file preparation and rejects late progress and success', async t => {
+  const pending = [];
+  const f = fixture(textGraph(), { prepareModelAssets: (graph, options) => new Promise(resolve => pending.push({ ...options, resolve })) });
+  t.after(() => f.session.close());
+  const first = f.session.prepareModels(); await turn();
+  f.session.setGraph(textGraph('IfCondition'), { id: 'chosen-next' }); await turn();
+  assert.equal(pending[0].signal.aborted, true); assert.equal(pending[1].signal.aborted, false);
+  pending[0].onChange({ title: 'Stale model' }, { state: 'Downloading' });
+  assert.doesNotMatch(f.session.view.modelStatus, /Stale/);
+  pending[0].resolve(); await first; assert.deepEqual(f.workers, []);
+  pending[1].resolve(); await f.session.preparing;
+  assert.equal(f.session.view.modelState, 'ready'); assert.equal(f.workers.length, 1);
+  assert.equal(f.session.prepared.description.nodes.find(node => node.id === 'model').type, 'IfCondition');
+});
+
+test('close during file preparation aborts its signal and cannot create a late runtime', async () => {
+  let pending;
+  const f = fixture(textGraph(), { prepareModelAssets: (graph, options) => new Promise(resolve => { pending = { ...options, resolve }; }) });
+  const preparing = f.session.prepareModels(); await turn();
+  const closing = f.session.close(); assert.equal(pending.signal.aborted, true);
+  pending.onChange({ title: 'Stale model' }, { state: 'Downloading' }); pending.resolve();
+  await Promise.all([preparing, closing]);
+  assert.equal(f.session.view.modelState, 'closed'); assert.equal(f.session.view.modelStatus, '');
+  assert.deepEqual(f.workers, []);
+});
+
+test('Web dictation can retain cache-only preflight without opting into Live downloads', async t => {
+  const f = fixture(textGraph(), { prepareModelAssets: () => { throw Error('Must not download outside Live'); } });
+  t.after(() => f.session.close());
+  await f.session.prepareModels({ download: false });
+  assert.equal(f.session.view.modelState, 'ready'); assert.equal(f.messages('load').length, 1);
+  assert.deepEqual(f.captures, []); assert.deepEqual(f.outputs, []);
+  await f.session.start(); await f.session.stop();
+  assert.equal(f.session.view.modelState, 'ready'); assert.equal(f.messages('load').length, 2);
 });
 
 test('multi-model graph initializes every executable instance without inference/output; parked models stay inert', async t => {
@@ -179,7 +236,7 @@ test('load failure blocks the whole Live graph and retry recovers without hiding
   const f = fixture(textGraph()); t.after(() => f.session.close()); f.controls.failure = true;
   await f.session.prepareModels();
   assert.equal(f.session.view.modelState, 'error'); assert.match(f.session.view.error, /model.*memory failure/);
-  assert.match(f.session.view.error, /Save.*Models.*Retry models/); assert.equal(f.session.view.modelRecovery, true);
+  assert.match(f.session.view.error, /Check your connection.*Retry models/); assert.equal(f.session.view.modelRecovery, true);
   assert.ok(f.workers.every(worker => worker.released)); await f.session.start(); assert.equal(f.session.session, undefined);
   f.controls.failure = false; await f.session.prepareModels(); assert.equal(f.session.view.modelState, 'ready');
 });
@@ -198,7 +255,7 @@ test('idle GPU/Worker failure invalidates Ready and releases all models', async 
   await f.session.prepareModels(); assert.equal(f.session.view.modelState, 'ready');
 });
 
-test('missing/evicted assets block readiness without capture, Worker allocation or automatic download/retry', async t => {
+test('eviction between file preparation and runtime initialization blocks readiness without capture or automatic retry', async t => {
   let inspections = 0;
   const graph = defaultGraph({ enabled: true });
   const f = fixture(graph, { prepareTranslation: async () => { inspections++; throw Error('Translation files missing or corrupt.'); } });

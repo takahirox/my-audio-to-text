@@ -26,7 +26,7 @@ self.onmessage = ({ data }) => {
       } else throw new Error(`Unknown Whisper request: ${data.type}`);
     } catch (error) {
       self.postMessage({ type: 'error', session: data.session,
-        message: `Local Whisper failed: ${error.message}. Open Models or Graph Editor and retry preparation, then start a fresh session.` });
+        message: `Local Whisper failed: ${error.message}. Use Retry models in Live, or retry preparation in Models.` });
     }
   });
 };

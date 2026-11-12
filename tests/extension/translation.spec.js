@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { installAssetQuotaFixture, setAssetQuota } from './model-asset-worker-fixture.js';
 
 const launch = profile => chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true,
   ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'] });
@@ -35,6 +36,7 @@ const test = base.extend({
       await cp('extension', path.join(root, 'extension'), { recursive: true });
       await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(vendor|tts-assets|correction-assets)(\/|$)/.test(source) });
       await cp('extension/manifest.json', path.join(root, 'manifest.json'));
+      await installAssetQuotaFixture(root);
       for (const direction of ['ja-en', 'en-ja']) {
         const entries = original.map(file => ({ path: file.path, bytes: 8192,
           sha256Chunks: [createHash('sha256').update(bodies.get(direction + '/' + file.path)).digest('hex')],
@@ -109,7 +111,10 @@ async function start(page) {
   await expect(page.locator('#status')).toHaveText('Transcription active');
 }
 async function prepare(page, { retry = true } = {}) {
-  await model(page, 'button:text-matches("^(Download|Retry)$")').click();
+  await expect(model(page, '.model-status')).toHaveText(/^(Not downloaded|Ready.*|Error)$/);
+  if (!(await model(page, '.model-status').textContent()).startsWith('Ready')) {
+    await model(page, 'button:text-matches("^(Download|Retry)$")').click();
+  }
   await expect(model(page, '.model-status')).toContainText('Ready');
   if (retry) {
     await expect(page.locator('#model-status')).toHaveText(/Ready|Models unavailable/);
@@ -139,10 +144,10 @@ for (const direction of ['ja-en', 'en-ja']) {
   const open = async f => { const page = await openRecorder(f); await setDirection(page, direction); return page; };
   test(`${direction}: preparation, ignored provisional input, ordered drain, offline profile reuse and eviction`, async ({ translationExtension: f }) => {
     test.setTimeout(60000); await instrument(f); let page = await open(f);
-    await expect(model(page, '.model-status')).toHaveText('Not downloaded');
-    await expect(page.locator('#errors')).toContainText('assets missing');
-    await expect(page.locator('#start')).toBeDisabled();
-    expect(f.requests).toEqual([]); await prepare(page); expect(f.requests).toHaveLength(7);
+    await expect(page.locator('#model-status')).toHaveText('Ready');
+    await expect(page.locator('#errors')).toBeEmpty();
+    await expect(page.locator('#start')).toBeEnabled();
+    expect(f.requests).toHaveLength(7);
     await start(page); await expect(page.locator('#translation-status')).toHaveText('Local translation ready');
     await emit(page, 'partial', 'old'); await expect(pairText(page)).toHaveCount(1); await emit(page, 'partial', 'slow'); await expect(pairText(page)).toHaveCount(1);
     await page.evaluate(() => { for (let i = 0; i < 100; i++) window.speech.receiveEvent({ type: 'partial', text: 'new ' + i, id: 0 }); window.speech.receiveEvent({ type: 'final', text: '最初', id: 0 }); window.speech.receiveEvent({ type: 'final', text: '次', id: 1 }); });
@@ -151,24 +156,30 @@ for (const direction of ['ja-en', 'en-ja']) {
     await page.close(); await f.restart(); await instrument(f); page = await open(f); await expect(model(page, '.model-status')).toContainText('Ready'); await f.context.setOffline(true); await start(page);
     await expect(page.locator('#translation-status')).toHaveText('Local translation ready'); await emit(page, 'final', 'offline'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(7);
     await page.evaluate(async direction => { const { opusMtManifest } = await import('./opus-mt-manifest.js'); const { englishToJapaneseOpusMtManifest } = await import('./opus-mt-en-ja-manifest.js'); const manifest = await (direction === 'en-ja' ? englishToJapaneseOpusMtManifest() : opusMtManifest()); const cache = await caches.open('transformers-cache'); await cache.delete(manifest.files[0].url); }, direction);
-    // The current idle owner is warm; a fresh Live must detect eviction.
+    // A fresh Live detects eviction and downloads only the missing file.
+    await f.context.setOffline(false);
     await page.close(); page = await open(f);
-    await expect(page.locator('#errors')).toContainText('assets missing');
-    await expect(page.locator('#start')).toBeDisabled(); expect(f.requests).toHaveLength(7);
+    await expect(page.locator('#model-status')).toHaveText('Ready');
+    await expect(page.locator('#errors')).toBeEmpty();
+    await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(8);
   });
 
   test(`${direction}: network, quota and preparation cancellation retry; inference failure leaves ASR active`, async ({ translationExtension: f }) => {
-    await instrument(f); const page = await open(f); f.mode('error'); await model(page, 'button:text-matches("^(Download|Retry)$")').click(); await expect(model(page, '.model-status')).toContainText('Error');
+    f.mode('error'); await instrument(f); const page = await open(f);
+    await expect(page.locator('#model-status')).toHaveText('Models unavailable');
+    await model(page, 'button:text-matches("^(Download|Retry)$")').click(); await expect(model(page, '.model-status')).toContainText('Error');
     f.mode('hold'); await model(page, 'button:text-matches("^(Download|Retry)$")').click(); await expect.poll(() => model(page, 'progress').evaluate(p => p.value)).toBeGreaterThan(0); await model(page, 'button:has-text("Cancel download")').click(); await expect(model(page, '.model-status')).toContainText('Error');
     await expect(model(page, 'button:text-matches("^(Download|Retry)$")')).toBeFocused();
-    f.mode('normal'); await page.models.evaluate(() => { const put = Cache.prototype.put; window.restorePut = () => { Cache.prototype.put = put; }; Cache.prototype.put = async function(key, response) { await response.body.cancel(); throw new DOMException('Full', 'QuotaExceededError'); }; });
-    await model(page, 'button:text-matches("^(Download|Retry)$")').click(); await expect(model(page, '.model-error')).toContainText('quota exceeded'); await page.models.evaluate(() => window.restorePut()); await prepare(page);
+    f.mode('normal'); await setAssetQuota(page.models, '');
+    await model(page, 'button:text-matches("^(Download|Retry)$")').click(); await expect(model(page, '.model-error')).toContainText('quota exceeded'); await setAssetQuota(page.models); await prepare(page);
     await start(page); await expect(page.locator('#translation-status')).toHaveText('Local translation ready'); await emit(page, 'final', 'fail'); await expect(page.locator('#translation-status')).toContainText('Controlled inference failure');
     await emit(page, 'final', '原文', 1); await expect(originalItems(page)).toHaveText(['fail', '原文']); await expect(page.locator('#errors')).toContainText('Controlled inference failure'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
   });
 
   for (const phase of ['loading', 'inference']) test(`${direction}: teardown during translation ${phase} rejects late output`, async ({ translationExtension: f }) => {
-    await instrument(f); const page = await open(f); await prepare(page, { retry: false });
+    f.mode('error'); await instrument(f); const page = await open(f);
+    await expect(page.locator('#model-status')).toHaveText('Models unavailable');
+    f.mode('normal'); await prepare(page, { retry: false });
     if (phase === 'loading') {
       await page.locator('#retry-models').click();
       await expect(page.locator('#model-status')).toContainText('Preparing models…');
@@ -209,8 +220,8 @@ for (const direction of ['ja-en', 'en-ja']) {
 
 test('saved processing direction applies next session; generic labels and existing history stay active; caches remain independent', async ({ translationExtension: f }) => {
   await instrument(f); const page = await openRecorder(f); await setDirection(page, 'en-ja'); await prepare(page); await start(page); await expect(page.locator('#translation-status')).toHaveText('Local translation ready');
-  await setDirection(page, 'ja-en'); await emit(page, 'final', 'Hello'); await page.locator('#stop').click(); await expect(page.locator('#model-status')).toHaveText('Models unavailable'); await expect(page.locator('#start')).toBeDisabled(); await expect(pairText(page)).toHaveText('HelloJapanese: Hello');
-  await prepare(page); expect(f.requests).toHaveLength(14); await start(page); await expect(pairText(page)).toHaveCount(0); await emit(page, 'final', '日本語'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('日本語English: 日本語');
+  await setDirection(page, 'ja-en'); await emit(page, 'final', 'Hello'); await page.locator('#stop').click(); await expect(page.locator('#model-status')).toHaveText('Ready'); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('HelloJapanese: Hello');
+  expect(f.requests).toHaveLength(14); await start(page); await expect(pairText(page)).toHaveCount(0); await emit(page, 'final', '日本語'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); await expect(pairText(page)).toHaveText('日本語English: 日本語');
   await loadTranslationFixture(page.editor, 'ja-en', false); await settleAutoSave(page.editor);  await f.context.setOffline(true); await start(page); await expect(page.locator('#translation-status')).toHaveText('Translation off'); await expect(page.locator('.live-text-region')).toHaveCount(1); await emit(page, 'final', 'Original only'); await expect(originalItems(page)).toHaveText('Original only'); await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled(); expect(f.requests).toHaveLength(14);
 });
 
