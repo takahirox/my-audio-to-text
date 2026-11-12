@@ -85,7 +85,7 @@ const session = new TabSession(view => {
   element('session-prompt').textContent = view.prompt;
   element('errors').textContent = graphError || view.error;
   const inputs = (view.state !== 'idle' ? view.activeGraph : view.savedGraph)?.nodes.filter(node => INPUT_TYPES.includes(node.type)) || [];
-  element('tab-status').textContent = inputs.length ? inputs.map(node => `${node.id} · ${node.type === 'MicrophoneAudio' ? 'microphone' : `${node.type === 'SelectedPageMediaAudio' ? 'selected media in' : 'whole'} tab ${view.tabId ?? '(invoke toolbar)'}`}`).join('\n') : 'No active audio sources.';
+  element('tab-status').textContent = inputs.length ? inputs.map(node => `${node.id} · ${node.type === 'MicrophoneAudio' ? 'microphone' : `whole tab ${view.tabId ?? '(invoke toolbar)'}`}`).join('\n') : 'No active audio sources.';
   renderDiagnostics(view);
   const current = view.state !== 'idle' ? view.activeGraph : view.savedGraph;
   const nextGraph = executableGraph(view.savedGraph);

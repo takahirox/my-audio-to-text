@@ -3,14 +3,6 @@
 (() => {
   if (globalThis.localTextPageAgent) return;
   globalThis.localTextPageAgent = true;
-  const targets = new Map();
-  const identify = element => {
-    for (const [id, ref] of targets) {
-      if (!ref.deref()?.isConnected) targets.delete(id);
-    }
-    const id = crypto.randomUUID(); targets.set(id, new WeakRef(element)); return id;
-  };
-  const describe = element => `${element.localName}${element.id ? ` #${element.id.slice(0, 80)}` : ''}${element.getAttribute('aria-label') ? ` · ${element.getAttribute('aria-label').slice(0, 80)}` : ''}`;
   const sensitive = /password|passcode|\bauth(?:entication)?\b|\blogin\b|\busername\b|\bpin\b|\biban\b|\bbic\b|\bswift\b|financial|transaction|payment|credit|cc-|card.?number|cvc|cvv|security|one.?time|otp|verification|social.?security|ssn|bank|routing|account.?number/i;
   function editable(element) {
     if (!(element instanceof HTMLElement) || !element.isConnected || element.ownerDocument !== document || element.getRootNode() !== document) return false;
@@ -88,31 +80,18 @@
     element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   }
-  function mediaError(element) {
-    if (!(element instanceof HTMLMediaElement) || !element.isConnected) return 'Media disappeared. Discover again or choose Chrome tab audio.';
-    if (element.mediaKeys) return 'Protected media cannot be captured. Choose Chrome tab audio where permitted.';
-    if (typeof element.captureStream !== 'function') return 'Element capture is unavailable. Choose Chrome tab audio.';
-    if (!element.srcObject) {
-      try { if (new URL(element.currentSrc || element.src, location.href).origin !== location.origin) return 'Cross-origin media is unsupported. Choose Chrome tab audio where permitted.'; }
-      catch { return 'Media source is unsupported. Choose Chrome tab audio.'; }
-    }
-    if (element.readyState < 2 || element.paused) return 'Play this media first, then discover again.';
-    return '';
-  }
   chrome.runtime.onConnect.addListener(port => {
     if (port.name !== 'local-page-target' || port.sender?.id !== chrome.runtime.id) return;
-    let disposed = false, output, capture;
+    let disposed = false, output;
     const post = message => { if (!disposed) { try { port.postMessage(message); } catch { cleanup(); } } };
     function cleanup() {
       disposed = true;
-      capture?.stop(); capture = null; output = null;
+      output = null;
     }
     port.onDisconnect.addListener(cleanup);
     async function command(message) {
       switch (message.action) {
         case 'describe': return { label: document.title.slice(0, 80) || 'Authorized page', frame: 'top frame' };
-        case 'discover': return [...document.querySelectorAll('audio,video')].map((element, index) => ({ id: identify(element), label: `${index + 1} · ${describe(element)}`, error: mediaError(element) }));
-        case 'forget': targets.delete(message.target); return true;
         case 'output': {
           output = { last: -1 }; return true;
         }
@@ -126,46 +105,7 @@
           try { append(element, message.text); return { inserted: true }; }
           catch (error) { return { skipped: error.message }; }
         }
-        case 'capture': {
-          if (capture) throw Error('Media capture already active.');
-          const element = targets.get(message.target)?.deref(), reason = mediaError(element);
-          if (reason) throw Error(reason);
-          let stream, context, source, processor, gain, watcher;
-          const stop = () => {
-            clearInterval(watcher); element.removeEventListener('encrypted', ended);
-            if (processor) processor.onaudioprocess = null;
-            source?.disconnect(); processor?.disconnect(); gain?.disconnect();
-            stream?.getTracks().forEach(track => { track.onended = null; track.stop(); });
-            if (context && context.state !== 'closed') void context.close().catch(() => {});
-          };
-          const ended = () => { stop(); capture = null; post({ event: 'ended', error: 'Selected media ended, changed or was removed. Stop and reselect, or use Chrome tab audio.' }); };
-          try {
-            stream = element.captureStream();
-            const tracks = stream.getAudioTracks();
-            if (!tracks.length || tracks.some(track => track.readyState !== 'live')) throw Error('No capturable audio track. Choose Chrome tab audio where permitted.');
-            stream.getVideoTracks().forEach(track => track.stop());
-            context = new AudioContext(); capture = { stop }; await context.resume();
-            if (disposed) { stop(); throw Error('Capture canceled.'); }
-            source = context.createMediaStreamSource(new MediaStream(tracks));
-            // ScriptProcessor avoids loading code into the page or weakening CSP.
-            processor = context.createScriptProcessor(2048, 2, 1);
-            processor.onaudioprocess = ({ inputBuffer }) => {
-              const mono = new Float32Array(inputBuffer.length);
-              for (let channel = 0; channel < inputBuffer.numberOfChannels; channel++) {
-                const samples = inputBuffer.getChannelData(channel);
-                for (let i = 0; i < mono.length; i++) mono[i] += samples[i] / inputBuffer.numberOfChannels;
-              }
-              post({ event: 'audio', samples: Array.from(mono), rate: context.sampleRate });
-            };
-            gain = context.createGain(); gain.gain.value = 0;
-            source.connect(processor); processor.connect(gain); gain.connect(context.destination);
-            tracks.forEach(track => { track.onended = ended; }); element.addEventListener('encrypted', ended);
-            const originalSource = element.currentSrc, originalObject = element.srcObject;
-            watcher = setInterval(() => { if (!element.isConnected || element.mediaKeys || element.currentSrc !== originalSource || element.srcObject !== originalObject) ended(); }, 300);
-            capture = { stop }; return true;
-          } catch (error) { stop(); throw Error(`Element audio unavailable: ${error.message}. Use Chrome tab audio where permitted.`); }
-        }
-        case 'stop': capture?.stop(); capture = null; output = null; return true;
+        case 'stop': output = null; return true;
         default: throw Error('Unknown page operation.');
       }
     }

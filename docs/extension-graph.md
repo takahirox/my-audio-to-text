@@ -628,7 +628,7 @@ payloads, startup configuration and correlation.
 
 | Nodes | Contracts and purpose |
 | --- | --- |
-| ChromeTabAudio, SelectedPageMediaAudio, MicrophoneAudio | Normalized mono 16 kHz PCM sources |
+| ChromeTabAudio, MicrophoneAudio | Normalized mono 16 kHz PCM sources |
 | SpeechToTextReazonSpeech, SpeechToTextZipformerEn, SpeechToTextMoonshineMediumEn | PCM → provisional/final TEXT and numeric IDs |
 | SpeechToTextWhisper, SpeechToTextParakeetV3 | PCM → final TEXT and numeric ID |
 | Text, Number | Literal TEXT and finite NUMBER constants |
@@ -650,10 +650,7 @@ payloads, startup configuration and correlation.
 ## Capture, output and lifecycle
 
 Whole-tab capture uses the toolbar-invoked tab. Microphone capture requires
-Start and browser permission. `SelectedPageMediaAudio` is
-temporarily unavailable because Live no longer provides an element selector; its
-source reports an actionable error and suggests `ChromeTabAudio`. An on-page
-selector is deferred to a separate task. Focused output still follows the
+Start and browser permission. Focused output follows the
 toolbar-invoked document automatically. Live shows only actionable Node errors;
 normal per-Node status stays in the optional Session details disclosure. One unavailable processor
 leaves independent healthy paths running. Repeated tab sources share capture;
