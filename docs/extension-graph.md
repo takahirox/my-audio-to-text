@@ -8,17 +8,28 @@ The active graph is an immutable snapshot; edits take effect at the next Start.
 ## Graph Library (#243)
 
 Open **Library** from Live, Graph or Models. Search names, descriptions or model
-names, sort by name/recent update, and filter entries needing recovery. The responsive
-workspace shows a selectable graph list on the left and persistent details on the
-right, including preview, metadata and editing actions (#279). Selecting a row
-updates the detail pane immediately; the active row is highlighted and announced
-as pressed. At narrow widths the panes stack, the list scrolls, and selection
-moves focus to the detail heading. On desktop, focus stays in the list for keyboard
-browsing; use Tab to reach the detail actions. Selection never launches a session
-or changes a default.
+names, sort by name/recent update, and filter entries needing recovery. The workspace
+is one full-width graph list on desktop and mobile (#285). Click a row to expand
+its details directly beneath it; click again to collapse, or choose another row
+to switch. At most one graph is expanded. A chevron and `aria-expanded` announce
+its state. Enter/Space toggle expansion, Up/Down/Home/End move among row headers,
+and Tab reaches the expanded actions. Selection is remembered across refreshes;
+a fresh Library starts collapsed. Expanding never launches a session or changes
+a default.
+
+The expanded area has **Edit graph**, **Duplicate**, and one **More** menu for
+**Export JSON** and **Delete graph**. **Models & saved information** contains model
+metadata and **Check model files**. Name and Description autosave with brief local
+status and no Save button. Switching, collapsing and actions wait for pending
+saves; validation errors, Japanese IME composition and save conflicts keep the
+current details open. Search and filters retain the expanded row so drafts remain
+reachable. Failed or interrupted edits survive refresh in a per-tab recovery
+draft, with **Retry saving** or **Load saved details** available when needed.
+
 Create, rename, describe, duplicate, import or export entries without starting
 inference. New graphs use the current transcription layout; portable JSON remains
-the existing version-15 graph format. Models remains accessible in the header.
+the existing version-15 graph format. Models remains accessible at the right of
+the compact Web microphone header.
 
 **Launch Settings and its Live/Web graph dropdowns have been removed (#267).**
 Choose graphs where they launch:

@@ -22,12 +22,16 @@ const details = new GraphDetailsAutosave({ store, storage: sessionStorage,
 });
 new MutationObserver(() => { element('details-error').textContent = element('errors').textContent; })
   .observe(element('errors'), { childList: true });
+new MutationObserver(renderRecoveryAction).observe(element('details-state'), { childList: true });
 const el = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
 function download(text, filename) {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   const link = el('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function dirty() { return details.editing; }
+function renderRecoveryAction() {
+  element('load-details').hidden = !details.entry || !details.failure && !details.reviewRequired && !!selected();
+}
 function selected() { return library.graphs.find(entry => entry.id === selectedId); }
 function models(entry) {
   if (entryError(entry, library)) return [];
@@ -39,20 +43,26 @@ function state(entry) {
   if (entryError(entry, library)) return 'Error · needs recovery';
   return states.get(JSON.stringify(resolvedEntryGraph(entry, library))) || (models(entry).length ? 'Unknown' : 'Ready · no model files');
 }
-function focusDetails() {
-  const title = element('selected-title');
-  title.focus();
-  if (matchMedia('(max-width: 900px)').matches) title.scrollIntoView({ block: 'start' });
+function rowButton(id = selectedId) {
+  return [...element('graph-list').querySelectorAll('button[data-id]')].find(button => button.dataset.id === id);
 }
-async function select(id, { focus = matchMedia('(max-width: 900px)').matches } = {}) {
+function focusDetails() { rowButton()?.focus(); }
+function rememberSelection() {
+  try {
+    if (selectedId) localStorage.setItem(selectionKey, selectedId);
+    else localStorage.removeItem(selectionKey);
+  } catch { /* Selection is optional; graph writes report their own errors. */ }
+}
+async function select(id) {
   if (actionPending) return false;
-  const request = ++selectionRequest;
-  if (id !== selectedId && !await details.flush()) return false;
+  const request = ++selectionRequest, nextId = id === selectedId ? null : id;
+  if (!await details.flush()) {
+    if (request === selectionRequest) rowButton()?.focus({ preventScroll: true });
+    return false;
+  }
   if (request !== selectionRequest) return false;
-  if (id !== selectedId) { details.clearDraft(); selectedId = id; render(true); }
-  else render();
-  try { localStorage.setItem(selectionKey, id); } catch { /* Selection is optional; graph writes report their own errors. */ }
-  if (focus) focusDetails();
+  details.clearDraft(); selectedId = nextId; render(true); rememberSelection();
+  (rowButton(id) || element('search')).focus({ preventScroll: true });
   return true;
 }
 function renderDetails(entry = selected()) {
@@ -81,56 +91,63 @@ function renderSelectedState() {
   element('graph-updated').textContent = new Date(entry.updatedAt).toLocaleString();
   element('graph-models').textContent = invalid ? 'Unknown · repair graph first' : models(entry).join(', ') || 'None';
   element('graph-cache').textContent = state(entry);
+  renderRecoveryAction();
 }
 function render(replaceDetails = false) {
-  if (!selected() && (!dirty() || replaceDetails)) selectedId = library.graphs[0].id;
+  if (selectedId && !selected() && (!dirty() || replaceDetails)) selectedId = null;
   const search = element('search').value.toLocaleLowerCase(), filter = element('filter').value;
   const rows = library.graphs.filter(entry => `${entry.name} ${entry.description} ${models(entry).join(' ')}`.toLocaleLowerCase().includes(search)
     && (filter === 'all' || filter === 'subgraph' && entry.kind === 'subgraph' || filter === 'graph' && entry.kind !== 'subgraph' || filter === 'invalid' && entryError(entry, library)));
+  const matches = rows.length;
+  // Keep the expanded row and its draft reachable even when it stops matching.
+  const expanded = selected() || (dirty() ? details.entry : null);
+  if (expanded && !rows.some(entry => entry.id === expanded.id)) rows.push(expanded);
   rows.sort(element('sort').value === 'name' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name));
-  const focusedRow = document.activeElement?.closest('#graph-list li');
-  const focusedId = focusedRow?.dataset.id;
-  const focusedMenu = document.activeElement?.tagName === 'SUMMARY';
-  element('graph-list').replaceChildren(...rows.map(entry => {
-    const row = el('li'), button = el('button'); row.dataset.id = entry.id; button.dataset.id = entry.id;
-    button.onclick = () => select(entry.id);
-    button.setAttribute('aria-label', `Open details for ${entry.name}`); button.setAttribute('aria-controls', 'selected'); button.setAttribute('aria-pressed', String(entry.id === selectedId));
-    row.classList.toggle('selected', entry.id === selectedId);
-    const name = el('span', `${entry.name}${entry.kind === 'subgraph' ? ' · Subgraph' : ''}`); name.className = 'graph-row-name'; button.append(name);
-    if (entry.description) {
-      const description = el('span', entry.description); description.className = 'graph-row-description';
-      description.id = `description-${entry.id}`; button.setAttribute('aria-describedby', description.id); button.append(description);
-    }
-    const hint = el('span', 'View details →'); hint.className = 'graph-row-hint'; hint.setAttribute('aria-hidden', 'true'); button.append(hint);
-    const menu = el('details'), summary = el('summary', '⋯'), commands = el('div');
-    menu.className = 'row-menu'; summary.setAttribute('aria-label', `Actions for ${entry.name}`); summary.title = `Actions for ${entry.name}`;
-    commands.className = 'row-commands';
-    for (const [label, command] of [['Graph details', null], ['Edit graph', 'open'], ['Duplicate', 'duplicate'], ['Export JSON', 'export']]) {
-      const actionButton = el('button', label);
-      actionButton.onclick = async () => {
-        menu.open = false;
-        if (!await select(entry.id, { focus: !command })) { summary.focus(); return; }
-        if (command) {
-          element(command).click();
-          [...element('graph-list').children].find(row => row.dataset.id === entry.id)?.querySelector('summary').focus({ preventScroll: true });
-        }
-      };
-      actionButton.disabled = ['open', 'duplicate'].includes(command) && !!entryError(entry, library);
-      commands.append(actionButton);
-    }
-    menu.append(summary, commands);
-    menu.addEventListener('toggle', () => {
-      if (menu.open) for (const other of element('graph-list').querySelectorAll('.row-menu[open]')) if (other !== menu) other.open = false;
-    });
-    row.append(button, menu); return row;
-  }));
-  if (focusedId) {
-    const row = [...element('graph-list').children].find(row => row.dataset.id === focusedId);
-    row?.querySelector(focusedMenu ? 'summary' : 'button[data-id]')?.focus({ preventScroll: true });
-  }
-  element('graph-count').textContent = rows.length;
-  element('empty').hidden = !!rows.length;
+  const list = element('graph-list'), region = element('selected'), focused = document.activeElement;
   if (replaceDetails || !dirty() && (details.entry?.id !== selectedId || details.entry?.revision !== selected()?.revision)) renderDetails();
+  const existing = new Map([...list.children].map(row => [row.dataset.id, row]));
+  const nextRows = rows.map(entry => {
+    let row = existing.get(entry.id);
+    if (!row) {
+      row = el('li'); row.dataset.id = entry.id;
+      const button = el('button'); button.type = 'button'; button.dataset.id = entry.id;
+      button.id = `graph-row-${entry.id}`;
+      button.onclick = () => { void select(entry.id); };
+      button.setAttribute('aria-controls', 'selected');
+      const chevron = el('span'); chevron.className = 'graph-row-chevron'; chevron.setAttribute('aria-hidden', 'true');
+      const text = el('span'); text.className = 'graph-row-text';
+      const name = el('span'); name.className = 'graph-row-name';
+      const description = el('span'); description.className = 'graph-row-description'; description.id = `description-${entry.id}`;
+      text.append(name, description); button.append(chevron, text); row.append(button);
+    }
+    const button = row.querySelector('button[data-id]'), open = entry.id === selectedId;
+    button.setAttribute('aria-label', `Open details for ${entry.name}${entry.kind === 'subgraph' ? ' · Subgraph' : ''}`);
+    button.setAttribute('aria-expanded', String(open));
+    row.classList.toggle('selected', open);
+    row.querySelector('.graph-row-chevron').textContent = open ? '▾' : '▸';
+    row.querySelector('.graph-row-name').textContent = `${entry.name}${entry.kind === 'subgraph' ? ' · Subgraph' : ''}`;
+    const description = row.querySelector('.graph-row-description');
+    description.textContent = entry.description; description.hidden = !entry.description;
+    if (entry.description) button.setAttribute('aria-describedby', description.id);
+    else button.removeAttribute('aria-describedby');
+    if (open && region.parentElement !== row) row.append(region);
+    return row;
+  });
+  if (!selectedId) { region.hidden = true; element('graphs').append(region); }
+  for (const row of existing.values()) if (!nextRows.includes(row)) row.remove();
+  // Reorder siblings around the expanded row without detaching its live inputs.
+  // This preserves focus, the caret and an active IME session during refreshes.
+  const anchor = nextRows.find(row => row.dataset.id === selectedId);
+  if (anchor && anchor.parentElement !== list) list.append(anchor);
+  let afterAnchor = !anchor;
+  for (const row of nextRows) {
+    if (row === anchor) { afterAnchor = true; continue; }
+    if (afterAnchor) list.append(row);
+    else list.insertBefore(row, anchor);
+  }
+  if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+  element('graph-count').textContent = matches;
+  element('empty').hidden = !!matches;
   renderSelectedState();
   refreshVoiceStatus();
   const changed = legacyChanged(localStorage, library);
@@ -166,7 +183,7 @@ try {
   const opened = await openLibrary(localStorage); library = opened.library;
   element('library-warning').textContent = opened.warning;
   selectedId = localStorage.getItem(selectionKey);
-  if (!library.graphs.some(entry => entry.id === selectedId)) selectedId = library.graphs[0].id;
+  if (!library.graphs.some(entry => entry.id === selectedId)) selectedId = null;
   render(true);
   // Per-tab drafts survive refresh without changing library data or revisions.
   try {
@@ -254,12 +271,11 @@ if (!fatal) {
   const more = element('graph-more');
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
-    const menu = event.target.closest('.row-menu[open], #graph-more[open]');
+    const menu = event.target.closest('#graph-more[open]');
     if (menu) { event.preventDefault(); menu.open = false; menu.querySelector('summary').focus(); }
   });
   document.addEventListener('click', event => {
     if (!more.contains(event.target)) more.open = false;
-    for (const menu of element('graph-list').querySelectorAll('.row-menu[open]')) if (!menu.contains(event.target)) menu.open = false;
   });
   more.addEventListener('click', event => {
     if (event.target.closest('button')) { more.open = false; more.querySelector('summary').focus(); }
@@ -286,19 +302,33 @@ if (!fatal) {
     } catch (error) { element('errors').textContent = error.message; }
     finally { actionPending = false; }
   };
+  element('open').onclick = async event => {
+    event.preventDefault();
+    if (actionPending) return;
+    const request = ++selectionRequest, id = selectedId;
+    if (await details.flush() && request === selectionRequest && id === selectedId) location.href = element('open').href;
+  };
   element('duplicate').onclick = () => { void action(() => store.duplicate(selectedId, library.revision), { selectNew: true }); };
-  element('export').onclick = () => {
+  element('export').onclick = async () => {
+    if (actionPending) return;
+    const request = ++selectionRequest, id = selectedId;
+    // Recovery export may use the last saved graph, but must retain a failed draft.
+    const saved = await details.flush();
+    if (request !== selectionRequest || id !== selectedId || !saved && !details.failure && !details.reviewRequired) return;
     const entry = selected() || details.entry;
     download(exportEntry(entry, library), `${entry.name.replace(/[^\p{L}\p{N} _-]/gu, '_')}.json`);
   };
   element('delete').onclick = () => {
     const entry = selected(); if (!entry) return;
     if (confirm(`Delete “${entry.name}”? This cannot be undone.`)) void action(() => store.delete(selectedId, library.revision)).then(success => {
-      if (success) { details.clearDraft(); selectedId = library.graphs[0].id; render(true); focusDetails(); }
+      if (success) { details.clearDraft(); selectedId = null; rememberSelection(); render(true); element('new').focus(); }
     });
   };
   element('recover-legacy').onclick = () => { void action(() => store.recoverLegacy(library.revision), { recover: true }); };
   element('check-cache').onclick = async () => {
+    if (actionPending) return;
+    const request = ++selectionRequest, id = selectedId;
+    if (!await details.flush() || request !== selectionRequest || id !== selectedId) return;
     const entry = selected(); if (!entry) return;
     const key = JSON.stringify(resolvedEntryGraph(entry, library));
     element('graph-metadata').open = true;
