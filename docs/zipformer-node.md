@@ -21,7 +21,7 @@ KeyedTextPair.pair → KeyedPairedTextAccumulator.pair
 KeyedPairedTextAccumulator.pairs → Display.input1
 ```
 
-Wait for Auto Save, then Start in Live. Selected media and microphone sources provide the same
+Wait for Auto Save, then Start in Live. Microphone sources provide the same
 PCM contract. There is no language or maxDuration input: this is English-only,
 with a fixed policy. Remove unused configuration sources/edges when replacing
 another ASR. Multiple ASRs may share a compatible source. Finals can also feed

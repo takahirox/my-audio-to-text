@@ -222,10 +222,8 @@ See the [development flow](docs/development-flow.md) for workflow and language p
 
 Live contains recording controls, graph-defined actions, Display tabs and actionable
 errors. Graph Editor owns source/output connections; routine Node diagnostics are
-available in Session details. There is no target panel. `SelectedPageMediaAudio`
-is temporarily unavailable and reports an error suggesting `ChromeTabAudio`;
-on-page element selection is deferred. Microphone Start permission and automatic
-focused-field output retain their existing behavior.
+available in Session details. There is no target panel. Microphone permission
+is requested by Start; focused-field output follows the toolbar tab automatically.
 
 The extension Live window shows each Display as an independent view with one
 switchable tab per `input1`, `input2`, … ITEM port and exactly one input panel

@@ -1,8 +1,6 @@
 import { Microphone } from '../web/audio.js';
 import { ExtensionTabAudioNode } from './tab-audio-node.js';
 
-export const SELECTED_MEDIA_UNAVAILABLE = 'SelectedPageMediaAudio is temporarily unavailable: Live no longer selects page media. Choose ChromeTabAudio in Graph Editor for now.';
-
 export function microphoneCaptureError(error) {
   const recovery = {
     NotAllowedError: 'Allow microphone access for the extension in Chrome and your OS privacy settings, then retry this session.',
@@ -14,14 +12,6 @@ export function microphoneCaptureError(error) {
   return Error(`Microphone capture unavailable: ${error.message || error}. ${recovery}`, { cause: error });
 }
 
-// Selection on the target page is deferred to a separate task. Fail this
-// source explicitly; Pipeline keeps independent complete branches running.
-export class SelectedPageMediaAudioNode extends ExtensionTabAudioNode {
-  constructor(options = {}) { super(null, options); }
-  start() {
-    throw Error(SELECTED_MEDIA_UNAVAILABLE);
-  }
-}
 export class ExtensionMicrophoneAudioNode extends ExtensionTabAudioNode {
   constructor(stream, options = {}) {
     super(null, { ...options, sourceFactory: (_tab, audio, ended) => {
