@@ -212,12 +212,19 @@ try {
 }
 // Consent remains revocable even if graph storage needs recovery.
 {
+  const help = element('web-voice-help');
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && help.open && !element('voice-consent').open) {
+      help.open = false; help.querySelector('summary').focus();
+    }
+  });
+  document.addEventListener('click', event => { if (!help.contains(event.target)) help.open = false; });
   const toggle = element('web-voice-enabled'), status = element('web-voice-status'), consent = element('voice-consent');
   let voiceMessage = '', hasWebsiteAccess = true;
   refreshVoiceStatus = () => {
     element('voice-switch-state').textContent = toggle.checked ? 'ON' : 'OFF';
     const count = library ? webVoiceChoices(library).length : null;
-    status.textContent = voiceMessage || (count === 0 ? 'No compatible graphs. Connect MicrophoneAudio through final text processing to FocusedInputTextOutputNode in Graph Editor.' : toggle.checked ? hasWebsiteAccess ? 'ON · click a field mic to start; right-click it to choose a default graph.' : 'Website access missing. Turn OFF, then ON to grant access.' : 'OFF · website microphone controls are disabled.');
+    status.textContent = voiceMessage || (toggle.checked && !hasWebsiteAccess ? 'Website access missing. Turn OFF, then ON to grant access.' : count === 0 ? 'No compatible graphs. Connect MicrophoneAudio through final text processing to FocusedInputTextOutputNode in Graph Editor.' : '');
   };
   toggle.checked = await readVoiceEnabled();
   const checkWebsiteAccess = async () => {
