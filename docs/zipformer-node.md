@@ -21,7 +21,7 @@ KeyedTextPair.pair → KeyedPairedTextAccumulator.pair
 KeyedPairedTextAccumulator.pairs → Display.input1
 ```
 
-Save, then Start in Live. Selected media and microphone sources provide the same
+Wait for Auto Save, then Start in Live. Selected media and microphone sources provide the same
 PCM contract. There is no language or maxDuration input: this is English-only,
 with a fixed policy. Remove unused configuration sources/edges when replacing
 another ASR. Multiple ASRs may share a compatible source. Finals can also feed
@@ -166,4 +166,4 @@ snapshot** decoding and its Number-configured cap. Whisper still exposes
 online acoustic/decoder state between incoming blocks within each capped segment;
 its provisional output comes from that real incremental inference.
 
-Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and automatic persistence of a repaired graph copy.

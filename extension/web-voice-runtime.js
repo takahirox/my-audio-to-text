@@ -61,7 +61,7 @@ async function start(owner, target, entry) {
     owner.session.outputTarget = structuredClone(target);
     await owner.session.prepareModels();
     if (owner.ending) return;
-    if (owner.session.view.modelState !== 'ready') throw Error(owner.session.view.error || 'Models unavailable. Save the graph or open Models to recover cached files.');
+    if (owner.session.view.modelState !== 'ready') throw Error(owner.session.view.error || 'Models unavailable. Use Graph Editor preparation controls or Models to recover cached files.');
     // The original page owns site permission and capture; only PCM arrives here.
     await owner.session.start(target.tabId, { microphoneGesture: true });
     if (!owner.ending && owner.session.view.state !== 'running') throw Error(owner.session.view.error || 'The local microphone graph could not start. Click the field mic to retry.');

@@ -108,7 +108,7 @@ implementation is outside this Issue.
 
 Graph version remains 15. Existing Display.input routes convert only to
 Display.input1 and missing title/inputCount settings receive defaults. Load and
-Import preserve Node IDs and other data; Save/Export write numbered ports.
+Import preserve Node IDs and other data; Auto Save/Export write numbered ports.
 Reading leaves stored JSON unchanged. Removed display Node types and their
 ports are still unsupported. Validation reports the
 unknown Node/port explicitly; Live disables Start and links to Graph Editor.
@@ -116,7 +116,7 @@ The editor opens a valid current default draft and shows the original saved JSON
 under Graph actions → Saved JSON. Reading never rewrites stored data.
 
 Choose Reset draft to default or Import graph JSON, inspect the current graph,
-then Save to replace the saved graph. Import validates before changing the draft;
+then Auto Save persists the valid draft. Import validates before changing the draft;
 unsupported imports leave it intact. There is no automatic migration, rewiring,
 legacy mode or accumulating display variant.
 

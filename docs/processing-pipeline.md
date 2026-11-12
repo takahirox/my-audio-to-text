@@ -160,4 +160,4 @@ For ordinary latest text, connect any TEXT producer directly to Display.input1.
 TextFormatter composes literal templates, TextAccumulator retains committed TEXT,
 and keyed pair history belongs to KeyedPairedTextAccumulator. Live follows graph
 order and supports copy and independent scroll position. Unsupported saved Nodes
-and ports require an explicit Reset or current graph Import and Save.
+and ports require an explicit Reset or current graph Import and wait for Auto Save.

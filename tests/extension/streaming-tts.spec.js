@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -148,7 +149,9 @@ async function graph(f, language, text) {
   await editor.reload();
   await expect(editor.getByRole('button', { name: 'tts output stream', exact: true })).toBeVisible();
   await expect(editor.getByRole('button', { name: 'speaker input stream', exact: true })).toBeVisible();
-  await editor.locator('#graph-save').click();
+  await settleAutoSave(editor);
+  const prepare = editor.getByRole('button', { name: 'Retry preparation', exact: true });
+  await expect(prepare).toBeEnabled(); await prepare.click();
   await expect(editor.locator('#graph-models .model-status')).toContainText('Ready', { timeout: 120000 });
   await editor.reload(); await expect(editor.getByRole('button', { name: 'speaker input stream', exact: true })).toBeVisible();
   return editor;

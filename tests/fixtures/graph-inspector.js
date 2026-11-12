@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { expect } from '@playwright/test';
 
 export async function checkStableInspector(page, width) {
@@ -46,6 +47,7 @@ export async function checkStableInspector(page, width) {
 }
 
 export async function loadInputGraph(page) {
+  await settleAutoSave(page);
   await page.evaluate(async () => {
     const { graphNode, edge } = await import(new URL('./graph.js', location.href)); const { saveLiveGraphData } = await import(new URL('./graph-library.js', location.href));
     const nodes = [graphNode('Text', 'source', 20, 20), graphNode('TextFormatter', 'first', 350, 20),
@@ -89,9 +91,9 @@ export async function checkInputDetach(page, width) {
   await page.mouse.move(end.x, end.y, { steps: 5 }); await page.mouse.up();
   await expect(page.locator('.graph-wire')).toHaveCount(before.edges.length - 1);
   await expect(page.locator('.graph-scroll')).toBeFocused();
-  await expect(page.locator('#graph-state')).toContainText('Unsaved');
+  await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
   expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(before);
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page);
   const expected = { ...before, edges: before.edges.slice(1) };
   expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(expected);
   await page.reload(); await expect(page.locator('.graph-wire')).toHaveCount(expected.edges.length);
@@ -114,10 +116,10 @@ export async function checkInputReconnect(page) {
   await input('first input input1').dragTo(input('second input input1'));
   await expect(page.locator('#graph-state')).toContainText('Saved'); // identical fan-out target
   await input('first input input1').dragTo(input('first input input2'));
-  await expect(page.locator('#graph-state')).toContainText('Unsaved');
+  await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
   await expect(page.locator('.graph-wire')).toHaveCount(2);
   await expect(input('first input input2')).toBeFocused();
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page);
   expect(await page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual({ ...before,
     edges: [before.edges[1], { from: ['source', 'value'], to: ['first', 'input2'] }] });
 }
@@ -137,7 +139,7 @@ export async function checkRecovery(page, kind) {
   await page.getByText('Saved JSON', { exact: true }).click();
   await expect(page.getByLabel('Original saved graph JSON')).toHaveValue(raw);
   page.once('dialog', dialog => dialog.accept()); await page.locator('#graph-reset').click();
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-errors')).toContainText('original has been kept');
+  await settleAutoSave(page); await expect(page.locator('#graph-save-error')).toContainText('original has been kept');
   await recoverAsNew(page);
   await expect(page.locator('#errors')).toBeEmpty();
 }

@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './graph-fixture.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -138,7 +139,7 @@ test('Live keeps all routine and unknown diagnostics in Session details; structu
   await expect(live.locator('#condition-status')).toBeVisible();
   await live.locator('#diagnostics > summary').press('Enter');
   await live.editor.getByRole('button', { name: 'Select transcript', exact: true }).press('ArrowRight');
-  await live.editor.locator('#graph-save').click();
+  await settleAutoSave(live.editor);
   await expect(live.locator('#saved-state')).toBeVisible();
   await expect(live.locator('.live-text-region')).toHaveAccessibleName('Input 1');
   await expect(live.locator('.display-label, .live-text-region button, .live-text-region [role="status"]')).toHaveCount(0);
@@ -206,7 +207,7 @@ test('Graph stays canvas-first and Models keeps preparation and legal notices se
   const live = await openGraph(f);
   for (const width of [390, 1440]) {
     await live.editor.setViewportSize({ width, height: 844 });
-    await expect(live.editor.locator('#graph-save')).toBeInViewport();
+    await expect(live.editor.locator('#graph-undo')).toBeInViewport();
     await expect(live.editor.locator('#graph-palette-toggle')).toBeInViewport();
     await expect(live.editor.locator('#graph-palette')).toBeHidden();
     await expect(live.editor.locator('.graph-inspector')).toContainText('Select a node or connection.');

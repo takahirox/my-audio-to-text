@@ -131,4 +131,4 @@ supported here in desktop Chrome MV3; WebKit cannot load this extension and has
 no Whisper support claim. Real fixtures and models must be prepared before the
 opt-in check; otherwise its explicit skip is not evidence of passing inference.
 
-Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and automatic persistence of a repaired graph copy.

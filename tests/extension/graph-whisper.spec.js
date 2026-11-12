@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { GRAPH_VERSION } from '../../extension/graph.js';
 import { openPalette, clickGraphAction } from './ui-controls.js';
@@ -43,7 +44,7 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   await page.evaluate(() => window.capture.emit('audio', new Float32Array(96000).fill(.1)));
   await expect(page.locator('.display-content')).toHaveText(['en: 96000'].join('\n'));
 
-  await editor.getByLabel('language value', { exact: true }).fill('ja'); await editor.locator('#graph-save').click();
+  await editor.getByLabel('language value', { exact: true }).fill('ja'); await settleAutoSave(editor);
   await expect(editor.locator('.graph-state-notice')).toContainText('earlier graph');
   await page.evaluate(() => window.capture.emit('audio', new Float32Array(37).fill(.1)));
   await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled();
@@ -55,8 +56,8 @@ test('MV3 Whisper worker routes completed PCM, binds Text language, freezes save
   await editor.reload(); await editor.getByRole('button', { name: 'Select language', exact: true }).click();
   await expect(editor.getByLabel('language value', { exact: true })).toHaveValue('ja');
   for (const invalid of ['', 'fr', 'EN']) {
-    await editor.getByLabel('language value', { exact: true }).fill(invalid); await editor.locator('#graph-save').click();
-    await expect(editor.locator('#graph-save')).toBeEnabled();
+    await editor.getByLabel('language value', { exact: true }).fill(invalid); await settleAutoSave(editor);
+
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(page.locator('#errors')).toContainText('Whisper.language must be en or ja');
     await expect(page.locator('#start')).toBeDisabled();
@@ -87,8 +88,8 @@ test('MV3 Text literal and empty values round-trip and deliver once to an ordina
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toBeDisabled();
   await editor.getByRole('button', { name: 'transcript input input1', exact: true }).click();
   for (const value of ['<img src=x onerror=alert(1)> & "\n😀 {1}', '']) {
-    await editor.getByLabel('text value', { exact: true }).fill(value); await editor.locator('#graph-save').click();
-    await expect(editor.locator('#graph-save')).toBeEnabled();
+    await editor.getByLabel('text value', { exact: true }).fill(value); await settleAutoSave(editor);
+
     await expect(editor.locator('#graph-errors')).toBeEmpty();
     // Reload only after the asynchronous Web Lock save has persisted the literal.
     await expect.poll(() => editor.evaluate(() =>

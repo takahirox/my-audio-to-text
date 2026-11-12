@@ -17,7 +17,7 @@ Text.value / ASR.final / committed translation.text
 
 Choose language (`japanese`/`english`) and voice (`ono_anna`/`ryan`) explicitly
 in the TTS inspector. Match the voice's native language for best pronunciation.
-Save prepares the same 690 MB asset set for either voice/language, including
+Auto Save prepares the same 690 MB asset set for either voice/language, including
 parked Nodes. The existing Models page provides Download / retry, verification
 and deletion. Press Start in Live to activate audio and keep Live open. Start
 reads verified cached weights only. Missing/evicted assets require Models
@@ -189,7 +189,7 @@ Omit `TTS_BROWSER_CHANNEL=chrome` for Playwright's installed Chromium.
 fixture packages production manifest/CSP, UI, graph, cache, session, Nodes,
 Workers and TTS runtime, omitting inactive ASR bundles. It serves real pinned
 weights from loopback with **unchanged production sizes/hashes**, exercises
-Save/Models verification, then asserts no recording-time HTTP. The controlled
+Auto Save/Models verification, then asserts no recording-time HTTP. The controlled
 transport mode is explicitly separate from real inference.
 
 To test a complete build instead of the focused fixture, run the normal extension

@@ -162,7 +162,7 @@ async function startupValues(graph, configurations, signal, timeoutMs) {
           wake = resolve; timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
         }));
       } finally { wake = null; clearTimeout(timer); }
-      if (Date.now() >= deadline && values.size !== configurations.size) throw Error('Startup configuration timed out. Supply configuration before capture in Graph Editor and Save.');
+      if (Date.now() >= deadline && values.size !== configurations.size) throw Error('Startup configuration timed out. Supply configuration before capture in Graph Editor and wait for Auto Save.');
     }
     signal.throwIfAborted();
     if (startup.errors.length) throw startup.errors[0];
@@ -297,7 +297,7 @@ export function buildGraph(graph, options) {
         if (resources.speechNodes.has(spec.id)) {
           const route = configurations.get(spec.id);
           if (route) {
-            if (!values.has(spec.id)) throw Error('Startup configuration is unavailable before capture. Connect startup data in Graph Editor and Save; audio, model output and button-triggered values are not available yet.');
+            if (!values.has(spec.id)) throw Error('Startup configuration is unavailable before capture. Connect startup data in Graph Editor and wait for Auto Save; audio, model output and button-triggered values are not available yet.');
             node.receive(node.configurationPort, values.get(spec.id));
           }
           node.configurationConnected = false;

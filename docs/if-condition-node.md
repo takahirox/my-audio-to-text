@@ -5,8 +5,8 @@ accepts `text: TEXT`, has one editable natural-language `condition`, and exposes
 `yes: TEXT` / `no: TEXT`. For example, connect `SpeechToTextReazonSpeech.final`
 to `IfCondition.text`, set `Is this a question?`, and connect the two outputs to
 separate Live text displays. Text, translators and other ordinary TEXT producers
-can use the same Node. Save/reload preserves each instance's independent condition
-and wires. Current graphs use version **15**; unsupported old versions require explicit Reset or Import and Save.
+can use the same Node. Auto Save/reload preserves each instance's independent condition
+and wires. Current graphs use version **15**; unsupported old versions require explicit Reset or Import and wait for Auto Save.
 
 A successful nonempty input runs a real binary classifier in an owned module
 Worker, then emits the **original string unchanged** to exactly one port. The
@@ -61,7 +61,7 @@ not committed or bundled.
 
 ## Preparation and recovery
 
-**Save graph** persists the validated graph first, then prepares the required
+**Auto Save** persists the validated graph first, then prepares the required
 model assets through `GraphModelPreparation` / `ModelAssetCache`, including
 parked IfCondition Nodes. Multiple instances share only verified cached assets;
 they own separate models/Workers and conditions. Preparation uses immutable
@@ -70,13 +70,13 @@ streams downloads, reports progress, reuses verified files, supports Cancel and
 Retry, and detects corruption/eviction. A preparation failure leaves the saved
 graph intact. The Models page also supports check, download/retry and deletion.
 
-Save performs **no inference** and creates no inference Worker. Start checks
+Auto Save performs **no inference** and creates no inference Worker. Start checks
 cached integrity and loads only cached model data; missing/invalid assets do not
 trigger a recording-time download. The runtime disables remote models and both
 ordinary runtime/model caches, and its read-only custom cache allowlists only
 the pinned data URLs. Optional model lookups fall back to packaged local 404s.
 Input text is never sent to a cloud API. A failure is shown in Live's
-IfCondition status; fix the condition/input or Save/retry preparation and Start
+IfCondition status; fix the condition/input or Auto Save/retry preparation and Start
 a fresh session. Unrelated transcript/display/processing paths remain running.
 
 Allow roughly **40 MB storage** for data and overhead, and **250 MB free RAM per
@@ -130,7 +130,7 @@ npm run test:if-condition-real
 ```
 
 `prepare:if-condition-test-model` downloads and verifies only the real smoke's
-fixture data. Production users prepare weights via Save instead. The maintainer
+fixture data. Production users prepare weights via Auto Save instead. The maintainer
 script `scripts/review-if-condition-assets.py` reproduces the immutable manifest;
 review the diff before changing a checkpoint.
 
@@ -143,8 +143,8 @@ with explicit fixture scores. They do not establish semantic accuracy.
 
 The opt-in real smoke keeps actual pinned weights, tokenizer, packaged runtime,
 owned Worker, cache verification, graph and sinks. A fixture replaces only the
-upstream ASR producer. It prepares via Save, verifies cache reuse/no inference at
-Save, disables networking, routes meaningful English examples to separate sinks,
+upstream ASR producer. It prepares via Auto Save, verifies cache reuse/no inference at
+Auto Save, disables networking, routes meaningful English examples to separate sinks,
 checks original text/repeats/empty values, changes independent condition settings,
 Stops and repeats sessions, and records browser/hardware, model bytes, startup,
 end-to-end decision latency, HTTP attempts and CSP violations. See

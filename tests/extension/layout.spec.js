@@ -32,7 +32,7 @@ test('MV3 palette search/categories, contextual settings, keyboard controls and 
   await editor.keyboard.press('Escape');
   await expect(editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await editor.locator('#graph-palette-toggle').focus();
-  await editor.keyboard.press('Tab'); await expect(editor.locator('#graph-save')).toBeFocused();
+  await editor.keyboard.press('Tab'); await expect(editor.locator('#graph-undo')).toBeFocused();
   await editor.keyboard.press('Tab'); await expect(editor.locator('.graph-actions > summary')).toBeFocused();
   await editor.keyboard.press('Enter'); await expect(editor.locator('#graph-validate')).toBeVisible();
   await editor.keyboard.press('Escape'); await expect(editor.locator('.graph-actions > summary')).toBeFocused();

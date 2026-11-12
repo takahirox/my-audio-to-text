@@ -8,14 +8,14 @@ export async function checkCanvasFirst(page, width) {
   await expect(page.locator('.graph-viewport-actions')).toHaveCount(0);
   const toolbar = page.locator('.graph-toolbar');
   const bounds = await toolbar.boundingBox();
-  expect(bounds.height).toBe(44);
+  expect(bounds.height).toBeGreaterThanOrEqual(44);
   for (const [selector, name, text] of [
-    ['#graph-palette-toggle', 'Add Node', 'Add Node'], ['#graph-save', 'Save graph', 'Save'],
+    ['#graph-palette-toggle', 'Add Node', 'Add Node'], ['#graph-undo', 'Undo', 'Undo'], ['#graph-redo', 'Redo', 'Redo'],
     ['.graph-actions > summary', 'Graph actions', '…'],
   ]) {
     const control = page.locator(selector), box = await control.boundingBox();
     await expect(control).toHaveAccessibleName(name); await expect(control).toHaveText(text);
-    expect(box.y).toBe(bounds.y); expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.y).toBeGreaterThanOrEqual(bounds.y); expect(box.height).toBeGreaterThanOrEqual(44);
     expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -45,7 +45,11 @@ export async function checkCanvasFirst(page, width) {
   // macOS WebKit needs Option+Tab to include native buttons in focus traversal.
   const tab = process.platform === 'darwin' && page.context().browser()?.browserType().name() === 'webkit' ? 'Alt+Tab' : 'Tab';
   await page.locator('#graph-palette-toggle').focus();
-  await page.keyboard.press(tab); await expect(page.locator('#graph-save')).toBeFocused();
+  for (const selector of ['#graph-undo', '#graph-redo']) {
+    if (await page.locator(selector).isEnabled()) {
+      await page.keyboard.press(tab); await expect(page.locator(selector)).toBeFocused();
+    }
+  }
   await page.keyboard.press(tab); await expect(page.locator('.graph-actions > summary')).toBeFocused();
   await page.keyboard.press(tab); await expect(scroll).toBeFocused();
   return { width, toolbar: bounds, canvas, controls };
@@ -77,15 +81,16 @@ export async function checkGraphActivity(page, width, info) {
   const active = await canvas.boundingBox();
   expect(active).toEqual(idle);
   expect(active.height).toBeGreaterThan(width > 800 ? 744 : 558); // Previous canvas sizes at 900px height.
-  const bounds = await toolbar.boundingBox(); expect(bounds.height).toBe(44);
+  const bounds = await toolbar.boundingBox(); expect(bounds.height).toBeGreaterThanOrEqual(44);
   expect(active.y - bounds.y - bounds.height).toBeLessThan(20);
   await expect(page.locator('.graph-status')).toHaveAttribute('role', 'status');
   await expect(page.locator('.graph-status [role=status]')).toHaveCount(0);
   expect(await page.locator('#graph-editor').innerText()).not.toContain('1476958582');
   await page.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
-  await expect(page.locator('#graph-state')).toHaveText('Unsaved');
-  await expect(badge).toBeVisible(); await expect(warning).toBeHidden();
-  expect(await canvas.boundingBox()).toEqual(idle);
+  await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
+  await expect(badge).toBeVisible();
+  // Auto Save may already have published the next-session warning.
+  await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
   // All controls and both independent statuses fit, without clipping or overlap.
   const status = await page.locator('.graph-status').boundingBox();
   for (const selector of ['#graph-state', '.graph-activity']) {
@@ -95,10 +100,11 @@ export async function checkGraphActivity(page, width, info) {
     expect(box.y).toBeGreaterThanOrEqual(bounds.y);
     expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height);
   }
-  for (const selector of ['#graph-palette-toggle', '#graph-save', '.graph-actions > summary']) {
+  for (const selector of ['#graph-palette-toggle', '#graph-undo', '.graph-actions > summary']) {
     const box = await page.locator(selector).boundingBox();
-    expect(box.y).toBe(bounds.y); expect(box.height).toBeGreaterThanOrEqual(44);
-    expect(box.x).toBeGreaterThanOrEqual(status.x + status.width);
+    expect(box.y).toBeGreaterThanOrEqual(bounds.y); expect(box.height).toBeGreaterThanOrEqual(44);
+    if (box.y < status.y + status.height) expect(box.x).toBeGreaterThanOrEqual(status.x + status.width);
+    else expect(box.x).toBeGreaterThanOrEqual(bounds.x);
     expect(box.x + box.width).toBeLessThanOrEqual(width);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -108,7 +114,7 @@ export async function checkGraphActivity(page, width, info) {
       await page.screenshot({ path: `docs/evidence/graph-245-${width}.png`, fullPage: true });
     }
   }
-  await clickGraphAction(page, 'graph-load');
+  await page.locator('#graph-undo').click();
   await expect(page.locator('#graph-state')).toHaveText('Saved');
   // Another window's activity and cleanup cannot clear this graph's status.
   await publishGraphActivity(page, { sessionId: 'unrelated-window', matching: false });
@@ -167,7 +173,7 @@ export async function checkLeanInspector(page) {
   await expect(heading).toHaveAttribute('aria-pressed', 'true');
   await expect(heading).toBeFocused();
   await expect(page.locator('[data-node="hold-1"]')).toHaveCSS('left', '70px');
-  await expect(page.locator('#graph-state')).toHaveText('Unsaved');
+  await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
   await heading.press('ArrowRight'); await expect(heading).toBeFocused();
   await expect(page.locator('[data-node="hold-1"]')).toHaveCSS('left', '80px');
   const wire = page.getByRole('button', { name: 'Select connection audio.audio to speech.audio', exact: true });
@@ -190,14 +196,14 @@ export async function checkGraphCommands(page) {
     const graph = defaultGraph(); graph.nodes.push(graphNode('Text', 'literal', 20, 20)); return graph;
   });
   await page.locator('input[type=file]').setInputFiles({ name: 'graph.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(graph)) });
-  await expect(page.locator('#graph-state')).toHaveText('Unsaved');
+  await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
   await expect(actions).toBeFocused();
   await actions.press('Enter');
   const download = page.waitForEvent('download'); await page.locator('#graph-export').click();
   expect(JSON.parse(await readFile(await (await download).path(), 'utf8'))).toEqual(graph);
-  await clickGraphAction(page, 'graph-load', { discard: false });
+  await expect(page.locator('#graph-undo')).toBeEnabled();
   await expect(page.locator('[data-node="literal"]')).toHaveCount(1);
-  await clickGraphAction(page, 'graph-load');
+  await page.locator('#graph-undo').click();
   await expect(page.locator('[data-node="literal"]')).toHaveCount(0);
   await actions.press('Enter');
   await expect(page.locator('#graph-optional-warnings')).toHaveCount(0);

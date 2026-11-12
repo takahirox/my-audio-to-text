@@ -1,7 +1,7 @@
 # Extension Models and model-asset cache (#67 / #77)
 
 [Text Summary · LFM2.5 1.2B JP and Qwen3.5 2B](text-summary-nodes.md)
-have independent Save-time preparation and Models cards (749 MB / 1.403 GB),
+have independent Auto Save preparation and Models cards (749 MB / 1.403 GB),
 including parked Nodes. Both require WebGPU shader-f16 and several GB of free
 RAM/GPU memory per active Node. LFM 1.0 commercial-use conditions apply; see the
 model card's packaged license. Live opening verifies cached assets and initializes
@@ -15,23 +15,23 @@ ReazonSpeech ja-en and Silero VAD are labeled **Bundled** because their assets
 are packaged with the extension, with no optional download lifecycle.
 The **Models** heading identifies the page; its header navigation contains only
 **Library**, which opens Graph Library in a separate tab and supports keyboard activation.
-Opening Models checks files only. A successful valid **Save graph** in Graph Editor
+Opening Models checks files only. A successful valid **Auto Save** in Graph Editor
 prepares the optional weights required by actual saved OPUS-MT/TranslateGemma/TTS/optional-ASR Node types and
 voices, including parked Nodes. Repeated equivalent Nodes are deduplicated; each
 direction and voice remains independent, with shared verified files reused.
 Existing packaged ASR assets are unchanged. The optional [Parakeet v3 / Moonshine
-Medium Streaming Nodes](optional-asr-nodes.md) prepare 1.26 GB / 305 MB after Save;
-the editor shows memory, GPU and storage guidance before Save. Editing/loading alone and failed validation or
-storage never trigger preparation. Storage finishes before preparation; download
+Medium Streaming Nodes](optional-asr-nodes.md) prepare 1.26 GB / 305 MB after Auto Save;
+the editor shows memory, GPU and storage guidance before Auto Save. Opening a graph checks cached files only. Edits auto-save before preparation; failed validation or
+storage prevents preparation. Storage finishes before preparation; download
 failure does not roll it back. No capture, inference, Workers or remote executable
-code starts during Save-time preparation. Live initialization and Start/inference
+code starts during Auto Save preparation. Live initialization and Start/inference
 remain cache-only; see the [Live model lifecycle](extension-graph.md#live-model-lifecycle-239).
 Each optional model has independent status, byte progress, error/retry, Cancel,
 Check cache and Delete controls. TTS voice selectors are initialized from saved
 Nodes where present, and never change graph settings. Choose a matching voice
-in Graph Editor, then Save to prepare it and use it next session. Language/voice and terms are
+in Graph Editor, Auto Save prepares its files after persistence for the next session. Language/voice and terms are
 shown alongside preparation. Graph Editor also shows per-model status and byte
-progress with cancellation, retry and cache checking after Save; Models remains
+progress with cancellation, retry and cache checking after Auto Save; Models remains
 available for recovery after interruption. Supertonic F1/M1 support Japanese and English;
 Kokoro jf_alpha is Japanese and af_heart is English.
 
@@ -216,11 +216,11 @@ measure real device persistence and multi-GB performance separately.
 
 `TranslateGemmaEnJa` and `TranslateGemmaJaEn` share one pinned q4 manifest and
 cache: **3,111,911,678 bytes**, including both ONNX external-data shards and the
-translation template. Save prepares it only when either Node is saved (parked
+translation template. Auto Save prepares it only when either Node is saved (parked
 Nodes included). Models exposes a single TranslateGemma card with integrity
 checks, Cancel/retry and deletion. Opening Models never downloads weights.
 No weight fetch is allowed during recording: extension Workers disable remote
-loading and use only the verified allowlist. Save failures do not erase graphs;
+loading and use only the verified allowlist. Auto Save failures do not erase graphs;
 cache/quota/eviction failures require preparation and a fresh run.
 
 Allow 7 GB free storage and several GB free RAM/GPU memory, more for concurrent

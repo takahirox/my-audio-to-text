@@ -133,7 +133,7 @@ Ending one source drains its ancestors and downstream path while independent
 branches continue. TextAccumulator intentionally retains history; TextWindow and
 the scheduler remove completed source from their processing buffers.
 
-Save persists the graph before preparing only referenced model weights.
+Auto Save persists the graph before preparing only referenced model weights.
 TextWindow adds none. TranslateGemma retains its pinned **3.112 GB q4** weights
 and WebGPU requirement (allow **7 GB storage** and several GB free RAM/GPU memory
 per active translator). See [model terms and preparation](translation-nodes.md#translategemma-in-the-extension-124).
@@ -157,7 +157,7 @@ npm run test:extension -- tests/extension/windowed-translation.spec.js tests/ext
 WINDOW_TRANSLATION_SMOKE=1 npx playwright test --config playwright.extension.config.js tests/extension/windowed-translation-smoke.spec.js
 ```
 
-The opt-in real-model test uses the packaged MV3 graph, Save preparation and real
+The opt-in real-model test uses the packaged MV3 graph, Auto Save preparation and real
 TranslateGemma Workers offline after preparation. Direct, batched and direct-ASR
 preview paths each use a fresh Worker. Fixed batching uses a 30-second wait limit
 for comparable length/Stop splits; deterministic checks exercise deadlines.
@@ -168,6 +168,6 @@ remain in [the #128 evidence record](evidence/translation-128.md).
 ## Saved graphs
 
 Unsupported Nodes, versions and ports require Reset or Import of a current graph
-and an explicit Save. Reading never rewrites stored JSON. The original JSON
+and automatic persistence of a repaired graph copy. Reading never rewrites stored JSON. The original JSON
 remains inspectable through Graph actions → Saved JSON. See
 [Graph Editor recovery](extension-graph.md).
