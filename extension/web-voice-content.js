@@ -36,7 +36,7 @@
   const native = element => element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
   const value = element => native(element) ? element.value : element.textContent;
   let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle', inserting = false;
-  let listeners, menu, menuCaret, choices = [], defaultId = null, selectionPending = false;
+  let listeners, menu, menuCaret, choices = [], defaultId = null;
   const positionKey = 'web-microphone-position-v1';
   const validPosition = value => ['auto', 'left', 'right'].includes(value) ? value : 'auto';
   let microphonePosition = 'auto', positionRevision = 0;
@@ -65,7 +65,7 @@
     svg.dataset.icon = icon;
     const path = document.createElementNS(svg.namespaceURI, 'path');
     path.setAttribute('d', iconPaths[icon]); svg.append(path); button.replaceChildren(svg);
-    button.setAttribute('aria-label', labels[next]); button.setAttribute('aria-description', 'Right-click or press Shift+F10 to choose the default voice graph.'); button.title = error || labels[next]; host.title = error || labels[next]; button.disabled = next === 'stopping' || selectionPending;
+    button.setAttribute('aria-label', labels[next]); button.setAttribute('aria-description', 'Right-click or press Shift+F10 to start with a voice graph and save it as the default.'); button.title = error || labels[next]; host.title = error || labels[next]; button.disabled = next === 'stopping';
     button.dataset.state = next;
     status.textContent = error || (next === 'preparing' ? 'Preparing…' : next === 'recording' ? 'Recording' : next === 'stopping' ? 'Stopping…' : '');
     position();
@@ -175,7 +175,7 @@
   function openMenu(event) {
     if (!event.isTrusted || !enabled) return;
     event.preventDefault(); event.stopPropagation();
-    if (selectionPending || session || ['preparing', 'recording', 'stopping'].includes(state) || !choices.length) return;
+    if (session || ['preparing', 'recording', 'stopping'].includes(state) || !choices.length) return;
     if (menu) { closeMenu(true); return; }
     try { menuCaret = { element: target }; saveCaret(menuCaret); }
     catch (error) { stateUI('error', error.message); return; }
@@ -189,10 +189,8 @@
       item.tabIndex = -1;
       item.addEventListener('pointerdown', event => { if (event.isTrusted) event.preventDefault(); });
       item.addEventListener('click', event => {
-        if (!event.isTrusted || session) return;
-        selectionPending = true;
-        send({ type: 'select-graph', id: choice.id }); closeMenu(true);
-        stateUI('idle', 'Saving default graph…');
+        if (!menu?.contains(item)) return;
+        startCapture(event, choice.id);
       });
       menu.append(item);
     }
@@ -243,6 +241,27 @@
       await owner.capture.stop(true);
       if (session === owner && !owner.cancelRequested) send({ type: 'stop' });
     } catch (error) { if (session === owner) abort(error.message); }
+  }
+  function startCapture(event, graphId) {
+    if (!event.isTrusted || !enabled || !control || session) return;
+    const element = menuCaret?.element || target;
+    closeMenu(true);
+    if (graphId === undefined && !defaultId) { stateUI('error', 'Right-click the mic (or press Shift+F10) to choose a voice graph first.'); return; }
+    try {
+      if (target !== element || !editable(element)) throw Error('Focus a supported writable field first.');
+      const owner = { element, capability: crypto.randomUUID(), last: -1 };
+      saveCaret(owner); session = owner; stateUI('preparing');
+      owner.capture = new WebVoiceCapture(
+        message => { if (session === owner && !owner.cancelRequested) send(message); },
+        error => { if (session === owner) abort(error); });
+      // Both native button and graph-item clicks (including Enter/Space) acquire
+      // site-owned media synchronously, before any extension round trip or await.
+      void owner.capture.acquire();
+      if (session === owner && !owner.cancelRequested) {
+        owner.admitted = true;
+        send({ type: 'start', capability: owner.capability, ...(graphId === undefined ? {} : { graphId }) });
+      }
+    } catch (error) { abort(error.message); }
   }
   function widget(element) {
     target = element;
@@ -306,26 +325,13 @@
       // uses the same saved field and never redirects to the widget or new focus.
       button.addEventListener('pointerdown', event => { if (event.isTrusted) event.preventDefault(); });
       button.addEventListener('click', event => {
-        if (!event.isTrusted || !enabled || selectionPending) return;
-        closeMenu(true);
+        if (!event.isTrusted || !enabled) return;
         if (session) {
           if (session.cancelRequested || state === 'error') return;
           void stopCapture(session);
           return;
         }
-        if (!defaultId) { stateUI('error', 'Right-click the mic (or press Shift+F10) to choose a voice graph first.'); return; }
-        try {
-          if (!editable(target)) throw Error('Focus a supported writable field first.');
-          const owner = { element: target, capability: crypto.randomUUID(), last: -1 };
-          saveCaret(owner); session = owner; stateUI('preparing');
-          owner.capture = new WebVoiceCapture(
-            message => { if (session === owner && !owner.cancelRequested) send(message); },
-            error => { if (session === owner) abort(error); });
-          // Site-owned getUserMedia begins within this trusted click. No await,
-          // extension document or page-world messaging participates in consent.
-          void owner.capture.acquire();
-          if (session === owner && !owner.cancelRequested) { owner.admitted = true; send({ type: 'start', capability: owner.capability }); }
-        } catch (error) { abort(error.message); }
+        startCapture(event);
       });
       shadow.append(style, button, status); document.documentElement.append(host);
     }
@@ -339,7 +345,7 @@
     if (editable(element)) widget(element); else removeWidget();
   }
   function disable() {
-    enabled = false; disposed = true; choices = []; defaultId = null; selectionPending = false;
+    enabled = false; disposed = true; choices = []; defaultId = null;
     const owner = session, previous = control; session = null; control = null;
     observer?.disconnect(); observer = null; clearInterval(timer);
     cancelAnimationFrame(placementFrame); placementFrame = null;
@@ -375,12 +381,8 @@
         choices = message.graphs; defaultId = message.defaultId;
         if (changed) { closeMenu(true); if (!session) focus(); }
       }
-      if (message.type === 'selection-saved' || message.type === 'selection-error') {
-        selectionPending = false;
-        if (!session) stateUI(message.error ? 'error' : 'idle', message.error || '');
-      }
       if (message.type === 'pcm-ack' && session && message.capability === session.capability) session.capture.ack(message.sequence);
-      if (message.type === 'state' && session) {
+      if (message.type === 'state' && session && message.capability === session.capability) {
         const owner = session;
         if (message.state === 'recording') {
           void owner.capture.start().then(() => {
@@ -392,7 +394,7 @@
         }
       }
       if (message.type === 'ended') {
-        if (!session) return;
+        if (!session || message.capability !== session.capability) return;
         void session.capture?.stop(false).catch(() => {});
         session?.connection?.disconnect(); session = null;
         // Only active sessions stay bound to the original field. Reconcile

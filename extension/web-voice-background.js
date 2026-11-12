@@ -76,6 +76,7 @@ const extensionPage = (sender, name) => sender?.id === chrome.runtime.id && send
 const authorized = async () => !safetyStop && await readVoiceEnabled() && await chrome.permissions.contains({ origins: WEB_VOICE_ORIGINS }) && !safetyStop;
 const current = owner => sessions.get(owner.target.documentId) === owner;
 const runtimePost = (owner, message) => post(host, { ...message, token: owner.token });
+const sessionPost = (owner, message) => post(owner.control, { ...message, capability: owner.target.capability });
 function serialize(operation) { return lifecycle = lifecycle.catch(() => {}).then(operation); }
 async function closeDocument() {
   hostURL = null;
@@ -89,7 +90,7 @@ function idleCleanup() {
 function end(owner, reason = '') {
   if (!owner || !current(owner)) return;
   sessions.delete(owner.target.documentId); clearTimeout(owner.timer);
-  post(owner.control, { type: 'ended', error: reason });
+  sessionPost(owner, { type: 'ended', error: reason });
   runtimePost(owner, { type: 'abort', error: reason });
   owner.output?.disconnect(); owner.relay?.disconnect();
   idleCleanup();
@@ -99,7 +100,7 @@ function cancelSession(owner, reason) {
   if (!owner.initialized) { end(owner, reason); return; }
   owner.stopRequested = true; owner.cancelError = reason;
   runtimePost(owner, { type: 'abort', error: reason });
-  post(owner.control, { type: 'state', state: 'stopping', error: reason });
+  sessionPost(owner, { type: 'state', state: 'stopping', error: reason });
 }
 function endAll(reason) { for (const owner of sessions.values()) end(owner, reason); }
 function initialize(owner) {
@@ -160,16 +161,21 @@ function catalog(port) { post(port, { type: 'graphs', graphs: choices.map(({ id,
 function refreshChoices(selectId, canSelect = () => true) {
   // Serialize preference writes only. Graph sessions remain independent.
   return selectionWork = selectionWork.catch(() => {}).then(async () => {
+    if (!await canSelect()) return;
     const library = await readVoiceLibrary();
     const next = webVoiceChoices(library);
     const saved = (await chrome.storage.local.get(defaultKey))[defaultKey];
     let id = webVoiceDefault(next, saved, library.assignments.webVoice);
     if (selectId !== undefined) {
-      if (!canSelect()) return;
       if (!next.some(choice => choice.id === selectId)) throw Error('Graph is no longer compatible. Choose another graph.');
       id = selectId;
     }
-    if (id !== saved) await chrome.storage.local.set({ [defaultKey]: id });
+    // Admission and opt-in can change while library/storage reads are pending.
+    if (!await canSelect()) return;
+    if (id !== saved) {
+      try { await chrome.storage.local.set({ [defaultKey]: id }); }
+      catch (error) { throw Error(`Could not save default graph. Choose the graph again to retry. ${error.message}`); }
+    }
     choices = next; defaultId = id;
     for (const port of controls) catalog(port);
     return next.find(choice => choice.id === id);
@@ -238,28 +244,30 @@ chrome.runtime.onConnect.addListener(port => {
       if (message.type === 'cancel' && existing?.control === port) { cancelSession(existing, message.error || 'Voice typing canceled.'); return; }
       if (message.type === 'stop' && existing?.control === port) {
         existing.stopRequested = true; runtimePost(existing, { type: 'stop' });
-        post(port, { type: 'state', state: 'stopping' }); return;
-      }
-      if (message.type === 'select-graph' && owner.valid && !existing && typeof message.id === 'string') {
-        void (async () => {
-          if (!await authorized()) return;
-          const selected = await refreshChoices(message.id, () => !sessions.has(owner.documentId) && controls.has(port));
-          if (selected) post(port, { type: 'selection-saved' });
-        })().catch(error => post(port, { type: 'selection-error', error: error.message }));
-        return;
+        sessionPost(existing, { type: 'state', state: 'stopping' }); return;
       }
       if (message.type !== 'start' || !owner.valid || typeof message.capability !== 'string' || message.capability.length !== 36) return;
+      if (!controls.has(port)) return;
       if (existing) {
-        if (existing.control !== port) post(port, { type: 'ended', error: 'Voice typing already active in this document.' });
+        if (existing.control !== port || existing.target.capability !== message.capability) post(port, { type: 'ended', capability: message.capability, error: 'Voice typing already active in this document.' });
         return;
       }
       const session = { control: port, token: crypto.randomUUID(), target: { tabId: owner.tabId, documentId: owner.documentId,
         frameId: 0, portName: 'web-voice-output', capability: message.capability, label: 'Selected Web voice field' } };
       sessions.set(owner.documentId, session);
       session.timer = setTimeout(() => end(session, 'Voice runtime did not respond. Click the mic to retry.'), 20000);
-      void (async () => {
+      const generation = preferenceGeneration;
+      const admitted = async () => {
+        if (!current(session) || !controls.has(port) || generation !== preferenceGeneration) return false;
         if (!await authorized()) throw Error('Right-click the extension toolbar icon → Web microphone to enable website controls.');
-        const selected = await refreshChoices();
+        return current(session) && controls.has(port) && generation === preferenceGeneration;
+      };
+      void (async () => {
+        if (message.graphId !== undefined && (typeof message.graphId !== 'string' || !message.graphId)) throw Error('Invalid voice graph. Choose another graph.');
+        // Queue before awaiting authorization, so overlapping requests cannot
+        // reorder canonical defaults when permission/storage reads are slow.
+        const selected = await refreshChoices(message.graphId, admitted);
+        if (!await admitted()) { end(session, 'Voice typing request expired. Click the mic to retry.'); return; }
         if (!selected) throw Error('Right-click the mic (or press Shift+F10) to choose a voice graph first.');
         session.graph = structuredClone(selected);
         if (current(session)) await ensureRuntime(session);
@@ -297,7 +305,7 @@ chrome.runtime.onConnect.addListener(port => {
         owner.acknowledged = message.sequence + 1; post(owner.control, { type: 'pcm-ack', sequence: message.sequence, capability: owner.target.capability }); return;
       }
       if (message.type === 'state' && message.state === 'recording') owner.recording = true;
-      if (message.type === 'state' && ['preparing', 'recording', 'stopping', 'error'].includes(message.state)) post(owner.control, message);
+      if (message.type === 'state' && ['preparing', 'recording', 'stopping', 'error'].includes(message.state)) sessionPost(owner, message);
       if (message.type === 'ended') end(owner, message.error || owner.cancelError || '');
     });
     port.onDisconnect.addListener(() => {

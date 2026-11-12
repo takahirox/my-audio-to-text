@@ -87,13 +87,16 @@ falling back and clamping at viewport edges. Changes apply live without changing
 field focus or selection, can be saved while OFF, and survive restarts. Graph
 Library remains for graph management.
 
-On an enabled page mic, right-click (or focus it and press **Shift+F10**) to choose
-a compatible microphone-only graph as the saved default for the next recording.
-Arrow keys/Home/End navigate the menu; Escape dismisses it and restores mic focus.
+On an enabled page mic, right-click (or focus it and press **Shift+F10**) to start
+with a compatible microphone-only graph and save it as the default for later clicks.
+Arrow keys/Home/End navigate; Enter/Space starts the focused graph. Selection and
+Escape restore the original field and caret. Choosing a graph immediately requests
+the website's microphone permission if needed, then runs that exact graph after
+saving its default. Failed saves or unavailable graphs release capture with an error.
 This page-widget menu is separate from Chrome's native toolbar menu. It filters
 with the existing Web voice graph rules; Live is never substituted when the Web
-default is missing or incompatible. Selecting a default during recording preserves
-the active snapshot. Click the page mic to start/stop local dictation; any required
+default is missing or incompatible. Graph selection is unavailable during an active
+session. Click the page mic to start/stop local dictation; any required
 native microphone consent belongs to the current website. Capture runs on that
 page and streams mono 16 kHz PCM to the extension’s existing graph without opening
 a tab or window. Use HTTPS (or localhost); a site’s Permissions Policy can block

@@ -306,12 +306,15 @@ prefer that side of the editable field, falling back and clamping to the visual
 viewport. The position applies live, including safe active Stop/Cancel controls,
 without moving field focus or caret, and may be chosen while the feature is OFF.
 
-Right-click an in-page mic (or focus it and press **Shift+F10**) to select a
-compatible saved default for its next recording. The context-menu key or Alt+Down
-also opens the menu; arrows/Home/End navigate, Enter selects, and Escape dismisses.
-Selection preserves the field and caret without recording, loading models or
-requesting microphone permission. Launch Settings and the graph assignment
-dropdowns have been removed.
+Right-click an in-page mic (or focus it and press **Shift+F10**) to start dictation
+with a compatible saved graph and save it as the default for later mic clicks.
+The context-menu key or Alt+Down also opens the menu; arrows/Home/End navigate,
+Enter/Space starts the focused graph, and Escape dismisses. Choosing a graph
+restores the field and caret and immediately requests the website's microphone
+permission if needed. Capture begins from that trusted click or key activation;
+the exact selected graph runs after its default is saved and validated. A failed
+save or unavailable graph reports an error and releases capture without running
+a substitute. Launch Settings and the graph assignment dropdowns have been removed.
 The preference defaults OFF on installation/upgrade, even with an existing
 `assignments.webVoice`. It is a separately validated versioned boolean in
 `chrome.storage.local`; graph JSON remains version 15. Assignment never grants

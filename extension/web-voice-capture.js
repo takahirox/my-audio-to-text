@@ -44,7 +44,7 @@
       this.send = send; this.fail = fail; this.sequence = 0; this.pending = new Map();
     }
     acquire() {
-      // Called synchronously in the trusted mic click, before any messaging or await.
+      // Called synchronously in the trusted mic/graph-item click, before messaging or await.
       try {
         if (!isSecureContext || !navigator.mediaDevices?.getUserMedia) throw Error('Use HTTPS or localhost; this page is not a supported secure microphone context.');
         const policy = document.permissionsPolicy || document.featurePolicy;

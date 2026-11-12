@@ -47,7 +47,7 @@ async function fixture(t, { existingDocument = false } = {}) {
   runInNewContext(source, globals);
   function connect(name, sender) { const port = makePort(name, sender); chrome.runtime.onConnect.emit(port); return port; }
   function control(tabId) { return connect('web-voice-control', { tab: { id: tabId }, documentId: `document-${tabId}`, frameId: 0, url: 'https://example.org/' }); }
-  async function start(port) { port.onMessage.emit({ type: 'start', capability: randomUUID() }); await turn(); }
+  async function start(port, graphId) { port.onMessage.emit({ type: 'start', capability: randomUUID(), graphId }); await turn(); }
   async function host(url = created.at(-1)?.url) { const port = connect('web-voice-host', { url }); await turn(); return port; }
   function output(token, url = created.at(-1)?.url) { return connect(`web-voice-output:${token}`, { url }); }
   t.after(async () => { chrome.storage.onChanged.emit({ voice: { newValue: { enabled: false } } }, 'local'); await turn(); assert.equal(timers.size, 0); });
@@ -212,29 +212,126 @@ test('an immediate retry after host disconnect creates a fresh generation', asyn
 });
 
 
-test('selection is storage-only; active and stopping controls cannot switch while another document can choose independently', async t => {
+test('graph selection starts that graph; active and stopping documents cannot switch, while peers stay independent', async t => {
   const f = await fixture(t), a = f.control(1); await turn(); await f.start(a);
   const host = await f.host(), running = host.sent[0];
   f.library.graphs.push({ ...structuredClone(f.library.graphs[0]), id: 'other', name: 'Other voice' });
   assert.equal(running.graph.id, 'voice');
   for (const state of ['preparing', 'recording', 'stopping']) {
     host.onMessage.emit({ type: 'state', token: running.token, state });
-    a.onMessage.emit({ type: 'select-graph', id: 'other' }); await turn();
+    await f.start(a, 'other');
     assert.equal(f.preferences['web-microphone-default-v1'], 'voice');
     await f.start(a); assert.equal(host.sent.filter(m => m.type === 'initialize').length, 1);
   }
   const peer = f.control(2); await turn();
-  peer.onMessage.emit({ type: 'select-graph', id: 'other' }); await turn();
+  await f.start(peer, 'other');
   assert.equal(f.preferences['web-microphone-default-v1'], 'other');
-  assert.ok(peer.sent.some(m => m.type === 'selection-saved'));
-  assert.equal(host.sent.filter(m => m.type === 'initialize').length, 1);
+  assert.equal(host.sent.filter(m => m.type === 'initialize').length, 2);
+  assert.equal(host.sent.filter(m => m.type === 'initialize').at(-1).graph.id, 'other');
   assert.equal(running.graph.id, 'voice');
   a.onMessage.emit({ type: 'stop' });
-  a.onMessage.emit({ type: 'select-graph', id: 'voice' }); await turn();
+  await f.start(a, 'voice');
   assert.equal(f.preferences['web-microphone-default-v1'], 'other');
   host.onMessage.emit({ type: 'ended', token: running.token }); await turn();
-  await f.start(a); const replacement = await f.host();
-  assert.equal(replacement.sent[0].graph.id, 'other');
+  await f.start(a);
+  assert.equal(host.sent.filter(m => m.type === 'initialize').at(-1).graph.id, 'other');
+});
+
+// Keep the real library host alive while tests hold selection reads/writes.
+async function readyHost(f) {
+  const keeper = f.control(99); await turn(); await f.start(keeper);
+  const host = await f.host(); host.sent.length = 0; return host;
+}
+
+test('slow default writes serialize cross-document choices and reserve one exact graph per start', async t => {
+  const f = await fixture(t), a = f.control(1); await turn(); const host = await readyHost(f);
+  for (const id of ['other', 'third']) f.library.graphs.push({ ...structuredClone(f.library.graphs[0]), id, name: id });
+  const b = f.control(2); await turn();
+  const write = f.chrome.storage.local.set, writes = []; let release;
+  f.chrome.storage.local.set = async value => {
+    writes.push(value['web-microphone-default-v1']);
+    if (writes.length === 1) await new Promise(resolve => { release = resolve; });
+    await write(value);
+  };
+  await f.start(a, 'other');
+  await f.start(a, 'third'); // Cannot replace the pending graph or queue another write.
+  await f.start(b, 'third');
+  assert.deepEqual(writes, ['other']);
+  assert.equal(host.sent.filter(m => m.type === 'initialize').length, 0);
+  assert.match(a.sent.at(-1).error, /already active/);
+  release(); await turn();
+  const initialized = host.sent.filter(m => m.type === 'initialize');
+  assert.deepEqual(initialized.map(m => m.graph.id), ['other', 'third']);
+  assert.deepEqual(writes, ['other', 'third']);
+  assert.equal(f.preferences['web-microphone-default-v1'], 'third');
+  const c = f.control(3); await turn(); await f.start(c);
+  assert.equal(host.sent.filter(m => m.type === 'initialize').at(-1).graph.id, 'third');
+});
+
+test('slow authorization cannot reorder choices from different documents', async t => {
+  const f = await fixture(t), a = f.control(1), b = f.control(2); await turn(); const host = await readyHost(f);
+  for (const id of ['other', 'third']) f.library.graphs.push({ ...structuredClone(f.library.graphs[0]), id });
+  let release, reads = 0;
+  f.globals.readVoiceEnabled = () => ++reads === 1 ? new Promise(resolve => { release = resolve; }) : Promise.resolve(true);
+  await f.start(a, 'other'); await f.start(b, 'third');
+  assert.equal(reads, 1);
+  release(true); await turn();
+  assert.deepEqual(host.sent.filter(m => m.type === 'initialize').map(m => m.graph.id), ['other', 'third']);
+  assert.equal(f.preferences['web-microphone-default-v1'], 'third');
+});
+
+for (const graphId of ['deleted', 'incompatible', null, '']) test(`explicit graph ${JSON.stringify(graphId)} never falls back to the saved default`, async t => {
+  const f = await fixture(t), a = f.control(1); await turn(); const host = await readyHost(f);
+  f.library.graphs.push({ id: 'incompatible', name: 'No microphone', graph: { version: 15, nodes: [], edges: [] } });
+  await f.start(a, graphId);
+  assert.match(a.sent.at(-1).error, /graph/i);
+  assert.equal(typeof a.sent.at(-1).capability, 'string');
+  assert.equal(f.preferences['web-microphone-default-v1'], 'voice');
+  assert.equal(host.sent.some(m => m.type === 'initialize'), false);
+});
+
+test('a failed default save ends the selected attempt without executing any graph', async t => {
+  const f = await fixture(t), a = f.control(1); await turn(); const host = await readyHost(f);
+  f.library.graphs.push({ ...structuredClone(f.library.graphs[0]), id: 'other' });
+  f.chrome.storage.local.set = async () => { throw Error('Could not save default. Retry the graph choice.'); };
+  await f.start(a, 'other');
+  assert.match(a.sent.at(-1).error, /Could not save default/);
+  assert.equal(f.preferences['web-microphone-default-v1'], 'voice');
+  assert.equal(host.sent.some(m => m.type === 'initialize'), false);
+});
+
+for (const interrupt of ['cancel', 'disconnect', 'OFF', 'permission', 'unauthorized']) test(`${interrupt} during graph resolution prevents stale preference writes and initialization`, async t => {
+  const f = await fixture(t), a = f.control(1); await turn(); const host = await readyHost(f);
+  f.library.graphs.push({ ...structuredClone(f.library.graphs[0]), id: 'other' });
+  const read = f.chrome.storage.local.get; let release;
+  f.chrome.storage.local.get = key => new Promise(resolve => { release = async () => resolve(await read(key)); });
+  await f.start(a, 'other'); assert.equal(typeof release, 'function');
+  if (interrupt === 'cancel') a.onMessage.emit({ type: 'cancel' });
+  if (interrupt === 'disconnect') a.disconnect();
+  if (interrupt === 'OFF') f.chrome.storage.onChanged.emit({ voice: { newValue: { enabled: false } } }, 'local');
+  if (interrupt === 'permission') f.chrome.permissions.onRemoved.emit({ origins: ['https://*/*'] });
+  if (interrupt === 'unauthorized') f.globals.readVoiceEnabled = async () => false;
+  f.chrome.storage.local.get = read; await release(); await turn();
+  assert.equal(f.preferences['web-microphone-default-v1'], 'voice');
+  assert.equal(host.sent.some(m => m.type === 'initialize'), false);
+});
+
+test('canceling an in-flight save cannot initialize its stale graph or reorder a replacement choice', async t => {
+  const f = await fixture(t), a = f.control(1); await turn(); const host = await readyHost(f);
+  for (const id of ['other', 'third']) f.library.graphs.push({ ...structuredClone(f.library.graphs[0]), id });
+  const write = f.chrome.storage.local.set; let release;
+  f.chrome.storage.local.set = async value => { await new Promise(resolve => { release = resolve; }); await write(value); };
+  await f.start(a, 'other'); assert.equal(typeof release, 'function');
+  a.onMessage.emit({ type: 'cancel' });
+  const ended = a.sent.findLast(m => m.type === 'ended');
+  await f.start(a, 'third');
+  f.chrome.storage.local.set = write; release(); await turn();
+  const initialized = host.sent.filter(m => m.type === 'initialize');
+  assert.deepEqual(initialized.map(m => m.graph.id), ['third']);
+  assert.equal(f.preferences['web-microphone-default-v1'], 'third');
+  assert.notEqual(initialized[0].target.capability, ended.capability);
+  host.onMessage.emit({ type: 'state', token: initialized[0].token, state: 'recording' });
+  assert.equal(a.sent.at(-1).capability, initialized[0].target.capability);
 });
 
 test('toolbar library reads/default writes share the DOM host without closing independent Web captures', async t => {

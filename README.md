@@ -84,7 +84,8 @@ Each launch opens an independent window, with capture beginning only on Start.
 The toolbar right-click **Microphone** submenu includes a default-OFF **Enable** checkbox
 and **Icon position → Auto / Left / Right**. Turning ON requests Chrome’s
 optional website access, with a native prompt only if needed; denial leaves it OFF. Choose its graph from the in-page mic's right-click
-menu (also Shift+F10). The page mic
+menu (also Shift+F10); choosing a graph starts dictation immediately and saves it
+as the default for later mic clicks. The page mic
 requests the current website’s native microphone permission and captures there;
 mono PCM stays local and feeds the existing extension graph. No setup tab opens.
 HTTPS (or localhost) and a website policy allowing microphone capture are required.
