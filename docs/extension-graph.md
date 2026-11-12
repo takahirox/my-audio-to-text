@@ -46,12 +46,12 @@ Choose graphs where they launch:
 - Left-click the extension toolbar icon to open a new execution window for the
   last selected runnable graph and the invoking tab. Opening prepares models, but
   never starts capture or requests microphone permission. Press **Start** when ready.
-- Right-click the toolbar icon for Chrome's native **Graphs → Open → <graph>**
+- Right-click the toolbar icon for Chrome's native **Graphs → Launch → <graph>**
   menu. Selecting a graph saves it for subsequent left-clicks and opens a separate
   window. The native radio state marks the current selection; hovering does not
-  change it. **Graph Library** sits directly under **Graphs**, alongside **Open**.
+  change it. **Graph Library** sits directly under **Graphs**, alongside **Launch**.
   Chrome's extension-management commands and native keyboard access remain available.
-- Open lists runnable saved top-level graphs in ascending name order, using the
+- Launch lists runnable saved top-level graphs in ascending name order, using the
   same Japanese locale-aware numeric comparison and stable ID tie-breaker as Graph
   Library. Kana order is supported; kanji readings are not inferred. When there is
   no valid saved selection, the first runnable graph in this order is selected and
@@ -64,12 +64,12 @@ Choose graphs where they launch:
   windows and Web microphone sessions can prepare and run together, subject to actual
   Chrome, device, permission and RAM/GPU limits.
 - Invalid drafts, missing dependencies and reusable subgraph definitions are excluded
-  from Open. If no runnable graph remains, Open shows a disabled explanation and
+  from Launch. If no runnable graph remains, Launch shows a disabled explanation and
   left-click shows an actionable error; use **Graphs → Graph Library** to create or
-  repair a graph. A stale explicit Open choice or failed selection save shows an
+  repair a graph. A stale explicit Launch choice or failed selection save shows an
   error and never launches a substitute. An existing window whose graph is deleted
   may finish its snapshot, but cannot Start again until that same ID is restored.
-  Open another graph from the toolbar.
+  Launch another graph from the toolbar.
 
 Right-click the extension toolbar icon and use the native **Web microphone**
 checkbox to show or remove website microphones. It starts OFF. ON requests

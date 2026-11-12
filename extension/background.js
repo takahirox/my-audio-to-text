@@ -40,7 +40,7 @@ function refreshMenus() {
     try { state = await requestLaunchLibrary('live-list'); } catch (failure) { error = failure.message; }
     // Three action-level items stay below Chrome's menu capacity for large libraries.
     await createMenu({ id: root, title: 'Graphs' });
-    await createMenu({ id: open, parentId: root, title: 'Open' });
+    await createMenu({ id: open, parentId: root, title: 'Launch' });
     for (const graph of state?.graphs || []) await createMenu({ id: run + graph.id, parentId: open, title: graph.name, type: 'radio', checked: graph.id === state.defaultId });
     if (!state?.graphs.length) await createMenu({ id: 'live-empty', parentId: open, title: error || 'No runnable graphs — create or repair one in Graph Library', enabled: false });
     await createMenu({ id: 'live-library', parentId: root, title: 'Graph Library' });

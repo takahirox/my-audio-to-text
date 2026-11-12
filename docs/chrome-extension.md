@@ -134,10 +134,10 @@ Stop releases used Workers and restores readiness before the next Start; Start
 uses the already prepared Workers without reloading. Each toolbar invocation
 creates a separate window bound to its graph ID and invoking tab, including while
 other windows are running. Right-click the extension toolbar icon for Chrome's
-native **Graphs → Open → <graph>** menu: selecting a graph opens it and remembers
+native **Graphs → Launch → <graph>** menu: selecting a graph opens it and remembers
 it for subsequent left-clicks. The native checked item marks that selection. If
 the selection is missing or unusable, the first runnable graph in name order is
-selected automatically. **Graph Library** is alongside **Open** under **Graphs**.
+selected automatically. **Graph Library** is alongside **Launch** under **Graphs**.
 Existing windows keep their identities and running snapshots. See the
 [launch and Library guide](extension-graph.md#graph-library-243) and
 [toolbar validation](evidence/toolbar-launch-306.md).
@@ -175,7 +175,7 @@ and [capture in a new extension window](https://developer.chrome.com/docs/extens
 ## Concurrent Live windows capturing the same tab (#347)
 
 Invoke the toolbar on the same source tab for each Live window, select each
-window's saved graph through **Graphs → Open**, then press **Start** in each
+window's saved graph through **Graphs → Launch**, then press **Start** in each
 window. Two or more different graphs can process the same audio concurrently.
 Opening Live, downloading/preparing models, and reaching Ready never capture
 or subscribe to audio. Each window retains its graph snapshot, dedicated model
