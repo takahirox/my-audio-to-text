@@ -44,6 +44,7 @@ async function openEditor() {
   recoveryCopy.hidden = !invalidSaved;
   recoveryCopy.className = 'graph-recovery';
   recoveryCopy.append(recoveryTitle, recoveryText);
+  let preservingParentDraft = false, parentDraftBase;
   async function persist(next) {
     if (conflict) throw Error('Saved graph changed in another page. Load saved before saving; your draft has been kept.');
     const saved = await store.save(id, base, next);
@@ -53,6 +54,7 @@ async function openEditor() {
     const graph = entryGraph(entry, library);
     preparation.replace(resolvedEntryGraph(entry, library));
     try { sessionStorage.removeItem(`subgraph-parent-draft:${id}`); } catch { /* Optional navigation cache cannot undo a successful save. */ }
+    preservingParentDraft = false;
     return graph;
   }
   let navigatingWithDraft = false;
@@ -64,11 +66,29 @@ async function openEditor() {
     onExport: graph => { try { return exportDraft(entry, graph, readLibrary(localStorage)); } catch { return JSON.stringify(graph, null, 2); } },
     onCreateSubgraph: async (definition, revision) => {
       if (conflict) throw Error('Load saved before creating a subgraph; your draft has been kept.');
-      library = await store.create({ ...definition, replacementSource: { id, revision } }); return library;
+      // Preserve the replacement before creating a shared entry. A failed
+      // recovery write must not leave a definition with a lost parent edit.
+      const key = `subgraph-parent-draft:${id}`, previous = sessionStorage.getItem(key);
+      try { sessionStorage.setItem(key, JSON.stringify({ base: revision, graph: definition.replacementGraph })); }
+      catch { throw Error('Cannot preserve the parent draft. Free browser storage or export your draft, then retry Create Subgraph.'); }
+      try { library = await store.create({ ...definition, replacementSource: { id, revision } }); }
+      catch (error) {
+        try { if (previous === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, previous); } catch { /* Keep the original creation error. */ }
+        throw error;
+      }
+      preservingParentDraft = true;
+      parentDraftBase = revision;
+      params.set('restore', '1'); history.replaceState(null, '', `?${params}`);
+      return library;
+    },
+    onDraft: graph => {
+      if (!preservingParentDraft) return;
+      try { sessionStorage.setItem(`subgraph-parent-draft:${id}`, JSON.stringify({ base: parentDraftBase, graph })); }
+      catch { element('errors').textContent = 'Parent draft recovery could not be updated. Save or export your draft before leaving.'; }
     },
     onEditSubgraph: sharedId => {
       try {
-        sessionStorage.setItem(`subgraph-parent-draft:${id}`, JSON.stringify({ base, graph: editor.draft }));
+        sessionStorage.setItem(`subgraph-parent-draft:${id}`, JSON.stringify({ base: preservingParentDraft ? parentDraftBase : base, graph: editor.draft }));
         navigatingWithDraft = true;
         location.href = `?id=${encodeURIComponent(sharedId)}&parent=${encodeURIComponent(id)}`;
       } catch (error) { element('errors').textContent = `Cannot preserve the parent draft for navigation: ${error.message}. Save or export it first.`; }
@@ -78,6 +98,7 @@ async function openEditor() {
       const graph = entryGraph(next, library);
       conflict = false; base = next.revision; entry = next;
       try { sessionStorage.removeItem(`subgraph-parent-draft:${id}`); } catch { /* Saved data remains authoritative. */ }
+      preservingParentDraft = false;
       element('graph-name').textContent = entry.name;
       return graph;
     }
@@ -87,6 +108,8 @@ async function openEditor() {
       const draft = JSON.parse(sessionStorage.getItem(`subgraph-parent-draft:${id}`));
       if (draft) {
         // Retain even an invalid draft for repair/export after external changes.
+        preservingParentDraft = true;
+        parentDraftBase = draft.base;
         editor.draft = draft.graph; conflict = draft.base !== base;
         editor.externalChange = conflict; editor.draw();
       }

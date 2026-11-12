@@ -1,4 +1,4 @@
-import { assertSubgraph, extractSubgraph, resolveSubgraphs } from './subgraphs.js';
+import { assertSubgraph, assertExtractionPorts, extractSubgraph, resolveSubgraphs } from './subgraphs.js';
 import { assertSubgraphUpdate } from './graph-library.js';
 import { MAX_DISPLAY_INPUTS } from '../web/display-node.js';
 import { createWireRouter, reusableWireRoute, wireColor, wireDistance } from './graph-wire-router.js';
@@ -24,6 +24,7 @@ export class GraphEditor {
   constructor(root, graph, { onSave, onDraft = () => {}, onLoad = () => {}, invalidSaved = false, definitions = [], kind = 'graph', graphId, onCreateSubgraph, onExport, onEditSubgraph }) {
     Object.assign(this, { definitions, kind, graphId, onCreateSubgraph, onExport, onEditSubgraph });
     this.multiSelection = new Set();
+    this.isMac = /Mac|iPhone|iPad/.test(navigator.userAgentData?.platform || navigator.platform);
     this.root = root; this.onSave = onSave; this.onDraft = onDraft; this.onLoad = onLoad;
     this.saved = invalidSaved ? null : this.assert(graph); this.draft = this.assert(graph); this.zoom = 1;
     const toolbar = el('div', undefined, 'graph-toolbar');
@@ -90,8 +91,11 @@ export class GraphEditor {
       this.draw();
     }));
     this.createButton = button('Create Subgraph', 'graph-create-subgraph', () => this.createSubgraph());
-    this.createButton.hidden = this.kind === 'subgraph' || !this.onCreateSubgraph;
-    commands.append(this.createButton);
+    this.createButton.className = 'primary';
+    this.selectionPanel = el('div', undefined, 'graph-selection');
+    this.selectionCount = el('p'); this.selectionCount.setAttribute('role', 'status');
+    this.selectionError = el('p'); this.selectionError.setAttribute('role', 'alert');
+    this.selectionPanel.append(this.selectionCount, this.createButton, this.selectionError);
     if (this.kind === 'subgraph') commands.append(button('Edit exposed ports', 'graph-exposed-ports', () => { this.closeActions(); this.selectDetails(); this.inspector.querySelector('input, button')?.focus(); }));
     this.actions.append(commands);
     this.paletteButton = button('Add Node', 'graph-palette-toggle', () => this.togglePalette()); this.paletteButton.setAttribute('aria-haspopup', 'dialog'); this.paletteButton.setAttribute('aria-expanded', 'false'); this.paletteButton.setAttribute('aria-controls', 'graph-palette');
@@ -222,9 +226,9 @@ export class GraphEditor {
     try { const definition = nodeDefinition(node, this.draft, this.definitions); if (definition) return definition; } catch { /* Keep a stale draft visible for recovery. */ }
     return { label: `Unavailable subgraph ${node?.subgraphId || ''}`, inputs: {}, outputs: {} };
   }
-  renderPortEditor(root, graph, changed) {
-    const panel = el('details'); panel.open = true; panel.append(el('summary', 'Exposed ports'));
-    panel.append(el('p', 'Names are editable labels; IDs preserve parent wires. Endpoint types are inferred. Incompatible changes are blocked while parents reference this definition.'));
+  renderPortEditor(root, graph, changed, { title = 'Exposed ports', open = true, help = 'Names are editable labels; IDs preserve parent wires. Endpoint types are inferred. Incompatible changes are blocked while parents reference this definition.' } = {}) {
+    const panel = el('details'); panel.open = open; panel.append(el('summary', title));
+    panel.append(el('p', help));
     for (const side of ['inputs', 'outputs']) {
       const group = el('fieldset'); group.append(el('legend', side));
       const endpoints = graph.nodes.flatMap(node => Object.entries(nodeDefinition(node, graph)?.[side] || {}).filter(([port]) => side !== 'inputs' || !graph.edges.some(route => route.to[0] === node.id && route.to[1] === port)).map(([port, contract]) => ({ node: node.id, port, contract })));
@@ -260,33 +264,58 @@ export class GraphEditor {
   }
   createSubgraph() {
     try {
+      if (this.multiSelection.size < 2) return;
       // The modal keeps an extracted snapshot even if a clean editor refreshes
       // from another tab. Keep that snapshot bound to its original revision.
       const parentRevision = this.definitions.find(entry => entry.id === this.graphId)?.revision;
       const id = crypto.randomUUID(), extracted = extractSubgraph(this.draft, this.multiSelection, id, this.definitions);
+      const inferred = structuredClone(extracted.shared.interface);
       const dialog = el('dialog', undefined, 'graph-subgraph-dialog'); dialog.setAttribute('aria-label', 'Create Subgraph');
       const title = el('h2', 'Create Subgraph'), name = el('input'), ports = el('div'), error = el('p');
-      error.setAttribute('role', 'alert'); name.value = 'Shared processing'; name.setAttribute('aria-label', 'Subgraph name');
-      const redrawPorts = () => { ports.replaceChildren(); this.renderPortEditor(ports, extracted.shared, redrawPorts); };
+      error.setAttribute('role', 'alert'); name.value = 'Shared processing'; name.id = 'graph-subgraph-name'; name.required = true; name.maxLength = 120;
+      const nameLabel = el('label', 'Subgraph name'); nameLabel.htmlFor = name.id;
+      const included = el('p', `Included nodes (${extracted.shared.nodes.length}): ${extracted.shared.nodes.map(node => `${this.definition(node).label} (${node.id})`).join(', ')}`);
+      const countPorts = side => `${inferred[side].length} ${inferred[side].length === 1 ? side.slice(0, -1) : side}`;
+      const connections = el('p', `Connections preserved. Automatically inferred: ${countPorts('inputs')}, ${countPorts('outputs')}.`);
+      const redrawPorts = () => {
+        const open = ports.querySelector('details')?.open || false;
+        const focused = ports.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
+        ports.replaceChildren(); this.renderPortEditor(ports, extracted.shared, redrawPorts, {
+          title: 'Edit input / output ports', open,
+          help: 'Rename connected ports while keeping their endpoints. Additional ports are optional; their types come from the chosen endpoints.'
+        });
+        if (focused) [...ports.querySelectorAll('[aria-label]')].find(control => control.getAttribute('aria-label') === focused)?.focus({ preventScroll: true });
+      };
       redrawPorts();
       const create = button('Create Subgraph', 'graph-confirm-subgraph', async () => {
-        create.disabled = true;
+        create.disabled = cancel.disabled = true; create.setAttribute('aria-busy', 'true');
         try {
+          if (!name.value.trim()) { name.focus(); throw Error('Enter a Subgraph name.'); }
+          assertExtractionPorts(extracted.shared, inferred);
           assertSubgraph(extracted.shared);
-          const definition = { id, name: name.value, kind: 'subgraph', graph: extracted.shared };
+          const definition = { id, name: name.value.trim(), kind: 'subgraph', graph: extracted.shared };
           const definitions = [...this.definitions, definition];
           const parent = assertGraph(extracted.parent, definitions);
           resolveSubgraphs(parent, definitions);
           const library = await this.onCreateSubgraph({ ...definition, replacementGraph: parent }, parentRevision);
           this.definitions = library.graphs; this.draft = parent;
-          this.multiSelection.clear(); this.selectedNode = extracted.instance.id; this.error = ''; dialog.close(); this.draw();
+          this.multiSelection = new Set([extracted.instance.id]); this.selectedNode = extracted.instance.id; this.error = ''; dialog.close(); this.draw();
         } catch (failure) { error.textContent = failure.message; }
-        finally { create.disabled = false; }
+        finally { create.disabled = cancel.disabled = false; create.setAttribute('aria-busy', 'false'); }
       });
-      dialog.append(title, el('label', 'Subgraph name'), name, ports, error, create, button('Cancel', null, () => dialog.close()));
-      dialog.onclose = () => { dialog.remove(); this.actions.querySelector('summary').focus(); };
+      create.className = 'primary';
+      const cancel = button('Cancel', null, () => dialog.close());
+      // Once the library transaction starts, dismissal cannot cancel its write.
+      dialog.oncancel = event => { if (create.disabled) event.preventDefault(); };
+      const actions = el('div', undefined, 'graph-subgraph-actions'); actions.append(cancel, create);
+      dialog.append(title, el('p', 'Combine the selected nodes into a reusable Subgraph.'), nameLabel, name, included, connections, ports, error, actions);
+      dialog.onclose = () => {
+        dialog.remove();
+        if (!this.createButton.hidden) this.createButton.focus({ preventScroll: true });
+        else this.canvas.querySelector(`[data-node="${this.selectedNode}"] .graph-heading`)?.focus({ preventScroll: true });
+      };
       this.root.append(dialog); this.actions.open = false; dialog.showModal(); name.focus(); name.select();
-    } catch (error) { this.error = error.message; this.draw(); }
+    } catch (error) { this.selectionError.textContent = error.message; }
   }
   diagnostics(includeWarnings = false) {
     let boundaryError = '';
@@ -571,7 +600,7 @@ export class GraphEditor {
       if (this.multiSelection.has(node)) this.multiSelection.delete(node); else this.multiSelection.add(node);
       node = this.multiSelection.has(node) ? node : [...this.multiSelection].at(-1) || null;
     } else this.multiSelection = new Set(node ? [node] : []);
-    if (this.createButton) this.createButton.disabled = !this.multiSelection.size;
+    if (this.selectionError) this.selectionError.textContent = '';
     this.selected = null; this.selectedNode = node; this.selectedEdge = connection;
     for (const card of this.canvas.querySelectorAll('.graph-node')) {
       const selected = this.multiSelection.has(card.dataset.node);
@@ -592,9 +621,12 @@ export class GraphEditor {
     const focused = this.inspector.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
     const node = this.draft.nodes.find(node => node.id === this.selectedNode);
     const header = el('div', undefined, 'graph-inspector-header'); header.append(el('h2', node ? 'Settings' : 'Details'));
-    this.inspector.replaceChildren(header);
+    this.selectionPanel.hidden = !this.multiSelection.size;
+    this.selectionCount.textContent = `${this.multiSelection.size} ${this.multiSelection.size === 1 ? 'node' : 'nodes'} selected`;
+    this.createButton.hidden = this.multiSelection.size < 2 || this.kind === 'subgraph' || !this.onCreateSubgraph;
+    this.inspector.replaceChildren(this.selectionPanel, header);
     this.disconnectButton.hidden = !this.selectedEdge;
-    if (!node && !this.selectedEdge) { this.inspector.append(el('p', 'Select a node or connection. Shift+click or Shift+Enter on headings selects a connected group for Graph actions → Create Subgraph.', 'muted')); if (this.kind === 'subgraph') this.renderPortEditor(this.inspector, this.draft, () => this.draw()); return; }
+    if (!node && !this.selectedEdge) { this.inspector.append(el('p', `Select a node or connection. Shift+click, ${this.isMac ? 'Command' : 'Ctrl'}+click or Shift+Enter on headings selects a group.`, 'muted')); if (this.kind === 'subgraph') this.renderPortEditor(this.inspector, this.draft, () => this.draw()); return; }
     if (this.selectedEdge) {
       const { from, to } = this.selectedEdge;
       this.disconnectButton.setAttribute('aria-label', `Disconnect ${from.join('.')} to ${to.join('.')}`);
@@ -605,7 +637,6 @@ export class GraphEditor {
     const remove = button('Remove Node', null, () => { this.removeNode(node); this.scroll.focus({ preventScroll: true }); });
     remove.className = 'danger'; remove.setAttribute('aria-label', `Remove ${node.id}`); header.append(remove);
     if (node.type === 'Subgraph' && this.onEditSubgraph) this.inspector.append(button('Edit Subgraph', 'graph-edit-subgraph', () => this.onEditSubgraph(node.subgraphId)));
-    if (this.multiSelection?.size > 1) this.inspector.append(el('p', `${this.multiSelection.size} nodes selected. Use Graph actions → Create Subgraph.`));
     const definition = this.definition(node); this.inspector.append(el('h3', definition.label), el('p', `Instance ID: ${node.id}`));
     for (const [key, values] of Object.entries(definition.settings || {})) {
       const label = el('label', key + ' '), select = el('select'); select.setAttribute('aria-label', `${node.id} ${key}`);
@@ -660,7 +691,6 @@ export class GraphEditor {
     this.geometryObserver?.disconnect();
     if (!this.selectedNode) this.multiSelection?.clear();
     else if (this.multiSelection) for (const id of this.multiSelection) if (!this.draft.nodes.some(node => node.id === id)) this.multiSelection.delete(id);
-    if (this.createButton) this.createButton.disabled = !(this.multiSelection?.size);
     if (!this.draft.edges.includes(this.selectedEdge)) this.selectedEdge = null;
     this.syncZoomControls();
     this.canvas.replaceChildren(this.svg); this.svg.replaceChildren();
@@ -674,17 +704,28 @@ export class GraphEditor {
       card.classList.toggle('selected-node', this.multiSelection?.has(node.id) || this.selectedNode === node.id);
       card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`;
       const heading = el('button', definition.label, 'graph-heading'); heading.type = 'button';
-      heading.setAttribute('aria-label', `Select ${node.id}`); heading.setAttribute('aria-pressed', String(this.selectedNode === node.id));
-      heading.title = 'Select to inspect settings; Shift+click or Shift+Enter selects a group. Drag to move; arrow keys move by 10 pixels.';
-      heading.onclick = event => { this.selectDetails(event.shiftKey ? node.id : this.selectedNode === node.id ? null : node.id, null, event.shiftKey); heading.focus({ preventScroll: true }); };
+      heading.setAttribute('aria-label', `Select ${node.id}`); heading.setAttribute('aria-pressed', String(this.multiSelection.has(node.id)));
+      heading.title = `Select to inspect settings; Shift+click, ${this.isMac ? 'Command' : 'Ctrl'}+click or Shift+Enter toggles selection. Escape clears. Drag to move; arrow keys move by 10 pixels.`;
+      const toggleModifier = event => event.shiftKey || (this.isMac ? event.metaKey : event.ctrlKey);
+      const selectHeading = event => {
+        if (this.isMac && event.ctrlKey) return;
+        event.preventDefault();
+        const extend = toggleModifier(event);
+        this.selectDetails(extend ? node.id : this.multiSelection.size === 1 && this.multiSelection.has(node.id) ? null : node.id, null, extend);
+        heading.focus({ preventScroll: true });
+      };
+      heading.onclick = selectHeading;
       if (node.type === 'Subgraph' && this.onEditSubgraph) heading.ondblclick = () => this.onEditSubgraph(node.subgraphId);
       heading.onkeydown = event => {
+        if (event.key === 'Enter' || event.key === ' ') { selectHeading(event); return; }
         const delta = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[event.key];
         if (!delta) return; event.preventDefault(); this.selectedEdge = null; this.selectedNode = node.id; this.multiSelection = new Set([node.id]);
         node.position.x = Math.max(0, node.position.x + delta[0]); node.position.y = Math.max(0, node.position.y + delta[1]); this.draw();
         this.canvas.querySelector(`[data-node="${node.id}"] .graph-heading`).focus();
       };
       heading.onpointerdown = event => {
+        if (this.isMac && event.ctrlKey) return;
+        if (event.button === 0 && toggleModifier(event)) { event.preventDefault(); heading.focus({ preventScroll: true }); return; }
         if (event.button !== 0) return; heading.setPointerCapture(event.pointerId); heading.focus({ preventScroll: true });
         const x = event.clientX, y = event.clientY, origin = { ...node.position }; let moved = false;
         heading.onpointermove = move => {
