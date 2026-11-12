@@ -56,8 +56,8 @@ and Models keep their dark appearance:
 The execution window's **Library**, **Edit graph** and **Models** links open
 separate tabs while capture continues. **Edit graph** opens this window's active
 session graph, or its selected saved graph when idle, regardless of the toolbar
-default. Graph Editor offers **Library** and **Models** navigation; Models retains
-its **Live** button to focus an existing execution window. Use the toolbar action
+default. Graph Editor offers **Library** and **Models** navigation; Models offers
+only **Library**, opening Graph Library in a separate tab. Use the toolbar action
 to open a new execution window. Closing auxiliary tabs does not end the session.
 A missing optional model links from Live
 to Models for direction/voice-specific recovery; retry preparation, then start a new session.
