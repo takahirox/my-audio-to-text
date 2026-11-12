@@ -27,9 +27,9 @@ const definitions = [
   { id: 'moonshine-medium-en', title: 'Moonshine Medium Streaming English (245M)', size: '305 MB download; allow 700 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineManifest, terms: 'Moonshine AI / Useful Sensors · MIT', url: 'https://moonshine-voice.readthedocs.io/en/latest/models/available-models/' },
   { id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', size: 'About 239 MB', manifest: opusMtManifest, terms: 'Helsinki-NLP / ONNX Community · CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
   { id: 'opus-en-ja', title: 'OPUS-MT · English → Japanese', size: 'About 253 MB', manifest: englishToJapaneseOpusMtManifest, terms: 'Helsinki-NLP / Kadonox ONNX conversion · Apache 2.0', url: 'https://huggingface.co/Helsinki-NLP/opus-tatoeba-en-ja' },
-  { id: 'translategemma', title: 'TranslateGemma 4B · English ↔ Japanese', size: '3.112 GB download shared by both directions; allow 7 GB free storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback.', manifest: translateGemmaManifest, terms: 'Google / ONNX Community · Gemma Terms of Use and Prohibited Use Policy apply to this conversion. Read before downloading or using.', url: '../web/licenses/gemma-notices.txt' },
+  { id: 'translategemma', title: 'TranslateGemma 4B · English ↔ Japanese', size: '3.112 GB download shared by both directions; allow 7 GB free storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback.', manifest: translateGemmaManifest, terms: 'Google / ONNX Community · Gemma Terms of Use and Prohibited Use Policy apply to this conversion. Read before downloading or using.', linkLabel: 'Gemma terms & attribution', url: '../web/licenses/gemma-notices.txt' },
   { id: 'supertonic3', type: 'Supertonic3', title: 'Supertonic 3', size: 'About 399 MB', voices: ['F1', 'M1'], terms: 'OpenRAIL-M weights and voices', url: '../web/licenses/tts-notices.txt' },
-  { id: 'kokoro', type: 'Kokoro', title: 'Kokoro 82M', size: 'About 93 MB', voices: ['jf_alpha', 'af_heart'], terms: 'Apache-2.0 weights; frontends have separate notices', url: '../web/licenses/tts-notices.txt' },
+  { id: 'kokoro', type: 'Kokoro', title: 'Kokoro 82M', size: 'About 93 MB', voices: ['jf_alpha', 'af_heart'], terms: 'Apache-2.0 weights; frontends have separate notices', url: '../web/licenses/tts-notices.txt', links: [{ label: 'eSpeak NG source / build bundle (GPL-3.0-or-later)', url: '../web/tts-assets/phonemizer-source.tar.gz' }] },
 ];
 class ModelCard {
   constructor(definition) {
@@ -60,8 +60,16 @@ class ModelCard {
     this.cancel = button('Cancel download', () => this.controller?.abort());
     this.remove = button('Delete cached assets', () => { void this.run('remove'); });
     this.remove.className = 'danger';
-    const terms = el('a', definition.terms); terms.href = definition.url;
+    const terms = el('a', definition.linkLabel || definition.terms); terms.href = definition.url;
     const license = el('p'); license.className = 'model-license'; license.append(terms);
+    if (definition.linkLabel) {
+      const notice = el('p', definition.terms); notice.className = 'model-license';
+      root.append(notice);
+    }
+    for (const link of definition.links || []) {
+      const anchor = el('a', link.label); anchor.href = link.url;
+      license.append(' · ', anchor);
+    }
     root.append(this.error, this.progress, controls, details, license);
     document.getElementById('models').append(root); this.buttons(); void this.inspect();
   }

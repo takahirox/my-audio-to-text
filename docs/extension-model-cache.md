@@ -85,9 +85,11 @@ persistence. Models has no manual storage-control UI. This is a safeguard agains
 browser eviction, not a guarantee against all data loss, intentional deletion
 or extension uninstall. No `unlimitedStorage` permission is added.
 
-Supertonic/Kokoro license links remain on their model cards. The Models footer
-also provides TTS terms/notices and the matching eSpeak NG source/build bundle,
-alongside the existing Gemma terms notice.
+Supertonic/Kokoro license links remain on their model cards, with the matching
+eSpeak NG source/build bundle linked on Kokoro's card. TranslateGemma's card
+discloses the Gemma usage restrictions before the download controls and links to
+the Gemma terms, prohibited-use policy and attribution. Models has no separate
+legal warning footer.
 See [Chrome extension storage scope and persistence](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies)
 and the [StorageManager API](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist).
 

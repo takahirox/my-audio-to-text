@@ -220,7 +220,7 @@ test('Graph stays canvas-first and Models keeps preparation and legal notices se
     await expect(live.editor.getByRole('link', { name: 'Models', exact: true })).toBeFocused();
     expect(await live.editor.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await live.models.setViewportSize({ width, height: 844 });
-    await expect(live.models.locator('#translategemma a')).toContainText('Gemma Terms');
+    await expect(live.models.locator('#translategemma').getByRole('link', { name: 'Gemma terms & attribution', exact: true })).toBeVisible();
     await expect(live.models.locator('#translategemma progress')).toBeHidden();
     await expect(live.models.locator('#translategemma').getByRole('button', { name: 'Cancel download', includeHidden: true })).toBeHidden();
     await expect(live.models.locator('#persist, #persistence, main > details')).toHaveCount(0);
@@ -229,6 +229,6 @@ test('Graph stays canvas-first and Models keeps preparation and legal notices se
       await live.models.screenshot({ path: `docs/evidence/ui-136-models-${width}.png` });
     }
   }
-  await expect(live.models.getByRole('link', { name: 'TTS terms and notices', exact: true })).toBeVisible();
+  await expect(live.models.locator('#kokoro a[href="../web/licenses/tts-notices.txt"]')).toBeVisible();
   expect(f.requests).toEqual([]);
 });

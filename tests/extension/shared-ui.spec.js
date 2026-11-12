@@ -140,8 +140,9 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   await card.getByRole('button', { name: 'Delete cached assets' }).click();
   await expect(status).toHaveText('Not downloaded');
   await expect(page.locator('#persist, #persistence, main > details')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'TTS terms and notices', exact: true })).toBeVisible();
-  await expect(page.locator('footer')).toContainText('Gemma Terms');
+  await expect(page.locator('#kokoro a[href="../web/licenses/tts-notices.txt"]')).toBeVisible();
+  await expect(page.locator('#translategemma').getByRole('link', { name: 'Gemma terms & attribution', exact: true })).toBeVisible();
+  await expect(page.locator('footer')).toHaveCount(0);
   await page.reload();
   await page.keyboard.press('Tab');
   const library = page.getByRole('navigation', { name: 'View', exact: true }).getByRole('link', { name: 'Library', exact: true });

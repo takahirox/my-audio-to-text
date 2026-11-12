@@ -18,12 +18,14 @@ test('Models removes storage controls and keeps discoverable legal links; model-
   await expect(models.locator('.model-card')).toHaveCount(12);
   await expect(models.locator('#persist, #persistence, main > details')).toHaveCount(0);
   await expect(models.getByText('Storage and cache management', { exact: true })).toHaveCount(0);
-  for (const [name, href] of [
-    ['TTS terms and notices', '../web/licenses/tts-notices.txt'],
-    ['Matching eSpeak NG source / build bundle (GPL-3.0-or-later)', '../web/tts-assets/phonemizer-source.tar.gz'],
-    ['Google Gemma Terms, Prohibited Use Policy and attribution', '../web/licenses/gemma-notices.txt'],
+  await expect(models.locator('footer')).toHaveCount(0);
+  for (const [id, name, href] of [
+    ['supertonic3', 'OpenRAIL-M weights and voices', '../web/licenses/tts-notices.txt'],
+    ['kokoro', 'Apache-2.0 weights; frontends have separate notices', '../web/licenses/tts-notices.txt'],
+    ['kokoro', 'eSpeak NG source / build bundle (GPL-3.0-or-later)', '../web/tts-assets/phonemizer-source.tar.gz'],
+    ['translategemma', 'Gemma terms & attribution', '../web/licenses/gemma-notices.txt'],
   ]) {
-    const link = models.getByRole('link', { name, exact: true });
+    const link = models.locator(`#${id}`).getByRole('link', { name, exact: true });
     await expect(link).toBeVisible(); await expect(link).toHaveAttribute('href', href);
   }
   await expect(models.locator('#supertonic3 .model-license')).toContainText('OpenRAIL-M');

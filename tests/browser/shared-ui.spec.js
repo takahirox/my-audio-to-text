@@ -31,11 +31,24 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
     await expect(card.getByRole('button')).toHaveText(['Download / retry', 'Delete cached assets']);
     await expect(card.getByRole('button', { name: 'Cancel download', includeHidden: true })).toBeHidden();
     await expect(card.getByRole('status')).toHaveText('Not downloaded');
-    await expect(card.locator('.model-license a')).toBeVisible();
+    for (const link of await card.locator('.model-license a').all()) await expect(link).toBeVisible();
   }
   const gemma = page.locator('#translategemma');
   await expect(gemma).toContainText('3.112 GB download shared by both directions');
   await expect(gemma).toContainText('Google / ONNX Community · Gemma Terms');
+  await expect(gemma).toContainText('Gemma Terms of Use and Prohibited Use Policy apply to this conversion. Read before downloading or using.');
+  await expect(page.locator('footer')).toHaveCount(0);
+  await expect(page.getByText('Before using TranslateGemma 4B, read', { exact: false })).toHaveCount(0);
+  for (const [id, name, href] of [
+    ['translategemma', 'Gemma terms & attribution', '../web/licenses/gemma-notices.txt'],
+    ['supertonic3', 'OpenRAIL-M weights and voices', '../web/licenses/tts-notices.txt'],
+    ['kokoro', 'Apache-2.0 weights; frontends have separate notices', '../web/licenses/tts-notices.txt'],
+    ['kokoro', 'eSpeak NG source / build bundle (GPL-3.0-or-later)', '../web/tts-assets/phonemizer-source.tar.gz'],
+  ]) {
+    const link = page.locator(`#${id}`).getByRole('link', { name, exact: true });
+    await expect(link).toBeVisible(); await expect(link).toHaveAttribute('href', href);
+  }
+  await expect(page.locator('a[href="../web/licenses/gemma-notices.txt"]')).toHaveCount(1);
   await gemma.getByText('Verified files and size', { exact: true }).click();
   const spec = JSON.parse(await readFile('extension/translategemma-assets.json'));
   await expect(gemma.locator('li')).toHaveCount(spec.length);
@@ -44,6 +57,8 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
     await page.evaluate(() => scrollTo(0, 0));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await gemma.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.locator('#kokoro').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.locator('body').evaluate(el => el.getBoundingClientRect().bottom - document.querySelector('main').getBoundingClientRect().bottom)).toBeLessThanOrEqual(20);
     await expect(library).toBeInViewport({ ratio: 1 });
     expect((await library.boundingBox()).height).toBeGreaterThanOrEqual(44);
     for (const button of await gemma.locator('.actions button:visible').all()) {
@@ -62,6 +77,9 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await remove.focus(); await page.keyboard.press(browserName === 'webkit' ? 'Alt+Shift+Tab' : 'Shift+Tab');
   await expect(download).toBeFocused();
   await expect(gemma.locator('.model-status')).toHaveText('Not downloaded');
+  await gemma.locator('summary').focus();
+  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+  await expect(gemma.getByRole('link', { name: 'Gemma terms & attribution', exact: true })).toBeFocused();
   await library.press('Enter');
   expect(await page.evaluate(() => window.openedPages)).toEqual([{ url: new URL('/extension/graph-library.html', page.url()).href }]);
 });
