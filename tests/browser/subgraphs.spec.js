@@ -112,6 +112,7 @@ test('extract, review port names, edit on the same canvas and return to the save
   await expect(page.locator('#graph-state')).toHaveText(/Saving…|Saved/);
   await page.locator('#graph-edit-subgraph').click();
   await expect(page).toHaveURL(new RegExp(`id=${ids.shared}`));
+  await expect(page.locator('#graph-create-subgraph')).toHaveCount(0);
   await expect(page.locator('.graph-node')).toHaveCount(2);
   const exposedPorts = inspector.locator('details').filter({ has: page.getByText('Exposed ports', { exact: true }) });
   await expect(exposedPorts).toHaveAttribute('open', '');
@@ -272,7 +273,7 @@ test('disconnecting shared processing reports affected parents in Validate and b
   const before = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   await page.locator('.graph-wire').focus(); await page.keyboard.press('Delete');
   await page.getByLabel('Graph actions', { exact: true }).click(); await page.locator('#graph-validate').click();
-  await expect(page.locator('#graph-errors')).toContainText('Cannot disable executable paths. Referenced by: Live transcription');
+  await expect(page.locator('#graph-validation-output')).toContainText('Cannot disable executable paths. Referenced by: Live transcription');
   await settleAutoSave(page);
   await expect(page.locator('#graph-errors')).toContainText('Restore the internal connections');
   await expect(page.locator('#graph-state')).toHaveText('Save failed');
@@ -318,16 +319,17 @@ for (const [platform, modifier] of [['Win32', 'Control'], ['Linux x86_64', 'Cont
     const first = page.getByRole('button', { name: 'Select format', exact: true });
     const second = page.getByRole('button', { name: 'Select history', exact: true });
     const create = page.locator('#graph-create-subgraph');
-    await expect(create).toBeHidden();
+    await expect(create).toBeDisabled();
     await first.click(); await expect(first).toHaveAttribute('aria-pressed', 'true');
-    await expect(create).toBeHidden();
+    await expect(create).toBeDisabled();
     for (const key of ['Shift', modifier]) {
       await modifiedClick(second, key);
       await expect(second).toBeFocused();
       await expect(first).toHaveAttribute('aria-pressed', 'true');
       await expect(second).toHaveAttribute('aria-pressed', 'true');
-      await expect(page.locator('.graph-selection')).toContainText('2 nodes selected');
-      await expect(create).toBeVisible();
+      await expect(page.locator('.graph-inspector')).toContainText('Instance ID: history');
+      await expect(page.locator('.graph-inspector')).not.toContainText(/\d+ nodes? selected/);
+      await expect(create).toBeEnabled();
       // A redraw must retain the selected/pressed state for every heading.
       await page.evaluate(() => window.dispatchEvent(new StorageEvent('storage', { key: 'processing-graph-library-v1' })));
       await expect(first).toHaveAttribute('aria-pressed', 'true');
@@ -335,7 +337,7 @@ for (const [platform, modifier] of [['Win32', 'Control'], ['Linux x86_64', 'Cont
       await modifiedClick(second, key);
       await expect(second).toHaveAttribute('aria-pressed', 'false');
       await expect(first).toHaveAttribute('aria-pressed', 'true');
-      await expect(create).toBeHidden();
+      await expect(create).toBeDisabled();
     }
     await modifiedClick(second, modifier);
     // A plain click on an already selected node in a group selects it alone.
@@ -344,8 +346,8 @@ for (const [platform, modifier] of [['Win32', 'Control'], ['Linux x86_64', 'Cont
     await second.click(); await expect(page.locator('.selected-node')).toHaveCount(0);
     await first.focus(); await first.press('Enter');
     await second.focus(); await second.press('Shift+Enter');
-    await expect(create).toBeVisible();
-    await second.press('Shift+Enter'); await expect(create).toBeHidden();
+    await expect(create).toBeEnabled();
+    await second.press('Shift+Enter'); await expect(create).toBeDisabled();
     await first.press('Escape'); await expect(page.locator('.selected-node')).toHaveCount(0);
     await first.press('Space'); await expect(first).toHaveAttribute('aria-pressed', 'true');
     await page.locator('.graph-scroll').click({ position: { x: 10, y: 10 } });
@@ -414,16 +416,16 @@ for (const multiple of [false, true]) test(`creation reports actual inferred cou
   })).toBe(multiple ? 6 : 1);
 });
 
-test('invalid selections explain the restriction beside Create Subgraph and keep selection correctable', async ({ page }) => {
+test('invalid selections explain the restriction in Graph notices and keep selection correctable', async ({ page }) => {
   await page.getByRole('button', { name: 'Select format', exact: true }).focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Select output', exact: true }).focus(); await page.keyboard.press('Shift+Enter');
   await page.locator('#graph-create-subgraph').click();
-  await expect(page.locator('.graph-selection [role="alert"]')).toContainText('Select one connected group');
+  await expect(page.locator('#graph-errors')).toContainText('Select one connected group');
   await expect(page.locator('.selected-node')).toHaveCount(2);
   await page.getByRole('button', { name: 'Select history', exact: true }).focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Select output', exact: true }).focus(); await page.keyboard.press('Shift+Enter');
   await page.locator('#graph-create-subgraph').click();
-  await expect(page.locator('.graph-selection [role="alert"]')).toContainText('output destinations');
+  await expect(page.locator('#graph-errors')).toContainText('output destinations');
   await expect(page.locator('.selected-node')).toHaveCount(2);
   await page.keyboard.press('Escape');
   await openExtraction(page, false);
@@ -483,7 +485,7 @@ test('failed pending parent Auto Save blocks creation and retains its recoverabl
   await page.getByRole('button', { name: 'Select format', exact: true }).focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Select history', exact: true }).focus(); await page.keyboard.press('Shift+Enter');
   await page.locator('#graph-create-subgraph').click();
-  await expect(page.locator('.graph-selection [role="alert"]')).toContainText('Parent write denied');
+  await expect(page.locator('#graph-errors')).toContainText('Parent write denied');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('.selected-node')).toHaveCount(2);
   expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);

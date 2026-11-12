@@ -50,15 +50,12 @@ export class GraphEditor {
     this.actions.append(actionsTrigger);
     const commands = el('div', undefined, 'graph-command-list');
     commands.append(
-      button('Reset draft to default', 'graph-reset', () => {
+      button('Reset to default', 'graph-reset', () => {
         if (this.readOnly || !confirm('Reset the graph to default? You can Undo this change.')) return;
         this.closeActions(); this.edit(() => { this.draft = this.kind === 'subgraph' ? { version: 15, nodes: [], edges: [], interface: { inputs: [], outputs: [] } } : defaultGraph(); this.selected = null; this.selectedNode = null; this.draw(); });
       }),
-      button('Validate draft', 'graph-validate', () => {
-        this.closeActions();
-        // Validation only updates the result; redrawing would notify draft
-        // consumers and could immediately replace the explicit warnings.
-        this.errors.textContent = this.diagnostics(true) || 'Draft valid. Changes save automatically for the next session.';
+      button('Validate graph', 'graph-validate', () => {
+        this.closeActions(); this.showValidation();
       }));
     const importFile = el('input'); importFile.type = 'file'; importFile.accept = '.json,application/json'; importFile.hidden = true;
     importFile.onchange = async () => {
@@ -85,17 +82,30 @@ export class GraphEditor {
     }));
     this.createButton = button('Create Subgraph', 'graph-create-subgraph', () => this.createSubgraph());
     this.createButton.className = 'primary';
-    this.selectionPanel = el('div', undefined, 'graph-selection');
-    this.selectionCount = el('p'); this.selectionCount.setAttribute('role', 'status');
-    this.selectionError = el('p'); this.selectionError.setAttribute('role', 'alert');
-    this.selectionPanel.append(this.selectionCount, this.createButton, this.selectionError);
     if (this.kind === 'subgraph') commands.append(button('Edit exposed ports', 'graph-exposed-ports', () => { this.closeActions(); this.selectDetails(); this.inspector.querySelector('input, button')?.focus(); }));
     this.actions.append(commands);
     this.paletteButton = button('Add Node', 'graph-palette-toggle', () => this.togglePalette()); this.paletteButton.setAttribute('aria-haspopup', 'dialog'); this.paletteButton.setAttribute('aria-expanded', 'false'); this.paletteButton.setAttribute('aria-controls', 'graph-palette');
-    toolbar.append(status, this.paletteButton, this.undoButton, this.redoButton, this.retryButton, this.actions);
-    // Only exceptional states get a row; routine Live activity stays in the toolbar.
+    toolbar.append(status, this.paletteButton);
+    if (this.kind !== 'subgraph' && this.onCreateSubgraph) toolbar.append(this.createButton);
+    toolbar.append(this.undoButton, this.redoButton, this.actions);
+    // Exceptional states go to Graph notices; routine activity stays in the toolbar.
     this.stateNotice = el('p', undefined, 'graph-state-notice'); this.stateNotice.setAttribute('role', 'status'); this.stateNotice.setAttribute('aria-atomic', 'true'); this.stateNotice.hidden = true;
     this.errors = el('pre'); this.errors.id = 'graph-errors'; this.errors.setAttribute('role', 'alert');
+    // Persistent notices have their own collapsible overlay. Closing explicit
+    // validation results never clears save, recovery or automatic diagnostics.
+    this.notices = el('details', undefined, 'graph-notices'); this.notices.open = true;
+    this.notices.append(el('summary', 'Graph notices'));
+    this.noticeContent = el('div', undefined, 'graph-notice-content');
+    this.noticeContent.append(this.stateNotice, this.saveError, this.retryButton, this.errors); this.notices.append(this.noticeContent);
+    this.noticesObserver = new MutationObserver(() => this.updateNotices());
+    this.noticesObserver.observe(this.noticeContent, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+    this.validation = el('section', undefined, 'graph-validation'); this.validation.id = 'graph-validation'; this.validation.hidden = true;
+    this.validation.setAttribute('role', 'region'); this.validation.setAttribute('aria-labelledby', 'graph-validation-title'); this.validation.tabIndex = -1;
+    const validationHeader = el('div', undefined, 'graph-validation-header'), validationTitle = el('h2', 'Validation results'); validationTitle.id = 'graph-validation-title';
+    validationHeader.append(validationTitle, button('Close', 'graph-validation-close', () => this.closeValidation()));
+    this.validationState = el('p'); this.validationState.setAttribute('role', 'status');
+    this.validationOutput = el('pre'); this.validationOutput.id = 'graph-validation-output'; this.validationOutput.tabIndex = 0; this.validationOutput.setAttribute('aria-label', 'Validation output');
+    this.validation.append(validationHeader, this.validationState, this.validationOutput, button('Validate graph', 'graph-revalidate', () => this.showValidation(false)));
     this.workspace = el('div', undefined, 'graph-workspace');
     this.palette = el('aside', undefined, 'graph-palette'); this.palette.id = 'graph-palette'; this.palette.hidden = true;
     this.palette.setAttribute('role', 'dialog'); this.palette.setAttribute('aria-label', 'Add Node');
@@ -186,8 +196,8 @@ export class GraphEditor {
     this.zoomIn.setAttribute('aria-label', 'Zoom in'); this.zoomIn.title = 'Zoom in';
     const fit = button('Fit', 'graph-fit', () => this.fit()); fit.setAttribute('aria-label', 'Fit graph'); fit.title = 'Fit graph in the canvas';
     viewportActions.append(this.zoomOut, this.zoomControl, this.zoomIn, fit);
-    surface.append(this.scroll, viewportActions); viewport.append(surface); this.workspace.append(viewport, this.inspector, this.palette);
-    root.replaceChildren(toolbar, this.stateNotice, this.saveError, this.errors, this.workspace);
+    surface.append(this.scroll, viewportActions, this.validation, this.notices); viewport.append(surface); this.workspace.append(viewport, this.inspector, this.palette);
+    root.replaceChildren(toolbar, this.workspace);
     document.addEventListener('keydown', event => {
       // Dialog edits and pending creation must not undo the parent snapshot.
       if (event.target.closest('dialog')) return;
@@ -201,6 +211,7 @@ export class GraphEditor {
         this.cancelDetach?.();
         if (!this.palette.hidden) { event.preventDefault(); this.togglePalette(false); return; }
         if (this.actions.open) { event.preventDefault(); this.actions.open = false; this.actions.querySelector('summary').focus(); return; }
+        if (!this.validation.hidden) { event.preventDefault(); this.closeValidation(); return; }
         event.preventDefault(); const restoreFocus = wire || event.target === this.disconnectButton || this.inspector.contains(event.target);
         this.selectDetails();
         if (restoreFocus) this.scroll.focus({ preventScroll: true });
@@ -319,11 +330,11 @@ export class GraphEditor {
       dialog.append(title, el('p', 'Combine the selected nodes into a reusable Subgraph.'), nameLabel, name, included, connections, ports, error, actions);
       dialog.onclose = () => {
         dialog.remove();
-        if (!this.createButton.hidden) this.createButton.focus({ preventScroll: true });
+        if (this.createButton.isConnected && !this.createButton.disabled) this.createButton.focus({ preventScroll: true });
         else this.canvas.querySelector(`[data-node="${this.selectedNode}"] .graph-heading`)?.focus({ preventScroll: true });
       };
       this.root.append(dialog); this.actions.open = false; dialog.showModal(); name.focus(); name.select();
-    } catch (error) { this.selectionError.textContent = error.message; }
+    } catch (error) { this.errors.textContent = error.message; this.notices.open = true; this.updateNotices(); }
   }
   diagnostics(includeWarnings = false) {
     let boundaryError = '';
@@ -335,6 +346,35 @@ export class GraphEditor {
     } catch (error) { boundaryError = error.message; }
     return [...(boundaryError ? [boundaryError] : validateGraph(this.draft, false, this.definitions)).map(message => `Error: ${message}`),
       ...(includeWarnings && !boundaryError && this.kind !== 'subgraph' ? graphWarnings(resolveSubgraphs(this.draft, this.definitions)).map(message => `Warning: ${message}`) : [])].join('\n');
+  }
+  updateNotices() {
+    this.notices.hidden = ![...this.noticeContent.querySelectorAll('p, pre, button, summary')].some(element => {
+      if (!element.textContent.trim()) return false;
+      for (let current = element; current !== this.noticeContent; current = current.parentElement) if (current.hidden) return false;
+      return true;
+    });
+  }
+  validationFingerprint() {
+    // Library revisions and Auto Save acknowledgements do not change results;
+    // edits to a referenced definition do, even when this graph stays identical.
+    return JSON.stringify([this.draft, this.definitions.filter(entry => entry.kind === 'subgraph').map(({ id, graph }) => ({ id, graph }))]);
+  }
+  showValidation(focus = true) {
+    this.validationOutput.textContent = this.diagnostics(true) || 'Graph is valid. Changes save automatically for the next session.';
+    this.validationSnapshot = this.validationFingerprint(); this.validationState.textContent = 'Results for the current graph.';
+    this.validation.hidden = false;
+    if (focus) this.validation.focus({ preventScroll: true });
+  }
+  updateValidationState() {
+    if (this.validationSnapshot && this.validationSnapshot !== this.validationFingerprint()) {
+      const message = 'Outdated results. The graph has changed. Validate graph again to refresh.';
+      if (this.validationState.textContent !== message) this.validationState.textContent = message;
+    }
+  }
+  closeValidation() {
+    const restore = this.validation.contains(document.activeElement);
+    this.validation.hidden = true;
+    if (restore) this.actions.querySelector('summary').focus({ preventScroll: true });
   }
   closeActions() {
     this.actions.open = false; this.actions.querySelector('summary').focus({ preventScroll: true });
@@ -554,7 +594,7 @@ export class GraphEditor {
   setSaveState(status, error = '') {
     this.saveState = status; this.saveError.textContent = error; this.retryButton.hidden = status !== 'Save failed'; this.updateSummary();
   }
-  markPending() { this.saveState = 'Saving…'; this.summary.textContent = this.readOnly ? 'Read-only' : 'Saving…'; }
+  markPending() { this.updateValidationState(); this.saveState = 'Saving…'; this.summary.textContent = this.readOnly ? 'Read-only' : 'Saving…'; }
   beginEdit(key = null) {
     if (this.readOnly) return false;
     if (this.transaction && (key === null || this.transaction.key !== key)) this.commitEdit();
@@ -606,7 +646,7 @@ export class GraphEditor {
     for (const id of ['graph-palette-toggle', 'graph-reset', 'graph-import', 'graph-exposed-ports']) {
       const control = this.root.querySelector(`#${id}`); if (control) control.disabled = this.readOnly;
     }
-    this.createButton.disabled = this.readOnly || !this.multiSelection?.size;
+    this.createButton.disabled = this.readOnly || this.multiSelection.size < 2;
     if (!this.readOnly) return;
     for (const control of this.root.querySelectorAll('#graph-palette-toggle, #graph-reset, #graph-import, #graph-create-subgraph, #graph-exposed-ports, .graph-inspector input, .graph-inspector select, .graph-inspector textarea, .graph-inspector button, .graph-ports button')) {
       if (control.id !== 'graph-edit-subgraph') control.disabled = true;
@@ -614,6 +654,7 @@ export class GraphEditor {
   }
   setActive(graph, state, tabId) { this.active = graph; this.state = state; this.tabId = tabId; this.updateSummary(); }
   updateSummary() {
+    this.updateValidationState();
     let savedSnapshot = this.saved;
     try { if (this.saved) savedSnapshot = resolveSubgraphs(this.saved, this.definitions); } catch { /* Show the pending warning if a dependency becomes invalid. */ }
     const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(savedSnapshot);
@@ -666,12 +707,12 @@ export class GraphEditor {
     // Validation and checkpointing run once when the typing transaction ends.
   }
   selectDetails(node = null, connection = null, extend = false) {
+    const previousNode = this.selectedNode, previousEdge = this.selectedEdge;
     if (extend && node) {
       this.multiSelection ||= new Set();
       if (this.multiSelection.has(node)) this.multiSelection.delete(node); else this.multiSelection.add(node);
       node = this.multiSelection.has(node) ? node : [...this.multiSelection].at(-1) || null;
     } else this.multiSelection = new Set(node ? [node] : []);
-    if (this.selectionError) this.selectionError.textContent = '';
     this.selected = null; this.selectedNode = node; this.selectedEdge = connection;
     for (const card of this.canvas.querySelectorAll('.graph-node')) {
       const selected = this.multiSelection.has(card.dataset.node);
@@ -686,7 +727,8 @@ export class GraphEditor {
       const selected = this.draft.edges[Number(wire.dataset.edge)] === connection;
       wire.classList.toggle('selected-wire', selected); wire.setAttribute('aria-pressed', String(selected));
     }
-    this.drawInspector(); this.applyReadOnly();
+    if (previousNode !== node || previousEdge !== connection) this.drawInspector();
+    this.applyReadOnly();
   }
   drawInspector() {
     const active = this.inspector.contains(document.activeElement) ? document.activeElement : null;
@@ -694,10 +736,7 @@ export class GraphEditor {
     const caret = active && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd, active.selectionDirection] : null;
     const node = this.draft.nodes.find(node => node.id === this.selectedNode);
     const header = el('div', undefined, 'graph-inspector-header'); header.append(el('h2', node ? 'Settings' : 'Details'));
-    this.selectionPanel.hidden = !this.multiSelection.size;
-    this.selectionCount.textContent = `${this.multiSelection.size} ${this.multiSelection.size === 1 ? 'node' : 'nodes'} selected`;
-    this.createButton.hidden = this.multiSelection.size < 2 || this.kind === 'subgraph' || !this.onCreateSubgraph;
-    this.inspector.replaceChildren(this.selectionPanel, header);
+    this.inspector.replaceChildren(header);
     this.disconnectButton.hidden = !this.selectedEdge;
     if (!node && !this.selectedEdge) { this.inspector.append(el('p', `Select a node or connection. Shift+click, ${this.isMac ? 'Command' : 'Ctrl'}+click or Shift+Enter on headings selects a group.`, 'muted')); if (this.kind === 'subgraph') this.renderPortEditor(this.inspector, this.draft, () => this.draw()); return; }
     if (this.selectedEdge) {
@@ -761,12 +800,14 @@ export class GraphEditor {
   removeNode(node) {
     this.draft.nodes = this.draft.nodes.filter(n => n !== node);
     this.draft.edges = this.draft.edges.filter(e => e.from[0] !== node.id && e.to[0] !== node.id);
-    this.selected = null; this.selectedNode = null; this.draw();
+    this.multiSelection.delete(node.id);
+    this.selected = null; this.selectedNode = [...this.multiSelection].at(-1) || null; this.draw();
   }
   draw(notify = true) {
     this.geometryObserver?.disconnect();
     if (!this.selectedNode) this.multiSelection?.clear();
     else if (this.multiSelection) for (const id of this.multiSelection) if (!this.draft.nodes.some(node => node.id === id)) this.multiSelection.delete(id);
+    if (this.selectedNode && !this.multiSelection.has(this.selectedNode)) this.selectedNode = [...this.multiSelection].at(-1) || null;
     if (!this.draft.edges.includes(this.selectedEdge)) this.selectedEdge = null;
     this.syncZoomControls();
     this.canvas.replaceChildren(this.svg); this.svg.replaceChildren();

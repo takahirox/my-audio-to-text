@@ -335,7 +335,7 @@ test('canvas-first editor: search, categories, keyboard add/settings, fit and sa
   await page.locator('#graph-undo').click();
   await expect(page.locator('[data-node="number"]')).toHaveCount(0);
   await page.locator('.graph-actions > summary').click(); await page.locator('#graph-validate').click();
-  await expect(page.locator('#graph-errors')).toHaveText('Draft valid. Changes save automatically for the next session.');
+  await expect(page.locator('#graph-validation-output')).toHaveText('Graph is valid. Changes save automatically for the next session.');
   for (const width of [390, 700]) {
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ reducedMotion: 'reduce' });

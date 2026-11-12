@@ -1,3 +1,4 @@
+import { checkValidationPanel, checkStableSelection } from '../fixtures/graph-validation.js';
 import { settleAutoSave } from '../extension/ui-controls.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -114,3 +115,8 @@ test('touch toggles selection without deleting and uses full-sized zoom controls
     await expect(page.locator('#graph-state')).toHaveText('Saved');
   } finally { await context.close(); }
 });
+
+for (const width of [1440, 390, 320]) {
+  test(`selection keeps Create Subgraph fixed at ${width}px`, async ({ page }) => { await checkStableSelection(page, width); });
+  test(`validation overlays preserve editing and geometry at ${width}px`, async ({ page }) => { await checkValidationPanel(page, width); });
+}
