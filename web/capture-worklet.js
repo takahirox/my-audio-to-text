@@ -1,7 +1,11 @@
 class Capture extends AudioWorkletProcessor {
   constructor(options) {
     super(); this.timestamps = options?.processorOptions?.timestamps; this.buffer = new Float32Array(2048); this.used = 0;
-    this.port.onmessage = () => { this.stopped = true; this.flush(); this.port.postMessage('flushed'); };
+    this.port.onmessage = ({ data }) => {
+      const drain = data?.type === 'drain';
+      if (!drain) this.stopped = true;
+      this.flush(); this.port.postMessage(drain ? { type: 'drained', id: data.id } : 'flushed');
+    };
   }
   flush() {
     if (this.used) {

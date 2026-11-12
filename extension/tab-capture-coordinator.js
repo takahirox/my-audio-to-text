@@ -34,8 +34,9 @@ export class TabCaptureCoordinator {
       if (this.subscribers.get(id) === subscriber) this.finish(subscriber, error.message);
     }
   }
-  audio(entry, audio, timing) {
-    for (const subscriber of [...entry.listeners]) {
+  audio(entry, audio, timing, listeners = entry.listeners) {
+    for (const subscriber of [...listeners]) {
+      if (this.subscribers.get(subscriber.id) !== subscriber) continue;
       if (subscriber.discard) continue;
       // Discard/trim pre-subscription samples even when an earlier worklet
       // block is still in transit or partly buffered at the instant of joining.
@@ -88,6 +89,15 @@ export class TabCaptureCoordinator {
         if (!flush && entry.closing) await entry.source.stop(false);
         await this.close(entry, flush);
       } catch (error) { this.finish(subscriber, `Tab capture teardown failed: ${error.message}`); return; }
+    } else if (flush) {
+      try {
+        await entry.starting;
+        if (this.subscribers.get(id) !== subscriber || subscriber.discard) return;
+        // Drain the shared worklet without stopping it. Only this subscriber
+        // receives the interpolated tail; peers retain their resampler phase.
+        const tail = await entry.source.drain();
+        this.audio(entry, tail.audio, tail.timing, [subscriber]);
+      } catch (error) { this.finish(subscriber, `Tab capture flush failed: ${error.message}`); return; }
     }
     this.finish(subscriber);
   }

@@ -62,16 +62,19 @@ export class BrowserAudioSource {
       const onChunk = (chunk, capturedAt) => {
         const startTime = capturedAt + (this.resampler.position - this.resampler.tail.length) / this.context.sampleRate;
         const audio = this.resampler.push(chunk);
+        this.nextAudioTime = startTime + audio.length / 16000;
         if (audio.length) {
           this.onAudio(audio, this.captureTimestamps ? { capturedAt: startTime } : undefined);
-          this.nextAudioTime = startTime + audio.length / 16000;
         }
       };
       if (this.context.audioWorklet) {
         await this.context.audioWorklet.addModule(this.workletURL || new URL('./capture-worklet.js', import.meta.url).href);
         this.checkCanceled();
         this.node = new AudioWorkletNode(this.context, 'capture', { processorOptions: { timestamps: !!this.captureTimestamps } });
-        this.node.port.onmessage = ({ data }) => this.captureTimestamps ? onChunk(data.audio, data.capturedAt) : onChunk(data);
+        this.node.port.onmessage = ({ data }) => {
+          if (data?.type === 'drained') return;
+          this.captureTimestamps ? onChunk(data.audio, data.capturedAt) : onChunk(data);
+        };
       } else {
         this.node = this.context.createScriptProcessor(2048, tracks[0].getSettings().channelCount || 2, 1);
         this.node.onaudioprocess = ({ inputBuffer, playbackTime }) => {

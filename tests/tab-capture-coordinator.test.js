@@ -11,6 +11,7 @@ function fixture({ pending = false, maxInFlight = 8 } = {}) {
     const grant = deferred(), release = deferred();
     const source = { tabId, audio, ended, grant, release, stops: [],
       start: () => pending ? grant.promise : Promise.resolve(),
+      async drain() { return { audio: new Float32Array() }; },
       async stop(flush) { this.stops.push(flush); if (flush) audio(Float32Array.of(0.125)); await release.promise; },
     };
     release.resolve(); sources.push(source); return source;
@@ -160,4 +161,32 @@ test('invalid acknowledgments fail only that subscriber without stopping a healt
   c.acknowledge('healthy',0); f.sources[0].audio(Float32Array.of(2));
   assert.equal(f.pcm('healthy').length,2); assert.deepEqual(f.sources[0].stops,[]);
   await c.unsubscribe('healthy',false);
+});
+
+test('shared graceful Stop waits for a drain; Cancel removes only its subscriber immediately', async () => {
+  const f = fixture(), c = f.coordinator, drain = deferred();
+  await Promise.all([c.subscribe('a', 42), c.subscribe('b', 42)]);
+  f.sources[0].drain = () => drain.promise;
+  const stop = c.unsubscribe('a'); await tick();
+  assert.equal(c.subscribers.has('a'), true);
+  await c.unsubscribe('a', false);
+  drain.resolve({ audio: Float32Array.of(0.25) }); await stop;
+  assert.equal(f.pcm('a').length, 0);
+  f.sources[0].audio(Float32Array.of(0.5));
+  assert.deepEqual(f.pcm('b').map(m => m.pcm), [[0.5]]);
+  assert.deepEqual(f.sources[0].stops, []);
+  assert.equal(f.messages.filter(m => m.id === 'a' && m.type === 'ended').length, 1);
+  await c.unsubscribe('b', false);
+});
+
+test('shared drain failures are reported only to the departing graph', async () => {
+  const f = fixture(), c = f.coordinator;
+  await Promise.all([c.subscribe('a', 42), c.subscribe('b', 42)]);
+  f.sources[0].drain = async () => { throw Error('flush timed out'); };
+  await c.unsubscribe('a');
+  assert.match(f.messages.find(m => m.id === 'a' && m.type === 'ended').error, /flush timed out/);
+  f.sources[0].audio(Float32Array.of(0.5));
+  assert.deepEqual(f.pcm('b').map(m => m.pcm), [[0.5]]);
+  assert.deepEqual(f.sources[0].stops, []);
+  await c.unsubscribe('b', false);
 });
