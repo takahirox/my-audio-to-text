@@ -24,8 +24,12 @@ export class GraphEditor {
   constructor(root, graph, { onDraft = () => {}, readOnly = false, onRetry = () => {}, onFlush = async () => {}, invalidSaved = false, definitions = [], kind = 'graph', graphId, onCreateSubgraph, onExport, onEditSubgraph }) {
     Object.assign(this, { definitions, kind, graphId, onCreateSubgraph, onExport, onEditSubgraph });
     this.multiSelection = new Set();
-    this.isMac = /Mac|iPhone|iPad/.test(navigator.userAgentData?.platform || navigator.platform);
+    this.isMac = /mac|iphone|ipad|ipod/i.test(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent);
     this.root = root; this.onDraft = onDraft;
+    // Modified pointer clicks can retain :focus-visible from earlier keyboard
+    // navigation. Keep heading focus, but show its ring only for keyboard input.
+    root.addEventListener('pointerdown', () => root.classList.add('graph-pointer-input'), true);
+    root.addEventListener('keydown', () => root.classList.remove('graph-pointer-input'), true);
     this.saved = invalidSaved ? null : this.assert(graph); this.draft = this.assert(graph); this.zoom = 1;
     this.readOnly = readOnly; this.onFlush = onFlush; this.undoStack = []; this.redoStack = [];
     // Every synchronous graph mutation enters the same boundary. Rendering,
@@ -832,16 +836,18 @@ export class GraphEditor {
       heading.setAttribute('aria-label', `Select ${node.id}`); heading.setAttribute('aria-pressed', String(this.multiSelection.has(node.id)));
       heading.title = `Select to inspect settings; Shift+click, ${this.isMac ? 'Command' : 'Ctrl'}+click or Shift+Enter toggles selection. Escape clears. Drag to move; arrow keys move by 10 pixels.`;
       const toggleModifier = event => event.shiftKey || (this.isMac ? event.metaKey : event.ctrlKey);
+      let pointerExtend = null;
       const selectHeading = event => {
         if (this.isMac && event.ctrlKey) return;
         event.preventDefault();
-        const extend = toggleModifier(event);
+        const extend = pointerExtend ?? toggleModifier(event); pointerExtend = null;
         this.selectDetails(extend ? node.id : this.multiSelection.size === 1 && this.multiSelection.has(node.id) ? null : node.id, null, extend);
         heading.focus({ preventScroll: true });
       };
       heading.onclick = selectHeading;
       if (node.type === 'Subgraph' && this.onEditSubgraph) heading.ondblclick = () => this.onEditSubgraph(node.subgraphId);
       heading.onkeydown = event => {
+        pointerExtend = null;
         if (event.key === 'Enter' || event.key === ' ') { selectHeading(event); return; }
         const delta = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[event.key];
         if (!delta || this.readOnly) return; event.preventDefault(); this.selectedEdge = null; this.selectedNode = node.id; this.multiSelection = new Set([node.id]);
@@ -849,9 +855,14 @@ export class GraphEditor {
         this.canvas.querySelector(`[data-node="${node.id}"] .graph-heading`).focus();
       };
       heading.onpointerdown = event => {
-        if (this.isMac && event.ctrlKey) return;
-        if (event.button === 0 && toggleModifier(event)) { event.preventDefault(); heading.focus({ preventScroll: true }); return; }
-        if (event.button !== 0 || this.readOnly) return; this.commitEdit(); heading.setPointerCapture(event.pointerId); heading.focus({ preventScroll: true });
+        pointerExtend = null;
+        if (event.button !== 0 || (this.isMac && event.ctrlKey)) return;
+        // Use the press's modifier even if it is released before click. Let the
+        // browser focus normally; modified presses never install drag handlers.
+        pointerExtend = toggleModifier(event);
+        heading.onpointercancel = () => { pointerExtend = null; };
+        if (pointerExtend || this.readOnly) return;
+        this.commitEdit(); heading.setPointerCapture(event.pointerId); heading.focus({ preventScroll: true });
         const x = event.clientX, y = event.clientY, origin = { ...node.position }; let moved = false;
         heading.onpointermove = move => {
           if (Math.abs(move.clientX - x) + Math.abs(move.clientY - y) < 3) return;
@@ -861,7 +872,7 @@ export class GraphEditor {
           node.position.x = Math.max(0, origin.x + (move.clientX - x) / this.zoom); node.position.y = Math.max(0, origin.y + (move.clientY - y) / this.zoom);
           this.markPending(); card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`; this.scheduleWires();
         };
-        const done = () => { this.draggingNode = null; heading.onpointermove = null; heading.onpointerup = heading.onpointercancel = null; if (moved) {
+        const done = event => { if (event.type === 'pointercancel') pointerExtend = null; this.draggingNode = null; heading.onpointermove = null; heading.onpointerup = heading.onpointercancel = null; if (moved) {
           this.commitEdit(); this.draw(); this.canvas.querySelector(`[data-node="${node.id}"] .graph-heading`)?.focus({ preventScroll: true });
         } };
         heading.onpointerup = heading.onpointercancel = done;
