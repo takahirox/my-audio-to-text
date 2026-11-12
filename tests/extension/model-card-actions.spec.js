@@ -79,7 +79,55 @@ test('active download hides actions on both pages; cancellation and failure reta
   await expect(other.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
 });
 
+test('successful deletion on another Models page clears an obsolete failure through later focus checks', async ({ graphExtension: f }) => {
+  const first = await open(f), second = await open(f);
+  const card = first.locator('#opus-ja-en'), other = second.locator('#opus-ja-en');
+  await expect(other).toHaveAttribute('data-state', 'Not downloaded');
+  f.mode('corrupt');
+  await card.getByRole('button', { name: 'Download', exact: true }).click();
+  await expect(card).toHaveAttribute('data-state', 'Error');
+  await expect(card.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+  await expect(card.locator('.model-error')).not.toBeEmpty();
+  const count = f.requests.length;
+  await other.getByRole('button', { name: 'Delete cached assets' }).click();
+  for (const model of [other, card]) {
+    await expect(model).toHaveAttribute('data-state', 'Not downloaded');
+    await expect(model.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
+    await expect(model.locator('.model-error')).toBeEmpty();
+  }
+  await focus(first);
+  await expect(card).toHaveAttribute('data-state', 'Not downloaded');
+  await expect(card.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
+  expect(f.requests).toHaveLength(count);
+  f.mode('normal');
+  await card.getByRole('button', { name: 'Download', exact: true }).click();
+  await expect(card).toHaveAttribute('data-state', 'Ready');
+  await expect(other).toHaveAttribute('data-state', 'Ready');
+});
+
 for (const [id, firstVoice, secondVoice] of [['supertonic3', 'F1', 'M1'], ['kokoro', 'jf_alpha', 'af_heart']]) {
+  test(`${id} cross-page deletion clears only the deleted voice's remembered failure`, async ({ graphExtension: f }) => {
+    const first = await open(f), second = await open(f);
+    const card = first.locator(`#${id}`), other = second.locator(`#${id}`);
+    f.mode('corrupt');
+    for (const voice of [firstVoice, secondVoice]) {
+      await card.locator('select').selectOption(voice);
+      await card.getByRole('button', { name: 'Download', exact: true }).click();
+      await expect(card).toHaveAttribute('data-state', 'Error');
+    }
+    const error = await card.locator('.model-error').textContent();
+    await other.locator('select').selectOption(firstVoice);
+    await other.getByRole('button', { name: 'Delete cached assets' }).click();
+    await expect(other).toHaveAttribute('data-state', 'Not downloaded');
+    await focus(first);
+    await expect(card.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+    await expect(card.locator('.model-error')).toHaveText(error);
+    await card.locator('select').selectOption(firstVoice);
+    await expect(card).toHaveAttribute('data-state', 'Not downloaded');
+    await expect(card.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
+    await expect(card.locator('.model-error')).toBeEmpty();
+  });
+
   test(`${id} actions follow selected voice, shared files and cross-page deletion without changing unrelated assets`, async ({ graphExtension: f }) => {
     const page = await open(f), card = page.locator(`#${id}`), unrelated = page.locator('#opus-en-ja');
     await unrelated.getByRole('button', { name: 'Download', exact: true }).click();

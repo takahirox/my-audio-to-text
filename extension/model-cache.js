@@ -139,6 +139,9 @@ class ModelCard {
         if (view.state === 'Error') this.render(view);
         else {
           this.failures.delete(this.key());
+          // Only successful explicit deletion retires this variant's old error.
+          // Notify before reinspection can wait on another consumer's download.
+          if (!closed) channel.postMessage({ id: this.definition.id, deletedKey: this.key() });
           this.state('Checking', 'Checking cached assets…');
           this.render(await cache.inspect());
         }
@@ -152,7 +155,12 @@ class ModelCard {
   }
 }
 for (const definition of definitions) cards.push(new ModelCard(definition));
-channel.onmessage = ({ data }) => { for (const card of cards) if (card.definition.id === data.id) void card.inspect(); };
+channel.onmessage = ({ data }) => {
+  for (const card of cards) if (card.definition.id === data.id) {
+    if (typeof data.deletedKey === 'string') card.failures.delete(data.deletedKey);
+    void card.inspect();
+  }
+};
 window.addEventListener('focus', () => { for (const card of cards) void card.inspect(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) for (const card of cards) void card.inspect(); });
 window.addEventListener('pagehide', () => { closed = true; for (const card of cards) { ++card.ticket; card.controller?.abort(); } channel.close(); });
