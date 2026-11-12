@@ -1,3 +1,4 @@
+import { checkValidationPanel, checkStableSelection, checkValidationPointer } from '../fixtures/graph-validation.js';
 import { settleAutoSave } from '../extension/ui-controls.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -112,5 +113,20 @@ test('touch toggles selection without deleting and uses full-sized zoom controls
     await page.getByRole('button', { name: 'Zoom in', exact: true }).tap();
     await expect(page.locator('#graph-zoom')).toHaveValue('1');
     await expect(page.locator('#graph-state')).toHaveText('Saved');
+  } finally { await context.close(); }
+});
+
+for (const width of [1440, 390, 320]) {
+  test(`selection keeps Create Subgraph fixed at ${width}px`, async ({ page }) => { await checkStableSelection(page, width); });
+  test(`validation overlays preserve editing and geometry at ${width}px`, async ({ page }) => { await checkValidationPanel(page, width); });
+}
+for (const width of [390, 320]) {
+  test(`validation results can uncover nodes for pointer selection and dragging at ${width}px`, async ({ page }) => { await checkValidationPointer(page, { width }); });
+}
+test('validation results can uncover nodes for touch selection', async ({ browser }) => {
+  const context = await browser.newContext({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  try {
+    const page = await context.newPage(); await page.route('**/*', serveExtension); await page.goto('/extension/graph-editor.html');
+    await checkValidationPointer(page, { touch: true });
   } finally { await context.close(); }
 });

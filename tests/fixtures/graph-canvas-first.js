@@ -209,5 +209,6 @@ export async function checkGraphCommands(page) {
   await expect(page.locator('#graph-optional-warnings')).toHaveCount(0);
   await expect(page.getByLabel('Show optional warnings')).toHaveCount(0);
   await page.keyboard.press('Escape');
-  await clickGraphAction(page, 'graph-validate'); await expect(page.locator('#graph-errors')).toContainText('Draft valid');
+  await clickGraphAction(page, 'graph-validate'); await expect(page.locator('#graph-validation-output')).toContainText('Graph is valid');
+  await page.locator('#graph-validation-close').click();
 }

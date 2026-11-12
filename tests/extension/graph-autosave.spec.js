@@ -54,6 +54,9 @@ test('same graph has one writer, viewer guards all mutations, explicit acquisiti
   await expect(viewer.locator('#graph-state')).toHaveText('Read-only'); await expect(viewer.locator('#graph-palette-toggle')).toBeDisabled();
   const original = await graph(page); await viewer.getByRole('button', { name: 'Select audio', exact: true }).click(); await viewer.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
   await expect(viewer.getByRole('button', { name: 'Remove audio', exact: true })).toBeDisabled();
+  await viewer.getByRole('button', { name: 'Select speech', exact: true }).press('Shift+Enter');
+  await expect(viewer.locator('#graph-create-subgraph')).toBeVisible();
+  await expect(viewer.locator('#graph-create-subgraph')).toBeDisabled();
   await expect(viewer.locator('#graph-undo')).toBeDisabled(); expect(await graph(viewer)).toEqual(original);
   await page.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight'); await saved(page);
   await page.close(); await viewer.getByRole('button', { name: 'Start editing', exact: true }).click();

@@ -305,7 +305,18 @@ Scroll or swipe to pan; controls stay in place and extra bottom scroll space
 lets the final ports move clear of them.
 Settings, essential port names and accessibility labels remain visible.
 
-Graph actions (…) provides Validate draft, Reset draft to default, and Import or
+Create Subgraph stays beside Add Node in the toolbar, enabled when two or more
+nodes are selected. Settings shows the last selected node; selection is indicated
+on the canvas. Subgraph definition editors omit Create Subgraph because nesting
+is prohibited.
+
+Validate graph opens a non-modal **Validation results** overlay with errors and
+optional warnings. Keep editing while it is open; edits mark its results outdated.
+Choose Validate graph again to refresh, or Close / Escape to dismiss. Persistent
+**Graph notices** are separate and retain automatic diagnostics, Auto Save errors,
+and recovery controls. Both panels scroll internally without shifting the canvas.
+
+Graph actions (…) provides Validate graph, Reset to default, and Import or
 Export graph JSON. Import and Reset are undoable and save automatically. Export
 includes the current draft, including invalid edits for repair. Invalid numbers,
 text and structural errors cannot replace the last good saved graph. A persistent
@@ -356,10 +367,10 @@ Click a node heading to select it and inspect its settings. **Shift+click** or
 and **Shift+Enter** toggle individual nodes in the selection. macOS Control+click
 retains native secondary-click behavior. A plain click selects one node; clicking
 that sole selected heading again, blank canvas, or **Escape** clears selection.
-Selected nodes show a checkmark and a thicker border, with a selection count in
-the Inspector. For two or more nodes, **Create Subgraph** appears there. Select
-one connected group of processing nodes; an ineligible selection is explained
-beside the action and remains selected so it can be corrected.
+Selected nodes show a checkmark and a thicker border on the canvas.
+**Create Subgraph** stays beside **Add Node** in the toolbar and is enabled for
+two or more selected nodes. Select one connected group of processing nodes; an ineligible selection is explained
+in **Graph notices** and remains selected so it can be corrected.
 
 The **Create Subgraph** dialog asks for a name and shows the actual included
 nodes, inferred input/output counts, and confirmation that connections are
