@@ -417,6 +417,49 @@ test('Library expands one full-width inline row with keyboard controls and no co
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
 });
 
+test('row hover preserves the expanded background, collapsed feedback and keyboard focus', async ({ libraryExtension: { page } }) => {
+  const header = page.locator('#graph-list button[data-id]').first();
+  const row = page.locator('#graph-list li').first();
+  const heading = page.getByRole('heading', { name: 'Graph Library', exact: true });
+  const transparent = 'rgba(0, 0, 0, 0)';
+  await heading.hover();
+  await expect(header).toHaveAttribute('aria-expanded', 'false');
+  await expect(header).toHaveCSS('background-color', transparent);
+  await header.hover();
+  await expect(header).toHaveCSS('background-color', 'rgb(247, 249, 252)');
+
+  await heading.hover();
+  await header.press('Enter');
+  await expect(header).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#selected')).toBeVisible();
+  await expect(row).toHaveCSS('background-color', 'rgb(237, 243, 252)');
+  await expect(header).toHaveCSS('background-color', transparent);
+  const selectedStyle = await row.evaluate(node => {
+    const style = getComputedStyle(node);
+    return { borderColor: style.borderColor, boxShadow: style.boxShadow };
+  });
+  await header.hover();
+  await expect(header).toHaveCSS('background-color', transparent);
+  await expect(row).toHaveCSS('background-color', 'rgb(237, 243, 252)');
+  await expect(row).toHaveCSS('border-color', selectedStyle.borderColor);
+  await expect(row).toHaveCSS('box-shadow', selectedStyle.boxShadow);
+  await expect(header).toBeFocused();
+  await expect(header).toHaveCSS('outline-style', 'solid');
+  await expect(header).toHaveCSS('outline-width', '3px');
+  await expect(header).toHaveCSS('outline-color', 'rgb(50, 106, 198)');
+
+  await header.press('Enter');
+  await expect(header).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#selected')).toBeHidden();
+  await expect(header).toHaveCSS('background-color', 'rgb(247, 249, 252)');
+  await expect(header).toBeFocused();
+  await expect(header).toHaveCSS('outline-style', 'solid');
+  await expect(header).toHaveCSS('outline-width', '3px');
+  await expect(header).toHaveCSS('outline-color', 'rgb(50, 106, 198)');
+  await heading.hover();
+  await expect(header).toHaveCSS('background-color', transparent);
+});
+
 test('rapid switching and collapsing wait for the latest pending details before unified actions', async ({ libraryExtension: { page } }) => {
   const a = await create(page, 'Graph A', simple('A')), b = await create(page, 'Graph B', simple('B'));
   const c = await create(page, 'Graph C', simple('C'));
