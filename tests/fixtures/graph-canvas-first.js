@@ -200,9 +200,8 @@ export async function checkGraphCommands(page) {
   await clickGraphAction(page, 'graph-load');
   await expect(page.locator('[data-node="literal"]')).toHaveCount(0);
   await actions.press('Enter');
-  await page.locator('#graph-optional-warnings').check();
-  await expect(page.locator('#graph-optional-warnings')).toBeChecked();
+  await expect(page.locator('#graph-optional-warnings')).toHaveCount(0);
+  await expect(page.getByLabel('Show optional warnings')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await clickGraphAction(page, 'graph-validate'); await expect(page.locator('#graph-errors')).toContainText('Draft valid');
-  await actions.press('Enter'); await page.locator('#graph-optional-warnings').uncheck(); await page.keyboard.press('Escape');
 }
