@@ -81,8 +81,8 @@ in a compact Live window. The [Graph Library](docs/extension-graph.md#graph-libr
 graphs in a responsive workspace. Left-click the toolbar icon for its saved Live
 default; right-click for Chrome's native graph launcher and default submenu.
 Each launch opens an independent window, with capture beginning only on Start.
-The toolbar right-click menu includes a default-OFF **Web microphone** checkbox
-and **Microphone position → Auto / Left / Right**. Turning ON requests Chrome’s
+The toolbar right-click **Microphone** submenu includes a default-OFF **Enable** checkbox
+and **Icon position → Auto / Left / Right**. Turning ON requests Chrome’s
 optional website access, with a native prompt only if needed; denial leaves it OFF. Choose its graph from the in-page mic's right-click
 menu (also Shift+F10). The page mic
 requests the current website’s native microphone permission and captures there;

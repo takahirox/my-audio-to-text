@@ -288,7 +288,7 @@ See [target policies, named ports and browser limitations](extension-graph.md).
 
 ## Opt-in Web voice typing (#247)
 
-Right-click the extension toolbar icon and check **Web microphone**. The native
+Right-click the extension toolbar icon and check **Microphone → Enable**. The native
 checkbox requests Chrome’s optional `http://*/*` and `https://*/*` website access
 from that click. Only confirmed permission, persistence and script registration
 show ON. While a change is pending the checkbox is disabled. Denial or dismissal
@@ -299,7 +299,7 @@ website access and the saved graph. Graph Library contains no microphone switch
 or permission help. Website microphone permission is requested only when you
 click its page mic.
 
-The toolbar **Microphone position → Auto / Left / Right** radio submenu stores
+The toolbar **Microphone → Icon position → Auto / Left / Right** radio submenu stores
 `web-microphone-position-v1` independently of enablement. Auto (and invalid or
 missing values) defaults to right first, then left at an edge. Left and Right
 prefer that side of the editable field, falling back and clamping to the visual
