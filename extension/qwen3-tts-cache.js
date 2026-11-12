@@ -11,13 +11,13 @@ export async function qwen3TtsManifest() {
 export async function qwen3TtsAssets() {
   const manifest = await qwen3TtsManifest();
   const view = await new ModelAssetCache(manifest).inspect();
-  if (view.state !== 'Ready') throw Error(view.error || 'Qwen3-TTS assets missing or evicted. Open Models and use Download / retry, then Start again.');
+  if (view.state !== 'Ready') throw Error(view.error || 'Qwen3-TTS assets missing or evicted. Use Retry models in Live, or Download / retry in Models.');
   const cache = await caches.open(MODEL_CACHE_NAME);
   const allowed = new Map(manifest.files.map(file => [file.path, file.url]));
   return async path => {
     if (!allowed.has(path)) throw Error('Unreviewed Qwen3-TTS asset requested.');
     const response = await cache.match(allowed.get(path));
-    if (!response) throw Error('Qwen3-TTS cache evicted during load. Open Models and retry preparation.');
+    if (!response) throw Error('Qwen3-TTS cache evicted during load. Use Retry models in Live, or retry preparation in Models.');
     return new Uint8Array(await response.arrayBuffer());
   };
 }

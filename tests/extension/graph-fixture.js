@@ -1,3 +1,4 @@
+import { writeSummaryAssetFixture } from './summary-asset-fixture.js';
 import { settleAutoSave } from './ui-controls.js';
 import { openPalette, loadTranslationFixture } from './ui-controls.js';
 import { startReadyLive } from './live-lifecycle.js';
@@ -133,6 +134,7 @@ export const test = base.extend({
         await writeFile(path.join(root, 'web/kokoro-japanese.js'), 'export async function createJapanesePhonemizer(){return async text=>text;}');
       }
       context = await launch(); const id = await load();
+      if (!real) await writeSummaryAssetFixture(root, `chrome-extension://${id}/extension/`);
       const f = { context, root, id, url: `chrome-extension://${id}/extension/recorder.html`, requests,
         asset(key, body) { bodies.set(key, body); return `http://127.0.0.1:${server.address().port}/${key}`; },
         mode(value) { mode = value; }, async restart() { await context.close(); context = await launch(); expect(await load()).toBe(id); this.context = context; } };

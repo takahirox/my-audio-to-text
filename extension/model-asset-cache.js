@@ -38,21 +38,22 @@ export function defineAssetSet({ id, revision, files, origin = 'https://huggingf
 
 // One bounded hash buffer; one backpressured stream into Cache.put, never a tee
 // or whole-model arrayBuffer/blob. Chunk hashes also catch same-length corruption.
-function validatedBody(response, file, onBytes = () => {}, signal) {
+function validatedBody(response, file, onBytes = () => {}, signal, onFailure = () => {}) {
   if (response.status !== 200 || !response.body) throw new Error(`Invalid response for ${file.path}.`);
+  const fail = message => { const error = new Error(message); onFailure(error); throw error; };
   let bytes = 0, used = 0, index = 0;
   const buffer = new Uint8Array(Math.min(HASH_CHUNK_BYTES, file.bytes));
   const verify = async () => {
     const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer.subarray(0, used)));
     const hex = Array.from(hash, byte => byte.toString(16).padStart(2, '0')).join('');
-    if (hex !== file.sha256Chunks[index++]) throw new Error(`Corrupt asset: ${file.path}.`);
+    if (hex !== file.sha256Chunks[index++]) fail(`Corrupt asset: ${file.path}.`);
     used = 0;
   };
   return response.body.pipeThrough(new TransformStream({
     async transform(chunk, controller) {
       signal?.throwIfAborted();
       bytes += chunk.byteLength;
-      if (bytes > file.bytes) throw new Error(`Incorrect size: ${file.path}.`);
+      if (bytes > file.bytes) fail(`Incorrect size: ${file.path}.`);
       for (let offset = 0; offset < chunk.byteLength;) {
         const length = Math.min(buffer.length - used, chunk.byteLength - offset);
         buffer.set(chunk.subarray(offset, offset + length), used);
@@ -64,7 +65,7 @@ function validatedBody(response, file, onBytes = () => {}, signal) {
     },
     async flush() {
       signal?.throwIfAborted();
-      if (bytes !== file.bytes) throw new Error(`Incomplete asset: ${file.path}.`);
+      if (bytes !== file.bytes) fail(`Incomplete asset: ${file.path}.`);
       if (used) await verify();
     },
   }));
@@ -147,7 +148,7 @@ export class ModelAssetCache {
           signal?.throwIfAborted();
           const cache = await this.cacheStorage.open(MODEL_CACHE_NAME);
           files = await this.scan(cache, controller.signal);
-          onChange(this.snapshot(files, 'Downloading'));
+          if (files.some(file => !file.cached)) onChange(this.snapshot(files, 'Downloading'));
           for (let i = 0; i < files.length; i++) {
             if (files[i].cached) continue;
             controller.signal.throwIfAborted();
@@ -158,12 +159,16 @@ export class ModelAssetCache {
             const response = await this.fetchAsset(activeFile.sourceURL, {
               signal: controller.signal, credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer',
             });
+            let validationError;
             const body = validatedBody(response, activeFile, bytes => {
               onChange(this.snapshot(files, 'Downloading', completeBytes + bytes));
-            }, controller.signal);
+            }, controller.signal, error => { validationError = error; });
             await cache.put(activeFile.url, new Response(body, { status: 200,
               headers: { 'Content-Length': String(activeFile.bytes),
-                'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream' } }));
+                'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream' } }))
+              // Chromium masks a rejected body as a generic Cache.put network
+              // error. Preserve the actual integrity failure for recovery UI.
+              .catch(error => { throw validationError || error; });
             controller.signal.throwIfAborted();
             files[i].cached = true; activeFile = undefined;
             onChange(this.snapshot(files, 'Downloading'));

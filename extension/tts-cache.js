@@ -19,7 +19,7 @@ export async function verifiedTtsCache(type, settings, signal) {
   const manifest = await ttsManifest(type, settings);
   const view = await new ModelAssetCache(manifest).inspect({ signal });
   signal?.throwIfAborted();
-  if (view.state !== 'Ready') throw new Error(view.error || `${type} assets missing or evicted. Open Models and use Download / retry for this model and voice.`);
+  if (view.state !== 'Ready') throw new Error(view.error || `${type} assets missing or evicted. Use Retry models in Live, or Download / retry for this model and voice in Models.`);
   return manifest;
 }
 export async function cacheOnlyKokoroRuntime(env, settings) {
@@ -34,7 +34,7 @@ export async function cacheOnlyKokoroRuntime(env, settings) {
       const url = typeof request === 'string' ? request : request.url;
       if (!allowed.has(url)) return undefined;
       const response = await cache.match(url);
-      if (!response) throw new Error('Kokoro cache evicted during load. Open Models and retry this voice.');
+      if (!response) throw new Error('Kokoro cache evicted during load. Use Retry models in Live, or retry this voice in Models.');
       return response;
     },
     async put() { /* Only explicit verified preparation writes model files. */ },

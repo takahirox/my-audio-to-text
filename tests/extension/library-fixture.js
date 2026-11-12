@@ -1,3 +1,4 @@
+import { writeSummaryAssetFixture } from './summary-asset-fixture.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -40,6 +41,7 @@ export const test = base.extend({
       context = await launch();
       const { id } = await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root });
       const url = `chrome-extension://${id}/extension/`, errors = [], remote = [], allowedRemote = [];
+      await writeSummaryAssetFixture(root, url);
       context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
       context.on('request', request => { if (/^https?:/.test(request.url()) && !allowedRemote.some(prefix => request.url().startsWith(prefix))) remote.push(request.url()); });
       await context.addInitScript(() => {

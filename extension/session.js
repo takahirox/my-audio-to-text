@@ -1,4 +1,4 @@
-import { graphModelRequirements } from './graph-model-preparation.js';
+import { graphModelRequirements, prepareGraphModelAssets } from './graph-model-preparation.js';
 import { SELECTED_MEDIA_UNAVAILABLE, microphoneCaptureError } from './media-source.js';
 import { authorizePage } from './page-target.js';
 import { buttonLabel } from '../web/button-node.js';
@@ -20,8 +20,10 @@ export class TabSession {
     textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, onSynthesizedAudio = () => {}, speakerContextFactory,
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
+    prepareModelAssets = prepareGraphModelAssets,
   } = {}) {
     this.onSourceEnded = onSourceEnded;
+    this.prepareModelAssets = prepareModelAssets;
     this.textSummaryWorkerFactory = textSummaryWorkerFactory;
     this.ifConditionWorkerFactory = ifConditionWorkerFactory;
     this.parakeetWorkerFactory = parakeetWorkerFactory; this.moonshineWorkerFactory = moonshineWorkerFactory;
@@ -45,19 +47,21 @@ export class TabSession {
   // Live opts into this lifetime before exposing Start. Preparing owns an inert
   // graph; Start transfers that same owner. A used graph is single-use, so idle
   // restoration waits for teardown and initializes a fresh graph.
-  prepareModels({ clearErrors = true } = {}) {
+  prepareModels({ clearErrors = true, download = this.downloadModelAssets ?? true } = {}) {
     this.livePreparation = true;
+    this.downloadModelAssets = download;
     if (this.closed || this.session) return Promise.resolve();
     if (this.graphUnavailable) { this.update({ modelState: 'error', modelStatus: 'Saved graph unavailable', modelRecovery: true, error: this.graphUnavailable }); return Promise.resolve(); }
     const snapshot = assertGraph(this.graph), key = JSON.stringify([this.view.savedGraphId, snapshot]);
     if (this.prepared?.key === key && ['preparing', 'ready'].includes(this.view.modelState)) return this.preparing;
     const previous = this.prepared;
     this.prepared = null;
+    previous?.assetController.abort();
     // Retain the teardown barrier even when an intervening owner has not built
     // a pipeline yet. Successive Saves and close must await all older GPU owners.
     const released = this.releasing = Promise.allSettled([this.releasing, previous?.pipeline?.dispose()]);
     const preferences = graphPreferences(snapshot);
-    const owner = this.prepared = { key, snapshot, speakers: new Map(), speakerStates: Object.create(null),
+    const owner = this.prepared = { key, snapshot, assetController: new AbortController(), speakers: new Map(), speakerStates: Object.create(null),
       microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null),
       targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
     this.nodeErrors.clear();
@@ -65,6 +69,14 @@ export class TabSession {
     return this.preparing = Promise.resolve(released).then(async () => {
       if (this.prepared !== owner || this.closed || owner.failed) return;
       try {
+        if (download) await this.prepareModelAssets(executableGraph(snapshot), { signal: owner.assetController.signal, onChange: (requirement, view) => {
+          if (this.prepared !== owner || this.closed || owner.failed) return;
+          const status = view.state === 'Downloading' ? 'Downloading model…' : 'Checking model files…';
+          const bytes = Number.isFinite(view.totalBytes) ? ` · ${view.downloadedBytes || 0}/${view.totalBytes} bytes` : '';
+          this.update({ modelStatus: `${status} ${requirement.title}${bytes}` });
+        } });
+        if (this.prepared !== owner || this.closed || owner.failed) return;
+        this.update({ modelStatus: 'Preparing models…' });
         this.createRuntime(owner, snapshot);
         for (const spec of owner.description.nodes) if (['SpeakerOutput', 'StreamingSpeakerOutput'].includes(spec.type)) {
           owner.speakers.set(spec.id, owner.pipeline.entries.get(spec.id).node);
@@ -81,8 +93,9 @@ export class TabSession {
   preparationFailed(owner, error) {
     if (this.prepared !== owner || owner.failed) return;
     owner.failed = true;
+    owner.assetController.abort();
     this.update({ modelState: 'error', modelStatus: 'Models unavailable', modelRecovery: true,
-      error: [...new Set([this.view.error, `${error.message || error} Save the graph to prepare files, or recover in Models; check browser/GPU support and free memory, then Retry models in this window.`].filter(Boolean))].join('\n') });
+      error: [...new Set([this.view.error, `${error.message || error} Check your connection, free storage and browser/GPU memory, then Retry models in this window.`].filter(Boolean))].join('\n') });
     // Keep the failed owner until retry so replacement waits for all teardown.
     void owner.pipeline?.dispose().catch(() => {});
   }
@@ -90,6 +103,7 @@ export class TabSession {
     this.closed = true;
     const owner = this.prepared;
     this.prepared = null;
+    owner?.assetController.abort();
     this.update({ modelState: 'closed', modelStatus: '' });
     await Promise.allSettled([owner?.pipeline?.dispose(), this.cancel(), this.preparing, this.releasing]);
   }
@@ -430,8 +444,9 @@ export class TabSession {
       if (this.prepared && this.view.modelState === 'preparing') {
         const owner = this.prepared;
         owner.failed = true;
+        owner.assetController.abort();
         this.update({ modelState: 'canceled', modelStatus: 'Preparation canceled. Retry models to continue.' });
-        return owner.pipeline?.dispose().catch(() => {});
+        return Promise.allSettled([owner.pipeline?.dispose(), this.preparing]);
       }
       return this.canceling?.canceled;
     }

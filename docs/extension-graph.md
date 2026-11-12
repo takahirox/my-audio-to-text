@@ -185,15 +185,18 @@ focused-field authorization is prepared before the popup takes focus. Editors
 aggregate activity by session ID, so one window's idle/close notification cannot
 clear another window's activity.
 
-## Live model lifecycle (#239)
+## Live model lifecycle (#239, #327)
 
 Auto Save prepares and verifies browser-local model **files**, including parked Nodes;
 it never starts inference Workers or initializes GPU models. Opening Live selects
-only `executableGraph(savedGraph)` routes to output sinks and immediately
-initializes every required model instance, including models behind Button/Hold
-gates. Live shows **Preparing models…**, with real Node/step counts when available,
-and disables Start until every instance is ready. A graph without AI becomes
-Ready after ordinary executable-graph validation.
+the chosen saved graph and expands its saved subgraph dependencies. It checks
+only `executableGraph(savedGraph)` routes to output sinks, downloads missing or
+invalid model files, then initializes every required model instance, including
+models behind Button/Hold gates. Live shows **Checking model files…**,
+**Downloading model…** with the model name and downloaded/total bytes when needed,
+then **Preparing models…** with real Node/step counts when available. Start stays
+disabled through file verification and runtime initialization. A graph without AI
+becomes Ready after ordinary executable-graph validation.
 
 **Ready** means inference resources are initialized, rather than just cached.
 Start transfers the same runtime, Workers and model instances to the session;
@@ -211,10 +214,10 @@ The model lifecycle is separate from the session's recording state:
 
 | Model state | Admission and transition |
 | --- | --- |
-| `preparing` | Start disabled; initialize an inert runtime from a saved snapshot. |
+| `preparing` | Start disabled; verify/download required files, then initialize an inert runtime from a saved snapshot. |
 | `ready` | All executable models ready; Start also checks existing input/tab constraints. |
 | `active` | Start owns that same runtime; saved edits wait until the session ends. |
-| `error` | Start disabled; identify the failing Node and show Graph/Models recovery plus Retry models. |
+| `error` | Start disabled; identify the failing Node and show the reason and Retry models inside Live. |
 | `canceled` | Stop during preparation releases resources; Retry models resumes preparation. |
 | `closed` | Terminal; release all Workers/media/GPU resources and suppress late callbacks. |
 
@@ -234,10 +237,22 @@ the obsolete owner before preparing the new snapshot. Running sessions retain
 their immutable graph until Stop/Cancel. Closing Live releases both pending and
 active resources; verified Cache Storage files persist.
 
-Live initialization is cache-only: it cannot recover missing, corrupt or evicted
-optional weights by downloading. Edit the graph or use Models preparation, then
-**Retry models** in Live. Unsupported hardware, memory failures, initialization
-timeouts, Worker failures and observed GPU device loss invalidate readiness.
+Live automatically recovers missing, corrupt or evicted downloadable weights using
+the same pinned manifests, integrity checks and shared model locks as Auto Save,
+Web dictation and Models. Only missing or invalid files are fetched; intact cached
+files are reused, including after cancellation or failure. Fully cached graphs
+need no download, and model-free graphs need no network. The shared download layer
+makes its one-time best-effort persistent-storage request on the first actual
+download; denial does not block readiness. Stop, close or a new saved snapshot
+cancels that window's preparation and suppresses stale progress/completion; other
+windows keep their own owners and queued cache work. Completed verified files
+remain reusable. A cache deletion/eviction race during initialization fails safely
+with Start disabled. For network/offline, quota, integrity or runtime failures,
+**Retry models** rechecks files and prepares models without leaving Live. Models
+remains available for manual cache management; saving again or visiting Models
+is not required for ordinary startup. This download fallback is specific to Live
+windows; Web dictation retains its existing cache-only preflight and permission
+flow. Unsupported hardware, memory failures, initialization timeouts, Worker failures and observed GPU device loss invalidate readiness.
 There is no automatic retry loop or model substitution. Ordinary session branch
 errors remain visible while healthy paths finish. Opening Graph/Models alone
 never opts into this GPU lifetime.
@@ -246,9 +261,11 @@ Developer checks: `tests/live-model-preparation.test.js` covers gated and multip
 models, parked/no-model graphs, configured ASR with translation, graph replacement,
 failures, timeouts, cancellation and repeated ownership transfers.
 `tests/extension/live-model-preparation.spec.js` exercises the real MV3 Live UI
-with controlled Workers, including disabled Start, no remote requests, recovery
-and replacement. These deterministic fixtures establish lifecycle behavior;
-hardware/model inference qualification remains in the opt-in real-model suites.
+with controlled Workers, including disabled Start, controlled asset downloads, recovery
+and replacement. `tests/extension/live-model-download.spec.js` covers real verified
+cache preparation, missing/partial/corrupt/evicted files, concurrent consumers,
+cancellation and download failures. These deterministic fixtures establish
+lifecycle behavior; hardware/model inference qualification remains in the opt-in real-model suites.
 For production preloading coverage, run `npm run setup:extension`, then
 `python3 scripts/review-opus-mt-assets.py`,
 `python3 scripts/review-text-summary-assets.py`,

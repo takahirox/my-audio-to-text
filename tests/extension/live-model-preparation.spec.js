@@ -1,6 +1,7 @@
 import { test, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
+import { writeSummaryAssetFixture } from './summary-asset-fixture.js';
 import path from 'node:path';
 import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
 
@@ -25,6 +26,7 @@ test('Live gates Start on actual Worker readiness, warms gated models, restores 
       viewport: { width: 390, height: 844 }, ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'] });
     const { id } = await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root });
     const base = `chrome-extension://${id}/extension/`;
+    await writeSummaryAssetFixture(root, base);
     const editor = await context.newPage(); await editor.goto(base + 'graph-editor.html');
     const source = graphNode('Text', 'source'); source.settings.value = 'Evidence';
     const graph = { version: GRAPH_VERSION, nodes: [source, graphNode('Button', 'button'), graphNode('Hold', 'held'), graphNode('TextSummaryLfm2', 'summary'), graphNode('Display', 'display'), graphNode('TextSummaryQwen35', 'parked')],

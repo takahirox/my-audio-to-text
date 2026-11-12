@@ -30,8 +30,15 @@ test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepar
 test('parallel production Nodes fan out finals, preserve repeats, clear failed preview, drain/release and Start fresh', async ({ graphExtension: f }) => {
   const page = await openGraph(f);
   await page.evaluate(async () => {
-    const { graphNode, edge, assertGraph } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
-
+    const { graphNode, edge, GRAPH_VERSION } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION,
+      nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextParakeetV3', 'parakeet'),
+        graphNode('SpeechToTextMoonshineMediumEn', 'moonshine'), graphNode('TextAccumulator', 'text'),
+        graphNode('TextFormatter', 'format'), ...['p', 'm', 'formatted'].map(id => graphNode('Display', id))],
+      edges: [edge('audio', 'audio', 'parakeet', 'audio'), edge('audio', 'audio', 'moonshine', 'audio'),
+        edge('parakeet', 'final', 'text', 'append'), edge('text', 'text', 'p', 'input1'),
+        edge('text', 'text', 'format', 'input1'), edge('format', 'text', 'formatted', 'input1'),
+        edge('moonshine', 'provisional', 'm', 'input1')] });
   });
   for (let repeat = 0; repeat < 2; repeat++) {
     await startGraph(page);
@@ -53,4 +60,5 @@ test('parallel production Nodes fan out finals, preserve repeats, clear failed p
     await expectPreparedIdle(page);
     await expect(page.locator('[data-display="p"] .display-content')).toHaveText('repeat\nrepeat');
   }
+  expect(f.requests.sort()).toEqual(['/moonshine-medium-en-assets.json', '/parakeet-v3-assets.json']);
 });

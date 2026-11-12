@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { graphModelRequirements, GraphModelPreparation } from '../extension/graph-model-preparation.js';
+import { graphModelRequirements, GraphModelPreparation, prepareGraphModelAssets } from '../extension/graph-model-preparation.js';
 import { defaultGraph, graphNode } from '../extension/graph.js';
 
 test('saved Nodes select only their direction and distinct weights/voices, including parked Nodes; ASR stays packaged', () => {
@@ -22,6 +22,46 @@ test('saved Nodes select only their direction and distinct weights/voices, inclu
 
 const settled = async () => { await new Promise(resolve => setImmediate(resolve)); };
 const graph = () => { const graph = defaultGraph(); graph.nodes.push(graphNode('OpusMtEnJa', 'parked')); return graph; };
+
+test('blocking asset preparation skips download preparation for verified and model-free graphs', async () => {
+  const originalFetch = globalThis.fetch;
+  let manifests = 0, inspections = 0;
+  globalThis.fetch = async () => {
+    manifests++; return { ok: true, json: async () => [{ path: 'weights', bytes: 1, sha256Chunks: ['0'.repeat(64)] }] };
+  };
+  try {
+    const createCache = () => ({ inspect: async () => { inspections++; return { state: 'Ready' }; },
+      prepare() { throw Error('Verified files must not need download preparation'); } });
+    await prepareGraphModelAssets(defaultGraph(), { createCache });
+    assert.equal(manifests, 0); assert.equal(inspections, 0);
+    const selected = graph(); selected.nodes.push(graphNode('OpusMtEnJa', 'repeat'));
+    await prepareGraphModelAssets(selected, { createCache });
+    assert.equal(manifests, 1); assert.equal(inspections, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('blocking asset preparation reports model download errors and honors cancellation between checking and fetching', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => [{ path: 'weights', bytes: 1, sha256Chunks: ['0'.repeat(64)] }] });
+  try {
+    const controller = new AbortController(), events = [];
+    let downloads = 0, cancel = false;
+    const createCache = () => ({
+      async inspect() { if (cancel) controller.abort(); return { state: 'Not downloaded' }; },
+      async prepare({ signal, onChange }) {
+        downloads++; assert.equal(signal.aborted, false);
+        onChange({ state: 'Downloading', downloadedBytes: 0, totalBytes: 1 });
+        return { state: 'Error', error: 'Offline fixture' };
+      },
+    });
+    const options = { createCache, signal: controller.signal, onChange: (requirement, view) => events.push([requirement.id, view.state]) };
+    await assert.rejects(prepareGraphModelAssets(graph(), options), /OPUS-MT.*Offline fixture/);
+    assert.equal(downloads, 1); assert.deepEqual(events, [['opus-en-ja', 'Checking'], ['opus-en-ja', 'Downloading']]);
+    cancel = true;
+    await assert.rejects(prepareGraphModelAssets(graph(), options), { name: 'AbortError' });
+    assert.equal(downloads, 1, 'cancellation must prevent any subsequent fetch');
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 test('no work until explicitly scheduled; manifests and preparation failures are retryable and leave saved data intact', async () => {
   let fetched = 0, prepared = 0, failManifest = true;

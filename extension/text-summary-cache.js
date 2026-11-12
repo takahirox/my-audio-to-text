@@ -11,7 +11,7 @@ export async function cacheOnlyTextSummaryRuntime(env, type) {
   if (globalThis.location?.protocol !== 'chrome-extension:') throw new Error('Text summary requires an extension-owned Worker.');
   const manifest = await textSummaryManifest(type);
   const view = await new ModelAssetCache(manifest).inspect();
-  if (view.state !== 'Ready') throw new Error(view.error || 'Text summary model assets missing or evicted. Use Retry preparation in Graph Editor or Models.');
+  if (view.state !== 'Ready') throw new Error(view.error || 'Text summary model assets missing or evicted. Use Retry models in Live, or retry preparation in Models.');
   const cache = await caches.open(MODEL_CACHE_NAME), allowed = new Set(manifest.files.map(file => file.url));
   env.allowLocalModels = true; env.allowRemoteModels = false;
   env.localModelPath = new URL('./missing-text-summary-models/', import.meta.url).href;
@@ -21,9 +21,9 @@ export async function cacheOnlyTextSummaryRuntime(env, type) {
       const url = typeof request === 'string' ? request : request.url;
       if (!allowed.has(url)) return undefined;
       const response = await cache.match(url);
-      if (!response) throw new Error('Text summary cache evicted during load. Use Retry preparation in Graph Editor or Models, then retry.');
+      if (!response) throw new Error('Text summary cache evicted during load. Use Retry models in Live, or retry preparation in Models.');
       return response;
     },
-    async put() { /* Only verified Auto Save preparation writes weights. */ },
+    async put() { /* Only verified asset preparation writes weights. */ },
   };
 }

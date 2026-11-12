@@ -40,6 +40,34 @@ export function graphModelRequirements(graph) {
   return [...requirements.values()];
 }
 
+// The caller supplies the resolved executable snapshot. Unlike Auto Save this
+// must finish successfully before inference resources are initialized. prepare
+// checks hashes under the shared model lock and fetches only missing files.
+export async function prepareGraphModelAssets(graph, { signal, onChange = () => {},
+  createCache = manifest => new ModelAssetCache(manifest) } = {}) {
+  for (const requirement of graphModelRequirements(graph)) {
+    signal?.throwIfAborted();
+    onChange(requirement, { state: 'Checking' });
+    try {
+      const manifest = await requirement.manifest();
+      signal?.throwIfAborted();
+      const cache = createCache(manifest);
+      let view = await cache.inspect({ signal });
+      signal?.throwIfAborted();
+      // Cached graphs take the read-only fast path. A missing-file prepare
+      // rechecks under the same lock in case another consumer finished first.
+      if (view.state === 'Not downloaded') view = await cache.prepare({ signal, onChange: view => {
+        if (!signal?.aborted) onChange(requirement, view);
+      } });
+      signal?.throwIfAborted();
+      if (view.state !== 'Ready') throw Error(view.error || 'Model files did not become ready.');
+    } catch (error) {
+      signal?.throwIfAborted();
+      throw Error(`${requirement.title}: ${error.message || error}`, { cause: error });
+    }
+  }
+}
+
 // Asset preparation only. Call replace only after validation and persistence.
 // Each run owns its signal, so new requirements or teardown cannot publish stale state.
 export class GraphModelPreparation {

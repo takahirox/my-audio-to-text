@@ -10,11 +10,11 @@ async function readManifest(file) {
 // Recognition is cache-only, including startup: this never calls prepare/fetch.
 export async function optionalAsrFiles(manifest, label) {
   const view = await new ModelAssetCache(manifest).inspect();
-  if (view.state !== 'Ready') throw Error(`${label}: ${view.error || 'model assets missing or evicted'}. Use Retry preparation in Graph Editor or Models before Start.`);
+  if (view.state !== 'Ready') throw Error(`${label}: ${view.error || 'model assets missing or evicted'}. Use Retry models in Live, or retry preparation in Models.`);
   const cache = await caches.open(MODEL_CACHE_NAME), files = new Map();
   for (const file of manifest.files) {
     const response = await cache.match(file.url);
-    if (!response) throw Error(`${label} cache evicted during load. Retry preparation in Graph Editor.`);
+    if (!response) throw Error(`${label} cache evicted during load. Use Retry models in Live, or retry preparation in Models.`);
     files.set(file.path, new Uint8Array(await response.arrayBuffer()));
   }
   return files;

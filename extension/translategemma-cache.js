@@ -13,7 +13,7 @@ export async function verifiedTranslateGemmaCache(signal) {
   signal?.throwIfAborted();
   const view = await new ModelAssetCache(manifest).inspect({ signal });
   signal?.throwIfAborted();
-  if (view.state !== 'Ready') throw new Error(view.error || 'TranslateGemma weights missing or evicted. Use Retry preparation in Graph Editor or Download / retry for TranslateGemma 4B in Models.');
+  if (view.state !== 'Ready') throw new Error(view.error || 'TranslateGemma weights missing or evicted. Use Retry models in Live, or Download / retry for TranslateGemma 4B in Models.');
   return manifest;
 }
 
@@ -29,7 +29,7 @@ export async function cacheOnlyTranslateGemmaRuntime(env) {
       const url = typeof request === 'string' ? request : request.url;
       if (!allowed.has(url)) return undefined; // Optional lookups get a local 404.
       const response = await cache.match(url);
-      if (!response) throw new Error('TranslateGemma cache evicted during load. Open Models and retry.');
+      if (!response) throw new Error('TranslateGemma cache evicted during load. Use Retry models in Live, or retry preparation in Models.');
       return response;
     },
     async put() { /* Only explicit verified preparation writes weights. */ },

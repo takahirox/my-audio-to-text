@@ -59,7 +59,9 @@ async function start(owner, target, entry) {
         chrome.runtime.connect({ name: `web-voice-output:${owner.token}` })),
       onSourceEnded: () => { void finish(owner, true, 'Microphone ended or permission was removed. Click the mic to start a new session.'); } });
     owner.session.outputTarget = structuredClone(target);
-    await owner.session.prepareModels();
+    // Automatic download is a Live-window fallback. Web dictation keeps its
+    // existing cache-only preflight and microphone/permission admission.
+    await owner.session.prepareModels({ download: false });
     if (owner.ending) return;
     if (owner.session.view.modelState !== 'ready') throw Error(owner.session.view.error || 'Models unavailable. Use Graph Editor preparation controls or Models to recover cached files.');
     // The original page owns site permission and capture; only PCM arrives here.
