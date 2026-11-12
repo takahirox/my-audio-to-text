@@ -20,10 +20,10 @@ test('Models removes storage controls and keeps discoverable legal links; model-
   await expect(models.getByText('Storage and cache management', { exact: true })).toHaveCount(0);
   await expect(models.locator('footer')).toHaveCount(0);
   for (const [id, name, href] of [
-    ['supertonic3', 'OpenRAIL-M weights and voices', '../web/licenses/tts-notices.txt'],
-    ['kokoro', 'Apache-2.0 weights; frontends have separate notices', '../web/licenses/tts-notices.txt'],
+    ['supertonic3', 'License & source for Supertonic 3', '../web/licenses/tts-notices.txt'],
+    ['kokoro', 'License & source for Kokoro 82M', '../web/licenses/tts-notices.txt'],
     ['kokoro', 'eSpeak NG source / build bundle (GPL-3.0-or-later)', '../web/tts-assets/phonemizer-source.tar.gz'],
-    ['translategemma', 'Gemma terms & attribution', '../web/licenses/gemma-notices.txt'],
+    ['translategemma', 'Gemma terms & attribution for TranslateGemma 4B · English ↔ Japanese', '../web/licenses/gemma-notices.txt'],
   ]) {
     const link = models.locator(`#${id}`).getByRole('link', { name, exact: true });
     await expect(link).toBeVisible(); await expect(link).toHaveAttribute('href', href);
