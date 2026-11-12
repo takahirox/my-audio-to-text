@@ -5,6 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 const directory = new URL('../extension/icons/', import.meta.url);
 const svg = await readFile(new URL('icon.svg', directory), 'utf8');
+const check = process.argv.includes('--check');
 const browser = await chromium.launch();
 try {
   const page = await browser.newPage();
@@ -18,7 +19,16 @@ try {
       canvas.getContext('2d').drawImage(image, 0, 0, size, size);
       return canvas.toDataURL('image/png').split(',')[1];
     }, { svg, size });
-    await writeFile(new URL(`icon-${size}.png`, directory), Buffer.from(png, 'base64'));
+    const file = new URL(`icon-${size}.png`, directory);
+    const data = Buffer.from(png, 'base64');
+    if (check) {
+      if (!data.equals(await readFile(file))) {
+        throw new Error(`icon-${size}.png differs from icon.svg; regenerate the icons`);
+      }
+    } else {
+      await writeFile(file, data);
+    }
+    console.log(`${check ? 'Verified' : 'Generated'} icon-${size}.png (${size}×${size})`);
   }
 } finally {
   await browser.close();

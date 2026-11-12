@@ -105,10 +105,10 @@ After rebuilding, open `chrome://extensions` and click **Reload** on the
 extension's card. This reloads the unpacked `dist/chrome-extension` directory;
 loading it again is unnecessary.
 
-The toolbar and native extension UI use the original audio-to-text speech icon
+The toolbar and native extension UI use the bold microphone icon
 in [`extension/icons/`](../extension/icons/README.md). Its editable SVG master
 and 16/32/48/128 px PNGs are committed; normal builds need no graphics tools.
-See the [icon validation evidence](evidence/extension-icon-343.md) for light/dark
+See the [icon validation evidence](evidence/extension-icon-345.md) for light/dark
 previews and the packaged-icon browser check.
 
 1. Open `chrome://extensions` and enable **Developer mode**.
