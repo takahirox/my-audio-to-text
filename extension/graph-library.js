@@ -108,7 +108,7 @@ export function exportEntry(entry, library) {
   if (entry.kind === 'subgraph' || dependencies.size) {
     const entries = [entry, ...(library?.graphs || []).filter(item => dependencies.has(item.id))];
     return JSON.stringify({ format: 'graph-bundle', version: 1, root: entry.id,
-      graphs: entries.map(({ id, name, description, kind = 'graph', graph }) => ({ id, name, description, kind, graph })) }, null, 2) + '\n';
+      graphs: entries.map(item => ({ id: item.id, name: item.name, description: item.description, kind: item.kind || 'graph', graph: entryGraph(item, library) })) }, null, 2) + '\n';
   }
   return JSON.stringify(entryGraph(entry, library), null, 2) + '\n';
 }
@@ -258,7 +258,7 @@ export class GraphLibrary {
       });
       // Fresh IDs on every import never overwrite definitions already in use.
       const candidate = { ...library, graphs: [...library.graphs, ...imported] };
-      for (const entry of imported) { entryGraph(entry, candidate); resolvedEntryGraph(entry, candidate); }
+      for (const entry of imported) { entry.graph = entryGraph(entry, candidate); resolvedEntryGraph(entry, candidate); }
       const root = imported.find(entry => entry.id === ids.get(value.root));
       library.graphs.push(...imported.filter(entry => entry !== root), root);
     }, { revision });

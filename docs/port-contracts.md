@@ -36,7 +36,7 @@ runtime allocation remain specialized. See the [#134 audit](evidence/composition
 | TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
 | Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
 | AudioOutput / playback and WAV adapter | `audio: SYNTHESIZED_AUDIO`, `{ samples: Float32Array, sampleRate: positive integer, channels: 1 }` | Playback URLs and cleanup |
-| Qwen3-TTS streaming / Speaker · streaming | [`stream: AUDIO_STREAM`](streaming-tts.md#public-port-limits-and-lifecycle), explicit start/chunk/end/abort events | Ordered utterance IDs, chunk sequences and native-rate PCM; distinct from a completed clip |
+| Qwen3-TTS / CosyVoice3 streaming | [`stream: AUDIO_STREAM`](streaming-tts.md#public-port-limits-and-lifecycle), explicit start/chunk/end/abort events | Ordered utterance IDs, chunk sequences and native-rate PCM; distinct from a completed clip |
 
 Portable public values include keyed pairs, ordered pair lists, synthesized audio
 and explicit audio stream events. Browser rendering stays inside Display; no DOM
@@ -120,3 +120,14 @@ connection is sampled during an ordinary input delivery to a consumer; storing
 text never emits or triggers that consumer. It starts empty on each session.
 This node capability breaks feedback without adding edge flags or changing
 primitive compatibility. [Feedback example and limits](text-summary-nodes.md).
+
+
+Speaker's single `audio` input is the input-only union
+`SYNTHESIZED_AUDIO | AUDIO_STREAM`. `inputUnion(...contracts)` composes shared
+concrete identities (including nested unions); `compatiblePorts` accepts only
+those concrete members. Unions cannot be output contracts, including to ANY.
+They do not coerce values, merge edges, or relax the one-wire-per-input rule.
+Pipeline exposes validated concrete source identities in `context.inputContracts`
+and snapshots/validates audio before queued delivery and fan-out. Speaker
+validates every payload using its connected concrete contract and keeps that
+kind for the execution. Subgraph outputs retain their concrete identities.

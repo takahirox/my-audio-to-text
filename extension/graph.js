@@ -1,3 +1,4 @@
+import { SPEAKER_AUDIO } from '../web/speaker-output.js';
 import { holdSampledOutputs } from '../web/hold-node.js';
 import { BUTTON_LABEL_MAX_LENGTH } from '../web/button-node.js';
 import { displayInputs } from '../web/display-node.js';
@@ -60,12 +61,11 @@ export const NODE_TYPES = Object.freeze({
   Supertonic3: { label: 'Supertonic 3 TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { language: ['ja', 'en'], voice: ['F1', 'M1'] } },
   Kokoro: { label: 'Kokoro TTS', inputs: { text: TEXT }, outputs: { audio: SYNTHESIZED_AUDIO }, settings: { voice: ['jf_alpha', 'af_heart'] } },
   Qwen3TtsStreaming: { label: 'Qwen3-TTS 0.6B · streaming', inputs: { text: TEXT }, outputs: { stream: AUDIO_STREAM }, settings: { language: ['japanese', 'english'], voice: ['ono_anna', 'ryan'] },
-    help: 'Committed TEXT → genuinely incremental mono PCM → Speaker · streaming. Choose language and voice explicitly (ono_anna Japanese, ryan English). Use ASR.final or committed translation.text, never revisable previews. Up to 300 characters/256 tokens and 20.48 seconds of generated speech per utterance; split longer text before this Node. 16 utterances/4,800 characters queued. Auto Save prepares pinned weights; Live downloads missing files before enabling Start. No CPU/cloud fallback. Stop drains accepted speech; Cancel terminates the owned Worker and playback. Desktop WebGPU only; speed depends on hardware.' },
+    help: 'Committed TEXT → genuinely incremental mono PCM → Speaker. Choose language and voice explicitly (ono_anna Japanese, ryan English). Use ASR.final or committed translation.text, never revisable previews. Up to 300 characters/256 tokens and 20.48 seconds of generated speech per utterance; split longer text before this Node. 16 utterances/4,800 characters queued. Auto Save prepares pinned weights; Live downloads missing files before enabling Start. No CPU/cloud fallback. Stop drains accepted speech; Cancel terminates the owned Worker and playback. Desktop WebGPU only; speed depends on hardware.' },
   CosyVoice3Streaming: { label: 'CosyVoice3 0.5B · streaming', inputs: { text: TEXT }, outputs: { stream: AUDIO_STREAM }, settings: { language: ['english', 'japanese'], voice: ['libritts-r-4446'] },
-    help: 'Committed English/Japanese TEXT → incremental 24 kHz PCM → Speaker · streaming. One reviewed reference voice; no voice cloning. Language follows the input text. Spell out numbers and symbols; no native text normalizer is included. Up to 300 characters/128 text tokens, 500 speech tokens (20 seconds); hitting a limit without EOS visibly aborts. 16 utterances/4,800 characters queued. Auto Save prepares pinned weights; Live downloads missing files before enabling Start. Stop drains accepted speech; Cancel terminates the owned Worker and playback. Desktop WebGPU only, no CPU/cloud fallback. Other languages, mobile and low-memory devices are unqualified. Short utterances may finish before the first chunk.' },
+    help: 'Committed English/Japanese TEXT → incremental 24 kHz PCM → Speaker. One reviewed reference voice; no voice cloning. Language follows the input text. Spell out numbers and symbols; no native text normalizer is included. Up to 300 characters/128 text tokens, 500 speech tokens (20 seconds); hitting a limit without EOS visibly aborts. 16 utterances/4,800 characters queued. Auto Save prepares pinned weights; Live downloads missing files before enabling Start. Stop drains accepted speech; Cancel terminates the owned Worker and playback. Desktop WebGPU only, no CPU/cloud fallback. Other languages, mobile and low-memory devices are unqualified. Short utterances may finish before the first chunk.' },
   AudioOutput: { label: 'Audio player / WAV', inputs: { audio: SYNTHESIZED_AUDIO }, outputs: {} },
-  SpeakerOutput: { label: 'Speaker', inputs: { audio: SYNTHESIZED_AUDIO }, outputs: {}, help: 'Automatically play completed TTS clips in order through the browser default speaker. Press Start in Live to enable audio and keep that window open. Stop drains accepted audio; Cancel clears playback. Queue limits: 32 clips, 120 seconds or 32 MiB; overflow is reported in Live.' },
-  StreamingSpeakerOutput: { label: 'Speaker · streaming', inputs: { stream: AUDIO_STREAM }, outputs: {}, help: 'Play ordered incremental PCM with explicit utterance boundaries through the default speaker. Press Start in Live to enable audio; keep Live open. Chunks share the audio clock and are resampled by Web Audio. Eight seconds/64 chunks/8 MiB maximum queued; overflow visibly rejects further audio until restart. Stop drains accepted chunks; Cancel stops immediately. Completed TTS clips use the ordinary Speaker input.' },
+  SpeakerOutput: { label: 'Speaker', inputs: { audio: SPEAKER_AUDIO }, outputs: {} },
 });
 // Resolve against the instance definition (including dynamic inputs). Ignore
 // malformed, duplicate and unknown entries; append unspecified own ports in
@@ -132,11 +132,16 @@ export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
 }
 export const edge = (source, output, target, input) => ({ from: [source, output], to: [target, input] });
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
-// Version 15 graphs remain readable. Canonicalize only Display's old input and
-// missing settings, without mutating the caller or rewriting unrelated data.
-export function upgradeDisplayGraph(graph) {
+// Version 15 graphs remain readable. Canonicalize legacy Display and Speaker
+// inputs without mutating the caller or rewriting unrelated data.
+export function upgradeGraph(graph) {
   if (graph?.version !== GRAPH_VERSION || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return graph;
-  const upgraded = structuredClone(graph), ids = new Set();
+  const upgraded = structuredClone(graph), ids = new Set(), speakers = new Set();
+  for (const node of upgraded.nodes) if (node?.type === 'StreamingSpeakerOutput') {
+    speakers.add(node.id); node.type = 'SpeakerOutput';
+  }
+  for (const route of upgraded.edges) if (Array.isArray(route?.to) && speakers.has(route.to[0]) && route.to[1] === 'stream') route.to[1] = 'audio';
+  for (const port of Array.isArray(upgraded.interface?.inputs) ? upgraded.interface.inputs : []) if (speakers.has(port?.node) && port.port === 'stream') port.port = 'audio';
   for (const node of upgraded.nodes) if (node?.type === 'Display') {
     ids.add(node.id);
     if (record(node.settings)) {
@@ -148,7 +153,7 @@ export function upgradeDisplayGraph(graph) {
   return upgraded;
 }
 export function validateGraph(graph, optionalWarnings = false, definitions = []) {
-  graph = upgradeDisplayGraph(graph);
+  graph = upgradeGraph(graph);
   const definitionOf = type => Object.hasOwn(NODE_TYPES, type) ? NODE_TYPES[type] : undefined;
   const errors = [], warnings = [];
   if (!record(graph) || graph.version !== GRAPH_VERSION || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return optionalWarnings ? [] : [`Expected version ${GRAPH_VERSION} graph with nodes and edges arrays.`];
@@ -273,7 +278,7 @@ export function graphWarnings(graph) {
   return warnings;
 }
 export function assertGraph(graph, definitions = []) {
-  graph = upgradeDisplayGraph(graph);
+  graph = upgradeGraph(graph);
   const errors = validateGraph(graph, false, definitions);
   if (errors.length) throw new Error(errors.join('\n'));
   return structuredClone(graph);

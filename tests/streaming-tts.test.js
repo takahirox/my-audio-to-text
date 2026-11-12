@@ -4,7 +4,7 @@ import { Pipeline } from '../web/pipeline.js';
 import { TEXT } from '../web/translation-nodes.js';
 import { AUDIO_STREAM, validateAudioStream } from '../web/audio-stream.js';
 import { Qwen3TtsNode, QWEN3_TTS_LIMITS } from '../web/qwen3-tts-node.js';
-import { StreamingSpeakerOutputNode, STREAM_SPEAKER_LIMITS } from '../web/speaker-output.js';
+import { SpeakerOutputNode, SPEAKER_AUDIO, STREAM_SPEAKER_LIMITS } from '../web/speaker-output.js';
 import { CosyVoice3Node } from '../web/cosyvoice3-node.js';
 import { SYNTHESIZED_AUDIO } from '../web/synthesized-audio.js';
 import { GRAPH_VERSION, NODE_TYPES, graphNode, edge, saveGraph, readGraph, assertGraph, executableGraph } from '../extension/graph.js';
@@ -30,9 +30,9 @@ function fixture({ suspended = false } = {}) {
     },
     close() { this.state = 'closed'; this.closes++; return Promise.resolve(); },
   };
-  const node = new StreamingSpeakerOutputNode({ contextFactory: () => audio, onState: state => states.push(state) });
+  const node = new SpeakerOutputNode({ contextFactory: () => audio, onState: state => states.push(state) });
   node.enable(); node.start({ signal: controller.signal });
-  return { node, audio, sources, states, controller, send: event => node.receive('stream', event, { signal: controller.signal }) };
+  return { node, audio, sources, states, controller, send: event => node.receive('audio', event, { signal: controller.signal }) };
 }
 
 test('stream contract rejects malformed PCM, rates, boundaries and mixing with completed clips', () => {
@@ -41,8 +41,8 @@ test('stream contract rejects malformed PCM, rates, boundaries and mixing with c
     { ...chunk(), samples: [1] }, { ...end(), type: 'unknown' }, { ...end(), type: 'abort' }]) assert.throws(() => validateAudioStream(value));
   assert.equal(validateAudioStream(begin()).sampleRate, 24000);
   assert.notEqual(AUDIO_STREAM, SYNTHESIZED_AUDIO);
-  assert.throws(() => new Pipeline({ nodes: { source: { outputs: { audio: SYNTHESIZED_AUDIO } }, sink: new StreamingSpeakerOutputNode() },
-    connections: [{ from: ['source', 'audio'], to: ['sink', 'stream'] }] }), /Incompatible/);
+  assert.throws(() => new Pipeline({ nodes: { source: { outputs: { audio: SYNTHESIZED_AUDIO } }, sink: { inputs: { audio: AUDIO_STREAM }, receive() {} } },
+    connections: [{ from: ['source', 'audio'], to: ['sink', 'audio'] }] }), /Incompatible/);
 });
 
 test('streaming speaker schedules gapless ordered native-rate chunks before end, snapshots PCM and drains Stop', async () => {
@@ -175,8 +175,8 @@ test(`${Node.name} text queue is bounded, provisional text is rejected and overs
 });
 
 test(`${Node.name} queue overflow reaches Live with recovery instructions and resets on restart`, async () => {
-  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'source'), graphNode(type, 'tts'), graphNode('StreamingSpeakerOutput', 'speaker')],
-    edges: [edge('source', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'stream')] };
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'source'), graphNode(type, 'tts'), graphNode('SpeakerOutput', 'speaker')],
+    edges: [edge('source', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'audio')] };
   const f = fixture(); await f.node.dispose();
   const session = new TabSession(() => {}, { graph,
     speakerContextFactory: () => ({ ...f.audio, state: 'running', resume() { return Promise.resolve(); } }),
@@ -225,22 +225,22 @@ test(`${Node.name} failure emits an abort, cancels queued work, and late Worker 
 });
 
 test(`${Node.name} graph saves without migration, prepares shared model once, and accepts alternate AUDIO_STREAM producers`, () => {
-  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode(type, 'tts'), graphNode('StreamingSpeakerOutput', 'speaker')],
-    edges: [edge('text', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'stream')] };
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode(type, 'tts'), graphNode('SpeakerOutput', 'speaker')],
+    edges: [edge('text', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'audio')] };
   const values = new Map(), storage = { setItem(key, value) { values.set(key, value); }, getItem(key) { return values.get(key) ?? null; }, removeItem(key) { values.delete(key); } };
   saveGraph(storage, graph); assert.deepEqual(readGraph(storage), graph); assert.equal(executableGraph(graph).nodes.length, 3);
-  assert.deepEqual(NODE_TYPES.StreamingSpeakerOutput.inputs, { stream: AUDIO_STREAM });
+  assert.deepEqual(NODE_TYPES.SpeakerOutput.inputs, { audio: SPEAKER_AUDIO });
   assert.equal(graphModelRequirements({ nodes: [graph.nodes[1], { ...graphNode(type, 'other'), settings: { language: 'english', voice } }] }).length, 1);
   assert.deepEqual(NODE_TYPES[type].outputs, { stream: AUDIO_STREAM });
   const bad = structuredClone(graph); bad.nodes[2] = graphNode('AudioOutput', 'speaker'); bad.edges[1].to[1] = 'audio';
   assert.throws(() => assertGraph(bad), /contract|Incompatible/i);
-  assert.doesNotThrow(() => new Pipeline({ nodes: { alternate: { outputs: { pcm: AUDIO_STREAM } }, speaker: new StreamingSpeakerOutputNode() },
-    connections: [{ from: ['alternate', 'pcm'], to: ['speaker', 'stream'] }] }));
+  assert.doesNotThrow(() => new Pipeline({ nodes: { alternate: { outputs: { pcm: AUDIO_STREAM } }, speaker: new SpeakerOutputNode() },
+    connections: [{ from: ['alternate', 'pcm'], to: ['speaker', 'audio'] }] }));
 });
 
 test(`${Node.name} Speaker needs Start gesture and audio activation happens before model initialization`, async () => {
-  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode(type, 'tts'), graphNode('StreamingSpeakerOutput', 'speaker')],
-    edges: [edge('text', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'stream')] };
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'text'), graphNode(type, 'tts'), graphNode('SpeakerOutput', 'speaker')],
+    edges: [edge('text', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'audio')] };
   const f = fixture(), order = []; await f.node.dispose();
   const session = new TabSession(() => {}, { graph,
     speakerContextFactory: () => { order.push('audio'); return { ...f.audio, state: 'running', resume() { return Promise.resolve(); } }; },

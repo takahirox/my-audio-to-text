@@ -1,8 +1,11 @@
-import { portContract } from './pipeline.js';
+import { portContract } from './port-contracts.js';
 
 // Ordered mono PCM events, independent of the synthesizer. IDs increase for the
 // lifetime of a producer; sequence counts chunks, starting at zero per utterance.
-export const AUDIO_STREAM = portContract('audio-stream');
+export const AUDIO_STREAM = portContract('audio-stream', value => {
+  const audio = validateAudioStream(value);
+  return { ...audio, ...(audio.type === 'chunk' ? { samples: audio.samples.slice() } : {}) };
+});
 export const AUDIO_STREAM_LIMITS = Object.freeze({ chunkSeconds: 2, sampleRate: 192000 });
 
 export function validateAudioStream(event) {

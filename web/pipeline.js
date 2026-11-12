@@ -1,4 +1,4 @@
-import { compatiblePorts, snapshotPortValue, ANY, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST } from './port-contracts.js';
+import { compatiblePorts, snapshotPortValue, inputOnlyContract, ANY, ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST } from './port-contracts.js';
 export const MAX_SAMPLED_PENDING = 32;
 export const MAX_SAMPLED_CHARS = 32768;
 export const SAMPLED_TIMEOUT_MS = 240000;
@@ -33,7 +33,7 @@ export class Pipeline {
       throw new Error('A node instance can occur only once in a pipeline.');
     }
     for (const entry of this.entries.values()) {
-      if (Object.values(entry.outputs).includes(ANY)) throw Error('ANY is an input-only contract.');
+      if (Object.values(entry.outputs).some(inputOnlyContract)) throw Error('ANY and unions are input-only contracts.');
     }
     for (const entry of this.entries.values()) for (const port of entry.sampledOutputs) {
       if (!Object.hasOwn(entry.outputs, port) || typeof entry.node.readOutput !== 'function') throw Error('Sampled outputs need a declared port and readOutput().');
@@ -90,6 +90,8 @@ export class Pipeline {
       entry.feedback = new Set(entry.samples.map(sample => sample.entry).filter(source => reachable.has(source)));
       entry.context = Object.freeze({
         signal: entry.controller.signal,
+        inputContracts: Object.freeze(Object.fromEntries(connections.filter(route => route.to[0] === entry.id)
+          .map(route => [route.to[1], this.entries.get(route.from[0]).outputs[route.from[1]]]))),
         connectedInputs: Object.freeze(connections.filter(route => route.to[0] === entry.id).map(route => route.to[1])),
         emit: (port, value) => this.emit(entry, port, value),
         emitOutputs: (values, options) => this.emitOutputs(entry, values, true, false, options?.provisional === true),
@@ -131,7 +133,7 @@ export class Pipeline {
         // Arrival-only sinks retain no payload. Concrete sibling routes still
         // receive the normal validated immutable snapshot.
         if (routes.length && routes.every(route => route.entry.inputs[route.port] === ANY)) return [port, undefined];
-        const portable = [ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST].includes(contract) ||
+        const portable = !!contract.snapshot || [ITEM, KEYED_PAIRED_TEXT, KEYED_PAIRED_TEXT_LIST].includes(contract) ||
           (entry.routes.get(port) || []).some(route => route.entry.inputs[route.port] === ITEM);
         return [port, portable ? snapshotPortValue(contract, value) : value];
       });

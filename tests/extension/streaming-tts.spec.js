@@ -143,17 +143,19 @@ async function graph(f, language, text) {
     const literal = graphNode('Text', 'literal', 20, 50); literal.settings.value = text;
     const tts = graphNode(nodeType, 'tts', 320, 50);
     tts.settings = { language, voice: cosy ? 'libritts-r-4446' : language === 'japanese' ? 'ono_anna' : 'ryan' };
-    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes: [literal, tts, graphNode('StreamingSpeakerOutput', 'speaker', 650, 50)],
-      edges: [edge('literal', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'stream')] });
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes: [literal, tts, graphNode('SpeakerOutput', 'speaker', 650, 50)],
+      edges: [edge('literal', 'value', 'tts', 'text'), edge('tts', 'stream', 'speaker', 'audio')] });
   }, { language, text, nodeType, cosy });
   await editor.reload();
   await expect(editor.getByRole('button', { name: 'tts output stream', exact: true })).toBeVisible();
-  await expect(editor.getByRole('button', { name: 'speaker input stream', exact: true })).toBeVisible();
+  await expect(editor.getByRole('button', { name: 'speaker input audio', exact: true })).toBeVisible();
   await settleAutoSave(editor);
   const models = await f.context.newPage(); await models.goto(f.url + 'model-cache.html');
-  await models.locator(`#${model}`).getByRole('button', { name: /^(Download|Retry)$/ }).click();
+  const card = models.locator(`#${model}`);
+  await expect(card).toHaveAttribute('data-state', /^(Ready|Not downloaded|Error)$/);
+  if (await card.getAttribute('data-state') !== 'Ready') await card.getByRole('button', { name: /^(Download|Retry)$/ }).click();
   await expectGraphModelsReady(editor, { timeout: 120000 }); await models.close();
-  await editor.reload(); await expect(editor.getByRole('button', { name: 'speaker input stream', exact: true })).toBeVisible();
+  await editor.reload(); await expect(editor.getByRole('button', { name: 'speaker input audio', exact: true })).toBeVisible();
   return editor;
 }
 
@@ -174,9 +176,9 @@ async function observe(page) {
     };
     const event = StreamingTtsNode.prototype.event;
     StreamingTtsNode.prototype.event = function(data) { window.ttsEvents.push({ ...data, receivedAt: performance.timeOrigin + performance.now() }); return event.call(this, data); };
-    const { StreamingSpeakerOutputNode } = await import('../web/speaker-output.js');
-    const start = StreamingSpeakerOutputNode.prototype.start;
-    StreamingSpeakerOutputNode.prototype.start = function(context) {
+    const { SpeakerOutputNode } = await import('../web/speaker-output.js');
+    const start = SpeakerOutputNode.prototype.start;
+    SpeakerOutputNode.prototype.start = function(context) {
       const observer = this.onState;
       this.onState = state => { if (state.type === 'scheduled') window.scheduleEvents.push({ ...state, observedAudioTime: window.contexts.at(-1)?.currentTime }); observer(state); };
       window.streamingSpeaker = this; return start.call(this, context);
