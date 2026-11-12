@@ -15,6 +15,14 @@ export async function seedQuickAdd(page, large = false) {
   try { await page.reload(); } finally { page.off('dialog', discard); }
 }
 const search = page => page.getByRole('combobox', { name: 'Search nodes' });
+async function expectNoPaletteStatus(page) {
+  const status = page.locator('#graph-palette [role="status"]');
+  await expect(status).toBeEmpty();
+  await expect(page.getByRole('dialog', { name: 'Add Node', exact: true }).getByRole('status')).toHaveCount(1);
+  await expect(status).toHaveCSS('position', 'absolute');
+  expect((await status.boundingBox()).height).toBe(0);
+  await expect(page.locator('#graph-palette')).not.toContainText(/\d+ node types?/);
+}
 async function expectPaletteSelection(page, option = null) {
   // Raw locators also check that closing clears selection in the hidden menu.
   const input = page.locator('#graph-palette input');
@@ -49,6 +57,7 @@ export async function checkQuickAddInteraction(page) {
   await seedQuickAdd(page);
   const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   await openQuickAdd(page);
+  await expectNoPaletteStatus(page);
   await expect(page.getByRole('group', { name: 'Sources / inputs' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Constants / utilities' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add selected node' })).toHaveCount(0);
@@ -63,14 +72,18 @@ export async function checkQuickAddInteraction(page) {
   await expectPaletteSelection(page);
   await search(page).fill('text');
   await expectPaletteSelection(page, options.first());
+  await expectNoPaletteStatus(page);
   await search(page).fill('no-such-node');
   await expect(page.getByRole('listbox', { name: 'Node types' }).getByRole('option')).toHaveCount(0);
   await expect(page.locator('#graph-palette')).toContainText('No matching nodes');
+  await expect(page.locator('#graph-palette [role="status"]')).toBeVisible();
+  await expect(page.locator('#graph-node-type')).toHaveCSS('display', 'none');
   for (const key of ['ArrowDown', 'ArrowUp', 'Enter']) await search(page).press(key);
   await expectPaletteSelection(page);
   await expect(page.locator('.graph-node')).toHaveCount(0);
   await search(page).fill('text');
   await expectPaletteSelection(page, options.first());
+  await expectNoPaletteStatus(page);
   const ids = await page.getByRole('listbox', { name: 'Node types' }).getByRole('option').evaluateAll(options => options.map(option => option.id));
   const first = await search(page).getAttribute('aria-activedescendant');
   await search(page).press('ArrowDown');
@@ -113,6 +126,7 @@ export async function checkQuickAddInteraction(page) {
   await openQuickAdd(page);
   await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
   await expectPaletteSelection(page);
+  await expectNoPaletteStatus(page);
   await search(page).press('ArrowDown');
   await expectPaletteSelection(page, options.first());
   await page.getByLabel('Node category', { exact: true }).selectOption('Outputs');
@@ -120,8 +134,11 @@ export async function checkQuickAddInteraction(page) {
   await search(page).press('Enter'); await expect(page.locator('.graph-node')).toHaveCount(0);
   await search(page).fill('number');
   await expect(options).toHaveCount(0); await expectPaletteSelection(page);
+  await expect(page.locator('#graph-palette [role="status"]')).toHaveText('No matching nodes');
+  await expect(page.locator('#graph-palette [role="status"]')).toBeVisible();
   await page.getByLabel('Node category', { exact: true }).selectOption('Constants / utilities');
   await expect(options).toHaveCount(1); await expectPaletteSelection(page);
+  await expectNoPaletteStatus(page);
   await search(page).press('Enter'); await expect(page.locator('.graph-node')).toHaveCount(0);
   await search(page).fill('Number');
   await expect(page.getByRole('listbox', { name: 'Node types' }).getByRole('option')).toHaveCount(1);
@@ -208,7 +225,8 @@ export async function checkQuickAddTouch(page) {
   await page.setViewportSize({ width: 390, height: 844 }); await seedQuickAdd(page);
   await openQuickAdd(page, true);
   const hold = page.getByRole('listbox', { name: 'Node types' }).getByRole('option', { name: 'Hold', exact: true });
-  expect((await hold.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect((await hold.boundingBox()).height).toBeGreaterThanOrEqual(32);
+  expect((await hold.boundingBox()).height).toBeLessThan(44);
   await expect(hold).toHaveAttribute('aria-selected', 'false');
   await hold.tap();
   await expect(page.locator('#graph-palette')).toBeHidden();
@@ -219,4 +237,67 @@ export async function checkQuickAddTouch(page) {
   await page.getByRole('heading', { name: /^Graph Editor\b/ }).tap();
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('.graph-node')).toHaveCount(1);
+}
+
+export async function checkQuickAddRows(page) {
+  await seedQuickAdd(page, true);
+  const names = ['Shared processing with a long name that wraps across several lines in the Add Node palette', 'Unbroken' + 'NodeName'.repeat(14)];
+  await page.evaluate(async names => {
+    const { GraphLibrary } = await import(new URL('./graph-library.js', location.href));
+    const { GRAPH_VERSION } = await import(new URL('./graph.js', location.href));
+    for (const [index, name] of names.entries()) await new GraphLibrary(localStorage).create({
+      id: `palette-wrap-${index}`, kind: 'subgraph', name,
+      graph: { version: GRAPH_VERSION, nodes: [], edges: [], interface: { inputs: [], outputs: [] } },
+    });
+  }, names);
+  await page.reload();
+  await openQuickAdd(page);
+  await expectNoPaletteStatus(page);
+  const hold = page.getByRole('option', { name: 'Hold', exact: true });
+  await hold.hover();
+  const hovered = await hold.evaluate(option => {
+    const box = option.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(option);
+    const text = range.getBoundingClientRect();
+    return { height: box.height, top: text.top - box.top, bottom: box.bottom - text.bottom, background: getComputedStyle(option).backgroundColor };
+  });
+  expect(hovered.height).toBeGreaterThanOrEqual(32);
+  expect(hovered.height).toBeLessThan(44);
+  expect(Math.abs(hovered.top - hovered.bottom)).toBeLessThanOrEqual(2);
+  expect(hovered.background).not.toBe('rgba(0, 0, 0, 0)');
+  await search(page).fill('Hold'); await search(page).hover();
+  await expectPaletteSelection(page, hold);
+  await expect(hold).toHaveCSS('background-color', hovered.background);
+  expect((await hold.boundingBox()).height).toBe(hovered.height);
+
+  await search(page).fill('');
+  await page.getByLabel('Node category', { exact: true }).selectOption('Subgraphs');
+  await expectNoPaletteStatus(page);
+  const options = page.getByRole('listbox', { name: 'Node types' }).getByRole('option');
+  await expect(options).toHaveCount(2);
+  const wrapped = await options.evaluateAll(options => options.map(option => {
+    const box = option.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(option);
+    return { top: box.top, bottom: box.bottom, height: box.height, width: option.clientWidth, scrollWidth: option.scrollWidth,
+      lines: [...range.getClientRects()].map(rect => ({ top: rect.top - box.top, bottom: rect.bottom - box.top, left: rect.left - box.left, right: rect.right - box.left })) };
+  }));
+  for (const row of wrapped) {
+    expect(row.height).toBeGreaterThan(hovered.height);
+    expect(row.lines.length).toBeGreaterThan(1);
+    expect(row.scrollWidth).toBeLessThanOrEqual(row.width);
+    for (const line of row.lines) {
+      expect(line.top).toBeGreaterThanOrEqual(0); expect(line.bottom).toBeLessThanOrEqual(row.height);
+      expect(line.left).toBeGreaterThanOrEqual(0); expect(line.right).toBeLessThanOrEqual(row.width);
+    }
+  }
+  expect(wrapped[0].bottom).toBeLessThanOrEqual(wrapped[1].top);
+  expect(await page.locator('#graph-palette').evaluate(menu => menu.scrollWidth <= menu.clientWidth)).toBe(true);
+  // The bottom line of a wrapped label must still belong to its clickable row.
+  const last = options.last(), box = await last.boundingBox();
+  await last.click({ position: { x: box.width / 2, y: box.height - 5 } });
+  await expect(page.locator('#graph-palette')).toBeHidden();
+  await expect(page.locator('.graph-node')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Select subgraph', exact: true })).toBeFocused();
+  await expect(page.locator('[data-node="subgraph"] .graph-heading')).toHaveText(names[1]);
+  // Larger controls outside the palette retain their original hit targets.
+  expect(await page.locator('.graph-heading').first().evaluate(control => control.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  expect(await page.locator('#graph-zoom-in').evaluate(control => control.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
 }

@@ -89,11 +89,14 @@ progress { width: 100%; accent-color: #a7c6ff; } .model-card li { overflow-wrap:
 .graph-palette { position: fixed; z-index: 5; width: 320px; box-shadow: 0 12px 36px #0008; display: flex; flex-direction: column; gap: .5rem; overflow: auto; }
 .graph-palette > input, .graph-palette > select, .graph-palette > p { flex-shrink: 0; }
 .graph-node-list { min-height: 44px; overflow: auto; overscroll-behavior: contain; }
+.graph-node-list:empty { display: none; }
 .graph-node-group > .muted { padding: .4rem; font-weight: 650; }
-.graph-node-option { min-height: 44px; padding: .5rem; border-radius: .35rem; cursor: pointer; overflow-wrap: anywhere; }
+.graph-node-option { display: flex; align-items: center; min-height: 32px; padding: .25rem .5rem; border-radius: .35rem; cursor: pointer; overflow-wrap: anywhere; }
 .graph-node-option:hover, .graph-node-option[aria-selected="true"] { background: var(--surface-hover, #344863); color: var(--accent); }
 .graph-palette input, .graph-palette select { width: 100%; min-width: 0; }
 .graph-palette p { margin: 0; }
+/* Keep the live region rendered without reserving an empty flex row. */
+.graph-palette-status:empty { display: block; position: absolute; }
 .graph-inspector { grid-column: auto; min-width: 0; max-height: calc(100dvh - 170px); overflow: auto; }
 .graph-inspector h2 { margin-top: 0; }
 .graph-inspector select { width: 100%; }

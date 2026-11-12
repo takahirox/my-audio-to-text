@@ -124,7 +124,7 @@ export class GraphEditor {
     for (const name of ['All categories', 'Sources / inputs', 'Processors', 'Constants / utilities', 'Outputs', 'Subgraphs']) { const option = el('option', name); this.category.append(option); }
     this.types = el('div', undefined, 'graph-node-list'); this.types.id = 'graph-node-type';
     this.types.setAttribute('role', 'listbox'); this.types.setAttribute('aria-label', 'Node types');
-    this.paletteStatus = el('p', undefined, 'muted'); this.paletteStatus.setAttribute('role', 'status');
+    this.paletteStatus = el('p', undefined, 'graph-palette-status muted'); this.paletteStatus.setAttribute('role', 'status');
     this.search.oninput = () => {
       this.filterPalette();
       if (this.search.value.trim()) this.highlightPalette(this.types.querySelector('[role="option"]')?.dataset.type);
@@ -445,7 +445,7 @@ export class GraphEditor {
   }
   filterPalette() {
     const query = this.search.value.trim().toLowerCase(); this.types.replaceChildren();
-    const groups = new Map(), matches = [];
+    const groups = new Map();
     for (const [type, definition] of [...Object.entries(NODE_TYPES), ...(this.kind === 'subgraph' ? [] : (this.definitions || []).filter(entry => entry.kind === 'subgraph').map(entry => [`Subgraph:${entry.id}`, { label: entry.name, inputs: {}, outputs: {} }]))]) {
       const category = type.startsWith('Subgraph:') ? 'Subgraphs' : ['Number', 'Text', 'TextFormatter', 'Hold'].includes(type) ? 'Constants / utilities'
         : !Object.keys(definition.inputs).length ? 'Sources / inputs'
@@ -461,12 +461,12 @@ export class GraphEditor {
       // Mouse keeps focus in search; touch must retain its native click path.
       option.onpointerdown = event => { if (event.pointerType === 'mouse') event.preventDefault(); };
       option.onclick = () => this.addNode(type);
-      groups.get(category).append(option); matches.push(type);
+      groups.get(category).append(option);
     }
     // Rendering results never selects one; search and arrow navigation do so explicitly.
     this.highlightPalette();
     this.types.scrollTop = 0;
-    this.paletteStatus.textContent = matches.length ? `${matches.length} node type${matches.length === 1 ? '' : 's'}` : 'No matching nodes';
+    this.paletteStatus.textContent = groups.size ? '' : 'No matching nodes';
   }
   fit() {
     const cards = [...this.canvas.querySelectorAll('.graph-node')];

@@ -2,7 +2,7 @@ import { test, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { checkQuickAddInteraction, checkQuickAddPlacement, checkQuickAddTouch } from '../fixtures/graph-quick-add.js';
+import { checkQuickAddInteraction, checkQuickAddPlacement, checkQuickAddTouch, checkQuickAddRows } from '../fixtures/graph-quick-add.js';
 
 // This editor-only MV3 suite loads production sources and the real manifest.
 // It needs no downloaded inference assets or mocked editor/graph modules.
@@ -28,5 +28,7 @@ test('MV3 quick-add mouse, keyboard, touch, Save, zoom, pan and responsive layou
     await checkQuickAddPlacement(page, 1440, '0.5', true);
     await checkQuickAddPlacement(page, 390, '1.5', false, 'KeyedTextCoalesce');
     await checkQuickAddTouch(page);
+    await page.setViewportSize({ width: 320, height: 900 });
+    await checkQuickAddRows(page);
   } finally { await context?.close(); await rm(temporary, { recursive: true, force: true }); }
 });
