@@ -22,6 +22,7 @@ test('MV3 palette search/categories, contextual settings, keyboard controls and 
   await editor.getByLabel('Search nodes', { exact: true }).press('Enter');
   await expect(editor.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
   await expect(editor.locator('#graph-palette')).toBeHidden();
+  await expect(editor.locator('.graph-inspector details')).toHaveCount(0);
   await editor.getByLabel('number value', { exact: true }).fill('3.5');
   await editor.keyboard.press('Escape'); await expect(editor.locator('.graph-scroll')).toBeFocused();
   await editor.locator('#graph-fit').click();

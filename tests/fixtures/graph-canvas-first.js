@@ -147,8 +147,8 @@ export async function checkLeanInspector(page) {
   await expect(inspector).not.toContainText('no configurable settings');
   await expect(inspector.locator('label')).toHaveCount(0);
   await expect(inspector.locator('.graph-inspector-header').getByRole('button', { name: 'Remove hold-1' })).toBeVisible();
-  await inspector.getByText('Node help and ports', { exact: true }).click();
-  await expect(inspector).toContainText('Output value:');
+  await expect(inspector.locator('details')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'hold-1 output value', exact: true })).toContainText('→ value');
   await expect(page.getByRole('button', { name: 'Clear selection' })).toHaveCount(0);
   await heading.click(); await expect(heading).toHaveAttribute('aria-pressed', 'false');
   await expect(heading).toBeFocused();

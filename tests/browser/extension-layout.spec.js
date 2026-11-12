@@ -19,7 +19,52 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const width of [390, 1440]) {
-  test(`node help and Models terms remain accessible without global Help at ${width}px`, async ({ page, context }) => {
+  test(`Inspector keeps editable settings and dynamic inputs without node help at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const inspector = page.locator('.graph-inspector');
+    for (const type of ['Text', 'Number', 'Display', 'TextFormatter']) {
+      await openPalette(page);
+      await page.locator(`#graph-node-type [data-type="${type}"]`).click();
+      const id = type.toLowerCase();
+      await expect(inspector.getByText(`Instance ID: ${id}`, { exact: true })).toBeVisible();
+      await expect(inspector.getByRole('button', { name: `Remove ${id}`, exact: true })).toBeVisible();
+      await expect(inspector.getByText('Node help and ports', { exact: true })).toHaveCount(0);
+      await expect(inspector.locator('details')).toHaveCount(0);
+      const help = await page.evaluate(async type => (await import('/extension/graph.js')).NODE_TYPES[type].help, type);
+      await expect(inspector).not.toContainText(help);
+      if (type === 'Text' || type === 'Number') {
+        const value = inspector.getByLabel(`${id} value`, { exact: true });
+        await value.fill(type === 'Text' ? 'Editable text' : '2.5');
+        await expect(value).toHaveValue(type === 'Text' ? 'Editable text' : '2.5');
+        await expect(page.getByRole('button', { name: `${id} output value`, exact: true }).locator('small')).toHaveText(type === 'Text' ? 'text' : 'number');
+      } else {
+        const inputs = page.locator(`[data-node="${id}"] [data-side="input"]`);
+        const count = await inputs.count();
+        await inspector.getByRole('button', { name: `${id} Add input`, exact: true }).click();
+        await expect(inputs).toHaveCount(count + 1);
+        if (type === 'Display') {
+          await inspector.getByLabel('display title', { exact: true }).fill('Results');
+          const label = inspector.getByLabel(`display input${count + 1} tab label`, { exact: true });
+          await label.fill('Extra tab'); await label.blur();
+          await expect(label).toHaveValue('Extra tab');
+        } else {
+          await inspector.getByLabel('textformatter template', { exact: true }).fill('{99}');
+          await expect(page.locator('#graph-errors')).toContainText('Input {99} is not configured');
+          await inspector.getByLabel('textformatter template', { exact: true }).fill('{1}');
+          await expect(page.locator('#graph-errors')).toBeEmpty();
+        }
+        await inspector.getByRole('button', { name: `${id} Remove last input`, exact: true }).click();
+        await expect(inputs).toHaveCount(count);
+      }
+      expect(await inspector.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    }
+    await inspector.getByRole('button', { name: 'Remove textformatter', exact: true }).click();
+    await expect(page.locator('[data-node="textformatter"]')).toHaveCount(0);
+    await expect(inspector).toContainText('Select a node or connection.');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+
+  test(`node settings and Models terms remain accessible without help panels at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 844 });
     await context.route('**/*', serveExtension);
     const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
@@ -31,16 +76,20 @@ for (const width of [390, 1440]) {
     await expect(page.getByRole('button', { name: 'Help', exact: true })).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toHaveCount(0);
     const inspector = page.locator('.graph-inspector');
-    const summary = inspector.getByText('Node help and ports', { exact: true });
-    await expect(inspector.locator('details')).not.toHaveAttribute('open');
-    await summary.press('Enter');
-    await expect(inspector.locator('details')).toHaveAttribute('open');
-    await expect(inspector.locator('details p').first()).toBeVisible();
-    await expect(inspector.locator('details')).toContainText('Input text: text');
-    await expect(inspector.locator('details')).toContainText('Output text: text');
+    await expect(inspector.getByText('Node help and ports', { exact: true })).toHaveCount(0);
+    await expect(inspector.locator('details')).toHaveCount(0);
+    const definition = await page.evaluate(async () => (await import('/extension/graph.js')).NODE_TYPES.TranslateGemmaEnJa);
+    await expect(inspector).not.toContainText(definition.help);
+    await expect(inspector.getByRole('heading', { name: definition.label, exact: true })).toBeVisible();
+    await expect(inspector.getByText('Instance ID: translategemmaenja', { exact: true })).toBeVisible();
+    await expect(inspector.getByRole('button', { name: 'Remove translategemmaenja', exact: true })).toBeVisible();
+    for (const side of ['input', 'output']) {
+      const port = page.getByRole('button', { name: `translategemmaenja ${side} text`, exact: true });
+      await expect(port).toContainText(`${side === 'input' ? '←' : '→'} text`);
+      await expect(port.locator('small')).toHaveText('text');
+      await expect(port).toHaveAttribute('title', `${side}: text (text)`);
+    }
     expect(await inspector.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    await summary.press('Space');
-    await expect(inspector.locator('details')).not.toHaveAttribute('open');
     const models = page.getByRole('navigation').getByRole('link', { name: 'Models', exact: true });
     await expect(models).toBeVisible();
     await expect(models).toHaveAttribute('href', 'model-cache.html');
@@ -240,7 +289,7 @@ test('touch returns from an overview to connect typed ports, move a node and dis
   await context.close();
 });
 
-test('canvas-first editor: search, categories, keyboard add/settings/help, fit and safe draft commands', async ({ page }) => {
+test('canvas-first editor: search, categories, keyboard add/settings, fit and safe draft commands', async ({ page }) => {
   await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('#translation-enabled')).toBeHidden();
@@ -262,7 +311,7 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
   await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('.graph-inspector')).toBeVisible();
-  await expect(page.locator('.graph-inspector details')).not.toHaveAttribute('open', '');
+  await expect(page.locator('.graph-inspector details')).toHaveCount(0);
   await page.getByLabel('number value', { exact: true }).fill('2.5');
   await page.keyboard.press('Escape');
   await expect(page.locator('#graph-palette')).toBeHidden();
