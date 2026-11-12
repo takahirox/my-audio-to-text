@@ -13,6 +13,8 @@ extension menu. The options page manages real OPUS-MT Japanese → English,
 OPUS-MT English → Japanese, TranslateGemma 4B English ↔ Japanese, Supertonic 3, Kokoro, Parakeet v3 and Moonshine Medium English Streaming in the existing verified cache.
 ReazonSpeech ja-en and Silero VAD are labeled **Bundled** because their assets
 are packaged with the extension, with no optional download lifecycle.
+The **Models** heading identifies the page; its header navigation contains only
+**Library**, which opens Graph Library in a separate tab and supports keyboard activation.
 Opening Models checks files only. A successful valid **Save graph** in Graph Editor
 prepares the optional weights required by actual saved OPUS-MT/TranslateGemma/TTS/optional-ASR Node types and
 voices, including parked Nodes. Repeated equivalent Nodes are deduplicated; each

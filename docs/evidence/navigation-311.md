@@ -4,7 +4,8 @@ Graph Editor now keeps only Library and Models in its header. The redundant
 Live action, current-page Graph item and unused navigation status are removed.
 The execution window's graph link is labeled **Edit graph**. The existing
 session-aware graph ID rewrite and explicit editor `?id=` handling are unchanged.
-Models retains its Live control.
+Models retained its Live control at this point; #319 subsequently simplifies
+the Models header navigation to Library only.
 
 ## Validation
 

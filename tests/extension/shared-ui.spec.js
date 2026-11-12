@@ -41,10 +41,12 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
       await page.evaluate(() => scrollTo(0, 0));
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
-      if (name === 'models') await expect(page.locator('nav [aria-current="page"]')).toHaveText('Models');
-      else {
-        await expect(page.locator('nav [aria-current="page"], nav button')).toHaveCount(0);
-        await expect(page.locator('nav a')).toHaveText(name === 'graph' ? ['Library', 'Models'] : ['Library', 'Edit graph', 'Models']);
+      await expect(page.locator('nav [aria-current="page"], nav button')).toHaveCount(0);
+      await expect(page.getByRole('navigation', { name: 'View', exact: true }).locator(':scope > *')).toHaveText(
+        name === 'models' ? ['Library'] : name === 'graph' ? ['Library', 'Models'] : ['Library', 'Edit graph', 'Models']);
+      if (name === 'models') {
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText('Models');
+        await expect(page.locator('#navigation-status')).toHaveCount(0);
       }
       for (const control of await page.locator('nav > *').all()) {
         await expect(control).toBeInViewport({ ratio: 1 });
@@ -142,7 +144,15 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   const persisted = await page.evaluate(() => navigator.storage.persisted());
   await expect(page.locator('#persistence')).toHaveText(`Persistent storage: ${persisted ? 'granted' : 'denied'}.`);
   await expect(page.locator('footer')).toContainText('Gemma Terms');
-  await page.getByRole('button', { name: 'Live', exact: true }).click();
-  // Returning focuses the existing Live window, keeping its graph and session.
+  await page.reload();
+  await page.keyboard.press('Tab');
+  const library = page.getByRole('navigation', { name: 'View', exact: true }).getByRole('link', { name: 'Library', exact: true });
+  await expect(library).toBeFocused();
+  const opened = f.context.waitForEvent('page');
+  await library.press('Enter');
+  const libraryPage = await opened;
+  await expect(libraryPage).toHaveURL(`chrome-extension://${f.id}/extension/graph-library.html`);
+  await expect(libraryPage.getByRole('heading', { level: 1 })).toHaveText('Graph Library');
+  // Library opens separately, keeping the existing Live window.
   expect(f.context.pages().filter(p => new URL(p.url()).pathname === '/extension/recorder.html')).toEqual([live]);
 });
