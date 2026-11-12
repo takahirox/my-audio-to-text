@@ -125,11 +125,13 @@ Stop releases used Workers and restores readiness before the next Start; Start
 uses the already prepared Workers without reloading. Each toolbar invocation
 creates a separate window bound to its graph ID and invoking tab, including while
 other windows are running. Right-click the extension toolbar icon for Chrome's
-native **Live graphs** menu: **Open <graph>** opens that graph without changing the
-default; **Default for left-click** changes only the persisted default. Existing
-windows keep their identities and running snapshots. See the
+native **Graphs → Open → <graph>** menu: selecting a graph opens it and remembers
+it for subsequent left-clicks. The native checked item marks that selection. If
+the selection is missing or unusable, the first runnable graph in name order is
+selected automatically. **Graph Library** is alongside **Open** under **Graphs**.
+Existing windows keep their identities and running snapshots. See the
 [launch and Library guide](extension-graph.md#graph-library-243) and
-[Issue #267 validation](evidence/toolbar-launch-267.md).
+[toolbar validation](evidence/toolbar-launch-306.md).
 
 Tab navigation, closing the captured tab, or Chrome ending its stream finalizes
 the session. Stop during model preparation cancels before capture; use Retry models

@@ -286,7 +286,7 @@ test('stream end during pending capture setup settles startup and drains once', 
   assert.equal(f.session.view.state, 'idle');
 });
 
-test('toolbar action and menu preserve their invoked tabs in distinct windows; defaults are explicit', async () => {
+test('toolbar Open remembers its selection and preserves invoking tabs in distinct windows', async () => {
   let invoke, menu; const created = [], items = [];
   const listener = () => ({ addListener() {} });
   let defaultId = 'a';
@@ -301,7 +301,7 @@ test('toolbar action and menu preserve their invoked tabs in distinct windows; d
     chrome, URLSearchParams, crypto: { randomUUID: () => `session-${++seq}` },
     requestLaunchLibrary: async (op, id) => {
       if (op === 'live-check') return id;
-      if (op === 'live-default') defaultId = id;
+      if (op === 'live-open') defaultId = id;
       return { defaultId, graphs: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] };
     },
   });
@@ -309,16 +309,69 @@ test('toolbar action and menu preserve their invoked tabs in distinct windows; d
   invoke({ id: 42 }); menu({ menuItemId: 'live-run:b' }, { id: 99 }); invoke({ id: 12 });
   await drain(); assert.equal(created.length, 3);
   const launches = created.map(item => new URL(item.url).searchParams);
-  assert.deepEqual(launches.map(p => [p.get('graph'), p.get('tab')]), [['a', '42'], ['b', '99'], ['a', '12']]);
+  assert.deepEqual(launches.map(p => [p.get('graph'), p.get('tab')]), [['a', '42'], ['b', '99'], ['b', '12']]);
   assert.equal(new Set(launches.map(p => p.get('session'))).size, 3);
   assert.ok(created.every(item => item.type === 'popup' && item.focused === false));
-  assert.equal(defaultId, 'a');
-  menu({ menuItemId: 'live-default:b' }, { id: 100 }); await drain();
+  assert.equal(defaultId, 'b');
+  menu({ menuItemId: 'live-default:a' }, { id: 100 }); await drain();
   assert.equal(defaultId, 'b'); assert.equal(created.length, 3);
   invoke({ id: 77 }); await drain();
   assert.equal(new URL(created[3].url).searchParams.get('graph'), 'b');
+  assert.ok(items.some(item => item.id === 'live-graphs' && item.title === 'Graphs'));
+  assert.ok(items.some(item => item.id === 'live-open' && item.parentId === 'live-graphs' && item.title === 'Open'));
+  assert.ok(items.some(item => item.id === 'live-library' && item.parentId === 'live-graphs'));
+  assert.ok(items.filter(item => item.id.startsWith('live-run:')).every(item => item.parentId === 'live-open' && item.type === 'radio' && ['A', 'B'].includes(item.title)));
+  assert.ok(!items.some(item => /Live graphs|Default for left-click|Live default/.test(item.title)));
   assert.ok(items.every(item => item.contexts.join() === 'action'));
   assert.ok(items.filter(item => !item.parentId).every(item => item.id === 'live-graphs'));
+});
+
+test('failed toolbar selection opens only an error, restores checked state, and serializes refresh storms', async () => {
+  const events = {}, items = new Map(), windows = [];
+  let creating = false, rejectSelection, empty = false, selected = 'a';
+  const event = name => ({ addListener(callback) { events[name] = callback; } });
+  const chrome = {
+    action: { onClicked: event('action') },
+    contextMenus: {
+      onClicked: event('menu'),
+      async removeAll() { assert.equal(creating, false); items.clear(); },
+      create(item, done) {
+        assert.equal(creating, false); assert.equal(items.has(item.id), false);
+        creating = true; items.set(item.id, item);
+        queueMicrotask(() => { creating = false; done(); });
+      },
+    },
+    runtime: { id: 'id', getURL: path => `chrome-extension://id/${path}`, onMessage: event('message'), onStartup: event('startup'), onInstalled: event('installed') },
+    windows: { create: async options => windows.push(options) },
+  };
+  runInNewContext(readFileSync('extension/background.js', 'utf8').replace(/^import .*\n/, ''), {
+    chrome, URLSearchParams, crypto: { randomUUID: () => 'session' },
+    requestLaunchLibrary: (op, id) => {
+      if (op === 'live-open') return new Promise((resolve, reject) => { rejectSelection = reject; });
+      return Promise.resolve({ defaultId: empty ? null : selected, graphs: empty ? [] : [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] });
+    },
+  });
+  await drain();
+  events.menu({ menuItemId: 'live-run:b' }, { id: 81 }); await drain();
+  assert.equal(windows.length, 0, 'selection must commit before a launch');
+  rejectSelection(Error('Storage quota exceeded')); await drain();
+  assert.equal(windows.length, 1);
+  const failed = new URL(windows[0].url).searchParams;
+  assert.equal(failed.get('tab'), '81'); assert.equal(failed.has('graph'), false);
+  assert.match(failed.get('error'), /selection could not be confirmed.*Storage quota.*Graph Library/);
+  assert.equal(items.get('live-run:a').checked, true);
+  assert.equal(items.get('live-run:b').checked, false);
+  // A change during creation schedules another complete pass; only one menu
+  // creation/removal may run at once and the final state is the latest one.
+  events.startup(); events.installed();
+  for (let i = 0; i < 5; i++) events.message({ type: 'graph-library-changed' }, { id: 'id', url: chrome.runtime.getURL('extension/graph-editor.html') });
+  selected = 'b'; await drain();
+  assert.equal(items.get('live-run:a').checked, false); assert.equal(items.get('live-run:b').checked, true);
+  empty = true; events.action({ id: 82 }); await drain();
+  const noGraphs = new URL(windows[1].url).searchParams;
+  assert.equal(noGraphs.has('graph'), false); assert.match(noGraphs.get('error'), /No runnable graphs.*Graph Library/);
+  assert.equal(items.get('live-empty').enabled, false);
+  assert.equal(items.get('live-empty').parentId, 'live-open'); assert.equal(items.get('live-library').parentId, 'live-graphs');
 });
 
 test('extension package retains byte-identical Web core/models and minimum permissions', () => {
