@@ -22,6 +22,8 @@ function notifyLibrary() {
   } catch {}
 }
 const validText = value => typeof value === 'string' && value.trim().length > 0;
+const nameCollator = new Intl.Collator('ja', { numeric: true });
+export const compareGraphNames = (a, b) => nameCollator.compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 // Validate the envelope separately: a corrupt graph must remain recoverable and
 // must not prevent browsing or editing other entries. Never normalize stored data.
@@ -155,7 +157,9 @@ export class GraphLibrary {
       const before = this.storage.getItem(LIBRARY_KEY), library = readLibrary(this.storage);
       if (revision !== undefined && revision !== library.revision) throw conflict();
       if (!recoverLegacy && legacyChanged(this.storage, library)) throw Error('Legacy graph changed. Recover it as a new graph in Graph Library first. Your draft has been kept.');
-      action(library);
+      // A conditional change may explicitly report that nothing changed. Recheck
+      // under the same lock without revising storage or sending notifications.
+      if (action(library) === false && before !== null) return library;
       library.revision = token(); validateLibrary(library);
       if (before !== this.storage.getItem(LIBRARY_KEY)) throw conflict();
       this.storage.setItem(LIBRARY_KEY, JSON.stringify(library));

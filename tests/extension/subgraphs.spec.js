@@ -30,7 +30,7 @@ test('toolbar parent windows resolve shared edits on next Start while independen
   await expect.poll(() => f.worker.evaluate(() => Object.values(toolbarMenus).filter(item => item.id.startsWith('live-run:')).map(item => item.id))).toContain('live-run:' + ids.first);
   expect(await f.worker.evaluate(() => Object.keys(toolbarMenus))).not.toContain('live-run:shared');
   const live = await openParent(f, ids.first, 41), other = await openParent(f, ids.second, 42);
-  expect((await library(page)).assignments.live).toBe(ids.first);
+  expect((await library(page)).assignments.live).toBe(ids.second);
   await other.locator('#start').click(); await expect(other.locator('#live-displays')).toContainText('Before: B');
   await live.locator('#start').click(); await expect(live.locator('#session-state')).toHaveText('Running');
   await expect(live.locator('#live-displays')).toContainText('Before: A');
@@ -80,11 +80,12 @@ test('stale definition and incomplete parent selections show recoverable errors 
     return (await store.create({ name: 'Incomplete parent', graph: extracted.parent })).graphs.at(-1).id;
   });
   const incomplete = await openParent(f, id, 71);
-  await expect(incomplete.locator('#errors')).toContainText('No executable path');
-  await expect(incomplete.locator('#live-graph-name')).toHaveText('Incomplete parent');
+  await expect(incomplete.locator('#errors')).toContainText('Graph selection could not be confirmed');
+  await expect(incomplete.locator('#errors')).toContainText('Graph Library');
+  expect(new URL(incomplete.url()).searchParams.has('graph')).toBe(false);
   await expect(incomplete.locator('#start')).toBeDisabled();
   const definition = await openParent(f, 'shared', 72);
-  await expect(definition.locator('#errors')).toContainText('Choose a parent graph');
+  await expect(definition.locator('#errors')).toContainText('cannot run here');
   await expect(definition.locator('#start')).toBeDisabled();
   await f.page.evaluate(async () => {
     const { GraphLibrary } = await import('./graph-library.js');
@@ -92,7 +93,8 @@ test('stale definition and incomplete parent selections show recoverable errors 
     await new GraphLibrary(localStorage).change(current => { current.graphs = current.graphs.filter(entry => entry.id !== 'shared'); });
   });
   const missing = await openParent(f, id, 73);
-  await expect(missing.locator('#errors')).toContainText('Missing or invalid subgraph');
+  await expect(missing.locator('#errors')).toContainText('cannot run here');
+  expect((await library(f.page)).assignments.live).toBe('default-live');
   await expect(missing.locator('#start')).toBeDisabled();
   for (const live of [incomplete, definition, missing]) {
     expect(await live.evaluate(() => modelWorkers.length)).toBe(0);

@@ -2,6 +2,9 @@
 
 Implemented against the selected upstream for [Issue #267](https://github.com/takahirox/my-audio-to-text/issues/267).
 
+> The toolbar selection behavior below is historical. Issue #306 supersedes the
+> separate default chooser; see [current toolbar validation](toolbar-launch-306.md).
+
 The toolbar uses one native `contexts: ['action']` submenu with separate **Open**
 commands and **Default for left-click** radio choices. Only `contextMenus` was
 added to required permissions. The existing `assignments.live` stable ID now

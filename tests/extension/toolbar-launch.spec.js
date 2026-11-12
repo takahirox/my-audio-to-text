@@ -33,21 +33,30 @@ async function save(page, id, graph) {
   }, { id, graph });
 }
 
-test('native action menu separates launch/default, filters drafts, refreshes names and preserves invoking tabs', async ({ libraryExtension: f }) => {
+test('native Graphs → Open remembers selections, refreshes names and preserves independent invoking tabs', async ({ libraryExtension: f }) => {
   const a = await create(f.page, 'A', simple('A')), b = await create(f.page, 'B', simple('B'));
   const draft = await create(f.page, 'Unconnected', { version: 15, nodes: [graphNode('Text', 'parked')], edges: [] });
-  await waitMenu(f, 'live-run:' + a, 'Open A');
+  await waitMenu(f, 'live-run:' + a, 'A');
+  await expect.poll(async () => (await choices(f)).map(({ id, parentId, title, type }) => ({ id, parentId, title, type }))).toEqual([
+    { id: 'live-graphs', title: 'Graphs' },
+    { id: 'live-open', parentId: 'live-graphs', title: 'Open' },
+    { id: 'live-run:' + a, parentId: 'live-open', title: 'A', type: 'radio' },
+    { id: 'live-run:' + b, parentId: 'live-open', title: 'B', type: 'radio' },
+    { id: 'live-run:default-live', parentId: 'live-open', title: 'Live transcription', type: 'radio' },
+    { id: 'live-library', parentId: 'live-graphs', title: 'Graph Library' },
+  ]);
   expect((await choices(f)).some(item => item.id === 'live-run:' + draft)).toBe(false);
-  expect((await choices(f)).filter(item => !item.parentId)).toHaveLength(1);
   expect((await choices(f)).every(item => item.contexts.join() === 'action')).toBe(true);
-  await menu(f, 'live-default:' + a);
-  await expect.poll(async () => (await library(f.page)).assignments.live).toBe(a);
+  // Building/reading menus never changes a valid selection or opens a window.
+  expect((await library(f.page)).assignments.live).toBe('default-live');
   expect(f.context.pages().filter(page => page.url().includes('recorder.html'))).toHaveLength(0);
-  const first = await clickAction(f, 41), second = await open(f, b, 42), third = await open(f, a, 43);
-  await expect(first.locator('#live-graph-name')).toHaveText('A');
-  await expect(second.locator('#live-graph-name')).toHaveText('B');
-  for (const [page, name] of [[first, 'A'], [second, 'B'], [third, 'A']]) await expect(page).toHaveTitle(name);
-  expect((await library(f.page)).assignments.live).toBe(a);
+  const first = await open(f, a, 41), second = await open(f, b, 42), third = await clickAction(f, 43);
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:' + b]);
+  expect((await library(f.page)).assignments.live).toBe(b);
+  for (const [page, name] of [[first, 'A'], [second, 'B'], [third, 'B']]) {
+    await expect(page.locator('#live-graph-name')).toHaveText(name);
+    await expect(page).toHaveTitle(name);
+  }
   const states = await Promise.all([first, second, third].map(page => page.evaluate(async () => ({
     url: location.href, windowId: (await chrome.windows.getCurrent()).id,
     state: document.querySelector('#session-state').textContent,
@@ -59,31 +68,26 @@ test('native action menu separates launch/default, filters drafts, refreshes nam
   await f.page.evaluate(async id => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js');
     const entry = readLibrary(localStorage).graphs.find(entry => entry.id === id);
-    await new GraphLibrary(localStorage).rename(id, 'Renamed B', '', entry.revision);
+    await new GraphLibrary(localStorage).rename(id, '0 Renamed B', '', entry.revision);
   }, b);
-  await waitMenu(f, 'live-run:' + b, 'Open Renamed B');
-  await expect(second.getByRole('heading', { level: 1 })).toHaveText('Renamed B');
-  await expect(second).toHaveTitle('Renamed B');
-  await menu(f, 'live-default:' + b);
-  await expect.poll(async () => (await library(f.page)).assignments.live).toBe(b);
+  await waitMenu(f, 'live-run:' + b, '0 Renamed B');
+  expect((await library(f.page)).assignments.live).toBe(b);
+  await expect(second).toHaveTitle('0 Renamed B');
   await first.reload(); await expect(first.locator('#live-graph-name')).toHaveText('A');
-  const editor = await f.context.newPage(); await editor.goto(f.url + `graph-editor.html?id=${a}`);
+  const editor = await f.context.newPage(); await editor.goto(f.url + `graph-editor.html?id=${b}`);
   const badge = editor.locator('.graph-toolbar .graph-activity');
-  await first.locator('#start').click(); await third.locator('#start').click();
+  await second.locator('#start').click(); await third.locator('#start').click();
   await expect(badge).toBeVisible();
-  // Changing the launch default must not relabel any existing window.
-  await menu(f, 'live-default:' + a);
-  await expect.poll(async () => (await library(f.page)).assignments.live).toBe(a);
-  for (const [page, name] of [[first, 'A'], [second, 'Renamed B'], [third, 'A']]) {
+  await open(f, a, 44);
+  expect((await library(f.page)).assignments.live).toBe(a);
+  for (const [page, name] of [[first, 'A'], [second, '0 Renamed B'], [third, '0 Renamed B']]) {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
     await expect(page).toHaveTitle(name);
   }
-  await menu(f, 'live-default:' + b);
-  await expect.poll(async () => (await library(f.page)).assignments.live).toBe(b);
-  await first.locator('#stop').click(); await expect(badge).toBeVisible();
+  await second.locator('#stop').click(); await expect(badge).toBeVisible();
   await editor.reload(); await expect(badge).toBeVisible();
   await third.close(); await expect(badge).toBeHidden();
-  const fourth = await clickAction(f, 44); await expect(fourth.locator('#live-graph-name')).toHaveText('Renamed B');
+  const fourth = await clickAction(f, 45); await expect(fourth.locator('#live-graph-name')).toHaveText('A');
 });
 
 test('three simultaneous sessions keep graph snapshots, independent workers, Stop, failure, and close cleanup', async ({ libraryExtension: f }) => {
@@ -115,33 +119,96 @@ test('three simultaneous sessions keep graph snapshots, independent workers, Sto
   await expect.poll(() => pages[2].evaluate(() => modelWorkers.every(worker => worker.released))).toBe(true);
 });
 
-test('missing or invalid default has an actionable path; stale menu IDs never substitute another graph', async ({ libraryExtension: f }) => {
+test('missing/deleted/invalid selections fall back by name; stale Open IDs never substitute', async ({ libraryExtension: f }) => {
   const a = await create(f.page, 'A', simple('A'));
-  await create(f.page, 'B', simple('B'));
+  const b = await create(f.page, 'B', simple('B'));
   await f.page.evaluate(async () => {
     const { GraphLibrary } = await import('./graph-library.js');
     await new GraphLibrary(localStorage).change(library => { library.assignments.live = 'deleted'; });
   });
   const missing = await clickAction(f, 51);
-  await expect(missing.locator('#errors')).toContainText('Default for left-click');
-  await expect(missing.locator('#start')).toBeDisabled();
+  await expect(missing.locator('#live-graph-name')).toHaveText('A');
+  expect((await library(f.page)).assignments.live).toBe(a);
   const stale = await open(f, 'deleted', 52);
-  await expect(stale.locator('#errors')).toContainText('toolbar context menu');
+  await expect(stale.locator('#errors')).toContainText('Graph selection could not be confirmed');
+  await expect(stale.locator('#errors')).toContainText('Graph Library');
   await expect(stale.locator('#start')).toBeDisabled();
+  expect((await library(f.page)).assignments.live).toBe(a);
   await save(f.page, a, { version: 15, nodes: [graphNode('Text', 'parked')], edges: [] });
   await expect.poll(async () => (await choices(f)).some(item => item.id === 'live-run:' + a)).toBe(false);
   const invalid = await open(f, a, 53);
-  await expect(invalid.locator('#errors')).toContainText('No executable path');
+  await expect(invalid.locator('#errors')).toContainText('cannot run');
   await expect(invalid.locator('#start')).toBeDisabled();
+  await expect.poll(async () => (await library(f.page)).assignments.live).toBe(b);
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:' + b]);
+  await f.page.evaluate(async id => {
+    const { GraphLibrary } = await import('./graph-library.js'); await new GraphLibrary(localStorage).delete(id);
+  }, b);
+  const remaining = await clickAction(f, 54);
+  await expect(remaining.locator('#live-graph-name')).toHaveText('Live transcription');
+  expect((await library(f.page)).assignments.live).toBe('default-live');
 });
 
-test('default survives a browser/worker restart and the native menus are reconstructed', async ({ libraryExtension: f }) => {
+test('unset selection uses the same numeric, kana and stable tie order as Open without writes on reads', async ({ libraryExtension: f }) => {
+  await f.page.evaluate(async graph => {
+    const { GraphLibrary } = await import('./graph-library.js');
+    const store = new GraphLibrary(localStorage);
+    for (const [id, name] of [['kana-i', 'い'], ['kana-a', 'あ'], ['z-tie', 'Same'], ['a-tie', 'Same'], ['n10', 'Graph 10'], ['n2', 'Graph 2']]) {
+      await store.create({ id, name, graph });
+    }
+    await store.change(library => { library.assignments.live = null; });
+  }, simple('Ordered'));
+  await expect.poll(async () => (await choices(f)).filter(item => item.type === 'radio').map(item => item.id)).toEqual([
+    'live-run:n2', 'live-run:n10', 'live-run:default-live', 'live-run:a-tie', 'live-run:z-tie', 'live-run:kana-a', 'live-run:kana-i',
+  ]);
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:n2']);
+  expect((await library(f.page)).assignments.live).toBe('n2');
+  const revision = (await library(f.page)).revision;
+  const first = await clickAction(f, 56);
+  await expect(first.locator('#live-graph-name')).toHaveText('Graph 2');
+  const second = await clickAction(f, 57);
+  await expect(second.locator('#live-graph-name')).toHaveText('Graph 2');
+  const repeated = await open(f, 'n2', 58);
+  await expect(repeated.locator('#live-graph-name')).toHaveText('Graph 2');
+  expect((await library(f.page)).revision).toBe(revision);
+  await f.page.evaluate(async () => {
+    const { GraphLibrary } = await import('./graph-library.js');
+    await new GraphLibrary(localStorage).change(library => {
+      library.graphs = library.graphs.filter(entry => entry.id.startsWith('kana-'));
+      library.assignments.live = null;
+    });
+  });
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:kana-a']);
+  const kana = await clickAction(f, 59); await expect(kana.locator('#live-graph-name')).toHaveText('あ');
+  await f.restart();
+  await expect.poll(async () => (await choices(f)).filter(item => item.checked).map(item => item.id)).toEqual(['live-run:kana-a']);
+  expect((await library(f.page)).assignments.live).toBe('kana-a');
+});
+
+test('no runnable graphs keep Open empty, left-click errors visible and Graph Library reachable', async ({ libraryExtension: f }) => {
+  await f.page.evaluate(async () => {
+    const { GraphLibrary } = await import('./graph-library.js');
+    await new GraphLibrary(localStorage).change(library => { library.graphs[0].graph = null; library.assignments.live = null; });
+  });
+  await expect.poll(async () => (await choices(f)).find(item => item.id === 'live-empty')?.enabled).toBe(false);
+  expect((await choices(f)).find(item => item.id === 'live-empty').parentId).toBe('live-open');
+  const empty = await clickAction(f, 55);
+  await expect(empty.locator('#errors')).toContainText('No runnable graphs');
+  await expect(empty.locator('#errors')).toContainText('Graphs → Graph Library');
+  await expect(empty.locator('#start')).toBeDisabled();
+  expect((await library(f.page)).assignments.live).toBeNull();
+  const opened = f.context.waitForEvent('page', { predicate: page => page.url().includes('graph-library.html') });
+  await menu(f, 'live-library'); const page = await opened;
+  await expect(page.locator('#graph-list button[data-id]')).toHaveCount(1);
+});
+
+test('last Open selection survives a browser/worker restart and the native menus are reconstructed', async ({ libraryExtension: f }) => {
   const id = await create(f.page, 'Persisted', simple('saved'));
-  await menu(f, 'live-default:' + id);
+  await open(f, id);
   await expect.poll(async () => (await library(f.page)).assignments.live).toBe(id);
   await f.restart();
-  await waitMenu(f, 'live-run:' + id, 'Open Persisted');
-  await expect.poll(async () => (await choices(f)).find(item => item.id === 'live-default:' + id)?.checked).toBe(true);
+  await waitMenu(f, 'live-run:' + id, 'Persisted');
+  await expect.poll(async () => (await choices(f)).find(item => item.id === 'live-run:' + id)?.checked).toBe(true);
   const live = await clickAction(f, 61); await expect(live.locator('#live-graph-name')).toHaveText('Persisted');
 });
 
@@ -151,7 +218,7 @@ test('real toolbar action retains activeTab for the invoking field despite later
   const graph = simple('Chosen target'); graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'field'));
   graph.edges.push(edge('source', 'value', 'field', 'text'));
   const id = await create(f.page, 'Field output', graph);
-  await menu(f, 'live-default:' + id);
+  await open(f, id);
   await expect.poll(async () => (await library(f.page)).assignments.live).toBe(id);
   const target = await f.context.newPage(); await target.goto('https://toolbar.test/invoked'); await target.locator('#target').focus();
   const other = await f.context.newPage(); await other.goto('https://toolbar.test/other');

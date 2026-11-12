@@ -11,7 +11,7 @@ export async function checkCanvasFirst(page, width) {
   expect(bounds.height).toBeGreaterThanOrEqual(44);
   for (const [selector, name, text] of [
     ['#graph-palette-toggle', 'Add Node', 'Add Node'], ['#graph-undo', 'Undo', 'Undo'], ['#graph-redo', 'Redo', 'Redo'],
-    ['.graph-actions > summary', 'Graph actions', '…'], ['#graph-help', 'Help', '?'],
+    ['.graph-actions > summary', 'Graph actions', '…'],
   ]) {
     const control = page.locator(selector), box = await control.boundingBox();
     await expect(control).toHaveAccessibleName(name); await expect(control).toHaveText(text);
@@ -39,10 +39,14 @@ export async function checkCanvasFirst(page, width) {
   await expect(page.locator('#graph-validate')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.graph-actions > summary')).toBeFocused();
-  await page.locator('#graph-help').press('Enter');
-  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Choose 100%');
-  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toContainText('Active in the toolbar means this graph is running in Live');
-  await page.keyboard.press('Escape'); await expect(page.locator('#graph-help')).toBeFocused();
+  await expect(page.locator('#graph-help, .graph-help, #graph-asset-notice')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Help', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toHaveCount(0);
+  // macOS WebKit needs Option+Tab to include native buttons in focus traversal.
+  const tab = process.platform === 'darwin' && page.context().browser()?.browserType().name() === 'webkit' ? 'Alt+Tab' : 'Tab';
+  await page.locator('#graph-palette-toggle').focus();
+  await page.keyboard.press(tab); await expect(page.locator('.graph-actions > summary')).toBeFocused();
+  await page.keyboard.press(tab); await expect(scroll).toBeFocused();
   return { width, toolbar: bounds, canvas, controls };
 }
 
@@ -91,7 +95,7 @@ export async function checkGraphActivity(page, width, info) {
     expect(box.y).toBeGreaterThanOrEqual(bounds.y);
     expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height);
   }
-  for (const selector of ['#graph-palette-toggle', '#graph-undo', '.graph-actions > summary', '#graph-help']) {
+  for (const selector of ['#graph-palette-toggle', '#graph-undo', '.graph-actions > summary']) {
     const box = await page.locator(selector).boundingBox();
     expect(box.y).toBeGreaterThanOrEqual(bounds.y); expect(box.height).toBeGreaterThanOrEqual(44);
     if (box.y < status.y + status.height) expect(box.x).toBeGreaterThanOrEqual(status.x + status.width);
@@ -144,8 +148,8 @@ export async function checkLeanInspector(page) {
   await expect(inspector).not.toContainText('no configurable settings');
   await expect(inspector.locator('label')).toHaveCount(0);
   await expect(inspector.locator('.graph-inspector-header').getByRole('button', { name: 'Remove hold-1' })).toBeVisible();
-  await inspector.getByText('Node help and ports', { exact: true }).click();
-  await expect(inspector).toContainText('Output value:');
+  await expect(inspector.locator('details')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'hold-1 output value', exact: true })).toContainText('→ value');
   await expect(page.getByRole('button', { name: 'Clear selection' })).toHaveCount(0);
   await heading.click(); await expect(heading).toHaveAttribute('aria-pressed', 'false');
   await expect(heading).toBeFocused();

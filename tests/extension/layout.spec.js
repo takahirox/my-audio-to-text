@@ -8,7 +8,7 @@ test('MV3 Fit and low zoom retain a reachable editing port in a narrow window', 
   await checkZoomRecovery(live.editor, 'large', info);
 });
 
-test('MV3 palette search/categories, contextual settings, keyboard help and draft discard work in a narrow window', async ({ graphExtension: f }) => {
+test('MV3 palette search/categories, contextual settings, keyboard controls and draft discard work in a narrow window', async ({ graphExtension: f }) => {
   const live = await openGraph(f), editor = live.editor;
   await editor.setViewportSize({ width: 390, height: 844 });
   await expect(editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
@@ -22,6 +22,7 @@ test('MV3 palette search/categories, contextual settings, keyboard help and draf
   await editor.getByLabel('Search nodes', { exact: true }).press('Enter');
   await expect(editor.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
   await expect(editor.locator('#graph-palette')).toBeHidden();
+  await expect(editor.locator('.graph-inspector details')).toHaveCount(0);
   await editor.getByLabel('number value', { exact: true }).fill('3.5');
   await editor.keyboard.press('Escape'); await expect(editor.locator('.graph-scroll')).toBeFocused();
   await editor.locator('#graph-fit').click();
@@ -30,8 +31,11 @@ test('MV3 palette search/categories, contextual settings, keyboard help and draf
   await editor.getByRole('button', { name: 'Select number', exact: true }).press('Enter');
   await editor.keyboard.press('Escape');
   await expect(editor.locator('.graph-inspector')).toContainText('Select a node or connection.');
-  await editor.locator('#graph-help').click(); await expect(editor.getByRole('dialog')).toBeVisible();
-  await editor.keyboard.press('Escape'); await expect(editor.locator('#graph-help')).toBeFocused();
+  await editor.locator('#graph-palette-toggle').focus();
+  await editor.keyboard.press('Tab'); await expect(editor.locator('#graph-undo')).toBeFocused();
+  await editor.keyboard.press('Tab'); await expect(editor.locator('.graph-actions > summary')).toBeFocused();
+  await editor.keyboard.press('Enter'); await expect(editor.locator('#graph-validate')).toBeVisible();
+  await editor.keyboard.press('Escape'); await expect(editor.locator('.graph-actions > summary')).toBeFocused();
   await clickGraphAction(editor, 'graph-reset', { discard: false });
   expect(await editor.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const commands = await editor.locator('.graph-command-list').boundingBox();

@@ -43,27 +43,33 @@ the compact Web microphone header.
 **Launch Settings and its Live/Web graph dropdowns have been removed (#267).**
 Choose graphs where they launch:
 
-- Left-click the extension toolbar icon to open a new Live window for the saved
-  default graph and the invoking tab. Opening prepares models, but never starts
-  capture or requests microphone permission. Press **Start** when ready.
-- Right-click the toolbar icon for Chrome's native **Live graphs** submenu.
-  **Open <graph>** creates a separate window without changing the default.
-  **Default for left-click → <graph>** explicitly changes the persisted default
-  without launching anything. The single action-level submenu accommodates large
-  libraries and preserves Chrome's extension-management commands. Chrome's native
-  keyboard context-menu access is unchanged.
-- Every Live window keeps its launch graph ID and tab. Graph edits and renames
-  apply at its next Start; changing the global default never changes an existing
+- Left-click the extension toolbar icon to open a new execution window for the
+  last selected runnable graph and the invoking tab. Opening prepares models, but
+  never starts capture or requests microphone permission. Press **Start** when ready.
+- Right-click the toolbar icon for Chrome's native **Graphs → Open → <graph>**
+  menu. Selecting a graph saves it for subsequent left-clicks and opens a separate
+  window. The native radio state marks the current selection; hovering does not
+  change it. **Graph Library** sits directly under **Graphs**, alongside **Open**.
+  Chrome's extension-management commands and native keyboard access remain available.
+- Open lists runnable saved top-level graphs in ascending name order, using the
+  same Japanese locale-aware numeric comparison and stable ID tie-breaker as Graph
+  Library. Kana order is supported; kanji readings are not inferred. When there is
+  no valid saved selection, the first runnable graph in this order is selected and
+  persisted automatically. Renaming/reordering never changes a still-valid selected
+  ID. The selection survives browser and extension worker restarts.
+- Every execution window keeps its launch graph ID and tab. Graph edits and renames
+  apply at its next Start; changing the last selection never changes an existing
   window. Active runs keep immutable snapshots, including Graph Actions and outputs.
-  Stop, close and failures release only that window's resources. Multiple Live and
-  Web microphone sessions can prepare and run together, subject to actual Chrome,
-  device, permission and RAM/GPU limits.
-- Only validated graphs with executable paths appear in the toolbar menu. Missing,
-  invalid or deleted choices never substitute an unrelated graph. An invalid default
-  selects the sole runnable graph if exactly one exists; otherwise Live shows an
-  actionable error directing the user to the toolbar default submenu or Library.
-  An existing window whose graph is deleted may finish its snapshot, but cannot
-  Start again until that same ID is restored. Open another graph from the toolbar.
+  Stop, close and failures release only that window's resources. Multiple execution
+  windows and Web microphone sessions can prepare and run together, subject to actual
+  Chrome, device, permission and RAM/GPU limits.
+- Invalid drafts, missing dependencies and reusable subgraph definitions are excluded
+  from Open. If no runnable graph remains, Open shows a disabled explanation and
+  left-click shows an actionable error; use **Graphs → Graph Library** to create or
+  repair a graph. A stale explicit Open choice or failed selection save shows an
+  error and never launches a substitute. An existing window whose graph is deleted
+  may finish its snapshot, but cannot Start again until that same ID is restored.
+  Open another graph from the toolbar.
 
 The compact **Web microphone ON/OFF** control in the Library header, immediately
 before the rightmost **Models** link, starts OFF without explicit opt-in. Turning
@@ -163,11 +169,11 @@ containing a library, so an old caller cannot silently edit a different graph.
 Use `GraphLibrary.save(id, revision, graph)` for drafts, `readSelectedGraph(storage, id)`
 for a particular Live window, or the explicitly named async `saveLiveGraphData` and
 `readLiveGraphData` compatibility helpers for automation deliberately targeting
-the current saved Live default. They never refer to the Library/editor selection.
+the current saved toolbar selection. They never refer to the Library/editor selection.
 These compatibility helpers allow incomplete saved drafts to be repaired; window
 launch validation separately requires an executable path.
 
-MV3 workers cannot access localStorage. Toolbar list/default requests use the
+MV3 workers cannot access localStorage. Toolbar list/selection requests use the
 existing offscreen DOM host and Web Locks, sharing its serialized lifecycle with
 Web dictation. A library-only request closes the inert host when finished; it
 never closes a host with pending reads or active Web owners. No parallel storage
@@ -268,7 +274,7 @@ highlighted Node and does nothing with no selection. Escape or clicking outside
 dismisses the list and clears selection. Adding keeps the current
 zoom and pan, selects and focuses the new Node, and saves changes automatically. The toolbar shows Saving… / Saved / Save failed for the editor draft and a separate
 green **Active** indicator only when this graph is running in Live, alongside Add
-Node, Undo, Redo, Graph actions (…) and Help (?). Hover Active for the capture tab ID;
+Node, Undo, Redo and Graph actions (…). Hover Active for the capture tab ID;
 the number does not occupy canvas space. Idle and routine active sessions have no
 status row below the toolbar. At the narrowest widths, draft and Live status stack
 within the toolbar; controls wrap as needed, keeping every action available. An exceptional
@@ -276,7 +282,7 @@ warning below the toolbar wraps in full: **earlier graph; saved edits apply next
 session** means Live is still running its immutable older snapshot. A saved graph
 changed elsewhere warning preserves your draft; export it if needed, then choose
 **Reload latest graph** in the recovery controls. Both warnings remain readable when
-they occur together. Select a heading for settings and help; click it again, press
+they occur together. Select a heading for settings; click it again, press
 Escape, or click blank canvas to clear selection. The Inspector identifies the
 Node by type and Instance ID, with Remove Node beside Settings. Drag headings or use arrow
 keys to move Nodes. Connect an output to a compatible input; reconnecting replaces only that input's wire. Select a wire
@@ -485,8 +491,8 @@ for independent ID/TEXT arrival semantics.
 
 ## Port display order
 
-Canvas rows, native keyboard tab order within each input/output column, and
-Inspector **Node help and ports** show payload above its matching numeric ID.
+Canvas rows and native keyboard tab order within each input/output column
+show payload above its matching numeric ID.
 Committed pairs precede provisional pairs, matching the default coalesce wiring:
 
 | Node | Inputs, top to bottom | Outputs, top to bottom |

@@ -1,6 +1,6 @@
 import { webVoiceChoices } from './web-voice-graph.js';
 import { readVoiceEnabled, setVoiceEnabled, WEB_VOICE_ORIGINS, WEB_VOICE_KEY, voiceEnabled } from './web-voice-preference.js';
-import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, resolvedEntryGraph, entryError, exportEntry, legacyChanged, usable } from './graph-library.js';
+import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, resolvedEntryGraph, entryError, exportEntry, legacyChanged, usable, compareGraphNames } from './graph-library.js';
 import { GRAPH_KEY, ASR_TYPES, nodeDefinition } from './graph.js';
 import { graphModelRequirements } from './graph-model-preparation.js';
 import { references } from './subgraphs.js';
@@ -8,7 +8,6 @@ import { GraphDetailsAutosave, DETAILS_DRAFT_KEY } from './graph-library-details
 
 const element = id => document.getElementById(id), store = new GraphLibrary(localStorage);
 const selectionKey = 'graph-library-selection';
-const nameCollator = new Intl.Collator('ja', { numeric: true });
 let library, selectedId, fatal = false, refreshVoiceStatus = () => {};
 let selectionRequest = 0, actionPending = false;
 const details = new GraphDetailsAutosave({ store, storage: sessionStorage,
@@ -90,7 +89,7 @@ function render(replaceDetails = false) {
   // Keep the expanded row and its draft reachable even when it stops matching.
   const expanded = selected() || (dirty() ? details.entry : null);
   if (expanded && !rows.some(entry => entry.id === expanded.id)) rows.push(expanded);
-  rows.sort((a, b) => nameCollator.compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  rows.sort(compareGraphNames);
   const list = element('graph-list'), region = element('selected'), focused = document.activeElement;
   if (replaceDetails || !dirty() && (details.entry?.id !== selectedId || details.entry?.revision !== selected()?.revision)) renderDetails();
   const existing = new Map([...list.children].map(row => [row.dataset.id, row]));

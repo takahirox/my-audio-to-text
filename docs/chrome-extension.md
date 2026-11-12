@@ -47,8 +47,8 @@ and Models keep their dark appearance:
   **Add Node** opens search and categories; node settings appear only on
   selection. Zoom and Fit graph stay visible; Undo and Redo sit in the toolbar. Graph actions
   groups reset, validation, import/export and optional warnings. Edits save automatically. Saving prepares required optional
-  model weights with progress, cancellation and retry. Detailed help
-  opens on demand. Changes apply next session; external revisions retain recoverable drafts and offer Reload latest graph in recovery controls. Reset is undoable.
+  model weights with progress, cancellation and retry. Models provides asset
+  requirements and terms. Changes apply next session; external revisions retain recoverable drafts and offer Reload latest graph in recovery controls. Reset is undoable.
 - **Models** opens a dedicated tab (also Chrome's Extension options page), with
   bundled ReazonSpeech/Silero labels and verified cache controls for both OPUS-MT
   directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Opening it never downloads weights.
@@ -124,11 +124,13 @@ Stop releases used Workers and restores readiness before the next Start; Start
 uses the already prepared Workers without reloading. Each toolbar invocation
 creates a separate window bound to its graph ID and invoking tab, including while
 other windows are running. Right-click the extension toolbar icon for Chrome's
-native **Live graphs** menu: **Open <graph>** opens that graph without changing the
-default; **Default for left-click** changes only the persisted default. Existing
-windows keep their identities and running snapshots. See the
+native **Graphs → Open → <graph>** menu: selecting a graph opens it and remembers
+it for subsequent left-clicks. The native checked item marks that selection. If
+the selection is missing or unusable, the first runnable graph in name order is
+selected automatically. **Graph Library** is alongside **Open** under **Graphs**.
+Existing windows keep their identities and running snapshots. See the
 [launch and Library guide](extension-graph.md#graph-library-243) and
-[Issue #267 validation](evidence/toolbar-launch-267.md).
+[toolbar validation](evidence/toolbar-launch-306.md).
 
 Tab navigation, closing the captured tab, or Chrome ending its stream finalizes
 the session. Stop during model preparation cancels before capture; use Retry models
@@ -613,7 +615,7 @@ and then Live. Japanese → English is a separate Node using the same weights.
 No preset or global language/model switch is added.
 
 Before using these Nodes, read the linked Gemma Terms and Prohibited Use Policy in
-**Help / Models**. Auto Save prepares **3.112 GB** of optional weights only when the
+**Models**. Auto Save prepares **3.112 GB** of optional weights only when the
 graph contains either Gemma Node, including parked Nodes; both directions reuse
 one verified cache. Allow **7 GB free storage**, several GB free RAM/GPU memory
 and supported **Worker WebGPU**. Each active Node owns a separate GPU session.

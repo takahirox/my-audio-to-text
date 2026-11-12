@@ -10,8 +10,8 @@ import { openPalette, clickGraphAction } from '../extension/ui-controls.js';
 // Chrome capture APIs or model inference. Packaged MV3 tests cover those paths.
 async function serveExtension(route) {
   const pathname = new URL(route.request().url()).pathname;
-  if (!/^\/(extension|web)\/[\w.-]+\.(js|html|css)$/.test(pathname)) return route.continue();
-  const contentType = pathname.endsWith('.js') ? 'text/javascript' : pathname.endsWith('.css') ? 'text/css' : 'text/html';
+  if (!/^\/(extension|web)\/(licenses\/)?[\w.-]+\.(js|html|css|txt)$/.test(pathname)) return route.continue();
+  const contentType = pathname.endsWith('.js') ? 'text/javascript' : pathname.endsWith('.css') ? 'text/css' : pathname.endsWith('.txt') ? 'text/plain' : 'text/html';
   await route.fulfill({ body: await readFile(path.resolve(pathname.slice(1))), contentType });
 }
 test.beforeEach(async ({ page }) => {
@@ -20,99 +20,95 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const width of [390, 1440]) {
-  test(`model requirements live in Help with keyboard access and focus recovery at ${width}px`, async ({ page, browserName }) => {
+  test(`Inspector keeps editable settings and dynamic inputs without node help at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
-    await page.context().route('**/*', serveExtension);
-    // WebKit on macOS uses Option+Tab to include links in keyboard navigation.
-    const optionTab = browserName === 'webkit' && process.platform === 'darwin';
-    const tab = optionTab ? 'Alt+Tab' : 'Tab';
-    const backTab = optionTab ? 'Alt+Shift+Tab' : 'Shift+Tab';
+    const inspector = page.locator('.graph-inspector');
+    for (const type of ['Text', 'Number', 'Display', 'TextFormatter']) {
+      await openPalette(page);
+      await page.locator(`#graph-node-type [data-type="${type}"]`).click();
+      const id = type.toLowerCase();
+      await expect(inspector.getByText(`Instance ID: ${id}`, { exact: true })).toBeVisible();
+      await expect(inspector.getByRole('button', { name: `Remove ${id}`, exact: true })).toBeVisible();
+      await expect(inspector.getByText('Node help and ports', { exact: true })).toHaveCount(0);
+      await expect(inspector.locator('details')).toHaveCount(0);
+      const help = await page.evaluate(async type => (await import('/extension/graph.js')).NODE_TYPES[type].help, type);
+      await expect(inspector).not.toContainText(help);
+      if (type === 'Text' || type === 'Number') {
+        const value = inspector.getByLabel(`${id} value`, { exact: true });
+        await value.fill(type === 'Text' ? 'Editable text' : '2.5');
+        await expect(value).toHaveValue(type === 'Text' ? 'Editable text' : '2.5');
+        await expect(page.getByRole('button', { name: `${id} output value`, exact: true }).locator('small')).toHaveText(type === 'Text' ? 'text' : 'number');
+      } else {
+        const inputs = page.locator(`[data-node="${id}"] [data-side="input"]`);
+        const count = await inputs.count();
+        await inspector.getByRole('button', { name: `${id} Add input`, exact: true }).click();
+        await expect(inputs).toHaveCount(count + 1);
+        if (type === 'Display') {
+          await inspector.getByLabel('display title', { exact: true }).fill('Results');
+          const label = inspector.getByLabel(`display input${count + 1} tab label`, { exact: true });
+          await label.fill('Extra tab'); await label.blur();
+          await expect(label).toHaveValue('Extra tab');
+        } else {
+          await inspector.getByLabel('textformatter template', { exact: true }).fill('{99}');
+          await expect(page.locator('#graph-errors')).toContainText('Input {99} is not configured');
+          await inspector.getByLabel('textformatter template', { exact: true }).fill('{1}');
+          await expect(page.locator('#graph-errors')).toBeEmpty();
+        }
+        await inspector.getByRole('button', { name: `${id} Remove last input`, exact: true }).click();
+        await expect(inputs).toHaveCount(count);
+      }
+      expect(await inspector.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    }
+    await inspector.getByRole('button', { name: 'Remove textformatter', exact: true }).click();
+    await expect(page.locator('[data-node="textformatter"]')).toHaveCount(0);
+    await expect(inspector).toContainText('Select a node or connection.');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+
+  test(`node settings and Models terms remain accessible without help panels at ${width}px`, async ({ page, context }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await context.route('**/*', serveExtension);
     const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
+    const preparationRequests = [];
+    page.on('request', request => { if (new URL(request.url()).origin !== new URL(page.url()).origin) preparationRequests.push(request.url()); });
     await openPalette(page);
     await page.locator('#graph-node-type [data-type="TranslateGemmaEnJa"]').click();
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#graph-editor > #graph-asset-notice')).toHaveCount(0);
-    await expect(page.locator('#graph-asset-notice')).toBeHidden();
-    await page.locator('#graph-help').press('Enter');
-    const help = page.getByRole('dialog', { name: 'Graph Editor help' });
-    const notice = help.locator('#graph-asset-notice'), summary = notice.locator('summary');
-    await expect(summary).toBeVisible(); await expect(summary).toBeInViewport({ ratio: 1 });
-    await expect(summary).toBeFocused();
-    await expect(notice).not.toHaveAttribute('open');
-    await expect(notice.locator('p')).toBeHidden();
-    await summary.press('Enter');
-    await expect(notice.locator('p')).toBeVisible();
-    await expect(notice).toContainText('3.112 GB shared by both directions');
-    await expect(notice).toContainText('7 GB free storage');
-    await expect(notice).toContainText('Google Gemma Terms of Use and Prohibited Use Policy');
-    await summary.press(tab);
-    const models = notice.getByRole('link', { name: 'Models for preparation, recovery and model license/terms' });
-    await expect(models).toBeFocused();
+    await expect(page.locator('#graph-help, .graph-help, #graph-asset-notice')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Help', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Graph Editor help' })).toHaveCount(0);
+    const inspector = page.locator('.graph-inspector');
+    await expect(inspector.getByText('Node help and ports', { exact: true })).toHaveCount(0);
+    await expect(inspector.locator('details')).toHaveCount(0);
+    const definition = await page.evaluate(async () => (await import('/extension/graph.js')).NODE_TYPES.TranslateGemmaEnJa);
+    await expect(inspector).not.toContainText(definition.help);
+    await expect(inspector.getByRole('heading', { name: definition.label, exact: true })).toBeVisible();
+    await expect(inspector.getByText('Instance ID: translategemmaenja', { exact: true })).toBeVisible();
+    await expect(inspector.getByRole('button', { name: 'Remove translategemmaenja', exact: true })).toBeVisible();
+    for (const side of ['input', 'output']) {
+      const port = page.getByRole('button', { name: `translategemmaenja ${side} text`, exact: true });
+      await expect(port).toContainText(`${side === 'input' ? '←' : '→'} text`);
+      await expect(port.locator('small')).toHaveText('text');
+      await expect(port).toHaveAttribute('title', `${side}: text (text)`);
+    }
+    expect(await inspector.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    const models = page.getByRole('navigation').getByRole('link', { name: 'Models', exact: true });
+    await expect(models).toBeVisible();
     await expect(models).toHaveAttribute('href', 'model-cache.html');
-    await expect(models).toHaveAttribute('target', '_blank');
-    const popup = page.waitForEvent('popup'); await models.press('Enter');
-    const modelsPage = await popup;
+    // Browser fixtures lack Chrome tabs APIs; MV3 tests exercise the header click.
+    const modelsPage = await context.newPage();
+    await modelsPage.goto(new URL(await models.getAttribute('href'), page.url()).href);
     await expect(modelsPage.getByRole('heading', { name: 'Models', exact: true })).toBeVisible();
-    await modelsPage.waitForLoadState('load'); await modelsPage.close();
-    await models.press(backTab); await expect(summary).toBeFocused();
-    await summary.press('Space'); await expect(notice).not.toHaveAttribute('open');
-    await summary.press('Enter');
-    await models.press(tab);
-    const terms = help.getByRole('link', { name: 'TranslateGemma terms, prohibited-use policy and attribution' });
-    await expect(terms).toBeFocused();
+    const terms = modelsPage.getByRole('contentinfo').getByRole('link', { name: 'Google Gemma Terms, Prohibited Use Policy and attribution' });
+    await expect(terms).toBeVisible();
     await expect(terms).toHaveAttribute('href', '../web/licenses/gemma-notices.txt');
-    expect(await help.evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth)).toBe(true);
-    await terms.press(tab);
-    await expect(help.getByRole('button', { name: 'Close help' })).toBeFocused();
-    await page.keyboard.press('Enter'); await expect(help).toBeHidden();
-    await expect(page.locator('#graph-help')).toBeFocused();
-    await page.locator('#graph-help').press('Space'); await expect(help).toBeVisible();
-    await page.keyboard.press('Escape'); await expect(help).toBeHidden();
-    await expect(page.locator('#graph-help')).toBeFocused();
+    await terms.click();
+    await expect(modelsPage.locator('body')).toContainText('Gemma Terms of Use');
+    await modelsPage.close();
     await expect(page.locator('[data-node="translategemmaenja"]')).toHaveCount(1);
     expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(stored);
+    expect(preparationRequests).toEqual([]);
   });
 }
-
-test('Help notices follow draft additions/removals, saved loading and reset without preparing models', async ({ page }) => {
-  const { types, notices } = await page.evaluate(async () => {
-    const { NODE_TYPES, defaultGraph, graphNode } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
-    const types = Object.keys(NODE_TYPES).filter(type => NODE_TYPES[type].preparationNotice);
-    const graph = defaultGraph();
-    graph.nodes.push(...types.map(type => graphNode(type, type.toLowerCase())));
-    await saveLiveGraphData(localStorage, graph);
-    return { types, notices: [...new Set(types.map(type => NODE_TYPES[type].preparationNotice))].join(' ') };
-  });
-  await page.reload();
-  const stored = await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
-  const preparationRequests = [];
-  page.on('request', request => { if (new URL(request.url()).origin !== new URL(page.url()).origin) preparationRequests.push(request.url()); });
-  const notice = page.locator('#graph-asset-notice');
-  const showNotices = async expected => {
-    await page.locator('#graph-help').click();
-    if (await notice.getAttribute('open') === null) await notice.locator('summary').click();
-    await expect(notice.locator('p')).toHaveText(expected);
-    await page.keyboard.press('Escape');
-  };
-  await showNotices(notices);
-  // Remove every notice-bearing Node via the inspector, including both Gemma directions.
-  for (const type of types) {
-    await page.getByRole('button', { name: `Select ${type.toLowerCase()}`, exact: true }).press('Enter');
-    await page.getByRole('button', { name: `Remove ${type.toLowerCase()}`, exact: true }).click();
-  }
-  await showNotices('No model preparation notices for Nodes in the current draft.');
-  await openPalette(page); await page.locator('#graph-node-type [data-type="SpeechToTextParakeetV3"]').click(); await page.keyboard.press('Escape');
-  await page.locator('#graph-help').click();
-  await expect(notice.locator('p')).toContainText('Parakeet v3: Auto Save prepares 1.26 GB.');
-  await expect(notice.locator('p')).not.toContainText('TranslateGemma');
-  await page.keyboard.press('Escape');
-  await page.locator('#graph-undo').click(); await showNotices(notices);
-  await clickGraphAction(page, 'graph-reset');
-  await showNotices('No model preparation notices for Nodes in the current draft.');
-  await page.locator('#graph-undo').click(); await showNotices(notices);
-  expect(await page.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(stored);
-  expect(preparationRequests).toEqual([]);
-});
 
 for (const width of [390, 1440]) {
   test(`canvas headings hide IDs while duplicate nodes remain identifiable at ${width}px`, async ({ page }) => {
@@ -294,7 +290,7 @@ test('touch returns from an overview to connect typed ports, move a node and dis
   await context.close();
 });
 
-test('canvas-first editor: search, categories, keyboard add/settings/help, fit and safe draft commands', async ({ page }) => {
+test('canvas-first editor: search, categories, keyboard add/settings, fit and safe draft commands', async ({ page }) => {
   await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('#translation-enabled')).toBeHidden();
@@ -316,7 +312,7 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
   await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
   await expect(page.locator('#graph-palette')).toBeHidden();
   await expect(page.locator('.graph-inspector')).toBeVisible();
-  await expect(page.locator('.graph-inspector details')).not.toHaveAttribute('open', '');
+  await expect(page.locator('.graph-inspector details')).toHaveCount(0);
   await page.getByLabel('number value', { exact: true }).fill('2.5');
   await page.keyboard.press('Escape');
   await expect(page.locator('#graph-palette')).toBeHidden();
@@ -327,12 +323,12 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
   await page.keyboard.press('Escape');
   await expect(page.locator('.graph-inspector')).toContainText('Select a node or connection.');
   await expect(page.getByRole('button', { name: 'Select number', exact: true })).toBeFocused();
-  await page.locator('#graph-help').click(); await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByRole('dialog')).toContainText('Reconnecting replaces');
-  await page.keyboard.press('Escape'); await expect(page.locator('#graph-help')).toBeFocused();
   await page.locator('.graph-actions > summary').click();
   await expect(page.locator('#graph-undo')).toBeEnabled();
   await expect(page.locator('[data-node="number"]')).toHaveCount(1);
+  await page.locator('#graph-undo').click();
+  await page.getByRole('button', { name: 'Select number', exact: true }).press('Enter');
+  await expect(page.getByLabel('number value', { exact: true })).toHaveValue('6');
   await page.locator('#graph-undo').click();
   await expect(page.locator('[data-node="number"]')).toHaveCount(0);
   await page.locator('.graph-actions > summary').click(); await page.locator('#graph-validate').click();
@@ -345,8 +341,9 @@ test('canvas-first editor: search, categories, keyboard add/settings/help, fit a
     const commands = await page.locator('.graph-command-list').boundingBox();
     expect(commands.x).toBeGreaterThanOrEqual(0); expect(commands.x + commands.width).toBeLessThanOrEqual(width);
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Tab'); await page.locator('#graph-undo').focus();
-    expect(await page.locator('#graph-undo').evaluate(button => getComputedStyle(button).outlineStyle)).toBe('solid');
+    await page.keyboard.press('Tab'); await page.locator('#graph-redo').focus();
+    await expect(page.locator('#graph-redo')).toBeFocused();
+    expect(await page.locator('#graph-redo').evaluate(button => getComputedStyle(button).outlineStyle)).toBe('solid');
   }
 });
 

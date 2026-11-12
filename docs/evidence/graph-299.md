@@ -65,3 +65,38 @@ runtime bundles are not present. No model bundles were downloaded for this issue
 The passing model tests use controlled asset/inference fixtures with production
 editor/library/preparation/runtime modules; they do not establish real model
 quality, throughput or GPU compatibility. No benchmark was added or required.
+
+## Main integration review fix
+
+Integrated reviewed main commit `b6d47171d2cf62a67cda84e0650464f5eb138d7f`
+to resolve the nine conflicting files. Preserved main's toolbar graph selection,
+name-order fallback and removal of editor/Inspector help, together with Auto Save,
+recovery, session history and single-writer editing. Shared keyboard/layout tests
+now use Undo/Redo and distinguish undoing a setting from undoing node creation.
+
+Validation after integration:
+
+- `npm test`: **962 passed**, 0 failed.
+- Syntax checks: **24 changed JavaScript files passed**; `git diff --cached --check`
+  passed; no unresolved merge entries remain.
+- Browser batch (`extension-layout.spec.js`, `graph-canvas-first.spec.js`,
+  `graph-port-order.spec.js`, `subgraphs.spec.js`, `keyed-text-coalesce.spec.js`,
+  `view.spec.js`; Chromium and WebKit, `--workers=2`): **124 passed, 2 failed**.
+  Corrected the two Undo/keyboard assertions; rerunning
+  `extension-layout.spec.js --grep 'canvas-first editor:'` in both engines:
+  **2 passed**.
+- MV3 batch (`graph-autosave.spec.js`, `graph-concurrent.spec.js`,
+  `subgraphs.spec.js`, `toolbar-launch.spec.js`, `layout.spec.js`,
+  `graph-models.spec.js`, `graph-optional-asr.spec.js`, `translategemma.spec.js`):
+  **46 passed, 3 failed**. Corrected the stale Save-button focus assertion;
+  `layout.spec.js --grep 'palette search/categories'`: **1 passed**.
+- The remaining two MV3 failures reproduce at pre-integration commit `8b81449`
+  in an isolated worktree: optional-ASR's parallel production case has an empty
+  graph setup and accesses an absent Worker; compact Live layout times out with
+  **Models unavailable**. Both were already recorded above and remain outside
+  this merge-conflict fix. This is not a passing full-extension-suite result.
+- Additional MV3 batch (`graph.spec.js`, `graph-actions.spec.js`,
+  `graph-port-order.spec.js`, `shared-ui.spec.js`): **11 passed, 2 failed**.
+  Both shared-UI failures also reproduce at `8b81449`: obsolete Live navigation
+  and exact-URL assertions. No runtime/test changes were made to substitute for
+  those existing failures.
