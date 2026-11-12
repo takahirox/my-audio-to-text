@@ -41,13 +41,25 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
       await page.evaluate(() => scrollTo(0, 0));
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
-      await expect(page.locator('nav [aria-current="page"]')).toHaveText(name === 'graph' ? 'Graph' : name === 'models' ? 'Models' : 'Live');
+      if (name === 'models') await expect(page.locator('nav [aria-current="page"]')).toHaveText('Models');
+      else {
+        await expect(page.locator('nav [aria-current="page"], nav button')).toHaveCount(0);
+        await expect(page.locator('nav a')).toHaveText(name === 'graph' ? ['Library', 'Models'] : ['Library', 'Edit graph', 'Models']);
+      }
       for (const control of await page.locator('nav > *').all()) {
         await expect(control).toBeInViewport({ ratio: 1 });
         expect((await control.boundingBox()).height).toBeGreaterThanOrEqual(44);
       }
       if (name === 'graph') {
+        await expect(page.getByRole('heading', { level: 1 })).toContainText('Graph Editor');
+        await expect(page.locator('#graph-name')).not.toBeEmpty();
+        await expect(page.locator('#navigation-status')).toHaveCount(0);
+        const library = page.getByRole('link', { name: 'Library', exact: true });
+        await library.focus(); await page.keyboard.press('Tab');
+        await expect(page.getByRole('link', { name: 'Models', exact: true })).toBeFocused();
+        await page.keyboard.press('Shift+Tab'); await expect(library).toBeFocused();
         await page.locator('#graph-fit').click();
+        await page.keyboard.press('Escape'); // Clear the selection from the previous viewport.
         await assertTraceability(page); await assertRoutingGeometry(page);
         await page.getByRole('button', { name: 'Select previous', exact: true }).press('Enter');
         await expect(page.locator('.graph-inspector')).toContainText('Instance ID: previous');
@@ -132,5 +144,5 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   await expect(page.locator('footer')).toContainText('Gemma Terms');
   await page.getByRole('button', { name: 'Live', exact: true }).click();
   // Returning focuses the existing Live window, keeping its graph and session.
-  expect((await f.context.pages()).filter(p => p.url() === f.url)).toHaveLength(1);
+  expect(f.context.pages().filter(p => new URL(p.url()).pathname === '/extension/recorder.html')).toEqual([live]);
 });

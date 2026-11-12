@@ -455,19 +455,19 @@ base('packaged extension initializes the real pinned ReazonSpeech/Silero workers
   } finally { await context.close(); await rm(profile, { recursive: true, force: true }); }
 });
 
-test('Live navigation opens separate extension pages without stopping or retargeting active native audio', async ({ extension }) => {
+test('execution navigation opens separate extension pages without stopping or retargeting active native audio', async ({ extension }) => {
   const page = await setup(extension);
   await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
   await page.setViewportSize({ width: 440, height: 800 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  for (const [name, file] of [['Graph', 'graph-editor.html'], ['Models', 'model-cache.html']]) {
+  for (const [name, file] of [['Edit graph', 'graph-editor.html'], ['Library', 'graph-library.html'], ['Models', 'model-cache.html']]) {
     const [opened] = await Promise.all([extension.context.waitForEvent('page'), page.getByRole('link', { name, exact: true }).click()]);
     await opened.waitForURL(url => url.pathname === `/extension/${file}`);
-    if (name === 'Graph') {
+    if (name === 'Edit graph') {
       expect(new URL(opened.url()).searchParams.get('id')).toBe('default-live');
       await expect(opened.getByRole('heading', { name: 'Graph Editor Live transcription', exact: true })).toBeVisible();
-    } else await expect(opened.getByRole('heading', { name, exact: true })).toBeVisible();
-    await opened.getByRole('button', { name: 'Live' }).click();
+    } else await expect(opened.getByRole('heading', { name: name === 'Library' ? 'Graph Library' : name, exact: true })).toBeVisible();
+    if (name === 'Models') await opened.getByRole('button', { name: 'Live', exact: true }).click();
     await expect(page.locator('#status')).toHaveText('Transcription active');
     expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);
     expect(await page.evaluate(() => window.streams.map(s => s.stops))).toEqual([0]);
