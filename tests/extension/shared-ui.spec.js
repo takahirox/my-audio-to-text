@@ -111,13 +111,15 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   await page.setViewportSize({ width: 390, height: 844 });
   const card = page.locator('#opus-ja-en'), status = card.locator('.model-status');
   await expect(status).toHaveText('Not downloaded');
+  await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
   await card.getByText('Verified files and size', { exact: true }).click();
   await expect(card.locator('li').first()).toContainText('Missing');
   f.mode('hold');
   await card.getByRole('button', { name: 'Download / retry' }).click();
   await expect(status).toHaveText('Downloading');
   await expect(card.locator('progress')).toBeVisible();
-  await expect(card.getByRole('button', { name: 'Check cache' })).toBeDisabled();
+  await expect(card.getByRole('button', { name: 'Download / retry' })).toBeDisabled();
+  await expect(card.getByRole('button', { name: 'Delete cached assets' })).toBeDisabled();
   await capture(page, info, 'models-downloading-390', true);
   await card.getByRole('button', { name: 'Cancel download' }).click();
   await expect(status).toHaveText('Error');
@@ -134,8 +136,6 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   await expect(status).toHaveText('Ready · Cached and verified');
   await expect(card.locator('li').first()).toContainText('Cached');
   await page.reload();
-  await expect(status).toHaveText('Ready · Cached and verified');
-  await card.getByRole('button', { name: 'Check cache' }).click();
   await expect(status).toHaveText('Ready · Cached and verified');
   await card.getByRole('button', { name: 'Delete cached assets' }).click();
   await expect(status).toHaveText('Not downloaded');

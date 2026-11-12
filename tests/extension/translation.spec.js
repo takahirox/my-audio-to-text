@@ -219,7 +219,7 @@ test('Models keeps both verified directions distinct across pages, deletion, ret
   await expect(models.locator('#opus-en-ja .model-status')).toHaveText('Not downloaded');
   const demo = await f.context.newPage(); await demo.goto(f.url.replace('recorder.html', 'cache-demo.html'));
   await demo.locator('#prepare').click(); await expect(demo.locator('#cache-status')).toHaveText('Ready');
-  await models.locator('#opus-ja-en button:has-text("Check cache")').click();
+  await models.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(models.locator('#opus-ja-en .model-status')).toHaveText('Not downloaded');
   await prepare(live); await expect(models.locator('#opus-en-ja .model-status')).toHaveText('Not downloaded');
   const second = await f.context.newPage(); await second.goto(models.url());
