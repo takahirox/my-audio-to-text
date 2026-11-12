@@ -66,17 +66,17 @@ class ModelCard {
     link.setAttribute('aria-label', `${linkLabel} for ${definition.title}`);
     const notices = el('details');
     notices.append(el('summary', 'Attribution & notices'), el('p', definition.terms));
-    const license = el('div'); license.className = 'model-license'; license.append(link, notices);
+    const license = el('div'); license.className = 'model-license'; license.append(link);
     for (const extra of definition.links || []) {
       const anchor = el('a', extra.label); anchor.href = extra.url;
       license.append(' · ', anchor);
     }
+    license.append(notices);
     // Keep the Gemma usage warning visible before the download controls.
     if (definition.id === 'translategemma') {
       const notice = el('p', definition.terms); notice.className = 'model-license';
       root.append(notice);
     }
-
     root.append(this.error, this.progress, controls, details, license);
     document.getElementById('models').append(root); this.buttons(); void this.inspect();
   }

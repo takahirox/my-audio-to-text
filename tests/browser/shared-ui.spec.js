@@ -62,8 +62,14 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
     await expect(notices.locator('p')).toContainText(notice);
     await summary.press('Space');
     await expect(notices.locator('p')).toBeHidden();
-    // Native Tab navigation reaches the link and then its separate disclosure.
-    await link.focus(); await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    // Native Tab navigation reaches every legal link and then its disclosure.
+    const links = await card.locator('.model-license a').all();
+    await links[0].focus();
+    for (let i = 1; i < links.length; i++) {
+      await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+      await expect(links[i]).toBeFocused();
+    }
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
     await expect(summary).toBeFocused();
     await expect(card.locator(':scope > details')).toHaveCSS('border-top-width', '0px');
     expect(await card.evaluate(el => parseFloat(getComputedStyle(el).borderTopWidth))).toBeGreaterThan(0);
@@ -82,6 +88,7 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await expect(gemma).toContainText('Google / ONNX Community · Gemma Terms');
   await expect(gemma.locator(':scope > p.model-license')).toBeVisible();
   await expect(gemma.locator(':scope > p.model-license')).toContainText('Gemma Terms of Use and Prohibited Use Policy apply to this conversion. Read before downloading or using.');
+  expect(await gemma.evaluate(card => !!(card.querySelector(':scope > p.model-license').compareDocumentPosition(card.querySelector('.actions')) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   await expect(page.locator('footer')).toHaveCount(0);
   await expect(page.locator('a[href="../web/licenses/gemma-notices.txt"]')).toHaveCount(1);
   const source = page.locator('#kokoro').getByRole('link', { name: 'eSpeak NG source / build bundle (GPL-3.0-or-later)', exact: true });
