@@ -42,11 +42,14 @@ test('Models wraps real manifests, licenses, expanded file paths and controls at
   await expect(page.locator('.model-card')).toHaveCount(12);
   await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(12);
   await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
-  for (const [id, label, href, notice] of legalLinks) {
-    const card = page.locator(`#${id}`), link = card.locator('.model-license a');
+  for (const card of await page.locator('.model-card').all()) {
     await expect(card.getByRole('button')).toHaveText(['Download / retry', 'Delete cached assets']);
     await expect(card.getByRole('button', { name: 'Cancel download', includeHidden: true })).toBeHidden();
     await expect(card.getByRole('status')).toHaveText('Not downloaded');
+    await expect(card.locator('.model-license a')).toBeVisible();
+  }
+  for (const [id, label, href, notice] of legalLinks) {
+    const card = page.locator(`#${id}`), link = card.locator('.model-license a');
     await expect(link).toBeVisible();
     await expect(link).toHaveText(label);
     await expect(link).toHaveAccessibleName(`${label} for ${await card.locator('h3').textContent()}`);
