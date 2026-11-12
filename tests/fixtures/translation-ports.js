@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { expect } from '@playwright/test';
 
 // Only inference is controlled. Real module Workers, runtime allocation,
@@ -86,6 +87,6 @@ export async function checkTranslationPortRecovery(editor, type) {
   await editor.locator('.graph-actions > summary').click();
   editor.once('dialog', dialog => dialog.accept());
   await editor.locator('#graph-reset').click();
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-errors')).toContainText('original has been kept');
+  await settleAutoSave(editor); await expect(editor.locator('#graph-save-error')).toContainText('original has been kept');
   await recoverAsNew(editor); await expect(editor.locator('#errors')).toBeEmpty();
 }

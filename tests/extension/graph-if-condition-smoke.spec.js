@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph, emitFinal, conditionAssets, seedConditionGraph } from './if-condition-fixture.js';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -11,9 +12,9 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
  test.setTimeout(600000);
  await conditionAssets(f,true);const page=await openGraph(f);await seedConditionGraph(page.editor);
  const modelCard=page.editor.locator('#graph-models .model-card').filter({hasText:'IfCondition'});
- await page.editor.locator('#graph-save').click();await expect(modelCard).toHaveAttribute('data-state','Ready',{timeout:180000});
+ await settleAutoSave(page.editor);await expect(modelCard).toHaveAttribute('data-state','Ready',{timeout:180000});
  expect(await page.evaluate(()=>window.graphWorkers.flatMap(w=>w.messages).some(m=>['vad-start','decide'].includes(m.type)))).toBe(false);
- const downloads=f.requests.length;await page.editor.locator('#graph-save').click();await expect(modelCard).toHaveAttribute('data-state','Ready',{timeout:30000});expect(f.requests.length).toBe(downloads);
+ const downloads=f.requests.length;await settleAutoSave(page.editor);await expect(modelCard).toHaveAttribute('data-state','Ready',{timeout:30000});expect(f.requests.length).toBe(downloads);
  const assets=JSON.parse(await readFile('extension/if-condition-assets.json','utf8'));
  const host=await page.evaluate(()=>({browser:navigator.userAgent,isolated:crossOriginIsolated}));
  const runtime=JSON.parse(await readFile('scripts/if-condition-runtime.json','utf8'));
@@ -30,7 +31,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
  try {
   await f.context.setOffline(true);
   for(const {condition,texts} of cases){
-   await page.editor.getByRole('button',{name:'Select condition',exact:true}).click();await page.editor.getByLabel('condition condition',{exact:true}).fill(condition);await page.editor.locator('#graph-save').click();await expect(page.editor.locator('#graph-save')).toBeEnabled();
+   await page.editor.getByRole('button',{name:'Select condition',exact:true}).click();await page.editor.getByLabel('condition condition',{exact:true}).fill(condition);await settleAutoSave(page.editor);
    const started=Date.now();await startGraph(page,120000);const loadMs=Date.now()-started;
    const outputs={yes:[],no:[]},decisions=[];
    for(const [text,branch]of texts){
@@ -51,7 +52,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
    g.nodes.find(n=>n.id==='animal').settings.condition='Does this text mention an animal?';
    g.edges.push(edge('speech','final','animal','text'),edge('animal','yes','animal-yes-acc','append'),edge('animal','no','animal-no-acc','append'),edge('animal-yes-acc','text','animal-yes','input1'),edge('animal-no-acc','text','animal-no','input1'));await saveLiveGraphData(localStorage, (g));
   });
-  await page.editor.reload();await page.editor.locator('#graph-save').click();await expect(page.editor.locator('#graph-save')).toBeEnabled();
+  await page.editor.reload();await settleAutoSave(page.editor);
   const parallelStart=Date.now();await startGraph(page,120000);
   const batch=Array.from({length:8},(_,i)=>i%2?'The meeting begins at noon.':'What time does the meeting begin?');
   await page.evaluate(batch=>{for(const text of batch)window.speech.receiveEvent({type:'final',text});document.getElementById('stop').click();},batch);

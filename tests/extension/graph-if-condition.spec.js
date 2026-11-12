@@ -1,9 +1,10 @@
+import { settleAutoSave } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph, emitFinal, conditionAssets, seedConditionGraph } from './if-condition-fixture.js';
 import { openPalette } from './ui-controls.js';
 const items=(page,id)=>page.locator(`[data-display="${id}"] .display-content`);
 const card=editor=>editor.locator('#graph-models .model-card').filter({hasText:'IfCondition'});
-const save=async editor=>{await editor.locator('#graph-save').click();await expect(editor.locator('#graph-save')).toBeEnabled();};
+const save=async editor=>{await settleAutoSave(editor);};
 const trackPipeline=page=>page.evaluate(async()=>{
  const {Pipeline}=await import('../web/pipeline.js'),start=Pipeline.prototype.start;
  Pipeline.prototype.start=function(){if(this.entries.has('condition'))window.conditionPipeline=this;return start.call(this);};
@@ -26,7 +27,7 @@ test('IfCondition palette/settings/wires persist; preparation verifies, cancels,
  await editor.reload();await editor.getByRole('button',{name:'Select ifcondition',exact:true}).click();
  await expect(editor.getByLabel('ifcondition condition',{exact:true})).toHaveValue('Does this text mention an animal?');
  expect(await editor.evaluate(()=>(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().edges.some(e=>e.from[0]==='ifcondition'&&e.from[1]==='yes'))).toBe(true);
- f.mode('hold');await save(editor);await expect(card(editor)).toHaveAttribute('data-state','Downloading');await card(editor).getByRole('button',{name:'Cancel preparation',exact:true}).click();
+ f.mode('hold');await card(editor).getByRole('button',{name:'Retry preparation',exact:true}).click();await expect(card(editor)).toHaveAttribute('data-state','Downloading');await card(editor).getByRole('button',{name:'Cancel preparation',exact:true}).click();
  await expect(card(editor)).toHaveAttribute('data-state','Canceled');f.mode('normal');await card(editor).getByRole('button',{name:'Retry preparation',exact:true}).click();
  await expect(card(editor)).toHaveAttribute('data-state','Ready');const count=f.requests.length;await save(editor);await expect(card(editor)).toHaveAttribute('data-state','Ready');expect(f.requests.length).toBe(count);
  expect(await page.evaluate(()=>window.graphWorkers.filter(w=>w.url.includes('if-condition-worker')).flatMap(w=>w.messages).some(m=>m.type==='decide'))).toBe(false);
@@ -56,10 +57,10 @@ for(const text of ['uncertain-fixture','error-fixture','long-token-fixture'])tes
 });
 
 test('missing cache never downloads at Start; Cancel during Stop/restart has no stale output',async({graphExtension:f})=>{
- await conditionAssets(f);const page=await openGraph(f);await trackPipeline(page);await seedConditionGraph(page.editor);
+ await conditionAssets(f);const page=await openGraph(f);await trackPipeline(page);await seedConditionGraph(page.editor, { persisted: true });
  const count=f.requests.length;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await expect(page.locator('#errors')).toContainText('missing');await expect(page.locator('#start')).toBeDisabled();expect(f.requests.length).toBe(count);
- await save(page.editor);await expect(card(page.editor)).toHaveAttribute('data-state','Ready');
+ await card(page.editor).getByRole('button',{name:'Retry preparation',exact:true}).click();await expect(card(page.editor)).toHaveAttribute('data-state','Ready');
  await startGraph(page);await emitFinal(page,'slow-fixture yes-fixture');await page.locator('#stop').click();await expect(page.locator('#status')).toContainText('Finalizing');
  await page.evaluate(() => window.graphSession.cancel());await expect(page.locator('#start')).toBeEnabled();await startGraph(page);await emitFinal(page,'yes-fixture');
  await expect(items(page,'yes')).toHaveText(['yes-fixture'].join('\n'));await page.waitForTimeout(1600);await expect(items(page,'yes')).toHaveText(['yes-fixture'].join('\n'));await page.locator('#stop').click();await expect(page.locator('#start')).toBeEnabled();

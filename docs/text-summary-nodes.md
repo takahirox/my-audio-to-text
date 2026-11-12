@@ -25,9 +25,9 @@ input is JSON-quoted in the user message, escaping angle-bracket chat delimiters
 
 Prompt must be a nonempty string of at most **4,096 UTF-16 code units**.
 Invalid settings and combined token-budget overflow are errors; instructions
-and input are never silently truncated. Save, Load and JSON Import preserve
+and input are never silently truncated. Auto Save, Undo/Redo and JSON Import preserve
 literal newlines. Graph actions → Export graph JSON downloads the validated draft, including
-the prompt and its newlines. An unsaved draft does not affect a session. Save applies both settings
+the prompt and its newlines. Edits do not affect an already active session. Auto Save applies both settings
 to the next session; each generation uses that session's saved instruction.
 
 ## Incremental example with Hold
@@ -35,7 +35,7 @@ to the next session; each generation uses that session's saved instruction.
 [Import this minimal graph](examples/incremental-text-summary.json) in Graph
 Editor. It contains a Text constant as a small, repeatable demonstration; Start
 begins with empty previous summary. TextWindow emits the text after its normal
-1.5-second deadline (or on Stop). Save prepares the selected summary model.
+1.5-second deadline (or on Stop). Auto Save prepares the selected summary model.
 For live transcripts, replace Text with your ASR's `final: TEXT` output. Leave the
 other connections unchanged:
 
@@ -105,7 +105,7 @@ Cancel/disposal suppress late replies and release Workers. New runs start fresh.
 If translation is instead placed on the path **back into Hold**, its completion
 necessarily precedes the next summary. The runtime uses ordinary graph
 reachability and [explicit async ownership](pipeline-runtime.md#queued-asynchronous-work-207),
-without changing TEXT ports, graph versions or Save/Load.
+without changing TEXT ports, graph versions or Auto Save/Undo.
 
 Only non-emitting sampled edges break cycle validation. Every ordinary event
 cycle remains invalid in both the editor and Pipeline. Hold connections save and
@@ -128,7 +128,7 @@ the editor does not overwrite it or rewire any edge.
    for standalone summaries, or write an explicit rolling-update instruction
    such as the example above. Keep the existing language.
 4. Keep every Node ID, position, other setting and edge unchanged. Import the
-   edited JSON, validate it and Save. Do not Reset or save the fallback default
+   edited JSON, validate it and wait for Auto Save. Do not Reset or save the fallback default
    graph over your work.
 
 The cache keys, asset manifests, packaged runtime directory and license paths
@@ -231,12 +231,12 @@ is MIT. See the packaged licenses and third-party notices.
 
 ## Preparation and recovery
 
-Save graph persists first, then prepares both selected model sets, including
+Auto Save graph persists first, then prepares both selected model sets, including
 disconnected/parked Nodes. Each has its own progress/cancel/retry card and Models
 cache controls/license link. Duplicate Nodes share stored assets only. Every
-file has immutable URLs, exact byte counts and 1 MiB SHA-256 chunk pins. Save
+file has immutable URLs, exact byte counts and 1 MiB SHA-256 chunk pins. Auto Save
 reuses verified cache entries; corruption/partial downloads are never Ready.
-Quota failure does not undo Save. Free storage or delete unused cache entries,
+Quota failure does not undo Auto Save. Free storage or delete unused cache entries,
 then Retry preparation. Cancellation preserves complete verified files; retry
 downloads missing files. Preparation across windows is serialized by Web Locks.
 
@@ -246,7 +246,7 @@ Start stays disabled until Ready. Inference still runs only on TEXT delivery.
 See [manual Graph Actions](graph-actions.md). Missing/evicted/corrupt data
 keeps Start disabled with recovery instructions. Only canonical allowlisted cached model
 URLs can be loaded; optional lookups get local misses. No model downloads after
-Start and no transcript or summary leaves the browser for inference. Save-time
+Start and no transcript or summary leaves the browser for inference. Auto Save
 downloads contact the model host; those requests contain no input text.
 
 ## Reproduction and test boundaries

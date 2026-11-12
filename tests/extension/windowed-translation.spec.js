@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
@@ -18,7 +19,7 @@ test('palette exposes NUMBER threshold inputs, one TEXT output, no threshold Set
   await editor.getByLabel('number value', { exact: true }).fill('2000');
   await editor.getByRole('button', { name: 'number output value', exact: true }).click();
   await editor.getByRole('button', { name: 'textwindow input maxChars', exact: true }).click();
-  await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(editor);
   expect(f.requests).toEqual([]);
   const graph = await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
   expect(graph.version).toBe(15); expect(graph.nodes.find(n => n.type === 'TextWindow').settings).toEqual({});

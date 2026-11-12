@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { selectWhisper } from './whisper-fixture.js';
@@ -33,8 +34,8 @@ test('real packaged Whisper tiny: English/Japanese language selection, Silero, S
         return Array.from(joinAudio([resampler.push(Float32Array.from(pcm)), resampler.flush()]));
       }, { pcm, rate: sampleRate });
       await page.editor.getByRole('button', { name: 'Select language', exact: true }).click();
-      await page.editor.getByLabel('language value', { exact: true }).fill(language); await page.editor.locator('#graph-save').click();
-      await expect(page.editor.locator('#graph-save')).toBeEnabled();
+      await page.editor.getByLabel('language value', { exact: true }).fill(language); await settleAutoSave(page.editor);
+
       await expect(page.editor.locator('#graph-errors')).toBeEmpty();
       await expect.poll(() => page.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.find(n => n.id === 'language').settings.value)).toBe(language);
       const start = Date.now(); await startGraph(page, 120000); const loaded = Date.now();

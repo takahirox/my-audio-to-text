@@ -1,3 +1,4 @@
+import { settleAutoSave } from '../extension/ui-controls.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -39,7 +40,7 @@ test('mouse hit resolution follows the crossing gap, keyboard Delete removes onl
   }
   await expect(page.locator(`.graph-wire[data-edge="${under}"]`)).toBeFocused();
   await page.keyboard.press('Delete'); await expect(page.locator('.graph-wire')).toHaveCount(traceabilityGraph.edges.length-1);
-  await page.locator('#graph-save').click(); await expect(page.locator('#graph-save')).toBeEnabled();
+  await settleAutoSave(page);
   expect(await page.evaluate(()=>(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual({...traceabilityGraph,edges:traceabilityGraph.edges.filter((_,i)=>i!==under)});
   await page.reload(); await assertRoutingGeometry(page);
 });

@@ -57,11 +57,27 @@ test('cancel, newer Save and teardown abort active/queued work and ignore late s
     preparation.cancel(entry); assert.equal(signals[0].aborted, true); finishes[0](); await settled();
     assert.equal(entry.view.state, 'Canceled');
     const retry = preparation.run(entry); await settled(); finishes[1](); await retry; assert.equal(entry.view.state, 'Ready');
-    preparation.replace(graph()); await settled(); const old = preparation.entries[0];
+    preparation.replace(graph()); await settled(); assert.equal(signals.length, 2, 'same requirements retain the verified entry');
+    preparation.replace(defaultGraph()); preparation.replace(graph()); await settled(); const old = preparation.entries[0];
     preparation.replace(defaultGraph()); assert.equal(signals[2].aborted, true);
     finishes[2](); await settled(); assert.deepEqual(preparation.entries, []); assert.equal(old.view.state, 'Downloading');
     preparation.replace(graph()); await settled(); preparation.close(); const count = changes;
     assert.equal(signals[3].aborted, true); finishes[3](); await settled(); assert.equal(changes, count);
     preparation.replace(graph()); assert.equal(signals.length, 4);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+
+test('text, position and library revisions do not restart an active preparation', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => [{ path: 'weights', bytes: 1, sha256Chunks: ['0'.repeat(64)] }] });
+  let count = 0, finish;
+  try {
+    const preparation = new GraphModelPreparation({ createCache: () => ({ prepare: () => { count++; return new Promise(resolve => { finish = resolve; }); } }) });
+    const initial = graph(); preparation.replace(initial); await settled(); const entry = preparation.entries[0];
+    for (let i = 0; i < 100; i++) { initial.nodes[0].position.x++; preparation.replace(initial); }
+    assert.equal(count, 1); assert.equal(preparation.entries[0], entry); assert.equal(entry.controller.signal.aborted, false);
+    finish({ state: 'Ready', downloadedBytes: 0, totalBytes: 0, error: '' }); await settled();
+    preparation.replace(initial); await settled(); assert.equal(count, 1); preparation.close();
   } finally { globalThis.fetch = originalFetch; }
 });

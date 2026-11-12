@@ -53,3 +53,12 @@
 .editor-page :is(.graph-subgraph-dialog, .graph-inspector) fieldset > div { display: grid; gap: .4rem; margin-bottom: 1rem; }
 .editor-page :is(.graph-subgraph-dialog, .graph-inspector) fieldset > div > button { justify-self: start; }
 .editor-page #graph-models { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--panel); }
+
+.editor-page .graph-recovery:empty, .editor-page .graph-recovery > p:empty, .editor-page #graph-save-error:empty { display: none; }
+.editor-page #graph-save-error { color: var(--warning); overflow-wrap: anywhere; }
+.editor-page .graph-recovery textarea { width: 100%; min-height: 8rem; box-sizing: border-box; }
+@media (max-width: 600px) {
+  .editor-page .graph-toolbar { flex-wrap: wrap; }
+  .editor-page .graph-status { min-width: max-content; flex-direction: column; align-items: flex-start; gap: 0; }
+  .editor-page #graph-retry { flex-basis: 100%; }
+}

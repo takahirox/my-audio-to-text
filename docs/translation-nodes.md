@@ -217,7 +217,7 @@ model-specific sink. Pending work and Cancel produce no text. Stop drains the
 committed FIFO; repeated input remains separate. Each active processor owns its
 Worker and GPU session; independent branches retain separate state and memory.
 
-Save graph persists first, then prepares only referenced optional model weights,
+Auto Save graph persists first, then prepares only referenced optional model weights,
 including parked Nodes. Both Gemma directions share the same eight-file manifest,
 **3,111,911,678 bytes** including `chat_template.jinja`, and one cache identity.
 [`extension/translategemma-assets.json`](../extension/translategemma-assets.json)
@@ -230,7 +230,7 @@ Weights remain optional and outside the extension bundle.
 Allow **7 GB free storage** for weights and browser write overhead, plus several
 GB free RAM/GPU memory per active Node. These are planning estimates, not an
 availability guarantee. Models supports progress, Cancel, retry, deletion,
-persistence requests and integrity checks. Failed downloads never undo Save.
+persistence requests and integrity checks. Failed downloads never undo Auto Save.
 Quota errors or eviction require recovery and a fresh session. Runtime verifies
 the cache, disables remote model loading, and serves optional missing files from
 a local missing-model path. There are no weight downloads during recording.
@@ -240,7 +240,7 @@ and memory failures have recovery guidance. There is no OPUS-MT/CPU/cloud fallba
 
 Read [Gemma Terms of Use](https://ai.google.dev/gemma/terms),
 [Prohibited Use Policy](https://ai.google.dev/gemma/prohibited_use_policy) and the
-[packaged notice](../web/licenses/gemma-notices.txt) before Save/preparation or
+[packaged notice](../web/licenses/gemma-notices.txt) before Auto Save/preparation or
 use. Gemma use constitutes agreement under the upstream terms; the application
 does not accept gated-repository terms on the user's behalf, collect tokens, or
 bypass access controls. If public asset access changes, preparation fails rather
@@ -257,8 +257,8 @@ npm run setup:extension
 TRANSLATEGEMMA_SMOKE=1 npm run test:extension -- tests/extension/translategemma-smoke.spec.js
 ```
 
-This prepares 3.112 GB from the pinned public URLs through Save, reuses the cache
-on a second Save, and runs semantic conversational/meeting fixtures online and
+This prepares 3.112 GB from the pinned public URLs through Auto Save, reuses the cache
+on a subsequent edit, and runs semantic conversational/meeting fixtures online and
 offline on fresh Workers, plus Japanese → English. Set `EXTENSION_HEADED=1`
 if the local headless browser lacks hardware WebGPU. The optional
 `TRANSLATEGEMMA_ASSET_DIR=.cache/translategemma` uses already reviewed real bytes
@@ -276,7 +276,7 @@ Both extension TranslateGemma Nodes accept optional `context: TEXT` from any
 TEXT producer, for example `Text.value → TranslateGemmaEnJa.context`. There is
 no prompt setting, new Node or model instance. OPUS-MT has no context port.
 Current graphs use version 15: adding an optional input needs no migration, and
-Save/reload preserves an explicitly connected context edge.
+Auto Save/reload preserves an explicitly connected context edge.
 
 With no context value, or with explicit `""`, inference uses the unchanged
 structured translation item and official TranslateGemma chat template, with
@@ -368,9 +368,9 @@ is required by #173.
 Connect its text output to a translator, then translator.text directly to
 Display.input1 or through TextAccumulator.append for history.
 The four extension translators accept optional provisional TEXT from any
-compatible producer, independently of the committed text source and edge order. Their committed source/text/error and preview provisionalSource/provisionalText/provisionalError TEXT outputs form separate atomic families sharing one owned Worker. Direct text is safe for committed history or TTS even when provisional is connected. Route provisionalText to a separate replacement display; empty clears on final acceptance, Stop and Cancel. Standalone web translator Nodes retain their behavior. Unsupported old graphs fail visibly; Reset or Import a current graph and Save explicitly.
+compatible producer, independently of the committed text source and edge order. Their committed source/text/error and preview provisionalSource/provisionalText/provisionalError TEXT outputs form separate atomic families sharing one owned Worker. Direct text is safe for committed history or TTS even when provisional is connected. Route provisionalText to a separate replacement display; empty clears on final acceptance, Stop and Cancel. Standalone web translator Nodes retain their behavior. Unsupported old graphs fail visibly; Reset or Import a current graph and wait for Auto Save.
 
-Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and an explicit Save.
+Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and automatic persistence of a repaired graph copy.
 
 For continuous bilingual ASR rows while translation is pending, use the
 [portable keyed pair history](display-items.md).

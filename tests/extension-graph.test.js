@@ -41,7 +41,7 @@ for (const type of removed) test(`removed ${type} is unsupported in validation, 
   assert.throws(() => graphNode(type, 'old'), /Unknown Node type/);
   const graph = defaultGraph(); graph.nodes.push({ id: 'old', type, settings: {}, position: { x: 1, y: 1 } });
   const raw = JSON.stringify(graph, null, 2), store = storage(); store.setItem(GRAPH_KEY, raw);
-  assert.throws(() => readGraph(store), error => /Unknown Node type/.test(error.message) && /Reset draft or import/.test(error.message) && !error.recoveryGraph);
+  assert.throws(() => readGraph(store), error => /Unknown Node type/.test(error.message) && /import a repaired current graph as a new entry in Library/.test(error.message) && !error.recoveryGraph);
   assert.equal(store.getItem(GRAPH_KEY), raw);
   assert.throws(() => buildGraph(graph), /Unknown Node type/);
   saveGraph(store, defaultGraph()); assert.deepEqual(readGraph(store), defaultGraph());

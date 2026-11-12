@@ -1,3 +1,4 @@
+import { settleAutoSave } from './ui-controls.js';
 import { openPalette } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -42,7 +43,7 @@ async function openNumberGraph(f) {
 const feed = (page, length, value = .05) => page.evaluate(({ length, value }) => {
   window.capture.emit('audio', new Float32Array(length).fill(value));
 }, { length, value });
-const save = async editor => { await editor.locator('#graph-save').click(); await expect(editor.locator('#graph-save')).toBeEnabled(); };
+const save = async editor => { await settleAutoSave(editor);  };
 
 test('packaged Number edge edits, validates, reloads and freezes the cap before model processing starts', async ({ graphExtension: f }) => {
   const page = await openNumberGraph(f), editor = page.editor;
