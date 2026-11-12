@@ -21,7 +21,6 @@
 .models-page .model-card ul { padding-left: 1.25rem; }
 .models-page .model-license { margin: .75rem 0 0; font-size: .8rem; }
 .models-page summary { align-content: center; }
-.models-page footer { padding: 1rem 1.25rem; border: 1px solid var(--warning-border); border-radius: var(--card-radius); color: var(--warning); background: var(--warning-bg); }
 @media (max-width: 800px) {
   .models-page .model-grid { grid-template-columns: minmax(0, 1fr); }
 }
