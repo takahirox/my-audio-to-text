@@ -321,7 +321,7 @@ test('failed toolbar selection opens only an error, restores checked state, and 
 
 test('extension artifact allowlist excludes stale weights in every runtime directory and audits all output', () => {
   const result = spawnSync('python3', ['-c', `
-import importlib.util, pathlib, tempfile, shutil, json, hashlib
+import importlib.util, pathlib, tempfile, shutil, json, hashlib, struct, zlib
 spec = importlib.util.spec_from_file_location('build', 'scripts/build-extension.py')
 build = importlib.util.module_from_spec(spec); spec.loader.exec_module(build)
 original = build.ROOT
@@ -351,7 +351,32 @@ with tempfile.TemporaryDirectory() as tmp:
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest == json.loads((original / 'extension' / 'manifest.json').read_text())
     assert manifest['name'] == 'My Audio to Text'
-    assert manifest['action'] == {'default_title': 'Transcribe this tab'}
+    assert manifest['action']['default_title'] == 'Transcribe this tab'
+    assert set(manifest['icons']) == {'16', '32', '48', '128'}
+    assert manifest['action']['default_icon'] == manifest['icons']
+    for size, relative in manifest['icons'].items():
+        assert relative == f'extension/icons/icon-{size}.png'
+        data = (target / relative).read_bytes()
+        assert data == (original / relative).read_bytes()
+        assert any(entry['path'] == relative for entry in inventory['files'])
+        assert data[:8] == bytes([137, 80, 78, 71, 13, 10, 26, 10])
+        offset, image = 8, b''
+        while offset < len(data):
+            length = struct.unpack('>I', data[offset:offset + 4])[0]
+            kind = data[offset + 4:offset + 8]
+            chunk = data[offset + 8:offset + 8 + length]
+            crc = struct.unpack('>I', data[offset + 8 + length:offset + 12 + length])[0]
+            assert zlib.crc32(kind + chunk) == crc
+            if kind == b'IHDR':
+                assert struct.unpack('>IIBBBBB', chunk) == (int(size), int(size), 8, 6, 0, 0, 0)
+            if kind == b'IDAT':
+                image += chunk
+            offset += length + 12
+        assert kind == b'IEND' and offset == len(data)
+        pixels = zlib.decompress(image)
+        assert len(pixels) == int(size) * (1 + int(size) * 4)
+        assert all(pixels[row * (1 + int(size) * 4)] <= 4 for row in range(int(size)))
+    assert (target / 'extension/icons/icon.svg').read_bytes() == (original / 'extension/icons/icon.svg').read_bytes()
     assert manifest['manifest_version'] == 3
     assert 'options_ui' not in manifest
     assert 'options_page' not in manifest
