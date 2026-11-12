@@ -53,7 +53,12 @@ export class GraphEditor {
         if (this.readOnly || !confirm('Reset the graph to default? You can Undo this change.')) return;
         this.closeActions(); this.edit(() => { this.draft = this.kind === 'subgraph' ? { version: 15, nodes: [], edges: [], interface: { inputs: [], outputs: [] } } : defaultGraph(); this.selected = null; this.selectedNode = null; this.draw(); });
       }),
-      button('Validate draft', 'graph-validate', () => { this.closeActions(); this.error = this.diagnostics(true) || 'Draft valid. Changes save automatically for the next session.'; this.draw(); }));
+      button('Validate draft', 'graph-validate', () => {
+        this.closeActions();
+        // Validation only updates the result; redrawing would notify draft
+        // consumers and could immediately replace the explicit warnings.
+        this.errors.textContent = this.diagnostics(true) || 'Draft valid. Changes save automatically for the next session.';
+      }));
     const importFile = el('input'); importFile.type = 'file'; importFile.accept = '.json,application/json'; importFile.hidden = true;
     importFile.onchange = async () => {
       const file = importFile.files?.[0]; if (!file || this.readOnly) return;
@@ -81,13 +86,6 @@ export class GraphEditor {
     this.createButton.hidden = this.kind === 'subgraph' || !this.onCreateSubgraph;
     commands.append(this.createButton);
     if (this.kind === 'subgraph') commands.append(button('Edit exposed ports', 'graph-exposed-ports', () => { this.closeActions(); this.selectDetails(); this.inspector.querySelector('input, button')?.focus(); }));
-    const warningLabel = el('label'); this.warningPreference = el('input'); this.warningPreference.type = 'checkbox';
-    this.warningPreference.id = 'graph-optional-warnings';
-    this.warningPreference.checked = localStorage.getItem('graph-show-optional-warnings') === 'true';
-    this.warningPreference.onchange = () => {
-      localStorage.setItem('graph-show-optional-warnings', String(this.warningPreference.checked)); this.draw();
-    };
-    warningLabel.append(this.warningPreference, ' Show optional warnings'); commands.append(warningLabel);
     this.actions.append(commands);
     this.paletteButton = button('Add Node', 'graph-palette-toggle', () => this.togglePalette()); this.paletteButton.setAttribute('aria-haspopup', 'dialog'); this.paletteButton.setAttribute('aria-expanded', 'false'); this.paletteButton.setAttribute('aria-controls', 'graph-palette');
     toolbar.append(status, this.paletteButton, this.undoButton, this.redoButton, this.retryButton, this.actions);
@@ -294,7 +292,7 @@ export class GraphEditor {
       this.root.append(dialog); this.actions.open = false; dialog.showModal(); name.focus(); name.select();
     } catch (error) { this.error = error.message; this.draw(); }
   }
-  diagnostics(includeWarnings = this.warningPreference?.checked) {
+  diagnostics(includeWarnings = false) {
     let boundaryError = '';
     try {
       if (this.kind === 'subgraph') {

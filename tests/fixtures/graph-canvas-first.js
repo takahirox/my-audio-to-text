@@ -45,6 +45,11 @@ export async function checkCanvasFirst(page, width) {
   // macOS WebKit needs Option+Tab to include native buttons in focus traversal.
   const tab = process.platform === 'darwin' && page.context().browser()?.browserType().name() === 'webkit' ? 'Alt+Tab' : 'Tab';
   await page.locator('#graph-palette-toggle').focus();
+  for (const selector of ['#graph-undo', '#graph-redo']) {
+    if (await page.locator(selector).isEnabled()) {
+      await page.keyboard.press(tab); await expect(page.locator(selector)).toBeFocused();
+    }
+  }
   await page.keyboard.press(tab); await expect(page.locator('.graph-actions > summary')).toBeFocused();
   await page.keyboard.press(tab); await expect(scroll).toBeFocused();
   return { width, toolbar: bounds, canvas, controls };
@@ -201,9 +206,8 @@ export async function checkGraphCommands(page) {
   await page.locator('#graph-undo').click();
   await expect(page.locator('[data-node="literal"]')).toHaveCount(0);
   await actions.press('Enter');
-  await page.locator('#graph-optional-warnings').check();
-  await expect(page.locator('#graph-optional-warnings')).toBeChecked();
+  await expect(page.locator('#graph-optional-warnings')).toHaveCount(0);
+  await expect(page.getByLabel('Show optional warnings')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await clickGraphAction(page, 'graph-validate'); await expect(page.locator('#graph-errors')).toContainText('Draft valid');
-  await actions.press('Enter'); await page.locator('#graph-optional-warnings').uncheck(); await page.keyboard.press('Escape');
 }

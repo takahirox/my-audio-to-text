@@ -114,23 +114,70 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
   expect(f.requests).toEqual([]);
 });
 
-test('MV3 drafts save/reload, optional warnings default off and persist, empty execution starts no resources', async ({ graphExtension: f }) => {
+test('MV3 drafts ignore the legacy warnings preference; Validate draft shows warnings and empty execution starts no resources', async ({ graphExtension: f }) => {
   const page = await openGraph(f), editor = page.editor;
-  await page.evaluate(async () => {
-    const { defaultGraph, graphNode } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
-    const graph = defaultGraph(); graph.nodes.push(graphNode('MicrophoneAudio','parked'),graphNode('SpeechToTextWhisper','unfinished'));
-    graph.edges=[]; await saveLiveGraphData(localStorage, (graph));
+  const alternateId = await page.evaluate(async () => {
+    const { GRAPH_VERSION, graphNode } = await import('./graph.js'); const { GraphLibrary, saveLiveGraphData } = await import('./graph-library.js');
+    const graph = { version: GRAPH_VERSION, nodes: [graphNode('MicrophoneAudio', 'parked'), graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('Number', 'duration')], edges: [] };
+    localStorage.setItem('graph-show-optional-warnings', 'true');
+    await saveLiveGraphData(localStorage, graph);
+    const library = await new GraphLibrary(localStorage).create({ name: 'Another incomplete draft', graph });
+    return library.graphs.at(-1).id;
+  });
+  await editor.addInitScript(() => {
+    window.legacyWarningAccess = [];
+    for (const method of ['getItem', 'setItem', 'removeItem']) {
+      const original = Storage.prototype[method];
+      Storage.prototype[method] = function(key, ...args) {
+        if (key === 'graph-show-optional-warnings') window.legacyWarningAccess.push(method);
+        return original.call(this, key, ...args);
+      };
+    }
   });
   await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
   await editor.locator('.graph-actions > summary').click();
-  await expect(editor.getByLabel('Show optional warnings')).not.toBeChecked();
-  await editor.getByLabel('Show optional warnings').check(); await expect(editor.locator('#graph-errors')).toContainText('Warning:');
-  await editor.reload(); await expect(editor.locator('#graph-errors')).toContainText('No executable path');
-  await editor.locator('.graph-actions > summary').click(); await editor.getByLabel('Show optional warnings').uncheck();
+  await expect(editor.locator('#graph-optional-warnings')).toHaveCount(0);
+  await expect(editor.getByLabel('Show optional warnings')).toHaveCount(0);
+  await editor.keyboard.press('Escape');
+  await clickGraphAction(editor, 'graph-validate');
+  for (const message of ['Required connection missing: unfinished.audio', 'Unconnected output Node: parked', 'At least one output destination is required to run.', 'No executable path']) {
+    await expect(editor.locator('#graph-errors')).toContainText(`Warning: ${message}`);
+  }
+  // The explicit result remains readable across frames and when selecting settings.
+  await editor.getByRole('button', { name: 'Select duration', exact: true }).click();
+  await editor.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(editor.locator('#graph-errors')).toContainText('No executable path');
+  await editor.getByLabel('duration value', { exact: true }).fill('');
+  await expect(editor.locator('#graph-errors')).toContainText('Error:');
+  await expect(editor.locator('#graph-errors')).not.toContainText('Warning:');
+  await clickGraphAction(editor, 'graph-validate');
+  await expect(editor.locator('#graph-errors')).toContainText('Error:');
+  await editor.getByLabel('duration value', { exact: true }).fill('2');
+  await expect(editor.locator('#graph-errors')).toBeEmpty();
+  await editor.getByRole('button', { name: 'Select duration', exact: true }).press('ArrowRight');
+  await expect(editor.locator('#graph-errors')).toBeEmpty();
+  expect(await editor.evaluate(() => window.legacyWarningAccess)).toEqual([]);
+  await settleAutoSave(editor);
+  await expect(editor.locator('#graph-state')).toHaveText('Saved');
+  await editor.reload();
+  await expect(editor.locator('#graph-errors')).toBeEmpty();
+  const originalURL = editor.url(), alternateURL = new URL(originalURL);
+  alternateURL.searchParams.set('id', alternateId);
+  await editor.goto(alternateURL.href);
+  await expect(editor.locator('#graph-errors')).toBeEmpty();
+  await clickGraphAction(editor, 'graph-validate');
+  await expect(editor.locator('#graph-errors')).toContainText('No executable path');
+  expect(await editor.evaluate(() => window.legacyWarningAccess)).toEqual([]);
+  await editor.goto(originalURL);
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await clickGraphAction(editor,'graph-validate'); await expect(editor.locator('#graph-errors')).toContainText('Warning:');
   await settleAutoSave(editor);
+  await expect(editor.locator('#graph-state')).toHaveText('Saved');
   await expect(editor.locator('#graph-save-error')).toBeEmpty();
+  // Validation is inspection only; a no-op Auto Save keeps its result visible.
+  await expect(editor.locator('#graph-errors')).toContainText('Warning:');
+  expect(await editor.evaluate(() => window.legacyWarningAccess)).toEqual([]);
+  expect(await page.evaluate(() => localStorage.getItem('graph-show-optional-warnings'))).toBe('true');
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('#errors')).toContainText('No executable path');
   expect(await page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(0);

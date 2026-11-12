@@ -206,6 +206,27 @@ async function enable(t) {
   await expect(t.library.locator('#web-voice-status')).toBeHidden();
   await expect.poll(() => t.library.evaluate(async () => (await chrome.permissions.getAll()).origins)).toEqual(['http://*/*', 'https://*/*']);
 }
+async function watchVoiceLayout(page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const sample = () => ({
+      geometry: ['.library-header', '.library-workspace', '#graph-list'].map(selector => {
+        const { x, y, width, height } = document.querySelector(selector).getBoundingClientRect();
+        return { x, y, width, height };
+      }),
+      message: document.getElementById('web-voice-status').textContent,
+      statusDisplay: getComputedStyle(document.getElementById('web-voice-status')).display
+    });
+    window.voiceLayoutSamples = [sample()];
+    window.voiceLayoutObserver = new MutationObserver(() => voiceLayoutSamples.push(sample()));
+    voiceLayoutObserver.observe(document.querySelector('main'), { childList: true, characterData: true, subtree: true, attributes: true });
+  });
+}
+async function expectStableVoiceLayout(page) {
+  const samples = await page.evaluate(() => { voiceLayoutObserver.disconnect(); return voiceLayoutSamples; });
+  expect(samples.length).toBeGreaterThan(1);
+  for (const sample of samples) expect(sample).toEqual({ ...samples[0], message: '', statusDisplay: 'none' });
+}
 async function pageCapture(t, action = 'info') {
   return t.library.evaluate(async ({ url, action }) => {
     const tab = (await chrome.tabs.query({})).find(tab => tab.url === url);
@@ -303,12 +324,12 @@ test('consent stays OFF for an existing assignment; permission and UI activation
   for (const selector of ['#password', '#otp', '#card', '#readonly']) { await t.website.locator(selector).focus(); await expect(widget(t.website)).toHaveCount(0); }
   const otherLibrary = await t.context.newPage(); await otherLibrary.goto(t.url + 'graph-library.html');
   await expect(otherLibrary.locator('#web-voice-enabled')).toBeChecked();
-  await otherLibrary.locator('#web-voice-enabled').uncheck(); await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
+  await otherLibrary.locator('#web-voice-enabled').click(); await expect(t.library.locator('#web-voice-enabled')).not.toBeChecked();
   await expect(t.library.locator('#web-graph')).toHaveCount(0);
   expect(await t.library.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).assignments.webVoice)).toBe(t.graphId);
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0);
   await enable(t);
-  await t.library.locator('#web-voice-enabled').uncheck();
+  await t.library.locator('#web-voice-enabled').click();
   expect(await t.library.evaluate(async () => (await chrome.storage.local.get('web-microphone-default-v1'))['web-microphone-default-v1'])).toBe(t.graphId);
 });
 
@@ -356,7 +377,7 @@ test('missing website access remains actionable ahead of graph compatibility gui
   await t.library.evaluate(async id => { const { GraphLibrary } = await import('./graph-library.js'); await new GraphLibrary(localStorage).delete(id); }, t.graphId);
   await t.library.reload();
   await expect(status).toContainText('Website access missing. Turn OFF, then ON');
-  await t.library.locator('#web-voice-enabled').uncheck();
+  await t.library.locator('#web-voice-enabled').click();
   await expect(status).toBeVisible(); await expect(status).toContainText('No compatible graphs');
 });
 
@@ -377,10 +398,13 @@ test('direct switch request waits for the grant, ignores rapid toggles, and sync
       return new Promise(resolve => { window.finishPermission = async () => resolve(await grant); });
     };
   });
+  await watchVoiceLayout(t.library);
   await toggle.click();
   await expect(toggle).toBeDisabled(); await expect(toggle).not.toBeChecked();
   await expect(toggle).toHaveAttribute('aria-busy', 'true');
-  await expect(t.library.locator('#web-voice-status')).toContainText('Requesting website access');
+  await expect(t.library.locator('#voice-switch-state')).toHaveText('OFF');
+  await expect(t.library.locator('#web-voice-status')).toBeEmpty();
+  await expect(t.library.locator('#web-voice-status')).toBeHidden();
   await expect(t.library.locator('dialog')).toHaveCount(0);
   expect(await t.library.evaluate(async () => ({
     enabled: (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1']?.enabled === true,
@@ -395,14 +419,59 @@ test('direct switch request waits for the grant, ignores rapid toggles, and sync
   await t.library.evaluate(() => finishPermission());
   await expect(toggle).toBeEnabled(); await expect(toggle).toBeChecked();
   await expect(toggle).not.toHaveAttribute('aria-busy');
+  await expect(t.library.locator('#voice-switch-state')).toHaveText('ON');
+  expect(await t.library.evaluate(async () => (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled)).toBe(true);
+  await expectStableVoiceLayout(t.library);
   await expect(t.library.locator('#search')).toBeFocused();
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toBeVisible();
   const other = await t.context.newPage(); await other.goto(t.url + 'graph-library.html');
   await expect(other.locator('#web-voice-enabled')).toBeChecked();
-  await other.locator('#web-voice-enabled').uncheck();
+  await other.locator('#web-voice-enabled').click();
   await expect(toggle).not.toBeChecked(); await expect(widget(t.website)).toHaveCount(0);
   expect(await t.library.evaluate(() => permissionCalls.length)).toBe(1);
   expect(await t.library.evaluate(() => chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] }))).toBe(true);
+});
+
+test('successful toggles keep layout stable and OFF retains ON until saving and reconciliation finish', async ({ voice: t }) => {
+  test.skip(real, 'Toggle feedback does not require real inference.');
+  await watchVoiceLayout(t.library);
+  await enable(t);
+  await expectStableVoiceLayout(t.library);
+  await t.library.evaluate(() => {
+    const set = chrome.storage.local.set.bind(chrome.storage.local), send = chrome.runtime.sendMessage.bind(chrome.runtime);
+    chrome.storage.local.set = async values => {
+      if (values['web-voice-typing-v1']?.enabled === false) await new Promise(resolve => { window.finishSave = resolve; });
+      return set(values);
+    };
+    chrome.runtime.sendMessage = async message => {
+      if (message.type === 'web-voice-reconcile') await new Promise(resolve => { window.finishReconcile = resolve; });
+      return send(message);
+    };
+  });
+  const toggle = t.library.locator('#web-voice-enabled'), status = t.library.locator('#web-voice-status');
+  await watchVoiceLayout(t.library);
+  await toggle.press('Space');
+  await expect.poll(() => t.library.evaluate(() => !!window.finishSave)).toBe(true);
+  for (const saved of [true, false]) {
+    await expect(toggle).toBeDisabled(); await expect(toggle).toBeChecked();
+    await expect(toggle).toHaveAttribute('aria-busy', 'true');
+    await expect(t.library.locator('#voice-switch-state')).toHaveText('ON');
+    await expect(status).toBeEmpty(); await expect(status).toBeHidden();
+    expect(await t.library.evaluate(async () => (await chrome.storage.local.get('web-voice-typing-v1'))['web-voice-typing-v1'].enabled)).toBe(saved);
+    // Duplicate changes must preserve the displayed state, even after storage sync.
+    await toggle.evaluate(node => { node.checked = false; node.dispatchEvent(new Event('change')); });
+    await expect(toggle).toBeChecked();
+    if (saved) {
+      await t.library.evaluate(() => finishSave());
+      await expect.poll(() => t.library.evaluate(() => !!window.finishReconcile)).toBe(true);
+    }
+  }
+  await t.library.evaluate(() => finishReconcile());
+  await expect(toggle).toBeEnabled(); await expect(toggle).not.toBeChecked();
+  await expect(toggle).not.toHaveAttribute('aria-busy'); await expect(toggle).toBeFocused();
+  await expect(t.library.locator('#voice-switch-state')).toHaveText('OFF');
+  await expectStableVoiceLayout(t.library);
+  await expect.poll(() => t.library.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).length)).toBe(0);
 });
 
 for (const failure of ['request throws', 'request rejects', 'permission check', 'save preference', 'reconcile error', 'reconcile rejects', 'missing reply']) {
@@ -554,7 +623,7 @@ for (const unreadable of [false, true]) {
       };
     });
     const toggle = t.library.locator('#web-voice-enabled');
-    await toggle.uncheck();
+    await toggle.click();
     await expect.poll(() => t.library.evaluate(() => !!window.failEarlierOFF)).toBe(true);
     const other = await t.context.newPage(); await other.goto(t.url + 'graph-library.html');
     const newerToggle = other.locator('#web-voice-enabled');
@@ -577,7 +646,7 @@ for (const unreadable of [false, true]) {
       calls: { writes: voiceWrites.length, reconciles: voiceReconciles.length }
     }))).toEqual({ enabled: true, scripts: 1, calls: callsBefore });
     await expect(widget(t.website)).toBeVisible();
-    await newerToggle.uncheck(); await expect(newerToggle).toBeEnabled();
+    await newerToggle.click(); await expect(newerToggle).toBeEnabled();
     await expect(toggle).not.toBeChecked(); await expect(widget(t.website)).toHaveCount(0);
   });
 }
@@ -596,7 +665,7 @@ for (const interruption of ['another Library turns OFF', 'website access removed
       // enables, then disables. The pending earlier intent must not win.
       await other.evaluate(() => chrome.storage.local.set({ 'web-voice-typing-v1': { version: 1, enabled: true } }));
       await expect(other.locator('#web-voice-enabled')).toBeChecked();
-      await other.locator('#web-voice-enabled').uncheck();
+      await other.locator('#web-voice-enabled').click();
       await expect(other.locator('#web-voice-enabled')).toBeEnabled();
     } else {
       await t.library.evaluate(() => chrome.permissions.remove({ origins: ['http://*/*', 'https://*/*'] }));
@@ -650,7 +719,7 @@ test('OFF during the final access check cannot be overwritten by the earlier ON 
   await expect.poll(() => t.library.evaluate(() => !!window.finishAccessCheck)).toBe(true);
   const other = await t.context.newPage(); await other.goto(t.url + 'graph-library.html');
   await expect(other.locator('#web-voice-enabled')).toBeChecked();
-  await other.locator('#web-voice-enabled').uncheck();
+  await other.locator('#web-voice-enabled').click();
   await expect(other.locator('#web-voice-enabled')).toBeEnabled();
   await t.library.evaluate(() => finishAccessCheck());
   await expect(toggle).toBeEnabled(); await expect(toggle).not.toBeChecked();
@@ -740,7 +809,7 @@ for (const failure of ['permission rejection', 'permission denial', 'reconcile r
       calls: { writes: voiceWrites.length, reconciles: voiceReconciles.length }
     }))).toEqual({ enabled: true, scripts: 1, calls: callsBefore });
     await expect(widget(t.website)).toBeVisible();
-    await newerToggle.uncheck(); await expect(newerToggle).toBeEnabled();
+    await newerToggle.click(); await expect(newerToggle).toBeEnabled();
     await expect(toggle).not.toBeChecked(); await expect(widget(t.website)).toHaveCount(0);
   });
 }
@@ -786,7 +855,7 @@ for (const boundary of ['permission request', 'final access check', 'rejected fi
     // A final-check pause has already saved ON; a native-request pause has not.
     if (boundary === 'permission request') { await newerToggle.click(); await expect(newerToggle).toBeEnabled(); }
     await expect(newerToggle).toBeChecked();
-    await newerToggle.uncheck(); await expect(newerToggle).toBeEnabled();
+    await newerToggle.click(); await expect(newerToggle).toBeEnabled();
     await expect.poll(() => t.library.evaluate(() => voiceChanges.at(-1))).toBe(false);
     await newerToggle.click(); await expect(newerToggle).toBeEnabled(); await expect(newerToggle).toBeChecked();
     await expect.poll(() => t.library.evaluate(() => voiceChanges.at(-1))).toBe(true);
@@ -803,7 +872,7 @@ for (const boundary of ['permission request', 'final access check', 'rejected fi
       calls: { writes: voiceWrites.length, reconciles: voiceReconciles.length }
     }))).toEqual({ enabled: true, scripts: 1, calls: callsBefore });
     await expect(widget(t.website)).toBeVisible();
-    await newerToggle.uncheck(); await expect(newerToggle).toBeEnabled();
+    await newerToggle.click(); await expect(newerToggle).toBeEnabled();
     await expect(toggle).not.toBeChecked(); await expect(widget(t.website)).toHaveCount(0);
   });
 }
@@ -1297,7 +1366,7 @@ test('multiple Web sessions share one offscreen document and stop independently 
   expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
   expect((await pageCapture(t)).streams).toBe(0);
   // OFF preserves finals already committed and does not drain provisional text.
-  await t.library.locator('#web-voice-enabled').uncheck(); await idle(t);
+  await t.library.locator('#web-voice-enabled').click(); await idle(t);
   await expect(widget(other)).toHaveCount(0);
   const afterOff = await other.locator('#first').inputValue();
   expect(afterOff).not.toContain('pending fixture');
@@ -1325,7 +1394,7 @@ test('Live and Web overlap Ready, recording, Stop, restart, OFF and close indepe
   await recording(t); await expectLiveRecording(second);
   await live.locator('#start').click(); await expectLiveRecording(live);
   await second.close(); await recording(t);
-  await t.library.locator('#web-voice-enabled').uncheck(); await idle(t); await expectLiveRecording(live);
+  await t.library.locator('#web-voice-enabled').click(); await idle(t); await expectLiveRecording(live);
   await enable(t); await start(t); await recording(t); await live.close(); await recording(t);
   await t.website.waitForTimeout(real ? 16000 : 650); await stop(t); await idle(t);
   await writeFile(info.outputPath('offscreen-overlap.json'), JSON.stringify({ browser: t.context.browser().version(), realModel: real,
@@ -1523,7 +1592,7 @@ test('back-forward navigation restores idle controls without resuming capture or
   await t.website.locator('#second').evaluate(e => e.setSelectionRange(5, 5));
   await t.website.waitForTimeout(650); await stop(t); await idle(t);
   await expect(t.website.locator('#second')).toHaveValue('left confirmed fixtureright');
-  await t.website.goto(original + '?away-again'); await t.library.locator('#web-voice-enabled').uncheck();
+  await t.website.goto(original + '?away-again'); await t.library.locator('#web-voice-enabled').click();
   await t.website.goBack({ waitUntil: 'commit' });
   await t.website.waitForLoadState('domcontentloaded');
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0); await idle(t);
@@ -1724,7 +1793,7 @@ test('Web microphone remains revocable while the graph library needs storage rec
   await expect(t.library.locator('#errors')).not.toBeEmpty();
   await expect(t.library.locator('#web-voice-enabled')).toBeEnabled();
   await expect(t.library.locator('#web-voice-enabled')).toBeChecked();
-  await t.library.locator('#web-voice-enabled').uncheck(); await idle(t);
+  await t.library.locator('#web-voice-enabled').click(); await idle(t);
   await expect(widget(t.website)).toHaveCount(0);
   expect(await t.library.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe('{broken library');
 });
