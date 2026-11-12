@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { checkQuickAddInteraction, checkQuickAddPlacement, checkQuickAddTouch, openQuickAdd } from '../fixtures/graph-quick-add.js';
+import { checkQuickAddInteraction, checkQuickAddPlacement, checkQuickAddTouch, checkQuickAddRows, openQuickAdd } from '../fixtures/graph-quick-add.js';
 
 async function serveExtension(route) {
   const pathname = new URL(route.request().url()).pathname;
@@ -14,6 +14,10 @@ test.beforeEach(async ({ page }) => {
 for (const width of [1440, 390]) test(`selection, search, categories, dismissal, focus and explicit Save at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   await checkQuickAddInteraction(page);
+});
+for (const width of [1440, 320]) test(`compact centered rows and fully clickable wrapped labels at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await checkQuickAddRows(page);
 });
 for (const width of [390, 1440]) for (const zoom of ['0.25', '0.5', '1', '1.5', 'fit']) {
   test(`add in viewed region without moving zoom/pan at ${width}px / ${zoom}`, async ({ page }) => {
