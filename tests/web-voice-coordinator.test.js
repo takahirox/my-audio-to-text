@@ -50,8 +50,54 @@ async function fixture(t, { existingDocument = false } = {}) {
   function output(token, url = created.at(-1)?.url) { return connect(`web-voice-output:${token}`, { url }); }
   t.after(async () => { chrome.storage.onChanged.emit({ voice: { newValue: { enabled: false } } }, 'local'); await turn(); assert.equal(timers.size, 0); });
   await turn();
-  return { requestLibrary: globals.requestLaunchLibrary, chrome, library, preferences, control, start, host, output, connect, created, removed, timers, relays, setups, closed: () => closed };
+  return { globals, requestLibrary: globals.requestLaunchLibrary, chrome, library, preferences, control, start, host, output, connect, created, removed, timers, relays, setups, closed: () => closed };
 }
+
+test('an earlier OFF reconciliation cannot clear a newly granted ON preference', async t => {
+  const f = await fixture(t);
+  let enabled = false, releaseInspection, registered = [];
+  f.globals.readVoiceEnabled = async () => enabled;
+  f.globals.setVoiceEnabled = async value => { enabled = value; };
+  f.chrome.scripting.getRegisteredContentScripts = () => new Promise(resolve => { releaseInspection = () => resolve(registered); });
+  const reconcile = () => new Promise(resolve => f.chrome.runtime.onMessage.emit({ type: 'web-voice-reconcile' },
+    { id: 'extension', url: 'chrome-extension://extension/extension/graph-library.html' }, resolve));
+  const earlier = reconcile(); await turn();
+  assert.equal(typeof releaseInspection, 'function');
+  enabled = true; releaseInspection(); await earlier;
+  assert.equal(enabled, true);
+  f.chrome.scripting.getRegisteredContentScripts = async () => registered;
+  f.chrome.scripting.registerContentScripts = async scripts => { registered = scripts; };
+  f.chrome.scripting.unregisterContentScripts = async () => { registered = []; };
+  assert.equal((await reconcile()).ok, true);
+  assert.equal(registered.length, 1); assert.equal(enabled, true);
+  f.chrome.permissions.contains = async () => false;
+  assert.equal((await reconcile()).ok, true);
+  assert.equal(enabled, false); assert.equal(registered.length, 0);
+});
+
+test('only Graph Library can stop controls without saving OFF, even behind pending reconciliation', async t => {
+  const f = await fixture(t), control = f.control(1); await turn();
+  await f.start(control); const host = await f.host();
+  let registered = true, finishInspection;
+  f.chrome.scripting.getRegisteredContentScripts = () => new Promise(resolve => { finishInspection = () => resolve([{}]); });
+  f.chrome.scripting.unregisterContentScripts = async () => { registered = false; };
+  const sender = { id: 'extension', url: 'chrome-extension://extension/extension/graph-library.html' };
+  for (const untrusted of [{ ...sender, id: 'other' }, { ...sender, url: 'https://example.org/' }]) {
+    f.chrome.runtime.onMessage.emit({ type: 'web-voice-reconcile', stop: true }, untrusted, () => assert.fail('Unauthorized stop replied'));
+  }
+  assert.equal(host.sent.some(message => message.type === 'abort'), false);
+  const pending = new Promise(resolve => f.chrome.runtime.onMessage.emit({ type: 'web-voice-reconcile' }, sender, resolve));
+  await turn();
+  f.globals.readVoiceEnabled = async () => { throw Error('Storage unavailable'); };
+  f.globals.setVoiceEnabled = async () => assert.fail('Temporary cleanup must not require storage');
+  const stopped = new Promise(resolve => f.chrome.runtime.onMessage.emit({ type: 'web-voice-reconcile', stop: true }, sender, resolve));
+  assert.equal(host.sent.at(-1).type, 'abort');
+  assert.equal(control.sent.at(-1).type, 'disabled');
+  f.chrome.scripting.getRegisteredContentScripts = async () => registered ? [{}] : [];
+  finishInspection(); assert.equal((await pending).ok, true);
+  assert.equal((await stopped).ok, true); assert.equal(registered, false);
+  await turn(); assert.equal(f.closed(), 1);
+});
 
 test('one authenticated offscreen host multiplexes independent documents and rejects forged owners', async t => {
   const f = await fixture(t), a = f.control(1), b = f.control(2); await turn();

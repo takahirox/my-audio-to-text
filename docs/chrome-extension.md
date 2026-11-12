@@ -209,6 +209,14 @@ See [target policies, named ports and browser limitations](extension-graph.md).
 ## Opt-in Web voice typing (#247)
 
 In **Graph Library**, explicitly turn the compact **Web microphone** switch **ON**.
+The switch directly calls Chrome’s optional website-access request for
+`http://*/*` and `https://*/*`; there is no extension confirmation dialog. Chrome
+may prompt if access is missing. Only a confirmed grant enables and registers
+page controls. The switch stays busy/disabled until setup finishes; denial,
+dismissal or failure leaves it OFF with retry guidance. Turning OFF removes
+controls and cancels recording while retaining website access and the saved graph.
+This host grant is separate from the website’s microphone permission, which is
+requested only when you click its page mic.
 Right-click an in-page mic (or focus it and press **Shift+F10**) to select a
 compatible saved default for its next recording. The context-menu key or Alt+Down
 also opens the menu; arrows/Home/End navigate, Enter selects, and Escape dismisses.
