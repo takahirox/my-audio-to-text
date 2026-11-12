@@ -1,3 +1,4 @@
+import { expectGraphModelsReady } from './ui-controls.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph, startGraph, emitFinal } from './graph-fixture.js';
@@ -66,7 +67,7 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
   await expect(editor.locator('#graph-translation')).toHaveCount(0);
   await editor.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
   await settleAutoSave(editor);
-  await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(4).fill('Ready · Cached and verified'));
+  await expectGraphModelsReady(editor);
   await startGraph(live); await emitFinal(live, '<em>committed</em>');
   await live.evaluate(() => window.speech.receiveEvent({ type: 'partial', text: 'pending' }));
   await expect(live.locator('[data-display="transcript"] tr td:first-child')).toHaveText(['<em>committed</em>', 'pending']);

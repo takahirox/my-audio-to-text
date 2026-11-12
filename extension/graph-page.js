@@ -1,11 +1,10 @@
 import { defaultGraph, GRAPH_KEY, GRAPH_VERSION } from './graph.js';
 import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, resolvedEntryGraph, entryError, exportEntry, exportDraft, legacyChanged } from './graph-library.js';
 import { GraphEditor } from './graph-editor.js';
-import { graphModelStatus } from './graph-model-status.js';
+import { GraphModelPreparation } from './graph-model-preparation.js';
 import { GraphDraftSession, recoveryDrafts, acquireGraphLease } from './graph-draft-session.js';
 
 const element = id => document.getElementById(id);
-const preparation = graphModelStatus(element('graph-models'));
 const store = new GraphLibrary(localStorage);
 async function openEditor() {
   let { library, warning } = await openLibrary(localStorage);
@@ -60,10 +59,7 @@ async function openEditor() {
       // Creation saved both entries in one transaction. Adopt that baseline
       // without clearing editor history; applying the replacement is one edit.
       editor.saved = entryGraph(entry, library); makeSession();
-      setTimeout(() => {
-        try { preparation.replace(resolvedEntryGraph(entry, library)); }
-        catch (error) { element('errors').textContent = `Graph saved; model preparation unavailable: ${error.message}. Open Models for recovery.`; }
-      }, 0);
+      schedulePreparation();
       return library;
     },
     onEditSubgraph: async sharedId => {
@@ -72,6 +68,53 @@ async function openEditor() {
     }
   });
   editor.noticeContent.append(element('errors'), controls); editor.updateNotices();
+  // Preparation has no progress UI. Only actionable warnings join the existing
+  // overlay, independently of the graph's persistence status and diagnostics.
+  const modelWarning = document.createElement('p'); modelWarning.id = 'graph-model-warning'; modelWarning.setAttribute('role', 'alert');
+  editor.noticeContent.append(modelWarning);
+  let modelMessage = '';
+  function showModelWarning(message = '') {
+    if (message === modelMessage) return;
+    modelMessage = message;
+    modelWarning.replaceChildren();
+    if (message) {
+      const recovery = document.createElement('a'); recovery.href = 'model-cache.html'; recovery.textContent = 'Open Models for recovery.';
+      modelWarning.append(`${message} `, recovery);
+      editor.notices.open = true;
+    }
+    editor.updateNotices();
+  }
+  const modelChannel = new BroadcastChannel('model-cache-updates');
+  const preparation = new GraphModelPreparation({
+    onChange: entries => {
+      const failed = entries.find(entry => ['Error', 'Canceled'].includes(entry.view.state));
+      showModelWarning(failed ? `Graph saved; model preparation unavailable: ${failed.view.error}`
+        : entries.some(entry => entry.view.state === 'Not downloaded') ? 'Saved graph needs model files.' : '');
+    },
+    onComplete: id => modelChannel.postMessage({ id })
+  });
+  const inspectModels = () => preparation.inspect();
+  modelChannel.onmessage = ({ data }) => preparation.inspect(data?.id);
+  window.addEventListener('focus', inspectModels);
+  let preparationTimer, closed = false;
+  function updatePreparation({ inspect = false } = {}) {
+    if (closed || conflict || legacyConflict || invalidSaved) return;
+    try { preparation.replace(resolvedEntryGraph(entry, library), { inspect }); }
+    catch (error) { preparation.clear(); showModelWarning(`Saved graph model preparation unavailable: ${error.message}.`); }
+  }
+  function schedulePreparation({ inspect = false } = {}) {
+    if (closed) return;
+    clearTimeout(preparationTimer);
+    const revision = base;
+    preparationTimer = setTimeout(() => {
+      if (revision === base) updatePreparation({ inspect });
+    }, 0);
+  }
+  window.addEventListener('pagehide', () => {
+    closed = true; clearTimeout(preparationTimer);
+    window.removeEventListener('focus', inspectModels);
+    preparation.close(); modelChannel.close();
+  }, { once: true });
   function makeSession() {
     session?.close();
     session = new GraphDraftSession({ id, base, graph: editor.saved || editor.draft, storage: localStorage, sessionId: crypto.randomUUID(),
@@ -83,10 +126,7 @@ async function openEditor() {
         library = saved; editor.definitions = saved.graphs;
         entry = saved.graphs.find(item => item.id === id); base = entry.revision;
         // Model preparation never participates in persistence success/failure.
-        setTimeout(() => {
-          try { preparation.replace(resolvedEntryGraph(entry, library)); }
-          catch (error) { element('errors').textContent = `Graph saved; model preparation unavailable: ${error.message}. Open Models for recovery.`; }
-        }, 0);
+        schedulePreparation();
         return { base };
       }, onState: (status, error) => { editor.setSaveState(status === 'Saved' && editor.transaction ? 'Saving…' : status, error); if (error?.includes('changed in another') || error?.includes('changed elsewhere')) { reload.hidden = false; editor.externalChange = true; session.blocked = error; } },
       onSaved: graph => { editor.saved = structuredClone(graph); editor.updateSummary(); }
@@ -95,7 +135,7 @@ async function openEditor() {
     if (invalidSaved) { session.blocked = 'This saved graph is invalid; the original has been kept. Export its original and import a repaired copy as a new graph in Library.'; session.state('Save failed', session.blocked); }
   }
   makeSession();
-  if (!invalidSaved) setTimeout(() => { try { preparation.replace(resolvedEntryGraph(entry, library), { inspect: true }); } catch { /* Saved dependency diagnostics remain visible. */ } }, 0);
+  if (!invalidSaved) schedulePreparation({ inspect: true });
   async function flush() {
     if (!lease) return;
     do { editor.commitEdit(); await session.flush(); } while (editor.transaction || editor.isDirty());
@@ -107,6 +147,7 @@ async function openEditor() {
     library = current; entry = next; base = next.revision; conflict = false; legacyConflict = legacyChanged(localStorage, current);
     invalidSaved = false; editor.definitions = current.graphs; editor.setSaved(graph); makeSession();
     element('graph-name').textContent = next.name; reload.hidden = true;
+    preparation.clear(); schedulePreparation({ inspect: true });
   }
   acquire.onclick = async () => {
     acquire.disabled = true;
@@ -218,7 +259,7 @@ async function openEditor() {
         if (!editor.palette.hidden) editor.filterPalette();
         if (dependencyChanged) {
           if (editor.composing) editor.refreshAfterComposition = true; else editor.draw();
-          try { preparation.replace(resolvedEntryGraph(next, current), { inspect: true }); } catch { preparation.clear(); }
+          updatePreparation({ inspect: true });
         } else { editor.errors.textContent = editor.diagnostics(); editor.updateSummary(); }
 
         return;
@@ -231,7 +272,7 @@ async function openEditor() {
         const graph = entryGraph(next, current);
         library = current; entry = next; base = next.revision;
         invalidSaved = false; editor.setSaved(graph); makeSession(); element('graph-name').textContent = next.name;
-        preparation.replace(resolvedEntryGraph(next, current), { inspect: true });
+        updatePreparation({ inspect: true });
       }
     } catch (error) {
       conflict = true; session.blocked = `Saved graph changed but is unavailable: ${error.message}. Export your draft or reload the latest graph.`; preparation.clear(); reload.hidden = false;
@@ -246,6 +287,7 @@ async function openEditor() {
     editor.setActive(live?.graph || null, live?.state || 'idle', live?.tabId);
   };
   function refreshActive() { stateChannel.postMessage({ type: 'get-live-graph-state' }); }
-  window.addEventListener('focus', refreshActive); window.addEventListener('pagehide', () => stateChannel.close()); refreshActive();
+  window.addEventListener('focus', refreshActive);
+  window.addEventListener('pagehide', () => { window.removeEventListener('focus', refreshActive); stateChannel.close(); }, { once: true }); refreshActive();
 }
 void openEditor().catch(error => { element('errors').textContent = `${error.message} Open Graph Library for recovery.`; });

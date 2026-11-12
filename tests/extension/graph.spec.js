@@ -37,7 +37,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
   test(`${type}: visual final-text/audio path uses production Workers, explicit preparation, playback, repeat, failure and cancellation (fixture inference)`, async ({ graphExtension: f }) => {
     const page = await openGraph(f), requests = [];
     page.on('request', request => requests.push({ url: request.url(), method: request.method(), body: request.postData() }));
-    f.mode('error'); await addAudioPath(page, type); await expect(page.editor.locator('#graph-models .model-card').filter({ hasText: type === 'Supertonic3' ? 'Supertonic 3' : 'Kokoro ·' }).locator('.model-status')).toHaveText('Error');
+    f.mode('error'); await addAudioPath(page, type); await expect(page.editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(page.locator('#tts-status')).toContainText('assets missing');
     await expect(page.locator('#errors')).toContainText('assets missing');

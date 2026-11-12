@@ -14,9 +14,10 @@ test('both optional ASRs are searchable independent Graph v11 Nodes; Save prepar
     await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
     expect(f.requests).toHaveLength(before);
     f.mode('error'); await settleAutoSave(editor);
-    const card = editor.locator('#graph-models .model-card').filter({ has: editor.getByRole('heading', { name: new RegExp(search) }) });
-    await expect(card).toHaveAttribute('data-state', 'Error');
-    f.mode('normal'); await card.getByRole('button', { name: 'Retry preparation' }).click();
+    const card = page.models.locator(`#${key}`);
+    await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
+    await expect(card).toHaveAttribute('data-state', 'Not downloaded');
+    f.mode('normal'); await card.getByRole('button', { name: /^(Download|Retry)$/ }).click();
     await expect(card).toHaveAttribute('data-state', 'Ready');
     expect(f.requests.some(url => url.includes(key))).toBe(true);
   }

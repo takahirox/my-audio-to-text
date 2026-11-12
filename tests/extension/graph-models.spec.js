@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
 
@@ -13,7 +13,11 @@ async function save(editor) {
 }
 // Editor-only tests use an inert host so opening Live cannot prepare the default
 // graph first. ASR dependency preparation is covered in local-asr-preparation.spec.js.
-const cards = editor => editor.locator('#graph-models .model-card').filter({ hasNotText: /Silero VAD|ReazonSpeech ja-en/ });
+const noModelPanel = async editor => {
+  await expect(editor.locator('#graph-models, .model-card, progress')).toHaveCount(0);
+  await expect(editor.getByRole('button', { name: /Cancel preparation|Retry preparation|Check cache/ })).toHaveCount(0);
+  await expect(editor.getByRole('navigation').getByRole('link', { name: 'Models', exact: true })).toBeVisible();
+};
 
 test('direct palette/canvas/settings use ordinary Text formatter; Graph actions has no translation preset', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
@@ -45,14 +49,16 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
   });
   await add(editor, 'OpusMtEnJa'); await add(editor, 'OpusMtEnJa');
   expect(f.requests).toEqual([]); expect(await saved(live)).toEqual(initial);
-  await save(editor); await expect(cards(editor)).toHaveCount(1);
-  await expect(cards(editor).locator('.model-status')).toContainText('Ready');
+  const workspace = await editor.locator('.graph-workspace').boundingBox();
+  await save(editor); await noModelPanel(editor);
+  await expectGraphModelsReady(editor);
   expect(f.requests).toHaveLength(7); expect(f.requests.every(url => url.startsWith('/opus-mt-en-ja-assets.json/'))).toBe(true);
   expect(await editor.evaluate(() => window.beforePersistence)).toEqual([false]);
+  expect(await editor.locator('.graph-workspace').boundingBox()).toEqual(workspace);
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.evaluate(() => window.graphWorkers.every(worker => /sherpa-worker|silero-worker/.test(worker.url)))).toBe(true);
   const before = await saved(live); expect(before.version).toBe(15); expect(before.edges).toEqual(initial.edges);
-  await save(editor); await expect(cards(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(7);
+  await save(editor); await expectGraphModelsReady(editor); expect(f.requests).toHaveLength(7);
   for (const corrupt of [true, false]) {
     await editor.evaluate(async corrupt => {
       const { englishToJapaneseOpusMtManifest } = await import('./opus-mt-en-ja-manifest.js');
@@ -60,10 +66,10 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
       if (corrupt) await cache.put(file.url, new Response(new Uint8Array(file.bytes)));
       else await cache.delete(file.url);
     }, corrupt);
-    await cards(editor).getByRole('button', { name: 'Check cache', exact: true }).click();
-    await expect(cards(editor).locator('.model-status')).toHaveText('Not downloaded');
-    await cards(editor).getByRole('button', { name: 'Retry preparation', exact: true }).click();
-    await expect(cards(editor).locator('.model-status')).toContainText('Ready');
+    await live.models.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(live.models.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Not downloaded');
+    await live.models.locator('#opus-en-ja').getByRole('button', { name: /^(Download|Retry)$/ }).click();
+    await expectGraphModelsReady(editor);
   }
   expect(f.requests).toHaveLength(9); expect(await saved(live)).toEqual(before);
   await expect(live.models.locator('#opus-en-ja .model-status')).toContainText('Ready');
@@ -76,7 +82,7 @@ test('no optional model requests on load, invalid Save, storage failure or unrel
   await add(editor, 'OpusMtEnJa'); await add(editor, 'Number');
   await editor.getByLabel('number value', { exact: true }).fill('');
   await settleAutoSave(editor); await expect(editor.locator('#graph-errors')).toContainText('finite number');
-  expect(await saved(live)).toEqual(before); expect(f.requests).toEqual([]); await expect(cards(editor)).toHaveCount(0);
+  expect(await saved(live)).toEqual(before); expect(f.requests).toEqual([]); await noModelPanel(editor);
   await editor.getByLabel('number value', { exact: true }).fill('6');
   await editor.evaluate(() => {
     const set = Storage.prototype.setItem;
@@ -84,10 +90,10 @@ test('no optional model requests on load, invalid Save, storage failure or unrel
     window.restoreStorage = () => { Storage.prototype.setItem = set; };
   });
   await settleAutoSave(editor); await expect(editor.locator('#graph-save-error')).toContainText('storage unavailable');
-  expect(await saved(live)).toEqual(before); expect(f.requests).toEqual([]); await expect(cards(editor)).toHaveCount(0);
+  expect(await saved(live)).toEqual(before); expect(f.requests).toEqual([]); await noModelPanel(editor);
   await editor.evaluate(() => window.restoreStorage());
-  await save(editor); await expect(cards(editor).locator('.model-status')).toContainText('Ready');
-  const count = f.requests.length; await editor.reload(); await expect(cards(editor).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(count);
+  await save(editor); await expectGraphModelsReady(editor);
+  const count = f.requests.length; await editor.reload(); await expectGraphModelsReady(editor); expect(f.requests).toHaveLength(count);
 });
 
 test('multiple parked model types and voices prepare distinct sets once and reuse shared weights', async ({ graphExtension: f }) => {
@@ -100,40 +106,46 @@ test('multiple parked model types and voices prepare distinct sets once and reus
     for (const [name, value] of Object.entries(settings)) await editor.getByLabel(`${id} ${name}`, { exact: true }).selectOption(value);
   }
   expect(f.requests).toEqual([]); await save(editor);
-  await expect(cards(editor)).toHaveCount(7);
-  await expect(cards(editor).locator('.model-status')).toHaveText(Array(7).fill('Ready · Cached and verified'));
+  await noModelPanel(editor);
+  await expectGraphModelsReady(editor);
   expect(new Set(f.requests).size).toBe(f.requests.length);
   for (const voice of ['F1.json', 'M1.json', 'jf_alpha.bin', 'af_heart.bin']) expect(f.requests.some(url => url.endsWith(voice))).toBe(true);
   expect((await saved(live)).edges).toEqual(initial.edges);
   const count = f.requests.length; await save(editor);
-  await expect(cards(editor).locator('.model-status')).toHaveText(Array(7).fill('Ready · Cached and verified'));
+  await expectGraphModelsReady(editor);
   expect(f.requests).toHaveLength(count); expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
 });
 
-for (const mode of ['error', 'short', 'corrupt']) test(`Save remains persisted after ${mode} download failure; editor retry recovers`, async ({ graphExtension: f }) => {
+for (const mode of ['error', 'short', 'corrupt']) test(`Save remains persisted after ${mode} download failure; Models recovery clears the editor warning`, async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
   f.mode(mode); await add(editor, 'OpusMtEnJa'); await save(editor);
-  await expect(cards(editor).locator('.model-status')).toHaveText('Error');
-  await expect(cards(editor).locator('.model-error')).not.toBeEmpty();
+  await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
+  await expect(editor.locator('#graph-model-warning')).toBeVisible();
+  await expect(editor.locator('#graph-model-warning a')).toHaveAttribute('href', 'model-cache.html');
+  await expect(editor.locator('#graph-state')).toHaveText('Saved');
+  await noModelPanel(editor);
   const before = await saved(live); expect(before.nodes.some(node => node.type === 'OpusMtEnJa')).toBe(true);
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  f.mode('normal'); await cards(editor).getByRole('button', { name: 'Retry preparation', exact: true }).click();
-  await expect(cards(editor).locator('.model-status')).toContainText('Ready'); expect(await saved(live)).toEqual(before);
+  f.mode('normal'); await live.models.locator('#opus-en-ja').getByRole('button', { name: /^(Download|Retry)$/ }).click();
+  await expectGraphModelsReady(editor); expect(await saved(live)).toEqual(before);
+  await expect(editor.locator('#graph-model-warning')).toBeEmpty();
 });
 
-test('byte progress, Cancel, newer Save and page teardown preserve storage and allow Models recovery', async ({ graphExtension: f }) => {
+test('requirement changes and page teardown cancel background preparation and allow Models recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
   f.mode('hold'); await add(editor, 'OpusMtEnJa'); await save(editor);
-  await expect.poll(() => cards(editor).locator('progress').evaluate(progress => progress.value)).toBeGreaterThan(0);
-  const before = await saved(live);
-  await cards(editor).getByRole('button', { name: 'Cancel preparation', exact: true }).click();
-  await expect(cards(editor).locator('.model-status')).toHaveText('Canceled'); expect(await saved(live)).toEqual(before);
-  await cards(editor).getByRole('button', { name: 'Retry preparation', exact: true }).click();
-  await expect(cards(editor).locator('.model-status')).toHaveText('Downloading');
-  await save(editor); await expect(cards(editor).locator('.model-status')).toHaveText('Downloading');
-  await expect.poll(() => cards(editor).locator('progress').evaluate(progress => progress.value)).toBeGreaterThan(0);
-  await editor.close(); f.mode('normal');
+  await expect.poll(() => f.requests.length).toBeGreaterThan(0);
+  await noModelPanel(editor);
+  await editor.getByRole('button', { name: 'Remove opusmtenja', exact: true }).click();
+  await save(editor);
+  // Acquiring the model lock in Models proves obsolete work released it.
   const models = live.models.locator('#opus-en-ja');
+  await live.models.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(models).toHaveAttribute('data-state', 'Not downloaded');
+  await add(editor, 'OpusMtEnJa'); await save(editor);
+  await expect.poll(() => f.requests.length).toBeGreaterThan(1);
+  const before = await saved(live);
+  await editor.close(); f.mode('normal');
   await models.getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
   await expect(models.locator('.model-status')).toContainText('Ready'); expect(await saved(live)).toEqual(before);
 });
@@ -141,7 +153,7 @@ test('byte progress, Cancel, newer Save and page teardown preserve storage and a
 test('an external revision cancels obsolete preparation and protects a dirty draft while the second editor is read-only', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor, initial = await saved(live);
   f.mode('hold'); await add(editor, 'OpusMtEnJa'); await save(editor);
-  await expect.poll(() => cards(editor).locator('progress').evaluate(progress => progress.value)).toBeGreaterThan(0);
+  await expect.poll(() => f.requests.length).toBeGreaterThan(0);
   const other = await f.context.newPage(); await other.goto(editor.url());
   await expect(other.locator('#graph-state')).toHaveText('Read-only');
   await add(editor, 'Text');
@@ -152,7 +164,9 @@ test('an external revision cancels obsolete preparation and protects a dirty dra
     await new GraphLibrary(localStorage).save(id, library.graphs.find(entry => entry.id === id).revision, graph);
   }, initial);
   await expect(editor.locator('#graph-save-error')).toContainText('changed elsewhere');
-  await expect(cards(editor)).toHaveCount(0);
+  await noModelPanel(editor);
+  await live.models.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(live.models.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Not downloaded');
   await expect(editor.locator('[data-node=text]')).toHaveCount(1);
   await expect(editor.locator('[data-node=opusmtenja]')).toHaveCount(1);
   expect(await saved(live)).toEqual(initial);
@@ -193,7 +207,7 @@ test('formatter instances add inputs above four, preserve wires, validate edits 
 test('named graphs share verified assets by identity; Save prepares only the open entry', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
   await add(editor, 'OpusMtEnJa'); await save(editor);
-  await expect(cards(editor).locator('.model-status')).toContainText('Ready');
+  await expectGraphModelsReady(editor);
   expect(f.requests).toHaveLength(7);
   const { id, original } = await editor.evaluate(async () => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js');
@@ -203,7 +217,45 @@ test('named graphs share verified assets by identity; Save prepares only the ope
   });
   const copy = await f.context.newPage(); const url = new URL(editor.url()); url.searchParams.set('id', id);
   await copy.goto(url.href); await settleAutoSave(copy);
-  await expect(cards(copy).locator('.model-status')).toContainText('Ready'); expect(f.requests).toHaveLength(7);
+  await expectGraphModelsReady(copy); expect(f.requests).toHaveLength(7);
   expect(await copy.evaluate(async id => (await import('./graph-library.js')).readLibrary(localStorage).graphs.find(entry => entry.id === id), original.id)).toEqual(original);
   expect(await copy.evaluate(() => window.graphWorkers.length)).toBe(0);
+});
+
+test('saved subgraph requirements inspect headlessly in read-only sessions, prepare on Auto Save and track Models deletion/recovery', async ({ graphExtension: f }) => {
+  const live = await openGraph(f, { live: false }), editor = live.editor;
+  await editor.evaluate(async () => {
+    const { defaultGraph, graphNode } = await import('./graph.js');
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { extractSubgraph } = await import('./subgraphs.js');
+    const graph = defaultGraph(); graph.nodes.push(graphNode('OpusMtEnJa', 'translator'));
+    const extracted = extractSubgraph(graph, ['translator'], 'weights');
+    const store = new GraphLibrary(localStorage);
+    await store.create({ id: 'weights', name: 'Translation weights', kind: 'subgraph', graph: extracted.shared });
+    const library = readLibrary(localStorage), entry = library.graphs.find(entry => entry.id === library.assignments.live);
+    await store.save(entry.id, entry.revision, extracted.parent);
+  });
+  await editor.reload();
+  await expect(editor.locator('#graph-model-warning')).toContainText('needs model files');
+  const viewer = await f.context.newPage(); await viewer.goto(editor.url());
+  await expect(viewer.locator('#graph-state')).toHaveText('Read-only');
+  await expect(viewer.locator('#graph-model-warning')).toContainText('needs model files');
+  await viewer.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await noModelPanel(viewer); expect(f.requests).toEqual([]);
+  const workspace = await editor.locator('.graph-workspace').boundingBox();
+  await editor.getByRole('button', { name: 'Select subgraph', exact: true }).press('ArrowRight');
+  await save(editor); await expectGraphModelsReady(editor);
+  await expect(live.models.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Ready');
+  await expect(viewer.locator('#graph-model-warning')).toBeEmpty();
+  expect(f.requests).toHaveLength(7);
+  const before = await saved(live), model = live.models.locator('#opus-en-ja');
+  await model.getByRole('button', { name: 'Delete cached assets', exact: true }).click();
+  await expect(editor.locator('#graph-model-warning')).toContainText('needs model files');
+  await expect(viewer.locator('#graph-model-warning')).toContainText('needs model files');
+  expect(f.requests).toHaveLength(7);
+  expect(await editor.locator('.graph-workspace').boundingBox()).toEqual(workspace);
+  await model.getByRole('button', { name: 'Download', exact: true }).click();
+  await expect(editor.locator('#graph-model-warning')).toBeEmpty();
+  await expectGraphModelsReady(editor); expect(await saved(live)).toEqual(before);
+  await viewer.close();
 });

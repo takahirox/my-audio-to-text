@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, emitFinal } from './graph-fixture.js';
 import { openPalette, loadTranslationFixture } from './ui-controls.js';
@@ -28,7 +28,7 @@ async function speakerGraph(f, type = 'Supertonic3') {
   }
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await settleAutoSave(editor);
-  await expect(editor.locator('#graph-models .model-status')).toHaveText(Array(await editor.locator('#graph-models .model-status').count()).fill('Ready · Cached and verified'));
+  await expectGraphModelsReady(editor);
   await editor.reload();
   await expect(editor.getByRole('button', { name: 'speakeroutput input audio', exact: true })).toBeVisible();
   return page;

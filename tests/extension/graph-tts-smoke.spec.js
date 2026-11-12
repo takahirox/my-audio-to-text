@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './graph-fixture.js';
 import { writeFile } from 'node:fs/promises';
@@ -27,7 +27,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
         else await page.editor.getByLabel('kokoro voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');
         await settleAutoSave(page.editor);
         if (type === 'Kokoro') await page.models.getByLabel('Kokoro 82M voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');
-        await expect(page.editor.locator('#graph-models .model-status')).toHaveText(/^(Ready|Error)/, { timeout: 600000 });
+        await expectGraphModelsReady(page.editor, { timeout: 600000 });
         await page.models.evaluate(() => window.dispatchEvent(new Event('focus')));
         const card = page.models.locator(`#${type.toLowerCase()}`);
         await expect(card).toHaveAttribute('data-state', /^(Ready|Not downloaded|Error)$/, { timeout: 600000 });

@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { test, expect, chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
@@ -79,9 +79,8 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
     await editor.reload();
     const beforeSave = requests.length;
     await settleAutoSave(editor);
-    const card = editor.locator('#graph-models .model-card'); await expect(card).toHaveCount(1);
-    await expect(card.locator('.model-status')).toHaveText(/^(Ready.*|Error)$/, { timeout: 1200000 });
-    cacheState = { status: await card.locator('.model-status').textContent(), error: await card.locator('.model-error').textContent() };
+    await expectGraphModelsReady(editor, { timeout: 1200000 });
+    cacheState = { status: 'Ready', error: '' };
     expect(cacheState.status, cacheState.error).toContain('Ready');
     const sources = new Set(files.map(f => mirror ? `http://127.0.0.1:${server.address().port}/${f.path}`
       : `https://huggingface.co/${TRANSLATE_GEMMA.id}/resolve/${TRANSLATE_GEMMA.revision}/${f.path}`));

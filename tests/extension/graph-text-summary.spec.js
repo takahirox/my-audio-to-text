@@ -1,4 +1,4 @@
-import { settleAutoSave } from './ui-controls.js';
+import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
 import { corruptSavedGraph, recoverAsNew } from './ui-controls.js';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
@@ -26,24 +26,25 @@ test('both text processors: parked Save persists, independent settings, cancella
     expect(await editor.locator('#graph-node-type [role="option"][data-type^="MeetingSummary"]').count()).toBe(0);
   }
   await editor.getByLabel('textsummaryqwen35 language', { exact: true }).selectOption('en');
-  const cards = editor.locator('#graph-models .model-card').filter({ hasText: 'Text Summary' });
+  const cards = page.models.locator('#meeting-summary-lfm2, #meeting-summary-qwen35');
   const save = async () => { await settleAutoSave(editor);  };
   f.mode('corrupt'); await save();
   await expect(cards).toHaveCount(2);
-  for (const card of await cards.all()) await expect(card).toHaveAttribute('data-state', 'Error');
+  await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
+  for (const card of await cards.all()) await expect(card).toHaveAttribute('data-state', 'Not downloaded');
   await editor.reload();
   expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.filter(n => n.type.startsWith('TextSummary')).map(n => n.settings.language))).toEqual(['ja', 'en']);
   expect(await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.filter(n => n.type.startsWith('TextSummary')).map(n => n.settings.prompt))).toEqual(TEXT_SUMMARY_TYPES.map(type => 'Summarize in bullets.\nFocus on ' + type + '.'));
   f.mode('hold'); await expect(cards).toHaveCount(2);
   for (const card of await cards.all()) {
-    await card.getByRole('button', { name: 'Retry preparation', exact: true }).click();
+    await card.getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
     await expect(card).toHaveAttribute('data-state', 'Downloading');
-    await card.getByRole('button', { name: 'Cancel preparation', exact: true }).click();
-    await expect(card).toHaveAttribute('data-state', 'Canceled');
+    await card.getByRole('button', { name: 'Cancel download', exact: true }).click();
+    await expect(card).toHaveAttribute('data-state', 'Error');
   }
   f.mode('normal');
   for (const card of await cards.all()) {
-    await card.getByRole('button', { name: 'Retry preparation', exact: true }).click();
+    await card.getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
     await expect(card).toHaveAttribute('data-state', 'Ready');
   }
   const count = f.requests.length; await save();
@@ -106,7 +107,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
   await editor.getByLabel('summary prompt', { exact: true }).press('Tab');
   await editor.getByLabel('summary language', { exact: true }).selectOption('en');
   await settleAutoSave(editor);
-  await expect(editor.locator('#graph-models .model-card')).toHaveAttribute('data-state', 'Ready');
+  await expectGraphModelsReady(editor);
   const downloadPromise = editor.waitForEvent('download');
   await editor.locator('.graph-actions > summary').click(); await editor.locator('#graph-export').click();
   const exported = JSON.parse(await readFile(await (await downloadPromise).path(), 'utf8'));

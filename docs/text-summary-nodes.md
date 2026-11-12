@@ -232,12 +232,13 @@ is MIT. See the packaged licenses and third-party notices.
 ## Preparation and recovery
 
 Auto Save graph persists first, then prepares both selected model sets, including
-disconnected/parked Nodes. Each has its own progress/cancel/retry card and Models
-cache controls/license link. Duplicate Nodes share stored assets only. Every
+disconnected/parked Nodes. Models owns each model’s progress/cancel/retry card,
+cache controls and license link; Graph Editor prepares assets headlessly and
+reports failures in Graph notices. Duplicate Nodes share stored assets only. Every
 file has immutable URLs, exact byte counts and 1 MiB SHA-256 chunk pins. Auto Save
 reuses verified cache entries; corruption/partial downloads are never Ready.
 Quota failure does not undo Auto Save. Free storage or delete unused cache entries,
-then Retry preparation. Cancellation preserves complete verified files; retry
+then choose Retry or Download in Models. Cancellation preserves complete verified files; retry
 downloads missing files. Preparation across windows is serialized by Web Locks.
 
 Opening Live re-verifies the entire required executable cached set, creates
