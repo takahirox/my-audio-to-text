@@ -199,7 +199,7 @@ try {
   document.addEventListener('click', event => { if (!help.contains(event.target)) help.open = false; });
   const toggle = element('web-voice-enabled'), status = element('web-voice-status');
   let voiceMessage = '', hasWebsiteAccess = true, voicePending = false, enableCanceled = false, savedEnabled = false, accessCheck = 0, preferenceChange = 0;
-  let observedPreference;
+  let observedPreference, pendingEnabled;
   refreshVoiceStatus = () => {
     element('voice-switch-state').textContent = toggle.checked ? 'ON' : 'OFF';
     const count = library ? webVoiceChoices(library).length : null;
@@ -221,9 +221,11 @@ try {
     const restoreFocus = document.activeElement === toggle;
     const operationId = crypto.randomUUID();
     const previousOperationId = observedPreference?.operationId;
-    voicePending = true; enableCanceled = false; toggle.disabled = true; toggle.checked = false;
+    // Keep the last confirmed state visible until persistence and reconciliation finish.
+    pendingEnabled = savedEnabled;
+    voicePending = true; enableCanceled = false; toggle.disabled = true; toggle.checked = pendingEnabled;
     toggle.setAttribute('aria-busy', 'true');
-    voiceMessage = enabled ? 'Requesting website access…' : 'Turning Web microphone OFF…'; refreshVoiceStatus();
+    refreshVoiceStatus();
     try {
       if (enabled) {
         if (!await permission) throw Error('Website access denied or dismissed.');
@@ -287,7 +289,7 @@ try {
     }
   }
   toggle.onchange = () => {
-    if (voicePending) { toggle.checked = false; return; }
+    if (voicePending) { toggle.checked = pendingEnabled; return; }
     if (!toggle.checked) { void changeVoice(false); return; }
     // Request synchronously in the switch gesture, before any storage read,
     // contains check, messaging or await can consume Chrome's user activation.

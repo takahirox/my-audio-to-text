@@ -201,7 +201,7 @@ test('microphone reconciliation errors remain visible even while OFF', async ({ 
   // OFF reconciliation can fail too; the error must not disappear with the
   // nominal OFF instructions.
   await toggle.evaluate(node => { node.checked = true; });
-  await expect(toggle).toBeChecked(); await toggle.uncheck();
+  await expect(toggle).toBeChecked(); await toggle.click();
   await expect(status).toBeVisible(); await expect(status).toContainText('Microphone setup failed. Retry');
   await expect(toggle).not.toBeChecked(); await expect(toggle).toBeEnabled();
 });
