@@ -454,7 +454,8 @@ with tempfile.TemporaryDirectory() as tmp:
     assert (target / 'web' / 'vendor' / 'translation' / 'transformers.js').read_bytes() == b'pinned runtime fixture'
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest['manifest_version'] == 3
-    assert manifest['options_ui'] == {'page': 'extension/model-cache.html', 'open_in_tab': True}
+    assert 'options_ui' not in manifest
+    assert 'options_page' not in manifest
     assert set(manifest['permissions']) == {'activeTab', 'tabCapture', 'scripting', 'storage', 'offscreen', 'contextMenus'}
     assert 'host_permissions' not in manifest
     assert set(manifest['optional_host_permissions']) == {'http://*/*', 'https://*/*'}

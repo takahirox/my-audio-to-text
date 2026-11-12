@@ -50,7 +50,7 @@ and Models keep their dark appearance:
   model weights with progress, cancellation and retry. Detailed help
   opens on demand. Drafts apply next session; external changes retain drafts and
   require Load saved before saving. Load/reset confirm before discarding edits.
-- **Models** opens a dedicated tab (also Chrome's Extension options page), with
+- **Models** opens a dedicated tab from Graph Library, Graph Editor or Live, with
   bundled ReazonSpeech/Silero labels and verified cache controls for both OPUS-MT
   directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Opening it never downloads weights.
 
@@ -450,7 +450,7 @@ explicit Start in Live, or the field mic click for the current website. Basic
 tab IDs and lifecycle events are available without the `tabs` permission. All
 scripts, translation runtimes and ASR weights are packaged locally; no remote code
 is loaded. The
-Models options page uses the existing extension-origin Cache Storage without adding permissions or changing the existing CSP. The toolbar
+Models page uses the existing extension-origin Cache Storage without adding permissions or changing the existing CSP. The toolbar
 invocation grants capture authority; opening a window by itself does not grant
 access to an arbitrary tab. The persistent window avoids a toolbar popup's
 automatic teardown when the user returns to the meeting.

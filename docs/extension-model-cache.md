@@ -8,8 +8,8 @@ model card's packaged license. Live opening verifies cached assets and initializ
 executable models before enabling Start; neither Live nor Start downloads weights.
 
 Build/load the extension as described in [the extension guide](chrome-extension.md).
-Open **Models** from Live or Graph Editor, or **Extension options** from Chrome's
-extension menu. The options page manages real OPUS-MT Japanese → English,
+Open **Models** from Graph Library, Graph Editor or Live.
+The Models page manages real OPUS-MT Japanese → English,
 OPUS-MT English → Japanese, TranslateGemma 4B English ↔ Japanese, Supertonic 3, Kokoro, Parakeet v3 and Moonshine Medium English Streaming in the existing verified cache.
 ReazonSpeech ja-en and Silero VAD are labeled **Bundled** because their assets
 are packaged with the extension, with no optional download lifecycle.
