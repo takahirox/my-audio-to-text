@@ -1,3 +1,4 @@
+import { build } from 'esbuild';
 import { toolbarHarness } from './toolbar-harness.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
@@ -10,7 +11,10 @@ const real = process.env.WEB_VOICE_REAL === '1';
 const test = base.extend({
   voice: async ({}, use, info) => {
     const temporary = await mkdtemp(path.join(tmpdir(), 'web-voice-')), root = path.join(temporary, 'bundle');
+    const richBundle = info.title.startsWith('rich framework') ? (await build({ entryPoints: ['tests/fixtures/rich-editors/editors.js'], bundle: true, write: false, define: { 'process.env.NODE_ENV': '"development"', global: 'globalThis' } })).outputFiles[0].text : null;
     const server = createServer((request, response) => {
+      if (request.url === '/rich-editors.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(richBundle); return; }
+      if (request.url === '/rich-editors') { response.end('<!doctype html><title>Real editor composers</title><style>section{margin:20px} [contenteditable],textarea{min-height:50px;white-space:pre-wrap}</style><script src="/rich-editors.js" defer></script>'); return; }
       response.writeHead(200, { 'Content-Type': 'text/html', ...(request.url.includes('policy-blocked') ? { 'Permissions-Policy': 'microphone=()' } : {}), ...(request.url.includes('strict-csp') ? { 'Content-Security-Policy': "script-src 'none'; worker-src 'none'; object-src 'none'" } : {}) });
       response.end(`<title>Voice fields</title><form><input id="first" value="before after"><textarea id="second">left right</textarea><button type="submit">Send</button></form>
         <input id="password" type="password"><input id="otp" autocomplete="one-time-code"><input id="card" autocomplete="cc-number"><input id="readonly" readonly><input id="disabled" disabled>
@@ -216,6 +220,22 @@ async function inspectControl(t, focus = false) {
     return result.value;
   } finally { await cdp.detach(); }
 }
+async function recoveryUI(t, label) {
+  const cdp = await t.context.newCDPSession(t.website);
+  try {
+    const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+    const find = node => node.attributes?.includes('data-local-text-recovery') ? node : [...node.children || [], ...node.shadowRoots || []].map(find).find(Boolean);
+    const panel = find(root); expect(panel).toBeTruthy();
+    const { object } = await cdp.send('DOM.resolveNode', { backendNodeId: panel.shadowRoots[0].backendNodeId });
+    const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true, arguments: [{ value: label }],
+      functionDeclaration: `function(label){ const button = [...this.querySelectorAll('button')].find(b=>b.textContent===label), preview=this.querySelector('textarea'); const r=button?.getBoundingClientRect(); return {x:r&&r.x+r.width/2,y:r&&r.y+r.height/2,disabled:button?.disabled,previewFocused:this.activeElement===preview,previewHidden:preview.hidden,text:preview.value}; }` });
+    return result.value;
+  } finally { await cdp.detach(); }
+}
+async function recoveryAction(t, label) {
+  const ui = await recoveryUI(t, label);
+  expect(ui.disabled).toBe(false); await t.website.mouse.click(ui.x, ui.y);
+}
 function expectIcon(ui, icon) {
   expect(ui.icon).toBe(icon); expect(ui.viewBox).toBe('0 -960 960 960');
   expect(ui.ariaHidden).toBe('true'); expect(ui.focusable).toBe('false'); expect(ui.text).toBe('');
@@ -282,7 +302,7 @@ async function start(t, selector = '#first', grant = 'granted') {
   await t.website.bringToFront(); await t.website.locator(selector).focus();
   await t.website.locator(selector).evaluate(e => {
     if (e.setSelectionRange) e.setSelectionRange(7, 7);
-    else { const range = document.createRange(); range.setStart(e.firstChild, 6); range.collapse(true); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); }
+    else { const walker = document.createTreeWalker(e, NodeFilter.SHOW_TEXT); const range = document.createRange(); range.setStart(walker.nextNode(), 6); range.collapse(true); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); }
   });
   await expect(widget(t.website)).toBeVisible(); await mic(t.website);
 }
@@ -725,6 +745,37 @@ test('fully occupied active viewport retains Cancel and Stop without placement h
 });
 
 
+for (const phase of ['preparing', 'recording']) for (const unavailable of ['removed', 'disabled']) test(`unavailable target (${unavailable}) keeps ${phase === 'preparing' ? 'Cancel' : 'Stop'} reachable after resizing and opening a modal`, async ({ voice: t }) => {
+  test.skip(real); await placementPage(t);
+  if (phase === 'preparing') await bootstrap(t, 'window.voiceDelay = 3000;');
+  await start(t, '#field');
+  if (phase === 'recording') await recording(t);
+  else await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
+  await expect.poll(async () => (await pageCapture(t)).streams).toBe(1);
+  await t.website.evaluate(unavailable => {
+    window.originalVoiceControl = document.querySelector('[data-local-web-voice]');
+    const field = document.querySelector('#field');
+    if (unavailable === 'removed') field.remove(); else field.disabled = true;
+    const dialog = document.createElement('dialog'); dialog.id = 'modal'; dialog.textContent = 'Site dialog';
+    document.body.append(dialog); dialog.showModal();
+  }, unavailable);
+  await t.website.setViewportSize({ width:240, height:180 });
+  await expect(async () => {
+    expect(await widget(t.website).evaluate(e => e === originalVoiceControl && e.parentElement.id === 'modal')).toBe(true);
+    const ui = await controlUI(t);
+    expect(ui.button.x).toBeGreaterThanOrEqual(4); expect(ui.button.x + 36).toBeLessThanOrEqual(236);
+    expect(ui.button.y).toBeGreaterThanOrEqual(4); expect(ui.button.y + 36).toBeLessThanOrEqual(176);
+    expect(await widget(t.website).evaluate(e => { const r = e.getBoundingClientRect(); return document.elementFromPoint(r.x + 18, r.y + 18) === e; })).toBe(true);
+  }).toPass();
+  expect((await controlUI(t, true)).focused).toBe(true);
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', phase);
+  expect((await pageCapture(t)).streams).toBe(1);
+  if (phase === 'preparing') await t.website.keyboard.press('Enter'); else await mic(t.website);
+  await idle(t);
+  expect((await pageCapture(t)).streams).toBe(0);
+  expect(await t.website.evaluate(() => siteClicks)).toBe(0);
+});
+
 test('active Stop remains clickable above later maximum-z-index overlays, popovers and modal dialogs', async ({ voice: t }) => {
   test.skip(real); await placementPage(t); await start(t, '#field'); await recording(t);
   await occupyViewport(t);
@@ -812,9 +863,15 @@ for (const phase of ['preparing', 'recording']) test(`closed-shadow modal keeps 
   const reachable = await inspectControl(t);
   await t.website.mouse.click(reachable.button.x + 18, reachable.button.y + 18);
   await idle(t); await owner.detach();
-  await expect(t.website.locator('#field')).toHaveValue(phase === 'recording' ? 'before confirmed fixtureafter' : 'before after');
+  // Modal/widget focus pauses delivery instead of editing an unfocused field.
+  await expect(t.website.locator('#field')).toHaveValue('before after');
+  if (phase === 'recording') {
+    await recoveryAction(t, 'Review text');
+    expect(await recoveryUI(t)).toMatchObject({ previewHidden: false, previewFocused: true, text: 'confirmed fixture' });
+    await recoveryAction(t, 'Discard retained text');
+  }
   expect(await t.website.evaluate(() => siteClicks)).toBe(0);
-  await expect(widget(t.website)).toBeHidden();
+  if (phase === 'preparing') await expect(widget(t.website)).toBeHidden();
 });
 
 for (const phase of ['preparing', 'recording']) test(`stacked modal dialogs keep ${phase === 'preparing' ? 'Cancel' : 'Stop'} in the active modal regardless of DOM order`, async ({ voice: t }) => {
@@ -858,7 +915,9 @@ for (const phase of ['preparing', 'recording']) test(`stacked modal dialogs keep
   await controlUI(t, true);
   expect((await controlUI(t)).focused).toBe(true);
   await mic(t.website); await idle(t);
-  await expect(t.website.locator('#field')).toHaveValue(phase === 'recording' ? 'before confirmed fixtureafter' : 'before after');
+  // Modal/widget focus pauses delivery instead of editing an unfocused field.
+  await expect(t.website.locator('#field')).toHaveValue('before after');
+  if (phase === 'recording') await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
   expect(await t.website.evaluate(() => siteClicks)).toBe(0);
 });
 
@@ -944,8 +1003,9 @@ test('multiple Web sessions share one offscreen document and stop independently 
   await t.website.locator('#second').focus(); await t.website.waitForTimeout(650);
   await stop(t); await recording(second);
   expect(await offscreenCount(t)).toBe(1);
-  await expect(t.website.locator('#first')).toHaveValue('before confirmed fixtureafter');
+  await expect(t.website.locator('#first')).toHaveValue('before after');
   await expect(t.website.locator('#second')).toHaveValue('left right');
+  await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
   expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
   expect((await pageCapture(t)).streams).toBe(0);
   // OFF preserves finals already committed and does not drain provisional text.
@@ -984,7 +1044,7 @@ test('Live and Web overlap Ready, recording, Stop, restart, OFF and close indepe
     ...(await realEvidence(t)), peakSessions: 3, independentStartStopClose: true, webOffPreservesLive: true, liveFinal, liveOutputMatchesFinal: true, inserted, remoteRequests: t.remote }, null, 2));
 });
 
-for (const reason of ['worker failure', 'device end', 'field removal', 'navigation', 'tab close', 'cancel preparing']) test(`${reason} cleans one Web owner and preserves Live and another Web session`, async ({ voice: t }) => {
+for (const reason of ['worker failure', 'device end', 'navigation', 'tab close', 'cancel preparing']) test(`${reason} cleans one Web owner and preserves Live and another Web session`, async ({ voice: t }) => {
   test.skip(real); await enable(t); await assignLiveMicrophone(t);
   const live = await openLive(t); await permission(t, 'granted'); await t.cdp.send('Browser.setPermission', { permission: { name: 'microphone' }, setting: 'granted', origin: t.url.replace(/\/extension\/$/, '') }); await live.locator('#start').click(); await expectLiveRecording(live);
   if (reason === 'cancel preparing') await bootstrap(t, 'window.voiceDelay = 1000;');
@@ -996,7 +1056,6 @@ for (const reason of ['worker failure', 'device end', 'field removal', 'navigati
   await start(peer); await recording(peer);
   if (reason === 'worker failure') await r.evaluate(() => voiceResources.workers[0].dispatchEvent(new ErrorEvent('error', { message: 'Controlled model failure' })));
   if (reason === 'device end') await pageCapture(t, 'end');
-  if (reason === 'field removal') await t.website.locator('#first').evaluate(e => e.remove());
   if (reason === 'navigation') await t.website.reload();
   if (reason === 'tab close') await t.website.close();
   if (reason === 'cancel preparing') {
@@ -1112,6 +1171,8 @@ test('basic editable, continued manual editing and idle target refresh stay boun
   await expect(t.website.locator('#first')).toHaveValue('before manual confirmed fixtureafter');
   await start(t); await recording(t); await t.website.locator('#second').focus();
   await t.website.waitForTimeout(650); await stop(t); await idle(t);
+  await recoveryAction(t, 'Discard retained text');
+  await t.website.locator('#second').focus();
   await t.website.locator('#second').evaluate(e => e.setSelectionRange(5, 5)); await mic(t.website); await recording(t);
   await t.website.waitForTimeout(650); await stop(t); await idle(t);
   await expect(t.website.locator('#second')).toHaveValue('left confirmed fixtureright');
@@ -1180,7 +1241,7 @@ test('back-forward navigation restores idle controls without resuming capture or
   await t.website.locator('#first').focus(); await expect(widget(t.website)).toHaveCount(0); await idle(t);
 });
 
-test('cancel while stopping releases only that owner without draining into a removed target', async ({ voice: t }) => {
+test('target removal during Stop retains final text and releases only that owner', async ({ voice: t }) => {
   test.skip(real); await enable(t); await bootstrap(t, 'window.voiceDelay = 900;');
   await start(t); await recording(t); const r = await runtime(t);
   const other = await t.context.newPage(); await other.goto(t.website.url() + '?peer'); const peer = { ...t, website: other };
@@ -1188,7 +1249,8 @@ test('cancel while stopping releases only that owner without draining into a rem
   const previous = await t.website.locator('#first').inputValue();
   await t.website.bringToFront(); await mic(t.website); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'stopping');
   await t.website.locator('#first').evaluate(e => { window.removedVoiceField = e; e.remove(); });
-  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error');
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
+  await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
   await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
   expect((await pageCapture(peer)).streams).toBe(1);
   if (!t.website.isClosed()) expect((await pageCapture(t)).streams).toBe(0);
@@ -1303,12 +1365,17 @@ test('graph-item click captures immediately during a slow save, executes the exa
   await rightMic(t); expect(await graphMenu(t)).toEqual([]);
   await toolbarWorker(t).evaluate(() => releaseVoiceSave());
   await recording(t); await expect.poll(() => savedDefault(t)).toBe(b);
-  // The second click lands on the page after menu removal, so completion can
-  // hide the idle widget while the session still inserts into its original field.
+  // The second click lands on the page after menu removal. Lost editor focus
+  // pauses delivery until explicit reselection and recovery.
   await t.website.waitForTimeout(650); await mic(t.website); await idle(t);
   const capture = await pageCapture(t);
   expect(capture.streams).toBe(0); expect(capture.contexts.every(s => s === 'closed')).toBe(true);
+  await expect(t.website.locator('#first')).toHaveValue('before after');
+  await t.website.locator('#first').focus();
+  await t.website.locator('#first').evaluate(e => e.setSelectionRange(7, 7));
+  await recoveryAction(t, 'Retry in original field');
   await expect(t.website.locator('#first')).toHaveValue('before B: confirmed fixtureafter');
+  await expect(t.website.locator('[data-local-text-recovery]')).toHaveCount(0);
   await start(t, '#second'); await recording(t);
   await t.website.waitForTimeout(650); await stop(t); await idle(t);
   await expect(t.website.locator('#second')).toHaveValue('left riB: confirmed fixtureght');
@@ -1349,6 +1416,10 @@ for (const action of ['failed save', 'cancel', 'OFF', 'permission removal', 'tar
   if (action === 'target removed') await t.website.locator('#first').evaluate(e => { e.disabled = true; });
   if (action === 'disconnect') await t.website.reload();
   await toolbarWorker(t).evaluate(() => releaseVoiceSave());
+  if (action === 'target removed') {
+    await recording(t); expect((await pageCapture(t)).streams).toBe(1);
+    await t.website.waitForTimeout(650); await mic(t.website);
+  }
   await idle(t);
   const readCapture = () => reader ? reader.read() : pageCapture(t);
   await expect.poll(async () => (await readCapture()).streams).toBe(0);
@@ -1608,4 +1679,87 @@ test('strict site CSP retains isolated capture without exposing an audio bridge'
   await recording(t); await t.website.waitForTimeout(650); await stop(t); await idle(t);
   await expect(t.website.locator('#first')).toHaveValue('before confirmed fixtureafter');
   expect(t.context.pages()).toHaveLength(pages);
+});
+
+for (const reason of ['rejected insertion', 'target removed', 'focus change', 'ambiguous reconciliation']) test(`destination ${reason} retains final text without stopping microphone or ASR`, async ({ voice: t }) => {
+  test.skip(real);
+  await enable(t); await start(t); await recording(t);
+  if (reason === 'rejected insertion') await t.website.locator('#first').evaluate(e => { window.rejectVoice = event => event.preventDefault(); e.addEventListener('beforeinput', rejectVoice); });
+  if (reason === 'target removed') await t.website.locator('#first').evaluate(e => { window.originalVoiceField = e; e.remove(); });
+  if (reason === 'focus change') await t.website.locator('#second').focus();
+  if (reason === 'ambiguous reconciliation') await t.website.locator('#first').evaluate(e => e.addEventListener('input', () => setTimeout(() => { e.value = 'reconciled'; }, 10), { once: true }));
+  // The fixture ASR finalizes on silence; force one final while capture remains
+  // live, through the actual offscreen graph and authenticated output relay.
+  const r = await runtime(t);
+  await r.evaluate(async () => {
+    const { SpeechToTextNode } = await import('../web/transcription-nodes.js');
+    // Existing instances inherit this method, so the next decode is observed.
+    const receive = SpeechToTextNode.prototype.receiveEvent;
+    SpeechToTextNode.prototype.receiveEvent = function(event) {
+      if (!globalThis.finalProbe) globalThis.finalProbe = this;
+      return receive.call(this, event);
+    };
+  });
+  // Stop/Start of VAD isn't needed: ordinary fake audio produces partials.
+  await expect.poll(() => r.evaluate(() => !!globalThis.finalProbe)).toBe(true);
+  await r.evaluate(() => finalProbe.receiveEvent({ type: 'final', id: 100, text: 'retained final' }));
+  await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
+  await recording(t); expect((await pageCapture(t)).streams).toBe(1);
+  expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
+  await expect(t.website.locator('#second')).toHaveValue('left right');
+  if (reason === 'target removed') {
+    await t.website.evaluate(() => { const replacement = document.createElement('input'); replacement.id = 'first'; replacement.value = 'replacement'; document.body.append(replacement); replacement.focus(); });
+    await recoveryAction(t, 'Retry in original field');
+    await expect(t.website.locator('#first')).toHaveValue('replacement');
+  }
+  if (reason === 'rejected insertion') {
+    await t.website.locator('#first').evaluate(e => e.removeEventListener('beforeinput', rejectVoice));
+    await t.website.locator('#first').focus();
+    await recoveryAction(t, 'Retry in original field');
+    await expect(t.website.locator('#first')).toHaveValue('before retained finalafter');
+    await expect(t.website.locator('[data-local-text-recovery]')).toHaveCount(0);
+    await recording(t);
+  }
+  await stop(t); await idle(t); await r.detach();
+});
+
+for (const [id, selector] of Object.entries({ react: '#react textarea', pm: '#pm .ProseMirror', lexical: '#lexical [contenteditable]', draft: '#draft [contenteditable]', quill: '#quill .ql-editor' })) test(`rich framework ${id} exposes the website mic and commits final text into the actual model`, async ({ voice: t }) => {
+  test.skip(real);
+  await t.website.goto(new URL('/rich-editors', t.website.url()).href);
+  await t.website.waitForFunction(() => window.fixtureReady);
+  await enable(t); await start(t, selector); await recording(t);
+  await t.website.waitForTimeout(650);
+  expect(await t.website.evaluate(id => editors[id].read(), id)).not.toContain('pending fixture');
+  await stop(t); await idle(t);
+  await t.website.evaluate(id => editors[id].render(), id); await t.website.waitForTimeout(80);
+  const expected = id === 'react' ? 'hello wconfirmed fixtureorld' : 'hello confirmed fixtureworld';
+  expect(await t.website.evaluate(id => editors[id].read(), id)).toBe(expected);
+});
+
+for (const [id, selector] of Object.entries({ react: '#react textarea', pm: '#pm .ProseMirror', lexical: '#lexical [contenteditable]', draft: '#draft [contenteditable]', quill: '#quill .ql-editor' })) test(`rich framework toolbar output ${id} uses the shared strategy with its own document authorization`, async ({ voice: t }) => {
+  test.skip(real);
+  await t.website.goto(new URL('/rich-editors', t.website.url()).href); await t.website.waitForFunction(() => window.fixtureReady);
+  await t.website.bringToFront(); await t.website.locator(selector).focus();
+  await t.website.locator(selector).evaluate(element => {
+    if (element.setSelectionRange) element.setSelectionRange(6, 6);
+    else { const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT), range = document.createRange(); range.setStart(walker.nextNode(), 6); range.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(range); }
+  });
+  await t.website.waitForTimeout(30);
+  await t.library.evaluate(async url => {
+    const { authorizePage } = await import('./page-target.js'), { FocusedInputTextOutputNode } = await import('./page-output-node.js');
+    const tab = (await chrome.tabs.query({})).find(tab => tab.url === url);
+    window.toolbarOutputStates = []; window.toolbarOutputContext = { signal: new AbortController().signal };
+    window.toolbarOutput = new FocusedInputTextOutputNode({ target: await authorizePage(tab.id), onState: (...state) => toolbarOutputStates.push(state) });
+    await toolbarOutput.start(toolbarOutputContext); await toolbarOutput.receive('text', 'confirmed', toolbarOutputContext);
+  }, t.website.url());
+  await t.website.evaluate(id => editors[id].render(), id);
+  expect(await t.website.evaluate(id => editors[id].read(), id)).toBe(id === 'react' ? 'hello worldconfirmed' : 'hello confirmedworld');
+  await t.website.locator(selector).evaluate(element => element.addEventListener('beforeinput', event => event.preventDefault(), { once: true }));
+  await t.library.evaluate(async () => toolbarOutput.receive('text', 'retained', toolbarOutputContext));
+  expect(await t.library.evaluate(() => ({ failed: !!toolbarOutput.failed, severity: toolbarOutputStates.at(-1)[2] }))).toEqual({ failed: false, severity: 'warning' });
+  await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
+  await recoveryAction(t, 'Retry in original field');
+  await expect(t.website.locator('[data-local-text-recovery]')).toHaveCount(0);
+  expect(await t.website.evaluate(id => editors[id].read(), id)).toBe(id === 'react' ? 'hello worldconfirmedretained' : 'hello confirmedretainedworld');
+  await t.library.evaluate(() => toolbarOutput.dispose());
 });

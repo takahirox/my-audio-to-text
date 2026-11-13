@@ -208,12 +208,12 @@ function reconcile(stop = false) {
       return;
     }
     if (!registered) await chrome.scripting.registerContentScripts([{ id: scriptId, matches: WEB_VOICE_ORIGINS,
-      js: ['extension/web-voice-capture.js', 'extension/web-voice-content.js'], runAt: 'document_idle', allFrames: false, persistAcrossSessions: false }]);
+      js: ['extension/text-insertion.js', 'extension/web-voice-capture.js', 'extension/web-voice-content.js'], runAt: 'document_idle', allFrames: false, persistAcrossSessions: false }]);
     // Registration handles future navigations; existing authorized tabs need an
     // explicit one-time install. No query/injection runs for an OFF user.
     const tabs = await chrome.tabs.query({ url: WEB_VOICE_ORIGINS });
     await Promise.allSettled(tabs.map(tab => chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] },
-      files: ['extension/web-voice-capture.js', 'extension/web-voice-content.js'], world: 'ISOLATED' })));
+      files: ['extension/text-insertion.js', 'extension/web-voice-capture.js', 'extension/web-voice-content.js'], world: 'ISOLATED' })));
   });
 }
 chrome.runtime.onConnect.addListener(port => {

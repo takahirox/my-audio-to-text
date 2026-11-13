@@ -1,0 +1,123 @@
+{
+  "issue": 375,
+  "scope": {
+    "status": "partial",
+    "parentIssue": "https://github.com/takahirox/my-audio-to-text/issues/375",
+    "parentDisposition": "PR #376 closes #375 with the remaining Lexical/Draft.js multiline scope explicitly split into follow-up #377; compatibility remains partial until that follow-up is resolved.",
+    "followUps": [
+      {
+        "issue": 377,
+        "url": "https://github.com/takahirox/my-audio-to-text/issues/377",
+        "remainingWork": "Support safe multiline voice insertion in Lexical and Draft.js editors, validated against their real application models through both authorized output routes. Current multiline segments remain definitely uninserted and recoverable."
+      }
+    ]
+  },
+  "implementation": {
+    "sharedStrategy": "extension/text-insertion.js, injected before both separately authorized output routes",
+    "editableRoots": [
+      "native text/search input",
+      "textarea",
+      "plain contenteditable",
+      "ProseMirror",
+      "Lexical",
+      "Draft.js",
+      "Quill",
+      "open shadow editable"
+    ],
+    "editing": "Native setters preserve existing route semantics. Contenteditable uses browser insertText and observable content checks after asynchronous reconciliation, with no direct DOM mutation fallback.",
+    "outcomes": [
+      "inserted",
+      "not-inserted",
+      "ambiguous"
+    ],
+    "queue": {
+      "maxSegments": 128,
+      "maxUTF16Units": 1000000,
+      "webGracefulStopSegments": 64,
+      "webGracefulStopUTF16Units": 500000,
+      "ordering": "A retained head blocks later segments; ambiguous heads cannot be retried."
+    },
+    "recovery": "Contextual closed-shadow panel offers same-original-element Retry, Review, explicit Copy and Discard. Replacement elements never inherit delivery identity. Web recovery survives Stop until cleared or authorization/document cleanup. Toolbar recovery remains scoped to the output connection.",
+    "fatalConditions": "Capture/ASR, permission, document/capability and real audio transport failures retain their existing cleanup paths.",
+    "permissions": "No manifest permission changes, page-world bridge, remote transcription or site adapters."
+  },
+  "validation": {
+    "browser": {
+      "command": "npx playwright test --config playwright.extension.config.js tests/extension/web-voice.spec.js tests/extension/text-insertion.spec.js --reporter=line",
+      "mode": "Real Chromium browser editing, actual React/ProseMirror/Lexical/Draft.js/Quill models. Extension capture uses fake microphone and deterministic ASR Workers, not model inference.",
+      "distinctScenariosValidated": 100,
+      "fullRun": {
+        "total": 98,
+        "passed": 97,
+        "failed": 1,
+        "durationSeconds": 210,
+        "failure": "A test-only expectation edit in the multiple-graph snapshot scenario was overly broad. Corrected without production changes; the focused rerun passed in 3.7 seconds."
+      },
+      "additionalFocusedRun": {
+        "passed": 3,
+        "newDistinctScenarios": 2,
+        "coverage": [
+          "plain contenteditable whitespace, replacement and Undo",
+          "open-shadow insertion and nested-control isolation",
+          "editable-root security regression"
+        ]
+      },
+      "coverage": [
+        "actual application state after render",
+        "caret and replacing selection",
+        "multiline where the browser path supports it",
+        "repeated equal committed segments",
+        "Undo/Redo",
+        "manual edits",
+        "composition/IME pause",
+        "selection changes during asynchronous preflight",
+        "DOM replacement",
+        "rejected edits keep microphone and ASR alive",
+        "ambiguous reconciliation blocks replay",
+        "same-target explicit retry",
+        "clipboard remains unchanged until explicit Copy",
+        "bounded recovery and overload",
+        "Stop/Cancel",
+        "navigation and page lifecycle",
+        "permission revocation",
+        "track end",
+        "stalled PCM acknowledgment",
+        "cross-document ownership",
+        "capability and sequence validation",
+        "accessible recovery and Stop controls"
+      ]
+    },
+    "unit": {
+      "command": "npm test",
+      "total": 1074,
+      "passed": 1073,
+      "failed": 1,
+      "baselineFailure": "tests/graph-palette.test.js: every built-in has an explicit Add Node category. StreamingSpeakerOutput remains in the unchanged palette mapping but is absent from unchanged NODE_TYPES. Reproduced using unchanged inputs; no unrelated palette fix included."
+    },
+    "legacyToolbarSuite": {
+      "attemptedCases": 6,
+      "result": "Fixture fails before delivery assertions because recorder Start remains disabled.",
+      "baselineCheck": "Restored all modified production files to HEAD versions in the generated dist bundle and ran the unchanged plain-TEXT #focused test. The same disabled-Start failure occurs before insertion. Rebuilt the current bundle afterwards.",
+      "replacementCoverage": "Both real authenticated output routes, controlled React native input, plain contenteditable, real rich editor models and branch error severity are covered by the passing affected suites."
+    },
+    "packaging": {
+      "command": "npm run build:extension",
+      "result": "passed after standard pinned runtime preparation",
+      "packagedFiles": 273,
+      "modelWeights": 0
+    },
+    "audit": {
+      "command": "npm audit",
+      "vulnerabilities": 0
+    },
+    "diffCheck": "passed",
+    "realModelInference": "Not run; AI models and inference behavior are unchanged."
+  },
+  "compatibilityLimits": [
+    "DOM checks cannot prove a framework private document model; verification waits for asynchronous reconciliation and returns ambiguous on inconsistent observable results. Later application rewrites remain possible.",
+    "Native value setters do not guarantee browser Undo integration.",
+    "Chromium multiline insertText/insertParagraph/insertLineBreak experiments lost content or line breaks in Lexical 0.38.2 and Draft.js 0.11.7. Multiline values for those editor roots are retained as definitely uninserted before editing; single-line values persist in their real model and pass Undo/Redo checks.",
+    "Reproduce the multiline limitation with the real fixtures: insert three single-line voice segments, then newline + next. Tests assert safe retention and preservation of existing text. Follow-up #377 (https://github.com/takahirox/my-audio-to-text/issues/377) tracks safe multiline insertion and model, caret, Undo/Redo and recovery validation.",
+    "X/ChatGPT/Claude are represented by local composer structures and real editor models, not logged-in production sites. No site-specific failure or production adapter is claimed."
+  ]
+}
