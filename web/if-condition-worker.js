@@ -1,16 +1,16 @@
+import { cacheOnlyIfConditionRuntime } from './optional-model-assets.js';
 import { IF_CONDITION_MODEL, decisionFromLogits } from './if-condition-model.js';
 import { validateCondition, validateText, MAX_PROMPT_TOKENS } from './if-condition-policy.js';
 import { translationRuntime } from './translation-worker.js';
-import { cacheOnlyIfConditionRuntime } from '../extension/if-condition-cache.js';
 
 let classifier, condition, queue = Promise.resolve();
 async function load(value) {
   if (classifier) throw new Error('IfCondition Worker already loaded.');
   condition = validateCondition(value);
   const { pipeline, env } = await translationRuntime();
-  // Executable JS/WASM is packaged. This verified cache adapter cannot download
-  // weights at Start or inference; optional lookups get local 404s, never cloud.
-  await cacheOnlyIfConditionRuntime(env);
+  // Executable JS/WASM is packaged. Extension Start stays cache-only; the web
+  // Playground's explicit Run prepares verified weights before local inference.
+  await cacheOnlyIfConditionRuntime(env, message => self.postMessage({ type: 'progress', message }));
   classifier = await pipeline('text-classification', IF_CONDITION_MODEL.id, {
     ...IF_CONDITION_MODEL, progress_callback: event => self.postMessage({ type: 'progress', message: `Loading IfCondition: ${event.status}` }),
   });

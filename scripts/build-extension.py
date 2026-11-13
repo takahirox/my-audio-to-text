@@ -8,6 +8,7 @@ import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_FILES = (
+    "optional-model-assets.js",
     "optional-asr-core.js", "optional-asr-node.js", "parakeet-v3-node.js", "parakeet-v3-worker.js", "parakeet-v3-segments.js",
     "moonshine-medium-node.js", "moonshine-medium-worker.js", "moonshine-medium-stream.js",
     "zipformer-node.js", "zipformer-worker.js", "zipformer-core.js", "zipformer-segments.js", "zipformer-config.js",

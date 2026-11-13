@@ -1,0 +1,34 @@
+name: Standalone model tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  models:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: playground-assets-${{ hashFiles('scripts/prepare-*.py', 'scripts/*runtime.json', 'scripts/*assets.json', 'package-lock.json') }}
+      - run: npm run prepare:playground-assets
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Model node and asset unit tests
+        run: node --test tests/playground-models.test.js tests/transcription-nodes.test.js tests/optional-asr.test.js tests/zipformer.test.js tests/whisper-graph.test.js tests/text-summary.test.js tests/if-condition.test.js tests/tts-nodes.test.js tests/streaming-tts.test.js tests/cosyvoice3.test.js tests/translation-nodes.test.js tests/model-asset-cache.test.js
+      - name: Browser tests with fixtures (no weights)
+        run: npm run test:playground -- --workers=2
+      - run: npm run build:extension
+      - name: Shared production nodes in the packaged extension (no weights)
+        run: npx playwright test --config playwright.extension.config.js tests/extension/graph-optional-asr.spec.js tests/extension/graph-whisper.spec.js tests/extension/graph-zipformer.spec.js tests/extension/graph-text-summary.spec.js tests/extension/graph-if-condition.spec.js tests/extension/streaming-tts.spec.js

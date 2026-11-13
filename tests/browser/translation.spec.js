@@ -19,11 +19,11 @@ async function modelFixture(page, mode = 'success') {
           const text = typeof input === 'string' ? input : input[0].content[0].text;
           if (typeof input !== 'string') {
             const content = input[0].content[0];
-            if (content.source_lang_code !== 'ja' || content.target_lang_code !== 'en' || content.type !== 'text') throw Error('Wrong translation template');
+            if (!['ja-en', 'en-ja'].includes(content.source_lang_code + '-' + content.target_lang_code) || content.type !== 'text') throw Error('Wrong translation template');
           }
           await new Promise(resolve => setTimeout(resolve, text === 'slow' ? 1000 : 10));
           if (text === 'zero') return [];
-          return (text === 'multi' ? ['first', 'second'] : [(model === 'Kadonox/opus-tatoeba-en-ja-onnx' ? 'Japanese: ' : 'English: ') + text]).map(output => task === 'translation'
+          return (text === 'multi' ? ['first', 'second'] : [(model === 'Kadonox/opus-tatoeba-en-ja-onnx' || (typeof input !== 'string' && input[0].content[0].target_lang_code === 'ja') ? 'Japanese: ' : 'English: ') + text]).map(output => task === 'translation'
             ? { translation_text: output } : { generated_text: [...input, { role: 'assistant', content: output }] });
         };
         translate.tokenizer = text => ({ input_ids: { dims: [1, text === 'tokens' ? 513 : 10] } });
@@ -32,6 +32,19 @@ async function modelFixture(page, mode = 'success') {
     `,
   }));
 }
+test('TranslateGemma direction selection runs each production direction independently', async ({ page }) => {
+  await modelFixture(page, 'loading'); await workerGpuFixture(page);
+  await page.goto('./nodes/translategemma/'); await observe(page);
+  for (const [direction, text, output] of [['en-ja', 'Hello.', 'Japanese: Hello.'], ['ja-en', 'こんにちは。', 'English: こんにちは。']]) {
+    await page.locator('#input').fill(text); await page.locator('#direction').selectOption(direction);
+    await expect(page.locator('#input')).toHaveValue(text);
+    await page.locator('#run').click(); await expect(page.locator('#direction')).toBeDisabled();
+    await expect(page.locator('#status')).toHaveText('Complete'); await expect(page.locator('#output')).toHaveText(output);
+    await expect(page.locator('#direction')).toBeEnabled();
+  }
+  expect(await page.evaluate(() => window.translationGraphs.map(graph => graph.entries.get('translation').node.constructor.name)))
+    .toEqual(['EnglishToJapaneseTranslateGemmaTranslationNode', 'TranslateGemmaTranslationNode']);
+});
 async function workerGpuFixture(page, available = true) {
   // GPU availability is controlled in the real processing Worker, not window.
   await page.context().route('**/translategemma-worker.js', async route => {
@@ -59,8 +72,8 @@ for (const slug of ['opus-mt', 'opus-mt-en-ja', 'translategemma']) {
     const prefix = !process.env.ASR_BASE_URL && !process.env.ASR_BENCHMARK ? './my-audio-to-text/' : './';
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(prefix);
-    await page.getByRole('link', { name: slug === 'opus-mt' ? 'OPUS-MT Translation (Japanese → English)' : slug === 'opus-mt-en-ja' ? 'OPUS-MT Translation (English → Japanese)' : 'TranslateGemma 4B Translation (Japanese → English)', exact: true }).click();
-    await expect(page.locator('#run')).toBeEnabled(); await expect(page.locator('select')).toHaveCount(0);
+    await page.getByRole('link', { name: slug === 'opus-mt' ? 'OPUS-MT Translation (Japanese → English)' : slug === 'opus-mt-en-ja' ? 'OPUS-MT Translation (English → Japanese)' : 'TranslateGemma 4B Translation (Japanese ↔ English)', exact: true }).click();
+    await expect(page.locator('#run')).toBeEnabled(); await expect(page.locator('select')).toHaveCount(slug === 'translategemma' ? 1 : 0);
     await observe(page);
     for (const input of ['今日は良い天気です。', 'multi', 'zero', ...(slug === 'opus-mt-en-ja' ? ['HELLO.', 'WE NEED TO FINISH THIS PROJECT BY FRIDAY.'] : [])]) {
       await page.locator('#input').fill(input); await page.locator('#run').click();

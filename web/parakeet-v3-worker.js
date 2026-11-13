@@ -1,6 +1,6 @@
+import { parakeetManifest, optionalAsrFiles } from './optional-model-assets.js';
 import { ParakeetModel } from './vendor/optional-asr/parakeet/parakeet.js';
 import * as ort from './vendor/optional-asr/ort/ort.webgpu.min.mjs';
-import { parakeetManifest, optionalAsrFiles } from '../extension/optional-asr-cache.js';
 import { ParakeetV3Segments } from './parakeet-v3-segments.js';
 import { watchGpuDevice } from './gpu-lifecycle.js';
 
@@ -18,7 +18,7 @@ async function handle(data) {
     const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
     if (!adapter || !adapter.features.has('shader-f16')) throw Error('A WebGPU adapter with shader-f16 is required for the pinned FP16 encoder');
     if (adapter.limits.maxStorageBufferBindingSize < 128 * 1024 * 1024) throw Error('GPU storage buffers below 128 MiB are unsupported');
-    const files = await optionalAsrFiles(await parakeetManifest(), 'Parakeet v3');
+    const files = await optionalAsrFiles(await parakeetManifest(), 'Parakeet v3', message => send('progress', { message }));
     ort.env.wasm.wasmPaths = new URL('./vendor/optional-asr/ort/', import.meta.url).href;
     ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false;
     const urls = [...files].map(([name, bytes]) => [name, URL.createObjectURL(new Blob([bytes]))]);

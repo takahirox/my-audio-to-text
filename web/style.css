@@ -14,3 +14,6 @@ dd { margin-left: 0; font-variant-numeric: tabular-nums; }
 meter { width: 100%; }
 #status { font-weight: bold; }
 #errors { color: light-dark(#a00, #ffb5b5); }
+.model-test label { display: block; margin: 12px 0 4px; }
+.model-test input, .model-test select, .model-test audio { box-sizing: border-box; max-width: 100%; }
+.model-test input { width: 100%; font: inherit; padding: 8px; }

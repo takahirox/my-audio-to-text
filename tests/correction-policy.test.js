@@ -12,7 +12,8 @@ test('pinned checkpoint/tokenizer manifest, sizes and runtime; independent asset
   const script=readFileSync('scripts/prepare-correction-assets.py','utf8');
   assert.match(script,/4\.0\.0-next\.3/);assert.match(script,/1\.25\.0-dev\.20260212-1a71a5f46e/);assert.match(script,/sha256/);assert.match(script,/ROOT \/ "web" \/ "correction-assets"/);
   assert.doesNotMatch(readFileSync('scripts/build-extension.py','utf8'),/correction-assets|correction-nodes/);
-  assert.match(readFileSync('.github/workflows/pages.yml','utf8'),/python3 scripts\/prepare-correction-assets.py/);
+  assert.match(readFileSync('.github/workflows/pages.yml','utf8'),/npm run prepare:playground-assets/);
+  assert.match(readFileSync('scripts/prepare-playground-assets.py','utf8'),/'correction-assets'/);
 });
 test('conservative policy, transcript data in separate user role and decoding bounds', () => {
   for(const term of ['text only','no audio','minimal','uncertain','meaning','language','numbers','figures','dates','times','proper names','negation',"speaker's wording",'paraphrase','translate','invent facts','stylistic rewriting','only the transcript']) assert.ok(CORRECTION_PROMPT.includes(term),term);

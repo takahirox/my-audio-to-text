@@ -10,8 +10,9 @@
 <main>
   <p><a href="../../">Node Playground</a></p>
   <h1>TranslateGemma 4B Translation</h1>
-  <p>Japanese → English. Google TranslateGemma 4B text-only ONNX, q4, local WebGPU execution. Run downloads about 3.112 GB of model assets from Hugging Face unless cached. Requires a supported GPU and several GB of available memory. The upstream Gemma terms apply.</p>
+  <p>Google TranslateGemma 4B text-only ONNX, q4, local WebGPU execution. Run downloads about 3.112 GB of model assets from Hugging Face unless cached. Requires a supported GPU and several GB of available memory. The upstream <a href="https://ai.google.dev/gemma/terms">Gemma Terms</a> and <a href="https://ai.google.dev/gemma/prohibited_use_policy">Prohibited Use Policy</a> apply.</p>
   <p>Text stays on this device. Try a short snippet; generation is capped at 256 output tokens. Each Run initializes a fresh dedicated Worker. Cancel releases it immediately.</p>
+  <label>Direction <select id="direction"><option value="ja-en">Japanese → English</option><option value="en-ja">English → Japanese</option></select></label>
   <label for="input">Japanese text (up to 1,000 characters)</label>
   <textarea id="input" lang="ja" rows="5" maxlength="1000">今日は良い天気です。</textarea>
   <div class="controls">
@@ -20,7 +21,7 @@
   </div>
   <p id="status" role="status" aria-live="polite">Ready to run</p>
   <p id="errors" role="alert"></p>
-  <h2>English translation</h2>
+  <h2 id="output-heading">English translation</h2>
   <pre id="output" lang="en" aria-live="polite"></pre>
   <dl>
     <dt>Model loading / initialization</dt><dd id="load-time">—</dd>

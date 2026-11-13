@@ -13,6 +13,17 @@ export async function ttsFixture(page, slug, mode = 'success') {
       : { style_ttl: { dims: [1, 1, 1], data: [0] }, style_dp: { dims: [1, 1, 1], data: [0] } };
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify(json) });
   });
+  // The frontend now receives voice bytes through a verified-cache reader and
+  // passes a blob URL to Open JTalk. Stub only this weight boundary; real cache
+  // preparation, integrity and eviction are covered by playground-assets.spec.
+  if (slug === 'kokoro') {
+    await page.context().route('**/local-model-assets.js', route => route.fulfill({ contentType: 'text/javascript', body: `
+      export async function localModelAssets(kind) {
+        if (kind !== 'japanese') throw Error('Unexpected frontend dependency');
+        return { async japaneseFrontendFiles() { return new Map([['openjtalk-voice.htsvoice', new Uint8Array([1, 2, 3])]]); } };
+      }
+    ` }));
+  }
   await page.context().route('**/tts-assets/ort.mjs', route => route.fulfill({ contentType: 'text/javascript', body: `
     export const env = { wasm: {} };
     export class Tensor { constructor(type, data, dims) { this.data = data; this.dims = dims; } }
@@ -58,14 +69,14 @@ export async function ttsFixture(page, slug, mode = 'success') {
       };
     } };
   ` }));
-  await page.context().route('**/tts-assets/phonemizer.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export async function phonemize(text) { return [text]; }' }));
+  await page.context().route('**/tts-assets/phonemizer.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export async function initialize() {} export async function phonemize(text) { return [text]; }' }));
   await page.context().route('**/tts-assets/openjtalk-wasm-wrapper-D6E3BSJO.js', route => route.fulfill({ contentType: 'text/javascript', body: `
     export default async function factory(settings) {
       if (!settings.locateFile('openjtalk-wasm.wasm').includes('/tts-assets/')) throw Error('Wrong WASM path');
       return {
         async configure(dic, voice, archive) {
           const root = new URL('./', import.meta.url).href;
-          if (!voice.startsWith(root) || !archive.startsWith(root)) throw Error('Wrong repository prefix');
+          if (!voice.startsWith('blob:') || !archive.startsWith(root)) throw Error('Wrong repository prefix / cached voice URL');
           // Exercise native requests and relative asset resolution too.
           await fetch(voice); await fetch(archive); await fetch(settings.locateFile('openjtalk-wasm.wasm'));
         },

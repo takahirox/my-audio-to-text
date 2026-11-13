@@ -1,5 +1,5 @@
+import { qwen3TtsAssets } from './optional-model-assets.js';
 import { Qwen3TtsRuntime } from './qwen3-tts-runtime.js';
-import { qwen3TtsAssets } from '../extension/qwen3-tts-cache.js';
 
 let runtime, active, acknowledgment;
 const now = () => performance.timeOrigin + performance.now();
@@ -13,7 +13,7 @@ self.onmessage = async ({ data }) => {
   try {
     if (data.type === 'load') {
       if (runtime || active) throw Error('Qwen3-TTS Worker already loaded.');
-      runtime = await Qwen3TtsRuntime.create(await qwen3TtsAssets(), message => postMessage({ type: 'progress', message }),
+      runtime = await Qwen3TtsRuntime.create(await qwen3TtsAssets(message => postMessage({ type: 'progress', message })), message => postMessage({ type: 'progress', message }),
         error => postMessage({ type: 'error', fatal: true, message: error.message }));
       postMessage({ type: 'ready' });
     } else if (data.type === 'generate') {
