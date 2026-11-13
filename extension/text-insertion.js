@@ -140,19 +140,18 @@
       // also records a preflight edit that application reconciliation reverted.
       const preflightChanged = input || value(element) !== before || observer.takeRecords().length || changed;
       if (!valid()) return preflightChanged ? ambiguous('Field changed during insertion.') : notInserted('Field became unavailable.');
-      if (preflightChanged) {
-        if (input && (native(element) ? value(element) : canonical(richText(element))) === expected) {
-          try { saveCaret(owner); } catch {}
-          return { outcome: 'inserted', inserted: true };
-        }
-        return ambiguous('Field changed during insertion.');
-      }
+      // No edit has been attempted yet. Even matching text could come from
+      // concurrent user input, so it cannot confirm delivery of this segment.
+      if (preflightChanged) return ambiguous('Field changed during insertion.');
       if (!accepted) return notInserted('The editor rejected insertion.');
       if (!(allowInactiveNative && native(element)) && (!document.hasFocus() || active() !== element)) return notInserted('Field focus changed.');
       if (!native(element)) {
         const current = range(element);
         if (current.startContainer !== owner.range.startContainer || current.startOffset !== owner.range.startOffset || current.endContainer !== owner.range.endContainer || current.endOffset !== owner.range.endOffset) return notInserted('Selection changed during insertion.');
       } else if (!appendNative && active() === element && (element.selectionStart !== owner.start || element.selectionEnd !== owner.end)) return notInserted('Selection changed during insertion.');
+      // Composition can start during the asynchronous preflight even when a
+      // controlled field consumes its input event and restores its prior value.
+      if (composing.has(element)) return notInserted('Finish composing, then reselect the insertion point and retry.');
       if (native(element)) {
         attempted = true;
         const prototype = element instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;

@@ -161,7 +161,7 @@ test('editable roots include rich and open-shadow editors while excluding sensit
   } finally { await page.close(); }
 });
 
-for (const revert of [false, true]) test(`native preflight edits are ${revert ? 'retained as ambiguous after reconciliation reverts them' : 'confirmed only after reconciliation'}`, async () => {
+for (const revert of [false, true]) test(`native preflight edits remain ambiguous${revert ? ' after reconciliation reverts them' : ' even when they match the expected text'}`, async () => {
   const page = await fixture();
   try {
     await page.evaluate(() => {
@@ -178,13 +178,62 @@ for (const revert of [false, true]) test(`native preflight edits are ${revert ? 
       });
       window.delivery = new LocalTextInsertion.Delivery(element, () => true);
       const result = await delivery.append(0, 'confirmed');
-      const retry = revert ? await delivery.retry(element) : null;
+      const retry = await delivery.retry(element);
       return { result, retry, edits, retained: delivery.text(), value: element.value };
     }, revert);
-    expect(result).toMatchObject(revert
-      ? { result: { outcome: 'ambiguous' }, retry: { outcome: 'ambiguous' }, edits: 1, retained: 'confirmed', value: '' }
-      : { result: { inserted: true }, edits: 1, retained: '', value: 'confirmed' });
+    expect(result).toMatchObject({ result: { outcome: 'ambiguous' }, retry: { outcome: 'ambiguous' }, edits: 1, retained: 'confirmed', value: revert ? '' : 'confirmed' });
   } finally { await page.close(); }
+});
+
+test('matching trusted manual input during preflight stays ambiguous and cannot be replayed', async () => {
+  const page = await fixture();
+  try {
+    // Pause the preflight timer so the trusted browser edit happens during its
+    // wait regardless of how quickly the test runner can send input commands.
+    await page.clock.install(); await page.clock.pauseAt(new Date());
+    await page.evaluate(() => {
+      const element = document.createElement('textarea'); element.id = 'concurrent'; document.body.prepend(element); element.focus();
+      window.inputs = [];
+      element.addEventListener('input', event => inputs.push({ trusted: event.isTrusted, data: event.data }));
+      window.delivery = new LocalTextInsertion.Delivery(element, () => true);
+      window.result = null; delivery.append(0, 'VOICE').then(value => { result = value; });
+    });
+    await page.keyboard.insertText('VOICE');
+    await page.clock.runFor(120);
+    expect(await page.evaluate(() => ({ result, inputs, retained: delivery.text(), value: delivery.owner.element.value }))).toMatchObject({
+      result: { outcome: 'ambiguous' }, inputs: [{ trusted: true, data: 'VOICE' }], retained: 'VOICE', value: 'VOICE',
+    });
+    expect(await page.evaluate(() => delivery.retry(delivery.owner.element))).toMatchObject({ outcome: 'ambiguous' });
+    expect(await page.locator('#concurrent').inputValue()).toBe('VOICE');
+  } finally { await page.close(); }
+});
+
+test('trusted IME starting during preflight pauses delivery even when a controlled handler restores the value', async () => {
+  const page = await fixture();
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await page.clock.install(); await page.clock.pauseAt(new Date());
+    await page.evaluate(() => {
+      const element = document.createElement('textarea'); element.id = 'composing'; document.body.prepend(element); element.focus();
+      window.composition = []; window.inputs = [];
+      for (const name of ['compositionstart', 'compositionend']) element.addEventListener(name, event => composition.push({ type: event.type, trusted: event.isTrusted }));
+      // A controlled field can consume its IME input and restore the original
+      // value before the insertion observer sees it. Composition is still live.
+      element.addEventListener('input', event => {
+        inputs.push({ trusted: event.isTrusted, composing: event.isComposing, data: event.data });
+        if (event.isComposing) { element.value = ''; element.setSelectionRange(0, 0); event.stopImmediatePropagation(); }
+      }, true);
+      window.delivery = new LocalTextInsertion.Delivery(element, () => true);
+      window.result = null; delivery.append(0, 'VOICE').then(value => { result = value; });
+    });
+    await cdp.send('Input.imeSetComposition', { text: 'あ', selectionStart: 1, selectionEnd: 1 });
+    await page.clock.runFor(120);
+    expect(await page.evaluate(() => ({ result, composition, inputs, retained: delivery.text(), value: delivery.owner.element.value }))).toMatchObject({
+      result: { outcome: 'not-inserted', skipped: expect.stringContaining('composing') },
+      composition: [{ type: 'compositionstart', trusted: true }],
+      inputs: [{ trusted: true, composing: true, data: 'あ' }], retained: 'VOICE', value: '',
+    });
+  } finally { await cdp.detach(); await page.close(); }
 });
 
 for (const limit of ['segments', 'characters']) test(`bounded recovery reports ${limit} backpressure without discarding text; disposal prevents late edits`, async () => {
