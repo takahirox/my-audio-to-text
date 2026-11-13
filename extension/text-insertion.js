@@ -78,6 +78,7 @@
   document.addEventListener('compositionend', event => composing.delete(field(event.composedPath()[0])), true);
   async function insert(owner, text, authorized = () => true, { allowInactiveNative = false, appendNative = false, changeEvent = false } = {}) {
     const element = owner.element;
+    if (!element) return notInserted('Focus a visible writable field in the toolbar tab and Retry, or copy the retained text.');
     const valid = () => authorized() && editable(element);
     if (!valid()) return notInserted('Original field is unavailable. Reselect it to retry, or copy the retained text.');
     if (!native(element) && /[\r\n]/.test(text) && element.matches('[data-lexical-editor],.public-DraftEditor-content')) return notInserted('This editor cannot safely accept multiline browser edits. Copy the retained text.');
@@ -174,7 +175,7 @@
       };
       for (const name of ['input', 'pointerup', 'keyup']) document.addEventListener(name, remember, listenerOptions);
       document.addEventListener('selectionchange', event => {
-        if (value(this.owner.element) === this.owner.expected && (native(this.owner.element) || this.owner.anchor?.isConnected)) remember(event);
+        if (this.owner.element && value(this.owner.element) === this.owner.expected && (native(this.owner.element) || this.owner.anchor?.isConnected)) remember(event);
       }, listenerOptions);
     }
     append(sequence, text) {
@@ -204,7 +205,11 @@
     }
     retry(element) {
       return this.run(async () => {
-        if (element !== this.owner.element || active() !== element || !document.hasFocus() || !editable(element) || !this.authorized()) return notInserted('Reselect the original field. Replacement fields require a new session; copy retained text.');
+        // Only the toolbar caller opts into authorizing a first target through
+        // explicit recovery. An existing target identity is never replaced here.
+        const initial = !this.owner.element && this.options?.allowInitialTarget;
+        if (this.disposed || (!initial && element !== this.owner.element) || active() !== element || !document.hasFocus() || !editable(element) || !this.authorized(element)) return notInserted('Reselect the original field. Replacement fields require a new session; copy retained text.');
+        if (initial) this.owner = { element };
         try { saveCaret(this.owner); } catch (error) { return notInserted(error.message); }
         while (this.pending.length && this.pending[0].outcome === 'not-inserted') {
           const result = await this.deliver(this.pending[0]); if (!result.inserted) return result;
@@ -230,15 +235,23 @@
       button.addEventListener('click', event => { if (event.isTrusted) void action(); }); panel.append(button); return button;
     };
     panel.append(status, preview);
-    let selected = false;
+    let selected = null;
     const focusListener = event => {
       const target = field(event.composedPath()[0]);
-      if (!event.composedPath().includes(host)) selected = target === delivery.owner.element;
+      if (event.composedPath().includes(host)) return;
+      selected = target === delivery.owner.element ? delivery.owner : !delivery.owner.element && delivery.options?.allowInitialTarget && editable(target) ? { element: target } : null;
+      rememberSelection(event);
+    };
+    const rememberSelection = event => {
+      // Bound owners already track trusted edits through Delivery. Only keep a
+      // candidate caret here for keyboard activation of targetless recovery.
+      if (event.isTrusted && selected && selected !== delivery.owner && active() === selected.element) { try { saveCaret(selected); } catch {} }
     };
     document.addEventListener('focusin', focusListener, true);
+    for (const name of ['input', 'pointerup', 'keyup']) document.addEventListener(name, rememberSelection, true);
     const retry = add('Retry in original field', async () => {
-      const owner = delivery.owner;
-      if (active() === host && selected && value(owner.element) === owner.expected && editable(owner.element)) {
+      const owner = selected;
+      if (active() === host && owner && value(owner.element) === owner.expected && editable(owner.element)) {
         owner.element.focus({ preventScroll: true });
         if (native(owner.element)) owner.element.setSelectionRange(owner.start, owner.end, owner.direction);
         else if (owner.anchor?.isConnected && owner.focus?.isConnected) { const selection = getSelection(); selection.removeAllRanges(); selection.addRange(owner.range); }
@@ -256,7 +269,8 @@
     host.update = () => {
       const uncertain = delivery.pending.some(item => item.outcome === 'ambiguous');
       retry.disabled = uncertain;
-      status.textContent = uncertain ? 'Insertion uncertain. Review text before copying; Retry is disabled to avoid duplicates.' : 'Text retained. Reselect the original field and Retry, or copy for review.';
+      retry.textContent = delivery.owner.element ? 'Retry in original field' : 'Retry in selected field';
+      status.textContent = uncertain ? 'Insertion uncertain. Review text before copying; Retry is disabled to avoid duplicates.' : delivery.owner.element ? 'Text retained. Reselect the original field and Retry, or copy for review.' : 'Text retained. Select a writable field and Retry, or copy for review.';
       if (!preview.hidden) preview.value = delivery.text();
       const rect = anchor()?.getBoundingClientRect();
       if (rect?.width) {
@@ -265,7 +279,11 @@
       }
     };
     const remove = host.remove.bind(host);
-    host.remove = () => { document.removeEventListener('focusin', focusListener, true); remove(); };
+    host.remove = () => {
+      document.removeEventListener('focusin', focusListener, true);
+      for (const name of ['input', 'pointerup', 'keyup']) document.removeEventListener(name, rememberSelection, true);
+      remove();
+    };
     host.review = () => { preview.hidden = false; preview.value = delivery.text(); preview.focus(); };
     host.update(); return host;
   }

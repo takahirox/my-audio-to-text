@@ -8,6 +8,11 @@
   // Chrome retains activeElement while Live steals window focus. Some editors
   // blur on window deactivation; retain their last trusted focus in that case.
   let previousFocus = editable(active()) ? active() : null;
+  let selectedField = null, selectionRevision = 0;
+  function selectField(element) {
+    selectedField = editable(element) ? element : null;
+    selectionRevision++;
+  }
   document.addEventListener('focusin', event => {
     if (!event.isTrusted) return;
     const element = field(event.composedPath()[0]);
@@ -20,9 +25,13 @@
   }, true);
   document.addEventListener('pointerdown', event => {
     if (!event.isTrusted) return;
+    selectField(field(event.composedPath()[0]));
     // A deliberate click elsewhere supersedes old focus, even on a nonfocusable
     // element. Dynamic comment activation will then provide a real focusin.
     if (field(event.composedPath()[0]) !== previousFocus) previousFocus = null;
+  }, true);
+  document.addEventListener('keyup', event => {
+    if (event.isTrusted && event.key === 'Tab') selectField(active());
   }, true);
   window.addEventListener('pagehide', () => { previousFocus = null; });
   function focusedField() {
@@ -55,21 +64,24 @@
           // Mark before editing: never retry an ambiguous DOM side effect.
           output.last = message.sequence;
           const element = focusedField();
-          if (output.delivery && !output.delivery.pending.length && element !== output.delivery.owner.element && editable(element)) {
+          // Focus events can also come from script/reconciliation. Switching an
+          // established target requires a new pointer or keyboard selection.
+          if (output.delivery?.owner.element && !output.delivery.pending.length && element !== output.delivery.owner.element && editable(element) && selectedField === element && selectionRevision > output.selectionRevision) {
             output.delivery.dispose(); output.delivery = null;
           }
           if (!output.delivery) {
-            if (!editable(element)) return { outcome: 'not-inserted', skipped: 'Focus a visible writable field in the toolbar tab. Sensitive, hidden, disabled and frame fields are unsupported; use Live Copy.' };
             const owner = output;
-            output.delivery = new Delivery(element, () => !disposed && output === owner && focusedField() === element,
+            output.selectionRevision = selectionRevision;
+            // A targetless Delivery still owns a bounded queue. Selecting a
+            // field later cannot replay it without the explicit Retry action.
+            output.delivery = new Delivery(editable(element) ? element : null, (target = owner.delivery.owner.element) => !disposed && output === owner && focusedField() === target,
               delivery => {
                 if (!delivery.pending.length) { recovery?.remove(); recovery = null; return; }
-                recovery ||= LocalTextInsertion.recoveryView(delivery, () => element);
+                recovery ||= LocalTextInsertion.recoveryView(delivery, () => delivery.owner.element);
                 recovery.update();
-              }, { allowInactiveNative: true, appendNative: true, changeEvent: true });
+              }, { allowInactiveNative: true, appendNative: true, changeEvent: true, allowInitialTarget: true });
           }
-          // Bind this output to its first verified target. Focus changes never
-          // redirect an existing session or replay its retained text elsewhere.
+          // Retained text stays bound to its original target, if any.
           return output.delivery.append(message.sequence, message.text);
         }
         case 'stop': output?.delivery?.dispose(); output = null; recovery?.remove(); recovery = null; return true;
