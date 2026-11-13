@@ -258,17 +258,20 @@ source/text/error outputs; pending/errors never reach successful translation tex
 
 Invoke the toolbar on the desired normal page. Configured focused output is
 prepared automatically on that same top-level document using `activeTab`, before
-Live takes window focus. Focus a supported text/search input, textarea or basic
+Live takes window focus. Focus a supported text/search input, textarea or rich
 contenteditable to receive subsequent text. No additional output authorization,
 field picker or cross-tab destination is supported. If Live temporarily steals
-window focus, a valid prior user-focused field is retained until superseded;
+window focus, native inputs retain their valid prior focus until superseded; rich
+editors require focus in the authorized page to use browser editing safely;
 no field is guessed when there was no valid focus. Dynamic YouTube-style comment
 activation is covered by a controlled fixture; live YouTube compatibility has
-not been manually verified. Complex editors, shadow roots and restricted frames
-may require selecting and copying Live's displayed text with browser commands.
+not been manually verified. ProseMirror, Lexical, Draft.js and Quill fixtures use
+the same general editing path. Open shadow roots are supported; closed roots and
+restricted frames require manual copy.
 
 Manual/selected text and existing whitespace are preserved. Incoming TEXT strings
-append verbatim in order, including leading/trailing whitespace. No spaces,
+append verbatim to native inputs in order, including leading/trailing whitespace.
+Rich editors insert at the caret or replace the selected text through browser editing. No spaces,
 newlines or other delimiters are added and no forms are submitted. Empty strings
 are ignored; formatting and spacing belong upstream. Upstream final adapters
 suppress repeated/stale IDs within the session and emit only confirmed
@@ -341,14 +344,15 @@ recording without committing pending output. Previously granted optional hosts
 remain in Chrome's extension settings until removed there; they cause no scripts
 or models to load while OFF.
 
-Focus a visible writable **text/search input, textarea, or basic contenteditable**
+Focus a visible writable **text/search input, textarea, or rich contenteditable**
 and click its small mic. The isolated floating widget preserves the original
 field/selection and does not change the host control's layout. Focus alone never
 records. Idle, Preparing, Recording, Stopping and Error have accessible labels;
 click again to Stop, or cancel while Preparing. An active control remains visible
-when focus changes, and output continues only to the original field. Stop drains
-accepted final TEXT once, in order; Cancel, OFF, navigation, field removal and
-permission/device loss abort and suppress late replies. Send/Submit and browser
+when focus changes. Delivery pauses when the original field loses focus, is
+removed or rejects insertion; the microphone and ASR continue. Stop drains
+accepted final TEXT once, in order. Cancel, OFF, navigation and permission/device
+loss abort and suppress late replies. Send/Submit and browser
 editing remain manual. No audio or transcript is persisted or transmitted.
 
 The circular in-page control uses locally bundled Material Symbols Outlined SVGs:
@@ -451,7 +455,7 @@ never stopped automatically to make room.
 
 Web microphones on different tabs/documents can record simultaneously. Within one
 document the existing single widget owns one fixed field/session; duplicate Start
-cannot replace it or insert twice. Stop, Cancel, navigation, target removal and
+cannot replace it or insert twice. Stop, Cancel, navigation and
 tab close affect that document only. Web voice OFF or website-permission removal
 cancels all Web sessions and leaves Live running. Live selection and the Web microphone default remain
 separate, and Library edits affect future sessions only. No graph schema changes
@@ -461,18 +465,48 @@ The page bridge uses Chrome's isolated world and extension-only ports, exact
 sender URL, tab/top-frame/document identity, a random per-field session capability
 and monotonic edit sequence. It accepts no page-world messages and does not scan
 other inputs. Native inputs replace the saved selection using the native value
-setter plus cancelable `beforeinput`/`input` events; basic contenteditable uses a
-saved Range. Unexpected edits, cancellation or field removal fail rather than
-retrying an ambiguous write. Native setters do not reliably integrate with browser
-undo stacks. Rich editors, Shadow DOM and cross-origin/same-origin subframes are
-unsupported; custom handlers can reject or rewrite input. This is not universal
-website/editor compatibility. The supported fixture coverage is documented below.
+setter plus cancelable `beforeinput`/`input` events. Both page-output routes share
+these primitives while retaining their separate toolbar/document-capability grants.
+Rich editors use browser `execCommand('insertText')`, preserving editor input
+handling and Undo where supported, without a direct DOM mutation fallback.
+The return value is not trusted: the bridge compares observable content after
+asynchronous reconciliation. Private application state cannot be proved through
+public DOM APIs, and a later application rewrite can still invalidate an edit.
+Native setters do not reliably integrate with browser Undo stacks.
+
+Failed final segments stay in a session-local ordered queue (128 segments or
+1,000,000 UTF-16 units maximum). A failed head blocks later text. Web recording
+stops gracefully at 64 retained segments or 500,000 units to leave drain capacity;
+hard overflow is an explicit output/backpressure error. Ordinary insertion failures
+are recoverable notices, separate from microphone, audio transport and permission
+failures. The website mic retains recovery text after Stop; toolbar output recovery
+is available while its output connection remains active. Navigation, OFF and
+security invalidation release the session and its recovery data.
+
+A contextual recovery panel appears only when text is retained. Reselect the
+**same original field** and use **Retry in original field** for definitely uninserted
+text. Replaced elements never inherit a session, even with identical attributes;
+copy retained text and start a new session after selecting the replacement.
+Ambiguous edits disable Retry: **Review text** and **Copy for review** let the user
+check for duplicates before pasting. Clipboard writes require that explicit Copy
+action; **Discard retained text** clears the queue. An active mic always remains
+Stop/Cancel. No interim ASR preview is delivered by the Web microphone graph.
+
+Multiline browser edits currently reconcile safely in the plain, ProseMirror and
+Quill fixtures. Chromium's multiline browser commands corrupt or discard content
+in the pinned Lexical/Draft.js fixtures. Those editor types retain multiline
+segments as definitely uninserted **before** editing; single-line final segments
+remain supported. Reproduce with `text-insertion.spec.js` using `"\nnext"` after
+three single-line segments. A focused follow-up can investigate a safe multiline
+editing operation for these frameworks. No production site adapters or claims of
+logged-in X, ChatGPT or Claude compatibility are added; fixtures model their
+composer structures without requiring accounts.
 
 ### Web voice validation
 
 ```sh
 npm test
-npx playwright test --config playwright.extension.config.js tests/extension/web-voice.spec.js tests/extension/offscreen-feasibility.spec.js
+npx playwright test --config playwright.extension.config.js tests/extension/web-voice.spec.js tests/extension/text-insertion.spec.js tests/extension/offscreen-feasibility.spec.js
 npm run prepare:assets
 WEB_VOICE_REAL=1 npx playwright test --config playwright.extension.config.js tests/extension/web-voice.spec.js -g 'already granted|Live and Web overlap'
 ```
