@@ -65,6 +65,10 @@ Keep Issue #373 open until the
 is performed and its evidence is recorded here and in the Issue. This is required
 after merge and does not block pre-merge approval.
 
+PR [#374](https://github.com/takahirox/my-audio-to-text/pull/374) uses the
+non-closing reference `Related to #373.` so merging keeps the Issue open for
+the required deployment verification.
+
 | Check | Expected result | Status |
 | --- | --- | --- |
 | Merged revision deployment | Both Pages jobs succeed for the merged SHA; the canonical published site serves that deployment. Record SHA, run/deployment URL and UTC verification time. | Pending |
