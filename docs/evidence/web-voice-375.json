@@ -3,7 +3,7 @@
   "scope": {
     "status": "partial",
     "parentIssue": "https://github.com/takahirox/my-audio-to-text/issues/375",
-    "parentDisposition": "Keep open for acceptance tracking; PR #376 does not claim to close #375.",
+    "parentDisposition": "PR #376 closes #375 with the remaining Lexical/Draft.js multiline scope explicitly split into follow-up #377; compatibility remains partial until that follow-up is resolved.",
     "followUps": [
       {
         "issue": 377,
