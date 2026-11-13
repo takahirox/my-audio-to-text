@@ -5,7 +5,8 @@ WebGPU Worker. It generates speech tokens and transfers mono 24 kHz PCM before
 token generation completes. English and Japanese have separate real packaged
 MV3 results in the [validation report](evidence/cosyvoice3-172.md). This does
 not rely on the Qwen3-TTS evidence. Required verification of the merged revision
-remains **pending**, so Issue #172 must remain open.
+remains **pending**; handle it after merge and Issue closure under the
+[lifecycle guidance](development-flow.md#pre-merge-acceptance-and-post-merge-verification).
 
 ```text
 Text.value / ASR.final / committed translation.text

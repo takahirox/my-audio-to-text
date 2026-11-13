@@ -187,7 +187,8 @@ package; the plain TEXT contract is shared without loading a model.
 
 ## Required post-merge verification
 
-**Pending for #78 until performed.** Keep the Issue open. After merge record
+**Pending for #78 until performed.** Follow the [merge, closure and follow-up lifecycle](development-flow.md#pre-merge-acceptance-and-post-merge-verification).
+After merge record
 successful Pages run URL, merged SHA and verification time. In a fresh deployed
 origin browser, follow the canonical index link and verify nested HTML/app,
 root Node/policy/contract/cache modules, the dedicated Worker, runtime JS/MJS/WASM,

@@ -158,7 +158,8 @@ not establish real model inference. See the evidence record for actual results.
 
 ## Required post-merge verification
 
-**Pending until performed.** Keep Issue #73 open. Record the successful Pages
+**Pending until performed.** Follow the [merge, closure and follow-up lifecycle](development-flow.md#pre-merge-acceptance-and-post-merge-verification).
+Record the successful Pages
 deployment run URL, merged SHA and verification time. In a fresh browser on
 the deployed origin, verify both index links, pages, scripts/Workers, notices
 and `tts-assets/` URLs under the repository prefix. If model-fetch/CORS/COEP
