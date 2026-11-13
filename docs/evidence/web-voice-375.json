@@ -1,5 +1,17 @@
 {
   "issue": 375,
+  "scope": {
+    "status": "partial",
+    "parentIssue": "https://github.com/takahirox/my-audio-to-text/issues/375",
+    "parentDisposition": "Keep open for acceptance tracking; PR #376 does not claim to close #375.",
+    "followUps": [
+      {
+        "issue": 377,
+        "url": "https://github.com/takahirox/my-audio-to-text/issues/377",
+        "remainingWork": "Support safe multiline voice insertion in Lexical and Draft.js editors, validated against their real application models through both authorized output routes. Current multiline segments remain definitely uninserted and recoverable."
+      }
+    ]
+  },
   "implementation": {
     "sharedStrategy": "extension/text-insertion.js, injected before both separately authorized output routes",
     "editableRoots": [
@@ -105,7 +117,7 @@
     "DOM checks cannot prove a framework private document model; verification waits for asynchronous reconciliation and returns ambiguous on inconsistent observable results. Later application rewrites remain possible.",
     "Native value setters do not guarantee browser Undo integration.",
     "Chromium multiline insertText/insertParagraph/insertLineBreak experiments lost content or line breaks in Lexical 0.38.2 and Draft.js 0.11.7. Multiline values for those editor roots are retained as definitely uninserted before editing; single-line values persist in their real model and pass Undo/Redo checks.",
-    "Reproduce the multiline limitation with the real fixtures: insert three single-line voice segments, then newline + next. Tests assert safe retention and preservation of existing text. A separate focused follow-up can investigate a safe multiline operation.",
+    "Reproduce the multiline limitation with the real fixtures: insert three single-line voice segments, then newline + next. Tests assert safe retention and preservation of existing text. Follow-up #377 (https://github.com/takahirox/my-audio-to-text/issues/377) tracks safe multiline insertion and model, caret, Undo/Redo and recovery validation.",
     "X/ChatGPT/Claude are represented by local composer structures and real editor models, not logged-in production sites. No site-specific failure or production adapter is claimed."
   ]
 }
