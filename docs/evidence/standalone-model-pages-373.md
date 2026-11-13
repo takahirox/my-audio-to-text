@@ -65,10 +65,12 @@ Perform the
 after merge and record its evidence here and in the Issue. This required
 verification remains pending and does not block pre-merge approval.
 
-PR [#374](https://github.com/takahirox/my-audio-to-text/pull/374) includes the
-publication-requested closing reference `Closes #373`. This reference does not
-establish completion of the required post-merge deployment checks below; those
-checks and their evidence remain pending. Publication does not authorize merge.
+PR [#374](https://github.com/takahirox/my-audio-to-text/pull/374) uses the
+non-closing reference `Related to #373` so merging does not automatically close
+the Issue. Keep #373 open until the required post-merge deployment checks below
+are performed and their evidence is recorded, as required by the
+[development flow](../development-flow.md#implement-and-propose-a-pull-request).
+Publication does not authorize merge.
 
 | Check | Expected result | Status |
 | --- | --- | --- |
