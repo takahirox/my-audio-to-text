@@ -65,9 +65,9 @@ Perform the
 after merge and record its evidence here and in the Issue. This required
 verification remains pending and does not block pre-merge approval.
 
-PR [#374](https://github.com/takahirox/my-audio-to-text/pull/374) uses the
-publication-requested closing reference `Closes #373`. This reference does not
-establish completion of the deployment checks below; no merge was requested.
+PR [#374](https://github.com/takahirox/my-audio-to-text/pull/374) references
+Issue #373 without a closing keyword. Keep the Issue open until the required
+post-merge deployment checks below are performed and their evidence is recorded.
 
 | Check | Expected result | Status |
 | --- | --- | --- |
