@@ -220,7 +220,7 @@ async function inspectControl(t, focus = false) {
     return result.value;
   } finally { await cdp.detach(); }
 }
-async function recoveryAction(t, label) {
+async function recoveryUI(t, label) {
   const cdp = await t.context.newCDPSession(t.website);
   try {
     const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
@@ -228,9 +228,13 @@ async function recoveryAction(t, label) {
     const panel = find(root); expect(panel).toBeTruthy();
     const { object } = await cdp.send('DOM.resolveNode', { backendNodeId: panel.shadowRoots[0].backendNodeId });
     const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true, arguments: [{ value: label }],
-      functionDeclaration: `function(label){ const button = [...this.querySelectorAll('button')].find(b=>b.textContent===label); const r=button.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2,disabled:button.disabled}; }` });
-    expect(result.value.disabled).toBe(false); await t.website.mouse.click(result.value.x, result.value.y);
+      functionDeclaration: `function(label){ const button = [...this.querySelectorAll('button')].find(b=>b.textContent===label), preview=this.querySelector('textarea'); const r=button?.getBoundingClientRect(); return {x:r&&r.x+r.width/2,y:r&&r.y+r.height/2,disabled:button?.disabled,previewFocused:this.activeElement===preview,previewHidden:preview.hidden,text:preview.value}; }` });
+    return result.value;
   } finally { await cdp.detach(); }
+}
+async function recoveryAction(t, label) {
+  const ui = await recoveryUI(t, label);
+  expect(ui.disabled).toBe(false); await t.website.mouse.click(ui.x, ui.y);
 }
 function expectIcon(ui, icon) {
   expect(ui.icon).toBe(icon); expect(ui.viewBox).toBe('0 -960 960 960');
@@ -741,6 +745,37 @@ test('fully occupied active viewport retains Cancel and Stop without placement h
 });
 
 
+for (const phase of ['preparing', 'recording']) for (const unavailable of ['removed', 'disabled']) test(`unavailable target (${unavailable}) keeps ${phase === 'preparing' ? 'Cancel' : 'Stop'} reachable after resizing and opening a modal`, async ({ voice: t }) => {
+  test.skip(real); await placementPage(t);
+  if (phase === 'preparing') await bootstrap(t, 'window.voiceDelay = 3000;');
+  await start(t, '#field');
+  if (phase === 'recording') await recording(t);
+  else await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing');
+  await expect.poll(async () => (await pageCapture(t)).streams).toBe(1);
+  await t.website.evaluate(unavailable => {
+    window.originalVoiceControl = document.querySelector('[data-local-web-voice]');
+    const field = document.querySelector('#field');
+    if (unavailable === 'removed') field.remove(); else field.disabled = true;
+    const dialog = document.createElement('dialog'); dialog.id = 'modal'; dialog.textContent = 'Site dialog';
+    document.body.append(dialog); dialog.showModal();
+  }, unavailable);
+  await t.website.setViewportSize({ width:240, height:180 });
+  await expect(async () => {
+    expect(await widget(t.website).evaluate(e => e === originalVoiceControl && e.parentElement.id === 'modal')).toBe(true);
+    const ui = await controlUI(t);
+    expect(ui.button.x).toBeGreaterThanOrEqual(4); expect(ui.button.x + 36).toBeLessThanOrEqual(236);
+    expect(ui.button.y).toBeGreaterThanOrEqual(4); expect(ui.button.y + 36).toBeLessThanOrEqual(176);
+    expect(await widget(t.website).evaluate(e => { const r = e.getBoundingClientRect(); return document.elementFromPoint(r.x + 18, r.y + 18) === e; })).toBe(true);
+  }).toPass();
+  expect((await controlUI(t, true)).focused).toBe(true);
+  await expect(widget(t.website)).toHaveAttribute('data-voice-state', phase);
+  expect((await pageCapture(t)).streams).toBe(1);
+  if (phase === 'preparing') await t.website.keyboard.press('Enter'); else await mic(t.website);
+  await idle(t);
+  expect((await pageCapture(t)).streams).toBe(0);
+  expect(await t.website.evaluate(() => siteClicks)).toBe(0);
+});
+
 test('active Stop remains clickable above later maximum-z-index overlays, popovers and modal dialogs', async ({ voice: t }) => {
   test.skip(real); await placementPage(t); await start(t, '#field'); await recording(t);
   await occupyViewport(t);
@@ -830,7 +865,11 @@ for (const phase of ['preparing', 'recording']) test(`closed-shadow modal keeps 
   await idle(t); await owner.detach();
   // Modal/widget focus pauses delivery instead of editing an unfocused field.
   await expect(t.website.locator('#field')).toHaveValue('before after');
-  if (phase === 'recording') await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
+  if (phase === 'recording') {
+    await recoveryAction(t, 'Review text');
+    expect(await recoveryUI(t)).toMatchObject({ previewHidden: false, previewFocused: true, text: 'confirmed fixture' });
+    await recoveryAction(t, 'Discard retained text');
+  }
   expect(await t.website.evaluate(() => siteClicks)).toBe(0);
   if (phase === 'preparing') await expect(widget(t.website)).toBeHidden();
 });

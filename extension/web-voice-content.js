@@ -51,35 +51,26 @@
   }
   function position() {
     if (!host || !target) return;
-    if (!editable(target)) {
+    const available = editable(target);
+    if (!available) {
       if (session || recovery) {
         status.textContent = session ? 'Delivery paused. Reselect the original field or copy retained text.' : 'Stopped · text retained for review.';
-        host.style.setProperty('visibility', 'visible', 'important');
       }
-      else if (state === 'error') host.style.setProperty('visibility', 'hidden', 'important');
-      else removeWidget();
-      return;
+      else {
+        if (state === 'error') host.style.setProperty('visibility', 'hidden', 'important');
+        else removeWidget();
+        return;
+      }
     }
-    const rect = target.getBoundingClientRect(), viewport = window.visualViewport;
+    // Keep the last control location when its editor disappears, but still
+    // clamp it and restore modal access so recording can always be stopped.
+    const rect = available ? target.getBoundingClientRect() : host.getBoundingClientRect(), viewport = window.visualViewport;
     const bounds = { left: (viewport?.offsetLeft || 0) + viewportInset, top: (viewport?.offsetTop || 0) + viewportInset,
       right: (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth) - viewportInset,
       bottom: (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) - viewportInset };
     // Keep active Stop/Cancel outside the page's inert subtree when a modal
-    // opens. Inspect only the viewport center, descending shadow roots there
-    // to find the topmost modal; this is not obstacle discovery.
-    const visited = new Set();
-    const modalAt = root => {
-      if (visited.has(root)) return null;
-      visited.add(root);
-      for (const element of root.elementsFromPoint((bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2)) {
-        if (element === host) continue;
-        const shadow = element instanceof HTMLElement && chrome.dom.openOrClosedShadowRoot(element);
-        const modal = (shadow && modalAt(shadow)) || element.closest('dialog:modal');
-        if (modal) return modal;
-      }
-      return null;
-    };
-    const modal = session && modalAt(document);
+    // opens, including when the original target is no longer available.
+    const modal = (session || recovery) && LocalTextInsertion.activeModal(host);
     const parent = modal || document.documentElement;
     if (host.parentElement !== parent) parent.append(host);
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -90,6 +81,7 @@
     if (microphonePosition === 'left' ? left < bounds.left : left + controlSize > bounds.right) {
       left = microphonePosition === 'left' ? right : leftSide;
     }
+    if (!available) left = rect.left;
     const anchor = {
       left: clamp(left, bounds.left, bounds.right - controlSize),
       top: clamp((rect.top + rect.bottom - controlSize) / 2, bounds.top, bounds.bottom - controlSize),

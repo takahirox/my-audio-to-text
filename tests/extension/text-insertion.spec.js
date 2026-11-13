@@ -245,6 +245,59 @@ test('the recovery clipboard changes only after a trusted explicit Copy action',
   } finally { await page.close(); }
 });
 
+for (const shadow of [false, true]) test(`modal recovery supports Review, Copy, keyboard Retry and Discard${shadow ? ' in an open shadow tree' : ''}`, async () => {
+  const page = await fixture();
+  const cdp = await page.context().newCDPSession(page);
+  // Inspect the closed recovery root through DevTools; actions use trusted
+  // pointer/key events, so inert or occluded controls cannot pass this test.
+  const ui = async (label, focus = false) => {
+    const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+    const find = n => n.attributes?.includes('data-local-text-recovery') ? n : [...n.children || [], ...n.shadowRoots || []].map(find).find(Boolean);
+    const { object } = await cdp.send('DOM.resolveNode', { backendNodeId: find(root).shadowRoots[0].backendNodeId });
+    const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true, arguments: [{ value: label }, { value: focus }],
+      functionDeclaration: `function(label,focus){const b=[...this.querySelectorAll('button')].find(b=>b.textContent===label);if(focus)b.focus();const r=b.getBoundingClientRect(),p=this.querySelector('textarea');return {x:r.x+r.width/2,y:r.y+r.height/2,focused:this.activeElement===b,previewHidden:p.hidden,previewFocused:this.activeElement===p,preview:p.value}}` });
+    return result.value;
+  };
+  const click = async label => { const point = await ui(label); await page.mouse.click(point.x, point.y); };
+  try {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(async shadow => {
+      const wrapper = document.createElement('div'); document.body.prepend(wrapper);
+      const root = shadow ? wrapper.attachShadow({ mode: 'open' }) : wrapper;
+      window.modal = document.createElement('dialog'); modal.innerHTML = '<textarea>original</textarea>'; root.append(modal); modal.showModal();
+      window.modalField = modal.querySelector('textarea'); modalField.focus(); modalField.setSelectionRange(8, 8);
+      window.reject = event => event.preventDefault(); modalField.addEventListener('beforeinput', reject);
+      window.delivery = new LocalTextInsertion.Delivery(modalField, () => true, () => { if (!delivery.pending.length) recovery.remove(); });
+      await delivery.append(0, ' retained');
+      window.recovery = LocalTextInsertion.recoveryView(delivery, () => modalField);
+      await navigator.clipboard.writeText('existing clipboard');
+    }, shadow);
+    await click('Review text');
+    expect(await ui('Review text')).toMatchObject({ previewHidden: false, previewFocused: true, preview: ' retained' });
+    await click('Copy for review');
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(' retained');
+    await page.evaluate(() => { modalField.removeEventListener('beforeinput', reject); modalField.focus(); modalField.setSelectionRange(8, 8); });
+    expect((await ui('Retry in original field', true)).focused).toBe(true);
+    await page.keyboard.press('Enter');
+    await expect.poll(() => page.evaluate(() => modalField.value)).toBe('original retained');
+    await expect.poll(() => page.evaluate(() => delivery.pending.length)).toBe(0);
+
+    // A retained panel also follows later modal changes while capture/output
+    // is idle. Closing a dialog must not hide the user's only recovery path.
+    await page.evaluate(async () => {
+      modalField.addEventListener('beforeinput', reject); modalField.focus();
+      await delivery.append(1, ' discard'); recovery = LocalTextInsertion.recoveryView(delivery, () => modalField);
+      modal.close(); window.nextModal = document.createElement('dialog'); nextModal.textContent = 'Next dialog'; document.body.append(nextModal); nextModal.showModal();
+    });
+    await expect.poll(() => page.evaluate(() => recovery.parentElement === nextModal)).toBe(true);
+    expect((await ui('Discard retained text', true)).focused).toBe(true);
+    await click('Discard retained text');
+    expect(await page.evaluate(() => delivery.text())).toBe('');
+    expect(await page.evaluate(() => modalField.value)).toBe('original retained');
+    expect(await page.evaluate(() => recovery.isConnected)).toBe(false);
+  } finally { await cdp.detach(); await page.close(); }
+});
+
 test('plain contenteditable retains verbatim whitespace, selection replacement and browser Undo', async () => {
   const page = await fixture();
   try {

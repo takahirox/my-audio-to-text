@@ -9,6 +9,25 @@
     while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
     return field(element);
   }
+  // Inspect only the viewport center, descending shadow roots there to find
+  // the topmost modal. Recovery and Stop must stay in its interactive subtree.
+  function activeModal(ignore) {
+    const viewport = window.visualViewport, visited = new Set();
+    const x = (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth) / 2;
+    const y = (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) / 2;
+    const modalAt = root => {
+      if (visited.has(root)) return null;
+      visited.add(root);
+      for (const element of root.elementsFromPoint(x, y)) {
+        if (element === ignore) continue;
+        const shadow = element instanceof HTMLElement && (globalThis.chrome?.dom?.openOrClosedShadowRoot(element) || element.shadowRoot);
+        const modal = (shadow && modalAt(shadow)) || element.closest('dialog:modal');
+        if (modal) return modal;
+      }
+      return null;
+    };
+    return modalAt(document);
+  }
   function field(element) {
     if (element?.nodeType === Node.TEXT_NODE) element = element.parentElement;
     if (native(element)) return element;
@@ -271,14 +290,30 @@
       catch { preview.hidden = false; preview.value = delivery.text(); preview.focus(); preview.select(); status.textContent = 'Select and copy the retained text.'; position(); }
     });
     add('Discard retained text', () => { delivery.clear(); onClear(); });
-    shadow.append(style, panel); document.documentElement.append(host);
+    shadow.append(style, panel);
+    let focusRoot;
     function position() {
+      const parent = activeModal(host) || document.documentElement;
+      if (host.parentElement !== parent) parent.append(host);
+      // Focus moves within a shadow tree may not reach document when the
+      // retargeted relatedTarget is the same wrapper. Observe that root too so
+      // explicitly reselecting the editor still authorizes keyboard Retry.
+      const root = host.getRootNode(), nextFocusRoot = root === document ? null : root;
+      if (focusRoot !== nextFocusRoot) {
+        focusRoot?.removeEventListener('focusin', focusListener, true);
+        focusRoot = nextFocusRoot;
+        focusRoot?.addEventListener('focusin', focusListener, true);
+      }
       const rect = anchor()?.getBoundingClientRect(), bounds = host.getBoundingClientRect();
       const left = rect?.width ? rect.left : innerWidth - bounds.width - 8;
       const top = rect?.width ? rect.bottom + 6 : innerHeight - bounds.height - 8;
       host.style.setProperty('left', `${Math.max(4, Math.min(left, innerWidth - bounds.width - 4))}px`, 'important');
       host.style.setProperty('top', `${Math.max(4, Math.min(top, innerHeight - bounds.height - 4))}px`, 'important');
     }
+    // Recovery can outlive capture and its placement observer. Follow modal
+    // changes (including closed shadow dialogs) even without another segment.
+    const timer = setInterval(position, 1000);
+    for (const name of ['scroll', 'resize']) window.addEventListener(name, position, true);
     host.update = () => {
       const uncertain = delivery.pending.some(item => item.outcome === 'ambiguous');
       retry.disabled = uncertain;
@@ -289,6 +324,9 @@
     };
     const remove = host.remove.bind(host);
     host.remove = () => {
+      clearInterval(timer);
+      focusRoot?.removeEventListener('focusin', focusListener, true);
+      for (const name of ['scroll', 'resize']) window.removeEventListener(name, position, true);
       document.removeEventListener('focusin', focusListener, true);
       for (const name of ['input', 'pointerup', 'keyup']) document.removeEventListener(name, rememberSelection, true);
       remove();
@@ -296,5 +334,5 @@
     host.review = () => { preview.hidden = false; preview.value = delivery.text(); position(); preview.focus(); };
     host.update(); return host;
   }
-  globalThis.LocalTextInsertion = { active, field, editable, native, value, range, saveCaret, insert, Delivery, recoveryView };
+  globalThis.LocalTextInsertion = { active, activeModal, field, editable, native, value, range, saveCaret, insert, Delivery, recoveryView };
 })();
