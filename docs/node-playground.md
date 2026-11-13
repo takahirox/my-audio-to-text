@@ -98,8 +98,8 @@ headers. Opt-in real-model checks use the migrated speech page too.
 ## Required post-merge verification
 
 **Pending for Issues #63 and #65.** Local tests do not establish deployment of the merged
-revision. Keep the Issue open until the following checks are performed and the
-evidence is recorded:
+revision. Follow the [merge, closure and follow-up lifecycle](development-flow.md#pre-merge-acceptance-and-post-merge-verification),
+then perform the following checks and record their evidence:
 
 1. Confirm the successful Pages push/deployment run belongs to the merged commit
    SHA; record the run URL, SHA and verification time.

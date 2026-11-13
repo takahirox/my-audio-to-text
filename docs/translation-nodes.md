@@ -179,8 +179,8 @@ pages on `https://takahirox.github.io/my-audio-to-text/`, verify navigation, all
 modules/workers and `vendor/translation/` assets retain the repository prefix,
 and run the real-model smokes on that origin if fetch restrictions differ.
 Use `ASR_BASE_URL=<published URL>` with the commands above. Local checks do not
-establish that this revision was deployed. Do not close #65 until required
-verification is performed and recorded.
+establish that this revision was deployed. Record verification evidence after
+merge and Issue closure under the [lifecycle guidance](development-flow.md#pre-merge-acceptance-and-post-merge-verification).
 
 
 ## Issue #71 post-merge verification
@@ -194,8 +194,9 @@ verify `app.js`, shared modules, `opus-mt-en-ja-worker.js`, packaged runtime URL
 and immutable model URLs. All page/worker/runtime URLs must preserve
 `/my-audio-to-text/`. Run the opt-in `TRANSLATION_SMOKE=opus-en-ja` with
 `ASR_BASE_URL=https://takahirox.github.io/my-audio-to-text/` on the deployed origin
-if needed. Local prefix checks do not establish deployment. Do not close #71
-until this verification is recorded. The unpacked extension has no deployment gate.
+if needed. Local prefix checks do not establish deployment. Record verification
+after merge and Issue closure under the [lifecycle guidance](development-flow.md#pre-merge-acceptance-and-post-merge-verification).
+The unpacked extension has no deployment gate.
 
 ## TranslateGemma in the extension (#124)
 
