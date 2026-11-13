@@ -58,6 +58,23 @@ known speech for transcript validation. No inference API or extension was used.
 Real heavyweight WebGPU generation and published deployment were not run; their
 explicit opt-in commands and requirements are in [the Playground guide](../node-playground.md).
 
+## Required post-merge verification — pending
+
+Keep Issue #373 open until the
+[#373 deployment checklist](../node-playground.md#issue-373--all-standalone-model-pages)
+is performed and its evidence is recorded here and in the Issue. This is required
+after merge and does not block pre-merge approval.
+
+| Check | Expected result | Status |
+| --- | --- | --- |
+| Merged revision deployment | Both Pages jobs succeed for the merged SHA; the canonical published site serves that deployment. Record SHA, run/deployment URL and UTC verification time. | Pending |
+| All 15 primary model links | Each index link, direct page URL and return link works beneath `/my-audio-to-text/`, shows the correct model controls and triggers no eager inference/download/capture. Record each URL/result. | Pending |
+| Per-model runtime and asset resolution | Explicit loading/running resolves modules, workers/worklets, isolation worker, notices and vendor runtimes/manifests under the repository prefix; pinned remote weights load from their distribution hosts. Record successful requests, required isolation, readiness/output and any console/network failures per model. | Pending |
+
+No post-merge deployment results have been collected. Fixture-driven published
+tests alone do not establish real runtime/weight loading; unperformed or
+hardware-blocked checks remain pending.
+
 ## Upstream suite failures
 
 The full repository suites are not green. The final full unit run had 1,076

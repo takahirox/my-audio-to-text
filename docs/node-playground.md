@@ -99,6 +99,46 @@ PLAYGROUND_MODELS=whisper PLAYGROUND_AUDIO_FILE=/path/to/speech.wav npm run test
 
 ## Required post-merge verification
 
+### Issue #373 — all standalone model pages
+
+**Pending.** Keep #373 open until these checks are performed on the published
+merged revision and the results are recorded in the Issue and
+[validation evidence](evidence/standalone-model-pages-373.md). Local tests and
+PR approval do not establish deployment success.
+
+1. **Deployment:** confirm that both jobs of the Pages workflow succeeded for
+   the merged commit SHA. Record that SHA, the workflow/deployment URL and UTC
+   verification time. Expected: the canonical
+   `https://takahirox.github.io/my-audio-to-text/` serves that deployment, rather
+   than an earlier revision or a preview branch.
+2. **All 15 links:** in a fresh browser context without the extension, follow
+   every primary model link in the four index task groups, using the model
+   table above as the checklist. Also open each page directly and use its
+   Node Playground return link. Expected: all 15 pages show their matching
+   model heading and input/run controls, return to the published index, and
+   retain `/my-audio-to-text/` in their URLs. Opening them must not start
+   inference, weight downloads or microphone prompts. Record each page's URL
+   and result; the experimental correction page and dependencies do not count.
+3. **Runtime and assets:** inspect network and console output while explicitly
+   loading/running each selected model on a compatible browser. Expected:
+   controllers, shared modules/styles, workers/worklets, isolation service
+   worker, notices, and prepared `vendor/` runtimes/manifests resolve beneath
+   `/my-audio-to-text/` with successful responses and appropriate content types;
+   pinned weights resolve from their licensed distribution hosts. No path may
+   accidentally resolve at the origin root or an extension URL. Required ASR
+   isolation is active, model readiness/output is visible, and there are no
+   missing-asset, CORS, MIME or runtime errors. Record per-model requests,
+   readiness/output and any failures with browser/hardware details. Leave
+   unperformed checks pending, including models unavailable on that hardware.
+
+The published deterministic command below can supplement navigation/lifecycle
+evidence, but its worker/asset fixtures do not verify deployed inference runtimes
+or real weights. Use the explicit real-model commands above and existing
+model-specific smoke checks with `ASR_BASE_URL` set to the published origin for
+runtime evidence. Do not report fixture results as real-model deployment checks.
+
+### Earlier Issues
+
 **Pending for Issues #63 and #65.** Local tests do not establish deployment of the merged
 revision. Keep the Issue open until the following checks are performed and the
 evidence is recorded:
