@@ -96,6 +96,25 @@ test('definite rejection is retained in order; only explicit same-target retry d
   } finally { await page.close(); }
 });
 
+test('a segment arriving after Retry is scheduled is acknowledged before that Retry edits it', async () => {
+  const page = await fixture();
+  try {
+    await select(page, 'react');
+    expect(await page.evaluate(async () => {
+      const element = document.querySelector('#react textarea');
+      const delivery = new LocalTextInsertion.Delivery(element, () => true);
+      const retry = delivery.retry(element);
+      const receipt = await delivery.append(0, 'one');
+      const retained = delivery.text();
+      const result = await retry;
+      const remaining = delivery.text();
+      delivery.dispose();
+      return { receipt, retained, result, remaining };
+    })).toMatchObject({ receipt: { outcome: 'not-inserted' }, retained: 'one', result: { inserted: true }, remaining: '' });
+    expect(await page.evaluate(() => editors.react.read())).toBe('hello oneworld');
+  } finally { await page.close(); }
+});
+
 test('async reconciliation is ambiguous, blocks replay and exposes accessible user-mediated recovery', async () => {
   const page = await fixture();
   try {

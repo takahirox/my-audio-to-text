@@ -161,6 +161,69 @@ test('actual toolbar output preserves bounded recovery on overflow until explici
   } finally { await page.close(); }
 });
 
+test('incoming toolbar output is acknowledged during a Retry longer than the real RPC timeout and remains recoverable', async () => {
+  const page = await fixture();
+  const segments = Array.from({ length: 100 }, (_, index) => ` [${index}]`);
+  const incoming = ' incoming';
+  try {
+    await page.addScriptTag({ content: outputBundle });
+    await page.evaluate(async segments => {
+      window.states = []; window.outputDisconnects = 0; window.context = { signal: new AbortController().signal };
+      // Substitute only the Chrome port transport. The real PageConnection
+      // retains its 10-second deadline, talking to the actual page agent.
+      chrome.tabs = { connect() {
+        let reply;
+        return {
+          onMessage: { addListener(listener) { reply = listener; } },
+          onDisconnect: { addListener() {} },
+          postMessage(message) {
+            command(message.action, message).then(
+              result => reply({ request: message.request, result }),
+              error => reply({ request: message.request, error: error.message }),
+            );
+          },
+          disconnect() { outputDisconnects++; disconnectOutput(); },
+        };
+      } };
+      window.node = new OutputModule.FocusedInputTextOutputNode({
+        target: { tabId: 42, documentId: 'fixture', label: 'Fixture' }, onState: (...state) => states.push(state),
+      });
+      await node.start(context);
+      for (const text of segments) await node.receive('text', text, context);
+      window.retryStarted = 0; window.retryAttempts = 0;
+      window.rejectLast = event => {
+        retryStarted ||= performance.now(); retryAttempts++;
+        if (event.data === segments.at(-1)) event.preventDefault();
+      };
+      document.querySelector('#first').addEventListener('beforeinput', rejectLast);
+    }, segments);
+    await page.locator('#first').click(); await recovery(page, 'Retry in selected field');
+    await expect.poll(() => page.evaluate(() => retryAttempts)).toBeGreaterThan(0);
+    const receipt = await page.evaluate(async text => {
+      const started = performance.now();
+      await node.receive('text', text, context);
+      return { elapsed: performance.now() - started, attempts: retryAttempts, failed: !!node.failed, closed: outputDisconnects };
+    }, incoming);
+    expect(receipt).toMatchObject({ failed: false, closed: 0 });
+    expect(receipt.elapsed).toBeLessThan(2000);
+    expect(receipt.attempts).toBeLessThan(100);
+    await expect.poll(async () => (await recovery(page)).status, { timeout: 20000 }).toContain('rejected insertion');
+    expect(await page.evaluate(() => performance.now() - retryStarted)).toBeGreaterThan(10000);
+    expect(await page.evaluate(() => ({ failed: !!node.failed, closed: outputDisconnects, attempts: retryAttempts })))
+      .toEqual({ failed: false, closed: 0, attempts: 100 });
+    await expect(page.locator('#first')).toHaveValue('manual' + segments.slice(0, -1).join(''));
+    await recovery(page, 'Review text'); expect((await recovery(page)).text).toBe(segments.at(-1) + incoming);
+    expect(await append(page, 100, incoming)).toEqual({ duplicate: true });
+    await page.evaluate(() => document.querySelector('#first').removeEventListener('beforeinput', rejectLast));
+    await page.locator('#first').click(); await recovery(page, 'Retry in original field');
+    await expect(page.locator('#first')).toHaveValue('manual' + segments.join('') + incoming);
+    await expect(page.locator('[data-local-text-recovery]')).toHaveCount(0);
+    await page.evaluate(() => node.receive('text', ' next', context));
+    await expect(page.locator('#first')).toHaveValue('manual' + segments.join('') + incoming + ' next');
+    await page.evaluate(() => node.stop());
+  } finally { await page.close(); }
+});
+
 test('targetless recovery remains visible and usable on a long page', async () => {
   const page = await fixture();
   try {

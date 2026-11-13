@@ -186,7 +186,7 @@
     constructor(element, authorized, onChange = () => {}, options) {
       this.owner = { element }; this.authorized = authorized; this.onChange = onChange; this.options = options;
       try { saveCaret(this.owner); } catch {}
-      this.pending = []; this.chars = 0; this.last = -1; this.chain = Promise.resolve(); this.revision = 0;
+      this.pending = []; this.chars = 0; this.last = -1; this.chain = Promise.resolve(); this.revision = 0; this.retrying = 0;
       this.listeners = new AbortController();
       const listenerOptions = { capture: true, signal: this.listeners.signal };
       const remember = event => {
@@ -209,6 +209,12 @@
       });
       const item = { sequence, text, outcome: 'not-inserted' };
       this.pending.push(item); this.chars += text.length;
+      // Admission must not wait for Retry to drain older segments: that can
+      // outlast the output RPC timeout and disconnect this recovery session.
+      // Retry remains the sole editor while new text joins its bounded queue.
+      if (this.pending[0] !== item || this.retrying) {
+        this.onChange(this); return Promise.resolve(notInserted('Text retained; earlier delivery or recovery is pending.'));
+      }
       return this.run(async () => {
         if (this.pending[0] !== item) { this.onChange(this); return notInserted('Delivery paused; earlier text needs recovery.'); }
         return this.deliver(item);
@@ -228,6 +234,7 @@
       this.onChange(this); return result;
     }
     retry(element) {
+      this.retrying++;
       return this.run(async () => {
         // Only the toolbar caller opts into authorizing a first target through
         // explicit recovery. An existing target identity is never replaced here.
@@ -239,7 +246,7 @@
           const result = await this.deliver(this.pending[0]); if (!result.inserted) return result;
         }
         return this.pending.length ? ambiguous('Review the uncertain edit before continuing.') : { inserted: true };
-      });
+      }).finally(() => { this.retrying--; });
     }
     text() { return this.pending.map(item => item.text).join(''); }
     clear() { this.revision++; this.pending = []; this.chars = 0; this.onChange(this); }
