@@ -1,9 +1,11 @@
 import { test, expect, chromium } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { build } from 'esbuild';
 
-let browser, server, url;
+let browser, server, url, outputBundle;
 test.beforeAll(async () => {
+  outputBundle = (await build({ entryPoints: ['extension/page-output-node.js'], bundle: true, write: false, format: 'iife', globalName: 'OutputModule', define: { 'import.meta.url': '"http://127.0.0.1/unused-worker.js"' } })).outputFiles[0].text;
   server = createServer((req, res) => res.end('<!doctype html><title>Toolbar output fixture</title><input id="first" value="manual"><textarea id="second">notes</textarea><input id="secret" type="password">'));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   url = `http://127.0.0.1:${server.address().port}`;
@@ -127,18 +129,48 @@ for (const keyboard of [false, true]) test(`initial targetless text is retained 
   } finally { await page.close(); }
 });
 
-test('targetless recovery is bounded and ends with its output session', async () => {
+test('actual toolbar output preserves bounded recovery on overflow until explicit Stop closes the connection', async () => {
   const page = await fixture();
   try {
-    for (let sequence = 0; sequence < 128; sequence++) expect(await append(page, sequence, 'x')).toMatchObject({ outcome: 'not-inserted' });
-    await expect(append(page, 128, 'overflow')).rejects.toThrow('Retained text capacity reached');
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.addScriptTag({ content: outputBundle });
+    await page.evaluate(async () => {
+      window.states = []; window.outputDisconnects = 0; window.context = { signal: new AbortController().signal };
+      window.node = new OutputModule.FocusedInputTextOutputNode({
+        target: { tabId: 42, documentId: 'fixture', label: 'Fixture' }, onState: (...state) => states.push(state),
+        connectionFactory: () => ({ request: command, close() { outputDisconnects++; disconnectOutput(); } }),
+      });
+      await node.start(context);
+      for (let sequence = 0; sequence < 128; sequence++) await node.receive('text', 'x', context);
+      await node.receive('text', 'overflow', context);
+    });
+    expect(await page.evaluate(() => ({ failed: !!node.failed, closed: outputDisconnects, state: states.at(-1) }))).toMatchObject({
+      failed: false, closed: 0, state: [expect.stringContaining('capacity reached'), false, 'warning'],
+    });
     await recovery(page, 'Review text'); expect((await recovery(page)).text).toBe('x'.repeat(128));
-    await page.evaluate(() => command('stop'));
+    await recovery(page, 'Copy for review');
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('x'.repeat(128));
+    await page.evaluate(() => node.stop());
+    expect(await page.evaluate(() => outputDisconnects)).toBe(1);
     await expect(page.locator('[data-local-text-recovery]')).toHaveCount(0);
-    await page.locator('#first').click(); await page.evaluate(() => command('output'));
+    await page.locator('#first').click(); await page.evaluate(() => { connectOutput(); return command('output'); });
     expect(await append(page, 0, ' fresh')).toMatchObject({ inserted: true });
     await expect(page.locator('#first')).toHaveValue('manual fresh');
     await page.evaluate(() => disconnectOutput());
     await expect(page.locator('[data-local-text-recovery]')).toHaveCount(0);
+  } finally { await page.close(); }
+});
+
+test('targetless recovery remains visible and usable on a long page', async () => {
+  const page = await fixture();
+  try {
+    await page.evaluate(() => { document.body.style.minHeight = '3000px'; });
+    expect(await append(page, 0, 'retained')).toMatchObject({ outcome: 'not-inserted' });
+    const bounds = await page.locator('[data-local-text-recovery]').boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.y).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(page.viewportSize().width);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(page.viewportSize().height);
+    await recovery(page, 'Review text'); expect((await recovery(page)).text).toBe('retained');
+    expect(await page.evaluate(() => scrollY)).toBe(0);
   } finally { await page.close(); }
 });

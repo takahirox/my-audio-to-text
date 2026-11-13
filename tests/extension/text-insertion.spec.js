@@ -161,19 +161,48 @@ test('editable roots include rich and open-shadow editors while excluding sensit
   } finally { await page.close(); }
 });
 
-test('bounded recovery explicitly rejects overload and disposal prevents late edits', async () => {
+for (const revert of [false, true]) test(`native preflight edits are ${revert ? 'retained as ambiguous after reconciliation reverts them' : 'confirmed only after reconciliation'}`, async () => {
+  const page = await fixture();
+  try {
+    await page.evaluate(() => {
+      const element = document.createElement('textarea'); element.id = 'preflight'; document.body.prepend(element);
+    });
+    await page.locator('#preflight').focus();
+    const result = await page.evaluate(async revert => {
+      const element = document.querySelector('#preflight');
+      let edits = 0;
+      element.addEventListener('beforeinput', event => {
+        edits++; element.value = event.data;
+        element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: event.data }));
+        if (revert) setTimeout(() => { element.value = ''; }, 10);
+      });
+      window.delivery = new LocalTextInsertion.Delivery(element, () => true);
+      const result = await delivery.append(0, 'confirmed');
+      const retry = revert ? await delivery.retry(element) : null;
+      return { result, retry, edits, retained: delivery.text(), value: element.value };
+    }, revert);
+    expect(result).toMatchObject(revert
+      ? { result: { outcome: 'ambiguous' }, retry: { outcome: 'ambiguous' }, edits: 1, retained: 'confirmed', value: '' }
+      : { result: { inserted: true }, edits: 1, retained: '', value: 'confirmed' });
+  } finally { await page.close(); }
+});
+
+for (const limit of ['segments', 'characters']) test(`bounded recovery reports ${limit} backpressure without discarding text; disposal prevents late edits`, async () => {
   const page = await fixture();
   try {
     await select(page, 'react');
-    const result = await page.evaluate(async () => {
+    const result = await page.evaluate(async limit => {
       const delivery = new LocalTextInsertion.Delivery(document.querySelector('#react textarea'), () => false);
-      for (let sequence = 0; sequence < 128; sequence++) await delivery.append(sequence, 'x');
-      let overload; try { await delivery.append(128, 'overflow'); } catch (error) { overload = error.message; }
+      const count = limit === 'segments' ? 128 : 10, text = limit === 'segments' ? 'x' : 'x'.repeat(100000);
+      for (let sequence = 0; sequence < count; sequence++) await delivery.append(sequence, text);
+      const overload = await delivery.append(count, 'overflow');
       const retained = delivery.text(); delivery.dispose();
       const late = await delivery.append(129, 'late');
       return { overload, retained, late, text: delivery.text() };
-    });
-    expect(result.overload).toContain('capacity'); expect(result.retained).toHaveLength(128);
+    }, limit);
+    expect(result.overload).toMatchObject({ outcome: 'not-inserted', backpressure: true });
+    expect(result.overload.skipped).toContain('not retained');
+    expect(result.retained).toBe('x'.repeat(limit === 'segments' ? 128 : 1000000));
     expect(result.late.outcome).toBe('not-inserted'); expect(result.text).toBe('');
   } finally { await page.close(); }
 });

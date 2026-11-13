@@ -116,8 +116,10 @@
       // A cancellable preflight is useful for policy/IME handlers. It is never
       // evidence of acceptance; actual input, DOM and reconciliation are checked.
       const accepted = element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, composed: true, cancelable: true, inputType: 'insertText', data: text }));
-      if (!native(element)) await new Promise(resolve => setTimeout(resolve, 60));
-      const preflightChanged = value(element) !== before || observer.takeRecords().length || changed;
+      await new Promise(resolve => setTimeout(resolve, 60));
+      // Native value changes are not MutationObserver records. An input event
+      // also records a preflight edit that application reconciliation reverted.
+      const preflightChanged = input || value(element) !== before || observer.takeRecords().length || changed;
       if (!valid()) return preflightChanged ? ambiguous('Field changed during insertion.') : notInserted('Field became unavailable.');
       if (preflightChanged) {
         if (input && (native(element) ? value(element) : canonical(richText(element))) === expected) {
@@ -182,7 +184,11 @@
       if (this.disposed) return Promise.resolve(notInserted('Output session ended.'));
       if (sequence <= this.last) return Promise.resolve({ duplicate: true });
       this.last = sequence;
-      if (this.pending.length >= 128 || this.chars + text.length > 1000000) return Promise.reject(Error('Retained text capacity reached. Stop this output and copy retained text.'));
+      // Saturation is destination backpressure, not a broken output transport.
+      // A rejected RPC closes the toolbar port and destroys retained recovery.
+      if (this.pending.length >= 128 || this.chars + text.length > 1000000) return Promise.resolve({
+        ...notInserted('Retained text capacity reached. This segment was not retained. Stop this output and copy retained text.'), backpressure: true,
+      });
       const item = { sequence, text, outcome: 'not-inserted' };
       this.pending.push(item); this.chars += text.length;
       return this.run(async () => {
@@ -259,24 +265,27 @@
       const result = await delivery.retry(active());
       if (result.skipped) status.textContent = result.skipped;
     });
-    add('Review text', () => { preview.hidden = false; preview.value = delivery.text(); preview.focus(); });
+    add('Review text', () => { preview.hidden = false; preview.value = delivery.text(); position(); preview.focus(); });
     add('Copy for review', async () => {
       try { await navigator.clipboard.writeText(delivery.text()); status.textContent = 'Copied for review. Uncertain text may already be inserted.'; }
-      catch { preview.hidden = false; preview.value = delivery.text(); preview.focus(); preview.select(); status.textContent = 'Select and copy the retained text.'; }
+      catch { preview.hidden = false; preview.value = delivery.text(); preview.focus(); preview.select(); status.textContent = 'Select and copy the retained text.'; position(); }
     });
     add('Discard retained text', () => { delivery.clear(); onClear(); });
     shadow.append(style, panel); document.documentElement.append(host);
+    function position() {
+      const rect = anchor()?.getBoundingClientRect(), bounds = host.getBoundingClientRect();
+      const left = rect?.width ? rect.left : innerWidth - bounds.width - 8;
+      const top = rect?.width ? rect.bottom + 6 : innerHeight - bounds.height - 8;
+      host.style.setProperty('left', `${Math.max(4, Math.min(left, innerWidth - bounds.width - 4))}px`, 'important');
+      host.style.setProperty('top', `${Math.max(4, Math.min(top, innerHeight - bounds.height - 4))}px`, 'important');
+    }
     host.update = () => {
       const uncertain = delivery.pending.some(item => item.outcome === 'ambiguous');
       retry.disabled = uncertain;
       retry.textContent = delivery.owner.element ? 'Retry in original field' : 'Retry in selected field';
       status.textContent = uncertain ? 'Insertion uncertain. Review text before copying; Retry is disabled to avoid duplicates.' : delivery.owner.element ? 'Text retained. Reselect the original field and Retry, or copy for review.' : 'Text retained. Select a writable field and Retry, or copy for review.';
       if (!preview.hidden) preview.value = delivery.text();
-      const rect = anchor()?.getBoundingClientRect();
-      if (rect?.width) {
-        host.style.setProperty('left', `${Math.max(4, Math.min(rect.left, innerWidth - 304))}px`, 'important');
-        host.style.setProperty('top', `${Math.max(4, Math.min(rect.bottom + 6, innerHeight - 200))}px`, 'important');
-      }
+      position();
     };
     const remove = host.remove.bind(host);
     host.remove = () => {
@@ -284,7 +293,7 @@
       for (const name of ['input', 'pointerup', 'keyup']) document.removeEventListener(name, rememberSelection, true);
       remove();
     };
-    host.review = () => { preview.hidden = false; preview.value = delivery.text(); preview.focus(); };
+    host.review = () => { preview.hidden = false; preview.value = delivery.text(); position(); preview.focus(); };
     host.update(); return host;
   }
   globalThis.LocalTextInsertion = { active, field, editable, native, value, range, saveCaret, insert, Delivery, recoveryView };
