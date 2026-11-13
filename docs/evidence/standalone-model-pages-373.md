@@ -68,7 +68,9 @@ verification remains pending and does not block pre-merge approval.
 PR [#374](https://github.com/takahirox/my-audio-to-text/pull/374) includes the
 publication-requested closing reference `Closes #373`. This reference does not
 establish completion of the required post-merge deployment checks below; those
-checks and their evidence remain pending. Publication does not authorize merge.
+checks and their evidence remain pending and must be recorded following the
+[development flow](../development-flow.md#implement-and-propose-a-pull-request).
+Publication does not authorize merge.
 
 | Check | Expected result | Status |
 | --- | --- | --- |
