@@ -26,7 +26,11 @@ performance across machines.
   runtimes and pages without downloading model weights. The extension Models UI,
   Graph Editor, graph runtime, model checkpoints and cache policy are unchanged.
 
-## Passing validation
+## Historical passing validation
+
+The following results are preserved from the implementation before the official
+default-branch reconciliation. They were not rerun for the documentation changes
+described below.
 
 | Check | Result |
 | --- | --- |
@@ -62,15 +66,18 @@ explicit opt-in commands and requirements are in [the Playground guide](../node-
 
 Perform the
 [#373 deployment checklist](../node-playground.md#issue-373--all-standalone-model-pages)
-after merge and record its evidence here and in the Issue. This required
-verification remains pending and does not block pre-merge approval.
+after merge and record its evidence here, in the merged PR or in the closed
+Issue. This required verification remains pending and does not block pre-merge
+approval.
 
 PR [#374](https://github.com/takahirox/my-audio-to-text/pull/374) includes the
-publication-requested closing reference `Closes #373`. This reference does not
-establish completion of the required post-merge deployment checks below; those
-checks and their evidence remain pending and must be recorded following the
-[development flow](../development-flow.md#implement-and-propose-a-pull-request).
-Publication does not authorize merge.
+normal closing reference `Closes #373`. Once implementation and mandatory
+pre-merge acceptance are complete, merge and close the implemented Issue, then
+perform the checks below following the
+[official lifecycle](../development-flow.md#pre-merge-acceptance-and-post-merge-verification).
+Record the affected revision, results and evidence in the merged PR, closed
+Issue or this report. Approval and Issue closure do not establish that pending
+checks passed. Publication does not authorize merge.
 
 | Check | Expected result | Status |
 | --- | --- | --- |
@@ -82,9 +89,16 @@ No post-merge deployment results have been collected. Fixture-driven published
 tests alone do not establish real runtime/weight loading; unperformed or
 hardware-blocked checks remain pending.
 
-## Upstream suite failures
+If verification discovers an actual defect, check for an equivalent Issue and
+use it or register a new linked Issue with reproduction steps, affected revision,
+expected/actual behavior and links to #373 and PR #374. Do not keep or reopen
+#373 solely for post-merge follow-up. An unavailable environment alone does not
+establish a product defect; record the blocker and leave the check pending.
 
-The full repository suites are not green. The final full unit run had 1,076
+## Historical upstream suite failures
+
+At the original implementation checkpoint, the full repository suites were not
+green. The final full unit run had 1,076
 passing checks and one failure: the palette still classifies the removed
 `StreamingSpeakerOutput` type. That failure also occurs at the untouched input
 checkpoint.
@@ -100,3 +114,41 @@ input checkpoint: both `extension-layout` Models/legal-link cases, `shared-ui`
 Models links, `graph-quick-add`, `text-sliding-window`, and packaged
 `graph-actions` / `graph-concurrent`. These extension UI/target issues were left
 outside #373. Full-suite success must not be inferred from the focused results.
+
+## PR #374 reconciliation context
+
+On 2026-11-14, at the owner's explicit request to resume #373 after the
+35-repository policy rollout, the saved implementation checkpoint
+`1447506b11d50cce7b5d624b3773611677950438` was reconciled with the officially
+updated default branch at `c72e0264661ef9b941ac5541994d3514be67b9cc` (policy
+Issue #378 / PR #379). This merge preserves #373's standalone model pages and
+main's other fixes, including the rich-editor changes from PR #376. It does not
+restore the discarded ad hoc local policy commit `8aa5f6d`.
+
+The current guide and this report now follow the officially merged development
+and review guidance: close the implemented Issue at merge, verify afterward and
+track actual discovered defects in new or equivalent linked Issues. This is the
+owner-requested reconciliation within PR #374, not a separate policy redesign.
+Historical validation above remains evidence for the recorded checkpoints;
+unperformed heavyweight inference and published-revision checks remain pending.
+
+### Reconciliation validation — 2026-11-14
+
+The merge completed without conflicts. Its only shared paths were this feature's
+Playground guide and `package.json`; package scripts, dependencies and overrides
+retain both branches' entries, and dependency declarations match the merged
+lockfile. No code conflict resolution or additional runtime changes were needed.
+
+| Check | Result |
+| --- | --- |
+| Merge target, unresolved entries and discarded-commit ancestry | Passed: target is `c72e0264661ef9b941ac5541994d3514be67b9cc`, no unresolved entries, `8aa5f6d` is absent from the saved implementation's ancestry |
+| Branch preservation | Passed: all 22 upstream-only paths and all 52 feature-only paths other than this deliberately updated report retain their source bytes |
+| Package merge / lockfile consistency | Passed: both branches' package entries retained, dependency declarations match lockfile |
+| Current guide and report structure / links / consistency | Passed: heading hierarchy, fences, table columns, 33 local links/anchors, four external HTTPS URL forms and #373 lifecycle wording checked; external destinations were not fetched |
+| `git diff --check` and `git diff --cached --check` | Passed |
+
+Runtime regression suites, asset preparation and real-model checks were not
+rerun for this documentation reconciliation. The imported upstream code is
+unchanged; historical suite failures above remain historical and no new
+full-suite success is claimed. Published-revision checks remain **pending**.
+This reconciliation did not push, merge PR #374, close Issues or alter Tasks.

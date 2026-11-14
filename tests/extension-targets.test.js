@@ -144,3 +144,16 @@ test('microphone toolbar selection never requests permission; cancellation relea
     assert.equal(stops, 1); assert.equal(session.view.state, 'idle'); assert.equal(session.session, null);
   } finally { if (descriptor) Object.defineProperty(globalThis, 'navigator', descriptor); else delete globalThis.navigator; }
 });
+
+test('destination outcomes are recoverable notices; transport errors still detach only the output', async () => {
+  for (const outcome of ['not-inserted', 'ambiguous']) {
+    const f = output({ response: { outcome, skipped: 'Text retained for recovery' } }), ctx = context();
+    await f.node.start(ctx); await f.node.receive('text', 'retained', ctx);
+    assert.equal(f.node.failed, undefined); assert.equal(f.closed(), 0);
+    assert.equal(f.states.at(-1)[2], 'warning');
+    f.node.connection.request = async () => { throw Error('Authorization revoked'); };
+    await f.node.receive('text', 'late', ctx);
+    assert.equal(f.node.failed, true); assert.equal(f.closed(), 1);
+    assert.equal(f.states.at(-1)[2], 'error');
+  }
+});

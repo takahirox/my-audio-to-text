@@ -19,7 +19,9 @@ Mandatory pre-merge acceptance criteria must be achievable and verifiable before
 
 For a merge-triggered deployment, review the code/configuration, local build results, and applicable automated tests before merge. Verify deployment and the newly published site after merge. This preserves implementation requirements and applicable pre-merge tests; failures, skips, or unperformed checks must not be reported as passed.
 
-For intentional partial work, verify that the PR clearly states what remains and follows the [partial-work rule](development-flow.md#implement-and-propose-a-pull-request).
+Pending post-merge-only checks do not make a complete implementation partial. Preserve `Closes #N` when implementation and mandatory pre-merge acceptance are complete. Do not request removing it, keeping the source Issue open or withholding approval solely for those pending checks: doing so causes the ProjectWeave Review → Fix → Publish → Review loop described in the [publication and partial-work rules](development-flow.md#implement-and-propose-a-pull-request).
+
+For intentional partial work, verify that the PR clearly states what remains and follows those rules. Missing implementation, mandatory pre-merge tests, required protections and genuinely necessary pre-merge human acceptance remain blockers.
 
 ## No unnecessary scope
 
@@ -89,7 +91,7 @@ A PR is ready to merge only after review and when:
 - it fully implements the required scope and satisfies pre-merge acceptance criteria, or accurately identifies intentional partial work;
 - it has no unjustified scope or complexity;
 - the implementation is correct and applicable pre-merge validation is sufficient;
-- required post-merge verification is recorded separately as pending, with expected results, and the Issue remains open until it is performed and recorded;
+- any required post-merge verification is recorded separately as pending, with expected results, following the [merge, closure and follow-up lifecycle](development-flow.md#pre-merge-acceptance-and-post-merge-verification);
 - review feedback has been resolved;
 - the PR description accurately reflects what was implemented.
 

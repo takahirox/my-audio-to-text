@@ -101,10 +101,14 @@ PLAYGROUND_MODELS=whisper PLAYGROUND_AUDIO_FILE=/path/to/speech.wav npm run test
 
 ### Issue #373 — all standalone model pages
 
-**Pending.** Keep #373 open until these checks are performed on the published
-merged revision and the results are recorded in the Issue and
-[validation evidence](evidence/standalone-model-pages-373.md). Local tests and
-PR approval do not establish deployment success.
+**Pending.** Follow the
+[merge, closure and follow-up lifecycle](development-flow.md#pre-merge-acceptance-and-post-merge-verification):
+retain `Closes #373` in PR #374 when implementation and mandatory pre-merge
+acceptance are complete, merge and close the implemented Issue, then perform
+these checks on the published merged revision. Record the affected SHA, results
+and evidence in the merged PR, closed Issue or
+[validation evidence](evidence/standalone-model-pages-373.md). Local tests,
+PR approval and Issue closure do not establish deployment success.
 
 1. **Deployment:** confirm that both jobs of the Pages workflow succeeded for
    the merged commit SHA. Record that SHA, the workflow/deployment URL and UTC
@@ -131,6 +135,12 @@ PR approval do not establish deployment success.
    readiness/output and any failures with browser/hardware details. Leave
    unperformed checks pending, including models unavailable on that hardware.
 
+For an actual defect discovered during verification, check for an equivalent
+Issue and use it or register a new linked Issue with reproduction steps, affected
+revision, expected/actual behavior and links to #373 and PR #374. Do not keep or
+reopen #373 solely for post-merge follow-up. An unavailable test environment is
+a blocker to record with the pending check, not evidence of a product defect.
+
 The published deterministic command below can supplement navigation/lifecycle
 evidence, but its worker/asset fixtures do not verify deployed inference runtimes
 or real weights. Use the explicit real-model commands above and existing
@@ -140,8 +150,8 @@ runtime evidence. Do not report fixture results as real-model deployment checks.
 ### Earlier Issues
 
 **Pending for Issues #63 and #65.** Local tests do not establish deployment of the merged
-revision. Keep the Issue open until the following checks are performed and the
-evidence is recorded:
+revision. Follow the [merge, closure and follow-up lifecycle](development-flow.md#pre-merge-acceptance-and-post-merge-verification),
+then perform the following checks and record their evidence:
 
 1. Confirm the successful Pages push/deployment run belongs to the merged commit
    SHA; record the run URL, SHA and verification time.

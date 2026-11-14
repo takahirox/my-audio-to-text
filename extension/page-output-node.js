@@ -43,7 +43,7 @@ export class FocusedInputTextOutputNode {
       // identity, never part of the plain TEXT contract. Never retry an edit.
       const result = await this.connection.request('append', { sequence: this.sequence++, text });
       if (context.signal.aborted || this.failed || this.disposed) return;
-      if (result?.skipped) this.onState(`Insertion skipped: ${result.skipped} Other branches continue.`, false, 'error');
+      if (result?.skipped) this.onState(`Insertion skipped: ${result.skipped} Other branches continue.`, false, result.outcome ? 'warning' : 'error');
       else if (result?.inserted) this.onState(`${this.target.label} · inserted ${++this.inserted} text value(s)`, true);
     } catch (error) { if (!context.signal.aborted) this.failure(error.message); }
   }

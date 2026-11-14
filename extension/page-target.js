@@ -38,7 +38,7 @@ export class PageConnection {
 export async function authorizePage(tabId) {
   if (!Number.isInteger(tabId)) throw Error('Invoke the toolbar action on the target tab first.');
   // Only the explicitly invoked top-level document. Chrome enforces activeTab.
-  const [result] = await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ['extension/page-agent.js'], world: 'ISOLATED' });
+  const [result] = await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ['extension/text-insertion.js', 'extension/page-agent.js'], world: 'ISOLATED' });
   if (!result?.documentId) throw Error('This page cannot be targeted. Use a normal web page and invoke its toolbar action.');
   const target = { tabId, documentId: result.documentId };
   const connection = new PageConnection(target);

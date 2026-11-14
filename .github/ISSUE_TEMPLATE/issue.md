@@ -20,8 +20,8 @@ Mandatory pre-merge acceptance criteria must be achievable and verifiable before
 
 ## Required post-merge verification
 
-List checks that can only be performed after merge separately from pre-merge acceptance criteria, or state "None." Describe the expected result and report each check as **pending** until performed. These remain required verification, without relaxing implementation requirements or applicable pre-merge tests. See [acceptance and verification guidance](https://github.com/takahirox/my-audio-to-text/blob/main/docs/development-flow.md#pre-merge-acceptance-and-post-merge-verification).
+List checks needed by this change that can only be performed after merge, or state "None." Describe the expected result and report each check as **pending** until performed. Follow the [merge, closure and follow-up lifecycle](https://github.com/takahirox/my-audio-to-text/blob/main/docs/development-flow.md#pre-merge-acceptance-and-post-merge-verification): close the implemented Issue after merge, record verification evidence, and track actual defects in new or existing linked Issues.
 
 ## Context
 
-Add relevant background, constraints, examples, references, or related Issues.
+Add relevant background, constraints, examples, references, or related Issues/PRs. For defects, include reproduction steps, the affected revision and actual behavior.

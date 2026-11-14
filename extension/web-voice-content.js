@@ -12,30 +12,9 @@
     progress_activity: 'M480-96q-78.72 0-148.8-30.24-70.08-30.24-122.4-82.56-52.32-52.32-82.56-122.4Q96-401.28 96-480q0-79.68 30.22-149.28 30.21-69.6 82.49-121.92 52.28-52.32 122.3-82.56Q401.04-864 479.69-864 496-864 506-854t10 25.51q0 15.51-10 26T480-792q-129.67 0-220.84 90.5Q168-611 168-480.5T259.16-259q91.17 91 220.84 91 131 0 221.5-91.16Q792-350.33 792-480q0-16 10.49-26t26-10Q844-516 854-506q10 10 10 26.31 0 78.65-30.24 148.68-30.24 70.02-82.56 122.3-52.32 52.28-121.92 82.49Q559.68-96 480-96Z',
   };
   const controlSize = 36, gap = 6, viewportInset = 4;
-  const sensitive = /password|passcode|\bauth(?:entication)?\b|\blogin\b|\busername\b|\bpin\b|\biban\b|\bbic\b|\bswift\b|financial|transaction|payment|credit|cc-|card.?number|cvc|cvv|security|one.?time|otp|verification|social.?security|ssn|bank|routing|account.?number/i;
-  function editable(element) {
-    if (!(element instanceof HTMLElement) || !element.isConnected || element.ownerDocument !== document || element.getRootNode() !== document) return false;
-    if (element.closest('[hidden],[inert],[aria-hidden="true"],[aria-disabled="true"],[aria-readonly="true"]') || !element.getClientRects().length) return false;
-    for (let ancestor = element; ancestor; ancestor = ancestor.parentElement) {
-      const style = getComputedStyle(ancestor);
-      if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) return false;
-      if (sensitive.test(['id', 'name', 'autocomplete', 'aria-label', 'placeholder'].map(key => ancestor.getAttribute(key) || '').join(' '))) return false;
-    }
-    if (sensitive.test((element.getAttribute('aria-labelledby') || '').split(/\s+/).map(id => document.getElementById(id)?.textContent || '').join(' '))) return false;
-    if (sensitive.test([...element.labels || []].map(label => label.textContent).join(' '))) return false;
-    if (element.closest('form')?.querySelector('input[type="password"],input[autocomplete^="cc-"],input[autocomplete="one-time-code"]')) return false;
-    if (element instanceof HTMLInputElement) return ['text', 'search'].includes(element.type) && !element.matches(':disabled') && !element.readOnly;
-    if (element instanceof HTMLTextAreaElement) return !element.matches(':disabled') && !element.readOnly;
-    if (element.querySelector('input,textarea,iframe,img,video,canvas,[contenteditable="false"],[data-lexical-editor],.ProseMirror,.ql-editor') || element.matches('[data-lexical-editor],.ProseMirror,.ql-editor')) return false;
-    return element.isContentEditable && element.getAttribute('contenteditable') !== 'false';
-  }
-  function field(element) {
-    if (element?.isContentEditable) while (element.parentElement?.isContentEditable) element = element.parentElement;
-    return element;
-  }
-  const native = element => element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
-  const value = element => native(element) ? element.value : element.textContent;
-  let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle', inserting = false;
+  const { editable, field, native, value, saveCaret, active, Delivery } = LocalTextInsertion;
+  let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle';
+  let recovery, recoveryView;
   let listeners, menu, menuCaret, choices = [], defaultId = null;
   const positionKey = 'web-microphone-position-v1';
   const validPosition = value => ['auto', 'left', 'right'].includes(value) ? value : 'auto';
@@ -56,7 +35,7 @@
     if (session) closeMenu();
     host?.setAttribute('data-voice-state', next);
     if (!button) return;
-    const labels = { idle: 'Start voice typing', preparing: 'Preparing… Click to cancel', recording: 'Recording · Stop voice typing', stopping: 'Stopping…', error: 'Voice typing error · Retry' };
+    const labels = { idle: recovery?.pending.length ? 'Review retained dictation' : 'Start voice typing', preparing: 'Preparing… Click to cancel', recording: 'Recording · Stop voice typing', stopping: 'Stopping…', error: 'Voice typing error · Retry' };
     const icon = { idle: 'mic', preparing: 'progress_activity', recording: 'stop', stopping: 'progress_activity', error: 'error' }[next];
     // Build SVG in the isolated world; no HTML parsing, font or resource requests.
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -72,32 +51,26 @@
   }
   function position() {
     if (!host || !target) return;
-    if (!editable(target)) {
-      if (session) abort('Target field removed or no longer supported. Focus a supported field to retry.');
-      else if (state === 'error') host.style.setProperty('visibility', 'hidden', 'important');
-      else removeWidget();
-      return;
+    const available = editable(target);
+    if (!available) {
+      if (session || recovery) {
+        status.textContent = session ? 'Delivery paused. Reselect the original field or copy retained text.' : 'Stopped · text retained for review.';
+      }
+      else {
+        if (state === 'error') host.style.setProperty('visibility', 'hidden', 'important');
+        else removeWidget();
+        return;
+      }
     }
-    const rect = target.getBoundingClientRect(), viewport = window.visualViewport;
+    // Keep the last control location when its editor disappears, but still
+    // clamp it and restore modal access so recording can always be stopped.
+    const rect = available ? target.getBoundingClientRect() : host.getBoundingClientRect(), viewport = window.visualViewport;
     const bounds = { left: (viewport?.offsetLeft || 0) + viewportInset, top: (viewport?.offsetTop || 0) + viewportInset,
       right: (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth) - viewportInset,
       bottom: (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) - viewportInset };
     // Keep active Stop/Cancel outside the page's inert subtree when a modal
-    // opens. Inspect only the viewport center, descending shadow roots there
-    // to find the topmost modal; this is not obstacle discovery.
-    const visited = new Set();
-    const modalAt = root => {
-      if (visited.has(root)) return null;
-      visited.add(root);
-      for (const element of root.elementsFromPoint((bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2)) {
-        if (element === host) continue;
-        const shadow = element instanceof HTMLElement && chrome.dom.openOrClosedShadowRoot(element);
-        const modal = (shadow && modalAt(shadow)) || element.closest('dialog:modal');
-        if (modal) return modal;
-      }
-      return null;
-    };
-    const modal = session && modalAt(document);
+    // opens, including when the original target is no longer available.
+    const modal = (session || recovery) && LocalTextInsertion.activeModal(host);
     const parent = modal || document.documentElement;
     if (host.parentElement !== parent) parent.append(host);
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -108,6 +81,7 @@
     if (microphonePosition === 'left' ? left < bounds.left : left + controlSize > bounds.right) {
       left = microphonePosition === 'left' ? right : leftSide;
     }
+    if (!available) left = rect.left;
     const anchor = {
       left: clamp(left, bounds.left, bounds.right - controlSize),
       top: clamp((rect.top + rect.bottom - controlSize) / 2, bounds.top, bounds.bottom - controlSize),
@@ -149,16 +123,21 @@
       status.style.top = `${clamp(top + height <= bounds.bottom ? top : anchor.top - gap - height, bounds.top, bounds.bottom - height) - anchor.top}px`;
     }
   }
-  function removeWidget() { closeMenu(); host?.remove(); host = button = status = null; if (!session) target = null; }
-  function saveCaret(owner) {
-    if (native(owner.element)) { owner.start = owner.element.selectionStart; owner.end = owner.element.selectionEnd; owner.direction = owner.element.selectionDirection; }
-    else {
-      const selection = getSelection();
-      if (!selection?.rangeCount || !owner.element.contains(selection.anchorNode) || !owner.element.contains(selection.focusNode)) throw Error('Select a caret in this basic editable field first.');
-      owner.range = selection.getRangeAt(0).cloneRange();
+  function deliveryChanged(delivery) {
+    if (delivery.disposed || !enabled) return;
+    if (!delivery.pending.length) {
+      recoveryView?.remove(); recoveryView = null;
+      if (recovery === delivery) { recovery = null; delivery.dispose(); focus(); }
+      if (session?.delivery === delivery) stateUI(state);
+      return;
     }
-    owner.expected = value(owner.element);
+    recoveryView ||= LocalTextInsertion.recoveryView(delivery, () => target, () => {
+      if (session?.delivery === delivery) stateUI(state);
+    });
+    recoveryView.update();
+    if (status) status.textContent = session ? 'Delivery paused · text retained. Recording continues until Stop.' : 'Stopped · text retained for review.';
   }
+  function removeWidget() { closeMenu(); host?.remove(); host = button = status = null; if (!session) target = null; }
   function closeMenu(restore = false) {
     if (!menu) return;
     menu.remove(); menu = null; button?.setAttribute('aria-expanded', 'false'); button?.removeAttribute('aria-controls');
@@ -223,7 +202,7 @@
       try { session.connection?.disconnect(); } catch { /* Context may have been revoked. */ }
     }
     // Keep ownership until the runtime acknowledges track/Worker cleanup.
-    if (session && !session.admitted) session = null;
+    if (session && !session.admitted) { session.delivery?.dispose(); session = null; }
     stateUI('error', error);
   }
   async function stopCapture(owner) {
@@ -243,14 +222,21 @@
     } catch (error) { if (session === owner) abort(error.message); }
   }
   function startCapture(event, graphId) {
-    if (!event.isTrusted || !enabled || !control || session) return;
+    if (!event.isTrusted || !enabled || !control || session || recovery?.pending.length) return;
     const element = menuCaret?.element || target;
     closeMenu(true);
     if (graphId === undefined && !defaultId) { stateUI('error', 'Right-click the mic (or press Shift+F10) to choose a voice graph first.'); return; }
     try {
       if (target !== element || !editable(element)) throw Error('Focus a supported writable field first.');
-      const owner = { element, capability: crypto.randomUUID(), last: -1 };
-      saveCaret(owner); session = owner; stateUI('preparing');
+      const owner = { element, capability: crypto.randomUUID() };
+      saveCaret(owner); session = owner;
+      owner.delivery = new Delivery(element, () => enabled && (session === owner && !owner.cancelRequested || recovery === owner.delivery), deliveryChanged);
+      // Keyboard activation may focus the control. Restore only the verified
+      // original selection captured before starting, never another editor.
+      element.focus({ preventScroll: true });
+      if (native(element)) element.setSelectionRange(owner.start, owner.end, owner.direction);
+      else { const selection = getSelection(); selection.removeAllRanges(); selection.addRange(owner.range); }
+      stateUI('preparing');
       owner.capture = new WebVoiceCapture(
         message => { if (session === owner && !owner.cancelRequested) send(message); },
         error => { if (session === owner) abort(error); });
@@ -326,6 +312,7 @@
       button.addEventListener('pointerdown', event => { if (event.isTrusted) event.preventDefault(); });
       button.addEventListener('click', event => {
         if (!event.isTrusted || !enabled) return;
+        if (!session && recovery?.pending.length) { recoveryView?.review(); return; }
         if (session) {
           if (session.cancelRequested || state === 'error') return;
           void stopCapture(session);
@@ -338,15 +325,16 @@
     stateUI(session ? state : 'idle');
   }
   function focus() {
-    if (!enabled || session) return;
+    if (!enabled || session || recovery) return;
     if (!choices.length) { removeWidget(); return; }
-    const element = field(document.activeElement);
+    const element = active();
     if (element === host) return;
     if (editable(element)) widget(element); else removeWidget();
   }
   function disable() {
     enabled = false; disposed = true; choices = []; defaultId = null;
     const owner = session, previous = control; session = null; control = null;
+    owner?.delivery?.dispose(); recovery?.dispose(); recovery = null; recoveryView?.remove(); recoveryView = null;
     observer?.disconnect(); observer = null; clearInterval(timer);
     cancelAnimationFrame(placementFrame); placementFrame = null;
     removeWidget();
@@ -367,7 +355,7 @@
       if (message.type === 'enabled') {
         enabled = true; focus();
         observer = new MutationObserver(records => {
-          if (!records.some(record => record.target !== host && !host?.contains(record.target))) return;
+          if (!records.some(record => record.target !== host && record.target !== recoveryView && !host?.contains(record.target))) return;
           schedulePosition();
         });
         observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true,
@@ -396,7 +384,10 @@
       if (message.type === 'ended') {
         if (!session || message.capability !== session.capability) return;
         void session.capture?.stop(false).catch(() => {});
+        const delivery = session.delivery;
         session?.connection?.disconnect(); session = null;
+        if (delivery.pending.length) { recovery = delivery; deliveryChanged(delivery); }
+        else delivery.dispose();
         // Only active sessions stay bound to the original field. Reconcile
         // focus before offering another start, including hiding idle controls
         // when focus moved away from supported editors.
@@ -418,12 +409,7 @@
     window.addEventListener('blur', event => { if (event.target === window) closeMenu(); }, options);
     visualViewport?.addEventListener('resize', () => { closeMenu(); schedulePosition(); }, options);
     visualViewport?.addEventListener('scroll', () => { closeMenu(); schedulePosition(); }, options);
-    document.addEventListener('selectionchange', () => {
-      if (!inserting && session && document.activeElement === session.element) try { saveCaret(session); } catch { /* A later insertion validates the saved range. */ }
-    }, options);
-    document.addEventListener('input', event => {
-      if (!inserting && event.isTrusted && session?.element === event.target) saveCaret(session);
-    }, options);
+
   }
   window.addEventListener('pagehide', () => { send({ type: 'cancel' }); disable(); listeners.abort(); });
   window.addEventListener('pageshow', event => {
@@ -449,43 +435,33 @@
     port.onDisconnect.addListener(() => {
       if (session === owner && state !== 'stopping') abort('Output connection lost. Click the mic to retry.');
     });
+    let outputChain = Promise.resolve();
     port.onMessage.addListener(message => {
       if (!Number.isSafeInteger(message.request)) return;
       const reply = result => { try { port.postMessage({ request: message.request, result }); } catch {} };
-      try {
-        if (!enabled || session !== owner || owner.cancelRequested || message.capability !== owner.capability || !editable(owner.element)) throw Error('Stale, unauthorized or removed voice target.');
-        if (message.action === 'output') { reply(true); return; }
-        if (message.action !== 'append' || !Number.isSafeInteger(message.sequence) || message.sequence < 0 || typeof message.text !== 'string' || message.text.length > 100000) throw Error('Invalid voice output message.');
-        if (message.sequence <= owner.last) { reply({ duplicate: true }); return; }
-        owner.last = message.sequence; // Never retry even an ambiguous edit.
-        if (value(owner.element) !== owner.expected) throw Error('Field changed outside normal editing. Stop and select the insertion point again.');
-        const element = owner.element, text = message.text;
-        inserting = true;
-        try {
-          if (!element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: text }))) throw Error('The editor rejected insertion. Use another field.');
-          if (!enabled || session !== owner || owner.cancelRequested || !editable(element) || value(element) !== owner.expected) throw Error('Field changed during insertion.');
-          if (native(element)) {
-            const next = owner.expected.slice(0, owner.start) + text + owner.expected.slice(owner.end);
-            if (element.maxLength >= 0 && next.length > element.maxLength) throw Error('Field length limit reached.');
-            const prototype = element instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
-            Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, next);
-            owner.start += text.length; owner.end = owner.start;
-            if (document.activeElement === element) element.setSelectionRange(owner.start, owner.end);
-          } else {
-            const range = owner.range;
-            if (!element.contains(range.startContainer) || !element.contains(range.endContainer)) throw Error('Editable selection was removed.');
-            range.deleteContents(); const node = document.createTextNode(text); range.insertNode(node); range.setStartAfter(node); range.collapse(true);
-            if (document.activeElement === element) { const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range.cloneRange()); }
-          }
-          owner.expected = value(element);
-          element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
-          if (value(element) !== owner.expected) throw Error('Website changed the inserted text. Stop and select a field again.');
-          reply({ inserted: true });
-        } finally { inserting = false; }
-      } catch (error) {
-        try { port.postMessage({ request: message.request, error: error.message }); } catch {}
-        abort(error.message);
+      // Authorization/protocol failures remain fatal; destination failures are
+      // explicit delivery results and cannot cancel the microphone or ASR.
+      if (!enabled || session !== owner || owner.cancelRequested || message.capability !== owner.capability) {
+        try { port.postMessage({ request: message.request, error: 'Stale or unauthorized voice output.' }); } catch {}
+        port.disconnect(); return;
       }
+      if (message.action === 'output') { reply(true); return; }
+      if (message.action !== 'append' || !Number.isSafeInteger(message.sequence) || message.sequence < 0 || typeof message.text !== 'string' || message.text.length > 100000) {
+        abort('Invalid voice output message.'); return;
+      }
+      outputChain = outputChain.then(async () => {
+        if (session !== owner || owner.cancelRequested) return;
+        try {
+          const result = await owner.delivery.append(message.sequence, message.text);
+          reply(result);
+          // Bound recovery memory with explicit backpressure, leaving room for
+          // the currently decoding final segment while Stop drains the graph.
+          if (owner.delivery.chars >= 500000 || owner.delivery.pending.length >= 64) {
+            status.textContent = 'Retained text is full. Stopping; copy text before starting again.';
+            void stopCapture(owner);
+          }
+        } catch (error) { abort(error.message); }
+      });
     });
   });
   listen(); connect();
