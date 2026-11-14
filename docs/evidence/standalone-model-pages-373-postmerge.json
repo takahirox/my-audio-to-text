@@ -1,0 +1,2546 @@
+{
+  "verified_at": "2026-11-14T09:07:42.678439+00:00",
+  "repository": "takahirox/my-audio-to-text",
+  "pr": {
+    "number": 374,
+    "html_url": "https://github.com/takahirox/my-audio-to-text/pull/374",
+    "state": "closed",
+    "merged": true,
+    "merged_at": "2026-11-14T08:58:05Z",
+    "merge_commit_sha": "d58849c766b7903a2d5f8a1f2201853f78a69e68"
+  },
+  "head_sha": "3a40a582b2831edc39301a47c41ccdb57c286cfd",
+  "issue": {
+    "number": 373,
+    "html_url": "https://github.com/takahirox/my-audio-to-text/issues/373",
+    "state": "closed",
+    "state_reason": "completed",
+    "closed_at": "2026-11-14T08:58:06Z"
+  },
+  "pages_run": {
+    "id": 43578274950,
+    "html_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/43578274950",
+    "head_sha": "d58849c766b7903a2d5f8a1f2201853f78a69e68",
+    "status": "completed",
+    "conclusion": "success",
+    "created_at": "2026-11-14T08:58:08Z",
+    "updated_at": "2026-11-14T08:59:05Z"
+  },
+  "jobs": [
+    {
+      "id": 132397256615,
+      "name": "build",
+      "html_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/43578274950/job/132397256615",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-14T08:58:10Z",
+      "completed_at": "2026-11-14T08:58:46Z"
+    },
+    {
+      "id": 132397405634,
+      "name": "deploy",
+      "html_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/43578274950/job/132397405634",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-14T08:58:50Z",
+      "completed_at": "2026-11-14T08:59:05Z"
+    }
+  ],
+  "deployment": {
+    "id": 7785295954,
+    "sha": "d58849c766b7903a2d5f8a1f2201853f78a69e68",
+    "statuses": [
+      {
+        "state": "success",
+        "environment_url": "https://takahirox.github.io/my-audio-to-text/",
+        "log_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/43578274950/job/132397405634",
+        "created_at": "2026-11-14T08:59:06Z"
+      },
+      {
+        "state": "in_progress",
+        "environment_url": "",
+        "log_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/43578274950/job/132397405634",
+        "created_at": "2026-11-14T08:58:51Z"
+      },
+      {
+        "state": "queued",
+        "environment_url": "",
+        "log_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/43578274950/job/132397405634",
+        "created_at": "2026-11-14T08:58:50Z"
+      },
+      {
+        "state": "queued",
+        "environment_url": "",
+        "log_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/43578274950/job/132397405634",
+        "created_at": "2026-11-14T08:58:49Z"
+      },
+      {
+        "state": "waiting",
+        "environment_url": "",
+        "log_url": "https://github.com/takahirox/my-audio-to-text/actions/runs/43578274950/job/132397405634",
+        "created_at": "2026-11-14T08:58:48Z"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "report": "real-cpu-recorded.json",
+      "stats": {
+        "startTime": "2026-11-14T09:05:13.479Z",
+        "duration": 66948.322,
+        "expected": 5,
+        "skipped": 5,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "tests": [
+        {
+          "title": "whisper: real standalone model readiness and local run",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 12918,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "zipformer: real standalone model readiness and local run",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 8727,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "parakeet-v3: real standalone model readiness and local run",
+          "status": "skipped",
+          "results": [
+            {
+              "status": "skipped",
+              "duration_ms": 30,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "moonshine-medium: real standalone model readiness and local run",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 28935,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "text-summary-lfm2: real standalone model readiness and local run",
+          "status": "skipped",
+          "results": [
+            {
+              "status": "skipped",
+              "duration_ms": 47,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "text-summary-qwen35: real standalone model readiness and local run",
+          "status": "skipped",
+          "results": [
+            {
+              "status": "skipped",
+              "duration_ms": 30,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "if-condition: real standalone model readiness and local run",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 5614,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "qwen3-tts: real standalone model readiness and local run",
+          "status": "skipped",
+          "results": [
+            {
+              "status": "skipped",
+              "duration_ms": 29,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "cosyvoice3: real standalone model readiness and local run",
+          "status": "skipped",
+          "results": [
+            {
+              "status": "skipped",
+              "duration_ms": 31,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "ReazonSpeech simulated: real Silero runtime, Stop and repeat",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 10193,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "report": "real-translation-tts.json",
+      "stats": {
+        "startTime": "2026-11-14T09:03:26.297Z",
+        "duration": 135430.778,
+        "expected": 2,
+        "skipped": 2,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "tests": [
+        {
+          "title": "real opus: Japanese → English initialization, inference and repeat",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 27970,
+              "error": null,
+              "stdout": [
+                "{\"choice\":\"opus\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false}}\n",
+                "{\"choice\":\"opus\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"今日は良い天気です。\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"It's a nice day today.\",\"load-time\":\"24751 ms\",\"latency\":\"120 ms\"}\n",
+                "{\"choice\":\"opus\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"今日は良い天気です。\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"It's a nice day today.\",\"load-time\":\"2062 ms\",\"latency\":\"120 ms\"}\n"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "real opus-en-ja: English → Japanese initialization, inference and repeat",
+          "status": "skipped",
+          "results": [
+            {
+              "status": "skipped",
+              "duration_ms": 36,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "real gemma: Japanese → English initialization, inference and repeat",
+          "status": "skipped",
+          "results": [
+            {
+              "status": "skipped",
+              "duration_ms": 28,
+              "error": null,
+              "stdout": []
+            }
+          ]
+        },
+        {
+          "title": "real supertonic3: Japanese and English waveform, playback, repeat and local-only requests",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 49526,
+              "error": null,
+              "stdout": [
+                "{\"slug\":\"supertonic3\",\"language\":\"ja\",\"browser\":\"153.0.8010.12\",\"device\":{\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"cores\":16,\"wasm\":true,\"gzip\":true,\"isolated\":false,\"secure\":true},\"host\":{\"platform\":\"darwin\",\"architecture\":\"arm64\",\"cpu\":\"Apple M4 Max\"},\"status\":\"Complete\",\"error\":\"\",\"load\":\"42232 ms\",\"generation\":\"1614 ms\",\"waveform\":{\"samples\":125952,\"sampleRate\":44100,\"channels\":1,\"finite\":true,\"peak\":0.2699722647666931,\"rms\":0.04632294137526174,\"duration\":2.8560544217687074}}\n",
+                "{\"slug\":\"supertonic3\",\"language\":\"en\",\"browser\":\"153.0.8010.12\",\"device\":{\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"cores\":16,\"wasm\":true,\"gzip\":true,\"isolated\":false,\"secure\":true},\"host\":{\"platform\":\"darwin\",\"architecture\":\"arm64\",\"cpu\":\"Apple M4 Max\"},\"status\":\"Complete\",\"error\":\"\",\"load\":\"530 ms\",\"generation\":\"1679 ms\",\"waveform\":{\"samples\":132096,\"sampleRate\":44100,\"channels\":1,\"finite\":true,\"peak\":0.22078558802604675,\"rms\":0.042108591610214,\"duration\":2.995374149659864}}\n",
+                "{\"slug\":\"supertonic3\",\"language\":\"en\",\"browser\":\"153.0.8010.12\",\"device\":{\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"cores\":16,\"wasm\":true,\"gzip\":true,\"isolated\":false,\"secure\":true},\"host\":{\"platform\":\"darwin\",\"architecture\":\"arm64\",\"cpu\":\"Apple M4 Max\"},\"status\":\"Complete\",\"error\":\"\",\"load\":\"535 ms\",\"generation\":\"1643 ms\",\"waveform\":{\"samples\":132096,\"sampleRate\":44100,\"channels\":1,\"finite\":true,\"peak\":0.2456064373254776,\"rms\":0.04079268464354551,\"duration\":2.995374149659864}}\n"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "real kokoro: Japanese and English waveform, playback, repeat and local-only requests",
+          "status": "unexpected",
+          "results": [
+            {
+              "status": "failed",
+              "duration_ms": 57484,
+              "error": "  49 |         if (request.origin !== new URL(page.url()).origin) {\n  50 |           const host = new URL(request.origin).hostname;\n> 51 |           expect(host === 'huggingface.co' || host.endsWith('.huggingface.co') || host.endsWith('.hf.co')).toBe(true);\n     |                                                                                                            ^\n  52 |           if (host === 'huggingface.co') {\n  53 |             const model = slug === 'kokoro' ? 'onnx-community/Kokoro-82M-v1.0-ONNX' : 'supertone-oss-archive/supertonic-3';\n  54 |             const revision = slug === 'kokoro' ? '1939ad2a8e416c0acfeecc08a694d14ef25f2231' : 'aafc6e32416a594460b32413efc49d7fe4ce6d46';",
+              "stdout": [
+                "{\"slug\":\"kokoro\",\"language\":\"ja\",\"browser\":\"153.0.8010.12\",\"device\":{\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"cores\":16,\"wasm\":true,\"gzip\":true,\"isolated\":false,\"secure\":true},\"host\":{\"platform\":\"darwin\",\"architecture\":\"arm64\",\"cpu\":\"Apple M4 Max\"},\"status\":\"Complete\",\"error\":\"\",\"load\":\"38558 ms\",\"generation\":\"4423 ms\",\"waveform\":{\"samples\":67800,\"sampleRate\":24000,\"channels\":1,\"finite\":true,\"peak\":0.5330084562301636,\"rms\":0.09488887097317482,\"duration\":2.825}}\n",
+                "{\"slug\":\"kokoro\",\"language\":\"en\",\"browser\":\"153.0.8010.12\",\"device\":{\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"cores\":16,\"wasm\":true,\"gzip\":true,\"isolated\":false,\"secure\":true},\"host\":{\"platform\":\"darwin\",\"architecture\":\"arm64\",\"cpu\":\"Apple M4 Max\"},\"status\":\"Complete\",\"error\":\"\",\"load\":\"3199 ms\",\"generation\":\"4280 ms\",\"waveform\":{\"samples\":66600,\"sampleRate\":24000,\"channels\":1,\"finite\":true,\"peak\":0.6262671947479248,\"rms\":0.06879230741969239,\"duration\":2.775}}\n",
+                "{\"slug\":\"kokoro\",\"language\":\"en\",\"browser\":\"153.0.8010.12\",\"device\":{\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"cores\":16,\"wasm\":true,\"gzip\":true,\"isolated\":false,\"secure\":true},\"host\":{\"platform\":\"darwin\",\"architecture\":\"arm64\",\"cpu\":\"Apple M4 Max\"},\"status\":\"Complete\",\"error\":\"\",\"load\":\"647 ms\",\"generation\":\"4222 ms\",\"waveform\":{\"samples\":66600,\"sampleRate\":24000,\"channels\":1,\"finite\":true,\"peak\":0.6262671947479248,\"rms\":0.06879230741969239,\"duration\":2.775}}\n"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "report": "real-opus-en-ja.json",
+      "stats": {
+        "startTime": "2026-11-14T09:04:07.221Z",
+        "duration": 159268.92599999998,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "tests": [
+        {
+          "title": "real opus-en-ja: English → Japanese initialization, inference and repeat",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 158914,
+              "error": null,
+              "stdout": [
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false}}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"Hello.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"こんにちは\",\"load-time\":\"59363 ms\",\"latency\":\"60 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"HELLO.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"こんにちは\",\"load-time\":\"2584 ms\",\"latency\":\"60 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"The meeting starts at ten.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"集会は10時から開始する.\",\"load-time\":\"1980 ms\",\"latency\":\"119 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"THE MEETING STARTS AT TEN.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"集会は10時から開始する.\",\"load-time\":\"2186 ms\",\"latency\":\"118 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"Please send me the report.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"報告書を寄越して\",\"load-time\":\"7410 ms\",\"latency\":\"113 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"PLEASE SEND ME THE REPORT.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"報告書を寄越して\",\"load-time\":\"3401 ms\",\"latency\":\"110 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"Where is the train station?\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"駅はどこだ?\",\"load-time\":\"6527 ms\",\"latency\":\"82 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"WHERE IS THE TRAIN STATION?\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"駅はどこだ?\",\"load-time\":\"3061 ms\",\"latency\":\"85 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"We need to finish this project by Friday.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"金曜までにこのプロジェクトを完了しなければならない.\",\"load-time\":\"26052 ms\",\"latency\":\"129 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":0,\"fixture\":\"WE NEED TO FINISH THIS PROJECT BY FRIDAY.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"金曜までにこのプロジェクトを完了しなければならない.\",\"load-time\":\"3532 ms\",\"latency\":\"131 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"Hello.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"こんにちは\",\"load-time\":\"3807 ms\",\"latency\":\"61 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"HELLO.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"こんにちは\",\"load-time\":\"8834 ms\",\"latency\":\"60 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"The meeting starts at ten.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"集会は10時から開始する.\",\"load-time\":\"3414 ms\",\"latency\":\"117 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"THE MEETING STARTS AT TEN.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"集会は10時から開始する.\",\"load-time\":\"2893 ms\",\"latency\":\"117 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"Please send me the report.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"報告書を寄越して\",\"load-time\":\"2623 ms\",\"latency\":\"107 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"PLEASE SEND ME THE REPORT.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"報告書を寄越して\",\"load-time\":\"2705 ms\",\"latency\":\"108 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"Where is the train station?\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"駅はどこだ?\",\"load-time\":\"2390 ms\",\"latency\":\"81 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"WHERE IS THE TRAIN STATION?\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"駅はどこだ?\",\"load-time\":\"2244 ms\",\"latency\":\"82 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"We need to finish this project by Friday.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"金曜までにこのプロジェクトを完了しなければならない.\",\"load-time\":\"2668 ms\",\"latency\":\"128 ms\"}\n",
+                "{\"choice\":\"opus-en-ja\",\"browser\":\"153.0.8010.12\",\"capabilities\":{\"gpu\":true,\"adapter\":null,\"gpuInfo\":null,\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\",\"secure\":true,\"isolated\":false},\"run\":1,\"fixture\":\"WE NEED TO FINISH THIS PROJECT BY FRIDAY.\",\"status\":\"Complete\",\"errors\":\"\",\"output\":\"金曜までにこのプロジェクトを完了しなければならない.\",\"load-time\":\"2155 ms\",\"latency\":\"128 ms\"}\n"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "model_runtime_records": [
+    {
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/sherpa-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/silero-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-model-assets.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/local-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/optional-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/model-asset-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-manifest.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/reazon-assets.json",
+          "status": 200,
+          "type": "application/json; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/silero-assets.json",
+          "status": 200,
+          "type": "application/json; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en/resolve/12b44671ff48b9aed622551d64e02fea9a2cf870/encoder-epoch-35-avg-1.int8.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/mobilebytesensei/betterflow-silero-vad/resolve/0ae41137f2cd00de5e8a286fe01bdd5e3644f2da/silero_vad.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6789c2cf2b4189d8cec017dc/a78e4a058dc57f72b5cc34ace1deadcf0f77caeb5675e07562eb36e09d7a4bc3",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6a60f4e61e5e6d576a3de9c2/9873141d5fcf5eea4595e486174aea54998d6077028b855df039d9cb7b3136ac",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-vad.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en/resolve/12b44671ff48b9aed622551d64e02fea9a2cf870/decoder-epoch-35-avg-1.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6789c2cf2b4189d8cec017dc/239e6b202eaa14444dfa5e3f8d19ca41534efd81cff40856aa9b2acd0ae5ab74",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en/resolve/12b44671ff48b9aed622551d64e02fea9a2cf870/joiner-epoch-35-avg-1.int8.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6789c2cf2b4189d8cec017dc/5ec73e1386f93b5febb1226f2242c972b8778ed126f4697c345f2b652020d885",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en/resolve/12b44671ff48b9aed622551d64e02fea9a2cf870/tokens.txt",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/csukuangfj/reazonspeech-k2-v2-ja-en/12b44671ff48b9aed622551d64e02fea9a2cf870/tokens.txt",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-asr.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "failed": [],
+      "console": [],
+      "errors": [],
+      "time": "2026-11-14T09:06:20.401Z",
+      "title": "ReazonSpeech simulated: real Silero runtime, Stop and repeat",
+      "status": "passed",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+      "result": {
+        "status": "Stopped. Results are final; tap Start to repeat.",
+        "errors": "",
+        "latency": "0.01 s"
+      },
+      "request_evidence_note": "Query strings omitted; repeated responses deduplicated. Blob playback requests excluded (the initial recorder formatted blob origins incorrectly); no HTTP failures were removed."
+    },
+    {
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-ai-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-model.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-model-assets.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/transformers.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/playground-model-assets.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/model-asset-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/optional-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-manifest.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/if-condition-assets.json",
+          "status": 200,
+          "type": "application/json; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/MoritzLaurer/xtremedistil-l6-h256-zeroshot-v1.1-all-33/resolve/c07f66d9cbf781191bee66edfe8ad7856f045781/config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/MoritzLaurer/xtremedistil-l6-h256-zeroshot-v1.1-all-33/c07f66d9cbf781191bee66edfe8ad7856f045781/config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/MoritzLaurer/xtremedistil-l6-h256-zeroshot-v1.1-all-33/resolve/c07f66d9cbf781191bee66edfe8ad7856f045781/tokenizer_config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/MoritzLaurer/xtremedistil-l6-h256-zeroshot-v1.1-all-33/c07f66d9cbf781191bee66edfe8ad7856f045781/tokenizer_config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/MoritzLaurer/xtremedistil-l6-h256-zeroshot-v1.1-all-33/resolve/c07f66d9cbf781191bee66edfe8ad7856f045781/tokenizer.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/MoritzLaurer/xtremedistil-l6-h256-zeroshot-v1.1-all-33/c07f66d9cbf781191bee66edfe8ad7856f045781/tokenizer.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/MoritzLaurer/xtremedistil-l6-h256-zeroshot-v1.1-all-33/resolve/c07f66d9cbf781191bee66edfe8ad7856f045781/special_tokens_map.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/MoritzLaurer/xtremedistil-l6-h256-zeroshot-v1.1-all-33/c07f66d9cbf781191bee66edfe8ad7856f045781/special_tokens_map.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/MoritzLaurer/xtremedistil-l6-h256-zeroshot-v1.1-all-33/resolve/c07f66d9cbf781191bee66edfe8ad7856f045781/onnx/model_quantized.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/659eb54ac50ce1bffc728127/ec07d1a397a5fd09fb85be03cd4c3972e53bf53bef00bd6d81fa79ee3a3a52f5",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.mjs",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "failed": [],
+      "console": [],
+      "errors": [],
+      "time": "2026-11-14T09:06:10.134Z",
+      "title": "if-condition: real standalone model readiness and local run",
+      "status": "passed",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/",
+      "result": {
+        "status": "Complete",
+        "errors": "",
+        "output": "Yes",
+        "load-time": "4952 ms",
+        "latency": "29 ms"
+      },
+      "request_evidence_note": "Query strings omitted; repeated responses deduplicated. Blob playback requests excluded (the initial recorder formatted blob origins incorrectly); no HTTP failures were removed."
+    },
+    {
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/kokoro-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/transformers.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/Kokoro-82M-v1.0-ONNX/1939ad2a8e416c0acfeecc08a694d14ef25f2231/config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/onnx/model_quantized.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/67a5e958d363dcc0e458b910/72db5d760d8920a2fbd09b5a5b109b29c71c5e525956e6166025d1146c851e15",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/ort-wasm-simd-threaded.jsep.mjs",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/ort-wasm-simd-threaded.jsep.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/tokenizer_config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/tokenizer.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/Kokoro-82M-v1.0-ONNX/1939ad2a8e416c0acfeecc08a694d14ef25f2231/tokenizer_config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/Kokoro-82M-v1.0-ONNX/1939ad2a8e416c0acfeecc08a694d14ef25f2231/tokenizer.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/voices/jf_alpha.bin",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/67a5e958d363dcc0e458b910/55f159cc77c5508bdf81bd95cd644cece886041d43ef69019ad6136965b53b43",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/kokoro-japanese.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/kokoro-hepburn.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/openjtalk-wasm-wrapper-D6E3BSJO.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/openjtalk-wasm.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-model-assets.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/local-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/model-asset-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/optional-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-manifest.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/kokoro-japanese-assets.json",
+          "status": 200,
+          "type": "application/json; charset=utf-8"
+        },
+        {
+          "url": "https://cdn.jsdelivr.net/npm/kokoro-js-jp@0.2.0/dist/openjtalk-voice.htsvoice",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/open_jtalk_dic_utf_8-1.11.tar.gz",
+          "status": 200,
+          "type": "application/gzip"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/voices/af_heart.bin",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/67a5e958d363dcc0e458b910/478bbd0d587a03135a4899153eac4a80a046d65a32d924b25ea059319b055df8",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/kokoro-english.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/phonemizer.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/phonemizer-engine.mjs",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        }
+      ],
+      "failed": [],
+      "console": [
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        }
+      ],
+      "errors": [],
+      "time": "2026-11-14T09:05:41.687Z",
+      "title": "real kokoro: Japanese and English waveform, playback, repeat and local-only requests",
+      "status": "failed",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/",
+      "result": {
+        "status": "Complete",
+        "errors": "",
+        "load-time": "647 ms",
+        "latency": "4222 ms",
+        "waveform": "66600 samples · 24000 Hz · 1 channel · 2.77 s"
+      },
+      "request_evidence_note": "Query strings omitted; repeated responses deduplicated. Blob playback requests excluded (the initial recorder formatted blob origins incorrectly); no HTTP failures were removed."
+    },
+    {
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/moonshine-medium-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/moonshine-medium-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-model-assets.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/enums.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/transcriber.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/asset-downloader.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/stream.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/types.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/module.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/errors.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/events.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/moonshine-medium-stream.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/playground-model-assets.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/optional-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/model-asset-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-manifest.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-model.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/moonshine-medium-en-assets.json",
+          "status": 200,
+          "type": "application/json; charset=utf-8"
+        },
+        {
+          "url": "https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/adapter.ort",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/cross_kv.ort",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/decoder_kv.ort",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/encoder.ort",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/frontend.ort",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/streaming_config.json",
+          "status": 200,
+          "type": "application/json"
+        },
+        {
+          "url": "https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/tokenizer.bin",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/moonshine.mjs",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/moonshine.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "failed": [],
+      "console": [],
+      "errors": [],
+      "time": "2026-11-14T09:06:04.427Z",
+      "title": "moonshine-medium: real standalone model readiness and local run",
+      "status": "passed",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/",
+      "result": {
+        "status": "Complete",
+        "errors": "",
+        "output": "",
+        "load-time": "26965 ms",
+        "latency": "1026 ms"
+      },
+      "request_evidence_note": "Query strings omitted; repeated responses deduplicated. Blob playback requests excluded (the initial recorder formatted blob origins incorrectly); no HTTP failures were removed."
+    },
+    {
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/opus-mt-en-ja-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/transformers.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/tokenizer.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/tokenizer_config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/Kadonox/opus-tatoeba-en-ja-onnx/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/Kadonox/opus-tatoeba-en-ja-onnx/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/tokenizer_config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/Kadonox/opus-tatoeba-en-ja-onnx/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/tokenizer.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/generation_config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/onnx/decoder_model_merged_quantized.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/Kadonox/opus-tatoeba-en-ja-onnx/resolve/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/onnx/encoder_model_quantized.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/Kadonox/opus-tatoeba-en-ja-onnx/225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e/generation_config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/69d76f812cd379891c628c8f/29367ba2ec971c580ba2dfe60aada1cfc8d991af83e55beba962c1eeedc4abec",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/69d76f812cd379891c628c8f/4358a3998b0ea45eddedfc26f05781c6933cf21faac47dc2f2060b8aa5a47f3c",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.mjs",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "failed": [],
+      "console": [
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        }
+      ],
+      "errors": [],
+      "time": "2026-11-14T09:06:46.461Z",
+      "title": "real opus-en-ja: English → Japanese initialization, inference and repeat",
+      "status": "passed",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+      "result": {
+        "status": "Complete",
+        "errors": "",
+        "output": "金曜までにこのプロジェクトを完了しなければならない.",
+        "load-time": "2155 ms",
+        "latency": "128 ms"
+      },
+      "request_evidence_note": "Query strings omitted; repeated responses deduplicated. Blob playback requests excluded (the initial recorder formatted blob origins incorrectly); no HTTP failures were removed."
+    },
+    {
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/opus-mt-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/transformers.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/tokenizer_config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/tokenizer.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/opus-mt-ja-en/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/opus-mt-ja-en/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/tokenizer.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/opus-mt-ja-en/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/tokenizer_config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/onnx/encoder_model_quantized.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/onnx/decoder_model_merged_quantized.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/opus-mt-ja-en/resolve/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/generation_config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/opus-mt-ja-en/05470cd69b62aa32e3ee64ccfd41279789ee4b1e/generation_config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/66ce4930da5d6bbe4dee43d3/fcab6d83b34094a4d17a3900ec60ca6469c0c0dbf4045ac1e5843c531aa88426",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/66ce4930da5d6bbe4dee43d3/3d6965f869634aa71e04f113930f6b184ac4f7f098836d645a0ca6237399cc00",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.mjs",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "failed": [],
+      "console": [
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "Unable to determine content-length from response headers. Will expand buffer when needed."
+        },
+        {
+          "type": "warning",
+          "text": "WARNING: `MarianTokenizer` is not yet supported by Hugging Face's \"fast\" tokenizers library. Therefore, you may experience slightly inaccurate results."
+        }
+      ],
+      "errors": [],
+      "time": "2026-11-14T09:03:54.594Z",
+      "title": "real opus: Japanese → English initialization, inference and repeat",
+      "status": "passed",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/",
+      "result": {
+        "status": "Complete",
+        "errors": "",
+        "output": "It's a nice day today.",
+        "load-time": "2062 ms",
+        "latency": "120 ms"
+      },
+      "request_evidence_note": "Query strings omitted; repeated responses deduplicated. Blob playback requests excluded (the initial recorder formatted blob origins incorrectly); no HTTP failures were removed."
+    },
+    {
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/supertonic3-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/ort.mjs",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/supertonic3-runtime.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/tts.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/supertone-oss-archive/supertonic-3/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx%2Ftts.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/unicode_indexer.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/supertone-oss-archive/supertonic-3/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx%2Funicode_indexer.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/duration_predictor.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6a9f6e77c73c1f80bd427e97/3f5f4dec9c9b3d9074a8d13141f3acc852dd6e97a07e156e9dc669fe98506b0a",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/ort-wasm-simd-threaded.mjs",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/ort-wasm-simd-threaded.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/text_encoder.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6a9f6e77c73c1f80bd427e97/9303c918c4da455b341b200d061a82c6ac3b8ed1d678cda6d412e72acfdb936b",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/vector_estimator.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6a9f6e77c73c1f80bd427e97/c39cede05082f67b544b19a3b0c0fc273a71d0d8d38a9e06f2512789e3bad7fe",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/onnx/vocoder.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6a9f6e77c73c1f80bd427e97/752c10c00131361ee3ff7de734566150cb26ae821a1245d177a7f682ed0cad4d",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/voice_styles/F1.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/supertone-oss-archive/supertonic-3/aafc6e32416a594460b32413efc49d7fe4ce6d46/voice_styles%2FF1.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        }
+      ],
+      "failed": [],
+      "console": [],
+      "errors": [],
+      "time": "2026-11-14T09:04:44.200Z",
+      "title": "real supertonic3: Japanese and English waveform, playback, repeat and local-only requests",
+      "status": "passed",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/",
+      "result": {
+        "status": "Complete",
+        "errors": "",
+        "load-time": "535 ms",
+        "latency": "1643 ms",
+        "waveform": "132096 samples · 44100 Hz · 1 channel · 3.00 s"
+      },
+      "request_evidence_note": "Query strings omitted; repeated responses deduplicated. Blob playback requests excluded (the initial recorder formatted blob origins incorrectly); no HTTP failures were removed."
+    },
+    {
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/whisper-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/whisper-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/whisper-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/silero-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-model-assets.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/transformers.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/local-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/optional-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/model-asset-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-manifest.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/whisper-assets.json",
+          "status": 200,
+          "type": "application/json; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/silero-assets.json",
+          "status": 200,
+          "type": "application/json; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/whisper-tiny/resolve/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/whisper-tiny/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/mobilebytesensei/betterflow-silero-vad/resolve/0ae41137f2cd00de5e8a286fe01bdd5e3644f2da/silero_vad.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/whisper-tiny/resolve/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/generation_config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/whisper-tiny/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/generation_config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/whisper-tiny/resolve/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/preprocessor_config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/whisper-tiny/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/preprocessor_config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6a60f4e61e5e6d576a3de9c2/9873141d5fcf5eea4595e486174aea54998d6077028b855df039d9cb7b3136ac",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/whisper-tiny/resolve/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/tokenizer.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/whisper-tiny/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/tokenizer.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-vad.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/whisper-tiny/resolve/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/tokenizer_config.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/whisper-tiny/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/tokenizer_config.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/whisper-tiny/resolve/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/special_tokens_map.json",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/onnx-community/whisper-tiny/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/special_tokens_map.json",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/whisper-tiny/resolve/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/onnx/encoder_model_quantized.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6650c5b45268217cf78b02f4/5c763ccd624ffb5ddc8f47693170e296a7da3566ef4a49211f6262290e538bf3",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/onnx-community/whisper-tiny/resolve/ff4177021cc41f7db950912b73ea4fdf7d01d8e7/onnx/decoder_model_merged_quantized.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/6650c5b45268217cf78b02f4/71d08b51c07532bef7551369d9b345e94e37bec92d56d8fe9c58e87e34ec6dc3",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.mjs",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "failed": [],
+      "console": [],
+      "errors": [],
+      "time": "2026-11-14T09:05:26.719Z",
+      "title": "whisper: real standalone model readiness and local run",
+      "status": "passed",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/",
+      "result": {
+        "status": "Complete",
+        "errors": "",
+        "output": "",
+        "load-time": "10938 ms",
+        "latency": "1026 ms"
+      },
+      "request_evidence_note": "Query strings omitted; repeated responses deduplicated. Blob playback requests excluded (the initial recorder formatted blob origins incorrectly); no HTTP failures were removed."
+    },
+    {
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-worker.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-model-assets.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/local-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/optional-asr-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/model-asset-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-cache.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-manifest.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/zipformer-assets.json",
+          "status": 200,
+          "type": "application/json; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/resolve/d42f2d9f7ca24806fb667456a18a9f1b60f70d16/encoder-epoch-99-avg-1.int8.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/64fd82bfbb362cbf2f372752/05f8c3003a5a5ea38ac6b65ba18017821a146eb3870c5d5b0b2d8ec17b23af86",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/resolve/d42f2d9f7ca24806fb667456a18a9f1b60f70d16/decoder-epoch-99-avg-1.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/64fd82bfbb362cbf2f372752/d7108c72363c08c0a45ddf32ce320b13cd7e68dfbc84489d5e18879107e60278",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/resolve/d42f2d9f7ca24806fb667456a18a9f1b60f70d16/joiner-epoch-99-avg-1.int8.onnx",
+          "status": 302,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://us.aws.cdn.hf.co/xet-bridge-us/64fd82bfbb362cbf2f372752/393609b706d839ead3a3d67b8877fee473de09167a12e77a5e85cd25b5cf1547",
+          "status": 200,
+          "type": "application/octet-stream"
+        },
+        {
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/resolve/d42f2d9f7ca24806fb667456a18a9f1b60f70d16/tokens.txt",
+          "status": 307,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://huggingface.co/api/resolve-cache/models/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/d42f2d9f7ca24806fb667456a18a9f1b60f70d16/tokens.txt",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/zipformer-en/sherpa-onnx-asr.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/zipformer-en/sherpa-onnx-wasm-main-asr.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/vendor/zipformer-en/sherpa-onnx-wasm-main-asr.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-segments.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "failed": [],
+      "console": [],
+      "errors": [],
+      "time": "2026-11-14T09:05:35.454Z",
+      "title": "zipformer: real standalone model readiness and local run",
+      "status": "passed",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/",
+      "result": {
+        "status": "Complete",
+        "errors": "",
+        "output": "",
+        "load-time": "6831 ms",
+        "latency": "1064 ms"
+      },
+      "request_evidence_note": "Query strings omitted; repeated responses deduplicated. Blob playback requests excluded (the initial recorder formatted blob origins incorrectly); no HTTP failures were removed."
+    }
+  ],
+  "fixture_suite": {
+    "command": "ASR_BASE_URL=https://takahirox.github.io/my-audio-to-text/ npm run test:playground -- --workers=2 --reporter=json",
+    "exit_code": 0,
+    "selected_tests": 294,
+    "local_alias_skips": 2,
+    "note": "294 declared cases across Chromium/WebKit; local-server-only alias case skipped once per browser. Worker/asset fixtures do not establish real model execution. The original JSON stdout file was removed by Playwright output-directory initialization; process exit and declared suite count were observed separately."
+  },
+  "unperformed": {
+    "reason": "Chromium 153.0.8010.12 on macOS arm64 Apple M4 Max: navigator.gpu exists but requestAdapter() returns null. No model weight download or inference attempted for these WebGPU models.",
+    "models": [
+      "parakeet-v3",
+      "translategemma",
+      "text-summary-lfm2",
+      "text-summary-qwen35",
+      "qwen3-tts",
+      "cosyvoice3"
+    ]
+  },
+  "verification_status": "partial",
+  "follow_up_issues": [],
+  "issue_comment": {
+    "id": 6874995203,
+    "url": "https://github.com/takahirox/my-audio-to-text/issues/373#issuecomment-6874995203"
+  }
+}

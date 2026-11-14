@@ -101,7 +101,13 @@ PLAYGROUND_MODELS=whisper PLAYGROUND_AUDIO_FILE=/path/to/speech.wav npm run test
 
 ### Issue #373 — all standalone model pages
 
-**Pending.** Follow the
+**Partial — 2026-11-14.** The exact merged SHA was deployed successfully and all
+15 canonical navigation/direct/return paths passed. Published real CPU checks
+completed; six WebGPU models remain hardware-blocked, and Kokoro generation
+succeeded while its smoke test failed a dependency-host allowlist assertion. See
+[post-merge evidence](evidence/standalone-model-pages-373.md#post-merge-published-verification--2026-11-14)
+for actual results and limitations. The checklist below states the remaining
+verification requirements. Follow the
 [merge, closure and follow-up lifecycle](development-flow.md#pre-merge-acceptance-and-post-merge-verification):
 retain `Closes #373` in PR #374 when implementation and mandatory pre-merge
 acceptance are complete, merge and close the implemented Issue, then perform

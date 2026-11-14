@@ -1,0 +1,3555 @@
+{
+  "time": "2026-11-14T09:01:34.782Z",
+  "sha": "d58849c766b7903a2d5f8a1f2201853f78a69e68",
+  "base": "https://takahirox.github.io/my-audio-to-text/",
+  "browser": "153.0.8010.12",
+  "platform": "darwin",
+  "arch": "arm64",
+  "pages": [
+    {
+      "name": "Speech-to-Text (ReazonSpeech ja-en)",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+      "heading": "Speech-to-Text (ReazonSpeech ja-en)",
+      "controls": [
+        {
+          "id": "source",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "load",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "start",
+          "type": "submit",
+          "disabled": true
+        },
+        {
+          "id": "stop",
+          "type": "submit",
+          "disabled": true
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        },
+        {
+          "id": "utterance",
+          "type": "textarea",
+          "disabled": false
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": true,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "Whisper tiny · multilingual q8",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/",
+      "heading": "Whisper tiny · multilingual q8",
+      "controls": [
+        {
+          "id": "file",
+          "type": "file",
+          "disabled": false
+        },
+        {
+          "id": "language",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "stop",
+          "type": "submit",
+          "disabled": true
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": true,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/whisper-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/whisper-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/whisper-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/whisper-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/whisper-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/whisper-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "Zipformer English · streaming",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/",
+      "heading": "Zipformer English · streaming",
+      "controls": [
+        {
+          "id": "file",
+          "type": "file",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "stop",
+          "type": "submit",
+          "disabled": true
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": true,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/zipformer-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "Parakeet TDT 0.6B v3",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/",
+      "heading": "Parakeet TDT 0.6B v3",
+      "controls": [
+        {
+          "id": "file",
+          "type": "file",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "stop",
+          "type": "submit",
+          "disabled": true
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": true,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/parakeet-v3-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/parakeet-v3-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/parakeet-v3-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "Moonshine Medium Streaming English",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/",
+      "heading": "Moonshine Medium Streaming English",
+      "controls": [
+        {
+          "id": "file",
+          "type": "file",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "stop",
+          "type": "submit",
+          "disabled": true
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": true,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/moonshine-medium-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/moonshine-medium-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/moonshine-medium-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "OPUS-MT Translation (Japanese → English)",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/",
+      "heading": "OPUS-MT Translation",
+      "controls": [
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "OPUS-MT Translation (English → Japanese)",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+      "heading": "OPUS-MT English → Japanese Translation",
+      "controls": [
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "TranslateGemma 4B Translation (Japanese ↔ English)",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/translategemma/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/translategemma/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/translategemma/",
+      "heading": "TranslateGemma 4B Translation",
+      "controls": [
+        {
+          "id": "direction",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translategemma/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translategemma/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translategemma/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translategemma/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "Text Summary · LFM2.5 1.2B JP",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-lfm2/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-lfm2/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-lfm2/",
+      "heading": "Text Summary · LFM2.5 1.2B JP",
+      "controls": [
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "language",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "prompt",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-lfm2/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-lfm2/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-ai-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-lfm2/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-lfm2/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-ai-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "Text Summary · Qwen3.5 2B",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-qwen35/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-qwen35/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-qwen35/",
+      "heading": "Text Summary · Qwen3.5 2B",
+      "controls": [
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "language",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "prompt",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-qwen35/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-qwen35/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-ai-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-qwen35/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-qwen35/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-ai-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "IfCondition · XtremeDistil",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/",
+      "heading": "IfCondition · XtremeDistil",
+      "controls": [
+        {
+          "id": "condition",
+          "type": "text",
+          "disabled": false
+        },
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-ai-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-ai-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-models.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/text-summary-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/if-condition-policy.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "Kokoro 82M Text-to-Speech",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/",
+      "heading": "Kokoro 82M Text-to-Speech",
+      "controls": [
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "voice",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "Supertonic 3 Text-to-Speech",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/",
+      "heading": "Supertonic 3 Text-to-Speech",
+      "controls": [
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "language",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "voice",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/tts-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "Qwen3-TTS 0.6B CustomVoice · streaming",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-tts/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-tts/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-tts/",
+      "heading": "Qwen3-TTS 0.6B CustomVoice · streaming",
+      "controls": [
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "language",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "voice",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        },
+        {
+          "id": "enable-speaker",
+          "type": "submit",
+          "disabled": false
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-tts/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-tts/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/qwen3-tts-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/streaming-tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/speaker-output.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/streaming-tts-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio-stream.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-tts/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-tts/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/qwen3-tts-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/streaming-tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/streaming-tts-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio-stream.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/speaker-output.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "CosyVoice3 0.5B · streaming",
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/cosyvoice3/",
+      "clicked": "https://takahirox.github.io/my-audio-to-text/nodes/cosyvoice3/",
+      "returned": "https://takahirox.github.io/my-audio-to-text/",
+      "direct": "https://takahirox.github.io/my-audio-to-text/nodes/cosyvoice3/",
+      "heading": "CosyVoice3 0.5B · streaming",
+      "controls": [
+        {
+          "id": "input",
+          "type": "textarea",
+          "disabled": false
+        },
+        {
+          "id": "language",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "voice",
+          "type": "select-one",
+          "disabled": false
+        },
+        {
+          "id": "run",
+          "type": "submit",
+          "disabled": false
+        },
+        {
+          "id": "cancel",
+          "type": "submit",
+          "disabled": true
+        },
+        {
+          "id": "enable-speaker",
+          "type": "submit",
+          "disabled": false
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "isolated": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "gpu": true,
+        "adapter": false,
+        "features": [],
+        "workers": 0,
+        "capture": 0
+      },
+      "errors": [],
+      "failed": [],
+      "external": [],
+      "responses": [
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/cosyvoice3/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/cosyvoice3/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/cosyvoice3-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/streaming-tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/streaming-tts-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio-stream.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/speaker-output.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/cosyvoice3/",
+          "status": 200,
+          "type": "text/html; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+          "status": 200,
+          "type": "text/css; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/cosyvoice3/app.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/cosyvoice3-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/streaming-tts-page.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/streaming-tts-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/audio-stream.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/speaker-output.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+          "status": 200,
+          "type": "application/javascript; charset=utf-8"
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "byteMatches": [
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/index.html",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "sha256": "0247c03a1e06f55b98e406a515819fb64a6f8a856ae5071464ec8e9d4410e646",
+      "matchesMerged": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/app.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "sha256": "2d1e285993d876659cb71fd9931c02ad6922aac04ec82258ddad699eb16445e4",
+      "matchesMerged": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/playground-model-assets.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "sha256": "f172dd777357d1fb6b40b670d8f1f06f095f3bf278d3bce0693f6799465c9260",
+      "matchesMerged": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/optional-model-assets.js",
+      "status": 200,
+      "contentType": "application/javascript; charset=utf-8",
+      "sha256": "2b233bcaff4f0b448a10bc799369699bc559579e058bd12ae3ea6f147ec3bd35",
+      "matchesMerged": true
+    }
+  ]
+}

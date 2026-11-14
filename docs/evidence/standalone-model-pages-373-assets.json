@@ -1,0 +1,1731 @@
+{
+  "time": "2026-11-14T09:04:53.249Z",
+  "sha": "d58849c766b7903a2d5f8a1f2201853f78a69e68",
+  "base": "https://takahirox.github.io/my-audio-to-text/",
+  "rows": [
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "0247c03a1e06f55b98e406a515819fb64a6f8a856ae5071464ec8e9d4410e646",
+      "matchesMerged": true,
+      "passed": true,
+      "note": "Directory URL compared to web/index.html (initial harness compared the web tree listing)."
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/audio-stream.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "a2513deb020c96c3b7ba79e38fe279d26e75249157e90d8c64ef389c0242155f",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/audio.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "e19f0c2f19c74c980e5017c09309b4fc1705f539038d08c7594cc3994a571d25",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/capture-worklet.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "a0256643ff65bfbffb5e366dfc1fbbcb82f8f5aabf792466f569de3562f6889f",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/cosyvoice3-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "ed6ff00aaa1ef3358cedd6626665f8a0e7ab8640c211d69427081a34b96536b7",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/cosyvoice3-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "c422179fbadc3d12f8e3df767b562fbb66952cd194e0f0d228b0543e762d7183",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/if-condition-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "3b92dbe64f91de6cedf225c778fe7808492e12a0ec2eaf5fc3310303975640a6",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/if-condition-policy.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "6bc4e3d4b30d0fe8355f7c8687aba121c3742b61494d8dc87c1a7451007f994a",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/if-condition-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "71828edc7b0e047589b0e888236909901b5958c8479c2b5c38eee0ea57cd19cc",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/isolation-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "8c8574848a3b457a33a9e4c3040bc83ffb93653a8314fc092523f13cfbdc479c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/kokoro-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "79441969ecf994007fd01a853adb7c0713e55fa8fd89d0bdd1a133e05abe343c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/cosyvoice3-LICENSE.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/cosyvoice3.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2031ba2c1c080e04874b33c60c45bdc3fe51f61ab492589095fdd11f5f506ff0",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/espeak-ng.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/gemma-notices.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "9e2007aa35d67ef9e552f3dd10a7082e8ea976b01fbdcd7be972aaf31405bf76",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/if-condition-model.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "86ba5dc977fa118eb501913e75eedfa756f82712c1c57b1c1a7f1a132a2b0c9f",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/kokoro-japanese.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "923965ed88e770a3e41407cc7f202c4216341065af6d6531e1256f2143e21e37",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/kokoro.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/meeting-summary-lfm2.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "ba2ea304b5852d61cf87d070002d983c3ba5fe6a8ca4b975436d246b2c0d2839",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/meeting-summary-qwen35.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "92cc63a51ccc5e23431dea5298c103e281c607b0d6fbe615fd8e2bf0e04c2dcc",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/moonshine-third-party.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "0f42008f9589a05bdf510a2e3fff77b150272c536fdbd9ac4f7272a5eb06bcb5",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/moonshine.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "d8848b2f79b8acb89b73060fd4196d808e460f5b3cef61c7ab3a8d8e8ba72b2d",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/onnxruntime-translation.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/onnxruntime-tts.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/optional-asr-onnxruntime.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/parakeet-v3-attribution.md",
+      "status": 200,
+      "type": "text/markdown; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "495ce7ef639f4b062850b7612d5ad6e56650e33a4c38166d4b348a94c2a3ad67",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/parakeet-v3-cc-by-4.0.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "9e5f1b3c610b9c2da5c313bf81d577a7d1acec686bdb0384edefa6df0f90cd94",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/qwen3-tts.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "e594c78c769e4fd4618a243f8e150b0df06524834a4d844bfc462c0a1679b6f1",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/qwen3.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/sherpa-onnx.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/silero-vad.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/supertonic-code.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "0dfe0d0ba84416fe3879d9a34f4909d8d0137c78d1e95834177b0414ac096fa2",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/supertonic-model.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "0d944a9110fed9a9602d60e0423a272903e7bd21ab060490774efc77c2275e9f",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/transformers-tts-LICENSE.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/transformers.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/tts-notices.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "476cf35d23ee610ddf6163c71818db08a113beb5900d5c124d23618dcb7b4a25",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/licenses/whisper.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-config.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "eddc85ee59189af0755605f380d16e8243a1a933a5e5b81cc92083939ec0ab6c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/local-asr-core.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "b8bf3f9160bacb523c786741644c34fca8abbaf2d27b2a2d26a649870cc03dac",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/moonshine-medium-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "de3c8c6078fed9f1eec8432da62a119be8f0bfccba56350da5543aa85dbc6b59",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/moonshine-medium-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "70d7c8876d0ce3e6174d9633e60749f6f68b88a3649ad2f6ec5ab5dda2ce6568",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/asr-file-page.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "00e422983663b2a953bb13d81a5893ae83a778c00e6fba66c6f2030d9bed1d1f",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/browser-setup.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "678b57118ace044b1ffc433ac79c84137edddd1cb8c00eec870180277232c0a9",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/cosyvoice3/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "50fce747ca83d90388582c53a8c5c1f8a16eece8aef4efaef5130a9baeced0c8",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/cosyvoice3/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "c19a9345960b52a4c735c92fc2b0a861598b1e156b9ce8f238f5b150ab7a7698",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "697889fba19a6c82f5c071ed37908afe782fb426948441e07e7b39e57ac51b98",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/if-condition/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2d1e285993d876659cb71fd9931c02ad6922aac04ec82258ddad699eb16445e4",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "5d730b91911f5195640222f2f531f71c380d755ec9dc1b996e3e014468cce1e3",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/kokoro/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "4d2f0a0e5cd791221e61297a33e5838bd6c48919ca2575750d5c91efcbdf82d9",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "be9e7c3ffffed75cf7da97c26cac1ca022d612f186c083d0952bc09028369cd2",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/moonshine-medium/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "1cf27f4fadc1081a3f58c68070265acb795df97b9807b14217044dcb3f5ddb21",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "30ad75c6cc952db5d02706d74639d8bf9ada8f1af8057c5607e64543dacfc25a",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt-en-ja/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "4c483270d86533c22a551cf5f29fd1cc90c4aa67d706fadc70c2d0b4f5ef38ce",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "29adceab05010424d53364c86f86cd54a7ecba7d11764a3a4313c13a6598231e",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/opus-mt/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "3c4c8fc981999b3bb0b8ac10e145cee22bd7e780aa6da74883cdc4857a84b6ae",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/page-resources.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "7d4745fe0fc6f335ae4bfa2fda09ba186c1f8247146a1752503abd5ff491c531",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "6939301711643ca0c4f72162b85daa7a82a9cb94d3b0ba71158f3c01c61bfc0e",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/parakeet-v3/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "8843efa76f4cc1f0cf909f99f392d9161ef2772059287f4b06cd5cb8c3d837fa",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-tts/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2838c4af163b3f5a662f65ed17b7307504a5e3e996484ad4cdedd07aa9631509",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/qwen3-tts/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "524aad1b7c12f9e8123d491137adc8b63e64c9e94e4d39bc436e64bf69f1ebd4",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "fa49702289dc051342aa8095a3c17d00ed2a98769a8948595c21fbe650bccc7e",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/speech-to-text/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "3799ed8c4f2f117ec28735747b5f4f278baf95559421f2622613718d3aeab3f0",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/streaming-tts-page.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "1b458c4048238dfbb4c6cd545b3469e884b6c4f9cc4e48efa9ebdd4b14ea3b37",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "81d2f40454b4014e2113c022e656b93e3a1cd98203c4f15dae63dc44bfe9c2ee",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/supertonic3/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "22d8b324dca8b723b3d187438c2241a12604dc1ffa618d91148c987e60891ca6",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-ai-page.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "7a00a296ceeb93818d7fc8c0024477b8d4d1c26d9480e77669cea746c420162e",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-lfm2/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "9452eb179a046a3444f78d0dc5aa2edb6e3a318499ff8b4fd1649e4102c882fd",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-lfm2/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "ed02b7c71233b6cea2c68a4a1a1668fc9956a6541bd93cad364020f3ef303171",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-qwen35/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "629ee72da5e76334144e7af746d2f0559a6ab6a0d40ace0bdfff9cbd5bbee12c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/text-summary-qwen35/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "ee0cf3cf44b1e41780944fbe5514260d6b60e04b92a30fa9c2d60aff2ecbecce",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/translategemma/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "7aad29a97c56c95381182493cd567316929f98c45e21906e77fa5abe34de2c22",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/translategemma/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "9850ba145ead09a961e57a85e40c12c84c7b7f8ac4b97351fe62843808394c7b",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/translation-page.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2fb78ec8343261369402399d68098c511517263b86dd3cb41b0f4d99049b3d9f",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/tts-page.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "3cd1cb7aa8fca3b61a72ff9e4a1840b9bc461e4205a4b95fd8dbacd33265e873",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "be4ab8b872b795ad7d9122aa6da8ac911383eee37f1e92ad75a0be4a750a1f0c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/whisper/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "6e09406531462ccb9cb6d7d431e8de33ef6e254bba8766a5997f1f5d509fad8e",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "c4ff4f6c4cdc7c0fca3509524f955b7d5fbcb4ca5a0836afa9ebbbc12eb9ce0a",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/nodes/zipformer/app.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "e35ae56d90cd35abdca90a555a1bc95a9ece8d4477bc19dbfc79cc1346c6c1f8",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/number-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "1b083f1698f295965e99bd96cbcfbc27a42620b0c6a1bdadfba441f952cf3ec1",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-core.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "06d580cb1ecc203ab0febda3276ca86e8acb3e7c07dafe68b8cd9dfbc4bbdccc",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/optional-asr-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "5106093b707ad7a03768225e8ba248dcde3f8922f66a05e6acc4f0f65ebc0866",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/opus-mt-en-ja-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2eef2c518fc56c67be7f6adf9e1963a331c28ebcff15deb7058c91be35148490",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/opus-mt-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "9eeb8a6842be45c3a48ace8f97c2bf20ef6025669a642b2434fadbab0cbfc032",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/paired-text.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "7a30e85984f3a25901f7ac290d9e8b60bc67be9a56e9f161fd937c2c60023dd0",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/parakeet-v3-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "40d4332e2f08f6ee31074d547789ea2e0357986bd4d90d9a3a744590b808ba66",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/parakeet-v3-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "8fb8d502e1d226e5a753571212e1dd43ba638d2acb2a210b72c38c6819fbcfd5",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/pipeline.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "cfa6b87906ca8e4105fb66e7b7d5cc79a3055cbc0f6020c86acf9de98200b432",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/port-contracts.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "066a78afc1ae94bf9a3abd3f58b484428cf607913bc7a71cd2e4abcf19c2079f",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/qwen3-correction-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "dd78e55e31061a1b4baef700712582f31a8180a3becf9e1ee59f312afc6d85df",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/qwen3-tts-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "11d9d3323a4bc8f4bab43c6208e70d60b8e9198eb627141e033d0446cf72377c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/qwen3-tts-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "0443d4d0f6265473a0ba7f69511760fa4c6b347cde3c4eec32244a8605c3df34",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/reazon-simulation.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "f3d894c15b27e8950b7e3a66a45045595d28ade3178cfef7a0d4208073c3f4a2",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/sherpa-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "5f132c9bd669068d12dc678fde63dcb4f957070dfcd262e16ebc32f277abb43c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/silero-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "15368e8534f69349d860073bdae80d93b26a5ad3d739b497ba30a8011ce4101a",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/speaker-output.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "fe11a952c78ed274305911a4e4f46e2dd8b0155a968ae33fff519139178435fa",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/streaming-tts-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "a842e324b9d7b8bad01e6ddf75e02159f0f64c510bed40d20fc959eaf1ea86f6",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/style.css",
+      "status": 200,
+      "type": "text/css; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2aaf9bd88dd9261912aa4dd5bc0d9c4842dc61c75df3331ac928e72f1b3e9f42",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/supertonic3-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "9fc4e1cfc5016a343131aab3f7cb199d5446c86378fcf342362bb82fd2033b27",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/synthesized-audio.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "883cfe62e855c439f03e46bb9da4dd9c2f76f566bd03797d771bca5828ae0248",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/text-summary-models.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "fd4d96a9b522ebc818063727a3fec98ace71cec9fa5315862b87020bedef3f8c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/text-summary-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "788d0445ed7a751c7d3703458689f661d6f0ab9d6bc771a2b499305a4ff07930",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/text-summary-policy.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "535cad4e643fba53420e4bfdde36707e701101f387eec70550aa78b2a06988f4",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/text-summary-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "48a35efdecb5cd2175a667ad4080921a52d7287e75ce6e6eb708505531171a18",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/third-party-notices.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "970f189636f191d2e25f14779618bda4f53891863188cc70f825f6f24a3281ee",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/transcription-nodes.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "e295e91549f595fd6aeebd1514fe4de64f0b8e0b8f7a9db74060f9b83355388f",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/translategemma-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "869b930c762ba8098a90f00853c3df6c9651a9d79c02714b6c5717aee0d57a53",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/translation-nodes.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "f0bd0bb310fb1296fba57cfdd120f14be044fedb414c1b767a084e1be5e3e317",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/translation-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "bd1e8c98f67ee4ca6ccc4bbeadca204b858de4c2c10b84f63cfb50f0da6f916d",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/openjtalk-wasm.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "check": "HEAD availability/MIME only",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/ort-wasm-simd-threaded.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "43c25054b6b9ac000f786c65545ff83a45f871e0e310e8c2f4d48a363bb66db4",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/ort-wasm-simd-threaded.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "check": "HEAD availability/MIME only",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/ort.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "0cb5ac5be2c414d5b9e361f857108630c6d6e24a5ab9be3cf5f761de55289e94",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/phonemizer-engine.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "33c6fbc7c26e4860908909c4375ed836f97d0dad682ba2f5eeba17ef365eb28e",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/qwen3/model-LICENSE",
+      "status": 200,
+      "type": "application/octet-stream",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/qwen3/ort-LICENSE",
+      "status": 200,
+      "type": "application/octet-stream",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/qwen3/ort-ThirdPartyNotices.txt",
+      "status": 200,
+      "type": "text/plain; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "143764b952fdb1a7c69ce653bfba74a7744d6a8a573bfb73e235fba356c83de3",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/qwen3/ort-wasm-simd-threaded.asyncify.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "59cf781530e1a16df2a291d78798e3ec1152467edaec402d6f9599d85047c302",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/qwen3/ort-wasm-simd-threaded.asyncify.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "check": "HEAD availability/MIME only",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/qwen3/ort.webgpu.min.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "329cd956772397a1aedd668e911195d39afefb182f6fc14aafa4f08ac8d8f379",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-assets/transformers.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "aa5002b70e789798da263f5f99c62bd3e8fcd0c119258a493c40c180648365fa",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-nodes.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "41f049fa5766f94c14fd760f0df9534accc698acbf54ccbbe6bee3a3ae973929",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/tts-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "51b87e6c9f102c1ca584928b92a591969ac965e60d51f9a679f96d3628297b14",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/meeting-summary/ort-wasm-simd-threaded.asyncify.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "5959c6733039619c9af710d8e1bae8d6e84402787990637be987c2b1bd6c5fa9",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/meeting-summary/ort-wasm-simd-threaded.asyncify.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "check": "HEAD availability/MIME only",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/meeting-summary/transformers-LICENSE",
+      "status": 200,
+      "type": "application/octet-stream",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/meeting-summary/transformers.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "e74bd32ed4453369ebb0edcaa27f6bc6204004a949a0233cdb87b62dda8d6978",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/cosyvoice3-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "28b167f04912eca840855c8bd12a5eb67e6c2f9dc5ab6a9c23a37ca07677525e",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/if-condition-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "1add720eef51589de4a2f0fa95ab5ad5c972ee635bac38b7c02439a9c60528d5",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/meeting-summary-lfm2-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "28a0afa776690c48a7d33b6fc3a3347d0980917417d69c612ce68373e810495b",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/meeting-summary-qwen35-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "a85ea64456038f2964b02ae38eb94d0397587ab808fe717bd3c8308504dc8a36",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/moonshine-medium-en-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "4d6f28bf6ee8267594c60bb7e744bac33cca7c57775dec50051f1f67cdd204f1",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "8fbf4c01f5a1188f2bbe30eaf8fa9effe043aa73066b11c38f9503e8fd7d0da7",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/parakeet-v3-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "13e0d36cac78503acc1da993b30a5b586218366fb477006d22636006f704f838",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/qwen3-tts-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "58039a29dbe6a058f981a5e6a03d4d9d51794329f540097e38bafd62dd4f6f9c",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/reazon-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "21038c050c7f7e30b4d1819f631f2848d2e5f63aaa2d837d4958b123a31e9cc2",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/whisper-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "65f27557b2d1036032ed1c967a1bc8ec2952a15e86a2e46ed6b139ddda12088b",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/zipformer-assets.json",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "0abbda5015b3da162c075394edf73ace2f7b339e76b22b9ce49ac9c29dce67b4",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/agent-flow.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "8435b476ef927c5422a20632b1b75b8ed83a896e6bb13af9b85ed5e4d3fadd24",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/asset-downloader.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "1887c3895d4d05aefacd9c7d0ca638c3b209c30de537fe65cd56595ff732d42e",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/embedding-model.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "17c60df8bc6efc52765221f71e67e9cf1892f5671d3e1fc3afbf5f9fff122f15",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/enums.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "149edff4d610640fc268a18ae0d207b443a5e5d841045e555b39788f9db802ed",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/errors.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "1f3abb56d6d28213adbb3f45e2c59eafecb48302d1e1a95164cdcb10c03576e0",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/events.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "2dd5076fcc75d27d531df3de86e3fe4829e98cb39a9e9214b252ac7b10923faa",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/grapheme-to-phonemizer.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "076f14e7d9d660eea1c44cd5d22eff36875cbe7db51705d3a4970ab4c1d8b1fe",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/index.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "02ac8a34d1d9cf84cf8d9ed49fa3ed832610495c5aef5fd751b250681e8e62ea",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/intent-recognizer.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "a0893eecbab1396e52c0364790fe515cf0e268c2c16b0a69f6529ab9066df74e",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/mic-transcriber.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "cef76a39506424dc413e42be47f9a608fde376e2d086d68fc112518418e47d1f",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/microphone-transcriber.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "487cf6c24370b44ae89382f4eb6ef6836c883bab0abb414e351088452b638e14",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/module.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "76ac4333a21258c9d80cf27a0d7804865e8fe56314fd31baf20cf286d77d3534",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/moonshine.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "a6ff5937467feea327842ef3affa251055b7c88f04116d136aa543a4343abbf2",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/moonshine.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "check": "HEAD availability/MIME only",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/stream.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "443a90c0fa92f4a75d85015f9c109ab48f4201b7546bccae0749111a885fd21b",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/stt-worker-host.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "4d44cc4c9a7a6f349e1b47955147b990cb1faf31e60bd8bf044a2222a056cef5",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/stt-worker-protocol.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "a321cf5a6cb323df23de1fcd2934239c95b6229943eba04f5486099db4a5b4be",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/stt-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "5a702ebd1bba145487a284daa7aa72ab5de3978e6a528b654f0f8065b4af1233",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/text-to-speech.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "7235b7cafae9cc31988a8a6d06a6ed753b147bd363035c5aac8e8361c3d3cbad",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/transcriber.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "7d18f6123a3a69a10a687c86662b3aa93748a27c95b26dc2f562ea34fe3f30d0",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/tts-worker-host.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "9be81a3edc1b17a480fd35a1b043507fd293299f487f51285e194f57b08d5d0b",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/tts-worker-protocol.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "e6a83c0945e5c9c0d16725d60e4d0b15d72cee553798c5f055652bd9f94c5122",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/tts-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "f657d9468e59dc51ba7c2188082d7075b4cb2f7e2c522629693c7c413306c182",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/types.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "7fb0bd0c6e9168b3f8b637e9267d799a570c2fb333a7fbdd69c0b067da7e2b85",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/moonshine/voice-clone.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "0dda9172452407fa7de9ff5bdfbe5b23b08b4566fb266f1d883505f48c49010f",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/ort/ort-wasm-simd-threaded.asyncify.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "dee69056fbfedf946ba0d9026e191c1361c5455895355e03f4346bf9308e58eb",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/ort/ort-wasm-simd-threaded.asyncify.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "check": "HEAD availability/MIME only",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/ort/ort.webgpu.min.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "c50f835ca8ee0999fef441f9319e507b0247923943aec034418b889904e94789",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet.js-LICENSE",
+      "status": 200,
+      "type": "application/octet-stream",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "524eeafb9e58a1e139032aa3c327b1a1d38e58f4ef2253329dc2c0a4279cef78",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet/backend.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "9bed96798fee2b8d067c86e8e9f6c66927c915322f2f8efd0ad1e6291521aa4c",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet/hub.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "867e5750016c6ff8d23cd6def18287076382353f0efc51d9e04c9400847b7c35",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet/index.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "97a1b4f85764f27b705853b06be3962f4e835cd3b15e2c87514d744cc3abc8ed",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet/long_audio.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "6123800dc5e75357bac355f9ca4a27ac14df9d81254ca3356ef0560adfbc6040",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet/mel.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "5a1bdcbf1025bb16d7c792ffb485d0e739f3862aa2bf4f96b1339989336ea211",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet/models.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "5dbd11534f05790eaac9e2545531530aa300f4669db7cfe16c0fdacf5c2e7817",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet/parakeet.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "7963a7762752934bcd3ae32134e9886f5d35b35108cca5336926f7a2c8ba7062",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet/preprocessor.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "a0d2d7b4d6ad1937271e158bf764eecdc7a1eae6784e16f0cb3e5f56dd419b18",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/optional-asr/parakeet/tokenizer.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET SHA-256 comparison to prepared runtime pin",
+      "sha256": "f166b9fd5c65be9ca63c45df01ec059e6766e1f31cf80dff5bfa03ac312f5857",
+      "matchesPin": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-asr.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "d51ae8e8b756ee5e53423ffada0c9702973f154f561aca7984fe0b12f4060178",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-vad.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "fecafc3f64a86b0dea5891cedabc553d3125029032643552c25383975064cdc3",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "a42ac2d4732e36f4636bd91cd0c1a54088e4620e7efb0cb48167552899d55147",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/sherpa-ja-en/sherpa-onnx-wasm-main-vad-asr.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "check": "HEAD availability/MIME only",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.mjs",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "32c0e5c315c7716ffd3dfd138269e0e71b3ba330f719cfbf1bdcb7ec71156358",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/ort-wasm-simd-threaded.asyncify.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "check": "HEAD availability/MIME only",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/translation/transformers.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "cbc046a11e0fd29542e6f2d301c083080e3f9767c233dbd0b2a107db5baa0a81",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/zipformer-en/sherpa-onnx-asr.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "d51ae8e8b756ee5e53423ffada0c9702973f154f561aca7984fe0b12f4060178",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/zipformer-en/sherpa-onnx-wasm-main-asr.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "sha256": "a8185277d452ef9070f413d52ef05dbd94aed99435e06ab41caff90c3c62e8f2",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/zipformer-en/sherpa-onnx-wasm-main-asr.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "check": "HEAD availability/MIME only",
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/whisper-config.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "2cc59fb98394aa2926270f41389fa9e99ed26076419a1e03779b189f62bd219e",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/whisper-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "138281e3fc2da4005bcd4fac4c4be172510b925c0383a0aef741158b0e3fef32",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/whisper-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "7458f0ee63ed4d75d9066e301ec327fcf5b282a64f1c81f7ce276dd28556c47a",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/zipformer-config.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "57b8d315d4c667cfb0ceaf15cf7027f02e5ffab1d0999b62856856b4daf92529",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/zipformer-core.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "70c6c579cf2a341df1483c364ed7c1f2bb32f99f17d32242d98259cc52c37eb9",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/zipformer-node.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "e2dbb76067f0098717884836bcf61eb52f10dbe979670e95196c3dd35c3f530c",
+      "matchesMerged": true,
+      "passed": true
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/zipformer-worker.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "check": "GET byte comparison to merged revision",
+      "sha256": "b29a8d171fbb132331d8cd4b449d8beac1941d425248ae1c284505e8015fb949",
+      "matchesMerged": true,
+      "passed": true
+    }
+  ],
+  "excludedProbes": [
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/kokoro-assets.json",
+      "status": 503,
+      "type": "text/html; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "passed": false,
+      "reason": "Probe assumption corrected: not staged or requested at this URL; existing direct runtime loaders are used. Not a product failure."
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/opus-mt-en-ja-assets.json",
+      "status": 404,
+      "type": "text/html; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "passed": false,
+      "reason": "Probe assumption corrected: not staged or requested at this URL; existing direct runtime loaders are used. Not a product failure."
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/supertonic3-assets.json",
+      "status": 404,
+      "type": "text/html; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "passed": false,
+      "reason": "Probe assumption corrected: not staged or requested at this URL; existing direct runtime loaders are used. Not a product failure."
+    },
+    {
+      "url": "https://takahirox.github.io/my-audio-to-text/vendor/model-cache/translategemma-assets.json",
+      "status": 404,
+      "type": "text/html; charset=utf-8",
+      "check": "HEAD availability/MIME only",
+      "passed": false,
+      "reason": "Probe assumption corrected: not staged or requested at this URL; existing direct runtime loaders are used. Not a product failure."
+    }
+  ]
+}

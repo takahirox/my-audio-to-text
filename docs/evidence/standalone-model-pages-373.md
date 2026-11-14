@@ -67,8 +67,8 @@ explicit opt-in commands and requirements are in [the Playground guide](../node-
 Perform the
 [#373 deployment checklist](../node-playground.md#issue-373--all-standalone-model-pages)
 after merge and record its evidence here, in the merged PR or in the closed
-Issue. This required verification remains pending and does not block pre-merge
-approval.
+Issue. The post-merge results are recorded below. Runtime verification remains partial;
+the historical pre-merge evidence does not establish these results.
 
 PR [#374](https://github.com/takahirox/my-audio-to-text/pull/374) includes the
 normal closing reference `Closes #373`. Once implementation and mandatory
@@ -81,13 +81,14 @@ checks passed. Publication does not authorize merge.
 
 | Check | Expected result | Status |
 | --- | --- | --- |
-| Merged revision deployment | Both Pages jobs succeed for the merged SHA; the canonical published site serves that deployment. Record SHA, run/deployment URL and UTC verification time. | Pending |
-| All 15 primary model links | Each index link, direct page URL and return link works beneath `/my-audio-to-text/`, shows the correct model controls and triggers no eager inference/download/capture. Record each URL/result. | Pending |
-| Per-model runtime and asset resolution | Explicit loading/running resolves modules, workers/worklets, isolation worker, notices and vendor runtimes/manifests under the repository prefix; pinned remote weights load from their distribution hosts. Record successful requests, required isolation, readiness/output and any console/network failures per model. | Pending |
+| Merged revision deployment | Both Pages jobs succeed for the merged SHA; the canonical published site serves that deployment. Record SHA, run/deployment URL and UTC verification time. | See 2026-11-14 results below |
+| All 15 primary model links | Each index link, direct page URL and return link works beneath `/my-audio-to-text/`, shows the correct model controls and triggers no eager inference/download/capture. Record each URL/result. | See 2026-11-14 results below |
+| Per-model runtime and asset resolution | Explicit loading/running resolves modules, workers/worklets, isolation worker, notices and vendor runtimes/manifests under the repository prefix; pinned remote weights load from their distribution hosts. Record successful requests, required isolation, readiness/output and any console/network failures per model. | See 2026-11-14 results below |
 
-No post-merge deployment results have been collected. Fixture-driven published
-tests alone do not establish real runtime/weight loading; unperformed or
-hardware-blocked checks remain pending.
+Post-merge deployment and navigation checks completed on 2026-11-14. Real
+runtime checks are partial, as detailed below. Fixture-driven published tests
+alone do not establish real runtime/weight loading; hardware-blocked checks
+remain pending.
 
 If verification discovers an actual defect, check for an equivalent Issue and
 use it or register a new linked Issue with reproduction steps, affected revision,
@@ -152,3 +153,97 @@ rerun for this documentation reconciliation. The imported upstream code is
 unchanged; historical suite failures above remain historical and no new
 full-suite success is claimed. Published-revision checks remain **pending**.
 This reconciliation did not push, merge PR #374, close Issues or alter Tasks.
+
+
+## Post-merge published verification — 2026-11-14
+
+**Result: partial.** GitHub was checked again after testing: PR #374 is merged,
+Issue #373 remains closed/completed, and the actual merge SHA is
+`d58849c766b7903a2d5f8a1f2201853f78a69e68` (PR head
+`3a40a582b2831edc39301a47c41ccdb57c286cfd`). No product/deployment defect was
+established; no follow-up Issue or fix was started.
+
+### Deployment and navigation
+
+[Pages run 43578274950](https://github.com/takahirox/my-audio-to-text/actions/runs/43578274950)
+ran for the exact merge SHA. Both build and deploy succeeded, finishing at
+08:58:46 and 08:59:05 UTC. Deployment `7785295954` reported success at
+08:59:06 UTC for [the canonical site](https://takahirox.github.io/my-audio-to-text/).
+It was already complete when inspected; no polling or deployment retry was needed.
+The run/deployment and final UTC observation are saved in
+[GitHub and runtime evidence](standalone-model-pages-373-postmerge.json).
+
+All **15** primary links in the four task groups passed in fresh Chromium
+contexts without an extension. Each link, direct URL and Node Playground return
+link retained `/my-audio-to-text/`; matching headings and enabled Run/Load controls
+were present. No model worker, capture call, external request or eager weight
+load occurred. All five ASR pages became cross-origin isolated through the
+published isolation worker. [Per-page evidence](standalone-model-pages-373-published.json)
+records every canonical URL, heading, controls, request statuses and capabilities.
+
+The published `test:playground` command exited 0 across Chromium/WebKit:
+294 declared cases, including two skipped local-server-only alias cases. This
+suite uses worker/asset fixtures and verifies lifecycle, cancellation, settings,
+streaming UI/playback plumbing and both TranslateGemma directions; it does not
+establish real inference. Its initial JSON stdout was removed by Playwright's
+output-directory initialization; the observed process exit and separate suite
+listing are recorded, rather than presenting a missing report as saved evidence.
+
+The [asset audit](standalone-model-pages-373-assets.json) records 192 successful
+availability/MIME checks: 117 published source responses match the merged bytes,
+45 prepared JS/runtime files match their recorded SHA-256 pins, and 30 other
+checks establish availability only (including WASM served as `application/wasm`).
+Controllers, shared modules/styles, workers/worklets, isolation worker, notices,
+model-cache manifests and vendor runtimes resolve beneath the repository prefix.
+HEAD availability does not establish successful runtime execution or WASM integrity.
+Four additional guessed manifest paths were excluded after checking
+`prepare-model-cache.py` and production loaders: those models do not use those
+URLs. Their observed responses, including an unused Kokoro probe's 503, remain
+in `excludedProbes`; no production failure is inferred from them.
+
+### Real model execution
+
+Chromium **153.0.8010.12**, macOS arm64, Apple M4 Max. Locked dependencies were
+installed with `npm ci --prefer-offline`; existing browser binaries, published
+staged runtimes and browser asset caches were used. No local asset rebuild or
+model substitution was required. Model inputs stayed local; observed HTTP
+requests downloaded static assets. Request evidence omits signed query strings.
+
+The repository's existing opt-in browser tests ran against `ASR_BASE_URL` set to
+the canonical published URL. A temporary wrapper only recorded network/console
+and final UI state; it did not replace workers, runtimes or weights. It imported
+`playground-model-smoke.spec.js`, `model-smoke.spec.js`,
+`translation-smoke.spec.js` and `tts-smoke.spec.js`. The wrapper was removed after
+recording evidence. Runs had explicit 240–360 second overall bounds; no unbounded
+wait/retry loop was used. Preliminary real runs passed; the five-model CPU subset
+was repeated specifically to collect the missing per-model network evidence.
+
+| Model | Published real result |
+| --- | --- |
+| ReazonSpeech ja-en | Real ReazonSpeech/Silero readiness; silence processing, Stop and repeat passed. Microphone input was replaced by silence injection, not inference. No speech-accuracy claim. |
+| Whisper tiny q8 | Real pinned loading and one-second generated-waveform processing/drain passed; empty transcript. No speech-accuracy claim. |
+| Zipformer English | Real pinned loading and generated-waveform processing/drain passed; empty transcript. No validated speech partial/final accuracy. |
+| Moonshine Medium | Real pinned loading and generated-waveform processing/drain passed; empty transcript. No validated speech partial/final accuracy. |
+| IfCondition | Real classifier completed with `Yes`; distinct load/inference timing and no page/runtime errors. |
+| OPUS-MT ja → en | Initialization, inference and repeat passed; example: `It's a nice day today.` |
+| OPUS-MT en → ja | Initialization, fixture meanings, inference and repeat passed; final example: `金曜までにこのプロジェクトを完了しなければならない.` |
+| Supertonic 3 | Japanese, English and repeated English generation, finite non-silent waveform, native WAV playback and local-only request checks passed. |
+| Kokoro 82M | Japanese and twice-English generation, non-silent finite WAV and playback succeeded; **the existing smoke test failed** its external-host assertion at `tts-smoke.spec.js:51`. It rejects the successful pinned `cdn.jsdelivr.net/npm/kokoro-js-jp@0.2.0/dist/openjtalk-voice.htsvoice` dependency download. This is a test allowlist mismatch, not evidence of failed generation, remote inference or an unavailable deployed asset. The test is not reported as passing. |
+
+Runtime records include real worker/vendor/model-manifest and licensed weight
+responses, final status/output, separate timings, console warnings and test
+assertions. There were no recorded HTTP failures or uncaught page errors in these
+nine executions. OPUS tokenizer/content-length warnings were retained. Replaced
+completed-audio blob requests can be aborted during normal player cleanup; the
+recorder excludes those from HTTP asset failures.
+
+**Still pending:** Parakeet, TranslateGemma (both real directions), LFM2 summary,
+Qwen3.5 summary, Qwen3-TTS and CosyVoice3 real generation. The headless browser
+exposes `navigator.gpu`, but `requestAdapter()` returned null in the fresh-context
+capability checks. Their WebGPU inference, shader-f16 behavior and real streaming
+speech playback were not performed; no heavyweight GPU weight download was
+attempted. Fixture-based streaming tests and runtime-file availability are not
+substitutes. Retry these opt-in checks on a compatible GPU/browser, and reconcile
+the Kokoro smoke allowlist separately. An unavailable adapter alone is a
+verification limitation, so #373 was left closed and no product defect Issue was
+created.
