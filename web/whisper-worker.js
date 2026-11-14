@@ -25,8 +25,11 @@ self.onmessage = ({ data }) => {
         self.postMessage({ type: 'decoded', session: data.session });
       } else throw new Error(`Unknown Whisper request: ${data.type}`);
     } catch (error) {
+      const retry = self.location.protocol === 'chrome-extension:'
+        ? 'Use Retry models in Live, or retry preparation in Models.'
+        : 'Check browser storage, downloads, WASM support and free memory, then Run again.';
       self.postMessage({ type: 'error', session: data.session,
-        message: `Local Whisper failed: ${error.message}. Use Retry models in Live, or retry preparation in Models.` });
+        message: `Local Whisper failed: ${error.message}. ${retry}` });
     }
   });
 };

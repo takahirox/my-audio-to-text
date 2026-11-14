@@ -1,6 +1,6 @@
+import { cacheOnlyTextSummaryRuntime } from './optional-model-assets.js';
 import { textSummaryModel } from './text-summary-models.js';
 import { summaryText, summarizeText, MAX_PROMPT_TOKENS, MAX_NEW_TOKENS } from './text-summary-policy.js';
-import { cacheOnlyTextSummaryRuntime } from '../extension/text-summary-cache.js';
 import { watchGpuDevice } from './gpu-lifecycle.js';
 
 let model, tokenizer, queue = Promise.resolve();
@@ -10,7 +10,7 @@ async function load(type) {
   const adapter = await self.navigator.gpu?.requestAdapter();
   if (!adapter?.features.has('shader-f16')) throw new Error('Text summary requires Worker WebGPU with shader-f16. Check Chrome hardware acceleration and available GPU memory.');
   const { PreTrainedTokenizer, AutoModelForCausalLM, env } = await import('./vendor/meeting-summary/transformers.js');
-  await cacheOnlyTextSummaryRuntime(env, type);
+  await cacheOnlyTextSummaryRuntime(env, type, message => self.postMessage({ type: 'progress', message }));
   env.backends.onnx.wasm.numThreads = 1; env.backends.onnx.wasm.proxy = false;
   env.backends.onnx.wasm.wasmPaths = {
     mjs: new URL('./vendor/meeting-summary/ort-wasm-simd-threaded.asyncify.mjs', import.meta.url).href,

@@ -1,5 +1,5 @@
+import { cosyVoice3Assets } from './optional-model-assets.js';
 import { CosyVoice3Runtime } from './cosyvoice3-runtime.js';
-import { cosyVoice3Assets } from '../extension/cosyvoice3-cache.js';
 
 let runtime, active, acknowledgment;
 const now = () => performance.timeOrigin + performance.now();
@@ -13,7 +13,7 @@ self.onmessage = async ({ data }) => {
   try {
     if (data.type === 'load') {
       if (runtime || active) throw Error('CosyVoice3 Worker already loaded.');
-      runtime = await CosyVoice3Runtime.create(await cosyVoice3Assets(), message => postMessage({ type: 'progress', message }),
+      runtime = await CosyVoice3Runtime.create(await cosyVoice3Assets(message => postMessage({ type: 'progress', message })), message => postMessage({ type: 'progress', message }),
         error => postMessage({ type: 'error', fatal: true, message: error.message }));
       postMessage({ type: 'ready' });
     } else if (data.type === 'generate') {

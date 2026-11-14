@@ -27,7 +27,10 @@
     "prepare:if-condition-test-model": "python3 scripts/prepare-if-condition-test-model.py",
     "test:if-condition-real": "IF_CONDITION_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-if-condition-smoke.spec.js",
     "prepare:text-summary-assets": "python3 scripts/prepare-text-summary-assets.py",
-    "test:text-summary-real": "TEXT_SUMMARY_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-text-summary-smoke.spec.js"
+    "test:text-summary-real": "TEXT_SUMMARY_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-text-summary-smoke.spec.js",
+    "prepare:playground-assets": "python3 scripts/prepare-playground-assets.py",
+    "test:playground-real": "PLAYGROUND_MODEL_SMOKE=1 playwright test tests/browser/playground-model-smoke.spec.js --project=chromium --workers=1",
+    "test:playground": "playwright test tests/browser/model-playground.spec.js tests/browser/playground-assets.spec.js tests/browser/playground.spec.js tests/browser/translation.spec.js tests/browser/tts.spec.js tests/browser/correction.spec.js"
   },
   "devDependencies": {
     "@lexical/history": "0.38.2",

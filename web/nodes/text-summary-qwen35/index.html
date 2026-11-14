@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text Summary · Qwen3.5 2B · Node Playground</title><link rel="stylesheet" href="../../style.css"></head>
+<body><main class="model-test"><p><a href="../../">Node Playground</a></p>
+<h1>Text Summary · Qwen3.5 2B</h1>
+
+<p>onnx-community/Qwen3.5-2B-ONNX-OPT. WebGPU with shader-f16; q4f16. Large download and several GB of RAM/GPU memory required. Maximum 8,192 runtime tokens, including up to 1,024 output tokens. Text stays on this device; downloads begin on Run.</p>
+<label for="input">Input text</label>
+<textarea id="input" rows="7" maxlength="32768">The team met on Monday. We agreed to release the update on Friday. Testing must finish on Thursday.</textarea>
+<label>Summary language <select id="language"><option value="ja">Japanese</option><option value="en">English</option></select></label>
+<label for="prompt">Instruction (optional)</label>
+<textarea id="prompt" rows="2" maxlength="4096" placeholder="Summarize the input text."></textarea>
+<div class="controls"><button id="run" disabled>Run</button><button id="cancel" disabled>Cancel / release</button></div>
+<p id="status" role="status" aria-live="polite">Ready</p>
+<p id="errors" role="alert"></p>
+<h2>Result</h2>
+<pre id="output" aria-live="polite"></pre>
+<dl><dt>Model download / loading</dt><dd id="load-time">—</dd><dt>Inference / drain</dt><dd id="latency">—</dd></dl>
+<p>Timings describe this run on this device; they are not comparable benchmarks across machines.</p>
+
+<p>First model download: about 1403 MB. <a href="../../licenses/meeting-summary-qwen35.txt">Model source and license</a></p>
+
+<p><a href="../../third-party-notices.txt">Runtime and model notices</a> · <a href="https://github.com/takahirox/my-audio-to-text/blob/main/docs/node-playground.md">Setup and requirements</a></p>
+
+</main><script type="module" src="./app.js"></script></body></html>
