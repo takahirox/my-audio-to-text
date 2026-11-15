@@ -1763,3 +1763,74 @@ for (const [id, selector] of Object.entries({ react: '#react textarea', pm: '#pm
   expect(await t.website.evaluate(id => editors[id].read(), id)).toBe(id === 'react' ? 'hello worldconfirmedretained' : 'hello confirmedretainedworld');
   await t.library.evaluate(() => toolbarOutput.dispose());
 });
+
+for (const id of ['lexical', 'draft']) for (const route of ['website mic', 'toolbar output']) test(`rich framework multiline ${id} through ${route} preserves model, history and ordered recovery`, async ({ voice: t }) => {
+  test.skip(real);
+  const selector = `#${id} [contenteditable]`;
+  await t.website.goto(new URL('/rich-editors', t.website.url()).href); await t.website.waitForFunction(() => window.fixtureReady);
+  let r, sequence = 100;
+  if (route === 'website mic') {
+    await enable(t); await start(t, selector); await recording(t);
+    r = await runtime(t);
+    await r.evaluate(async () => {
+      const { SpeechToTextNode } = await import('../web/transcription-nodes.js');
+      const receive = SpeechToTextNode.prototype.receiveEvent;
+      SpeechToTextNode.prototype.receiveEvent = function(event) {
+        globalThis.finalProbe = this;
+        // This case controls final segments while real capture/ASR stay live.
+        // Suppress fixture-generated finals; partials still flow normally.
+        if (event.type !== 'final') return receive.call(this, event);
+      };
+      globalThis.sendVoiceFinal = event => receive.call(finalProbe, event);
+    });
+    await expect.poll(() => r.evaluate(() => !!globalThis.finalProbe)).toBe(true);
+  }
+  await t.website.bringToFront(); await t.website.locator(selector).focus();
+  await t.website.locator(selector).evaluate(element => {
+    const node = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode(), range = document.createRange();
+    range.setStart(node, 6); range.setEnd(node, 11); getSelection().removeAllRanges(); getSelection().addRange(range);
+  });
+  await t.website.waitForTimeout(40);
+  if (route === 'toolbar output') await t.library.evaluate(async url => {
+    const { authorizePage } = await import('./page-target.js'), { FocusedInputTextOutputNode } = await import('./page-output-node.js');
+    const tab = (await chrome.tabs.query({})).find(tab => tab.url === url);
+    window.toolbarOutputStates = []; window.toolbarOutputContext = { signal: new AbortController().signal };
+    window.toolbarOutput = new FocusedInputTextOutputNode({ target: await authorizePage(tab.id), onState: (...state) => toolbarOutputStates.push(state) });
+    await toolbarOutput.start(toolbarOutputContext);
+  }, t.website.url());
+  const send = async text => {
+    if (r) await r.evaluate(({ id, text }) => sendVoiceFinal({ type: 'final', id, text }), { id: sequence++, text });
+    else await t.library.evaluate(text => toolbarOutput.receive('text', text, toolbarOutputContext), text);
+  };
+  let expected = 'hello voice';
+  for (const text of ['voice', ' voice', ' voice', '\nnext']) {
+    await send(text); if (text !== 'voice') expected += text;
+    await expect.poll(() => t.website.evaluate(id => editors[id].read(), id)).toBe(expected);
+  }
+  await t.website.evaluate(id => editors[id].render(), id); await t.website.waitForTimeout(80);
+  expect(await t.website.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice\nnext');
+  if (r) await r.evaluate(id => sendVoiceFinal({ type: 'final', id, text: '\nnext' }), sequence - 1);
+  else expect(await t.library.evaluate(() => toolbarOutput.connection.request('append', { sequence: toolbarOutput.sequence - 1, text: '\nnext' }))).toMatchObject({ duplicate: true });
+  await t.website.evaluate(id => editors[id].undo(), id); await expect.poll(() => t.website.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice');
+  await t.website.evaluate(id => editors[id].redo(), id); await expect.poll(() => t.website.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice\nnext');
+  await t.website.keyboard.type(' manual'); await send('\nfinal');
+  await expect.poll(() => t.website.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice\nnext manual\nfinal');
+
+  await t.website.locator(selector).evaluate(element => {
+    window.rejectMultiline = event => { event.preventDefault(); event.stopImmediatePropagation(); };
+    element.addEventListener('paste', rejectMultiline, true);
+  });
+  await send('\nretained'); await send(' tail');
+  await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
+  expect(await t.website.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice\nnext manual\nfinal');
+  if (r) { await recording(t); expect((await pageCapture(t)).streams).toBe(1); expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2); }
+  else expect(await t.library.evaluate(() => ({ failed: !!toolbarOutput.failed, severity: toolbarOutputStates.at(-1)[2] }))).toEqual({ failed: false, severity: 'warning' });
+  await t.website.locator(selector).evaluate(element => element.removeEventListener('paste', rejectMultiline, true));
+  await recoveryAction(t, 'Retry in original field');
+  await expect(t.website.locator('[data-local-text-recovery]')).toHaveCount(0);
+  await expect.poll(() => t.website.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice\nnext manual\nfinal\nretained tail');
+  await t.website.evaluate(id => editors[id].render(), id); await t.website.waitForTimeout(80);
+  expect(await t.website.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice\nnext manual\nfinal\nretained tail');
+  if (r) { await stop(t); await idle(t); await r.detach(); }
+  else await t.library.evaluate(() => toolbarOutput.dispose());
+});
