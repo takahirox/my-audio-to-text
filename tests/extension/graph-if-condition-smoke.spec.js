@@ -30,7 +30,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
  try {
   await f.context.setOffline(true);
   for(const {condition,texts} of cases){
-   await page.editor.getByRole('button',{name:'Select condition',exact:true}).click();await page.editor.getByLabel('condition condition',{exact:true}).fill(condition);await settleAutoSave(page.editor);
+   await page.editor.getByRole('button',{name:/^Select condition:/}).click();await page.editor.getByLabel('condition condition',{exact:true}).fill(condition);await settleAutoSave(page.editor);
    const started=Date.now();await startGraph(page,120000);const loadMs=Date.now()-started;
    const outputs={yes:[],no:[]},decisions=[];
    for(const [text,branch]of texts){

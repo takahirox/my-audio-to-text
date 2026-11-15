@@ -1,0 +1,189 @@
+{
+  "graph": {
+    "version": 15,
+    "nodes": [
+      {
+        "id": "SpeechToTextReazonSpeech",
+        "type": "SpeechToTextReazonSpeech",
+        "settings": {},
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "SpeechToTextWhisper",
+        "type": "SpeechToTextWhisper",
+        "settings": {},
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "SpeechToTextZipformerEn",
+        "type": "SpeechToTextZipformerEn",
+        "settings": {},
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "SpeechToTextParakeetV3",
+        "type": "SpeechToTextParakeetV3",
+        "settings": {},
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "SpeechToTextMoonshineMediumEn",
+        "type": "SpeechToTextMoonshineMediumEn",
+        "settings": {},
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "OpusMtJaEn",
+        "type": "OpusMtJaEn",
+        "settings": {},
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "OpusMtEnJa",
+        "type": "OpusMtEnJa",
+        "settings": {},
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "TextSummaryLfm2",
+        "type": "TextSummaryLfm2",
+        "settings": {
+          "language": "ja",
+          "prompt": "Summarize the input text."
+        },
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "TextSummaryQwen35",
+        "type": "TextSummaryQwen35",
+        "settings": {
+          "language": "ja",
+          "prompt": "Summarize the input text."
+        },
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "IfCondition",
+        "type": "IfCondition",
+        "settings": {
+          "condition": "Is this a question?"
+        },
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "TranslateGemmaEnJa",
+        "type": "TranslateGemmaEnJa",
+        "settings": {},
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "TranslateGemmaJaEn",
+        "type": "TranslateGemmaJaEn",
+        "settings": {},
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "Supertonic3",
+        "type": "Supertonic3",
+        "settings": {
+          "language": "ja",
+          "voice": "F1"
+        },
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "Kokoro",
+        "type": "Kokoro",
+        "settings": {
+          "voice": "jf_alpha"
+        },
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "Qwen3TtsStreaming",
+        "type": "Qwen3TtsStreaming",
+        "settings": {
+          "language": "japanese",
+          "voice": "ono_anna"
+        },
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      },
+      {
+        "id": "CosyVoice3Streaming",
+        "type": "CosyVoice3Streaming",
+        "settings": {
+          "language": "english",
+          "voice": "libritts-r-4446"
+        },
+        "position": {
+          "x": 20,
+          "y": 20
+        }
+      }
+    ],
+    "edges": []
+  },
+  "contracts": {
+    "SpeechToTextReazonSpeech": "de28604b75de6e584e37f0c4ad539c43671b541102b6b4826a10c76a8c45eda7",
+    "SpeechToTextWhisper": "c966dba6554a63e981888ad513c057f9edcc564a60aec3de5527c9ccb20c454e",
+    "SpeechToTextZipformerEn": "fe042166b6a9d5b288f73a64f663927ef63e092680b3a45b921f0ca9f03be2e1",
+    "SpeechToTextParakeetV3": "23bf4f048637ce32ead385e7b99d85ef2c159e245f3cd735caa1731a7cbc7d3d",
+    "SpeechToTextMoonshineMediumEn": "644ab0b49ddae3a4eba91cf9974a77b9dffba72f069ab5695e72c3a50d7935bd",
+    "OpusMtJaEn": "7985489715af91f49c8921df80d16dde47b9b92861e07cc055278253bfc335c5",
+    "OpusMtEnJa": "7985489715af91f49c8921df80d16dde47b9b92861e07cc055278253bfc335c5",
+    "TextSummaryLfm2": "fb88c267e5cbab536a941549397efd7b6c979392af44841a6335b25fad6a5bbc",
+    "TextSummaryQwen35": "fb88c267e5cbab536a941549397efd7b6c979392af44841a6335b25fad6a5bbc",
+    "IfCondition": "11974f97c53a0e6862b0a39cd4b794640de61c8910b032fb52bfcb672e66b4cf",
+    "TranslateGemmaEnJa": "4d48c31f99db4e10bb841d68b7ef71a338cd9d7927519234a5ed8a168a40dc48",
+    "TranslateGemmaJaEn": "cb39f1861291803d3b14705aa554f40508e4f5cbba562583908ee63665f3ace7",
+    "Supertonic3": "d2667dd28eebb5c38dfa9d778bb6fc81f1c37c697a8e0cd8d355c24093857d10",
+    "Kokoro": "c69283323bff8272bdb2ddaac8cf9d46dace5cc1bd40e493bef5d743ef269c7e",
+    "Qwen3TtsStreaming": "c0e90163a3806580d8a77b3eae9e844dc08dc56ddcc5a1e0131490ba97a4f96f",
+    "CosyVoice3Streaming": "97a993d7773028c76d2e7edd90709f01d0764886d6757c29dfd675fe77dc9cd1"
+  }
+}

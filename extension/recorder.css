@@ -155,3 +155,13 @@ button, summary, nav a { min-height: 44px; }
 #graph-action-buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
 #graph-action-buttons button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 #graph-action-area h2 { font-size: 1rem; margin: .75rem 0 .5rem; }
+
+/* AI display facts wrap within the existing card/palette width. */
+.graph-node-option:has(.graph-node-model) { display: block; }
+.graph-node-title { display: flex; align-items: baseline; gap: .3rem; min-width: 0; overflow-wrap: anywhere; }
+.graph-ai-icon { flex: none; position: relative; width: 1rem; line-height: 1; }
+.graph-ai-icon > span { position: absolute; font-size: .55em; right: 0; top: -.15em; }
+.graph-node-model { display: block; font-size: .75rem; font-weight: 400; color: var(--muted, #b9c6d8); overflow-wrap: anywhere; line-height: 1.35; }
+.graph-model-facts { margin: .75rem 0; font-size: .85rem; overflow-wrap: anywhere; }
+.graph-model-facts dt { font-weight: 650; }
+.graph-model-facts dd { margin: 0 0 .5rem; }

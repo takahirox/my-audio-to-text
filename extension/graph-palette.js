@@ -21,7 +21,7 @@ const categoryTypes = {
     'TextFormatter', 'TextAccumulator', 'TextSlidingWindow', 'TextWindow', 'Hold',
     'KeyedTextPair', 'KeyedTextCoalesce', 'KeyedPairedTextAccumulator',
   ],
-  'Outputs': ['Display', 'SpeakerOutput', 'StreamingSpeakerOutput', 'AudioOutput', 'FocusedInputTextOutputNode'],
+  'Outputs': ['Display', 'SpeakerOutput', 'AudioOutput', 'FocusedInputTextOutputNode'],
   'Subgraphs': [],
 };
 export const PALETTE_CATEGORIES = Object.freeze(Object.keys(categoryTypes));
@@ -30,10 +30,12 @@ export const NODE_PALETTE_CATEGORIES = Object.freeze(Object.fromEntries(
 
 const labelCollator = new Intl.Collator('ja-JP', { usage: 'sort', sensitivity: 'base', numeric: true });
 const compareText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-// Match Models: equivalent kana/case/numeric labels use exact text, then type
-// (the stable subgraph ID for library entries), never registration order.
+// Equivalent kana/case/numeric titles use exact text, then the secondary
+// model name and stable type/ID, never registration order.
 const compareEntries = ([aType, a], [bType, b]) => labelCollator.compare(a.label, b.label)
-  || compareText(a.label, b.label) || compareText(aType, bType);
+  || compareText(a.label, b.label)
+  || labelCollator.compare(a.ai?.model || '', b.ai?.model || '')
+  || compareText(a.ai?.model || '', b.ai?.model || '') || compareText(aType, bType);
 
 export function groupPaletteEntries(entries, { query = '', category = 'All categories' } = {}) {
   query = query.trim().toLowerCase();
@@ -41,7 +43,7 @@ export function groupPaletteEntries(entries, { query = '', category = 'All categ
   for (const [type, definition] of entries) {
     const name = type.startsWith('Subgraph:') ? 'Subgraphs' : NODE_PALETTE_CATEGORIES[type];
     if (!groups.has(name)) throw new Error(`Missing Add Node category for ${type}`);
-    if ((category !== 'All categories' && category !== name) || !`${type} ${definition.label}`.toLowerCase().includes(query)) continue;
+    if ((category !== 'All categories' && category !== name) || !`${type} ${definition.label} ${definition.ai?.model || ''}`.toLowerCase().includes(query)) continue;
     groups.get(name).push([type, definition]);
   }
   return new Map([...groups].filter(([, options]) => options.length).map(([name, options]) => [name, options.sort(compareEntries)]));

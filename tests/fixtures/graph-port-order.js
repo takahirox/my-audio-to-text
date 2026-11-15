@@ -52,7 +52,7 @@ export async function checkPortOrderAndInspector(page, tabKey = 'Tab') {
         if (i + 1 < names.length) await page.keyboard.press(tabKey);
       }
     }
-    await page.getByRole('button', { name: `Select ${node.id}`, exact: true }).press('Enter');
+    await card.locator('.graph-heading').press('Enter');
     await expect(page.locator('.graph-inspector')).toContainText(`Instance ID: ${node.id}`);
     await expect(page.locator('.graph-inspector details')).toHaveCount(0);
   }

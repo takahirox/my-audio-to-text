@@ -22,7 +22,7 @@ test('fresh install and Reset use current transcription; saved model requirement
   await page.locator('#stop').click();
   await expect(page.locator('#errors')).toContainText('assets missing');
   await expect(page.locator('#start')).toBeDisabled();
-  await page.editor.getByRole('button', { name: 'Select translation', exact: true }).click();
+  await page.editor.getByRole('button', { name: /^Select translation:/ }).click();
   await page.editor.getByRole('button', { name: 'Remove translation', exact: true }).click();
   await settleAutoSave(page.editor);
   await startGraph(page); await expect(page.locator('#translation-status')).toHaveText('Translation off');
@@ -140,7 +140,7 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await disconnectWire(editor, 'audio.audio to speech.audio');
   await output.dragTo(input); await expect(editor.locator('#graph-errors')).toBeEmpty();
   await editor.locator('#graph-zoom').selectOption('0.75');
-  const heading = editor.getByRole('button', { name: 'Select speech', exact: true });
+  const heading = editor.getByRole('button', { name: /^Select speech:/ });
   await heading.scrollIntoViewIfNeeded();
   const box = await heading.boundingBox();
   await editor.mouse.move(box.x + 10, box.y + 10); await editor.mouse.down(); await editor.mouse.move(box.x + 40, box.y + 25); await editor.mouse.up();
@@ -152,8 +152,8 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   const second = await f.context.newPage(); await second.goto(editor.url());
   await expect(second.locator('#graph-state')).toHaveText('Read-only');
   await expect(second.locator('#graph-palette-toggle')).toBeDisabled();
-  await editor.getByRole('button', { name: 'Select speech', exact: true }).press('ArrowRight');
-  await second.getByRole('button', { name: 'Select speech', exact: true }).press('ArrowDown');
+  await editor.getByRole('button', { name: /^Select speech:/ }).press('ArrowRight');
+  await second.getByRole('button', { name: /^Select speech:/ }).press('ArrowDown');
   await settleAutoSave(editor);
   expect((await saved(live)).nodes.find(n => n.id === 'speech').position).toEqual({ x: 320, y: 50 });
   await expect(editor.locator('#graph-save-error')).toBeEmpty();

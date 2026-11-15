@@ -288,7 +288,18 @@ always appear in this order: **Sources / inputs** (including Text and Number),
 **AI Models / Text** (summaries and condition AI), **AI Models / Speech Synthesis**,
 **Processors** (deterministic transformations, including Text formatter and Hold),
 **Outputs**, then **Subgraphs**. Within each category, displayed names sort
-automatically in Japanese-aware alphabetical / kana order with natural numbers.
+automatically in Japanese-aware alphabetical / kana order with natural numbers,
+by functional title then model name for AI nodes.
+AI nodes show a shared sparkles indicator (accessible name **AI**), a function-first
+title, and a smaller persistent model subtitle on the canvas and in Add Node.
+Search matches both function and model names, including competing models with the
+same function. Settings lists read-only **Model**, **Languages**, and **Runtime**
+facts above the existing editable controls; the Model fact does not switch models.
+Whisper accepts English (default) and Japanese here. Parakeet detects its 25
+European languages automatically and uses a WebGPU encoder plus WASM decoder
+([model language reference](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)).
+These are display facts only: graph type IDs, settings, ports and version-15
+save/import/export stay unchanged.
 These eight categories are independent choices in the primary selector.
 **All categories** shows all groups; a category filter and search can be combined.
 New built-in Node types must be classified in `extension/graph-palette.js`;

@@ -62,8 +62,8 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
     await saveLiveGraphData(localStorage, (graph));
   });
   await editor.reload();
-  await expect(editor.locator('[data-node=forward]')).toContainText('OPUS-MT Japanese → English');
-  await expect(editor.locator('[data-node=reverse]')).toContainText('OPUS-MT English → Japanese');
+  await expect(editor.locator('[data-node=forward]')).toContainText('Translation · JA → EN');
+  await expect(editor.locator('[data-node=reverse]')).toContainText('Translation · EN → JA');
   await expect(editor.locator('#graph-translation')).toHaveCount(0);
   await editor.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
   await settleAutoSave(editor);

@@ -101,7 +101,9 @@ for (const width of [390, 1440]) {
     const modelsPage = await context.newPage();
     await modelsPage.goto(new URL(await models.getAttribute('href'), page.url()).href);
     await expect(modelsPage.getByRole('heading', { name: 'Models', exact: true })).toBeVisible();
-    const terms = modelsPage.getByRole('contentinfo').getByRole('link', { name: 'Google Gemma Terms, Prohibited Use Policy and attribution' });
+    const model = modelsPage.getByRole('region', { name: 'TranslateGemma 4B · English ↔ Japanese', exact: true });
+    await model.locator('summary').click();
+    const terms = model.getByRole('link', { name: 'License / terms for TranslateGemma 4B · English ↔ Japanese', exact: true });
     await expect(terms).toBeVisible();
     await expect(terms).toHaveAttribute('href', '../web/licenses/gemma-notices.txt');
     await terms.click();
@@ -121,18 +123,21 @@ for (const width of [390, 1440]) {
       const graph = defaultGraph();
       graph.nodes.push(graphNode('SpeechToTextReazonSpeech', 'speech-second', 270, 330));
       await saveLiveGraphData(localStorage, graph);
-      return graph.nodes.map(node => nodeDefinition(node).label);
+      return graph.nodes.map(node => {
+        const definition = nodeDefinition(node);
+        return definition.ai ? `✧✦${definition.label}${definition.ai.model}` : definition.label;
+      });
     });
     await page.reload();
     // Library Save advances revisions/timestamps even when graph content is unchanged.
     const savedGraphs = () => page.evaluate(() => JSON.parse(localStorage.getItem('processing-graph-library-v1')).graphs.map(({ id, graph }) => ({ id, graph })));
     const original = await savedGraphs();
     await expect(page.locator('.graph-heading')).toHaveText(labels);
-    const first = page.getByRole('button', { name: 'Select speech', exact: true });
-    const second = page.getByRole('button', { name: 'Select speech-second', exact: true });
+    const first = page.getByRole('button', { name: /^Select speech:/ });
+    const second = page.getByRole('button', { name: /^Select speech-second:/ });
     await expect(second).toHaveText(await first.textContent());
-    await expect(first).toHaveAccessibleName('Select speech');
-    await expect(second).toHaveAccessibleName('Select speech-second');
+    await expect(first).toHaveAccessibleName('Select speech: Speech Recognition · JA/EN · ReazonSpeech ja-en · AI');
+    await expect(second).toHaveAccessibleName('Select speech-second: Speech Recognition · JA/EN · ReazonSpeech ja-en · AI');
     await first.click();
     const inspector = page.getByRole('complementary', { name: 'Graph details inspector' });
     await expect(inspector.getByText('Instance ID: speech', { exact: true })).toBeVisible();
@@ -206,7 +211,7 @@ for (const zoom of ['0.25', '0.5', '0.75', 'fit']) {
     await page.getByRole('button', { name: 'audio output audio', exact: true }).press('Enter');
     await page.getByRole('button', { name: 'speech input audio', exact: true }).press('Space');
     await expect(wire).toHaveCount(1);
-    const heading = page.getByRole('button', { name: 'Select speech', exact: true });
+    const heading = page.getByRole('button', { name: /^Select speech:/ });
     await heading.press('ArrowRight'); await expect(heading).toBeFocused();
     await expect(page.locator('[data-node="speech"]')).toHaveCSS('left', '280px');
     await page.locator('#graph-zoom').selectOption('1');
@@ -239,7 +244,7 @@ for (const zoom of ['0.25', 'fit', '1.5']) {
     await page.locator('#graph-disconnect').scrollIntoViewIfNeeded();
     await expect(page.locator('.graph-inspector #graph-disconnect')).toBeInViewport({ ratio: 1 });
     await page.locator('#graph-disconnect').click(); await expect(wire).toHaveCount(0);
-    const heading = page.getByRole('button', { name: 'Select speech', exact: true });
+    const heading = page.getByRole('button', { name: /^Select speech:/ });
     await heading.scrollIntoViewIfNeeded(); const box = await heading.boundingBox();
     const scale = Number(await page.locator('#graph-zoom').inputValue());
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
@@ -282,7 +287,7 @@ test('touch returns from an overview to connect typed ports, move a node and dis
     const input = page.getByRole('button', { name: 'coalesce input input2', exact: true });
     await expect(input).toBeFocused(); await expectInsideCanvas(input);
   }
-  const heading = page.getByRole('button', { name: 'Select speech', exact: true });
+  const heading = page.getByRole('button', { name: /^Select speech:/ });
   await heading.scrollIntoViewIfNeeded();
   const box = await heading.boundingBox();
   await page.mouse.move(box.x + 20, box.y + 20); await page.mouse.down();
