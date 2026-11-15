@@ -7,7 +7,7 @@ import { EditorState } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { schema } from 'prosemirror-schema-basic';
 import { history, undo as pmUndo, redo as pmRedo } from 'prosemirror-history';
-import { createEditor, $getRoot, $createParagraphNode, $createTextNode, UNDO_COMMAND, REDO_COMMAND } from 'lexical';
+import { createEditor, $getRoot, $getSelection, $createParagraphNode, $createTextNode, UNDO_COMMAND, REDO_COMMAND, HISTORY_MERGE_TAG } from 'lexical';
 import { registerPlainText } from '@lexical/plain-text';
 import { registerHistory, createEmptyHistoryState } from '@lexical/history';
 import Quill from 'quill';
@@ -35,11 +35,20 @@ lexRoot.innerHTML = '<div role="textbox" aria-label="Rich composer" contentedita
 const lexical = createEditor({ namespace: 'dictation-test', onError: error => { throw error; } });
 lexical.setRootElement(lexRoot.firstChild); registerPlainText(lexical); registerHistory(lexical, createEmptyHistoryState(), 100);
 lexical.update(() => { $getRoot().append($createParagraphNode().append($createTextNode('hello world'))); }, { discrete: true });
-editors.lexical = { read: () => lexical.getEditorState().read(() => $getRoot().getTextContent()), render: () => lexical.setEditorState(lexical.getEditorState()), undo: () => lexical.dispatchCommand(UNDO_COMMAND), redo: () => lexical.dispatchCommand(REDO_COMMAND) };
+// Force a reconciliation without manufacturing an extra Undo entry. A normal
+// application render does not push a duplicate document onto the history stack.
+editors.lexical = { read: () => lexical.getEditorState().read(() => $getRoot().getTextContent()), render: () => lexical.setEditorState(lexical.getEditorState(), { tag: HISTORY_MERGE_TAG }), undo: () => lexical.dispatchCommand(UNDO_COMMAND), redo: () => lexical.dispatchCommand(REDO_COMMAND),
+  replace: text => lexical.update(() => { $getRoot().clear().append($createParagraphNode().append($createTextNode(text))); }, { discrete: true }),
+  inspect: () => lexical.getEditorState().read(() => {
+    const selection = $getSelection(), point = p => ({ key: p.key, offset: p.offset, type: p.type });
+    return { document: lexical.getEditorState().toJSON(), selection: selection?.anchor && { anchor: point(selection.anchor), focus: point(selection.focus) } };
+  }) };
 function Draft() {
   const [state, set] = React.useState(() => DraftState.createWithContent(ContentState.createFromText('hello world')));
   const [, tick] = React.useState(0);
-  editors.draft = { read: () => state.getCurrentContent().getPlainText(), render: () => flushSync(() => tick(x => x + 1)), undo: () => flushSync(() => set(DraftState.undo(state))), redo: () => flushSync(() => set(DraftState.redo(state))) };
+  editors.draft = { read: () => state.getCurrentContent().getPlainText(), render: () => flushSync(() => tick(x => x + 1)), undo: () => flushSync(() => set(DraftState.undo(state))), redo: () => flushSync(() => set(DraftState.redo(state))),
+    replace: text => flushSync(() => set(DraftState.createWithContent(ContentState.createFromText(text)))),
+    inspect: () => ({ blocks: state.getCurrentContent().getBlocksAsArray().map(block => ({ key: block.getKey(), text: block.getText(), type: block.getType() })), selection: state.getSelection().toJS() }) };
   return React.createElement(Editor, { editorState: state, onChange: set, ariaLabel: 'X-style post composer' });
 }
 flushSync(() => createRoot(mount('draft', 'X-style Draft.js post composer')).render(React.createElement(Draft)));

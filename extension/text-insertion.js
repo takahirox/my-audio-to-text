@@ -100,7 +100,12 @@
     if (!element) return notInserted('Focus a visible writable field in the toolbar tab and Retry, or copy the retained text.');
     const valid = () => authorized() && editable(element);
     if (!valid()) return notInserted('Original field is unavailable. Reselect it to retry, or copy the retained text.');
-    if (!native(element) && /[\r\n]/.test(text) && element.matches('[data-lexical-editor],.public-DraftEditor-content')) return notInserted('This editor cannot safely accept multiline browser edits. Copy the retained text.');
+    // These editors reconcile native multiline DOM edits as text-leaf changes,
+    // losing blocks/content. Their public paste handlers instead update the
+    // model transactionally. This untrusted event has no browser default edit;
+    // ignored handlers with no effects remain uninserted. See web-voice-377.md.
+    const modelPaste = !native(element) && /[\r\n]/.test(text) && element.matches('[data-lexical-editor],.public-DraftEditor-content');
+    if (modelPaste && (typeof DataTransfer !== 'function' || typeof ClipboardEvent !== 'function')) return notInserted('This editor cannot safely accept multiline browser edits. Copy the retained text.');
     if (composing.has(element)) return notInserted('Finish composing, then reselect the insertion point and retry.');
     if (!(allowInactiveNative && native(element)) && (!document.hasFocus() || active() !== element)) return notInserted('Reselect the original field to retry.');
     try {
@@ -120,7 +125,7 @@
     const onInput = () => { input = true; };
     element.addEventListener('input', onInput);
     const before = value(element);
-    let expected;
+    let expected, expectedCaret;
     try {
       if (native(element)) {
         if (appendNative) { owner.start = before.length; owner.end = before.length; }
@@ -131,10 +136,14 @@
         prefix.selectNodeContents(element); prefix.setEnd(owner.range.startContainer, owner.range.startOffset);
         suffix.selectNodeContents(element); suffix.setStart(owner.range.endContainer, owner.range.endOffset);
         expected = canonical(richText(prefix.cloneContents()) + text + richText(suffix.cloneContents()));
+        if (modelPaste) expectedCaret = canonical(richText(prefix.cloneContents()) + text).length;
       }
       // A cancellable preflight is useful for policy/IME handlers. It is never
       // evidence of acceptance; actual input, DOM and reconciliation are checked.
-      const accepted = element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, composed: true, cancelable: true, inputType: 'insertText', data: text }));
+      // Lexical interprets a literal newline in beforeinput as an edit itself.
+      // For model paste, preflight carries no text; only the paste below may
+      // deliver it. Cancellation and all asynchronous safety checks still apply.
+      const accepted = element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, composed: true, cancelable: true, inputType: 'insertText', data: modelPaste ? null : text }));
       await new Promise(resolve => setTimeout(resolve, 60));
       // Native value changes are not MutationObserver records. An input event
       // also records a preflight edit that application reconciliation reverted.
@@ -159,6 +168,11 @@
         element.setSelectionRange(owner.start + text.length, owner.start + text.length);
         element.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
         if (changeEvent) element.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (modelPaste) {
+        const clipboardData = new DataTransfer();
+        clipboardData.setData('text/plain', text.replace(/\r\n?/g, '\n'));
+        attempted = true;
+        element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, composed: true, cancelable: true, clipboardData }));
       } else {
         if (typeof document.execCommand !== 'function') return notInserted('Browser text editing is unavailable. Copy the retained text.');
         // Browser editing notifies the editor and preserves its undo path. Never
@@ -172,8 +186,25 @@
       changed ||= observer.takeRecords().length > 0;
       const actual = native(element) ? value(element) : canonical(richText(element));
       if (!valid() || actual !== expected || (!native(element) && !input && !changed)) {
-        if (!input && !changed && value(element) === before && valid()) return notInserted('Browser editing had no observable effect.');
+        // A paste handler can consume a same-text replacement and move only
+        // the caret. Without a DOM/input signal that is uncertain, not a safe
+        // no-op to replay at the now-collapsed selection.
+        let sameSelection = true;
+        if (modelPaste) {
+          try {
+            const current = range(element), saved = owner.range;
+            sameSelection = current.startContainer === saved.startContainer && current.startOffset === saved.startOffset && current.endContainer === saved.endContainer && current.endOffset === saved.endOffset;
+          } catch { sameSelection = false; }
+        }
+        if (!input && !changed && sameSelection && value(element) === before && valid()) return notInserted('Browser editing had no observable effect.');
         return ambiguous('The editor did not confirm insertion.');
+      }
+      if (modelPaste) {
+        try {
+          const caret = range(element), prefix = document.createRange();
+          prefix.selectNodeContents(element); prefix.setEnd(caret.startContainer, caret.startOffset);
+          if (!caret.collapsed || canonical(richText(prefix.cloneContents())).length !== expectedCaret) return ambiguous('The editor did not restore the insertion caret.');
+        } catch { return ambiguous('The editor did not restore the insertion caret.'); }
       }
       try { saveCaret(owner); } catch { owner.expected = value(element); }
       return { outcome: 'inserted', inserted: true };

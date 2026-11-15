@@ -119,5 +119,11 @@
     "Chromium multiline insertText/insertParagraph/insertLineBreak experiments lost content or line breaks in Lexical 0.38.2 and Draft.js 0.11.7. Multiline values for those editor roots are retained as definitely uninserted before editing; single-line values persist in their real model and pass Undo/Redo checks.",
     "Reproduce the multiline limitation with the real fixtures: insert three single-line voice segments, then newline + next. Tests assert safe retention and preservation of existing text. Follow-up #377 (https://github.com/takahirox/my-audio-to-text/issues/377) tracks safe multiline insertion and model, caret, Undo/Redo and recovery validation.",
     "X/ChatGPT/Claude are represented by local composer structures and real editor models, not logged-in production sites. No site-specific failure or production adapter is claimed."
-  ]
+  ],
+  "multilineFollowUp": {
+    "issue": 377,
+    "evidence": "docs/evidence/web-voice-377.md",
+    "matrix": "docs/evidence/web-voice-377-matrix.json",
+    "disposition": "The recorded #376 results are historical. #377 replaces the Lexical/Draft.js multiline rejection with a validated isolated-world plain-text paste-handler path; unsupported or uncertain deliveries remain retained."
+  }
 }

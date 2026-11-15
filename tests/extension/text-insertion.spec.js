@@ -50,11 +50,6 @@ for (const id of Object.keys(selectors)) test(`${id}: actual application model, 
     // A second committed value, including equal utterances, is a distinct edit.
     expect(await insert(page, id, ' voice')).toMatchObject({ inserted: true });
     expect(await insert(page, id, ' voice')).toMatchObject({ inserted: true });
-    if (['lexical', 'draft'].includes(id)) {
-      expect(await insert(page, id, '\nnext')).toMatchObject({ outcome: 'not-inserted' });
-      expect(await page.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice');
-      return;
-    }
     expect(await insert(page, id, '\nnext')).toMatchObject({ inserted: true });
     await page.evaluate(id => editors[id].render(), id); await page.waitForTimeout(80);
     expect(await page.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice\nnext');
