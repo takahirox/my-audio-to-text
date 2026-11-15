@@ -21,7 +21,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     const device = await page.evaluate(() => ({ userAgent: navigator.userAgent, isolated: crossOriginIsolated, secure: isSecureContext, cores: navigator.hardwareConcurrency }));
     try {
       await addAudioPath(page, type);
-      await page.editor.getByRole('button', { name: `Select ${type.toLowerCase()}`, exact: true }).click();
+      await page.editor.getByRole('button', { name: new RegExp(`^Select ${type.toLowerCase()}:`) }).click();
       for (const language of ['ja', 'en', 'en']) {
         if (type === 'Supertonic3') await page.editor.getByLabel('supertonic3 language', { exact: true }).selectOption(language);
         else await page.editor.getByLabel('kokoro voice', { exact: true }).selectOption(language === 'ja' ? 'jf_alpha' : 'af_heart');

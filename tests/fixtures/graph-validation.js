@@ -98,7 +98,7 @@ export async function checkStableSelection(page, width) {
   await expect(page.locator('#graph-create-subgraph')).toHaveCount(1);
   const bounds = await create.boundingBox(), toolbar = await page.locator('.graph-toolbar').boundingBox();
   const first = page.getByRole('button', { name: 'Select audio', exact: true });
-  const second = page.getByRole('button', { name: 'Select speech', exact: true });
+  const second = page.getByRole('button', { name: /^Select speech:/ });
   await first.press('Enter'); await expect(create).toBeDisabled();
   await second.press('Shift+Enter'); await expect(create).toBeEnabled();
   await expect(inspector).toContainText('Instance ID: speech');

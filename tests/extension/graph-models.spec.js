@@ -102,7 +102,7 @@ test('multiple parked model types and voices prepare distinct sets once and reus
   // Individual inspector settings, including a different language with the same
   // voice, choose equivalent weights without modifying any routes.
   for (const [id, settings] of [['supertonic3-1', { language: 'en' }], ['supertonic3-2', { voice: 'M1' }], ['kokoro-1', { voice: 'af_heart' }]]) {
-    await editor.getByRole('button', { name: `Select ${id}`, exact: true }).click();
+    await editor.getByRole('button', { name: new RegExp(`^Select ${id}:`) }).click();
     for (const [name, value] of Object.entries(settings)) await editor.getByLabel(`${id} ${name}`, { exact: true }).selectOption(value);
   }
   expect(f.requests).toEqual([]); await save(editor);

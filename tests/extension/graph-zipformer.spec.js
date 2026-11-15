@@ -22,7 +22,7 @@ test('MV3 searchable palette, typed audio/TEXT routes and help; production onlin
   await runtime(f); const page = await openGraph(f); await selectZipformer(page);
   const editor = page.editor; await openPalette(editor);
   await editor.getByRole('combobox', { name: 'Search nodes' }).fill('zipformer');
-  await expect(editor.getByRole('option', { name: 'Streaming Zipformer English ASR', exact: true })).toHaveCount(1);
+  await expect(editor.getByRole('option', { name: 'Speech Recognition · EN / Streaming · Zipformer English · AI', exact: true })).toHaveCount(1);
   await editor.locator('#graph-palette-toggle').click();
   await expect(editor.getByRole('button', { name: 'speech input audio', exact: true })).toHaveCount(1);
   await expect(editor.locator('[data-node="speech"] [data-side="input"]')).toHaveCount(1);
@@ -34,8 +34,8 @@ test('MV3 searchable palette, typed audio/TEXT routes and help; production onlin
   }
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   await settleAutoSave(editor);
-  await editor.getByRole('button', { name: 'Select speech', exact: true }).click();
-  await expect(editor.locator('.graph-inspector')).toContainText('Streaming Zipformer English ASR');
+  await editor.getByRole('button', { name: /^Select speech:/ }).click();
+  await expect(editor.locator('.graph-inspector')).toContainText('Speech Recognition · EN / Streaming');
   for (let i = 0; i < 2; i++) {
     await startGraph(page);
     await page.evaluate(() => window.capture.emit('audio', new Float32Array(3200).fill(.1)));

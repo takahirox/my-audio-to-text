@@ -16,6 +16,18 @@ const button = (label, id, action) => {
   const control = el('button', label); if (id) control.id = id;
   control.type = 'button'; control.onclick = action; return control;
 };
+// One compact title treatment for both canvas headings and palette results.
+const nodeName = definition => definition.ai ? `${definition.label} · ${definition.ai.model} · AI` : definition.label;
+const renderNodeName = (element, definition) => {
+  if (!definition.ai) { element.textContent = definition.label; return; }
+  const title = el('span', undefined, 'graph-node-title');
+  const icon = el('span', '✧', 'graph-ai-icon');
+  icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', 'AI');
+  // Inline sparkles, without an icon font or external asset.
+  const smallSpark = el('span', '✦'); smallSpark.setAttribute('aria-hidden', 'true'); icon.append(smallSpark);
+  title.append(icon, el('span', definition.label));
+  element.append(title, el('span', definition.ai.model, 'graph-node-model'));
+};
 const ZOOM_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5];
 const MIN_ZOOM = .01, MAX_ZOOM = 1.5, ZOOM_STEP = .1;
 // Leave room below content for the unscaled viewport controls.
@@ -304,7 +316,7 @@ export class GraphEditor {
       const title = el('h2', 'Create Subgraph'), name = el('input'), ports = el('div'), error = el('p');
       error.setAttribute('role', 'alert'); name.value = 'Shared processing'; name.id = 'graph-subgraph-name'; name.required = true; name.maxLength = 120;
       const nameLabel = el('label', 'Subgraph name'); nameLabel.htmlFor = name.id;
-      const included = el('p', `Included nodes (${extracted.shared.nodes.length}): ${extracted.shared.nodes.map(node => `${this.definition(node).label} (${node.id})`).join(', ')}`);
+      const included = el('p', `Included nodes (${extracted.shared.nodes.length}): ${extracted.shared.nodes.map(node => `${nodeName(this.definition(node))} (${node.id})`).join(', ')}`);
       const countPorts = side => `${inferred[side].length} ${inferred[side].length === 1 ? side.slice(0, -1) : side}`;
       const connections = el('p', `Connections preserved. Automatically inferred: ${countPorts('inputs')}, ${countPorts('outputs')}.`);
       const redrawPorts = () => {
@@ -457,7 +469,9 @@ export class GraphEditor {
       heading.id = `graph-category-${PALETTE_CATEGORIES.indexOf(category)}`; group.setAttribute('role', 'group'); group.setAttribute('aria-labelledby', heading.id);
       group.append(heading); this.types.append(group);
       for (const [type, definition] of options) {
-        const option = el('div', definition.label, 'graph-node-option'); option.id = `graph-option-${type}`;
+        const option = el('div', undefined, 'graph-node-option'); renderNodeName(option, definition);
+        if (definition.ai) { option.setAttribute('aria-label', nodeName(definition)); option.title = nodeName(definition); }
+        option.id = `graph-option-${type}`;
         option.dataset.type = type; option.setAttribute('role', 'option');
         // Mouse keeps focus in search; touch must retain its native click path.
         option.onpointerdown = event => { if (event.pointerType === 'mouse') event.preventDefault(); };
@@ -760,6 +774,13 @@ export class GraphEditor {
     remove.className = 'danger'; remove.setAttribute('aria-label', `Remove ${node.id}`); header.append(remove);
     if (node.type === 'Subgraph' && this.onEditSubgraph) this.inspector.append(button('Edit Subgraph', 'graph-edit-subgraph', () => this.onEditSubgraph(node.subgraphId)));
     const definition = this.definition(node); this.inspector.append(el('h3', definition.label), el('p', `Instance ID: ${node.id}`));
+    if (definition.ai) {
+      const facts = el('dl', undefined, 'graph-model-facts');
+      for (const [label, value] of [['Model', definition.ai.model], ['Languages', definition.ai.languages], ['Runtime', definition.ai.runtime]]) {
+        if (value) facts.append(el('dt', label), el('dd', value));
+      }
+      this.inspector.append(facts);
+    }
     for (const [key, values] of Object.entries(definition.settings || {})) {
       const label = el('label', key + ' '), select = el('select'); select.setAttribute('aria-label', `${node.id} ${key}`);
       for (const value of values) { const option = el('option', value); option.value = value; select.append(option); }
@@ -830,9 +851,9 @@ export class GraphEditor {
       const definition = this.definition(node), card = el('section', undefined, 'graph-node'); card.dataset.node = node.id;
       card.classList.toggle('selected-node', this.multiSelection?.has(node.id) || this.selectedNode === node.id);
       card.style.left = `${node.position.x}px`; card.style.top = `${node.position.y}px`;
-      const heading = el('button', definition.label, 'graph-heading'); heading.type = 'button';
-      heading.setAttribute('aria-label', `Select ${node.id}`); heading.setAttribute('aria-pressed', String(this.multiSelection.has(node.id)));
-      heading.title = `Select to inspect settings; Shift+click, ${this.isMac ? 'Command' : 'Ctrl'}+click or Shift+Enter toggles selection. Escape clears. Drag to move; arrow keys move by 10 pixels.`;
+      const heading = el('button', undefined, 'graph-heading'); renderNodeName(heading, definition); heading.type = 'button';
+      heading.setAttribute('aria-label', definition.ai ? `Select ${node.id}: ${nodeName(definition)}` : `Select ${node.id}`); heading.setAttribute('aria-pressed', String(this.multiSelection.has(node.id)));
+      heading.title = `${nodeName(definition)}. Select to inspect settings; Shift+click, ${this.isMac ? 'Command' : 'Ctrl'}+click or Shift+Enter toggles selection. Escape clears. Drag to move; arrow keys move by 10 pixels.`;
       const toggleModifier = event => event.shiftKey || (this.isMac ? event.metaKey : event.ctrlKey);
       let pointerExtend = null;
       const selectHeading = event => {

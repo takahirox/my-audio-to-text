@@ -101,7 +101,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
     const { graphNode, GRAPH_VERSION } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     await saveLiveGraphData(localStorage, {version: GRAPH_VERSION, nodes: [graphNode(type, 'summary')], edges: []});
   }, type);
-  await editor.reload(); await editor.getByRole('button', { name: 'Select summary', exact: true }).click();
+  await editor.reload(); await editor.getByRole('button', { name: /^Select summary:/ }).click();
   const savedPrompt = 'Summarize in two bullets.\nFocus on technical highlights.';
   await editor.getByLabel('summary prompt', { exact: true }).fill(savedPrompt);
   await editor.getByLabel('summary prompt', { exact: true }).press('Tab');
@@ -144,7 +144,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: saved prompt controls prod
   await editor.locator('.graph-actions > summary').click();
   editor.once('dialog', dialog => dialog.accept());
   await editor.locator('input[type=file]').setInputFiles({ name: 'summary.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
-  await editor.getByRole('button', { name: 'Select summary', exact: true }).click();
+  await editor.getByRole('button', { name: /^Select summary:/ }).click();
   await expect(editor.getByLabel('summary prompt', { exact: true })).toHaveValue(savedPrompt);
   const nextPrompt = 'Give a chronological summary in Japanese.';
   await editor.getByLabel('summary prompt', { exact: true }).fill(nextPrompt); await editor.getByLabel('summary prompt', { exact: true }).press('Tab');

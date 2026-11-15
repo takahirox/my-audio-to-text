@@ -45,7 +45,7 @@ test('eight flat sorted categories combine search/filter and refresh dynamic Jap
     'Text accumulator', 'Text formatter', 'Text sliding window', 'Text window',
   ]);
   await expect(page.getByRole('group', { name: 'Outputs', exact: true }).getByRole('option')).toHaveText([
-    'Audio player / WAV', 'Display', 'Focused input text output', 'Speaker', 'Speaker · streaming',
+    'Audio player / WAV', 'Display', 'Focused input text output', 'Speaker',
   ]);
 
   // Write real library definitions in another tab while the picker stays open.
@@ -72,8 +72,12 @@ test('eight flat sorted categories combine search/filter and refresh dynamic Jap
   expect(await page.locator('.graph-node-group').evaluateAll(groups => {
     const collator = new Intl.Collator('ja-JP', { usage: 'sort', sensitivity: 'base', numeric: true });
     return groups.every(group => {
-      const labels = [...group.querySelectorAll('[role="option"]')].map(option => option.textContent);
-      return labels.every((label, i) => !i || collator.compare(labels[i - 1], label) <= 0);
+      const labels = [...group.querySelectorAll('[role="option"]')].map(option => ({
+        primary: option.querySelector('.graph-node-title > span:last-child')?.textContent || option.textContent,
+        model: option.querySelector('.graph-node-model')?.textContent || '',
+      }));
+      return labels.every((label, i) => !i || (collator.compare(labels[i - 1].primary, label.primary)
+        || collator.compare(labels[i - 1].model, label.model)) <= 0);
     });
   })).toBe(true);
   await expect(page.locator('#graph-palette')).not.toContainText('Constants / utilities');
@@ -88,12 +92,12 @@ test('eight flat sorted categories combine search/filter and refresh dynamic Jap
   ]);
   await category.selectOption('AI Models / Text'); await search.fill('summary');
   await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
-    'Text Summary · LFM2.5 1.2B JP', 'Text Summary · Qwen3.5 2B',
+    '✧✦Text SummarizationLFM2.5 1.2B JP', '✧✦Text SummarizationQwen3.5 2B',
   ]);
   await category.selectOption('AI Models / Translation'); await search.fill('OPUS');
   await expect(page.locator('.graph-node-group > .muted')).toHaveText(['AI Models / Translation']);
   await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
-    'OPUS-MT English → Japanese', 'OPUS-MT Japanese → English',
+    '✧✦Translation · EN → JAOPUS-MT', '✧✦Translation · JA → ENOPUS-MT',
   ]);
   await category.selectOption('Outputs'); await search.fill('Number');
   await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(0);

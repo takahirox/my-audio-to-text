@@ -32,8 +32,8 @@ async function mockRuntime(f) {
 test('MV3 Whisper worker routes completed PCM, binds Text language, freezes saves, drains and repeats', async ({ graphExtension: f }) => {
   await mockRuntime(f); const page = await openGraph(f); await selectWhisper(page, 'en');
   const editor = page.editor; await openPalette(editor);
-  await expect(editor.getByRole('option', { name: 'ReazonSpeech ja-en ASR', exact: true })).toHaveCount(1);
-  await expect(editor.getByRole('option', { name: 'Whisper tiny (multilingual) ASR', exact: true })).toHaveCount(1);
+  await expect(editor.getByRole('option', { name: 'Speech Recognition · JA/EN · ReazonSpeech ja-en · AI', exact: true })).toHaveCount(1);
+  await expect(editor.getByRole('option', { name: 'Speech Recognition · Multilingual · Whisper tiny (multilingual) · AI', exact: true })).toHaveCount(1);
   await expect(editor.getByRole('button', { name: 'speech output final', exact: true })).toHaveCount(1);
   await expect(editor.getByRole('button', { name: 'speech output provisional', exact: true })).toHaveCount(0);
   await expect(editor.locator('[data-node="speech"] [data-side="output"]')).toHaveCount(2);

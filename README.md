@@ -111,9 +111,11 @@ From a fresh checkout, build the unpacked extension with one command:
 npm run setup:extension
 ```
 
-The extension Graph Editor exposes **ReazonSpeech ja-en ASR**, **Whisper tiny
-(multilingual) ASR**, **Streaming Zipformer English ASR**, and a reusable **Text**
-constant. Whisper defaults to English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
+The extension Graph Editor shows function-first **Speech Recognition** titles
+with an AI sparkles icon and smaller model subtitles: **ReazonSpeech ja-en**,
+**Whisper tiny (multilingual)** and **Zipformer English**. Search by function or
+model name; Settings shows read-only Model, Languages and Runtime facts above
+editable controls. A reusable **Text** constant supplies language input. Whisper defaults to English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
 Japanese. Whisper exposes only `final: TEXT`; connect it to
 `final → TextAccumulator.append → text → Display.input1` for completed segments.
 For provisional/final history, use the [keyed display path](docs/display-items.md).
