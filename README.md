@@ -81,6 +81,7 @@ with the **PLaMo 3 Translate 2B** subtitle and supports 53 languages via optiona
 TEXT language ports. Its unconnected/auto target follows the official GGUF
 Japanese ↔ English switch; specify a target for other input languages. A concrete
 source requires a concrete target. Connect target `en` for fixed English output.
+Optional `context: TEXT` supplies native PFML3 reference information; context-only updates never translate.
 See [PLaMo translation](docs/plamo-translation.md) for supported codes and examples. Saved
 graph edits apply on the next session, after preparation of required model caches;
 transcripts remain window-local. See its

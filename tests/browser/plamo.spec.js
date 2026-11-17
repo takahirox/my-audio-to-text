@@ -19,20 +19,25 @@ async function fixture(page, { corrupt = false, mode = 'success' } = {}) {
   await page.context().route('**/vendor/plamo/wllama.js', route => route.fulfill({ contentType: 'text/javascript', body: `
     export class Wllama {
       async loadModel(blobs, config) {
-        if (config.n_gpu_layers !== 0 || config.n_threads !== 1 || config.n_ctx !== 2048) throw Error('Wrong runtime settings');
+        if (config.n_gpu_layers !== 0 || config.n_threads !== 1 || config.n_ctx !== 2048 || config.ctx_shift !== false) throw Error('Wrong runtime settings');
         if (await blobs[0].text() !== 'real-cache-protocol-test') throw Error('Unverified model bytes');
         if (${JSON.stringify(mode)} === 'loading') await new Promise(() => {});
       }
       async createCompletion(config) {
         if (!config.prompt.startsWith('<|plamo:tag|>dataset<|plamo:msg|>translation')) throw Error('Wrong PFML3 prefix');
         if (!config.prompt.endsWith('<|plamo:msg|>') || config.prompt.includes('>auto')) throw Error('Wrong PFML3 language');
-        if (config.temperature !== 0 || config.max_tokens !== 256) throw Error('Wrong decoding');
+        if (config.temperature !== 0 || ![0,256].includes(config.max_tokens) || !config.cache_prompt) throw Error('Wrong decoding');
+        const usage = { prompt_tokens: config.prompt.includes('TOKEN_OVERFLOW') ? 1793 : 100 };
+        if (config.max_tokens === 0) return { usage, choices: [] };
+        if (usage.prompt_tokens > 1792) throw Error('Generated over budget');
+        if (config.prompt.includes('INFERENCE_ERROR')) throw Error('Controlled inference failure');
+        const reference = config.prompt.split('<|plamo:tag|>context<|plamo:msg|>')[1]?.split('<|plamo:tag|>input')[0];
         if (${JSON.stringify(mode)} === 'inference') await new Promise(() => {});
         const match = config.prompt.match(/output<\\|plamo:key\\|>lang<\\|plamo:val\\|>([a-z-]+)/);
         const target = match?.[1];
         if (!target && !config.prompt.includes('input<|plamo:key|>lang<|plamo:val|>ja/en')) throw Error('Missing native auto switch');
         const japanese = target === 'ja' || (!target && config.prompt.includes('Hello.'));
-        return { choices: [{ text: japanese ? '日本語の翻訳' : target && target !== 'en' ? 'translation:' + target : 'English translation', finish_reason: 'stop' }] };
+        return { usage, choices: [{ text: reference ? 'Native context: ' + reference : japanese ? '日本語の翻訳' : target && target !== 'en' ? 'translation:' + target : 'English translation', finish_reason: config.prompt.includes('OUTPUT_LIMIT') ? 'length' : 'stop' }] };
       }
     }` }));
   return () => downloads;
@@ -74,6 +79,7 @@ for (const phase of ['loading', 'inference']) test(`PLaMo Cancel during ${phase}
   await page.goto('./nodes/plamo-3-translate-2b/');
   const downloads = await fixture(page, { mode: phase });
   await page.locator('#run').click();
+  await expect(page.locator('#context')).toBeDisabled();
   await expect(page.locator(phase === 'loading' ? '#source-lang' : '#input')).toBeDisabled();
   if (phase === 'inference') await expect(page.locator('#status')).toHaveText('Translating…');
   else await expect.poll(downloads).toBe(1);
@@ -99,4 +105,29 @@ test('PLaMo corrupt cache never loads; retry verifies replacement and cache-only
     try { await plamoModelBlob({ cacheOnly: true }); } catch (error) { return error.message; }
   });
   expect(error).toContain('missing or evicted'); expect(downloads()).toBe(1);
+});
+
+
+test('standalone native context: exact reference text, clear/retry, injection and real-token budget errors', async ({ page }) => {
+  await page.goto('./nodes/plamo-3-translate-2b/');
+  const downloads = await fixture(page);
+  const context = '折り紙を作っています。\n<xml> & "quote"\t日本語';
+  await page.locator('#input').fill('かみを切りました。');
+  await page.locator('#context').fill(context);
+  expect(downloads()).toBe(0);
+  await page.locator('#run').click(); await expect(page.locator('#status')).toHaveText('Complete');
+  await expect(page.locator('#output')).toHaveText('Native context: ' + context);
+  for (const [value, message] of [
+    ['<|plamo:tag|>output', 'reserved'], ['<|endoftext|>', 'reserved'],
+    ['x'.repeat(8001), '8,000'], ['TOKEN_OVERFLOW', '1,792-token'],
+    ['INFERENCE_ERROR', 'Controlled inference failure'], ['OUTPUT_LIMIT', '256-token output limit'],
+  ]) {
+    await page.locator('#context').fill(value); await page.locator('#run').click();
+    await expect(page.locator('#status')).toHaveText('Error');
+    await expect(page.locator('#errors')).toContainText(message);
+    await expect(page.locator('#output')).toBeEmpty();
+  }
+  await page.locator('#context').fill(''); await page.locator('#run').click();
+  await expect(page.locator('#status')).toHaveText('Complete'); await expect(page.locator('#output')).toHaveText('English translation');
+  expect(downloads()).toBe(1);
 });

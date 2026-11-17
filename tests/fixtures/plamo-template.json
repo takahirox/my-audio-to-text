@@ -136,6 +136,37 @@
         "target_lang": "fr"
       },
       "prompt": "<|plamo:tag|>dataset<|plamo:msg|>translation<|plamo:tag|>input<|plamo:key|>lang<|plamo:val|>de<|plamo:msg|>Guten Tag.<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>fr<|plamo:msg|>"
+    },
+    {
+      "text": "Hello.",
+      "languages": {
+        "context": ""
+      },
+      "prompt": "<|plamo:tag|>dataset<|plamo:msg|>translation<|plamo:tag|>input<|plamo:key|>lang<|plamo:val|>ja/en<|plamo:msg|>Hello.<|plamo:tag|>output<|plamo:msg|>"
+    },
+    {
+      "text": "かみを切りました。",
+      "languages": {
+        "context": "折り紙を作っています。"
+      },
+      "prompt": "<|plamo:tag|>dataset<|plamo:msg|>translation<|plamo:tag|>context<|plamo:msg|>折り紙を作っています。<|plamo:tag|>input<|plamo:key|>lang<|plamo:val|>ja/en<|plamo:msg|>かみを切りました。<|plamo:tag|>output<|plamo:msg|>"
+    },
+    {
+      "text": "Text <>& \"quoted\"",
+      "languages": {
+        "source_lang": "en",
+        "target_lang": "ja",
+        "context": "参考情報\nTCP:443 & <xml> \"quote\"\t終わり"
+      },
+      "prompt": "<|plamo:tag|>dataset<|plamo:msg|>translation<|plamo:tag|>context<|plamo:msg|>参考情報\nTCP:443 & <xml> \"quote\"\t終わり<|plamo:tag|>input<|plamo:key|>lang<|plamo:val|>en<|plamo:msg|>Text <>& \"quoted\"<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>ja<|plamo:msg|>"
+    },
+    {
+      "text": "Hello.",
+      "languages": {
+        "target_lang": "ja",
+        "context": " \t\r\n"
+      },
+      "prompt": "<|plamo:tag|>dataset<|plamo:msg|>translation<|plamo:tag|>context<|plamo:msg|> \t\r\n<|plamo:tag|>input<|plamo:msg|>Hello.<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>ja<|plamo:msg|>"
     }
   ],
   "allLanguagePromptsSha256": "5ba7bc712f84bcde23de2a3f8bf4be26bf3ecc155ff6418c30682b40f7773744"

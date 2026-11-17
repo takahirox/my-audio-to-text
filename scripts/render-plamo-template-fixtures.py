@@ -43,6 +43,10 @@ cases = [
     ('你好。', {'source_lang': 'zh-hans', 'target_lang': 'ja'}),
     ('你好。', {'source_lang': 'zh-hant', 'target_lang': 'fr'}),
     ('Guten Tag.', {'source_lang': 'de', 'target_lang': 'fr'}),
+    ('Hello.', {'context': ''}),
+    ('かみを切りました。', {'context': '折り紙を作っています。'}),
+    ('Text <>& \"quoted\"', {'source_lang': 'en', 'target_lang': 'ja', 'context': '参考情報\nTCP:443 & <xml> \"quote\"\t終わり'}),
+    ('Hello.', {'target_lang': 'ja', 'context': ' \t\r\n'}),
 ]
 all_prompts = [render('text', languages) for code in codes for languages in
                [{'source_lang': code, 'target_lang': 'ja'}, {'target_lang': code}]]

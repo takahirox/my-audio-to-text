@@ -23,7 +23,7 @@ for (const type of ['KeyedTextCoalesce', 'KeyedTextPair']) test(`${type} shows e
 });
 for (const type of translators) test(`${type} keeps data/ID adjacent, context last and output families intact`, () => {
   const definition = nodeDefinition(graphNode(type, 'translation'));
-  assert.deepEqual(names(definition, 'input'), ['text', 'id', 'provisional', 'provisionalId', ...(type.startsWith('TranslateGemma') ? ['context', 'source_lang', 'target_lang'] : ['source_lang', 'target_lang'])]);
+  assert.deepEqual(names(definition, 'input'), ['text', 'id', 'provisional', 'provisionalId', 'context', 'source_lang', 'target_lang']);
   assert.deepEqual(names(definition, 'output'), ['text', 'id', 'source', 'error', 'provisionalText', 'provisionalId', 'provisionalSource', 'provisionalError']);
   assert.deepEqual(Object.keys(definition.inputs).slice(0, 4), ['text', 'provisional', 'id', 'provisionalId']);
   assert.equal(definition.outputs, TRANSLATION_OUTPUTS);

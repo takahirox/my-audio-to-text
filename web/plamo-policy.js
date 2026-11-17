@@ -13,6 +13,16 @@ export const PLAMO_LANGUAGE_CODES = Object.freeze([
   'ta', 'te', 'th', 'tl', 'ur', 'uz', 'vi',
 ]);
 export const DEFAULT_PLAMO_LANGUAGES = Object.freeze({ source_lang: 'auto', target_lang: 'auto' });
+// A transport/memory bound only; the runtime checks the full tokenized prompt.
+export const MAX_PLAMO_CONTEXT_CHARS = 8000;
+export const PLAMO_CONTEXT_TOKENS = 2048;
+export const PLAMO_OUTPUT_TOKENS = 256;
+export const MAX_PLAMO_PROMPT_TOKENS = PLAMO_CONTEXT_TOKENS - PLAMO_OUTPUT_TOKENS;
+export function validatePlamoContext(context) {
+  if (typeof context !== 'string') throw TypeError('PLaMo context must be TEXT.');
+  if (context.length > MAX_PLAMO_CONTEXT_CHARS) throw RangeError('PLaMo context accepts at most 8,000 characters; shorten the context.');
+  if (/<\|(?:plamo:|endoftext\|)/.test(context)) throw Error('PLaMo context contains reserved model control tokens.');
+}
 export function plamoLanguages(values = {}) {
   const { source_lang, target_lang } = Object.fromEntries(Object.entries(DEFAULT_PLAMO_LANGUAGES).map(([port, fallback]) => {
     const value = Object.hasOwn(values, port) ? values[port] : fallback;
@@ -37,6 +47,8 @@ export function updatePlamoLanguages(current, values, groupInputs = []) {
 }
 export function plamoPrompt(text, config = {}) {
   const { source_lang, target_lang } = plamoLanguages(config);
+  const context = Object.hasOwn(config, 'context') ? config.context : '';
+  validatePlamoContext(context);
   if (typeof text !== 'string' || text.length > 1000) throw Error('PLaMo accepts at most 1,000 characters of TEXT.');
   // Reject special-token injection rather than silently altering the source.
   if (/<\|(?:plamo:|endoftext\|)/.test(text)) throw Error('PLaMo input contains reserved model control tokens.');
@@ -45,6 +57,25 @@ export function plamoPrompt(text, config = {}) {
   // language detection. Merely dropping output lang would change the prompt.
   const inputLanguage = target_lang === 'auto' ? 'ja/en' : source_lang;
   return '<|plamo:tag|>dataset<|plamo:msg|>translation' +
+    (context ? '<|plamo:tag|>context<|plamo:msg|>' + context : '') +
     '<|plamo:tag|>input' + (inputLanguage === 'auto' ? '' : language(inputLanguage)) +
     '<|plamo:msg|>' + text + '<|plamo:tag|>output' + (target_lang === 'auto' ? '' : language(target_lang)) + '<|plamo:msg|>';
+}
+
+export async function plamoCompletion(model, text, config = {}) {
+  const prompt = plamoPrompt(text, config);
+  const settings = { prompt, temperature: 0, seed: 0, stream: false, cache_prompt: true };
+  // Wllama 3.13 has no tokenize API. Its pinned llama.cpp accepts max_tokens=0:
+  // evaluate/cache the entire prompt, generate nothing, and return usage including
+  // BOS. Oversized prompts fail in the runtime before evaluation; ctx_shift is off.
+  const evaluated = await model.createCompletion({ ...settings, max_tokens: 0 });
+  const tokens = evaluated.usage?.prompt_tokens;
+  if (!Number.isInteger(tokens) || tokens < 1) throw Error('PLaMo could not verify the prompt token budget.');
+  if (tokens > MAX_PLAMO_PROMPT_TOKENS) throw RangeError('PLaMo context and text exceed the 1,792-token prompt budget (256 output tokens reserved); shorten the context or text.');
+  const response = await model.createCompletion({ ...settings, max_tokens: PLAMO_OUTPUT_TOKENS });
+  if (response.usage?.prompt_tokens !== tokens) throw Error('PLaMo prompt token count changed during translation.');
+  const choice = response.choices?.[0];
+  if (choice?.finish_reason === 'length') throw Error('PLaMo reached the 256-token output limit. Split the text and retry.');
+  if (typeof choice?.text !== 'string' || !choice.text.trim()) throw Error('PLaMo returned no translation.');
+  return [choice.text.trim()];
 }

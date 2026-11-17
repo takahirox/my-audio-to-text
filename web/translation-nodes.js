@@ -2,16 +2,17 @@ import { translateGemmaLanguages, updateTranslateGemmaLanguages } from './transl
 import { validateTranslateGemmaContext } from './translategemma-context.js';
 import { finiteNumber } from './number-node.js';
 import { TEXT, NUMBER } from './port-contracts.js';
-import { updatePlamoLanguages, plamoLanguages } from './plamo-policy.js';
+import { updatePlamoLanguages, plamoLanguages, validatePlamoContext } from './plamo-policy.js';
 export { TEXT } from './port-contracts.js';
 
 // Private transport only: every node instance owns its Worker and pending RPCs.
 class WorkerTranslationNode {
   inputs = { text: TEXT, id: NUMBER };
   outputs = { text: TEXT, source: TEXT, error: TEXT, id: NUMBER };
-  constructor(url, { workerFactory = url => new Worker(url, { type: 'module' }), onEvent = () => {}, loadOptions = {}, requireSingleOutput = false } = {}) {
+  constructor(url, { workerFactory = url => new Worker(url, { type: 'module' }), onEvent = () => {}, loadOptions = {}, requireSingleOutput = false, onTranslationError } = {}) {
     this.url = url; this.workerFactory = workerFactory; this.onEvent = onEvent;
     this.loadOptions = loadOptions; this.requireSingleOutput = requireSingleOutput;
+    this.onTranslationError = onTranslationError;
     this.pending = new Map(); this.sequence = 0;
   }
   async start(context) {
@@ -93,7 +94,10 @@ class WorkerTranslationNode {
         else context.emit('text', value);
       }
     } catch (error) {
-      if (!metadata) throw error;
+      if (!metadata) {
+        if (this.onTranslationError && !this.failureError && !this.disposed && !context.signal.aborted) return this.onTranslationError(error);
+        throw error;
+      }
       if (this.disposed || context.signal.aborted) return;
       context.emitOutputs({ ...identity, source: text, error: error.message });
       try { this.onEvent({ type: 'error', message: error.message }); } catch { /* diagnostic observer only */ }
@@ -116,6 +120,8 @@ class WorkerTranslationNode {
 
 export class TranslateGemmaTranslationNode extends WorkerTranslationNode {
   static supportsContext = true;
+  static contextPolicy = validateTranslateGemmaContext;
+  static validateContextUpdate = validateTranslateGemmaContext;
   static supportsLanguages = true;
   static languagePolicy = translateGemmaLanguages;
   static updateLanguages = updateTranslateGemmaLanguages;
@@ -144,21 +150,33 @@ export class TranslateGemmaTranslationNode extends WorkerTranslationNode {
 }
 
 export class Plamo3Translate2BTranslationNode extends WorkerTranslationNode {
+  static recoverRequestErrors = true;
+  static supportsContext = true;
+  static contextPolicy = validatePlamoContext;
   static supportsLanguages = true;
   static languagePolicy = plamoLanguages;
   static updateLanguages = updatePlamoLanguages;
-  inputs = { text: TEXT, id: NUMBER, source_lang: TEXT, target_lang: TEXT };
+  inputs = { text: TEXT, id: NUMBER, context: TEXT, source_lang: TEXT, target_lang: TEXT };
   languages = Object.freeze({});
+  translationContext = '';
   constructor(options) {
     super(new URL('./plamo-worker.js', import.meta.url), options);
     this.getTranslationLanguages = options?.getTranslationLanguages;
+    this.getTranslationContext = options?.getTranslationContext;
   }
   receiveInputs(values, context) {
     this.languages = updatePlamoLanguages(this.languages, values, context.groupInputs);
-    const textValues = Object.fromEntries(Object.entries(values).filter(([port]) => !['source_lang', 'target_lang'].includes(port)));
+    if (Object.hasOwn(values, 'context')) this.translationContext = values.context;
+    else if (context.groupInputs?.includes('context')) this.translationContext = '';
+    const textValues = Object.fromEntries(Object.entries(values).filter(([port]) => !['context', 'source_lang', 'target_lang'].includes(port)));
     return super.receiveInputs(textValues, context);
   }
-  translationPayload() { return plamoLanguages(this.getTranslationLanguages?.() ?? this.languages); }
+  translationPayload() {
+    const languages = plamoLanguages(this.getTranslationLanguages?.() ?? this.languages);
+    const context = this.getTranslationContext?.() ?? this.translationContext;
+    validatePlamoContext(context);
+    return { ...languages, ...(context ? { context } : {}) };
+  }
 }
 
 export class TextInputNode {

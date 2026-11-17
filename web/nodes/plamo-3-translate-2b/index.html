@@ -18,6 +18,9 @@
   <label for="target-lang">Optional target_lang (53 language codes or auto; omitted = Japanese/English auto switch)</label>
   <input id="target-lang" type="text" placeholder="auto" aria-describedby="language-help">
   <p id="language-help">Leave a field empty to omit its connection. Connected blank or unsupported codes are configuration errors in the graph. Use official lowercase codes such as ja, en, fr, ko, de, zh-hans (Simplified Chinese) or zh-hant (Traditional Chinese). Every job snapshots its languages. Omitted/auto target uses the official GGUF switch: Japanese → English, English → Japanese. For other input languages the default output language is undefined: specify a target. A concrete source requires a concrete target; source auto is equivalent to omission. Connect target en for fixed English. Try both Japanese and English with both fields omitted, or source fr and target ja.</p>
+  <label for="context">Optional context (reference text, up to 8,000 characters)</label>
+  <textarea id="context" rows="3" aria-describedby="context-help" placeholder="折り紙を作っています。"></textarea>
+  <p id="context-help">Try text「かみを切りました。」with context「折り紙を作っています。」, then clear context and Run again to compare. Reference text uses the official native PFML3 context section; it is separate from the text to translate. Quality improvement is not guaranteed. Empty context omits the section. Reserved control tokens are rejected. The full prompt must fit 1,792 tokens, reserving 256 output tokens; overflow reports an error without truncation.</p>
   <label for="input">Text (up to 1,000 characters)</label>
   <textarea id="input" rows="5" maxlength="1000">会議は来週の月曜日に変更されました。</textarea>
   <div class="controls"><button id="run" disabled>Run</button><button id="cancel" disabled>Cancel</button></div>
