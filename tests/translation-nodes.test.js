@@ -2,7 +2,7 @@ import { NUMBER } from '../web/port-contracts.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
-import { TEXT, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode, TextOutputNode } from '../web/translation-nodes.js';
+import { TEXT, TranslateGemmaTranslationNode, TextOutputNode } from '../web/translation-nodes.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(Node, respond = message => {
@@ -32,14 +32,14 @@ function fixture(Node, respond = message => {
   return { pipeline, node, workers, output, errors, emit: value => context.emit('text', value) };
 }
 
-for (const Node of [TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode]) {
+for (const Node of [TranslateGemmaTranslationNode]) {
   test(`${Node.name}: typed ports, order, zero/multiple outputs and drain`, async () => {
     const f = fixture(Node, message => {
       if (message.type === 'load') return { type: 'ready' };
       if (message.type === 'drain') return { type: 'drained' };
       return { type: 'result', texts: message.text === 'zero' ? [] : [message.text, message.text + ' second'] };
     });
-    assert.deepEqual(f.node.inputs, { text: TEXT, id: NUMBER }); assert.deepEqual(f.node.outputs, { text: TEXT, source: TEXT, error: TEXT, id: NUMBER });
+    assert.deepEqual(f.node.inputs, { text: TEXT, id: NUMBER, context: TEXT, source_lang: TEXT, target_lang: TEXT }); assert.deepEqual(f.node.outputs, { text: TEXT, source: TEXT, error: TEXT, id: NUMBER });
     await f.pipeline.start();
     for (const text of [' ', 'one', 'zero', 'two']) f.emit(text);
     await f.pipeline.stop();

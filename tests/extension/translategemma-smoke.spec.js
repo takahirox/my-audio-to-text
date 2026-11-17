@@ -67,9 +67,9 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic en�
     expect(publicAccess).toEqual({ status: 200, architecture: 'Gemma3ForCausalLM' });
     await editor.evaluate(async initial => {
       const { graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
-      const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemmaEnJa', 'gemma'),
+      const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('TranslateGemma4B', 'gemma'),
         graphNode('TextFormatter', 'format'), graphNode('Display', 'paired'), graphNode('Display', 'plain'),
-        graphNode('TranslateGemmaJaEn', 'parked'), graphNode('Text', 'independent'), graphNode('Display', 'other')], edges: [
+        graphNode('TranslateGemma4B', 'parked'), graphNode('Text', 'independent'), graphNode('Display', 'other')], edges: [
         edge('input', 'value', 'gemma', 'text'), edge('gemma', 'source', 'format', 'input1'), edge('gemma', 'text', 'format', 'input2'), edge('gemma', 'error', 'format', 'input3'),
         edge('format', 'text', 'paired', 'input1'), edge('gemma', 'text', 'plain', 'input1'), edge('independent', 'value', 'other', 'input1'),
       ] };
@@ -99,11 +99,22 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic en�
       const first = requests.length;
       const texts = direction === 'en-ja' ? fixtures.map(f => f.text) : ['会議は金曜日の午前十時に始まります。'];
       const probes = translationContextFixtures[direction];
-      const targets = [...texts, ...probes.flatMap(f => [f.text, f.text, f.text])];
-      const contexts = [...texts.map(() => ''), ...probes.flatMap(f => ['', f.context, ''])];
-      const run = await page.evaluate(async ({ direction, targets, contexts }) => {
+      const multilingual = [
+        { text: '今日は良い天気です。', source: 'ja', target: 'en', meanings: [/weather/i] },
+        { text: 'Hello.', source: 'en', target: 'ja', meanings: [/こんにちは/] },
+        { text: 'Bonjour.', source: 'fr', target: 'de', meanings: [/Hallo|Guten Tag/i] },
+      ];
+      const targets = [...texts, ...probes.flatMap(f => [f.text, f.text, f.text]), ...multilingual.map(f => f.text)];
+      const contexts = [...texts.map(() => ''), ...probes.flatMap(f => ['', f.context, '']), ...multilingual.map(() => '')];
+      const jobLanguages = targets.map((_, i) => i < targets.length - multilingual.length
+        ? direction.split('-') : [multilingual[i - targets.length + multilingual.length].source, multilingual[i - targets.length + multilingual.length].target]);
+      const run = await page.evaluate(async ({ direction, targets, contexts, jobLanguages }) => {
         const { graphNode, edge } = await import('./graph.js'); const { readLiveGraphData } = await import('./graph-library.js'); const { buildGraph } = await import('./graph-runtime.js');
-        const graph = readLiveGraphData(localStorage); graph.nodes.find(n => n.id === 'gemma').type = direction === 'en-ja' ? 'TranslateGemmaEnJa' : 'TranslateGemmaJaEn';
+        const graph = readLiveGraphData(localStorage);
+        for (const [port, value] of [['source_lang', direction.split('-')[0]], ['target_lang', direction.split('-')[1]]]) {
+          const constant = graphNode('Text', `gemma-${port}`); constant.settings.value = value;
+          graph.nodes.push(constant); graph.edges.push(edge(constant.id, 'value', 'gemma', port));
+        }
         graph.nodes.find(n => n.id === 'input').settings.value = targets[0];
         graph.nodes.push(graphNode('Text', 'context'));
         graph.edges.push(edge('context', 'value', 'gemma', 'context'));
@@ -124,13 +135,15 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic en�
           // First input comes from the production Text Node. Further controlled
           // fixtures traverse that source's real TEXT routes and scheduler FIFO.
           for (let i = 1; i < targets.length; i++) {
+            built.pipeline.entries.get('gemma-source_lang').context.emit('value', jobLanguages[i][0]);
+            built.pipeline.entries.get('gemma-target_lang').context.emit('value', jobLanguages[i][1]);
             built.pipeline.entries.get('context').context.emit('value', contexts[i]);
             built.pipeline.entries.get('input').context.emit('value', targets[i]);
           }
           await built.pipeline.stop();
           return { direction, displays, translated, states, ms: performance.now() - started, errors: built.pipeline.errors.map(e => e.message) };
         } finally { await built.pipeline.dispose(); if (workers.length !== 1 || !workers.every(w => w.released)) throw Error('Owned Worker was not released or parked Node executed'); }
-      }, { direction, targets, contexts });
+      }, { direction, targets, contexts, jobLanguages });
       run.contextComparisons = probes.map((f, i) => ({ text: f.text, context: f.context,
         official: run.translated[texts.length + i * 3], contextual: run.translated[texts.length + i * 3 + 1], reset: run.translated[texts.length + i * 3 + 2] }));
       run.offline = offline; runs.push(run); console.log(JSON.stringify(run));
@@ -144,6 +157,8 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic en�
         expect(output.trim()).not.toBe(texts[i]);
         for (const meaning of direction === 'en-ja' ? fixtures[i].meanings : [/meeting/i, /Friday/i, /10|ten/i, /start|begin/i]) expect(output, `Meaning of ${texts[i]}: ${meaning}`).toMatch(meaning);
       }
+      for (const [i, fixture] of multilingual.entries()) for (const meaning of fixture.meanings)
+        expect(run.translated[targets.length - multilingual.length + i]).toMatch(meaning);
       for (const [i, probe] of probes.entries()) {
         const comparison = run.contextComparisons[i];
         expect(comparison.reset).toBe(comparison.official);

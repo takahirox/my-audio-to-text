@@ -1,3 +1,4 @@
+import { translateGemmaLanguages, TRANSLATE_GEMMA_LANGUAGES } from './translategemma-languages.js';
 // Minimal context adaptation of the pinned TranslateGemma text chat template:
 // onnx-community/translategemma-text-4b-it-ONNX@f7874a1ac60758872a4f78aac0df95b17b776994
 // The official structured API has no context field. Empty context bypasses this
@@ -12,13 +13,11 @@ export function validateTranslateGemmaContext(context) {
   }
 }
 
-export function translateGemmaContextPrompt(text, context, direction) {
+export function translateGemmaContextPrompt(text, context, languages = {}) {
   validateTranslateGemmaContext(context);
   if (typeof text !== 'string' || text.length > 1000) throw new RangeError('TranslateGemma accepts at most 1,000 characters per utterance.');
-  const languages = { 'en-ja': ['English', 'Japanese'], 'ja-en': ['Japanese', 'English'] };
-  if (!Object.hasOwn(languages, direction)) throw new Error('Unsupported TranslateGemma direction.');
-  const [source, target] = languages[direction];
-  const [sourceCode, targetCode] = direction.split('-');
+  const { source_lang: sourceCode, target_lang: targetCode } = translateGemmaLanguages(languages);
+  const source = TRANSLATE_GEMMA_LANGUAGES[sourceCode], target = TRANSLATE_GEMMA_LANGUAGES[targetCode];
   // Escape every '<' in external data: neither tokenizer controls nor our
   // reference-section delimiter can be injected. Keep the target as plain text
   // in the official final position, including its template's trim behavior.

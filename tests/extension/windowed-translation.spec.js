@@ -39,7 +39,7 @@ for (const mode of ['baseline', 'window']) test(`packaged ${mode}: committed ASR
   const live = await openGraph(f, { live: false });
   // Use the production ASR final emitter with fixture recognition/capture.
   // The translator remains a real owned module Worker with controlled results.
-  const graph = windowGraph(mode, 'TranslateGemmaEnJa');
+  const graph = windowGraph(mode, 'TranslateGemma4B');
   graph.nodes[0] = { ...graph.nodes[0], type: 'SpeechToTextMoonshineSmallJa', settings: {} };
   graph.nodes.push({ id: 'audio', type: 'ChromeTabAudio', settings: {}, position: { x: 0, y: 0 } });
   graph.edges.forEach(e => { if (e.from[0] === 'input') e.from[1] = 'final'; });

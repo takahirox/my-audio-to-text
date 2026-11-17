@@ -8,7 +8,7 @@ import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { NODE_TYPES, GRAPH_VERSION, graphNode, edge, validateGraph, saveGraph, readGraph, defaultGraph } from '../extension/graph.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
-const translators = ['TranslateGemmaJaEn', 'TranslateGemmaEnJa'];
+const translators = ['TranslateGemma4B'];
 const store = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k,v) => m.set(k,v), removeItem: k => m.delete(k) }; };
 
 // Exhaust all current TEXT producer ports, including ASR, summaries, formatters,
@@ -81,7 +81,7 @@ test('Cancel closes field side effects while retaining committed accumulator tex
 
 test('Text literals and formatter/accumulator snapshots execute as independent translator previews', async () => {
   for (const type of ['Text','TextFormatter','TextAccumulator']) {
-    const f=workers(),graph={version:GRAPH_VERSION,nodes:[graphNode('Text','final'),graphNode('Text','seed'),graphNode(type,'alternate'),graphNode('TranslateGemmaEnJa','translator'),graphNode('Display','view'),graphNode('Display','preview')],
+    const f=workers(),graph={version:GRAPH_VERSION,nodes:[graphNode('Text','final'),graphNode('Text','seed'),graphNode(type,'alternate'),graphNode('TranslateGemma4B','translator'),graphNode('Display','view'),graphNode('Display','preview')],
       edges:[edge('final','value','translator','text'),edge('translator','text','view','input1'),edge('translator','provisionalText','preview','input1')]};
     if(type!=='Text')graph.edges.push(edge('seed','value','alternate',type==='TextFormatter'?'input1':'append'));
     graph.edges.push(edge('alternate',type==='Text'?'value':'text','translator','provisional'));
@@ -97,7 +97,7 @@ test('Text literals and formatter/accumulator snapshots execute as independent t
 test('Committed translator text is an ordinary TEXT producer for another translator preview', async () => {
   const {windowGraph}=await import('./fixtures/windowed-translation.js');const f=workers(),graph=windowGraph('window');
   graph.nodes.find(n=>n.id==='window-chars').settings.value=6;
-  graph.nodes.push(graphNode('Text','independent'),graphNode('TranslateGemmaEnJa','second'),graphNode('Display','second-view'));
+  graph.nodes.push(graphNode('Text','independent'),graphNode('TranslateGemma4B','second'),graphNode('Display','second-view'));
   graph.edges.push(edge('independent','value','second','text'),edge('translator','text','second','provisional'),edge('second','provisionalText','second-view','input1'));
   let display;const built=buildGraph((graph),{translationWorkerFactory:f.factory,prepareTranslateGemma(){},onDisplay:(id,v)=>{ v = domText(v);if(id==='second-view')display=v;}});
   await built.pipeline.start();await tick();built.pipeline.entries.get('input').context.emit('value','First.');await tick();f.complete(0);await tick();

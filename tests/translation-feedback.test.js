@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { translationFeedback } from './fixtures/translation-feedback.js';
-import { TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
+import { TranslateGemmaTranslationNode } from '../web/translation-nodes.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-for (const TranslationNode of [TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode]) {
+for (const TranslationNode of [TranslateGemmaTranslationNode]) {
   test(`${TranslationNode.name}: delayed output followed by another window has no sampled lifetime/reachability errors`, async t => {
     const f = await translationFeedback({ TranslationNode }); t.after(() => f.pipeline.dispose());
     await f.send('A'); await tick();
@@ -31,7 +31,7 @@ for (const TranslationNode of [TranslateGemmaTranslationNode, EnglishToJapaneseT
   });
 }
 
-for (const TranslationNode of [TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode]) {
+for (const TranslationNode of [TranslateGemmaTranslationNode]) {
   for (const failure of ['model', 'inference']) test(`${TranslationNode.name}: ${failure} failure is visible per job without corrupting feedback`, async t => {
     const f = await translationFeedback({ TranslationNode, failLoad: failure === 'model', failTranslate: failure === 'inference' });
     t.after(() => f.pipeline.dispose());
@@ -72,7 +72,7 @@ for (const TranslationNode of [TranslateGemmaTranslationNode, EnglishToJapaneseT
   });
 }
 
-for (const TranslationNode of [TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode]) {
+for (const TranslationNode of [TranslateGemmaTranslationNode]) {
   test(`${TranslationNode.name}: sampled preview branch replaces pending work and keeps committed priority and families`, async t => {
     const f = await translationFeedback({ TranslationNode, preview: true }); t.after(() => f.pipeline.dispose());
     for (const text of ['A', 'B', 'C']) { await f.send(text); await tick(); }
@@ -95,7 +95,7 @@ for (const TranslationNode of [TranslateGemmaTranslationNode, EnglishToJapaneseT
   });
 }
 
-for (const TranslationNode of [TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode]) {
+for (const TranslationNode of [TranslateGemmaTranslationNode]) {
   test(`${TranslationNode.name}: translation on a feedback path retains completion until Hold stores the result`, async t => {
     const f = await translationFeedback({ TranslationNode, translatedFeedback: true }); t.after(() => f.pipeline.dispose());
     await f.send('A'); await f.send('B'); await tick();

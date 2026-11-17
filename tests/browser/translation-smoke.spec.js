@@ -3,10 +3,12 @@ import { writeFile } from 'node:fs/promises';
 import { TRANSLATE_GEMMA } from '../../web/translation-models.js';
 
 for (const [choice, slug] of [['gemma', 'translategemma']]) {
-  test(`real ${choice}: Japanese → English initialization, inference and repeat`, async ({ page, browser }, testInfo) => {
+  test(`real ${choice}: one loaded model, Japanese/English/French/German inference and repeat`, async ({ page, browser }, testInfo) => {
     test.skip(process.env.TRANSLATION_SMOKE !== choice || testInfo.project.name !== 'chromium', 'Opt-in real translation inference; large downloads and suitable device required.');
     test.setTimeout(900000);
-    const fixtures = [{ text: '今日は良い天気です。', meanings: [/[A-Za-z]/] }];
+    const fixtures = [{ source: 'ja', target: 'en', text: '今日は良い天気です。', meanings: [/weather/i] },
+      { source: 'en', target: 'ja', text: 'Hello.', meanings: [/こんにちは/] },
+      { source: 'fr', target: 'de', text: 'Bonjour.', meanings: [/Hallo|Guten Tag/i] }];
     const requests = [], errors = [];
     page.on('request', request => requests.push({ url: new URL(request.url()).origin + new URL(request.url()).pathname, method: request.method(), hasBody: request.postData() !== null, containsInput: fixtures.some(({ text }) => request.url().includes(text) || request.url().includes(encodeURIComponent(text))) }));
     page.on('pageerror', error => errors.push(error.message));
@@ -23,7 +25,8 @@ for (const [choice, slug] of [['gemma', 'translategemma']]) {
     console.log(JSON.stringify({ choice, browser: browser.version(), capabilities }));
     const runs = [];
     try {
-      for (let run = 0; run < 2; run++) for (const { text: fixture, meanings } of fixtures) {
+      for (let run = 0; run < 2; run++) for (const { source, target, text: fixture, meanings } of fixtures) {
+        await page.locator('#source-lang').fill(source); await page.locator('#target-lang').fill(target);
         await page.locator('#input').fill(fixture); await page.locator('#run').click();
         await expect(page.locator('#status')).toHaveText(/^(Complete|Error)$/, { timeout: 840000 });
         const result = await page.evaluate(() => Object.fromEntries(['status', 'errors', 'output', 'load-time', 'latency'].map(id => [id, document.getElementById(id).textContent])));

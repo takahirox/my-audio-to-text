@@ -232,7 +232,7 @@ one or more outputs. Multiple independent ASRs and displays run concurrently;
 parked or unfinished Nodes remain saved but inactive. See the
 [execution and permission policy](extension-graph.md). Graph Editor owns source
 and output choices; Live shows actionable errors without target controls. Connect `SpeechToTextMoonshineSmallJa.final → FocusedInputTextOutputNode.text`
-or `TranslateGemmaEnJa.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
+or `TranslateGemma4B.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
 strings can fan out to TTS and other consumers. For final-only output, select
 ASR `final` or translation `text`. Bilingual formatting uses grouped primitive
 source/text/error outputs; pending/errors never reach successful translation text sinks.
@@ -574,9 +574,9 @@ cross-browser extension support. No post-merge verification is required by #61.
    focused; successful connection/insertion counts belong in Session details,
    while unavailable output/permission errors remain visible.
 
-## TranslateGemma 4B English → Japanese
+## Translation / TranslateGemma 4B
 
-Add **TranslateGemma 4B English → Japanese** in Graph Editor. Connect
+Add **Translation**, subtitle **TranslateGemma 4B**, in Graph Editor. Defaults are ja → en; for English → Japanese connect Text constants `en` → `source_lang` and `ja` → `target_lang`. Connect
 `ChromeTabAudio → English ASR.final → TranslateGemma.text`; connect its completed
 `text` to `TextAccumulator.append`, a focused field or Japanese TTS. For a
 controlled text test, connect `Text.value → TranslateGemma.text → TextAccumulator.append`.
@@ -586,7 +586,7 @@ No preset or global language/model switch is added.
 
 Before using these Nodes, read the linked Gemma Terms and Prohibited Use Policy in
 **Models**. Auto Save prepares **3.112 GB** of optional weights only when the
-graph contains either Gemma Node, including parked Nodes; both directions reuse
+graph contains a Gemma Node, including parked Nodes; all language pairs reuse
 one verified cache. Allow **7 GB free storage**, several GB free RAM/GPU memory
 and supported **Worker WebGPU**. Each active Node owns a separate GPU session.
 Auto Save remains successful if preparation fails; use Cancel/retry or Models for

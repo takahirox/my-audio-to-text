@@ -48,5 +48,10 @@ test('Pages staging and packaged extension inventory exclude retired assets and 
 test('published bilingual history example uses executable current graph contracts', () => {
   const graph = JSON.parse(readFileSync('docs/examples/bilingual-history.json'));
   assert.deepEqual(validateGraph(graph), []);
-  assert.ok(graph.nodes.some(node => node.type === 'TranslateGemmaEnJa'));
+  const gemma = graph.nodes.find(node => node.type === 'TranslateGemma4B');
+  assert.ok(gemma);
+  for (const [port, code] of [['source_lang','en'], ['target_lang','ja']]) {
+    const route = graph.edges.find(route => route.to[0] === gemma.id && route.to[1] === port);
+    assert.equal(graph.nodes.find(node => node.id === route.from[0]).settings.value, code);
+  }
 });

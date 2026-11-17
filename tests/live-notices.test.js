@@ -24,7 +24,7 @@ test('Live notices require explicit error metadata; message wording and unfamili
 
 test('a fatal translation backlog failure replaces an earlier validation notice and repeated reports stay deduplicated', async () => {
   const graph = { version: GRAPH_VERSION,
-    nodes: [graphNode('Text', 'source'), graphNode('TranslateGemmaJaEn', 'translator'), graphNode('Display', 'display')],
+    nodes: [graphNode('Text', 'source'), graphNode('TranslateGemma4B', 'translator'), graphNode('Display', 'display')],
     edges: [edge('source', 'value', 'translator', 'text'), edge('translator', 'text', 'display', 'input1')] };
   const session = new TabSession(() => {}, { graph, prepareTranslateGemma: async () => {},
     translationWorkerFactory: () => {

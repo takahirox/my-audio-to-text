@@ -10,7 +10,7 @@ test('every built-in has an explicit Add Node category; new types must be classi
     'AI Models / Speech Recognition': [
       'SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa',
     ],
-    'AI Models / Translation': ['Plamo3Translate2B', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn'],
+    'AI Models / Translation': ['Plamo3Translate2B', 'TranslateGemma4B'],
     'AI Models / Text': ['IfCondition', 'TextProcessingLfm2', 'TextProcessingQwen35'],
     'AI Models / Speech Synthesis': ['CosyVoice3Streaming', 'Kokoro', 'Qwen3TtsStreaming', 'Supertonic3'],
     'Processors': ['Hold', 'KeyedPairedTextAccumulator', 'KeyedTextCoalesce', 'KeyedTextPair', 'TextAccumulator', 'TextFormatter', 'TextSlidingWindow', 'TextWindow'],
@@ -83,7 +83,7 @@ test('category/query filters combine, keep sorted groups, match types or labels 
   assert.deepEqual(summary.get('AI Models / Text').map(([type]) => type), ['TextProcessingLfm2', 'TextProcessingQwen35']);
   const translation = groupPaletteEntries(entries, { query: 'gemma', category: 'AI Models / Translation' });
   assert.deepEqual([...translation.keys()], ['AI Models / Translation']);
-  assert.deepEqual(translation.get('AI Models / Translation').map(([type]) => type), ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']);
+  assert.deepEqual(translation.get('AI Models / Translation').map(([type]) => type), ['TranslateGemma4B']);
   const processors = groupPaletteEntries(entries, { query: 'text', category: 'Processors' });
   assert.deepEqual(processors.get('Processors'), groups.get('Processors'));
   assert.equal(groupPaletteEntries(entries, { query: 'あか', category: 'Subgraphs' }).get('Subgraphs')[0][0], 'Subgraph:jp');

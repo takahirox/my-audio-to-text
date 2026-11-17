@@ -132,7 +132,7 @@ test('Web dictation can retain cache-only preflight without opting into Live dow
 
 test('multi-model graph initializes every executable instance without inference/output; parked models stay inert', async t => {
   const graph = textGraph();
-  for (const type of ['TextProcessingQwen35', 'IfCondition', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Supertonic3', 'Kokoro', 'Qwen3TtsStreaming', 'CosyVoice3Streaming']) {
+  for (const type of ['TextProcessingQwen35', 'IfCondition', 'TranslateGemma4B', 'Supertonic3', 'Kokoro', 'Qwen3TtsStreaming', 'CosyVoice3Streaming']) {
     graph.nodes.push(graphNode(type, type));
     graph.edges.push(edge('source', 'value', type, type.startsWith('TextProcessing') ? 'input1' : 'text'));
     const output = ['Supertonic3', 'Kokoro'].includes(type) ? 'audio' : type.endsWith('Streaming') ? 'stream' : type === 'IfCondition' ? 'yes' : type.startsWith('TextProcessing') ? 'result' : 'text';
@@ -144,7 +144,7 @@ test('multi-model graph initializes every executable instance without inference/
   const f = fixture(graph, { prepareTranslateGemma: async () => {} }); t.after(() => f.session.close());
   await f.session.prepareModels();
   assert.equal(f.session.view.error, ''); assert.equal(f.session.view.modelState, 'ready');
-  assert.equal(f.workers.length, 9); assert.equal(f.messages('load').length, 9);
+  assert.equal(f.workers.length, 8); assert.equal(f.messages('load').length, 8);
   assert.deepEqual([...new Set(f.workers.flatMap(worker => worker.messages.map(message => message.type)))], ['load']);
   assert.deepEqual(f.outputs, []); assert.deepEqual(f.captures, []); assert.deepEqual(f.session.view.displays, {});
   assert.equal(f.session.prepared.pipeline.entries.has('parked'), false);

@@ -15,7 +15,7 @@ test('all ASR dependencies and Japanese frontend are explicit and deduplicated, 
 const modelFreeGraph = () => ({ ...defaultGraph(), nodes: [graphNode('Text', 'text')] });
 
 const settled = async () => { await new Promise(resolve => setImmediate(resolve)); };
-const graph = () => { const graph = modelFreeGraph(); graph.nodes.push(graphNode('TranslateGemmaEnJa', 'parked')); return graph; };
+const graph = () => { const graph = modelFreeGraph(); graph.nodes.push(graphNode('TranslateGemma4B', 'parked')); return graph; };
 
 test('blocking asset preparation skips download preparation for verified and model-free graphs', async () => {
   const originalFetch = globalThis.fetch;
@@ -28,7 +28,7 @@ test('blocking asset preparation skips download preparation for verified and mod
       prepare() { throw Error('Verified files must not need download preparation'); } });
     await prepareGraphModelAssets(modelFreeGraph(), { createCache });
     assert.equal(manifests, 0); assert.equal(inspections, 0);
-    const selected = graph(); selected.nodes.push(graphNode('TranslateGemmaEnJa', 'repeat'));
+    const selected = graph(); selected.nodes.push(graphNode('TranslateGemma4B', 'repeat'));
     await prepareGraphModelAssets(selected, { createCache });
     assert.equal(manifests, 1); assert.equal(inspections, 1);
   } finally { globalThis.fetch = originalFetch; }

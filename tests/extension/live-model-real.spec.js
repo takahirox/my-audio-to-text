@@ -71,7 +71,7 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
     const editor = await context.newPage(); await editor.goto(base + 'graph-editor.html');
     let graph;
     if (kind === 'asr-translation') {
-      graph = { version: GRAPH_VERSION, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('TranslateGemmaJaEn', 'translation'), graphNode('Display', 'output')],
+      graph = { version: GRAPH_VERSION, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('TranslateGemma4B', 'translation'), graphNode('Display', 'output')],
         edges: [edge('audio', 'audio', 'asr', 'audio'), edge('asr', 'final', 'translation', 'text'), edge('translation', 'text', 'output', 'input1')] };
     } else {
       const text = graphNode('Text', 'text'); text.settings.value = 'The city opened a park in April. Volunteers maintain its shaded trails.';

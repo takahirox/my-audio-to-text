@@ -3,10 +3,10 @@ import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'TranslateGemmaJaEn']) {
+for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'TranslateGemma4B']) {
   test(`${type}: Live shows queue failures, replaces prior errors and clears them on restart`, async ({ graphExtension: f }) => {
-    const streaming = type !== 'TranslateGemmaJaEn';
-    const workerFile = { Qwen3TtsStreaming: 'qwen3-tts-worker.js', CosyVoice3Streaming: 'cosyvoice3-worker.js', TranslateGemmaJaEn: 'translategemma-worker.js' }[type];
+    const streaming = type !== 'TranslateGemma4B';
+    const workerFile = { Qwen3TtsStreaming: 'qwen3-tts-worker.js', CosyVoice3Streaming: 'cosyvoice3-worker.js', TranslateGemma4B: 'translategemma-worker.js' }[type];
     // Hold generation while exercising production queue admission, session
     // routing and the accessible Live alert with a controlled Worker protocol.
     await writeFile(path.join(f.root, 'web', workerFile), `

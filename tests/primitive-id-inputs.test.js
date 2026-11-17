@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
+import { TranslateGemmaTranslationNode } from '../web/translation-nodes.js';
 import { TranslationSchedulerNode } from '../extension/translation-scheduler.js';
 import { NODE_TYPES, GRAPH_VERSION, graphNode, edge, validateGraph } from '../extension/graph.js';
 
@@ -22,7 +22,7 @@ function workers() {
   };
 }
 
-for (const Node of [TranslationSchedulerNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode]) {
+for (const Node of [TranslationSchedulerNode, TranslateGemmaTranslationNode]) {
   test(`${Node.name}: independent ID changes cannot relabel accepted/queued or unidentified translation jobs`, async () => {
     const f = workers(), out = [], node = new Node({ workerFactory: f.factory });
     const c = context({ connectedInputs: ['id', 'text'], emitOutputs: values => out.push(values), fail: assert.fail });
@@ -78,7 +78,7 @@ test('scheduler keeps independent preview and committed ID snapshots through fin
 
 test('current same-contract ID routes are producer/family-independent', () => {
   for (const [sourceType, source] of Object.entries(NODE_TYPES)) for (const [output, contract] of Object.entries(source.outputs)) {
-    for (const targetType of ['TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'KeyedTextPair', 'KeyedTextCoalesce']) {
+    for (const targetType of ['TranslateGemma4B', 'KeyedTextPair', 'KeyedTextCoalesce']) {
       for (const [input, expected] of Object.entries(NODE_TYPES[targetType].inputs)) {
         if (contract !== expected) continue;
         const graph = { version: GRAPH_VERSION, nodes: [graphNode(sourceType, 'any-source'), graphNode(targetType, 'any-target')],

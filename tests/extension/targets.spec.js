@@ -92,7 +92,7 @@ const test = base.extend({
           const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
           const graph = defaultGraph(); graph.nodes[0].type = source;
           if (translation) {
-            graph.nodes.push(graphNode('TranslateGemmaJaEn', 'translation'));
+            graph.nodes.push(graphNode('TranslateGemma4B', 'translation'));
             graph.edges.push(edge('speech', 'finalId', 'translation', 'id'), edge('speech', 'final', 'translation', 'text'),
               edge('translation', 'id', 'pair', 'id2'), edge('translation', 'text', 'pair', 'input2'));
           }

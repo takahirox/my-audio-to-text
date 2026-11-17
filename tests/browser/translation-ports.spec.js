@@ -13,12 +13,12 @@ test.beforeEach(async ({ page }) => {
   });
   await page.goto('/');
 });
-for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn'])
+for (const type of ['TranslateGemma4B'])
   test(`${type}: committed history, separate TEXT previews, clearing, Cancel and restart`, async ({ page }) => {
     await checkTranslationPorts(page, type, '/extension/');
   });
 
-for (const type of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn'])
+for (const type of ['TranslateGemma4B'])
   test(`${type}: mixed saved routes require reviewed repair and exact JSON recovery`, async ({ page }) => {
     await page.goto('/extension/graph-editor.html');
     await checkTranslationPortRecovery(page, type);

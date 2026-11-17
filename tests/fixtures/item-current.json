@@ -49,7 +49,10 @@
     {
       "id": "display",
       "type": "Display",
-      "settings": {},
+      "settings": {
+        "title": "",
+        "inputCount": 1
+      },
       "position": {
         "x": 1640,
         "y": 30
@@ -57,11 +60,33 @@
     },
     {
       "id": "translation",
-      "type": "TranslateGemmaEnJa",
+      "type": "TranslateGemma4B",
       "settings": {},
       "position": {
         "x": 620,
         "y": 430
+      }
+    },
+    {
+      "id": "translation-source_lang",
+      "type": "Text",
+      "settings": {
+        "value": "en"
+      },
+      "position": {
+        "x": 300,
+        "y": 800
+      }
+    },
+    {
+      "id": "translation-target_lang",
+      "type": "Text",
+      "settings": {
+        "value": "ja"
+      },
+      "position": {
+        "x": 300,
+        "y": 1050
       }
     }
   ],
@@ -153,7 +178,27 @@
       ],
       "to": [
         "display",
-        "input"
+        "input1"
+      ]
+    },
+    {
+      "from": [
+        "translation-source_lang",
+        "value"
+      ],
+      "to": [
+        "translation",
+        "source_lang"
+      ]
+    },
+    {
+      "from": [
+        "translation-target_lang",
+        "value"
+      ],
+      "to": [
+        "translation",
+        "target_lang"
       ]
     },
     {

@@ -57,13 +57,13 @@ test('MV3 compact controls precede live outputs; preview, current value and inde
   await live.evaluate(async () => {
     const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
-    graph.nodes.push(graphNode('Display', 'value'), graphNode('TranslateGemmaJaEn', 'forward'), graphNode('TranslateGemmaEnJa', 'reverse'), graphNode('Display', 'forward-output'), graphNode('Display', 'reverse-output'));
+    graph.nodes.push(graphNode('Display', 'value'), graphNode('TranslateGemma4B', 'forward'), graphNode('TranslateGemma4B', 'reverse'), graphNode('Display', 'forward-output'), graphNode('Display', 'reverse-output'));
     graph.edges.push(edge('speech', 'final', 'value', 'input1'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'input1'), edge('reverse', 'text', 'reverse-output', 'input1'));
     await saveLiveGraphData(localStorage, (graph));
   });
   await editor.reload();
-  await expect(editor.locator('[data-node=forward]')).toContainText('Translation · JA → EN');
-  await expect(editor.locator('[data-node=reverse]')).toContainText('Translation · EN → JA');
+  await expect(editor.locator('[data-node=forward]')).toContainText('Translation');
+  await expect(editor.locator('[data-node=reverse]')).toContainText('Translation');
   await expect(editor.locator('#graph-translation')).toHaveCount(0);
   await editor.getByRole('button', { name: 'Select audio', exact: true }).press('ArrowRight');
   await settleAutoSave(editor);
