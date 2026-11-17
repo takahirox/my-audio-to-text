@@ -87,7 +87,7 @@ test('real pinned TranslateGemma in packaged MV3: Save preparation, semantic enâ
     const downloaded = requests.slice(beforeSave).filter(r => sources.has(r.url));
     expect(downloaded).toHaveLength(files.length);
     const beforeReuse = requests.length;
-    await settleAutoSave(editor); await expect(card.locator('.model-status')).toContainText('Ready', { timeout: 120000 });
+    await settleAutoSave(editor); await expectGraphModelsReady(editor, { timeout: 120000 });
     reuseRequests = requests.slice(beforeReuse).filter(r => !r.url.startsWith('chrome-extension:'));
     expect(reuseRequests).toEqual([]);
     for (const [direction, offline] of [['en-ja', false], ['en-ja', true], ['ja-en', true]]) {
