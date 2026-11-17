@@ -2,6 +2,9 @@
 
 Issue #385 adds one [experimental PLaMo 3 Translate 2B Node](plamo-translation.md)
 with optional TEXT language ports and a separate packaged GGUF/WASM runtime.
+Issue #391 extends it to 53 languages and labels it **Translation**. Omitted/auto
+target follows the official GGUF Japanese/English switch; specify a target for
+other input languages. A concrete source requires a concrete target.
 It uses the existing translation scheduler/output families and does not change
 the fixed-direction TranslateGemma Nodes documented below.
 

@@ -318,10 +318,10 @@ with tempfile.TemporaryDirectory() as tmp:
         shutil.copy2(original / 'web' / name, root / 'web' / name)
     shutil.copytree(original / 'web/licenses', root / 'web/licenses')
     entries = []
-    for name in ['vendor/optional-asr', 'vendor/translation', 'tts-assets']:
+    for name in ['vendor/optional-asr', 'vendor/translation', 'vendor/plamo', 'tts-assets']:
         directory = root / 'web' / name; directory.mkdir(parents=True)
         # Old generated/checkpoint files must never leak through directory copies.
-        for filename in ['model.onnx', 'model.data', 'model.bin', 'model.safetensors', 'voice.htsvoice']:
+        for filename in ['model.onnx', 'model.data', 'model.bin', 'model.safetensors', 'model.gguf', 'voice.htsvoice']:
             (directory / filename).write_bytes(b'old model weights')
         asset = directory / 'engine.wasm'; asset.write_bytes(b'weight-free runtime fixture')
         entries.append(dict(path=str(asset.relative_to(root / 'web')), bytes=asset.stat().st_size, sha256=hashlib.sha256(asset.read_bytes()).hexdigest()))

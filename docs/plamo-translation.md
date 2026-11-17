@@ -1,6 +1,6 @@
-# Experimental PLaMo 3 Translate 2B (#385)
+# Experimental PLaMo 3 Translate 2B (#385, #391)
 
-Add **Translation · JA ↔ EN**, model subtitle **PLaMo 3 Translate 2B**, in
+Add **Translation**, model subtitle **PLaMo 3 Translate 2B**, in
 AI Models / Translation. Search by translation, PLaMo or the internal stable
 type `Plamo3Translate2B`. This is an experimental Node; TranslateGemma and the default graph remain available with their existing models.
 
@@ -8,8 +8,32 @@ Connect text to `text: TEXT`. Optional ordinary Text constants configure:
 
 | Port | Unconnected default | Accepted connected values |
 | --- | --- | --- |
-| `source_lang: TEXT` | automatic identification | `auto`, `ja`, `en` |
-| `target_lang: TEXT` | English | `en`, `ja` |
+| `source_lang: TEXT` | automatic identification | `auto` or any of the 53 official codes |
+| `target_lang: TEXT` | Japanese/English auto switch | `auto` or any of the 53 official codes |
+
+Use exact lowercase codes from the [official supported-language table](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF/blob/4f672106b847200bfdc0f6af6c321cd94eba1aed/README.md#supported-languages):
+
+```text
+ja en zh-hans zh-hant ko ar az be bg bn ca ceb de es et eu fa fr gu he hi hr
+hu hy id it jv ka kk km lt lv ml mr ms my ne nl pa pl ru si sk sl sr sw ta te
+th tl ur uz vi
+```
+
+Simplified Chinese (`zh-hans`) and Traditional Chinese (`zh-hant`) are distinct.
+The Node accepts these 53 codes and `auto`, without trimming, case folding,
+region-code conversion or aliases. This matches explicit GGUF template kwargs;
+the template's system-message parser also supports lowercase normalization, but
+this Node sends PFML3 directly and does not use that parser. Blank connected
+values, unknown codes, `zh`, `zh-CN`, `en-US` and uppercase codes are errors.
+The template's extra Easy Japanese alias is outside this Node's 53-code contract.
+
+With both language ports unconnected, Japanese input translates into English and
+English input into Japanese. Explicit `target_lang=auto` selects the same GGUF
+behavior. For other input languages the default output language is **undefined**:
+connect a concrete target (for example `fr → ja`, `ko → en`, `zh-hans → ja`).
+The application adds no language detection or fallback. A concrete source language
+requires a concrete target; source `auto` is equivalent to omission. To keep output
+in English, connect `Text('en').value → target_lang`.
 
 For example, `Text('en').value → source_lang` and
 `Text('ja').value → target_lang` configure English → Japanese. Language events
@@ -64,11 +88,19 @@ permission, remote executable code, native host, inference server or remote AI A
 is required. Cancel terminates the outer Worker and its WASM child. Runtime files
 are individually pinned in the extension packaging allowlist.
 
-Direct [official PFML3](https://huggingface.co/pfnet/plamo-3-translate-2b#pfml3-prompt-format)
-supplies the dataset, input and output sections. Automatic source identification
-omits the input `lang` key. The output **always** includes the chosen/default `lang`
-key, so the upstream GGUF target-default change on 2026-11-08 cannot change this
-Node's behavior. Reserved model control tokens in source text are rejected.
+Direct [official PFML3](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF/blob/4f672106b847200bfdc0f6af6c321cd94eba1aed/README.md#pfml3-prompt-format)
+supplies the dataset, input and output sections. With a concrete target, automatic
+source identification omits input `lang`, an explicit source adds that exact code,
+and output `lang` is the chosen target. With omitted/auto target, input carries
+`lang=ja/en` and output has **no** `lang`, matching the official GGUF template.
+This is a model instruction, not application-side language detection. llama.cpp
+adds BOS, so the handwritten prompt omits it. Reserved model control tokens in
+source text are rejected.
+
+The official GGUF default changed on **2026-11-08** from fixed Japanese output to
+Japanese/English switching. The pinned revision already contains this behavior;
+no revision, hash, manifest or cache migration is needed. The ordinary Transformers
+API requires a target and is a different interface from this GGUF Node.
 The unmodified official template is retained as `web/plamo-chat-template.jinja`,
 SHA-256 `ad7eb87b161c6792be070d777a9f9da50c9e57a77e1fa5cca3a24b91b6bdb9e9`.
 MLX is a separate native distribution and is not a dependency of this browser Node.
@@ -95,8 +127,9 @@ The model license has different conditions from the inference runtime licenses.
 `npm run setup:extension` includes it. `npm run prepare:playground-assets` stages
 all independent pages' runtimes; `npm run serve` serves the Playground. Open
 `/nodes/plamo-3-translate-2b/` without installing the extension. Leave source and
-target omitted for Japanese → English; enter source `en`, target `ja` for the
-reverse, or source `auto`, target `ja` for automatic identification.
+target omitted for Japanese → English and English → Japanese. Enter source `fr`,
+target `ja` for French → Japanese, or source `ko`, target `en` for Korean → English.
+An empty Playground field means omission; whitespace is a connected invalid value.
 
 Default CI uses deterministic production scheduler/Worker/UI/cache tests with tiny
 fixtures, without real weights. `npm test` covers language validation, grouped
@@ -117,11 +150,31 @@ PLAMO_EXTENSION_SMOKE=1 npx playwright test --config playwright.extension.config
 
 The first command stages code only. The real web test downloads 1.81 GB on first
 Run, uses a dedicated disk-backed Chrome profile in ignored `.cache/`, exercises
-all three language cases, cancels actual inference, checks both Workers disappear,
+both default directions, explicit auto and fixed targets, French/Korean/Simplified
+and Traditional Chinese, cancels actual inference, checks both Workers disappear,
 and retries from cache. The extension smoke automatically obtains the official
 GGUF if needed, serves only its verified bytes from loopback to avoid a second WAN
 download, and exercises the packaged graph/runtime under MV3 CSP and COOP/COEP.
 Its test-only `sourceURL` override changes asset delivery, never inference or hashes.
 `python3 scripts/review-plamo-assets.py` independently checks the upstream pinned
-LFS hash, every committed chunk, template and both license files. Timings and exact
+LFS hash, every committed chunk, the embedded GGUF template against the packaged
+template, and both license files. Timings and exact
 generated strings are recorded in real-model evidence.
+
+To reuse that verified local GGUF in the standalone smoke without another WAN
+download, run:
+
+```sh
+PLAMO_SMOKE_GGUF=.cache/plamo-review/plamo-3-translate-2b-Q4_K_M.gguf npm run test:plamo-real
+```
+
+The test serves static bytes on loopback and changes only the manifest's delivery
+URL; the production hashes, immutable cache key, Worker and inference stay intact.
+
+`tests/fixtures/plamo-template.json` records prompts rendered by the pinned official
+Jinja template (Jinja2 3.1.6, `trim_blocks`/`lstrip_blocks`, empty BOS). Tests compare
+the template digest, representative prompts and a digest covering all 53 codes as
+both source and target against the production PFML3 builder. To regenerate it,
+install `Jinja2==3.1.6` in an isolated review environment and run
+`python scripts/render-plamo-template-fixtures.py`; normal CI needs no Jinja package.
+See [#391 validation evidence](evidence/plamo-391.md) for actual model results.

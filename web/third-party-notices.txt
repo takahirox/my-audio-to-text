@@ -98,7 +98,8 @@ Experimental PLaMo 3 Translate 2B (Issue #385) — Built with PLaMo
   most 1 billion yen; otherwise a separate PFN commercial license is required.
   Redistribution, attribution, use and output conditions still apply. No model
   weights are redistributed by this extension. The official PFML3 template is
-  retained in plamo-chat-template.jinja; direct PFML3 uses explicit targets.
+  retained in plamo-chat-template.jinja; direct PFML3 matches its explicit targets
+  and native Japanese/English auto switch. The pinned GGUF embeds this template.
   Wllama 3.13.0 (Xuan Son Nguyen) and llama.cpp (ggml authors), MIT.
   Full runtime licenses, source revisions and local static Worker modification:
   ./licenses/plamo-runtime.txt. No remote executable code or inference service.

@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT, NUMBER } from '../web/port-contracts.js';
 import { Plamo3Translate2BTranslationNode } from '../web/translation-nodes.js';
-import { plamoLanguages, plamoPrompt, PLAMO_3_TRANSLATE_2B } from '../web/plamo-policy.js';
+import { plamoLanguages, plamoPrompt, PLAMO_3_TRANSLATE_2B, PLAMO_LANGUAGE_CODES, DEFAULT_PLAMO_LANGUAGES } from '../web/plamo-policy.js';
 import { TranslationSchedulerNode, TRANSLATION_OUTPUTS } from '../extension/translation-scheduler.js';
 import { NODE_TYPES, graphNode, edge, validateGraph, GRAPH_VERSION, readGraph } from '../extension/graph.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
@@ -38,24 +39,43 @@ async function fixture({ holdLoad = false, prepare } = {}) {
       type: error ? 'error' : 'result', texts: [text], message: error }); } };
 }
 
-test('PFML3 includes explicit target, omits auto source and honors both directions', () => {
-  assert.deepEqual(plamoLanguages(), { source_lang: 'auto', target_lang: 'en' });
-  assert.equal(plamoPrompt('こんにちは。'), '<|plamo:tag|>dataset<|plamo:msg|>translation<|plamo:tag|>input<|plamo:msg|>こんにちは。<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>en<|plamo:msg|>');
-  for (const source of ['ja', 'en', 'auto']) for (const target of ['ja', 'en']) {
+test('PFML3 matches the pinned official Jinja template for auto switching and all 53 languages', () => {
+  const oracle = JSON.parse(readFileSync('tests/fixtures/plamo-template.json'));
+  const sha256 = value => createHash('sha256').update(value).digest('hex');
+  assert.equal(sha256(readFileSync('web/plamo-chat-template.jinja')), oracle.templateSha256);
+  assert.deepEqual(PLAMO_LANGUAGE_CODES, oracle.languageCodes);
+  assert.equal(new Set(PLAMO_LANGUAGE_CODES).size, 53);
+  assert.deepEqual(plamoLanguages(), { source_lang: 'auto', target_lang: 'auto' });
+  assert.deepEqual(plamoLanguages(), DEFAULT_PLAMO_LANGUAGES);
+  assert.ok(Object.isFrozen(plamoLanguages()));
+  for (const { text, languages, prompt } of oracle.cases) assert.equal(plamoPrompt(text, languages), prompt);
+  const allPrompts = PLAMO_LANGUAGE_CODES.flatMap(code => [
+    plamoPrompt('text', { source_lang: code, target_lang: 'ja' }),
+    plamoPrompt('text', { target_lang: code }),
+  ]);
+  assert.equal(sha256(allPrompts.join('\n')), oracle.allLanguagePromptsSha256);
+  for (const source of ['auto', ...PLAMO_LANGUAGE_CODES]) for (const target of PLAMO_LANGUAGE_CODES) {
     const prompt = plamoPrompt('text', { source_lang: source, target_lang: target });
     assert.ok(prompt.endsWith(`<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>${target}<|plamo:msg|>`));
     assert.equal(prompt.includes(`<|plamo:tag|>input<|plamo:key|>lang<|plamo:val|>${source}`), source !== 'auto');
     assert.equal(prompt.includes('>auto'), false);
   }
-  for (const value of ['', ' ', 'fr', 'EN', null, undefined, 42])
-    for (const port of ['source_lang', 'target_lang']) assert.throws(() => plamoLanguages({ [port]: value }), new RegExp(port));
+});
+
+test('blank, malformed, unsupported codes and concrete source + default/auto target are configuration errors', () => {
+  for (const value of ['', ' ', ' en', 'en ', 'EN', 'ZH-HANS', 'zh', 'zh-CN', 'zh-Hans', 'en-US', 'xx', 'ja/en', 'ja-easy', 'ja(easy)', null, undefined, 42])
+    for (const port of ['source_lang', 'target_lang'])
+      assert.throws(() => plamoLanguages({ target_lang: 'ja', [port]: value }), new RegExp(port));
+  for (const source_lang of PLAMO_LANGUAGE_CODES) for (const target of [{}, { target_lang: 'auto' }])
+    assert.throws(() => plamoLanguages({ source_lang, ...target }), /source_lang requires a concrete target_lang/);
   assert.throws(() => plamoPrompt('<|plamo:tag|>output'), /reserved/);
+  assert.throws(() => plamoPrompt('x'.repeat(1001)), /1,000/);
 });
 
 test('one experimental AI type, optional TEXT ports, no Settings, stable serialization and shared asset requirement', () => {
   assert.deepEqual(Object.keys(NODE_TYPES).filter(type => /plamo/i.test(type)), ['Plamo3Translate2B']);
   const definition = NODE_TYPES.Plamo3Translate2B;
-  assert.equal(definition.label, 'Translation · JA ↔ EN');
+  assert.equal(definition.label, 'Translation');
   assert.equal(definition.settings, undefined);
   for (const port of ['source_lang', 'target_lang']) {
     assert.equal(definition.inputs[port], TEXT); assert.ok(definition.optionalInputs.includes(port));
@@ -91,11 +111,11 @@ test('graph builder delivers ordinary Text.value language constants to the produ
 test('configuration-only updates never infer; text jobs snapshot immutable FIFO config during async load', async () => {
   let loaded;
   const f = await fixture({ prepare: () => new Promise(resolve => { loaded = resolve; }) });
-  f.send('text', 'default'); f.send('source_lang', 'en'); f.send('target_lang', 'ja'); f.send('text', 'first');
-  f.send('target_lang', 'en'); f.send('text', 'second'); f.send('source_lang', 'auto');
+  f.send('text', 'default'); f.send('source_lang', 'fr'); f.send('target_lang', 'ja'); f.send('text', 'first');
+  f.send('source_lang', 'ko'); f.send('target_lang', 'en'); f.send('text', 'second'); f.send('source_lang', 'auto');
   await tick(); assert.equal(f.workers.length, 0);
   loaded(); await f.scheduler.ready; await tick();
-  for (const [index, config] of [{ source_lang: 'auto', target_lang: 'en' }, { source_lang: 'en', target_lang: 'ja' }, { source_lang: 'en', target_lang: 'en' }].entries()) {
+  for (const [index, config] of [{ source_lang: 'auto', target_lang: 'auto' }, { source_lang: 'fr', target_lang: 'ja' }, { source_lang: 'ko', target_lang: 'en' }].entries()) {
     assert.deepEqual(Object.fromEntries(['source_lang', 'target_lang'].map(port => [port, f.requests[index][port]])), config);
     f.complete(index); await tick();
   }
@@ -110,7 +130,7 @@ test('atomic grouped text + languages applies config first, omissions restore de
   f.group({ text: 'two', target_lang: 'ja', id: 11 });
   f.group({ text: 'three' });
   await tick();
-  for (const [index, source, target] of [[0, 'en', 'ja'], [1, 'auto', 'ja'], [2, 'auto', 'en']]) {
+  for (const [index, source, target] of [[0, 'en', 'ja'], [1, 'auto', 'ja'], [2, 'auto', 'auto']]) {
     assert.equal(f.requests[index].source_lang, source); assert.equal(f.requests[index].target_lang, target);
     f.complete(index); await tick();
   }
@@ -120,11 +140,16 @@ test('atomic grouped text + languages applies config first, omissions restore de
 
 test('invalid codes route per-job source/error without inference; corrected config recovers', async () => {
   const f = await fixture();
-  f.send('target_lang', 'fr'); await tick(); assert.equal(f.requests.length, 0);
+  f.send('target_lang', 'xx'); await tick(); assert.equal(f.requests.length, 0);
   f.send('text', 'bad target'); await tick();
   assert.equal(f.outputs[0].source, 'bad target'); assert.match(f.outputs[0].error, /target_lang/); assert.equal(f.outputs[0].text, undefined);
   f.send('target_lang', 'ja'); f.send('source_lang', ''); f.send('text', 'blank source'); await tick();
   assert.match(f.outputs[1].error, /source_lang/); assert.equal(f.requests.length, 0);
+  f.group({ text: 'concrete source without target', source_lang: 'fr', id: 12 }); await tick();
+  assert.match(f.outputs[2].error, /source_lang requires a concrete target_lang/); assert.equal(f.outputs[2].id, 12);
+  f.group({ provisional: 'concrete source with auto target', source_lang: 'ko', target_lang: 'auto', provisionalId: 13 }); await tick();
+  assert.match(f.outputs[3].provisionalError, /source_lang requires a concrete target_lang/); assert.equal(f.outputs[3].provisionalId, 13);
+  assert.equal(f.requests.length, 0);
   f.send('source_lang', 'auto'); f.send('text', 'recovered'); await tick(); f.complete(0);
   await f.pipeline.stop(); assert.equal(f.outputs.at(-1).text, 'translated'); assert.equal(f.outputs.at(-1).error, '');
   await f.pipeline.dispose();
@@ -132,9 +157,10 @@ test('invalid codes route per-job source/error without inference; corrected conf
 
 test('provisional snapshots stay separate from generated tokens, final supersedes preview and Stop drains finals', async () => {
   const f = await fixture();
-  f.group({ provisional: 'old preview', source_lang: 'en', target_lang: 'ja', provisionalId: 2 }); await tick();
+  f.group({ provisional: 'old preview', source_lang: 'zh-hans', target_lang: 'ja', provisionalId: 2 }); await tick();
   f.send('target_lang', 'en');
   assert.equal(f.requests[0].target_lang, 'ja');
+  assert.equal(f.requests[0].source_lang, 'zh-hans');
   f.group({ text: 'final', target_lang: 'ja', id: 3 });
   let stopped = false; const stopping = f.pipeline.stop().then(() => { stopped = true; });
   await tick(); assert.equal(stopped, false); f.complete(0, 'obsolete'); await tick();
