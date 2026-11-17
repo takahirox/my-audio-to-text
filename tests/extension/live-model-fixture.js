@@ -10,8 +10,8 @@ import { installAssetQuotaFixture } from './model-asset-worker-fixture.js';
 export function summaryGraph() {
   const source = graphNode('Text', 'source'); source.settings.value = 'Evidence';
   return { version: GRAPH_VERSION,
-    nodes: [source, graphNode('TextSummaryLfm2', 'summary'), graphNode('Display', 'display'), graphNode('TextSummaryQwen35', 'parked')],
-    edges: [edge('source', 'value', 'summary', 'text'), edge('summary', 'summary', 'display', 'input1')] };
+    nodes: [source, graphNode('TextProcessingLfm2', 'summary'), graphNode('Display', 'display'), graphNode('TextProcessingQwen35', 'parked')],
+    edges: [edge('source', 'value', 'summary', 'input1'), edge('summary', 'result', 'display', 'input1')] };
 }
 
 // Production UI, manifest resolver, verified streaming cache and Web Locks.
@@ -53,7 +53,7 @@ export async function liveModelFixture() {
     await writeFile(path.join(root, 'extension/meeting-summary-lfm2-assets.json'), JSON.stringify(files));
     await writeFile(path.join(root, 'web/text-summary-worker.js'), `self.onmessage=({data})=>{
       if(data.type==='load')postMessage({type:'ready',id:data.id});
-      if(data.type==='summarize')postMessage({type:'result',id:data.id,summary:'Ready summary'});
+      if(data.type==='process')postMessage({type:'result',id:data.id,result:'Ready summary'});
       if(data.type==='drain')postMessage({type:'drained',id:data.id});
     };`);
     context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,

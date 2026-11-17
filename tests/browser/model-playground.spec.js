@@ -50,7 +50,7 @@ for (const slug of [...asrPages, ...textPages, ...streamPages]) {
     await page.goto(`./nodes/${slug}/`); await expect(page.locator('#run')).toBeEnabled();
     if (asrPages.includes(slug)) await page.locator('#file').setInputFiles(wavFixture(3));
     await page.locator('#run').click();
-    const expected = phase === 'loading' ? 'load' : asrPages.includes(slug) ? 'audio' : slug === 'if-condition' ? 'decide' : textPages.includes(slug) ? 'summarize' : 'generate';
+    const expected = phase === 'loading' ? 'load' : asrPages.includes(slug) ? 'audio' : slug === 'if-condition' ? 'decide' : textPages.includes(slug) ? 'process' : 'generate';
     await expect.poll(() => page.evaluate(type => window.modelWorkers.some(w => w.messages.some(m => m.type === type)), expected)).toBe(true);
     await page.locator('#cancel').click(); await expect(page.locator('#status')).toHaveText('Canceled');
     expect((await page.evaluate(() => window.modelWorkers)).every(worker => worker.terminated === 1)).toBe(true);
@@ -118,15 +118,15 @@ test('IfCondition shows both independent decisions', async ({ page }) => {
 for (const slug of ['text-summary-lfm2', 'text-summary-qwen35', ...streamPages]) test(`${slug}: supported language/voice/prompt settings reach only the selected model`, async ({ page }) => {
   await modelWorkers(page, slug); await observeModels(page);
   await page.goto(`./nodes/${slug}/`); await expect(page.locator('#run')).toBeEnabled();
-  await page.locator('#language').selectOption(streamPages.includes(slug) ? 'japanese' : 'ja');
+  if (streamPages.includes(slug)) await page.locator('#language').selectOption('japanese');
   if (slug === 'qwen3-tts') await page.locator('#voice').selectOption('ryan');
   if (textPages.includes(slug)) await page.locator('#prompt').fill('Give one concise sentence.');
   await page.locator('#run').click(); await expect(page.locator('#status')).toHaveText('Complete');
   const messages = await page.evaluate(() => window.modelWorkers.flatMap(worker => worker.messages));
-  expect(messages.some(message => message.language === (streamPages.includes(slug) ? 'japanese' : 'ja'))).toBe(true);
+  if (streamPages.includes(slug)) expect(messages.some(message => message.language === 'japanese')).toBe(true);
   if (textPages.includes(slug)) {
     expect(messages.some(message => message.prompt === 'Give one concise sentence.')).toBe(true);
-    expect(messages.some(message => message.processor === (slug === 'text-summary-lfm2' ? 'TextSummaryLfm2' : 'TextSummaryQwen35'))).toBe(true);
+    expect(messages.some(message => message.processor === (slug === 'text-summary-lfm2' ? 'TextProcessingLfm2' : 'TextProcessingQwen35'))).toBe(true);
   }
   if (streamPages.includes(slug)) expect(messages.some(message => message.voice === (slug === 'qwen3-tts' ? 'ryan' : 'libritts-r-4446'))).toBe(true);
 });
@@ -163,4 +163,22 @@ for (const slug of ['text-summary-lfm2', 'qwen3-tts']) test(`${slug}: cancel pen
   await expect(page.locator('#run')).toBeEnabled();
   expect(await page.evaluate(() => window.modelWorkers)).toEqual([]);
   await expect(page.locator('#status')).toHaveText('Canceled');
+});
+
+for (const slug of ['text-summary-lfm2', 'text-summary-qwen35']) test(`${slug}: four task examples send one atomic numbered input snapshot with a Settings prompt`, async ({ page }) => {
+  await modelWorkers(page, slug); await observeModels(page);
+  await page.goto(`./nodes/${slug}/`); await expect(page.locator('#run')).toBeEnabled();
+  for (const example of ['comparison', 'proofreading', 'extraction', 'summary']) {
+    await page.locator('#example').selectOption(example);
+    const count = example === 'comparison' ? 2 : 1;
+    await expect(page.locator('#input-count')).toHaveValue(String(count));
+    const inputs = [await page.locator('#input').inputValue()];
+    if (count === 2) inputs.push(await page.locator('#input-2').inputValue());
+    const prompt = await page.locator('#prompt').inputValue();
+    await page.locator('#run').click(); await expect(page.locator('#status')).toHaveText('Complete');
+    const worker = await page.evaluate(() => window.modelWorkers.at(-1));
+    const requests = worker.messages.filter(message => message.type === 'process');
+    expect(requests).toHaveLength(1); expect(requests[0].prompt).toBe(prompt); expect(requests[0].inputs).toEqual(inputs);
+    expect(worker.terminated).toBe(1);
+  }
 });

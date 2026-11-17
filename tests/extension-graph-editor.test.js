@@ -96,3 +96,16 @@ test('quick-add densely occupied and undersized views have deterministic finite 
     assert.ok(position.y >= bounds.top && position.y <= Math.max(bounds.top, bounds.bottom - added.offsetHeight));
   }
 });
+
+for (const type of ['TextProcessingLfm2', 'TextProcessingQwen35']) test(`${type}: resize retains removed wires as errors and respects 1–32 bounds`, () => {
+  const graph = defaultGraph(), n = graphNode(type, 'processor'); n.settings.inputCount = 2;
+  graph.nodes.push(n); graph.edges.push(edge('speech', 'final', n.id, 'input2'));
+  const e = editor(graph), before = structuredClone(graph.edges);
+  e.resizeInputs(n, -1);
+  assert.deepEqual(graph.edges, before);
+  assert.deepEqual(Object.keys(nodeDefinition(n).inputs), ['input1']);
+  assert.match(validateGraph(graph).join(' '), /processor.input2/);
+  e.resizeInputs(n, -1); assert.equal(n.settings.inputCount, 1);
+  e.resizeInputs(n, 1); assert.deepEqual(validateGraph(graph), []);
+  n.settings.inputCount = 32; e.resizeInputs(n, 1); assert.equal(n.settings.inputCount, 32);
+});

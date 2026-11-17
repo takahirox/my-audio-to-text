@@ -1,22 +1,22 @@
 import { TEXT } from './port-contracts.js';
-import { textSummaryModel } from './text-summary-models.js';
-import { MAX_PENDING_CHARS, summaryLanguage, summaryPrompt, summaryText } from './text-summary-policy.js';
+import { textProcessingModel } from './text-summary-models.js';
+import { MAX_PENDING_CHARS, processingInputs, processingValues, processingPrompt, processingResult } from './text-summary-policy.js';
 
-// One awaited update per input; previous summary and windowing are graph-owned.
-export class TextSummaryNode {
-  inputs = { text: TEXT };
-  outputs = { summary: TEXT };
+// One awaited generation per atomic TEXT delivery; history and windowing are graph-owned.
+export class TextProcessingNode {
+  outputs = { result: TEXT };
   // Admission happens before Pipeline retains deliveries behind inference.
   inputQueueLimits = { deliveries: 32, chars: MAX_PENDING_CHARS };
-  constructor({ type, language = 'ja', prompt, onEvent = () => {}, workerFactory = url => new Worker(url, { type: 'module' }),
+  constructor({ type, inputCount = 1, prompt, onEvent = () => {}, workerFactory = url => new Worker(url, { type: 'module' }),
     lazy = false, loadTimeoutMs = 180000, generationTimeoutMs = 180000 } = {}) {
-    this.model = textSummaryModel(type);
-    Object.assign(this, { type, language: summaryLanguage(language), prompt: summaryPrompt(prompt), onEvent, workerFactory, lazy, loadTimeoutMs, generationTimeoutMs });
+    this.model = textProcessingModel(type);
+    this.inputs = processingInputs(inputCount); this.values = Object.fromEntries(Object.keys(this.inputs).map(port => [port, '']));
+    Object.assign(this, { type, prompt: processingPrompt(prompt), onEvent, workerFactory, lazy, loadTimeoutMs, generationTimeoutMs });
     this.sequence = 0; this.pending = new Map();
   }
   event(event) { try { this.onEvent(event); } catch { /* observer only */ } }
   async start(context) {
-    if (this.started || this.disposed) throw new Error('Text summary requires a fresh session instance.');
+    if (this.started || this.disposed) throw new Error('Text processing requires a fresh session instance.');
     this.started = true; this.context = context;
     context.signal.throwIfAborted();
     this.abort = () => {
@@ -44,51 +44,58 @@ export class TextSummaryNode {
         this.pending.delete(data.id); clearTimeout(pending.timer);
         if (data.type === 'error') pending.reject(new Error(data.message));
         else if (data.type === pending.reply) pending.resolve(data);
-        else pending.reject(new Error('Unexpected text summary Worker reply.'));
+        else pending.reject(new Error('Unexpected text processing Worker reply.'));
       };
       worker.onerror = worker.onmessageerror = event => {
-        event.preventDefault?.(); this.failure(new Error(event.message || 'Text summary Worker communication failed.'));
+        event.preventDefault?.(); this.failure(new Error(event.message || 'Text processing Worker communication failed.'));
       };
       await this.request('load', 'ready', { processor: this.type }, this.loadTimeoutMs);
-      this.event({ type: 'ready', message: `${this.model.label} ready · ${this.language} · local` });
+      this.event({ type: 'ready', message: `${this.model.label} ready · local` });
     }).catch(error => { if (!this.disposed) this.failure(error); });
     return this.ready;
   }
   request(type, reply, payload, timeout = this.generationTimeoutMs) {
-    if (this.disposed) return Promise.reject(new DOMException('Text summary canceled.', 'AbortError'));
+    if (this.disposed) return Promise.reject(new DOMException('Text processing canceled.', 'AbortError'));
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pending.delete(id); reject(new Error(`Text summary ${type} timed out. Check free RAM/GPU memory, then Start again.`));
+        this.pending.delete(id); reject(new Error(`Text processing ${type} timed out. Check free RAM/GPU memory, then Start again.`));
       }, timeout);
       this.pending.set(id, { resolve, reject, reply, timer });
       try { this.worker.postMessage({ type, id, ...payload }); }
       catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
   }
-  async receive(port, text, context = this.context) {
-    if (this.disposed || this.stopping) throw new DOMException('Text summary session closed.', 'AbortError');
+  receive(port, text, context = this.context) { return this.receiveInputs({ [port]: text }, context); }
+  async receiveInputs(values, context = this.context) {
+    if (this.disposed || this.stopping) throw new DOMException('Text processing session closed.', 'AbortError');
     const abort = () => this.dispose();
     context.signal.addEventListener('abort', abort, { once: true });
     try {
       context.signal.throwIfAborted();
-      if (!this.started || port !== 'text' || typeof text !== 'string') throw new TypeError('Text summary requires text: TEXT after Start.');
-      if (!text.trim() || text.length > MAX_PENDING_CHARS) throw new RangeError('Text summary needs nonempty input of at most 32,768 characters; no evidence was truncated.');
-      if (this.generating) throw new Error('Text summary receive calls must be awaited.');
+      if (!this.started || Object.entries(values).some(([port, value]) => !Object.hasOwn(this.inputs, port) || typeof value !== 'string')) {
+        throw new TypeError('Text processing requires configured input1…inputN: TEXT after Start.');
+      }
+      if (!Object.keys(values).length) return;
+      if (this.generating) throw new Error('Text processing receive calls must be awaited.');
+      // Apply an atomic family before taking its snapshot. Missing siblings in
+      // that family clear; independent inputs retain their latest value.
+      for (const port of context.groupInputs || []) if (Object.hasOwn(this.inputs, port)) this.values[port] = '';
+      Object.assign(this.values, values);
+      const inputs = Object.freeze(processingValues(Object.keys(this.inputs).map(port => this.values[port])));
       this.generating = true;
       await this.load();
       context.signal.throwIfAborted();
-      if (this.disposed) throw new DOMException('Text summary unavailable.', 'AbortError');
-      this.event({ type: 'generating', message: `${this.model.label}: summarizing text…` });
-      const result = await this.request('summarize', 'result', { text, language: this.language, prompt: this.prompt });
+      if (this.disposed) throw new DOMException('Text processing unavailable.', 'AbortError');
+      this.event({ type: 'generating', message: `${this.model.label}: processing text…` });
+      const response = await this.request('process', 'result', { inputs, prompt: this.prompt });
       context.signal.throwIfAborted();
-      if (this.disposed) throw new DOMException('Text summary canceled.', 'AbortError');
-      // Equality is a successful completion too. Retain delivery identity across
-      // inference, never emit from the session's unrelated startup context.
-      const summary = summaryText(result.summary);
-      context.emit('summary', summary);
-      this.event({ type: 'updated', message: `${this.model.label}: AI draft updated · verify against the input text`, metrics: result.metrics });
-      return summary;
+      if (this.disposed) throw new DOMException('Text processing canceled.', 'AbortError');
+      // Equal results complete too. Keep the delivery's identity across inference.
+      const result = processingResult(response.result);
+      context.emit('result', result);
+      this.event({ type: 'updated', message: `${this.model.label}: AI result updated · verify against the input text`, metrics: response.metrics });
+      return result;
     } catch (error) {
       if (!this.disposed) this.failure(error, context);
       throw error;
@@ -97,7 +104,7 @@ export class TextSummaryNode {
   stop() { this.stopping = true; this.dispose(); }
   failure(error, context = this.context) {
     if (this.disposed) return;
-    this.event({ type: 'error', cause: error, message: `${this.model.label} unavailable: ${error.message || error}. Last successful summary retained; pending work stopped. Save graph or retry preparation in Models, then Start again. No replacement summary was emitted.` });
+    this.event({ type: 'error', cause: error, message: `${this.model.label} unavailable: ${error.message || error}. Last successful result retained; pending work stopped. Save graph or retry preparation in Models, then Start again. No replacement result was emitted.` });
     this.dispose(); context?.fail(error);
   }
   dispose() {
@@ -108,7 +115,7 @@ export class TextSummaryNode {
       this.worker.onmessage = this.worker.onerror = this.worker.onmessageerror = null;
       this.worker.terminate(); this.worker = null;
     }
-    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new DOMException('Text summary canceled.', 'AbortError')); }
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new DOMException('Text processing canceled.', 'AbortError')); }
     this.pending.clear();
   }
 }

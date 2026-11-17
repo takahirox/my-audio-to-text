@@ -49,7 +49,7 @@ export async function modelWorkers(page, slug, mode = 'success') {
           postMessage({ type: 'final', text: 'Recognized speech', session: d.session, id: d.id });
           postMessage({ type: 'decoded', session: d.session });
         }
-        if (d.type === 'summarize') postMessage({ type: 'result', id: d.id, summary: 'A local summary.' });
+        if (d.type === 'process') postMessage({ type: 'result', id: d.id, result: 'A local summary.' });
         if (d.type === 'decide') postMessage({ type: 'result', id: d.id, branch: d.text.includes('?') ? 'yes' : 'no', confidence: 0.9 });
         if (d.type === 'drain') postMessage({ type: 'drained', id: d.id });
         if (d.type === 'generate') {
@@ -76,7 +76,7 @@ export async function observeModels(page) {
       constructor(url, options) {
         super(url, options); this.record = { url: String(url), terminated: 0, messages: [] }; window.modelWorkers.push(this.record);
       }
-      postMessage(message, ...args) { this.record.messages.push({ type: message.type, language: message.language, voice: message.voice, processor: message.processor, prompt: message.prompt }); super.postMessage(message, ...args); }
+      postMessage(message, ...args) { this.record.messages.push({ type: message.type, language: message.language, voice: message.voice, processor: message.processor, prompt: message.prompt, inputs: message.inputs }); super.postMessage(message, ...args); }
       terminate() { this.record.terminated++; super.terminate(); }
     };
     const NativeContext = window.AudioContext;

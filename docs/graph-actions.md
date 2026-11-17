@@ -27,7 +27,7 @@ Its optional `trigger: ANY` input selects the mode by **connection presence**:
 
 Before receiving any TEXT, triggered Hold emits nothing. Live reports “Waiting
 for first TEXT value; triggers emit nothing.” An explicitly received empty string
-is valid state for a generic consumer. TextSummary separately rejects empty or
+is valid state for a generic consumer. TextProcessing separately rejects empty or
 whitespace-only text before allocating its Worker. If your source explicitly
 initializes with empty TEXT (as TextAccumulator does), wait for transcript content
 before requesting a summary.
@@ -64,8 +64,8 @@ ASR.final → TextAccumulator.append
 TextAccumulator.text → Display.input1 (Transcript)
 TextAccumulator.text → Hold.input
 Button.trigger → Hold.trigger
-Hold.value → TextSummary.text
-TextSummary.summary → Display.input2 (Summary)
+Hold.value → TextProcessing.input1
+TextProcessing.result → Display.input2 (Summary)
 ```
 
 Transcription/accumulation/display continue independently. Press **Generate
@@ -88,7 +88,7 @@ It marks those buttons busy before emitting, and observes existing Pipeline
 queues/owned work until completion. Further UI activations during busy are
 unavailable (they are not accepted or queued). Disjoint actions remain usable.
 Programmatic/other-producer trigger deliveries are never deduplicated: they use
-the existing serial queues. TextSummary admission remains bounded to 32 active
+the existing serial queues. TextProcessing admission remains bounded to 32 active
 plus queued deliveries / 32,768 total characters; overflow visibly fails its
 branch and cancels pending work, preserving the transcript and last result.
 

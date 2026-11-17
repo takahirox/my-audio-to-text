@@ -50,10 +50,10 @@
     },
     {
       "id": "summary",
-      "type": "TextSummaryLfm2",
+      "type": "TextProcessingLfm2",
       "settings": {
-        "language": "ja",
-        "prompt": "Summarize the input text."
+        "prompt": "Summarize the input text. Use Japanese unless explicitly instructed otherwise.",
+        "inputCount": 1
       },
       "position": {
         "x": 1350,
@@ -135,13 +135,13 @@
       ],
       "to": [
         "summary",
-        "text"
+        "input1"
       ]
     },
     {
       "from": [
         "summary",
-        "summary"
+        "result"
       ],
       "to": [
         "display",

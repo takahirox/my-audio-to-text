@@ -217,15 +217,15 @@ for (const action of ['navigate', 'close']) {
     await observer.evaluate(async () => {
       const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
       const graph = defaultGraph(), text = graphNode('Text', 'text'); text.settings.value = 'Held summary';
-      graph.nodes.push(text, graphNode('TextSummaryLfm2', 'summary'), graphNode('Display', 'notes'));
-      graph.edges.push(edge('text', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input1'));
+      graph.nodes.push(text, graphNode('TextProcessingLfm2', 'summary'), graphNode('Display', 'notes'));
+      graph.edges.push(edge('text', 'value', 'summary', 'input1'), edge('summary', 'result', 'notes', 'input1'));
       await saveLiveGraphData(localStorage, graph);
     });
     const page = await setup(extension);
     await expect(page.locator('#cancel-session')).toHaveCount(0);
     await expect(page.locator('#status')).toHaveText('Transcription active');
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-    await expect(page.locator('#summary-status')).toContainText('summarizing text');
+    await expect(page.locator('#processing-status')).toContainText('processing text');
     await page.evaluate(() => {
       // Registered after the production pagehide handler: capture its effects
       // synchronously, before the document and its JS state disappear.

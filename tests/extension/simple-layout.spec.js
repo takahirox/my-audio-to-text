@@ -120,13 +120,13 @@ test('Live keeps all routine and unknown diagnostics in Session details; structu
   await live.locator('#diagnostics > summary').press('Enter');
   await live.evaluate(() => window.layoutSession.update({
     conditionStatus: 'decision: A new diagnostic without a recognized error keyword.',
-    summaryStatus: 'textsummaryqwen35: Text Summary · Qwen3.5 2B: waiting for TEXT; model loads on first request.',
+    processingStatus: 'textprocessingqwen35: Text Processing · Qwen3.5 2B: waiting for TEXT; model loads on first request.',
     translationStatus: 'translator: Generating; queue 1/2', holdStatus: 'hold: Ready',
     ttsStatus: 'speech: Processing complete', speakerStatus: 'speaker: Playing',
     status: 'future-node: An unfamiliar progress message',
     signal: 'speech: Waiting for startup language; model has not started.',
   }));
-  for (const id of ['condition-status', 'summary-status', 'translation-status', 'hold-status', 'tts-status', 'speaker-status', 'status', 'signal', 'model-recovery']) await expect(live.locator(`#${id}`)).toBeHidden();
+  for (const id of ['condition-status', 'processing-status', 'translation-status', 'hold-status', 'tts-status', 'speaker-status', 'status', 'signal', 'model-recovery']) await expect(live.locator(`#${id}`)).toBeHidden();
   await expect(live.locator('#errors')).toBeEmpty();
   await expect(live.locator('#diagnostics [role=status], #diagnostics [role=alert]')).toHaveCount(0);
   await expect(live.locator('#tts-output')).toBeHidden();

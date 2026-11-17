@@ -17,7 +17,7 @@ export function webVoiceGraph(value) {
   }
   const nodes = graph.nodes.filter(n => needed.has(n.id)), edges = graph.edges.filter(e => needed.has(e.from[0]) && needed.has(e.to[0]));
   const allowed = new Set(['MicrophoneAudio', ...ASR_TYPES, 'FocusedInputTextOutputNode', 'TextFormatter', 'TextWindow',
-    'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'Plamo3Translate2B', 'IfCondition', 'TextSummaryLfm2', 'TextSummaryQwen35', 'Text', 'Number']);
+    'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'Plamo3Translate2B', 'IfCondition', 'TextProcessingLfm2', 'TextProcessingQwen35', 'Text', 'Number']);
   const unsupported = nodes.find(n => !allowed.has(n.type));
   if (unsupported) throw Error(`${unsupported.id}: ${unsupported.type} is not supported on a Web voice output path. Use final text processors; cumulative snapshots, triggers and side effects are not dictation segments.`);
   if (edges.some(e => /^(provisional|error)/i.test(e.from[1]))) throw Error('Web voice typing inserts committed text only. Disconnect provisional and diagnostic outputs from the field path.');

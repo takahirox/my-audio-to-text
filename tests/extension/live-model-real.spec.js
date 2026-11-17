@@ -75,13 +75,13 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
         edges: [edge('audio', 'audio', 'asr', 'audio'), edge('asr', 'final', 'translation', 'text'), edge('translation', 'text', 'output', 'input1')] };
     } else {
       const text = graphNode('Text', 'text'); text.settings.value = 'The city opened a park in April. Volunteers maintain its shaded trails.';
-      const model = graphNode(kind === 'held-summary' ? 'TextSummaryLfm2' : 'Kokoro', 'model');
+      const model = graphNode(kind === 'held-summary' ? 'TextProcessingLfm2' : 'Kokoro', 'model');
       if (kind.startsWith('kokoro')) {
         model.settings.voice = kind === 'kokoro-en' ? 'af_heart' : 'jf_alpha';
         text.settings.value = kind === 'kokoro-en' ? 'Hello. It is a beautiful day today.' : 'こんにちは。今日は良い天気です。';
-      } else model.settings = { language: 'en', prompt: 'Summarize in one short sentence.' };
+      } else model.settings = { inputCount: 1, prompt: 'Summarize Input 1 in one short English sentence.' };
       graph = { version: GRAPH_VERSION, nodes: [text, graphNode('Button', 'button'), graphNode('Hold', 'hold'), model, graphNode(kind === 'held-summary' ? 'Display' : 'AudioOutput', 'output')],
-        edges: [edge('text', 'value', 'hold', 'input'), edge('button', 'trigger', 'hold', 'trigger'), edge('hold', 'value', 'model', 'text'), edge('model', kind === 'held-summary' ? 'summary' : 'audio', 'output', kind === 'held-summary' ? 'input1' : 'audio')] };
+        edges: [edge('text', 'value', 'hold', 'input'), edge('button', 'trigger', 'hold', 'trigger'), edge('hold', 'value', 'model', kind === 'held-summary' ? 'input1' : 'text'), edge('model', kind === 'held-summary' ? 'result' : 'audio', 'output', kind === 'held-summary' ? 'input1' : 'audio')] };
     }
     await editor.locator('input[type=file]').setInputFiles({ name: 'live-real.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(graph)) });
     await settleAutoSave(editor);
@@ -133,7 +133,7 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
           for (let i = 0; i < audio.length; i += 2048) { feedAudio(audio.slice(i, i + 2048)); await new Promise(resolve => setTimeout(resolve, 16)); }
         }, { pcm, sampleRate });
       } else {
-        expect(await page.evaluate(() => graphWorkers.filter(w => !w.released).flatMap(w => w.messages).filter(m => ['summarize', 'generate'].includes(m.type)))).toEqual([]);
+        expect(await page.evaluate(() => graphWorkers.filter(w => !w.released).flatMap(w => w.messages).filter(m => ['process', 'generate'].includes(m.type)))).toEqual([]);
         await page.locator('#graph-action-buttons button').click();
         if (kind === 'held-summary') await expect(page.locator('#live-displays')).toContainText(/park/i, { timeout: 180000 });
         else {

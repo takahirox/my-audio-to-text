@@ -14,10 +14,10 @@
     },
     {
       "id": "summary",
-      "type": "TextSummaryLfm2",
+      "type": "TextProcessingLfm2",
       "settings": {
-        "language": "ja",
-        "prompt": "Update the previous summary using the new text. Preserve still-relevant facts and explicit corrections. Return the complete updated summary."
+        "prompt": "Update the previous summary using the new text. Preserve still-relevant facts and explicit corrections. Return the complete updated summary. Use Japanese unless explicitly instructed otherwise.",
+        "inputCount": 1
       },
       "position": {
         "x": 1000,
@@ -105,13 +105,13 @@
       ],
       "to": [
         "summary",
-        "text"
+        "input1"
       ]
     },
     {
       "from": [
         "summary",
-        "summary"
+        "result"
       ],
       "to": [
         "previous",
@@ -121,7 +121,7 @@
     {
       "from": [
         "summary",
-        "summary"
+        "result"
       ],
       "to": [
         "notes",

@@ -1,2 +1,2 @@
 import { mountTextAiPage } from '../text-ai-page.js';
-mountTextAiPage('TextSummaryQwen35');
+mountTextAiPage('TextProcessingQwen35');

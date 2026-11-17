@@ -6,14 +6,14 @@ import { watchGpuDevice } from '../web/gpu-lifecycle.js';
 import { domText } from './fixtures/dom.js';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
-function textGraph(type = 'TextSummaryLfm2', gated = false) {
+function textGraph(type = 'TextProcessingLfm2', gated = false) {
   const source = graphNode('Text', 'source'); source.settings.value = 'Evidence';
   const nodes = [source, graphNode(type, 'model'), graphNode('Display', 'display')];
-  const edges = [edge('source', 'value', 'model', 'text'), edge('model', type === 'IfCondition' ? 'yes' : 'summary', 'display', 'input1')];
+  const edges = [edge('source', 'value', 'model', type.startsWith('TextProcessing') ? 'input1' : 'text'), edge('model', type === 'IfCondition' ? 'yes' : 'result', 'display', 'input1')];
   if (gated) {
     nodes.push(graphNode('Button', 'button'), graphNode('Hold', 'held'));
     edges[0] = edge('source', 'value', 'held', 'input');
-    edges.push(edge('button', 'trigger', 'held', 'trigger'), edge('held', 'value', 'model', 'text'));
+    edges.push(edge('button', 'trigger', 'held', 'trigger'), edge('held', 'value', 'model', type.startsWith('TextProcessing') ? 'input1' : 'text'));
   }
   return { version: GRAPH_VERSION, nodes, edges };
 }
@@ -24,7 +24,7 @@ function fixture(graph, options = {}) {
       terminate() { this.released = true; },
       reply(data) {
         if (data.type === 'load') this.onmessage?.({ data: { id: data.id, type: controls.failure ? 'error' : 'ready', message: 'Controlled model memory failure' } });
-        if (data.type === 'summarize') this.onmessage?.({ data: { id: data.id, type: 'result', summary: 'Summary' } });
+        if (data.type === 'process') this.onmessage?.({ data: { id: data.id, type: 'result', result: 'Summary' } });
         if (data.type === 'decide') this.onmessage?.({ data: { id: data.id, type: 'result', branch: 'yes' } });
         if (data.type === 'translate') this.onmessage?.({ data: { id: data.id, type: 'result', texts: ['Translation'] } });
         if (data.type === 'generate') this.onmessage?.({ data: { id: data.id, type: 'result', audio: { samples: new Float32Array(10), sampleRate: 24000, channels: 1 } } });
@@ -40,7 +40,7 @@ function fixture(graph, options = {}) {
     workers.push(worker); return worker;
   };
   const session = new TabSession(view => views.push(view), { graph, workerFactory, moonshineJapaneseWorkerFactory: workerFactory,
-    textSummaryWorkerFactory: workerFactory, ifConditionWorkerFactory: workerFactory, translationWorkerFactory: workerFactory,
+    textProcessingWorkerFactory: workerFactory, ifConditionWorkerFactory: workerFactory, translationWorkerFactory: workerFactory,
     prepareModelAssets: async () => {},
     ttsWorkerFactory: workerFactory, prepareTranslation: async () => {}, prepareTts: async () => {},
     sourceFactory: id => ({ start() { captures.push(id); }, stop() {} }),
@@ -50,32 +50,32 @@ function fixture(graph, options = {}) {
 }
 
 test('hand-triggered summary is genuinely warm before Start; first Button action uses the same Worker', async t => {
-  const f = fixture(textGraph('TextSummaryLfm2', true)); t.after(() => f.session.close());
+  const f = fixture(textGraph('TextProcessingLfm2', true)); t.after(() => f.session.close());
   f.controls.hold = true;
   const preparing = f.session.prepareModels(); await turn();
   assert.equal(f.session.view.modelState, 'preparing');
   assert.match(f.session.view.modelStatus, /Preparing models…/);
   await f.session.start(); assert.equal(f.session.session, undefined);
   assert.equal(f.workers.length, 1); assert.equal(f.messages('load').length, 1);
-  assert.equal(f.messages('summarize').length, 0); assert.deepEqual(f.session.view.displays, {});
+  assert.equal(f.messages('process').length, 0); assert.deepEqual(f.session.view.displays, {});
   f.workers[0].reply(f.workers[0].messages[0]); await preparing;
   const runtime = f.session.prepared.pipeline, worker = f.workers[0];
   assert.equal(f.session.view.modelState, 'ready'); assert.equal(runtime.state, 'idle');
   await f.session.start(); await turn();
   assert.equal(f.session.session.pipeline, runtime); assert.equal(f.workers[0], worker);
-  assert.equal(f.messages('load').length, 1); assert.equal(f.messages('summarize').length, 0);
+  assert.equal(f.messages('load').length, 1); assert.equal(f.messages('process').length, 0);
   assert.equal(await f.session.pressButton('button'), true);
-  assert.equal(f.messages('summarize').length, 1); assert.equal(f.messages('load').length, 1);
+  assert.equal(f.messages('process').length, 1); assert.equal(f.messages('load').length, 1);
   assert.equal(domText(f.session.view.displays.display.input1), 'Summary');
   f.controls.hold = false;
   await f.session.stop();
   assert.equal(worker.released, true); assert.equal(f.session.view.modelState, 'ready');
-  assert.equal(f.workers.length, 2); assert.equal(f.messages('summarize').length, 1);
+  assert.equal(f.workers.length, 2); assert.equal(f.messages('process').length, 1);
 });
 
 test('file preparation precedes Worker allocation and Ready still waits for runtime initialization', async t => {
   let finishFiles;
-  const graph = textGraph(); graph.nodes.push(graphNode('TextSummaryQwen35', 'parked'));
+  const graph = textGraph(); graph.nodes.push(graphNode('TextProcessingQwen35', 'parked'));
   const f = fixture(graph, { prepareModelAssets: async (graph, { onChange }) => {
     assert.equal(graph.nodes.some(node => node.id === 'parked'), false);
     onChange({ title: 'Required model' }, { state: 'Downloading', downloadedBytes: 10, totalBytes: 20 });
@@ -88,7 +88,7 @@ test('file preparation precedes Worker allocation and Ready still waits for runt
   assert.deepEqual(f.workers, []); assert.deepEqual(f.captures, []); assert.deepEqual(f.outputs, []);
   finishFiles(); await turn();
   assert.equal(f.session.view.modelState, 'preparing'); assert.equal(f.workers.length, 1);
-  assert.deepEqual(f.messages('summarize'), []);
+  assert.deepEqual(f.messages('process'), []);
   f.workers[0].reply(f.workers[0].messages[0]); await preparing;
   assert.equal(f.session.view.modelState, 'ready');
 });
@@ -131,15 +131,15 @@ test('Web dictation can retain cache-only preflight without opting into Live dow
 
 test('multi-model graph initializes every executable instance without inference/output; parked models stay inert', async t => {
   const graph = textGraph();
-  for (const type of ['TextSummaryQwen35', 'IfCondition', 'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Supertonic3', 'Kokoro', 'Qwen3TtsStreaming', 'CosyVoice3Streaming']) {
+  for (const type of ['TextProcessingQwen35', 'IfCondition', 'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Supertonic3', 'Kokoro', 'Qwen3TtsStreaming', 'CosyVoice3Streaming']) {
     graph.nodes.push(graphNode(type, type));
-    graph.edges.push(edge('source', 'value', type, 'text'));
-    const output = ['Supertonic3', 'Kokoro'].includes(type) ? 'audio' : type.endsWith('Streaming') ? 'stream' : type === 'IfCondition' ? 'yes' : type.startsWith('TextSummary') ? 'summary' : 'text';
+    graph.edges.push(edge('source', 'value', type, type.startsWith('TextProcessing') ? 'input1' : 'text'));
+    const output = ['Supertonic3', 'Kokoro'].includes(type) ? 'audio' : type.endsWith('Streaming') ? 'stream' : type === 'IfCondition' ? 'yes' : type.startsWith('TextProcessing') ? 'result' : 'text';
     const sink = output === 'audio' ? 'AudioOutput' : output === 'stream' ? 'SpeakerOutput' : 'Display';
     graph.nodes.push(graphNode(sink, type + '-out'));
     graph.edges.push(edge(type, output, type + '-out', sink === 'Display' ? 'input1' : 'audio'));
   }
-  graph.nodes.push(graphNode('TextSummaryLfm2', 'parked'), graphNode('MicrophoneAudio', 'parked-mic'));
+  graph.nodes.push(graphNode('TextProcessingLfm2', 'parked'), graphNode('MicrophoneAudio', 'parked-mic'));
   const f = fixture(graph, { prepareTranslateGemma: async () => {} }); t.after(() => f.session.close());
   await f.session.prepareModels();
   assert.equal(f.session.view.error, ''); assert.equal(f.session.view.modelState, 'ready');
@@ -173,7 +173,7 @@ test('saved changes during preparation dispose obsolete Workers and reject late 
 });
 
 test('saved edits never hot-swap an active graph; Stop prepares the latest saved graph', async t => {
-  const f = fixture(textGraph('TextSummaryLfm2', true)); t.after(() => f.session.close());
+  const f = fixture(textGraph('TextProcessingLfm2', true)); t.after(() => f.session.close());
   await f.session.prepareModels(); await f.session.start();
   const owner = f.session.session;
   f.session.setGraph(textGraph('IfCondition'));
@@ -183,7 +183,7 @@ test('saved edits never hot-swap an active graph; Stop prepares the latest saved
 });
 
 test('repeated Start/Stop/Cancel/close release each owner; concurrent prepares and Starts allocate only once', async () => {
-  const f = fixture(textGraph('TextSummaryLfm2', true));
+  const f = fixture(textGraph('TextProcessingLfm2', true));
   const first = f.session.prepareModels(); assert.equal(f.session.prepareModels(), first); await first;
   for (const end of ['stop', 'cancel', 'stop']) {
     const before = f.workers.length, owner = f.session.prepared;
@@ -246,15 +246,15 @@ test('eviction between file preparation and runtime initialization blocks readin
 });
 
 test('multiple same-model instances keep separate state and transfer each ready Worker once', async t => {
-  const graph = textGraph('TextSummaryLfm2', true);
-  graph.nodes.push(graphNode('TextSummaryLfm2', 'second'), graphNode('Display', 'second-display'));
-  graph.edges.push(edge('held', 'value', 'second', 'text'), edge('second', 'summary', 'second-display', 'input1'));
+  const graph = textGraph('TextProcessingLfm2', true);
+  graph.nodes.push(graphNode('TextProcessingLfm2', 'second'), graphNode('Display', 'second-display'));
+  graph.edges.push(edge('held', 'value', 'second', 'input1'), edge('second', 'result', 'second-display', 'input1'));
   const f = fixture(graph); t.after(() => f.session.close());
   await f.session.prepareModels(); assert.equal(f.workers.length, 2);
   const first = f.session.prepared.pipeline.entries.get('model').node, second = f.session.prepared.pipeline.entries.get('second').node;
   assert.notEqual(first.worker, second.worker); assert.notEqual(first.pending, second.pending);
   await f.session.start(); await turn(); await f.session.pressButton('button');
-  assert.equal(f.messages('load').length, 2); assert.equal(f.messages('summarize').length, 2);
+  assert.equal(f.messages('load').length, 2); assert.equal(f.messages('process').length, 2);
 });
 
 for (const close of [false, true]) test(`successive Saves retain pending teardown${close ? ' through close' : ' before Ready'}`, async () => {
@@ -264,7 +264,7 @@ for (const close of [false, true]) test(`successive Saves retain pending teardow
   const dispose = node.dispose.bind(node); let release;
   node.dispose = () => new Promise(resolve => { release = () => { dispose(); resolve(); }; });
   f.session.setGraph(textGraph('IfCondition')); await turn();
-  f.session.setGraph(textGraph('TextSummaryQwen35')); await turn();
+  f.session.setGraph(textGraph('TextProcessingQwen35')); await turn();
   assert.equal(f.workers.length, 1); assert.equal(f.workers[0].released, false);
   assert.equal(f.session.view.modelState, 'preparing');
   let closed = false;
@@ -278,7 +278,7 @@ for (const close of [false, true]) test(`successive Saves retain pending teardow
 });
 
 test('a Save during Cancel waits for the old GPU owner to finish releasing before allocating replacements', async t => {
-  const f = fixture(textGraph('TextSummaryLfm2', true)); t.after(() => f.session.close());
+  const f = fixture(textGraph('TextProcessingLfm2', true)); t.after(() => f.session.close());
   await f.session.prepareModels(); await f.session.start();
   const node = f.session.session.pipeline.entries.get('model').node;
   const dispose = node.dispose.bind(node); let release;
@@ -335,7 +335,7 @@ test('identical graphs assigned different library IDs have separate preparation 
 });
 
 for (const end of ['stop', 'cancel']) test(`named Live assignment during active session applies only after ${end}`, async t => {
-  const f = fixture(textGraph('TextSummaryLfm2', true), { graphId: 'a', graphName: 'Meeting Notes' }); t.after(() => f.session.close());
+  const f = fixture(textGraph('TextProcessingLfm2', true), { graphId: 'a', graphName: 'Meeting Notes' }); t.after(() => f.session.close());
   await f.session.prepareModels(); await f.session.start();
   const owner = f.session.session, snapshot = structuredClone(f.session.view.activeSavedGraph);
   f.session.setGraph(textGraph('IfCondition'), { id: 'b', name: 'Different graph' });
@@ -346,7 +346,7 @@ for (const end of ['stop', 'cancel']) test(`named Live assignment during active 
 });
 
 test('an unavailable next assignment never prepares the previous saved graph after Stop', async t => {
-  const f = fixture(textGraph('TextSummaryLfm2', true), { graphId: 'a', graphName: 'Graph A' }); t.after(() => f.session.close());
+  const f = fixture(textGraph('TextProcessingLfm2', true), { graphId: 'a', graphName: 'Graph A' }); t.after(() => f.session.close());
   await f.session.prepareModels(); await f.session.start(); const active = f.session.session;
   f.session.invalidateGraph(Error('Assigned graph is corrupt'));
   assert.equal(f.session.session, active); assert.equal(f.workers.length, 1);
@@ -425,7 +425,7 @@ test('model failure, worker failure and late canceled preparation affect only th
 });
 
 test('one session awaiting Stop disposal does not delay another session preparing and starting', async t => {
-  const a = fixture(textGraph('TextSummaryLfm2', true)), b = fixture(textGraph());
+  const a = fixture(textGraph('TextProcessingLfm2', true)), b = fixture(textGraph());
   let release;
   t.after(() => { release?.(); return Promise.all([a.session.close(), b.session.close()]); });
   await a.session.prepareModels(); await a.session.start();

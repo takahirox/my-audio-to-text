@@ -11,7 +11,7 @@ const categoryTypes = {
     'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'Plamo3Translate2B',
   ],
   'AI Models / Text': [
-    'TextSummaryLfm2', 'TextSummaryQwen35', 'IfCondition',
+    'TextProcessingLfm2', 'TextProcessingQwen35', 'IfCondition',
   ],
   'AI Models / Speech Synthesis': [
     'Supertonic3', 'Kokoro', 'Qwen3TtsStreaming', 'CosyVoice3Streaming',

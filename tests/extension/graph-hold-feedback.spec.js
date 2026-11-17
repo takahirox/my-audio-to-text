@@ -17,11 +17,11 @@ test('MV3 imports and reloads Hold feedback; real Worker replies serialize A/B/C
       const queue = []; let count = 0;
       self.onmessage = ({ data }) => {
         if (data.type === 'load') postMessage({ type: 'ready', id: data.id });
-        if (data.type === 'summarize') queue.push(data);
+        if (data.type === 'process') queue.push(data);
         if (data.type === 'complete') {
           const job = queue.shift();
-          if (job.text.includes('FAIL')) postMessage({ type: 'error', id: job.id, message: 'Controlled inference failure' });
-          else postMessage({ type: 'result', id: job.id, summary: ++count === 1 ? 'S1' : 'same' });
+          if (job.inputs[0].includes('FAIL')) postMessage({ type: 'error', id: job.id, message: 'Controlled inference failure' });
+          else postMessage({ type: 'result', id: job.id, result: ++count === 1 ? 'S1' : 'same' });
         }
       };
     `);
@@ -58,10 +58,10 @@ test('MV3 imports and reloads Hold feedback; real Worker replies serialize A/B/C
       addEventListener('securitypolicyviolation', e => violations.push(e.violatedDirective));
       window.fresh = async () => {
         window.workers = [];
-        const built = buildGraph(graph, { textSummaryWorkerFactory: url => {
+        const built = buildGraph(graph, { textProcessingWorkerFactory: url => {
           const worker = new Worker(url, { type: 'module' });
           const post = worker.postMessage.bind(worker), terminate = worker.terminate.bind(worker);
-          worker.postMessage = data => { if (data.type === 'summarize') sent.push(data.text); post(data); };
+          worker.postMessage = data => { if (data.type === 'process') sent.push(data.inputs[0]); post(data); };
           worker.terminate = () => { worker.released = true; terminate(); };
           worker.onerror = error => workerErrors.push(error.message);
           workers.push(worker); return worker;

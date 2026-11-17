@@ -11,7 +11,7 @@ const readWindowGraph = () => readSelectedGraph(localStorage, selectedGraphId);
 const element = id => document.getElementById(id);
 const stateChannel = new BroadcastChannel('live-graph-state');
 function renderDiagnostics(view) {
-  for (const [id, text] of [['signal', view.signal], ['translation-status', view.translationStatus], ['summary-status', view.summaryStatus], ['condition-status', view.conditionStatus], ['hold-status', view.holdStatus], ['tts-status', view.ttsStatus], ['speaker-status', view.speakerStatus], ['output-status', view.outputStatus]]) {
+  for (const [id, text] of [['signal', view.signal], ['translation-status', view.translationStatus], ['processing-status', view.processingStatus], ['condition-status', view.conditionStatus], ['hold-status', view.holdStatus], ['tts-status', view.ttsStatus], ['speaker-status', view.speakerStatus], ['output-status', view.outputStatus]]) {
     element(id).textContent = text;
   }
 }

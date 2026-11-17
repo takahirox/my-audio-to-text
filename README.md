@@ -10,12 +10,15 @@ The Chrome extension also supports [local IfCondition branching](docs/if-conditi
 edit a natural-language condition and route the original TEXT to Yes or No with
 a small browser-local classifier. Auto Save prepares its verified 14 MB model.
 
-The extension also has independent [LFM2.5 1.2B JP and Qwen3.5 2B text-summary
-processors](docs/text-summary-nodes.md). Summarize arbitrary TEXT with a
-multiline prompt in Settings, using the existing Auto Save-prepared local WebGPU
-models. Compose rolling updates explicitly with TextWindow, TextFormatter and
-Hold. For manual on-demand requests, use a [Live Button and triggered Hold](docs/graph-actions.md). Connect `summary → Display.input1`. Read the recorded accuracy
-limitations before relying on generated facts.
+The extension has independent [Text Processing · LFM2.5 1.2B JP and Qwen3.5 2B
+nodes](docs/text-summary-nodes.md). Set a multiline **System prompt** and **Input
+count (1–32)** in Settings to summarize, proofread, extract, classify or compare
+texts. Connect `input1 … inputN: TEXT` and `result → Display.input1`. Inputs are
+separate user data; the saved prompt defines the task, language and format.
+Models use existing Auto Save-prepared local WebGPU assets. Each TEXT update runs
+inference: control frequency with TextWindow, Hold or a [Live Button](docs/graph-actions.md).
+Rolling history belongs to explicit Hold feedback. Verify AI results against
+the source. Saved Summary graphs receive explicit repair guidance.
 
 A local-first composable processing system that connects reusable input and processing capabilities into pipelines for useful derived information.
 
@@ -128,14 +131,14 @@ composable pipelines
 outputs / derived information
 ```
 
-Future inputs may include files, Web/article text and platform-specific sources alongside today's microphone and tab audio. Future processing capabilities may include summarization, topic extraction/analysis, storage and visualization. These are architectural examples, not implemented features.
+Future inputs may include files, Web/article text and platform-specific sources alongside today's microphone and tab audio. Configurable text processing already supports summary and extraction prompts. Future processing capabilities may include storage and visualization; these remain architectural examples.
 
 See the [architecture guide](docs/processing-pipeline.md) for conceptual nodes, typed ports and examples that distinguish existing behavior from future composition.
 
 ## Near-term direction
 
 - Continue improving the reusable speech-to-text capability, including Japanese recognition, latency and browser usability.
-- Prove a small number of real processors and useful pipelines. Candidates include speech-to-text → translation, committed transcript → incremental summary, or article/text → summary; each needs its own implementation Issue.
+- Evaluate useful pipelines, including speech-to-text → translation, committed transcript → incremental summary, and two-input text comparison, against representative inputs.
 - Extend the minimal Node/port contract only when a concrete next processor requires it, using the existing audio-source and Local ASR Core boundaries as a foundation.
 - Develop personalized ASR data, correction and evaluation work as an independently evolving capability.
 

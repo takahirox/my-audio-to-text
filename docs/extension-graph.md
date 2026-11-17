@@ -448,7 +448,7 @@ uses arrival order alone, with no stage or model-specific priority.
 
 Final-only ASRs omit the provisional branch. For append-only plain text, use
 `ASR.final → TextAccumulator.append → text → Display.input1`. Any complete TEXT
-snapshot, including `TextSummary.summary`, can connect directly to Display.
+snapshot, including `TextProcessing.result`, can connect directly to Display.
 
 See [portable display items](display-items.md) for contracts, exact wiring,
 snapshot ownership and lifecycle, and [ID-scoped pairing](keyed-text-history.md)
@@ -596,7 +596,7 @@ are optional strings up to 120 characters; blank/missing labels use `Input 1`,
 (blank uses `Display <Node ID>`). Auto Save applies settings changes next session.
 
 Connect transcript history to Display.input1, translated text to Display.input2,
-and TextSummary.summary to Display.input3 on **one Display**. Import the
+and TextProcessing.result to Display.input3 on **one Display**. Import the
 [model-free example](examples/display-tabs.json) to try these three switchable
 tabs using literal Text sources, then connect your preferred upstream processors.
 Every delivery replaces only that input's complete snapshot. No inference,
@@ -656,7 +656,7 @@ NUMBER output to any compatible consumer. Live renders active buttons by Node ID
 in Graph Actions below Start/Stop, with keyboard/touch access and bounded busy
 handling.
 For manual summaries, connect Button.trigger → Hold.trigger, accumulated text →
-Hold.input and Hold.value → TextSummary.text. A connected trigger makes value an
+Hold.input and Hold.value → TextProcessing.input1. A connected trigger makes value an
 ordinary emitted output; without it the original sampled feedback mode remains.
 See [Graph Actions](graph-actions.md) and the [example graph](examples/manual-text-summary.json).
 

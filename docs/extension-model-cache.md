@@ -1,6 +1,6 @@
 # Extension Models and model-asset cache (#67 / #77)
 
-[Text Summary · LFM2.5 1.2B JP and Qwen3.5 2B](text-summary-nodes.md)
+[Text Processing · LFM2.5 1.2B JP and Qwen3.5 2B](text-summary-nodes.md)
 have independent Auto Save preparation and Models cards (749 MB / 1.403 GB),
 including parked Nodes. Both require WebGPU shader-f16 and several GB of free
 RAM/GPU memory per active Node. LFM 1.0 commercial-use conditions apply; see the
@@ -11,7 +11,7 @@ models before enabling Start.
 Build/load the extension as described in [the extension guide](chrome-extension.md).
 Open **Models** from Graph Library, Graph Editor or Live.
 The Models page manages both language-specific Moonshine streaming recognizers,
-both OPUS-MT directions, TranslateGemma, text summary, IfCondition and all speech
+both OPUS-MT directions, TranslateGemma, text processing, IfCondition and all speech
 synthesis families. Japanese Kokoro additionally prepares its OpenJTalk frontend
 voice. No model has a Bundled status.
 The **Models** heading identifies the page; its header navigation contains only

@@ -12,7 +12,7 @@ releases resources. Pages show genuine provisional and final output, loading tim
 and replay/inference time. Neither model detects or switches languages.
 
 Translation pages test OPUS-MT in each direction and TranslateGemma. Text pages
-test both summary models and IfCondition. Speech synthesis pages test Kokoro,
+test both text processing models and IfCondition. Speech synthesis pages test Kokoro,
 Supertonic 3, Qwen3-TTS and CosyVoice3. Experimental transcript correction has its
 own page. All inference stays on the device; only explicit actions start downloads.
 GPU models require supported desktop WebGPU hardware and sufficient memory.

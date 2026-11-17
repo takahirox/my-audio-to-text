@@ -25,15 +25,15 @@ test.beforeEach(async ({ page }) => {
     window.editor = new GraphEditor(document.querySelector('#editor'), graph, {});
     window.aiFacts = Object.entries(NODE_TYPES).filter(([,definition])=>definition.ai).map(([type,definition])=>({
       type, label: definition.label, ...definition.ai,
-      controls: Object.keys(definition.settings || {}).length + Object.keys(definition.textSettings || {}).length,
+      controls: Object.keys(definition.settings || {}).length + Object.keys(definition.textSettings || {}).length + (type.startsWith('TextProcessing') ? 1 : 0),
     }));
   });
 });
-for (const width of [1440, 320]) test(`all 16 AI cards, palette results and Settings facts at ${width}px`, async ({ page }, info) => {
+for (const width of [1440, 320]) test(`all AI cards, palette results and Settings facts at ${width}px`, async ({ page }, info) => {
   await page.setViewportSize({ width, height: 900 });
   const facts = await page.evaluate(() => window.aiFacts);
   const inspector = page.locator('.graph-inspector');
-  await expect(page.locator('.graph-node .graph-ai-icon')).toHaveCount(16);
+  await expect(page.locator('.graph-node .graph-ai-icon')).toHaveCount(facts.length);
   for (const fact of facts) {
     const heading = page.locator(`[data-node="${fact.type}"] .graph-heading`);
     await expect(heading).toHaveAccessibleName(`Select ${fact.type}: ${fact.label} · ${fact.model} · AI`);
@@ -68,7 +68,7 @@ for (const width of [1440, 320]) test(`all 16 AI cards, palette results and Sett
   await page.locator('#graph-palette-toggle').click();
   const search = page.getByRole('combobox', { name: 'Search nodes' });
   await expect(search).toBeFocused();
-  await expect(page.locator('.graph-node-option .graph-ai-icon')).toHaveCount(16);
+  await expect(page.locator('.graph-node-option .graph-ai-icon')).toHaveCount(facts.length);
   for (const fact of facts) {
     await search.fill(fact.model);
     const option = page.locator(`[id="graph-option-${fact.type}"]`);
@@ -77,12 +77,12 @@ for (const width of [1440, 320]) test(`all 16 AI cards, palette results and Sett
     await expect(option.locator('.graph-node-model')).toHaveText(fact.model);
     expect(await option.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   }
-  await search.fill('Text Summarization');
+  await search.fill('Text Processing');
   await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(2);
   await expect(page.locator('.graph-node-option .graph-node-model')).toHaveText(['LFM2.5 1.2B JP', 'Qwen3.5 2B']);
   await search.press('ArrowDown');
-  await expect(search).toHaveAttribute('aria-activedescendant', 'graph-option-TextSummaryQwen35');
-  await expect(page.locator('#graph-option-TextSummaryQwen35')).toHaveAttribute('aria-selected', 'true');
+  await expect(search).toHaveAttribute('aria-activedescendant', 'graph-option-TextProcessingQwen35');
+  await expect(page.locator('#graph-option-TextProcessingQwen35')).toHaveAttribute('aria-selected', 'true');
   await search.press('Escape'); await expect(page.locator('#graph-palette-toggle')).toBeFocused();
   expect(await page.evaluate(() => JSON.stringify(window.editor.draft) === window.originalJSON)).toBe(true);
   await page.locator('#graph-fit').click();
