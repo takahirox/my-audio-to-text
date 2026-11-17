@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { domText } from './fixtures/dom.js';
-import { graphNode, defaultGraph, edge, assertGraph, nodeDefinition, executableGraph } from '../extension/graph.js';
+import { graphNode, defaultGraph, edge, assertGraph, nodeDefinition, executableGraph, graphExecutionFingerprint } from '../extension/graph.js';
 import { extractSubgraph, assertSubgraph, assertExtractionPorts, resolveSubgraphs, references } from '../extension/subgraphs.js';
 import { GraphLibrary, openLibrary, readLibrary, entryGraph, entryError, exportEntry, resolvedEntryGraph, readLiveGraph, LIBRARY_KEY } from '../extension/graph-library.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
@@ -21,6 +21,21 @@ function parent(source = 'ChromeTabAudio', sink = 'Display') {
   return { version: 15, nodes: [graphNode(source, 'audio'), graphNode('TextFormatter', 'language'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode(sink, 'output')],
     edges: [edge('audio', 'audio', 'asr', 'audio'), edge('asr', 'final', 'language', 'input1'), edge('language', 'text', 'output', sink === 'Display' ? 'input1' : 'text')] };
 }
+
+test('resolved subgraph layout is execution-equivalent while settings and exposed routes still change semantics', () => {
+  const extracted = extractSubgraph(parent(), ['language'], 'shared');
+  const definitions = [{ id: 'shared', kind: 'subgraph', graph: extracted.shared }];
+  const fingerprint = () => graphExecutionFingerprint(resolveSubgraphs(extracted.parent, definitions));
+  const original = fingerprint();
+  definitions[0].graph.nodes[0].position.x += 50;
+  extracted.parent.nodes.find(node => node.type === 'Subgraph').position.y += 50;
+  assert.equal(fingerprint(), original);
+  definitions[0].graph.nodes[0].settings.template = 'New: {1}';
+  assert.notEqual(fingerprint(), original);
+  const changed = fingerprint();
+  definitions[0].graph.interface.inputs[0].port = 'input2';
+  assert.notEqual(fingerprint(), changed);
+});
 async function sharedFixture() {
   const f = await fixture(), source = parent(); source.nodes[1].settings.template = '{1}';
   const extracted = extractSubgraph(source, ['language', 'asr'], 'shared-asr');

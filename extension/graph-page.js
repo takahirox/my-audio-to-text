@@ -1,7 +1,7 @@
 import { defaultGraph, GRAPH_KEY, GRAPH_VERSION } from './graph.js';
 import { GraphLibrary, LIBRARY_KEY, openLibrary, readLibrary, entryGraph, resolvedEntryGraph, entryError, exportEntry, exportDraft, legacyChanged } from './graph-library.js';
 import { GraphEditor } from './graph-editor.js';
-import { GraphModelPreparation } from './graph-model-preparation.js';
+import { GraphModelPreparation, graphModelRequirementsFingerprint } from './graph-model-preparation.js';
 import { GraphDraftSession, recoveryDrafts, acquireGraphLease } from './graph-draft-session.js';
 
 const element = id => document.getElementById(id);
@@ -99,7 +99,10 @@ async function openEditor() {
   let preparationTimer, closed = false;
   function updatePreparation({ inspect = false } = {}) {
     if (closed || conflict || legacyConflict || invalidSaved) return;
-    try { preparation.replace(resolvedEntryGraph(entry, library), { inspect }); }
+    try {
+      const graph = resolvedEntryGraph(entry, library);
+      if (graphModelRequirementsFingerprint(graph) !== preparation.requirementsFingerprint) preparation.replace(graph, { inspect });
+    }
     catch (error) { preparation.clear(); showModelWarning(`Saved graph model preparation unavailable: ${error.message}.`); }
   }
   function schedulePreparation({ inspect = false } = {}) {

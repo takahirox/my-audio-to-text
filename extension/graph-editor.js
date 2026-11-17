@@ -5,7 +5,7 @@ import { MAX_DISPLAY_INPUTS } from '../web/display-node.js';
 import { createWireRouter, reusableWireRoute, wireColor, wireDistance } from './graph-wire-router.js';
 import { compatiblePorts } from '../web/port-contracts.js';
 import { PALETTE_CATEGORIES, groupPaletteEntries } from './graph-palette.js';
-import { NODE_TYPES, nodeDefinition, portDisplayEntries, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph } from './graph.js';
+import { NODE_TYPES, nodeDefinition, portDisplayEntries, graphNode, defaultGraph, edge, validateGraph, graphWarnings, assertGraph, graphExecutionFingerprint } from './graph.js';
 
 const el = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -682,7 +682,7 @@ export class GraphEditor {
     this.updateValidationState();
     let savedSnapshot = this.saved;
     try { if (this.saved) savedSnapshot = resolveSubgraphs(this.saved, this.definitions); } catch { /* Show the pending warning if a dependency becomes invalid. */ }
-    const running = this.state && this.state !== 'idle', pending = running && JSON.stringify(this.active) !== JSON.stringify(savedSnapshot);
+    const running = this.state && this.state !== 'idle', pending = running && graphExecutionFingerprint(this.active) !== graphExecutionFingerprint(savedSnapshot);
     const summary = this.readOnly ? 'Read-only' : this.saveState || (this.isDirty() ? 'Saving…' : 'Saved');
     if (this.summary.textContent !== summary) this.summary.textContent = summary;
     if (this.activity.textContent !== 'Active') this.activity.textContent = 'Active';

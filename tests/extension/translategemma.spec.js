@@ -1,5 +1,5 @@
 import { expectGraphModelsReady, settleAutoSave } from './ui-controls.js';
-import { readFile, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect, openGraph } from './graph-fixture.js';
 import { openPalette } from './ui-controls.js';
@@ -10,6 +10,129 @@ async function add(editor, type) {
 async function save(editor) {
   await settleAutoSave(editor);
 }
+
+test('layout Auto Saves preserve cached Gemma/Moonshine, Ready and running Live across storage events', async ({ graphExtension: f }) => {
+  // Count real shared-cache hash scans as well as the Window-facing calls.
+  // The fixture uses tiny verified bytes and controlled inference, never weights.
+  await appendFile(path.join(f.root, 'extension/model-asset-worker.js'), `
+    let fixtureScans = 0;
+    const fixtureScan = ModelAssetCache.prototype.scan;
+    ModelAssetCache.prototype.scan = function(...args) { fixtureScans++; return fixtureScan.apply(this, args); };
+    self.addEventListener('connect', ({ ports: [port] }) => {
+      port.addEventListener('message', ({ data }) => {
+        if (data.type !== 'fixture-scans') return;
+        port.postMessage({ scans: fixtureScans }); port.close();
+      });
+    });
+  `);
+  const host = await openGraph(f, { live: false }), editor = host.editor;
+  await editor.evaluate(async () => {
+    const { graphNode, edge, GRAPH_VERSION } = await import('./graph.js');
+    const graph = { version: GRAPH_VERSION,
+      nodes: [graphNode('ChromeTabAudio', 'audio', 20, 20), graphNode('SpeechToTextMoonshineMediumEn', 'speech', 320, 20),
+        graphNode('TranslateGemma4B', 'translation', 620, 20), graphNode('Display', 'display', 920, 20)],
+      edges: [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'translation', 'text'), edge('translation', 'text', 'display', 'input1')] };
+    await (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph);
+  });
+  await editor.reload();
+  await host.models.locator('#translategemma').getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
+  await host.models.locator('#moonshine-medium-en').getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
+  await expectGraphModelsReady(editor);
+  const live = await f.context.newPage(); await live.goto(f.url + '?tab=42');
+  await expect(live.locator('#model-status')).toHaveText('Ready');
+  await live.evaluate(async () => {
+    const { ExtensionTabAudioNode } = await import('./tab-audio-node.js');
+    ExtensionTabAudioNode.prototype.start = function() {};
+    ExtensionTabAudioNode.prototype.stop = function() {};
+    const { TabSession } = await import('./session.js');
+    const setGraph = TabSession.prototype.setGraph;
+    TabSession.prototype.setGraph = function(...args) {
+      window.layoutSession = this;
+      window.layoutOwner ||= this.prepared || this.session;
+      return setGraph.apply(this, args);
+    };
+  });
+  const viewer = await f.context.newPage(); await viewer.goto(editor.url());
+  await expect(viewer.locator('#graph-state')).toHaveText('Read-only');
+  await expectGraphModelsReady(viewer);
+  for (const page of [editor, viewer, live]) await page.evaluate(async () => {
+    window.layoutChecks = { inspect: 0, prepare: 0, replace: 0, prepareModels: 0 };
+    const { ModelAssetCache } = await import('./model-asset-cache.js');
+    const { GraphModelPreparation } = await import('./graph-model-preparation.js');
+    const { TabSession } = await import('./session.js');
+    for (const [prototype, methods] of [[ModelAssetCache.prototype, ['inspect', 'prepare']],
+      [GraphModelPreparation.prototype, ['replace']], [TabSession.prototype, ['prepareModels']]]) {
+      for (const name of methods) {
+        const method = prototype[name];
+        prototype[name] = function(...args) { layoutChecks[name]++; return method.apply(this, args); };
+      }
+    }
+  });
+  await live.evaluate(() => window.dispatchEvent(new Event('focus')));
+  const scans = () => editor.evaluate(() => new Promise(resolve => {
+    const worker = new SharedWorker(new URL('./model-asset-worker.js', location.href), { type: 'module', name: 'model-assets' });
+    worker.port.onmessage = ({ data }) => { worker.port.close(); resolve(data.scans); };
+    worker.port.postMessage({ type: 'fixture-scans' });
+  }));
+  const entry = () => editor.evaluate(() => {
+    const library = JSON.parse(localStorage.getItem('processing-graph-library-v1'));
+    return library.graphs.find(entry => entry.id === library.assignments.live);
+  });
+  const baseline = await scans(), downloads = f.requests.length, original = await entry();
+  const assertCheap = async () => {
+    expect(await scans()).toBe(baseline); expect(f.requests).toHaveLength(downloads);
+    for (const page of [editor, viewer, live]) expect(await page.evaluate(() => layoutChecks)).toEqual({ inspect: 0, prepare: 0, replace: 0, prepareModels: 0 });
+    expect(await live.evaluate(() => graphWorkers.length === 2 && graphWorkers.every(worker => !worker.released))).toBe(true);
+    expect(await live.evaluate(() => (layoutSession.prepared || layoutSession.session) === layoutOwner)).toBe(true);
+    await expect(live.locator('#saved-state')).toBeEmpty();
+    await expect(editor.locator('.graph-state-notice')).toBeHidden();
+  };
+  const savePosition = async action => {
+    const previous = await entry(); await action(); await save(editor);
+    await expect.poll(async () => (await entry()).revision).not.toBe(previous.revision);
+    const saved = await entry();
+    expect(saved.graph.edges).toEqual(original.graph.edges);
+    expect(saved.graph.nodes.map(({ position, ...node }) => node)).toEqual(original.graph.nodes.map(({ position, ...node }) => node));
+    await expect(viewer.locator('[data-node=audio]')).toHaveCSS('left', `${saved.graph.nodes[0].position.x}px`);
+    await expect.poll(() => live.evaluate(() => layoutSession.graph.nodes[0].position)).toEqual(saved.graph.nodes[0].position);
+    await assertCheap();
+  };
+  const heading = editor.getByRole('button', { name: 'Select audio', exact: true });
+  await savePosition(async () => {
+    const box = await heading.boundingBox();
+    await editor.mouse.move(box.x + 15, box.y + 15); await editor.mouse.down();
+    await editor.mouse.move(box.x + 65, box.y + 45, { steps: 8 }); await editor.mouse.up();
+  });
+  await expect(live.locator('#model-status')).toHaveText('Ready'); await expect(live.locator('#start')).toBeEnabled();
+  await savePosition(() => heading.press('ArrowRight'));
+  await savePosition(() => editor.locator('#graph-undo').click());
+  await savePosition(() => editor.locator('#graph-redo').click());
+  const savedRevision = (await entry()).revision;
+  await heading.click(); await editor.locator('#graph-zoom-in').click();
+  await editor.locator('.graph-scroll').evaluate(element => { element.scrollLeft += 20; });
+  expect((await entry()).revision).toBe(savedRevision); await assertCheap();
+  await live.locator('#start').click(); await expect(live.locator('#session-state')).toHaveText('Recording');
+  await savePosition(() => heading.press('ArrowDown'));
+  await expect(editor.locator('.graph-activity')).toBeVisible();
+  await expect(live.locator('#session-state')).toHaveText('Recording');
+  await live.evaluate(() => graphWorkers.find(worker => /moonshine-medium-worker/.test(worker.url)).postMessage({ type: 'fixture-final', id: 'first', text: 'Hello' }));
+  await expect(live.locator('#live-displays')).toContainText('English: Hello');
+  await assertCheap();
+  // A real connection edit must still warn, while keeping the started snapshot.
+  await editor.getByRole('button', { name: 'speech output provisional', exact: true }).press('Enter');
+  await editor.getByRole('button', { name: 'translation input text', exact: true }).press('Enter');
+  await save(editor);
+  await expect(live.locator('#saved-state')).toContainText('changes apply on Start');
+  await expect(editor.locator('.graph-state-notice')).toContainText('earlier graph');
+  expect(await live.evaluate(() => layoutSession.session === layoutOwner)).toBe(true);
+  expect(await editor.evaluate(() => layoutChecks.replace)).toBe(0);
+  await live.locator('#stop').click(); await expect(live.locator('#model-status')).toHaveText('Ready');
+  await live.locator('#start').click(); await expect(live.locator('#session-state')).toHaveText('Recording');
+  await expect(live.locator('#saved-state')).toBeEmpty();
+  await expect(editor.locator('.graph-state-notice')).toBeHidden();
+  expect(await live.evaluate(() => layoutSession.session.description.edges.some(edge => edge.from[1] === 'provisional'))).toBe(true);
+  expect((await entry()).graph.nodes[0].position).not.toEqual(original.graph.nodes[0].position);
+});
 
 test('palette, Save and reload preserve current connected graph and optional language ports; shared verified preparation and recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;

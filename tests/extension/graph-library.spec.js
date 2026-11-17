@@ -312,6 +312,10 @@ test('toolbar activity follows only the running graph ID across snapshot saves, 
   await expect(editorA.locator('.graph-state-notice')).toBeHidden();
   await settleAutoSave(editorA);
   await expect(editorA.locator('#graph-state')).toHaveText('Saved');
+  await expect(editorA.locator('.graph-state-notice')).toBeHidden();
+  await expect(live.locator('#saved-state')).toBeEmpty();
+  await editorA.getByLabel('source value', { exact: true }).fill('Next session A');
+  await settleAutoSave(editorA);
   await expect(editorA.locator('.graph-state-notice')).toContainText('earlier graph; saved edits apply next session');
   await expect(badgeA).toBeVisible(); await expect(badgeB).toBeHidden();
   await expect(live.locator('#live-displays')).toContainText('A');

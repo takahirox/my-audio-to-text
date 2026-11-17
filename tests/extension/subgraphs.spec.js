@@ -36,7 +36,21 @@ test('toolbar parent windows resolve shared edits on next Start while independen
   await expect(live.locator('#live-displays')).toContainText('Before: A');
   await expect(parentEditor.locator('.graph-state-notice')).toBeHidden();
   const shared = await context.newPage(); await shared.goto(url + 'graph-editor.html?id=shared');
-  await shared.getByRole('button', { name: 'Select format', exact: true }).click();
+  const sharedBefore = (await library(page)).graphs.find(entry => entry.id === 'shared');
+  for (const window of [live, other, parentEditor]) await window.evaluate(() => {
+    window.layoutStorage = new Promise(resolve => addEventListener('storage', resolve, { once: true }));
+  });
+  await shared.getByRole('button', { name: 'Select format', exact: true }).press('ArrowRight');
+  await settleAutoSave(shared);
+  const sharedAfter = (await library(page)).graphs.find(entry => entry.id === 'shared');
+  expect(sharedAfter.revision).not.toBe(sharedBefore.revision);
+  expect(sharedAfter.graph.nodes[0].position.x).toBe(sharedBefore.graph.nodes[0].position.x + 10);
+  for (const window of [live, other, parentEditor]) await window.evaluate(() => layoutStorage.then(() => {}));
+  for (const window of [live, other]) {
+    await expect(window.locator('#session-state')).toHaveText('Running');
+    await expect(window.locator('#saved-state')).toBeEmpty();
+  }
+  await expect(parentEditor.locator('.graph-state-notice')).toBeHidden();
   await shared.getByLabel('format template', { exact: true }).fill('After: {1}');
   await settleAutoSave(shared); await expect(shared.locator('#graph-state')).toHaveText('Saved');
   await expect(live.locator('#live-displays')).toContainText('Before: A');

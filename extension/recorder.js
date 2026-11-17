@@ -1,6 +1,6 @@
 import { TabSession } from './session.js';
 import { renderTextRegions } from './live-text-regions.js';
-import { GRAPH_VERSION, GRAPH_KEY, INPUT_TYPES, executableGraph } from './graph.js';
+import { GRAPH_VERSION, GRAPH_KEY, INPUT_TYPES, executableGraph, graphExecutionFingerprint } from './graph.js';
 import { openLibrary, readLiveGraph, readSelectedGraph, readLibrary, resolvedEntryGraph, LIBRARY_KEY } from './graph-library.js';
 import { audioToWav } from '../web/synthesized-audio.js';
 
@@ -90,7 +90,7 @@ const session = new TabSession(view => {
   const current = view.state !== 'idle' ? view.activeGraph : view.savedGraph;
   const nextGraph = executableGraph(view.savedGraph);
   const running = view.state !== 'idle';
-  const pending = running && (view.activeGraphId !== view.savedGraphId || JSON.stringify(view.activeSavedGraph) !== JSON.stringify(view.savedGraph) || view.activeGraphName !== view.savedGraphName);
+  const pending = running && (view.activeGraphId !== view.savedGraphId || graphExecutionFingerprint(view.activeSavedGraph) !== graphExecutionFingerprint(view.savedGraph) || view.activeGraphName !== view.savedGraphName);
   element('saved-state').textContent = pending ? `Next session: ${view.savedGraphName}. This session keeps ${view.activeGraphName}; changes apply on Start.` : '';
   renderTextRegions(element('live-displays'), view.activeGraph || nextGraph, view.displays);
   element('no-live-displays').hidden = !!element('live-displays').children.length;

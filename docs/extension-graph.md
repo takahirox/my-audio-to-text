@@ -210,8 +210,12 @@ runtime before re-enabling Start. Internal Cancel releases the old owner before
 the same idle restoration. Completed display output remains visible. Each Node
 keeps its own processing state and dedicated Workers; cached immutable files are
 shared, and Start never creates a second copy of its ready models. Repeated
-prepares/Starts coalesce. An Auto Save during idle/preparation invalidates and tears down
-the obsolete owner before preparing the new snapshot. Running sessions retain
+prepares/Starts coalesce. An execution-relevant Auto Save during idle/preparation
+invalidates and tears down the obsolete owner before preparing the new snapshot.
+Position-only saves retain the same prepared instances and Ready state. Drag,
+arrow keys and Undo/Redo still persist coordinates, revisions and recovery data;
+they do not check model files or produce earlier-graph warnings. Resolved shared
+definition layout follows the same rule. Running sessions retain
 their immutable graph until Stop/Cancel. Closing Live releases both pending and
 active resources; verified Cache Storage files persist.
 
@@ -270,10 +274,13 @@ overwrite newer saved revisions. Checkpoints clear only after persistence is
 confirmed. Quota/storage failures remain visible; browser/device storage failure
 can still lose data, so export important drafts.
 
-After successful persistence, required model files (including parked model
-Nodes) prepare asynchronously. Opening a saved graph checks its cached requirements
+After successful persistence, changed model/voice requirements (including parked
+model Nodes) prepare asynchronously. Opening a saved graph checks its cached requirements
 without downloading. Equivalent model/voice identities retain running or verified
 preparations across moves, text edits and Undo. Obsolete requirements are canceled.
+An unchanged missing requirement remains available for explicit Models recovery;
+a coordinate-only Save never initiates a download or verification. First-open,
+focus and cache-update inspections and explicit Retry remain available.
 Graph notices shows missing files and preparation errors without moving the workspace.
 The header Models link opens per-model progress, cancellation, retry and deletion.
 Graph editing and navigation do not wait for downloads. Active Live sessions
