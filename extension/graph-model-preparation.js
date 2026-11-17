@@ -2,8 +2,6 @@ import { japaneseFrontendManifest } from './japanese-frontend-cache.js';
 import { textSummaryManifest } from './text-summary-cache.js';
 import { TEXT_SUMMARY_TYPES, textSummaryModel } from '../web/text-summary-models.js';
 import { ModelAssetCache } from './model-asset-cache.js';
-import { opusMtManifest } from './opus-mt-manifest.js';
-import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
 import { translateGemmaManifest } from './translategemma-cache.js';
 import { plamoManifest } from './plamo-cache.js';
 import { moonshineManifest, moonshineJapaneseManifest } from './optional-asr-cache.js';
@@ -27,8 +25,6 @@ export function graphModelRequirements(graph) {
         : ' · 1.403 GB · allow 3 GB storage, 6 GB free RAM/GPU per Node (estimate) · WebGPU shader-f16 · Apache 2.0 (Models)'), manifest: () => textSummaryManifest(type) };
     }
     else if (node.type === 'IfCondition') requirement = { key: 'if-condition', id: 'if-condition', title: 'IfCondition · XtremeDistil · 14 MB · CPU WASM · allow 250 MB RAM per Node', manifest: ifConditionManifest };
-    else if (node.type === 'OpusMtJaEn') requirement = { key: 'opus-ja-en', id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', manifest: opusMtManifest };
-    else if (node.type === 'OpusMtEnJa') requirement = { key: 'opus-en-ja', id: 'opus-en-ja', title: 'OPUS-MT · English → Japanese', manifest: englishToJapaneseOpusMtManifest };
     else if (node.type === 'Plamo3Translate2B') requirement = { key: 'plamo-3-translate-2b', id: 'plamo-3-translate-2b', title: 'Experimental PLaMo 3 Translate 2B · 1.81 GB download · allow 5 GB storage, 6 GB free RAM per Node · CPU WASM · PLaMo Community License: commercial registration/revenue conditions apply (Models)', manifest: plamoManifest };
     else if (['TranslateGemmaEnJa', 'TranslateGemmaJaEn'].includes(node.type)) requirement = { key: 'translategemma', id: 'translategemma', title: 'TranslateGemma 4B · 3.112 GB download · several GB RAM/GPU memory · WebGPU · Gemma Terms apply', manifest: translateGemmaManifest };
     else if (node.type === 'SpeechToTextMoonshineMediumEn') requirement = { key: 'moonshine-medium-en', id: 'moonshine-medium-en', title: 'Moonshine Medium Streaming English · 305 MB download · CPU WASM · allow 2 GB RAM, 700 MB storage', manifest: moonshineManifest };

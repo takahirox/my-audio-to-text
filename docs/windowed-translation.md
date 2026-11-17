@@ -1,7 +1,7 @@
 # Windowed translation
 
 TextWindow batches short committed TEXT fragments before sending them to any
-text consumer, including the local OPUS-MT and TranslateGemma translators. It
+text consumer, including the local TranslateGemma and PLaMo translators. It
 requires no model weights. Batching does not provide conversation-wide context,
 conversation memory, or guaranteed translation accuracy improvements.
 
@@ -86,7 +86,7 @@ ASR.provisional (or explicit TEXT snapshots) → Translator.provisional
 Translator.provisionalText → PreviewDisplay.input1
 ```
 
-Translator means OpusMtEnJa, OpusMtJaEn, TranslateGemmaEnJa or TranslateGemmaJaEn.
+Translator means TranslateGemmaEnJa, TranslateGemmaJaEn or Plamo3Translate2B.
 PreviewDisplay is an ordinary separate Display instance. Any compatible TEXT
 producer can supply provisional snapshots independently of the committed source
 and edge order. TextWindow emits only completed batches and creates no previews.
@@ -163,7 +163,7 @@ preview paths each use a fresh Worker. Fixed batching uses a 30-second wait limi
 for comparable length/Stop splits; deterministic checks exercise deadlines.
 Its JSON attachment records model results, inputs, display events, inference
 counts, request timings and Stop/drain time. Historical experiment measurements
-remain in [the #128 evidence record](evidence/translation-128.md).
+remain in the #128 evidence record.
 
 ## Saved graphs
 

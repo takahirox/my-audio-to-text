@@ -1,28 +1,28 @@
+import { translationGraph } from './translation-graph.js';
 import { settleAutoSave } from '../extension/ui-controls.js';
 import { expect } from '@playwright/test';
 import { assertRoutingGeometry } from './graph-routing.js';
 
 const asrTypes = ['SpeechToTextMoonshineSmallJa', 'SpeechToTextMoonshineMediumEn'];
-const translatorTypes = ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa'];
+const translatorTypes = ['TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Plamo3Translate2B'];
 const keyedInputs = ['input1', 'id1', 'input2', 'id2'];
 const translationOutputs = ['text', 'id', 'source', 'error', 'provisionalText', 'provisionalId', 'provisionalSource', 'provisionalError'];
 const port = (page, id, side, name) => page.getByRole('button', { name: `${id} ${side} ${name}`, exact: true });
 
 export async function loadPortOrderGraph(page) {
-  const graph = await page.evaluate(async () => {
+  const graph = await page.evaluate(async graph => {
     const { defaultGraph, graphNode, edge, ASR_TYPES } = await import(new URL('./graph.js', location.href)); const { saveLiveGraphData } = await import(new URL('./graph-library.js', location.href));
-    const graph = defaultGraph({ enabled: true });
     graph.nodes.find(n => n.id === 'audio').position.x = 0;
     graph.nodes.find(n => n.id === 'speech').position.x = 320;
     graph.nodes.find(n => n.id === 'translation').position.y = 650;
     graph.nodes.push(graphNode('KeyedTextPair', 'preview-pair', 960, 650));
     graph.edges.push(edge('translation', 'provisionalText', 'preview-pair', 'input1'), edge('translation', 'provisionalId', 'preview-pair', 'id1'),
       edge('speech', 'provisional', 'translation', 'provisional'), edge('speech', 'provisionalId', 'translation', 'provisionalId'));
-    const types = [...ASR_TYPES, 'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Display', 'TextFormatter'];
+    const types = [...ASR_TYPES, 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Plamo3Translate2B', 'Display', 'TextFormatter'];
     graph.nodes.push(...types.map((type, i) => graphNode(type, `extra-${type}`, 30 + i % 4 * 360, 1450 + Math.floor(i / 4) * 950)));
     for (const node of graph.nodes) if (node.id.startsWith('extra-') && ['Display', 'TextFormatter'].includes(node.type)) node.settings.inputCount = 12;
     await saveLiveGraphData(localStorage, graph); return graph;
-  });
+  }, translationGraph());
   await page.reload(); await expect(page.locator('.graph-wire')).toHaveCount(graph.edges.length);
   return graph;
 }
@@ -31,7 +31,7 @@ export async function checkPortOrderAndInspector(page, tabKey = 'Tab') {
   const graph = await loadPortOrderGraph(page);
   const expected = node => {
     if (asrTypes.includes(node.type)) return { output: ['final', 'finalId', 'provisional', 'provisionalId'] };
-    if (translatorTypes.includes(node.type)) return { input: ['text', 'id', 'provisional', 'provisionalId', ...(node.type.startsWith('TranslateGemma') ? ['context'] : [])], output: translationOutputs };
+    if (translatorTypes.includes(node.type)) return { input: ['text', 'id', 'provisional', 'provisionalId', ...(node.type.startsWith('TranslateGemma') ? ['context'] : ['source_lang', 'target_lang'])], output: translationOutputs };
     if (['KeyedTextCoalesce', 'KeyedTextPair'].includes(node.type)) return { input: keyedInputs, output: node.type === 'KeyedTextCoalesce' ? ['text', 'id'] : ['pair'] };
     if (['Display', 'TextFormatter'].includes(node.type)) return { input: Array.from({ length: node.settings.inputCount }, (_, i) => `input${i + 1}`) };
     return {};

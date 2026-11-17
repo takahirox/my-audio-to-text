@@ -117,7 +117,7 @@ for (const [type, Node, key, factoryKey, partial] of types) {
 
 test('current independent paths retain default graphs, save/reload exactly, bind production types and fan out plain TEXT', () => {
   const original = defaultGraph(); assert.equal(original.version, 15); assert.deepEqual(graphModelRequirements(original).map(r => r.key), ['moonshine-small-ja']);
-  const description = graph(); description.nodes.push(graphNode('TextFormatter', 'format'), graphNode('OpusMtEnJa', 'translate'), graphNode('FocusedInputTextOutputNode', 'field'));
+  const description = graph(); description.nodes.push(graphNode('TextFormatter', 'format'), graphNode('TranslateGemmaEnJa', 'translate'), graphNode('FocusedInputTextOutputNode', 'field'));
   description.edges.push(edge('asr0', 'final', 'format', 'input1'), edge('asr1', 'final', 'translate', 'text'), edge('asr0', 'final', 'field', 'text'));
   assertGraph(description);
   const store = new Map(), storage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) };

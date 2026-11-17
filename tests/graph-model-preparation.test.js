@@ -15,7 +15,7 @@ test('all ASR dependencies and Japanese frontend are explicit and deduplicated, 
 const modelFreeGraph = () => ({ ...defaultGraph(), nodes: [graphNode('Text', 'text')] });
 
 const settled = async () => { await new Promise(resolve => setImmediate(resolve)); };
-const graph = () => { const graph = modelFreeGraph(); graph.nodes.push(graphNode('OpusMtEnJa', 'parked')); return graph; };
+const graph = () => { const graph = modelFreeGraph(); graph.nodes.push(graphNode('TranslateGemmaEnJa', 'parked')); return graph; };
 
 test('blocking asset preparation skips download preparation for verified and model-free graphs', async () => {
   const originalFetch = globalThis.fetch;
@@ -28,7 +28,7 @@ test('blocking asset preparation skips download preparation for verified and mod
       prepare() { throw Error('Verified files must not need download preparation'); } });
     await prepareGraphModelAssets(modelFreeGraph(), { createCache });
     assert.equal(manifests, 0); assert.equal(inspections, 0);
-    const selected = graph(); selected.nodes.push(graphNode('OpusMtEnJa', 'repeat'));
+    const selected = graph(); selected.nodes.push(graphNode('TranslateGemmaEnJa', 'repeat'));
     await prepareGraphModelAssets(selected, { createCache });
     assert.equal(manifests, 1); assert.equal(inspections, 1);
   } finally { globalThis.fetch = originalFetch; }
@@ -49,8 +49,8 @@ test('blocking asset preparation reports model download errors and honors cancel
       },
     });
     const options = { createCache, signal: controller.signal, onChange: (requirement, view) => events.push([requirement.id, view.state]) };
-    await assert.rejects(prepareGraphModelAssets(graph(), options), /OPUS-MT.*Offline fixture/);
-    assert.equal(downloads, 1); assert.deepEqual(events, [['opus-en-ja', 'Checking'], ['opus-en-ja', 'Downloading']]);
+    await assert.rejects(prepareGraphModelAssets(graph(), options), /TranslateGemma 4B.*Offline fixture/);
+    assert.equal(downloads, 1); assert.deepEqual(events, [['translategemma', 'Checking'], ['translategemma', 'Downloading']]);
     cancel = true;
     await assert.rejects(prepareGraphModelAssets(graph(), options), { name: 'AbortError' });
     assert.equal(downloads, 1, 'cancellation must prevent any subsequent fetch');

@@ -71,9 +71,9 @@ Live and Web microphone sessions can prepare and record independently, using
 the same or different saved graphs. Stopping or closing one leaves the other
 running; actual browser/device and memory limits can still cause session errors.
 Open a library entry in Graph Editor; Auto Save updates that entry only. Graph Editor and Models tabs provide executable graph editing and verified optional model preparation without
-interrupting capture. Optional local OPUS-MT pairs committed
+interrupting capture. Optional local TranslateGemma and PLaMo translation pairs committed
 Japanese transcripts with English or English transcripts with Japanese using
-independent direction-specific Nodes and editable TextFormatter templates. Saved
+explicit translator Nodes and KeyedTextPair history. Saved
 graph edits apply on the next session, after preparation of required model caches;
 transcripts remain window-local. See its
 guide for building/loading the unpacked extension,
@@ -94,7 +94,7 @@ prepared, run `npm run build:extension` after source changes, then click
 **Reload** on the extension's card. See the [extension guide](docs/chrome-extension.md)
 for requirements and usage.
 
-The [Pages workflow](.github/workflows/pages.yml) installs pinned npm dependencies and prepares every Playground model runtime/manifest and deploys the entire `web/` tree (the index, nested node pages and shared assets) automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. Inference runs in the browser; speech loading needs about 91 MB of model/runtime assets and no ASR server. Translation weights download explicitly on Run (about 239 MB for OPUS-MT ja-en, 253 MB for OPUS-MT en-ja and 3.112 GB for TranslateGemma); text stays local.
+The [Pages workflow](.github/workflows/pages.yml) installs pinned npm dependencies and prepares every Playground model runtime/manifest and deploys the entire `web/` tree (the index, nested node pages and shared assets) automatically on pushes to `main`. A maintainer can manually dispatch it on the exact reviewed PR branch permitted by the `github-pages` environment, retaining existing protections. Inference runs in the browser; speech loading needs about 91 MB of model/runtime assets and no ASR server. Translation weights download explicitly on Run (3.112 GB for TranslateGemma or 1.81 GB for PLaMo); text stays local.
 
 For setup, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the `github-pages` environment and built-in `GITHUB_TOKEN`.
 
@@ -197,7 +197,7 @@ pair or pair-list snapshot without accumulating history. Any TEXT processor,
 including text summaries, connects directly to Display.input1.
 
 See [contracts and wiring](docs/display-items.md), the
-[importable graph](docs/evidence/item-198.json), and the
+[importable graph](docs/examples/bilingual-history.json), and the
 [executable fixture](tests/fixtures/item-graph.js). Legacy `Display.input` edges
 convert to `input1` on Load/Import; Auto Save writes the numbered form. Other removed
 display Nodes and ports are unsupported. Graph Editor reports them visibly and

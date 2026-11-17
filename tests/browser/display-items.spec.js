@@ -1,3 +1,4 @@
+import { translationGraph } from '../fixtures/translation-graph.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -14,11 +15,11 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const ending of ['stop', 'cancel']) test(`paired history: interleaved ASR, delayed translation, safe/empty/repeated text, ${ending} and restart`, async ({ page }) => {
-  await page.evaluate(async () => {
+  await page.evaluate(async graph => {
     const { defaultGraph } = await import('/extension/graph.js');
     const { buildGraph } = await import('/extension/graph-runtime.js');
     const { renderTextRegions } = await import('/extension/live-text-regions.js');
-    const graph = defaultGraph({ enabled: true, direction: 'en-ja' }), displays = {};
+    const displays = {};
     window.pending = []; window.events = []; window.workers = [];
     const factory = () => {
       const worker = { postMessage(data) {
@@ -30,7 +31,7 @@ for (const ending of ['stop', 'cancel']) test(`paired history: interleaved ASR, 
     window.begin = async () => {
     window.pending.length = 0;
     window.built = buildGraph(graph, { tabId: 42, sourceFactory: () => ({ start() {}, stop() {} }),
-      workerFactory: factory, translationWorkerFactory: factory, prepareTranslation: async () => {},
+      workerFactory: factory, translationWorkerFactory: factory, prepareTranslateGemma: async () => {},
       onDisplay(id, dom) {
         displays[id] = dom; renderTextRegions(document.querySelector('#live-displays'), graph, displays);
         events.push([...dom.querySelectorAll('tr')].map(row => [...row.children].map(cell => cell.textContent)));
@@ -39,7 +40,7 @@ for (const ending of ['stop', 'cancel']) test(`paired history: interleaved ASR, 
     window.speech = built.speechNodes.get('speech');
     window.send = (type, id, text) => speech.receiveEvent({ type, id, text });
     }; await begin();
-  });
+  }, translationGraph({ direction: 'en-ja' }));
   const rows = page.locator('.display-content tr'), cells = page.locator('.display-content td');
   await page.evaluate(() => send('partial', 0, '<img src=x>\nA')); await expect(cells).toHaveText(['<img src=x>\nA', '']);
   await page.evaluate(() => send('final', 0, 'same')); await expect(cells).toHaveText(['same', '']);

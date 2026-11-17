@@ -30,7 +30,7 @@ test('palette exposes NUMBER threshold inputs, one TEXT output, no threshold Set
 for (const mode of ['baseline', 'window']) test(`packaged ${mode}: committed ASR TEXT routing, deterministic inference, deadline, Stop and repeat`, async ({ graphExtension: f }) => {
   // Only model inference is controlled. Real module Worker, production
   // scheduler, graph, grouping, timers, formatter/display and cleanup execute.
-  await writeFile(path.join(f.root, 'web/opus-mt-en-ja-worker.js'), `
+  await writeFile(path.join(f.root, 'web/translategemma-worker.js'), `
     self.onmessage = ({data}) => {
       if (data.type === 'load') postMessage({id:data.id,type:'ready'});
       if (data.type === 'drain') postMessage({id:data.id,type:'drained'});
@@ -39,7 +39,7 @@ for (const mode of ['baseline', 'window']) test(`packaged ${mode}: committed ASR
   const live = await openGraph(f, { live: false });
   // Use the production ASR final emitter with fixture recognition/capture.
   // The translator remains a real owned module Worker with controlled results.
-  const graph = windowGraph(mode, 'OpusMtEnJa');
+  const graph = windowGraph(mode, 'TranslateGemmaEnJa');
   graph.nodes[0] = { ...graph.nodes[0], type: 'SpeechToTextMoonshineSmallJa', settings: {} };
   graph.nodes.push({ id: 'audio', type: 'ChromeTabAudio', settings: {}, position: { x: 0, y: 0 } });
   graph.edges.forEach(e => { if (e.from[0] === 'input') e.from[1] = 'final'; });
@@ -51,7 +51,7 @@ for (const mode of ['baseline', 'window']) test(`packaged ${mode}: committed ASR
     const runs = [];
     for (let run = 0; run < 2; run++) {
       let display; const events = [];
-      const built = buildGraph(readLiveGraphData(localStorage), { tabId: 42, prepareTranslation() {}, onDisplay: (_, s) => { display = s.textContent; events.push(s.textContent); } });
+      const built = buildGraph(readLiveGraphData(localStorage), { tabId: 42, prepareTranslateGemma() {}, onDisplay: (_, s) => { display = s.textContent; events.push(s.textContent); } });
       try {
         await built.pipeline.start(); await built.translations[0].ready;
         for (const text of texts) built.speechNodes.get('input').receiveEvent({ type: 'final', text });

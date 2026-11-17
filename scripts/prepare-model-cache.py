@@ -5,7 +5,6 @@ import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ['model-asset-cache.js', 'plamo-cache.js', 'plamo-assets.json', 'japanese-frontend-cache.js', 'optional-asr-cache.js',
-         'opus-mt-cache.js', 'opus-mt-manifest.js', 'opus-mt-assets.json',
          'kokoro-japanese-assets.json',
          'moonshine-small-ja-assets.json', 'moonshine-medium-en-assets.json',
          'if-condition-assets.json', 'meeting-summary-lfm2-assets.json',

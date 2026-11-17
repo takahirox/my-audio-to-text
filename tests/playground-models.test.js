@@ -24,7 +24,7 @@ test('static primary model navigation is exhaustive and preserves direct/return 
   assert.equal(document.querySelectorAll('script, button').length, 0);
   const catalog = readFileSync('extension/model-cache.js', 'utf8').split('const definitions = [')[1].split('class ModelCard')[0];
   const aliases = { 'moonshine-small-ja': 'moonshine-small-ja', 'moonshine-medium-en': 'moonshine-medium', 'meeting-summary-lfm2': 'text-summary-lfm2',
-    'meeting-summary-qwen35': 'text-summary-qwen35', 'opus-ja-en': 'opus-mt', 'opus-en-ja': 'opus-mt-en-ja' };
+    'meeting-summary-qwen35': 'text-summary-qwen35' };
   const primary = [...catalog.matchAll(/\{ id: '([\w-]+)'/g)].map(match => match[1])
     .filter(id => !['kokoro-japanese'].includes(id)).map(id => aliases[id] || id);
   assert.deepEqual(primary.sort(), [...modelPages].sort(), 'Every current catalog entry has its own test');

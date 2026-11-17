@@ -33,7 +33,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
   await expect(live.locator('#session-state')).toHaveText('Running');
   await loadTraceabilityGraph(graph);
   await models.reload();
-  await expect(models.locator('#opus-ja-en .model-status')).toHaveText('Not downloaded');
+  await expect(models.locator('#translategemma .model-status')).toHaveText('Not downloaded');
   const original = await graph.evaluate(() => localStorage.getItem('processing-graph-library-v1'));
   for (const width of [1440, 390]) {
     for (const [name, page] of [['live', live], ['graph', graph], ['models', models]]) {
@@ -109,7 +109,7 @@ test('Live, Graph and Models share light controls with reachable narrow layouts 
 test('Models keeps real cache progress, cancellation, retry, error, deletion and legal notices usable', async ({ graphExtension: f }, info) => {
   const live = await openGraph(f), page = live.models;
   await page.setViewportSize({ width: 390, height: 844 });
-  const card = page.locator('#opus-ja-en'), status = card.locator('.model-status');
+  const card = page.locator('#translategemma'), status = card.locator('.model-status');
   await expect(status).toHaveText('Not downloaded');
   await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
   await card.locator('summary').filter({ hasText: /^Details$/ }).click();
@@ -130,7 +130,7 @@ test('Models keeps real cache progress, cancellation, retry, error, deletion and
   await card.getByRole('button', { name: /^(Download|Retry)$/ }).click();
   await expect(status).toHaveText('Error');
   await expect(card.locator('.model-error')).toContainText('Retry preparation');
-  await checkContrast(page, '#opus-ja-en .model-error, #opus-ja-en .model-status', '.model-card', 4.5);
+  await checkContrast(page, '#translategemma .model-error, #translategemma .model-status', '.model-card', 4.5);
   await capture(page, info, 'models-error-390', true);
   f.mode('normal');
   await card.getByRole('button', { name: /^(Download|Retry)$/ }).click();

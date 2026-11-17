@@ -12,24 +12,6 @@
         }
       },
       {
-        "id": "OpusMtJaEn",
-        "type": "OpusMtJaEn",
-        "settings": {},
-        "position": {
-          "x": 20,
-          "y": 20
-        }
-      },
-      {
-        "id": "OpusMtEnJa",
-        "type": "OpusMtEnJa",
-        "settings": {},
-        "position": {
-          "x": 20,
-          "y": 20
-        }
-      },
-      {
         "id": "TextSummaryLfm2",
         "type": "TextSummaryLfm2",
         "settings": {
@@ -134,8 +116,6 @@
   },
   "contracts": {
     "SpeechToTextMoonshineMediumEn": "644ab0b49ddae3a4eba91cf9974a77b9dffba72f069ab5695e72c3a50d7935bd",
-    "OpusMtJaEn": "7985489715af91f49c8921df80d16dde47b9b92861e07cc055278253bfc335c5",
-    "OpusMtEnJa": "7985489715af91f49c8921df80d16dde47b9b92861e07cc055278253bfc335c5",
     "TextSummaryLfm2": "fb88c267e5cbab536a941549397efd7b6c979392af44841a6335b25fad6a5bbc",
     "TextSummaryQwen35": "fb88c267e5cbab536a941549397efd7b6c979392af44841a6335b25fad6a5bbc",
     "IfCondition": "11974f97c53a0e6862b0a39cd4b794640de61c8910b032fb52bfcb672e66b4cf",

@@ -96,7 +96,7 @@ TextSummary.summary ──┬──→ Hold.input
 
 Hold stores the original completed summary. When S1 has been stored, the next
 window may summarize using S1 while translation T1 is still running. The same
-behavior applies to OPUS-MT and other independent consumers. Feedback stays
+behavior applies to TranslateGemma, PLaMo and other independent consumers. Feedback stays
 serial; translation keeps its own bounded committed FIFO and replaceable
 preview. Translation errors remain visible without replacing or corrupting the
 original held summary. An overloaded translation branch stops visibly while

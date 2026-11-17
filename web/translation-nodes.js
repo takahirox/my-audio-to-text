@@ -112,12 +112,6 @@ class WorkerTranslationNode {
   }
 }
 
-export class OpusMtTranslationNode extends WorkerTranslationNode {
-  constructor(options) { super(new URL('./opus-mt-worker.js', import.meta.url), options); }
-}
-export class EnglishToJapaneseOpusMtTranslationNode extends WorkerTranslationNode {
-  constructor(options) { super(new URL('./opus-mt-en-ja-worker.js', import.meta.url), options); }
-}
 export class TranslateGemmaTranslationNode extends WorkerTranslationNode {
   static supportsContext = true;
   constructor(options, direction = 'ja-en') {

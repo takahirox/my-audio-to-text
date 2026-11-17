@@ -251,7 +251,7 @@ test('click and drag reconnect a populated input, preserving fan-out; identical 
 });
 
 async function fixtureTranslation(f, live) {
-  for (const file of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(f.root, 'web', file), `
+  for (const file of ['translategemma-worker.js']) await writeFile(path.join(f.root, 'web', file), `
     self.onmessage=({data})=>{
       if(data.type==='load')postMessage({type:'ready',id:data.id});
       if(data.type==='translate')setTimeout(()=>postMessage(data.text==='fail'
@@ -261,7 +261,7 @@ async function fixtureTranslation(f, live) {
     };`);
   await live.evaluate(async () => {
     const { TabSession } = await import('./session.js'), start = TabSession.prototype.start;
-    TabSession.prototype.start = function(...args) { this.prepareTranslation = async () => {}; return start.apply(this, args); };
+    TabSession.prototype.start = function(...args) { this.prepareTranslateGemma = async () => {}; return start.apply(this, args); };
   });
 }
 

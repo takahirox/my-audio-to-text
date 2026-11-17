@@ -49,7 +49,7 @@ test('existing ASRs, translation, formatting, batching and summary processors re
   for (const type of ['SpeechToTextMoonshineSmallJa', 'SpeechToTextMoonshineMediumEn']) {
     const graph = voice(); graph.nodes[1] = graphNode(type, 'asr'); assert.equal(webVoiceError(graph), '', type);
   }
-  for (const [type, output] of [['OpusMtJaEn','text'], ['OpusMtEnJa','text'], ['TranslateGemmaJaEn','text'], ['TranslateGemmaEnJa','text'], ['Plamo3Translate2B','text'], ['TextWindow','text'], ['TextSummaryLfm2','summary'], ['TextSummaryQwen35','summary']]) {
+  for (const [type, output] of [['TranslateGemmaJaEn','text'], ['TranslateGemmaEnJa','text'], ['TranslateGemmaJaEn','text'], ['TranslateGemmaEnJa','text'], ['Plamo3Translate2B','text'], ['TextWindow','text'], ['TextSummaryLfm2','summary'], ['TextSummaryQwen35','summary']]) {
     const graph = voice(); graph.nodes.push(graphNode(type,'processor'));
     graph.edges[1] = edge('asr','final','processor','text'); graph.edges.push(edge('processor',output,'field','text'));
     assert.equal(webVoiceError(graph), '', type);

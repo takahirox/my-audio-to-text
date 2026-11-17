@@ -33,7 +33,7 @@ Redistributors of Gemma or derivatives must follow the full upstream agreement,
 including providing a copy of that agreement, the required Notice, applicable
 modification notices and enforceable use restrictions for subsequent users.
 This notice is not a replacement for that agreement. No translation accuracy
-or superiority to OPUS-MT is claimed. Review outputs for your intended use.
+is claimed. Review outputs for your intended use.
 
 Runtime: Transformers.js Apache-2.0; ONNX Runtime MIT. See adjacent runtime
 license files and third-party-notices.txt for bundled dependency notices.

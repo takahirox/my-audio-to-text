@@ -40,7 +40,7 @@ test('initial inspection hides Download; Ready hides it entirely; partial cache 
     };
     window.releaseInspection = () => { released = true; for (const [port, args] of pending) send.apply(port, args); };
   });
-  const page = await open(f), card = page.locator('#opus-ja-en');
+  const page = await open(f), card = page.locator('#translategemma');
   await expect(card).toHaveAttribute('data-state', 'Checking');
   await expect(action(card)).toBeHidden();
   await expect(page.getByRole('button', { name: 'Check cache' })).toHaveCount(0);
@@ -50,14 +50,14 @@ test('initial inspection hides Download; Ready hides it entirely; partial cache 
   await expect(card).toHaveAttribute('data-state', 'Ready');
   await expect(action(card)).toBeHidden();
   await expect(card.getByRole('button', { name: 'Delete cached assets' })).toBeEnabled();
-  await expect(card.locator('.model-license a')).toBeHidden();
+  await expect(card.locator('details .model-license a')).toBeHidden();
   await card.locator('summary').filter({ hasText: /^Details$/ }).click();
-  await expect(card.locator('.model-license a')).toBeVisible();
+  await expect(card.locator('details .model-license a')).toBeVisible();
   await expect(card.locator('li').first()).toContainText('Cached');
   const count = f.requests.length;
   await page.evaluate(async () => {
-    const { opusMtManifest } = await import('./opus-mt-manifest.js');
-    const manifest = await opusMtManifest(), cache = await caches.open('transformers-cache');
+    const { translateGemmaManifest } = await import('./translategemma-cache.js');
+    const manifest = await translateGemmaManifest(), cache = await caches.open('transformers-cache');
     await cache.delete(manifest.files.at(-1).url);
   });
   await focus(page);
@@ -77,7 +77,7 @@ test('initial inspection hides Download; Ready hides it entirely; partial cache 
 
 test('active download hides actions on both pages; cancellation and failure retain Retry through focus and cache notifications', async ({ graphExtension: f }) => {
   const first = await open(f), second = await open(f);
-  const card = first.locator('#opus-ja-en'), other = second.locator('#opus-ja-en');
+  const card = first.locator('#translategemma'), other = second.locator('#translategemma');
   await expect(other).toHaveAttribute('data-state', 'Not downloaded');
   f.mode('hold'); await card.getByRole('button', { name: 'Download', exact: true }).click();
   await expect(card.locator('progress')).toBeVisible();
@@ -95,7 +95,7 @@ test('active download hides actions on both pages; cancellation and failure reta
   await expect(card).toHaveAttribute('data-state', 'Error');
   const error = await card.locator('.model-error').textContent();
   await focus(first);
-  await second.evaluate(() => { const channel = new BroadcastChannel('model-cache-updates'); channel.postMessage({ id: 'opus-ja-en' }); channel.close(); });
+  await second.evaluate(() => { const channel = new BroadcastChannel('model-cache-updates'); channel.postMessage({ id: 'translategemma' }); channel.close(); });
   await expect(card.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
   await expect(card.locator('.model-error')).toHaveText(error);
   f.mode('normal'); await card.getByRole('button', { name: 'Retry', exact: true }).click();
@@ -109,7 +109,7 @@ test('active download hides actions on both pages; cancellation and failure reta
 
 test('successful deletion on another Models page clears an obsolete failure through later focus checks', async ({ graphExtension: f }) => {
   const first = await open(f), second = await open(f);
-  const card = first.locator('#opus-ja-en'), other = second.locator('#opus-ja-en');
+  const card = first.locator('#translategemma'), other = second.locator('#translategemma');
   await expect(other).toHaveAttribute('data-state', 'Not downloaded');
   f.mode('corrupt');
   await card.getByRole('button', { name: 'Download', exact: true }).click();
@@ -157,7 +157,7 @@ for (const [id, firstVoice, secondVoice] of [['supertonic3', 'F1', 'M1'], ['koko
   });
 
   test(`${id} actions follow selected voice, shared files and cross-page deletion without changing unrelated assets`, async ({ graphExtension: f }) => {
-    const page = await open(f), card = page.locator(`#${id}`), unrelated = page.locator('#opus-en-ja');
+    const page = await open(f), card = page.locator(`#${id}`), unrelated = page.locator('#plamo-3-translate-2b');
     await unrelated.getByRole('button', { name: 'Download', exact: true }).click();
     await expect(unrelated).toHaveAttribute('data-state', 'Ready');
     await card.locator('select').selectOption(firstVoice);

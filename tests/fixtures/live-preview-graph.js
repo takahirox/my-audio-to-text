@@ -1,7 +1,7 @@
-import { defaultGraph } from '../../extension/graph.js';
+import { translationGraph } from './translation-graph.js';
 
 export function livePreviewGraph(audioType = 'ChromeTabAudio') {
-  const graph = defaultGraph({ enabled: true, direction: 'en-ja' });
+  const graph = translationGraph({ enabled: true, direction: 'en-ja' });
   graph.nodes[0].type = audioType;
   graph.nodes[1].type = 'SpeechToTextMoonshineMediumEn';
   graph.nodes.find(node => node.id === 'transcript').id = 'live';

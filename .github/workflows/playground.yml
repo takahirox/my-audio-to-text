@@ -30,5 +30,7 @@ jobs:
       - name: Browser tests with fixtures (no weights)
         run: npm run test:playground -- --workers=2
       - run: npm run build:extension
+      - name: Audit current model sources and distribution inventories
+        run: node --test tests/model-distribution.test.js
       - name: Shared production nodes in the packaged extension (no weights)
         run: npx playwright test --config playwright.extension.config.js tests/extension/graph-optional-asr.spec.js tests/extension/graph-text-summary.spec.js tests/extension/graph-if-condition.spec.js tests/extension/streaming-tts.spec.js tests/extension/plamo.spec.js

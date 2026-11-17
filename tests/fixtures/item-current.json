@@ -57,7 +57,7 @@
     },
     {
       "id": "translation",
-      "type": "OpusMtEnJa",
+      "type": "TranslateGemmaEnJa",
       "settings": {},
       "position": {
         "x": 620,

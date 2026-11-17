@@ -5,7 +5,7 @@ long-lived product vision: reusable source and processing nodes connected into
 local-first pipelines. The [minimal Node/Port runtime](pipeline-runtime.md)
 implements code-level composition and an executable browser-tab transcription
 example, and powers the Node Playground speech page's microphone/tab
-transcription. Independent [OPUS-MT and TranslateGemma translation nodes](translation-nodes.md)
+transcription. Independent [TranslateGemma and PLaMo translation nodes](translation-nodes.md)
 also compose text source → processor → text sink graphs. This document explains
 the longer-lived architecture; further processors and a universal plugin SDK remain future work.
 See the [README](../README.md#current-implemented-capabilities) for current status.

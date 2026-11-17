@@ -1,3 +1,4 @@
+import { translationGraph } from './translation-graph.js';
 import { settleAutoSave } from '../extension/ui-controls.js';
 import { expect } from '@playwright/test';
 
@@ -39,7 +40,7 @@ export async function checkTranslationPorts(page, type, base = './') {
         worker.postMessage = m => { if (m.type === 'translate') requests.push({ ...m, worker }); post(m); };
         worker.terminate = () => { worker.released = true; terminate(); }; workers.push(worker); return worker;
       };
-      const built = buildGraph(readLiveGraphData(localStorage), { translationWorkerFactory: factory, prepareTranslation() {}, prepareTranslateGemma() {},
+      const built = buildGraph(readLiveGraphData(localStorage), { translationWorkerFactory: factory, prepareTranslateGemma() {},
         onDisplay(id, dom) { displays[id] = dom.textContent; events.push({ id, text: dom.textContent }); } });
       const send = (id, text) => built.pipeline.entries.get(id).context.emit('value', text);
       const complete = (i, text) => { const r = requests[i]; r.worker.postMessage({ type: 'fixture-complete', id: r.id, text }); };
@@ -76,12 +77,9 @@ export async function checkTranslationPorts(page, type, base = './') {
 }
 
 export async function checkTranslationPortRecovery(editor, type) {
-  const raw = await editor.evaluate(async type => {
-    const { defaultGraph } = await import(new URL('./graph.js', location.href));
-    const graph = defaultGraph({ enabled: true }); graph.version = 13;
-    graph.nodes.find(n => n.id === 'translation').type = type;
-    return JSON.stringify(graph, null, 2);
-  }, type);
+  const graph = translationGraph(); graph.version = 13;
+  graph.nodes.find(node => node.id === 'translation').type = type;
+  const raw = JSON.stringify(graph, null, 2);
   const { corruptSavedGraph, recoverAsNew } = await import('../extension/ui-controls.js');
   await corruptSavedGraph(editor, raw); await editor.reload(); await expect(editor.locator('#errors')).toContainText('Expected version 15');
   await editor.locator('.graph-actions > summary').click();

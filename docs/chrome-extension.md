@@ -232,7 +232,7 @@ one or more outputs. Multiple independent ASRs and displays run concurrently;
 parked or unfinished Nodes remain saved but inactive. See the
 [execution and permission policy](extension-graph.md). Graph Editor owns source
 and output choices; Live shows actionable errors without target controls. Connect `SpeechToTextMoonshineSmallJa.final → FocusedInputTextOutputNode.text`
-or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
+or `TranslateGemmaEnJa.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
 strings can fan out to TTS and other consumers. For final-only output, select
 ASR `final` or translation `text`. Bilingual formatting uses grouped primitive
 source/text/error outputs; pending/errors never reach successful translation text sinks.
@@ -405,7 +405,7 @@ FocusedInputTextOutputNode and its complete typed ancestors** run; optional Live
 speaker or other output branches are omitted, not initialized. Any executable
 ChromeTabAudio path makes a graph incompatible. The
 eligible field path starts at MicrophoneAudio, passes through an existing ASR's
-`final`, and may use TextFormatter, TextWindow, OPUS-MT, TranslateGemma or
+`final`, and may use TextFormatter, TextWindow, TranslateGemma, PLaMo or
 IfCondition or the existing text-summary Nodes. Number configuration and Text→ASR language / translation context configuration are allowed.
 Provisional/diagnostic output paths, startup text, multiple field sinks, cumulative
 snapshot processors and trigger/sampled paths are rejected with reasons. This
@@ -574,103 +574,6 @@ cross-browser extension support. No post-merge verification is required by #61.
    focused; successful connection/insertion counts belong in Session details,
    while unavailable output/permission errors remain visible.
 
-## Optional OPUS-MT Japanese ↔ English (#69 / #71)
-
-Fresh installs default to a minimal transcription graph. Translation is an
-explicit graph addition. New/reset graphs use the current transcription path; translation is added explicitly in Graph Editor.
-
-The original ASR preview remains available while committed translations are queued.
-Translation publishes completed results only; no provisional translation or pending
-history rows are produced. Session details contains loading/readiness diagnostics;
-actionable failures also appear in Live’s error alert. A failure
-can be displayed through the primitive `error` output while successful `text` sinks
-receive nothing. Stop drains final speech and translations. Closing the Live
-window discards pending work, releases Workers and ignores late completions.
-Completed display items remain until the next Start; transcripts are not persisted.
-
-For either direction, wire ASR.final → OPUS-MT.text. Connect its source/text/error
-directly to TextFormatter.input1/input2/input3, then formatter.text →
-TextAccumulator.append. For example, use `English: {1}` and `Japanese: {2}{3}`
-on separate template lines. Every result appends once, including repeated phrases.
-A direct group clears omitted formatter inputs, so failure cannot reuse an older
-translation. Independent branches have no implied pairing. Plain successful text
-also connects directly to display, field and TTS sinks. See
-[formatter controls and saved-graph recovery](extension-graph.md).
-
-The session-owned scheduler accepts plain committed strings into one FIFO and an
-owned inner graph: source.text → direction-specific OpusMtTranslationNode.text →
-TextOutputNode.text. It runs one inference at a time and keeps request identity
-internal; it never compares equal source strings to join results. Empty/whitespace
-utterances produce an empty translation without inference, preserving order.
-Text over 1,000 characters produces a per-utterance error; model errors make
-translation unavailable for that session while ASR continues. The tokenizer also
-enforces 512 tokens and caps output at 256 tokens. Each Node owns its module Worker,
-pinned runtime/checkpoint and cache-only loading; no remote inference or shared
-model manager is involved. Graceful Stop drains all queued results; closing Live
-uses internal cancellation to terminate inference immediately. Fresh sessions use
-fresh Nodes.
-
-`extension/opus-mt-assets.json` reviews all seven model files at immutable
-revision `05470cd69b62aa32e3ee64ccfd41279789ee4b1e` with exact sizes and 1 MiB
-chunk SHA-256 hashes. `scripts/review-opus-mt-assets.py` reproduces this manifest
-via an explicit maintainer download; it is never invoked by build/install.
-`extension/opus-mt-en-ja-assets.json` separately pins `Kadonox/opus-tatoeba-en-ja-onnx` at
-`225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e` with exact sizes, whole-file and chunk
-hashes. `python3 scripts/review-opus-mt-en-ja-assets.py` explicitly verifies its
-remote metadata and downloaded bytes. The immutable cache keys cannot overlap
-with Japanese → English assets.
-Preparation uses the #67 streaming validator and Web Locks. Cache Storage is
-owned by the extension origin even though keys are pinned HTTPS URLs. Opening
-or enabling translation never fetches remote assets. The Worker verifies cache
-readiness again, uses a custom cache with only reviewed canonical keys, and sets
-`env.allowRemoteModels = false`: missing assets cannot trigger a download during
-inference. Local optional-file lookups may return 404. Cached assets are reused
-across windows/Chrome profile restarts subject to eviction. Offline execution
-requires the complete cache plus packaged runtimes; the Playground's origin cache
-is separate. Persistence is best effort, not a retention guarantee.
-
-Preparation GETs immutable `huggingface.co` model paths and follows the host's
-HTTPS asset-delivery redirects. Their CORS responses permit extension-page fetch
-under COEP; no host permissions, remote-script CSP allowances or new capture
-permissions are added. Runtime JS/MJS/WASM execute only from `chrome-extension:`.
-Input text is sent only to the owned local Worker. OPUS-MT / Helsinki-NLP and ONNX
-Community attribution and CC BY 4.0, plus English → Japanese base Apache 2.0
-terms and Kadonox attribution, are shown next to the download control; see
-[translation nodes](translation-nodes.md) for the pinned runtime archive hashes,
-model limitations and license details. TranslateGemma 4B is also available as concrete English → Japanese / Japanese → English Nodes; see the TranslateGemma section below.
-
-### Translation checks
-
-`npm test` includes deterministic port wiring, coalescing, stale-result suppression,
-final priority/order, load/inference failure isolation, cancellation, repeats and
-UI statuses. `npm run test:extension` additionally exercises the real MV3 page,
-cache API and production OPUS Worker with small asset/model-runtime fixtures,
-preparation failures/retry and offline Chrome profile restart. These fixtures do
-not establish real model inference.
-
-Opt-in real-model smoke (no inference, ASR or capture mocks):
-
-This launches an isolated Chrome-for-Testing profile, triggers the actual toolbar
-action on a tab playing checksum-pinned upstream Japanese or English WAV audio, explicitly
-downloads real OPUS assets under MV3 CSP, and checks original ASR previews and committed translation
-translations in the selected direction through production ASR and translation.
-The English → Japanese smoke uses the committed [ordinary-English synthetic
-speech fixture](../tests/fixtures/ordinary-english.md) and asserts meanings on
-the actual final rows; the Japanese smoke uses the pinned upstream speech fixture. It recreates the recorder window
-and repeats offline using cached
-bytes and records browser capabilities, paired output, requests and errors in
-`extension-opus-evidence.json`. Set `EXTENSION_HEADED=1` for headed testing.
-When opted in, fixture/network/device/model errors fail visibly; the default
-suite labels this large-download smoke opt-in. See [Issue #69 evidence](evidence/extension-translation-69.md)
-for the original execution result, and [Issue #71 evidence](evidence/translation-direction-71.md)
-for both-direction checks and real English → Japanese execution. The production
-page smoke checks ordinary English meanings (greeting, meeting time, report,
-station and deadline, including ASR uppercase forms); Japanese characters alone
-do not establish translation. The English → Japanese Worker recases uppercase
-English for inference; the copyable original and paired source stay unchanged.
-No post-merge verification is required for the
-unpacked extension; Web Store distribution is separate future work.
-
 ## TranslateGemma 4B English → Japanese
 
 Add **TranslateGemma 4B English → Japanese** in Graph Editor. Connect
@@ -688,11 +591,9 @@ one verified cache. Allow **7 GB free storage**, several GB free RAM/GPU memory
 and supported **Worker WebGPU**. Each active Node owns a separate GPU session.
 Auto Save remains successful if preparation fails; use Cancel/retry or Models for
 recovery. Recording never fetches weights. GPU/adapter/memory failures are visible;
-there is no CPU, OPUS-MT or remote fallback. The public ONNX conversion remains
+there is no CPU or remote fallback. The public ONNX conversion remains
 subject to Google's upstream terms. See [runtime, provenance, terms and real-test
-commands](translation-nodes.md#translategemma-in-the-extension-124) and
-[#124 validation evidence](evidence/translation-124.md). No translation-quality
-superiority to OPUS-MT is assumed.
+commands](translation-nodes.md#translategemma-in-the-extension-124).
 
 Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and automatic persistence of a repaired graph copy.
 

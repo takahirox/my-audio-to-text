@@ -1,7 +1,7 @@
 # ID-scoped text pairing
 
 Use the [portable display path](display-items.md): KeyedTextPair →
-KeyedPairedTextAccumulator → Display. The [importable graph](evidence/item-198.json)
+KeyedPairedTextAccumulator → Display. The [importable graph](examples/bilingual-history.json)
 shows the exact recommended ASR and translation connections.
 
 ## KeyedTextPair

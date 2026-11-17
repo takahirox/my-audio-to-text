@@ -6,6 +6,7 @@ import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 
 function wav(frequency) {
   const length = 48000 * 2, buffer = Buffer.alloc(44 + length * 2);
@@ -37,16 +38,23 @@ const test = base.extend({
     try {
       await cp(path.resolve('dist/chrome-extension'), root, { recursive: true, filter: source => !source.includes(`${path.sep}vendor`) });
       for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture({}));
-      for (const name of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(root, 'web', name), `self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready',id:data.id});if(data.type==='translate')postMessage({type:'result',id:data.id,texts:['translated '+data.text]});if(data.type==='drain')postMessage({type:'drained',id:data.id});};`);
+      for (const name of ['translategemma-worker.js']) await writeFile(path.join(root, 'web', name), `self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready',id:data.id});if(data.type==='translate')postMessage({type:'result',id:data.id,texts:['translated '+data.text]});if(data.type==='drain')postMessage({type:'drained',id:data.id});};`);
       context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: false,
         ignoreDefaultArgs: ['--disable-extensions', '--mute-audio'], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream'] });
       const cdp = await context.browser().newBrowserCDPSession(), { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
       await writeMoonshineAssetFixture(root, `chrome-extension://${id}/extension/`);
+      const translationBytes = Buffer.from('controlled translation model');
+      await writeFile(path.join(root, 'extension/translategemma-fixture.bin'), translationBytes);
+      await writeFile(path.join(root, 'extension/translategemma-assets.json'), JSON.stringify([{
+        path: 'weights.bin', bytes: translationBytes.length,
+        sha256Chunks: [createHash('sha256').update(translationBytes).digest('hex')],
+        sourceURL: `chrome-extension://${id}/extension/translategemma-fixture.bin`,
+      }]));
       const page = await context.newPage(); await page.goto(`chrome-extension://${id}/extension/recorder.html`);
       await page.evaluate(async () => {
         const { TabSession } = await import('./session.js'), start = TabSession.prototype.start;
         TabSession.prototype.start = function(...args) { window.targetSession = this; return start.apply(this, args); };
-        const { defaultGraph } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, defaultGraph({ enabled: false }));
+        const { defaultGraph } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, defaultGraph());
         const { OptionalAsrNode: SpeechToTextNode } = await import('../web/optional-asr-node.js'), original = SpeechToTextNode.prototype.start;
         SpeechToTextNode.prototype.start = function(context) { window.activeSpeech = this; return original.call(this, context); };
         const { ExtensionTabAudioNode } = await import('./tab-audio-node.js'), capture = ExtensionTabAudioNode.prototype.start;
@@ -82,7 +90,12 @@ const test = base.extend({
       const graph = async ({ source = 'ChromeTabAudio', outputs = [], translation = false, live = true } = {}) => {
         await page.evaluate(async ({ source, outputs, translation, live }) => {
           const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
-          const graph = defaultGraph({ enabled: translation }); graph.nodes[0].type = source;
+          const graph = defaultGraph(); graph.nodes[0].type = source;
+          if (translation) {
+            graph.nodes.push(graphNode('TranslateGemmaJaEn', 'translation'));
+            graph.edges.push(edge('speech', 'finalId', 'translation', 'id'), edge('speech', 'final', 'translation', 'text'),
+              edge('translation', 'id', 'pair', 'id2'), edge('translation', 'text', 'pair', 'input2'));
+          }
           if (!live) {
             const views = graph.nodes.filter(node => ['Display', 'TextFormatter'].includes(node.type)).map(node => node.id);
             graph.nodes = graph.nodes.filter(node => !views.includes(node.id)); graph.edges = graph.edges.filter(edge => !views.includes(edge.to[0]) && !views.includes(edge.from[0]));

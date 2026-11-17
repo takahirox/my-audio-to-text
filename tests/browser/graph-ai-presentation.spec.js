@@ -29,11 +29,11 @@ test.beforeEach(async ({ page }) => {
     }));
   });
 });
-for (const width of [1440, 320]) test(`all 16 AI cards, palette results and Settings facts at ${width}px`, async ({ page }, info) => {
+for (const width of [1440, 320]) test(`all 12 AI cards, palette results and Settings facts at ${width}px`, async ({ page }, info) => {
   await page.setViewportSize({ width, height: 900 });
   const facts = await page.evaluate(() => window.aiFacts);
   const inspector = page.locator('.graph-inspector');
-  await expect(page.locator('.graph-node .graph-ai-icon')).toHaveCount(16);
+  await expect(page.locator('.graph-node .graph-ai-icon')).toHaveCount(12);
   for (const fact of facts) {
     const heading = page.locator(`[data-node="${fact.type}"] .graph-heading`);
     await expect(heading).toHaveAccessibleName(`Select ${fact.type}: ${fact.label} · ${fact.model} · AI`);
@@ -68,7 +68,7 @@ for (const width of [1440, 320]) test(`all 16 AI cards, palette results and Sett
   await page.locator('#graph-palette-toggle').click();
   const search = page.getByRole('combobox', { name: 'Search nodes' });
   await expect(search).toBeFocused();
-  await expect(page.locator('.graph-node-option .graph-ai-icon')).toHaveCount(16);
+  await expect(page.locator('.graph-node-option .graph-ai-icon')).toHaveCount(12);
   for (const fact of facts) {
     await search.fill(fact.model);
     const option = page.locator(`[id="graph-option-${fact.type}"]`);

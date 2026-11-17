@@ -42,44 +42,44 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
     // The shared asset worker asks a Window for persistence immediately before
     // its first download; fetch itself no longer belongs to the editor.
     navigator.storage.persisted = () => {
-      window.beforePersistence.push(!(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'OpusMtEnJa'));
+      window.beforePersistence.push(!(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'TranslateGemmaEnJa'));
       return persisted();
     };
     navigator.mediaDevices.getUserMedia = () => { throw Error('Save must not capture'); };
   });
-  await add(editor, 'OpusMtEnJa'); await add(editor, 'OpusMtEnJa');
+  await add(editor, 'TranslateGemmaEnJa'); await add(editor, 'TranslateGemmaEnJa');
   expect(f.requests).toEqual([]); expect(await saved(live)).toEqual(initial);
   const workspace = await editor.locator('.graph-workspace').boundingBox();
   await save(editor); await noModelPanel(editor);
   await expectGraphModelsReady(editor);
-  expect(f.requests).toHaveLength(7); expect(f.requests.every(url => url.startsWith('/opus-mt-en-ja-assets.json/'))).toBe(true);
+  expect(f.requests).toHaveLength(8); expect(f.requests.every(url => url.startsWith('/translategemma-assets.json/'))).toBe(true);
   expect(await editor.evaluate(() => window.beforePersistence)).toEqual([false]);
   expect(await editor.locator('.graph-workspace').boundingBox()).toEqual(workspace);
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.evaluate(() => window.graphWorkers.every(worker => /moonshine-small-ja-worker|moonshine-medium-worker/.test(worker.url)))).toBe(true);
   const before = await saved(live); expect(before.version).toBe(15); expect(before.edges).toEqual(initial.edges);
-  await save(editor); await expectGraphModelsReady(editor); expect(f.requests).toHaveLength(7);
+  await save(editor); await expectGraphModelsReady(editor); expect(f.requests).toHaveLength(8);
   for (const corrupt of [true, false]) {
     await editor.evaluate(async corrupt => {
-      const { englishToJapaneseOpusMtManifest } = await import('./opus-mt-en-ja-manifest.js');
-      const manifest = await englishToJapaneseOpusMtManifest(), cache = await caches.open('transformers-cache'), file = manifest.files[0];
+      const { translateGemmaManifest } = await import('./translategemma-cache.js');
+      const manifest = await translateGemmaManifest(), cache = await caches.open('transformers-cache'), file = manifest.files[0];
       if (corrupt) await cache.put(file.url, new Response(new Uint8Array(file.bytes)));
       else await cache.delete(file.url);
     }, corrupt);
     await live.models.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(live.models.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Not downloaded');
-    await live.models.locator('#opus-en-ja').getByRole('button', { name: /^(Download|Retry)$/ }).click();
+    await expect(live.models.locator('#translategemma')).toHaveAttribute('data-state', 'Not downloaded');
+    await live.models.locator('#translategemma').getByRole('button', { name: /^(Download|Retry)$/ }).click();
     await expectGraphModelsReady(editor);
   }
-  expect(f.requests).toHaveLength(9); expect(await saved(live)).toEqual(before);
-  await expect(live.models.locator('#opus-en-ja .model-status')).toContainText('Ready');
-  await expect(live.models.locator('#opus-ja-en .model-status')).toHaveText('Not downloaded');
+  expect(f.requests).toHaveLength(10); expect(await saved(live)).toEqual(before);
+  await expect(live.models.locator('#translategemma .model-status')).toContainText('Ready');
+  await expect(live.models.locator('#plamo-3-translate-2b .model-status')).toHaveText('Not downloaded');
 });
 
 test('no optional model requests on load, invalid Save, storage failure or unrelated saved model dependencies', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor, before = await saved(live);
   await save(editor); expect(f.requests).toEqual([]);
-  await add(editor, 'OpusMtEnJa'); await add(editor, 'Number');
+  await add(editor, 'TranslateGemmaEnJa'); await add(editor, 'Number');
   await editor.getByLabel('number value', { exact: true }).fill('');
   await settleAutoSave(editor); await expect(editor.locator('#graph-errors')).toContainText('finite number');
   expect(await saved(live)).toEqual(before); expect(f.requests).toEqual([]); await noModelPanel(editor);
@@ -98,7 +98,7 @@ test('no optional model requests on load, invalid Save, storage failure or unrel
 
 test('multiple parked model types and voices prepare distinct sets once and reuse shared weights', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor, initial = await saved(live);
-  for (const [type, settings] of [['OpusMtJaEn', {}], ['OpusMtEnJa', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Kokoro', {}], ['Kokoro', {}]]) await add(editor, type, settings);
+  for (const [type, settings] of [['Plamo3Translate2B', {}], ['TranslateGemmaEnJa', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Kokoro', {}], ['Kokoro', {}]]) await add(editor, type, settings);
   // Individual inspector settings, including a different language with the same
   // voice, choose equivalent weights without modifying any routes.
   for (const [id, settings] of [['supertonic3-1', { language: 'en' }], ['supertonic3-2', { voice: 'M1' }], ['kokoro-1', { voice: 'af_heart' }]]) {
@@ -118,31 +118,31 @@ test('multiple parked model types and voices prepare distinct sets once and reus
 
 for (const mode of ['error', 'short', 'corrupt']) test(`Save remains persisted after ${mode} download failure; Models recovery clears the editor warning`, async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
-  f.mode(mode); await add(editor, 'OpusMtEnJa'); await save(editor);
+  f.mode(mode); await add(editor, 'TranslateGemmaEnJa'); await save(editor);
   await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
   await expect(editor.locator('#graph-model-warning')).toBeVisible();
   await expect(editor.locator('#graph-model-warning a')).toHaveAttribute('href', 'model-cache.html');
   await expect(editor.locator('#graph-state')).toHaveText('Saved');
   await noModelPanel(editor);
-  const before = await saved(live); expect(before.nodes.some(node => node.type === 'OpusMtEnJa')).toBe(true);
+  const before = await saved(live); expect(before.nodes.some(node => node.type === 'TranslateGemmaEnJa')).toBe(true);
   await expect(editor.locator('#graph-errors')).toBeEmpty();
-  f.mode('normal'); await live.models.locator('#opus-en-ja').getByRole('button', { name: /^(Download|Retry)$/ }).click();
+  f.mode('normal'); await live.models.locator('#translategemma').getByRole('button', { name: /^(Download|Retry)$/ }).click();
   await expectGraphModelsReady(editor); expect(await saved(live)).toEqual(before);
   await expect(editor.locator('#graph-model-warning')).toBeEmpty();
 });
 
 test('requirement changes and page teardown cancel background preparation and allow Models recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
-  f.mode('hold'); await add(editor, 'OpusMtEnJa'); await save(editor);
+  f.mode('hold'); await add(editor, 'TranslateGemmaEnJa'); await save(editor);
   await expect.poll(() => f.requests.length).toBeGreaterThan(0);
   await noModelPanel(editor);
-  await editor.getByRole('button', { name: 'Remove opusmtenja', exact: true }).click();
+  await editor.getByRole('button', { name: 'Remove translategemmaenja', exact: true }).click();
   await save(editor);
   // Acquiring the model lock in Models proves obsolete work released it.
-  const models = live.models.locator('#opus-en-ja');
+  const models = live.models.locator('#translategemma');
   await live.models.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(models).toHaveAttribute('data-state', 'Not downloaded');
-  await add(editor, 'OpusMtEnJa'); await save(editor);
+  await add(editor, 'TranslateGemmaEnJa'); await save(editor);
   await expect.poll(() => f.requests.length).toBeGreaterThan(1);
   const before = await saved(live);
   await editor.close(); f.mode('normal');
@@ -152,7 +152,7 @@ test('requirement changes and page teardown cancel background preparation and al
 
 test('an external revision cancels obsolete preparation and protects a dirty draft while the second editor is read-only', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor, initial = await saved(live);
-  f.mode('hold'); await add(editor, 'OpusMtEnJa'); await save(editor);
+  f.mode('hold'); await add(editor, 'TranslateGemmaEnJa'); await save(editor);
   await expect.poll(() => f.requests.length).toBeGreaterThan(0);
   const other = await f.context.newPage(); await other.goto(editor.url());
   await expect(other.locator('#graph-state')).toHaveText('Read-only');
@@ -166,9 +166,9 @@ test('an external revision cancels obsolete preparation and protects a dirty dra
   await expect(editor.locator('#graph-save-error')).toContainText('changed elsewhere');
   await noModelPanel(editor);
   await live.models.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(live.models.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Not downloaded');
+  await expect(live.models.locator('#translategemma')).toHaveAttribute('data-state', 'Not downloaded');
   await expect(editor.locator('[data-node=text]')).toHaveCount(1);
-  await expect(editor.locator('[data-node=opusmtenja]')).toHaveCount(1);
+  await expect(editor.locator('[data-node=translategemmaenja]')).toHaveCount(1);
   expect(await saved(live)).toEqual(initial);
   await settleAutoSave(editor); await expect(editor.locator('#graph-save-error')).toContainText('reload the latest');
 });
@@ -206,9 +206,9 @@ test('formatter instances add inputs above four, preserve wires, validate edits 
 
 test('named graphs share verified assets by identity; Save prepares only the open entry', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
-  await add(editor, 'OpusMtEnJa'); await save(editor);
+  await add(editor, 'TranslateGemmaEnJa'); await save(editor);
   await expectGraphModelsReady(editor);
-  expect(f.requests).toHaveLength(7);
+  expect(f.requests).toHaveLength(8);
   const { id, original } = await editor.evaluate(async () => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js');
     const library = readLibrary(localStorage), original = structuredClone(library.graphs.find(entry => entry.id === library.assignments.live));
@@ -217,7 +217,7 @@ test('named graphs share verified assets by identity; Save prepares only the ope
   });
   const copy = await f.context.newPage(); const url = new URL(editor.url()); url.searchParams.set('id', id);
   await copy.goto(url.href); await settleAutoSave(copy);
-  await expectGraphModelsReady(copy); expect(f.requests).toHaveLength(7);
+  await expectGraphModelsReady(copy); expect(f.requests).toHaveLength(8);
   expect(await copy.evaluate(async id => (await import('./graph-library.js')).readLibrary(localStorage).graphs.find(entry => entry.id === id), original.id)).toEqual(original);
   expect(await copy.evaluate(() => window.graphWorkers.length)).toBe(0);
 });
@@ -228,7 +228,7 @@ test('saved subgraph requirements inspect headlessly in read-only sessions, prep
     const { defaultGraph, graphNode } = await import('./graph.js');
     const { GraphLibrary, readLibrary } = await import('./graph-library.js');
     const { extractSubgraph } = await import('./subgraphs.js');
-    const graph = defaultGraph(); graph.nodes.push(graphNode('OpusMtEnJa', 'translator'));
+    const graph = defaultGraph(); graph.nodes.push(graphNode('TranslateGemmaEnJa', 'translator'));
     const extracted = extractSubgraph(graph, ['translator'], 'weights');
     const store = new GraphLibrary(localStorage);
     await store.create({ id: 'weights', name: 'Translation weights', kind: 'subgraph', graph: extracted.shared });
@@ -245,14 +245,14 @@ test('saved subgraph requirements inspect headlessly in read-only sessions, prep
   const workspace = await editor.locator('.graph-workspace').boundingBox();
   await editor.getByRole('button', { name: 'Select subgraph', exact: true }).press('ArrowRight');
   await save(editor); await expectGraphModelsReady(editor);
-  await expect(live.models.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Ready');
+  await expect(live.models.locator('#translategemma')).toHaveAttribute('data-state', 'Ready');
   await expect(viewer.locator('#graph-model-warning')).toBeEmpty();
-  expect(f.requests).toHaveLength(7);
-  const before = await saved(live), model = live.models.locator('#opus-en-ja');
+  expect(f.requests).toHaveLength(8);
+  const before = await saved(live), model = live.models.locator('#translategemma');
   await model.getByRole('button', { name: 'Delete cached assets', exact: true }).click();
   await expect(editor.locator('#graph-model-warning')).toContainText('needs model files');
   await expect(viewer.locator('#graph-model-warning')).toContainText('needs model files');
-  expect(f.requests).toHaveLength(7);
+  expect(f.requests).toHaveLength(8);
   expect(await editor.locator('.graph-workspace').boundingBox()).toEqual(workspace);
   await model.getByRole('button', { name: 'Download', exact: true }).click();
   await expect(editor.locator('#graph-model-warning')).toBeEmpty();
