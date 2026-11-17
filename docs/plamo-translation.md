@@ -1,4 +1,4 @@
-# Experimental PLaMo 3 Translate 2B (#385, #391)
+# Experimental PLaMo 3 Translate 2B (#385, #391, #395)
 
 Add **Translation**, model subtitle **PLaMo 3 Translate 2B**, in
 AI Models / Translation. Search by translation, PLaMo or the internal stable
@@ -8,6 +8,7 @@ Connect text to `text: TEXT`. Optional ordinary Text constants configure:
 
 | Port | Unconnected default | Accepted connected values |
 | --- | --- | --- |
+| `context: TEXT` | no reference context | reference TEXT; empty omits the section |
 | `source_lang: TEXT` | automatic identification | `auto` or any of the 53 official codes |
 | `target_lang: TEXT` | Japanese/English auto switch | `auto` or any of the 53 official codes |
 
@@ -36,15 +37,40 @@ requires a concrete target; source `auto` is equivalent to omission. To keep out
 in English, connect `Text('en').value → target_lang`.
 
 For example, `Text('en').value → source_lang` and
-`Text('ja').value → target_lang` configure English → Japanese. Language events
+`Text('ja').value → target_lang` configure English → Japanese. Language and context events
 never request translation. A text or provisional event accepts an immutable
-snapshot of the current languages; changing a language while a job is loading,
-running or queued affects subsequent jobs. Grouped delivery applies configuration
+snapshot of context, languages and ID; changing context or a language while a job
+is loading, running or queued affects subsequent jobs. Grouped delivery applies configuration
 before text regardless of key order, and omitted connected configuration siblings
 restore defaults. Independent producers follow arrival order, without pretending
 to be an atomic group. Blank, whitespace, uppercase or unsupported connected
 values produce explicit configuration errors. Correcting the ports recovers
-subsequent jobs. There are no language, direction or model Settings controls.
+subsequent jobs. There are no context, language, direction or model Settings controls.
+
+Optional `context` is reference information, kept separate from the source text.
+For example, connect `Moonshine.final → PLaMo.text`, a separate
+`Text.value → PLaMo.context`, and `PLaMo.text → Display.input1`. Try
+`かみを切りました。` as text with `折り紙を作っています。` as context, then clear
+context and compare. This can help disambiguation; improved translation quality
+is not guaranteed. Multiline Japanese, quotes, `<xml>` and other ordinary special
+characters are preserved verbatim. Unconnected or empty context uses exactly the
+previous context-free prompt. Whitespace-only context is nonempty, matching the
+official template's explicit context kwarg. Context does not select a language or
+load another model. It is neither added to the source nor wrapped in custom instructions.
+
+Context has an independent 8,000 UTF-16-unit transport bound. This is **not** a
+token-budget guarantee: every full PFML3 prompt is evaluated by the embedded GGUF
+runtime with [`max_tokens: 0`](https://github.com/ggml-org/llama.cpp/blob/7d7f0287530bc8981690f361d8c1627dbae1c99a/tools/server/server-schema.cpp#L46),
+which generates no output and returns the actual
+`usage.prompt_tokens`, including BOS. More than **1,792 prompt tokens** is an
+explicit error, reserving **256 output tokens** within `n_ctx: 2048`. Generation
+reuses that evaluated prompt cache; context shifting is disabled. Prompts exceeding
+the runtime context itself are rejected by llama.cpp. Missing/inconsistent token
+counts, output limits and inference failures produce errors, never successful
+truncated output. Shorten context or source text to recover. Context containing
+`<|plamo:` or `<|endoftext|>` is rejected rather than escaped or silently altered.
+Invalid context snapshots report through `error` / `provisionalError` with their
+source and ID; later corrected jobs recover. Context-only updates do not infer.
 
 The shared translation scheduler owns the committed FIFO, replaceable provisional
 job, IDs, output groups, Stop drain, Cancel cleanup and owned Worker. It emits the
@@ -69,7 +95,7 @@ leases so cached files cannot be deleted during inference.
 
 Save/Live preparation and the single Models card use the same manifest. Extension
 inference is cache-only. Playground Run downloads missing verified bytes on demand;
-merely opening a page or editing language fields does not download weights.
+merely opening a page or editing language/context fields does not download weights.
 The GGUF Blob is read via Wllama's async file ABI without a whole-file JS
 ArrayBuffer. No weights or preload data enter the extension artifact. Cache
 eviction, restricted/private storage, quota and device memory can require retry.
@@ -89,13 +115,13 @@ is required. Cancel terminates the outer Worker and its WASM child. Runtime file
 are individually pinned in the extension packaging allowlist.
 
 Direct [official PFML3](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF/blob/4f672106b847200bfdc0f6af6c321cd94eba1aed/README.md#pfml3-prompt-format)
-supplies the dataset, input and output sections. With a concrete target, automatic
-source identification omits input `lang`, an explicit source adds that exact code,
+supplies `dataset → context (when nonempty) → input → output` sections. With a
+concrete target, automatic source identification omits input `lang`, an explicit source adds that exact code,
 and output `lang` is the chosen target. With omitted/auto target, input carries
 `lang=ja/en` and output has **no** `lang`, matching the official GGUF template.
 This is a model instruction, not application-side language detection. llama.cpp
 adds BOS, so the handwritten prompt omits it. Reserved model control tokens in
-source text are rejected.
+source and context are rejected.
 
 The official GGUF default changed on **2026-11-08** from fixed Japanese output to
 Japanese/English switching. The pinned revision already contains this behavior;
@@ -129,12 +155,15 @@ all independent pages' runtimes; `npm run serve` serves the Playground. Open
 `/nodes/plamo-3-translate-2b/` without installing the extension. Leave source and
 target omitted for Japanese → English and English → Japanese. Enter source `fr`,
 target `ja` for French → Japanese, or source `ko`, target `en` for Korean → English.
-An empty Playground field means omission; whitespace is a connected invalid value.
+The optional context textarea runs through the same Node and PFML3 builder as
+the graph; clear it and Run again to compare. Empty language fields mean omission;
+whitespace is a connected invalid language value.
 
 Default CI uses deterministic production scheduler/Worker/UI/cache tests with tiny
 fixtures, without real weights. `npm test` covers language validation, grouped
 delivery/omissions, queued snapshots during async loading, configuration-only
-updates, Text.value connections, IDs, previews, error routing and lifecycle.
+updates, context changes/clears, reserved-token rejection, actual token-budget
+checks, Text.value connections, IDs, previews, error routing and lifecycle.
 `npm run test:playground` includes PLaMo native Worker/cache tests. Extension tests
 cover the palette, sparkles, inspector, save/reload, Models and production Worker.
 Existing translation and graph regression tests remain in place.
@@ -172,9 +201,21 @@ The test serves static bytes on loopback and changes only the manifest's deliver
 URL; the production hashes, immutable cache key, Worker and inference stay intact.
 
 `tests/fixtures/plamo-template.json` records prompts rendered by the pinned official
-Jinja template (Jinja2 3.1.6, `trim_blocks`/`lstrip_blocks`, empty BOS). Tests compare
+Jinja template, including native context boundaries and multilingual/special-character
+references (Jinja2 3.1.6, `trim_blocks`/`lstrip_blocks`, empty BOS). Tests compare
 the template digest, representative prompts and a digest covering all 53 codes as
 both source and target against the production PFML3 builder. To regenerate it,
 install `Jinja2==3.1.6` in an isolated review environment and run
 `python scripts/render-plamo-template-fixtures.py`; normal CI needs no Jinja package.
 See [#391 validation evidence](evidence/plamo-391.md) for actual model results.
+
+## Post-merge validation for #395
+
+Human real-model/device quality checks for native context are **pending**. They
+are post-merge validation, not a Draft removal, approval or merge requirement.
+Normal automated checks use tiny deterministic runtime fixtures and require no
+GGUF download. After merge, compare the ambiguity example above with and without
+context, check that reference information is not copied into the translation,
+and try multiline/special-character references on a supported Chromium device.
+Record actual output and timing; create a follow-up Issue if a defect is found.
+The earlier #385/#391 evidence does not establish #395 context quality.

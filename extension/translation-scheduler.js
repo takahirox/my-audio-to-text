@@ -2,7 +2,6 @@ import { NUMBER } from '../web/port-contracts.js';
 import { finiteNumber } from '../web/number-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { TranslateGemmaTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
-import { validateTranslateGemmaContext } from '../web/translategemma-context.js';
 
 export const TRANSLATION_OUTPUT_GROUPS = Object.freeze([
   Object.freeze(['source', 'text', 'error', 'id']),
@@ -41,6 +40,9 @@ export class TranslationSchedulerNode {
     const source = { inputs: {}, outputs: { text: TEXT }, start: context => { this.send = text => context.emit('text', text); } };
     // Read the active job's accepted snapshot, never the mutable latest context.
     const translator = new this.TranslationNode({ workerFactory: this.workerFactory, loadOptions: { cacheOnly: true }, requireSingleOutput: true,
+      // A rejected PLaMo prompt/request fails only its accepted job. Fatal Worker
+      // or load failures still follow the Pipeline's session failure path.
+      ...(this.TranslationNode.recoverRequestErrors ? { onTranslationError: error => this.active?.reject(error) } : {}),
       getTranslationContext: () => this.active?.job.translationContext ?? '',
       getTranslationLanguages: () => this.active?.job.languages ?? {} });
     const sink = new TextOutputNode(text => this.active?.resolve(text));
@@ -83,9 +85,13 @@ export class TranslationSchedulerNode {
       catch (error) { this.onState(`Translation configuration: ${error.message}`, 'error'); }
     }
     if (Object.hasOwn(values, 'context')) {
-      validateTranslateGemmaContext(values.context);
+      this.TranslationNode.validateContextUpdate?.(values.context);
       this.translationContext = values.context;
     } else if (this.acceptsContext && context.groupInputs?.includes('context')) this.translationContext = '';
+    if (this.acceptsContext) {
+      try { this.TranslationNode.contextPolicy(this.translationContext); }
+      catch (error) { this.onState(`Translation configuration: ${error.message}`, 'error'); }
+    }
     for (const [id, text] of [['id', 'text'], ['provisionalId', 'provisional']]) {
       if (Object.hasOwn(values, id)) this.ids[id] = values[id];
       // An explicit snapshot without an ID cannot borrow a previous job's ID.
@@ -138,6 +144,7 @@ export class TranslationSchedulerNode {
       else this.queuedChars -= job.source.length;
       try {
         if (this.acceptsLanguages) this.TranslationNode.languagePolicy(job.languages);
+        if (this.acceptsContext) this.TranslationNode.contextPolicy(job.translationContext);
         if (!job.source.trim()) { this.emit(job, ''); continue; }
         if (this.error) { this.emit(job, undefined, this.error); continue; }
         if (job.source.length > 1000) {

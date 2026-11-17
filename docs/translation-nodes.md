@@ -33,7 +33,12 @@ TEXT graph value is invalid. Optional context uses the same reference-only promp
 PLaMo has its own `Plamo3Translate2B` type, runtime, language policy, assets and
 license. Its **Translation** Node accepts 53 languages. Unconnected/auto target
 uses the official GGUF Japanese/English switch; other input languages need an
-explicit target. A concrete source requires a concrete target. See
+explicit target. A concrete source requires a concrete target. Optional
+`context: TEXT` uses its native PFML3 reference section, with no context Settings.
+Context-only updates never translate; text/provisional jobs snapshot context,
+languages and ID together. Empty context omits the section. Its independent
+validation rejects reserved tokens and enforces a runtime-counted 1,792-token
+prompt budget with 256 output tokens reserved. See
 [its guide](plamo-translation.md). Independent graph Node instances
 still own separate Workers and runtime state.
 
