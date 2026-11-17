@@ -18,15 +18,15 @@ test('both AI text processing models: parked Save persists, independent settings
   for (const type of TEXT_PROCESSING_TYPES) {
     await openPalette(editor); await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'AI Models / Text' });
     await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
-    await expect(editor.getByLabel(type.toLowerCase() + ' Input count', { exact: true })).toHaveValue('1');
+    await expect(editor.getByLabel(type.toLowerCase() + ' Input count', { exact: true })).toHaveCount(0);
+    await expect(editor.getByLabel(type.toLowerCase() + ' Remove last input', { exact: true })).toBeDisabled();
     const prompt = editor.getByLabel(type.toLowerCase() + ' System prompt', { exact: true });
     await expect(prompt).toHaveJSProperty('tagName', 'TEXTAREA');
     await expect(prompt).not.toHaveValue('');
     await prompt.fill('Summarize in bullets.\nFocus on ' + type + '.'); await prompt.press('Tab');
     expect(await editor.locator('#graph-node-type [role="option"][data-type^="MeetingSummary"]').count()).toBe(0);
   }
-  await editor.getByLabel('textprocessingqwen35 Input count', { exact: true }).fill('2');
-  await editor.getByLabel('textprocessingqwen35 Input count', { exact: true }).press('Tab');
+  await editor.getByLabel('textprocessingqwen35 Add input', { exact: true }).click();
   const cards = page.models.locator('#meeting-summary-lfm2, #meeting-summary-qwen35');
   const save = async () => { await settleAutoSave(editor);  };
   f.mode('corrupt'); await save();
@@ -218,7 +218,11 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: numbered connectors, Sy
   }, type);
   await editor.reload();
   await editor.getByRole('button', { name: /^Select processor:/ }).click();
-  const count = () => editor.getByLabel('processor Input count', { exact: true });
+  const group = editor.getByRole('group', { name: 'Inputs', exact: true });
+  const add = group.getByRole('button', { name: 'processor Add input', exact: true });
+  const remove = group.getByRole('button', { name: 'processor Remove last input', exact: true });
+  await expect(editor.getByLabel('processor Input count', { exact: true })).toHaveCount(0);
+  await expect(editor.locator('.graph-inspector')).not.toContainText(/\d+ TEXT inputs\.|Removed inputs keep their wires|System prompt can refer|Auto Save applies next session/);
   const inputs = editor.locator('[data-node=processor] [data-side=input]');
   await expect(inputs).toHaveCount(2);
   await expect(editor.getByRole('button', { name: 'processor output result', exact: true })).toBeVisible();
@@ -230,14 +234,20 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: numbered connectors, Sy
   await expect(inputs).toHaveCount(3);
   await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(2);
   await editor.locator('#graph-redo').click(); await expect(inputs).toHaveCount(3);
-  await count().fill('32'); await count().press('Tab');
+  for (let i = 3; i < 32; i++) await add.press('Enter');
   await expect(inputs).toHaveCount(32); await expect(editor.getByLabel('processor Add input', { exact: true })).toBeDisabled();
-  await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(3);
+  await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(31);
   await editor.locator('#graph-redo').click(); await expect(inputs).toHaveCount(32);
-  await count().fill('2'); await count().press('Tab'); await settleAutoSave(editor);
+  await settleAutoSave(editor); await editor.reload();
+  await editor.getByRole('button', { name: /^Select processor:/ }).click();
+  await expect(inputs).toHaveCount(32); await expect(add).toBeDisabled();
+  for (let i = 32; i > 2; i--) await remove.press('Enter');
+  await settleAutoSave(editor);
   const before = await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage));
   await editor.getByLabel('processor Remove last input', { exact: true }).click();
-  await expect(inputs).toHaveCount(1);
+  await expect(inputs).toHaveCount(1); await expect(remove).toBeDisabled();
+  await expect(editor.locator('.graph-inspector')).toContainText('Unknown port: b.value → processor.input2');
+  await expect(editor.locator('#graph-state')).toHaveText('Save failed');
   await expect(editor.locator('#graph-errors')).toContainText('b.value → processor.input2');
   // Invalid removal cannot overwrite the saved graph or reroute the old wire.
   expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(before);
@@ -246,9 +256,10 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: numbered connectors, Sy
   await editor.locator('#graph-undo').click();
   await expect(editor.locator('#graph-errors')).toContainText('processor.input2');
   await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(2);
+  await expect(editor.locator('.graph-wire')).toHaveCount(3);
   await expect(editor.locator('#graph-errors')).toBeEmpty(); await settleAutoSave(editor);
   await editor.reload(); await editor.getByRole('button', { name: /^Select processor:/ }).click();
-  await expect(count()).toHaveValue('2');
+  await expect(inputs).toHaveCount(2);
   await expect(editor.getByLabel('processor System prompt', { exact: true })).toHaveValue(prompt);
   const download = editor.waitForEvent('download');
   await editor.locator('.graph-actions > summary').click(); await editor.locator('#graph-export').click();

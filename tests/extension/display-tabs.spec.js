@@ -39,9 +39,24 @@ test('MV3 legacy Display graph Load/Import/Export/Reset and numbered Settings pr
   await editor.reload(); await editor.getByRole('button', { name: 'Select main', exact: true }).click();
   await expect(editor.getByLabel('main title', { exact: true })).toHaveValue('Main');
   await expect(editor.getByLabel('main input2 tab label', { exact: true })).toHaveValue('Translation');
-  await editor.getByLabel('main Remove last input', { exact: true }).click();
+  const group = editor.getByRole('group', { name: 'Inputs', exact: true });
+  const add = group.getByRole('button', { name: 'main Add input', exact: true });
+  const remove = group.getByRole('button', { name: 'main Remove last input', exact: true });
+  for (let i = 2; i < 32; i++) await add.press('Enter');
+  await expect(add).toBeDisabled();
+  await editor.locator('#graph-undo').click();
+  await expect(editor.locator('[data-node=main] [data-side=input]')).toHaveCount(31);
+  await expect(add).toBeEnabled();
+  await editor.locator('#graph-redo').click();
+  await expect(add).toBeDisabled();
+  for (let i = 32; i > 2; i--) await remove.press('Space');
+  await expect(group.getByLabel('main input1 tab label', { exact: true })).toHaveValue('Transcript');
+  await expect(group.getByLabel('main input2 tab label', { exact: true })).toHaveValue('Translation');
+  await remove.click();
+  await expect(remove).toBeDisabled();
   await settleAutoSave(editor);
   const reduced = await editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })());
+  expect(reduced.nodes.find(n => n.id === 'main').settings).toEqual({ title: 'Main', inputCount: 1, inputLabels: { input1: 'Transcript' } });
   expect(reduced.edges).toEqual(saved.edges.filter(e => !(e.to[0] === 'main' && e.to[1] === 'input2')));
   // Import legacy JSON uses the same conversion without overwriting storage.
   await editor.locator('input[type="file"]').setInputFiles({ name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(raw) });

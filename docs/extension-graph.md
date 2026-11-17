@@ -592,8 +592,9 @@ Display nodes remain independent outputs; the collection of nodes is never a tab
 strip. A single-input Display omits tab navigation. No executable Displays retains
 the empty-output message.
 
-In Settings use **Add input** / **Remove last input** for 1–32 `ITEM` inputs
-(default 1). Removing the last input deletes only its label and connected wire;
+In Settings → **Inputs** use **+** (Add input) / **−** (Remove last input)
+for 1–32 `ITEM` inputs (default 1). Removing the last input deletes only its label
+and connected wire;
 remaining ports keep their names and labels. Each input has an editable **tab
 label**, stored in `settings.inputLabels` by port name, for example
 `{"input1":"Transcript","input2":"Translation","input3":"Summary"}`. Labels
