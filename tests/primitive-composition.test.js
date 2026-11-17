@@ -8,7 +8,7 @@ import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { NODE_TYPES, GRAPH_VERSION, graphNode, edge, validateGraph, saveGraph, readGraph, defaultGraph } from '../extension/graph.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
-const translators = ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn'];
+const translators = ['TranslateGemmaJaEn', 'TranslateGemmaEnJa'];
 const store = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k,v) => m.set(k,v), removeItem: k => m.delete(k) }; };
 
 // Exhaust all current TEXT producer ports, including ASR, summaries, formatters,
@@ -32,7 +32,7 @@ for (const translator of translators) test(`${translator}: direct ASR previews c
   const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),
     edge('translator','provisionalText','preview','input1'),edge('translator','text','acc','append'),edge('acc','text','translated','input1'));
-  const built = buildGraph((graph), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslation(){},prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
+  const built = buildGraph((graph), { sourceFactory:()=>({start(){},stop(){}}), workerFactory:f.factory, translationWorkerFactory:f.factory, prepareTranslateGemma(){},onDisplay:(id,s)=>{ s = domText(s);displays[id]=s;} });
   try {
     await built.pipeline.start(); await built.translations[0].ready;
     const speech = built.speechNodes.get('speech');

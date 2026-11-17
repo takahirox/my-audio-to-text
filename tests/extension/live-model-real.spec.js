@@ -20,12 +20,12 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
   let context, page, server;
   try {
     await cp('dist/chrome-extension', root, { recursive: true });
-    for (const name of ['extension/session.js', 'extension/recorder.js', 'extension/graph-runtime.js', 'web/text-summary-worker.js', 'web/moonshine-small-ja-worker.js', 'web/opus-mt-worker.js', 'web/kokoro-worker.js', 'web/kokoro-english.js', 'web/tts-assets/phonemizer.js']) {
+    for (const name of ['extension/session.js', 'extension/recorder.js', 'extension/graph-runtime.js', 'web/text-summary-worker.js', 'web/moonshine-small-ja-worker.js', 'web/translategemma-worker.js', 'web/kokoro-worker.js', 'web/kokoro-english.js', 'web/tts-assets/phonemizer.js']) {
       const bytes = await readFile(name);
       expect((await readFile(path.join(root, name))).equals(bytes), `Rebuild changed source: ${name}`).toBe(true);
       sourceSHA256[name] = createHash('sha256').update(bytes).digest('hex');
     }
-    const manifests = kind === 'asr-translation' ? [['moonshine-small-ja-assets.json', '.cache/new-asr/moonshine-small-ja'], ['opus-mt-assets.json', '.cache/opus-mt']]
+    const manifests = kind === 'asr-translation' ? [['moonshine-small-ja-assets.json', '.cache/new-asr/moonshine-small-ja'], ['translategemma-assets.json', '.cache/translategemma']]
       : kind === 'held-summary' ? [['meeting-summary-lfm2-assets.json', '.cache/meeting-summary/01b5a0a33d22253d5ee52b367d2375eeb113b7cd']]
       : [['kokoro-assets.json', '.cache/tts-models/Kokoro-82M-v1.0-ONNX']];
     server = createServer((request, response) => {
@@ -71,7 +71,7 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
     const editor = await context.newPage(); await editor.goto(base + 'graph-editor.html');
     let graph;
     if (kind === 'asr-translation') {
-      graph = { version: GRAPH_VERSION, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('OpusMtJaEn', 'translation'), graphNode('Display', 'output')],
+      graph = { version: GRAPH_VERSION, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('TranslateGemmaJaEn', 'translation'), graphNode('Display', 'output')],
         edges: [edge('audio', 'audio', 'asr', 'audio'), edge('asr', 'final', 'translation', 'text'), edge('translation', 'text', 'output', 'input1')] };
     } else {
       const text = graphNode('Text', 'text'); text.settings.value = 'The city opened a park in April. Volunteers maintain its shaded trails.';

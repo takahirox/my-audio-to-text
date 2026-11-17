@@ -292,7 +292,7 @@ ports (including `Hold.input`) stay unchanged. Load, Import, validation and runt
 selection use the same conversion; reading leaves stored JSON untouched. Auto Save and
 Export write the canonical numbered ports. Conflicting `input`/`input1` connections
 fail validation instead of replacing an edge. Removed display Node types and
-older schema versions still fail explicitly. Current [example JSON](evidence/item-198.json) can be imported directly.
+older schema versions still fail explicitly. Current [example JSON](examples/bilingual-history.json) can be imported directly.
 
 ## Reusable processing subgraphs
 
@@ -465,7 +465,7 @@ Committed pairs precede provisional pairs, matching the default coalesce wiring:
 | ASR | Audio, then optional configuration | final, finalId, provisional, provisionalId (previews where supported) |
 | KeyedTextCoalesce | input1, id1, input2, id2 | text, id |
 | KeyedTextPair | input1, id1, input2, id2 | pair |
-| OPUS-MT / TranslateGemma | text, id, provisional, provisionalId, then context where supported | text, id, source, error; provisionalText, provisionalId, provisionalSource, provisionalError |
+| TranslateGemma / PLaMo | text, id, provisional, provisionalId, then context (TranslateGemma) or source_lang / target_lang (PLaMo) | text, id, source, error; provisionalText, provisionalId, provisionalSource, provisionalError |
 
 Translation source/error outputs remain in their committed or provisional family;
 context is an independent auxiliary input. Duration/size limits, triggers and

@@ -1,3 +1,4 @@
+import { translationGraph } from '../fixtures/translation-graph.js';
 // Follow the same disclosure controls a keyboard or pointer user sees.
 export async function openPalette(page) {
   if (!await page.locator('#graph-palette').isVisible()) await page.locator('#graph-palette-toggle').click();
@@ -7,10 +8,10 @@ export async function openPalette(page) {
 // Seed an existing saved graph for runtime tests. UI composition and automatic
 // Save preparation are covered separately in graph-models.spec.js.
 export async function loadTranslationFixture(page, direction = 'ja-en', enabled = true) {
-  await page.evaluate(async ({ direction, enabled }) => {
-    const { defaultGraph } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
-    await saveLiveGraphData(localStorage, defaultGraph({ direction, enabled }));
-  }, { direction, enabled });
+  await page.evaluate(async graph => {
+    const { saveLiveGraphData } = await import('./graph-library.js');
+    await saveLiveGraphData(localStorage, graph);
+  }, translationGraph({ direction, enabled }));
   await page.reload();
 }
 export async function clickGraphAction(page, id, { discard = true } = {}) {

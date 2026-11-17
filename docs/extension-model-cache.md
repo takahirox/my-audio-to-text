@@ -11,7 +11,7 @@ models before enabling Start.
 Build/load the extension as described in [the extension guide](chrome-extension.md).
 Open **Models** from Graph Library, Graph Editor or Live.
 The Models page manages both language-specific Moonshine streaming recognizers,
-both OPUS-MT directions, TranslateGemma, text processing, IfCondition and all speech
+TranslateGemma, PLaMo, text processing, IfCondition and all speech
 synthesis families. Japanese Kokoro additionally prepares its OpenJTalk frontend
 voice. No model has a Bundled status.
 The **Models** heading identifies the page; its header navigation contains only
@@ -173,24 +173,16 @@ Cache API errors are surfaced instead of claiming a successful uncached download
 
 ## Optional large models and terms
 
-Models offers production OPUS-MT and TTS preparation through complete reviewed
-immutable manifests and deliberate download actions. Live uses these same cache
-keys for inference, with no redundant model store. TranslateGemma remains
-unavailable in the extension, and optional model weights are not bundled.
-Keep the pinned IDs, revisions and required files from
-[translation nodes](translation-nodes.md); do not use floating `main` URLs.
+Models prepares TranslateGemma, experimental PLaMo and TTS models through
+complete reviewed immutable manifests. Auto Save prepares saved dependencies,
+including parked Nodes; Models also supports explicit download/retry/deletion.
+Live uses the same verified cache keys without downloading during inference.
+Optional model weights are never bundled. Keep pinned IDs, revisions and
+required files from [translation nodes](translation-nodes.md).
 Remote asset hosts must meet browser CORS/COEP rules under the current MV3 CSP.
-The loopback test server sends CORS and CORP headers; it requires no
-production host permission or CSP change. Real OPUS delivery and inference are
-recorded separately in the #69 evidence;
-fixture tests alone do not verify them.
+Loopback fixtures exercise these paths without changing host permissions or CSP;
+fixture tests alone do not establish real model inference.
 
-Japanese → English OPUS-MT is approximately **239 MB**, with **CC BY 4.0** attribution to
-Helsinki-NLP/OPUS-MT and ONNX Community. English → Japanese uses its own
-`Kadonox/opus-tatoeba-en-ja-onnx` checkpoint/manifest/cache keys, approximately **253 MB**,
-with upstream **Apache 2.0** and Kadonox conversion attribution. The selected
-direction alone downloads on explicit request; its state/progress never stands
-in for the other model. See [#71 evidence](evidence/translation-direction-71.md).
 TranslateGemma 4B's selected ONNX assets
 are approximately **3.112 GB**, subject to Google's
 [Gemma Terms of Use](https://ai.google.dev/gemma/terms) and
@@ -235,7 +227,6 @@ and Models recovery without shifting the editor workspace.
 opening, focus and cross-page updates, including corruption/eviction recovery and
 actionable inspection errors without a manual cache-check control.
 
-See [Issue #67 validation evidence](evidence/extension-model-cache-67.md).
 No post-merge human acceptance gate is required. Optional follow-up work can
 measure real device persistence and multi-GB performance separately.
 

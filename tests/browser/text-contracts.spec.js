@@ -4,9 +4,10 @@ test('ASR final TEXT → correction → translation fans out directly and drains
   await page.goto('/');
   const result = await page.evaluate(async () => {
     const { Pipeline } = await import('/pipeline.js');
-    const { SpeechToTextNode, MONO_16KHZ_PCM } = await import('/transcription-nodes.js');
+    const { MONO_16KHZ_PCM } = await import('/transcription-nodes.js');
+    const { SpeechToTextMoonshineSmallJaNode } = await import('/moonshine-small-ja-node.js');
     const { SpeechTranscriptCorrectionNode } = await import('/correction-nodes.js');
-    const { OpusMtTranslationNode, TextOutputNode, TEXT } = await import('/translation-nodes.js');
+    const { TranslateGemmaTranslationNode, TextOutputNode, TEXT } = await import('/translation-nodes.js');
     const workers = [], urls = [];
     const workerFactory = url => {
       const blob = URL.createObjectURL(new Blob([`
@@ -21,10 +22,10 @@ test('ASR final TEXT → correction → translation fans out directly and drains
       worker.terminate = () => { worker.released = true; terminate(); };
       workers.push(worker); return worker;
     };
-    const speech = new SpeechToTextNode({ workerFactory: path => workerFactory(new URL(path, location.href)) });
+    const speech = new SpeechToTextMoonshineSmallJaNode({ workerFactory: path => workerFactory(new URL(path, location.href)) });
     const original = [], a = [], b = [];
     const source = { outputs: { audio: MONO_16KHZ_PCM } };
-    const translation = new OpusMtTranslationNode({ workerFactory });
+    const translation = new TranslateGemmaTranslationNode({ workerFactory });
     const graph = new Pipeline({ nodes: {
       source, speech, correction: new SpeechTranscriptCorrectionNode({ enabled: false }), translation,
       original: new TextOutputNode(text => original.push(text)),
@@ -41,7 +42,7 @@ test('ASR final TEXT → correction → translation fans out directly and drains
     for (const [id, text] of [[0, 'same'], [0, 'duplicate'], [1, 'same'], [2, 'last']]) speech.receiveEvent({ type: 'final', id, text });
     await graph.stop(); await graph.dispose(); urls.forEach(url => URL.revokeObjectURL(url));
     let invalid;
-    try { new Pipeline({ nodes: { source: { outputs: { text: TEXT } }, speech: new SpeechToTextNode() }, connections: [{ from: ['source', 'text'], to: ['speech', 'audio'] }] }); }
+    try { new Pipeline({ nodes: { source: { outputs: { text: TEXT } }, speech: new SpeechToTextMoonshineSmallJaNode() }, connections: [{ from: ['source', 'text'], to: ['speech', 'audio'] }] }); }
     catch (error) { invalid = error.message; }
     return { original, a, b, released: workers.every(w => w.released), invalid, primitive: speech.outputs.final === TEXT && speech.outputs.provisional === TEXT };
   });

@@ -3,10 +3,10 @@ import { test, expect, openGraph, startGraph, emitFinal, addAudioPath } from './
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'OpusMtJaEn']) {
+for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'TranslateGemmaJaEn']) {
   test(`${type}: Live shows queue failures, replaces prior errors and clears them on restart`, async ({ graphExtension: f }) => {
-    const streaming = type !== 'OpusMtJaEn';
-    const workerFile = { Qwen3TtsStreaming: 'qwen3-tts-worker.js', CosyVoice3Streaming: 'cosyvoice3-worker.js', OpusMtJaEn: 'opus-mt-worker.js' }[type];
+    const streaming = type !== 'TranslateGemmaJaEn';
+    const workerFile = { Qwen3TtsStreaming: 'qwen3-tts-worker.js', CosyVoice3Streaming: 'cosyvoice3-worker.js', TranslateGemmaJaEn: 'translategemma-worker.js' }[type];
     // Hold generation while exercising production queue admission, session
     // routing and the accessible Live alert with a controlled Worker protocol.
     await writeFile(path.join(f.root, 'web', workerFile), `
@@ -18,7 +18,7 @@ for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'OpusMtJaEn']) {
     await live.evaluate(async () => {
       const { TabSession } = await import('./session.js'), start = TabSession.prototype.start;
       TabSession.prototype.start = function(...args) {
-        this.prepareTranslation = async () => {};
+        this.prepareTranslateGemma = async () => {};
         return start.apply(this, args);
       };
     });
@@ -29,8 +29,8 @@ for (const type of ['Qwen3TtsStreaming', 'CosyVoice3Streaming', 'OpusMtJaEn']) {
         edges: [edge('source', 'value', 'processor', 'text'), edge('processor', streaming ? 'stream' : 'text', 'output', streaming ? 'audio' : 'input1')] });
     }, { type, streaming });
     if (!streaming) {
-      await live.models.locator('#opus-ja-en').getByRole('button', { name: /^(Download|Retry)$/ }).click();
-      await expect(live.models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Ready');
+      await live.models.locator('#translategemma').getByRole('button', { name: /^(Download|Retry)$/ }).click();
+      await expect(live.models.locator('#translategemma')).toHaveAttribute('data-state', 'Ready');
     }
     await expect(live.locator('#model-status')).toHaveText(/Ready|Models unavailable/);
     if (await live.locator('#retry-models').isVisible()) await live.locator('#retry-models').click();

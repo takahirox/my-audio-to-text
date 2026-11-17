@@ -1,3 +1,4 @@
+import { translationGraph } from './fixtures/translation-graph.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
@@ -13,7 +14,7 @@ const removed = ['ViewBuilder', 'TextDisplay', 'LiveTextDisplay', 'TextToDOM', '
 
 test('default/reset and explicit translated history graphs use only current contracts and exact runtime ports', async () => {
   for (const enabled of [false, true]) for (const direction of ['ja-en', 'en-ja']) {
-    const graph = defaultGraph({ enabled, direction });
+    const graph = translationGraph({ enabled, direction });
     assert.deepEqual(validateGraph(graph), []);
     assert.deepEqual(NODE_TYPES.KeyedTextPair.outputs, { pair: KEYED_PAIRED_TEXT });
     assert.deepEqual(NODE_TYPES.Display.inputs, { input1: ITEM });
@@ -31,8 +32,8 @@ test('default/reset and explicit translated history graphs use only current cont
   }
 });
 
-test('new storage uses current transcription default without importing legacy preferences', () => {
-  const store = storage(); store.setItem('opus-mt-translation-preferences', '{"enabled":true}');
+test('new storage uses the current transcription default', () => {
+  const store = storage();
   assert.deepEqual(readGraph(store), defaultGraph());
 });
 
@@ -78,7 +79,7 @@ for (const [name, edit, pattern] of [
   ['settings', g => g.nodes[2].settings.model = 'remote', /Unknown setting/],
   ['malformed edge', g => g.edges.push({ from: null }), /Malformed/],
 ]) test(`schema rejects ${name} before persistence or constructing Workers`, () => {
-  const graph = defaultGraph({ enabled: true }); edit(graph);
+  const graph = translationGraph({ enabled: true }); edit(graph);
   assert.match(validateGraph(graph).join('\n'), pattern);
   assert.throws(() => assertGraph(graph), pattern); assert.throws(() => buildGraph(graph), pattern);
 });

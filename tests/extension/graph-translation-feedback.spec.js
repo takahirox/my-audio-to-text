@@ -5,7 +5,7 @@ import path from 'node:path';
 
 // Source-only MV3 package: production Pipeline/scheduler/summary nodes, native
 // module Workers and CSP; deterministic replies, no model assets or inference.
-for (const type of ['EnglishToJapaneseTranslateGemmaTranslationNode', 'EnglishToJapaneseOpusMtTranslationNode']) {
+for (const type of ['EnglishToJapaneseTranslateGemmaTranslationNode']) {
   test(`MV3 ${type}: independent feedback, FIFO translation, Stop and Cancel/restart`, async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'translation-feedback-'));
     let browser;
@@ -26,7 +26,7 @@ for (const type of ['EnglishToJapaneseTranslateGemmaTranslationNode', 'EnglishTo
           if (data.type === 'drain') postMessage({ type: 'drained', id: data.id });
         };
       `;
-      for (const name of ['text-summary-worker.js', 'translategemma-worker.js', 'opus-mt-en-ja-worker.js']) {
+      for (const name of ['text-summary-worker.js', 'translategemma-worker.js']) {
         await writeFile(path.join(root, 'web', name), worker);
       }
       browser = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,

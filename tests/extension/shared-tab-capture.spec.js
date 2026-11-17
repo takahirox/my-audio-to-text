@@ -71,7 +71,7 @@ test('two independent Live graphs share native tab capture and one playback bran
     await library.evaluate(async () => {
       const { GraphLibrary } = await import('./graph-library.js');
       const { defaultGraph, graphNode } = await import('./graph.js');
-      const store = new GraphLibrary(localStorage), first = defaultGraph({ enabled: false }), second = defaultGraph({ enabled: false });
+      const store = new GraphLibrary(localStorage), first = defaultGraph(), second = defaultGraph();
       second.nodes.push(graphNode('Display','second-output'));
       second.edges.push({from:['speech','provisional'],to:['second-output','input1']});
       second.nodes[0].id='second-audio'; for(const route of second.edges)if(route.from[0]==='audio')route.from[0]='second-audio';

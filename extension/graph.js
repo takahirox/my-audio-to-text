@@ -47,8 +47,6 @@ export const NODE_TYPES = Object.freeze({
   Text: { label: 'Text', inputs: {}, outputs: { value: TEXT }, textSettings: { value: { default: '', multiline: true } }, help: 'Reusable literal text constant, including empty text. Delivered once at session start to ordinary TEXT consumers.' },
   SpeechToTextMoonshineMediumEn: { ...aiPresentation('Speech Recognition · EN / Streaming', 'Moonshine Medium Streaming English', 'English'), inputs: { audio: MONO_16KHZ_PCM }, outputs: asrOutputs(), outputOrder: ASR_OUTPUT_ORDER, outputGroups: ASR_OUTPUT_GROUPS, help: 'Optional 245M English Medium Streaming, CPU WASM. Auto Save prepares 305 MB of weights; allow at least 2 GB free RAM and 700 MB free storage. Route final/provisional with their IDs through KeyedTextCoalesce → KeyedTextPair → KeyedPairedTextAccumulator → Display.input1. Updates from 0.5 seconds, native endpointing; history renews every 30 seconds after drain. Hard boundaries can split words. 30-second backlog limit. Local inference; no recording-time downloads.' },
   SpeechToTextMoonshineSmallJa: { ...aiPresentation('Speech Recognition · JA / Streaming', 'Moonshine Small Streaming Japanese', 'Japanese'), inputs: { audio: MONO_16KHZ_PCM }, outputs: asrOutputs(), outputOrder: ASR_OUTPUT_ORDER, outputGroups: ASR_OUTPUT_GROUPS, help: '123M Japanese Small Streaming, CPU WASM. Auto Save prepares 122 MB of weights; allow at least 2 GB free RAM and 300 MB free storage. Route final/provisional with their IDs through KeyedTextCoalesce → KeyedTextPair → KeyedPairedTextAccumulator → Display.input1. Updates from 0.5 seconds, native endpointing; history renews every 30 seconds after drain. Hard boundaries can split words. 30-second backlog limit. Local inference; no recording-time downloads.' },
-  OpusMtJaEn: { ...aiPresentation('Translation · JA → EN', 'OPUS-MT', 'Japanese → English'), inputs: { text: TEXT, provisional: TEXT, id: NUMBER, provisionalId: NUMBER }, optionalInputs: ['provisional', 'id', 'provisionalId'], outputs: TRANSLATION_OUTPUTS, inputOrder: TRANSLATION_INPUT_ORDER, outputOrder: TRANSLATION_OUTPUT_ORDER, outputGroups: TRANSLATION_OUTPUT_GROUPS, help: 'Committed text by default. Optional provisional accepts any TEXT source. Optional id/provisionalId accept independent finite NUMBER sources; each TEXT event snapshots the latest ID, or no ID, for its job. ID-only updates never translate. Committed source/text/error and preview provisionalSource/provisionalText/provisionalError are separate atomic families sharing one Worker. provisionalText replaces a separate preview display and emits empty text on final input, Stop or Cancel. Pending emits nothing; Cancel clears previews only; Stop drains queued text. Failures emit source/error without successful text.' },
-  OpusMtEnJa: { ...aiPresentation('Translation · EN → JA', 'OPUS-MT', 'English → Japanese'), inputs: { text: TEXT, provisional: TEXT, id: NUMBER, provisionalId: NUMBER }, optionalInputs: ['provisional', 'id', 'provisionalId'], outputs: TRANSLATION_OUTPUTS, inputOrder: TRANSLATION_INPUT_ORDER, outputOrder: TRANSLATION_OUTPUT_ORDER, outputGroups: TRANSLATION_OUTPUT_GROUPS, help: 'Committed text by default. Optional provisional accepts any TEXT source. Optional id/provisionalId accept independent finite NUMBER sources; each TEXT event snapshots the latest ID, or no ID, for its job. ID-only updates never translate. Committed source/text/error and preview provisionalSource/provisionalText/provisionalError are separate atomic families sharing one Worker. provisionalText replaces a separate preview display and emits empty text on final input, Stop or Cancel. Pending emits nothing; Cancel clears previews only; Stop drains queued text. Failures emit source/error without successful text.' },
   TextProcessingLfm2: { ...aiPresentation('Text Processing', 'LFM2.5 1.2B JP', 'Specified by System prompt', 'WebGPU (shader-f16)'), inputs: processingInputs(), optionalInputs: ['input1'], outputs: { result: TEXT }, numberSettings: { inputCount: { default: 1 } }, textSettings: { prompt: { label: 'System prompt', default: DEFAULT_PROCESSING_PROMPT, maxLength: MAX_INSTRUCTION_CHARS, multiline: true } }, help: 'One generation per TEXT update using all latest numbered inputs; an atomic group generates once. Unset inputs are empty. System prompt specifies the task, language and format (1–4,096 characters). Refer to Input 1, Input 2, etc. Input count: 1–32. No prompt port or hidden history. Complete result → Display.input1, including unchanged results. Frequent updates run the model repeatedly: use TextWindow, Hold or Button to control frequency. Hold supports explicit feedback. Stop drains accepted work; Cancel discards pending work. Combined input limit: 32,768 characters; overflow fails visibly without truncation. Auto Save applies settings next session. AI results may be inaccurate; verify against the inputs. Local WebGPU shader-f16 required; no CPU/cloud fallback or recording-time downloads.' },
   TextProcessingQwen35: { ...aiPresentation('Text Processing', 'Qwen3.5 2B', 'Specified by System prompt', 'WebGPU (shader-f16)'), inputs: processingInputs(), optionalInputs: ['input1'], outputs: { result: TEXT }, numberSettings: { inputCount: { default: 1 } }, textSettings: { prompt: { label: 'System prompt', default: DEFAULT_PROCESSING_PROMPT, maxLength: MAX_INSTRUCTION_CHARS, multiline: true } }, help: 'One generation per TEXT update using all latest numbered inputs; an atomic group generates once. Unset inputs are empty. System prompt specifies the task, language and format (1–4,096 characters). Refer to Input 1, Input 2, etc. Input count: 1–32. No prompt port or hidden history. Complete result → Display.input1, including unchanged results. Frequent updates run the model repeatedly: use TextWindow, Hold or Button to control frequency. Hold supports explicit feedback. Stop drains accepted work; Cancel discards pending work. Combined input limit: 32,768 characters; overflow fails visibly without truncation. Auto Save applies settings next session. AI results may be inaccurate; verify against the inputs. Local WebGPU shader-f16 required; no CPU/cloud fallback or recording-time downloads.' },
   IfCondition: { ...aiPresentation('Condition Check · Yes/No', 'XtremeDistil', 'English'), inputs: { text: TEXT }, outputs: { yes: TEXT, no: TEXT }, textSettings: { condition: { default: 'Is this a question?', maxLength: MAX_CONDITION_CHARS, multiline: true } }, help: 'Evaluate an English natural-language condition locally. Yes/No carries the original text unchanged to exactly one branch. Empty/whitespace text takes No. Auto Save prepares model files; Live initializes an owned CPU WASM Worker before enabling Start. Ambiguous decisions, errors or overflow stop this Node visibly; other paths continue. Stop drains; Cancel discards pending text. Conditions apply next session.' },
@@ -107,17 +105,15 @@ export function nodeDefinition(node, graph, definitions = []) {
   try { inputs = (node.type === 'Display' ? displayInputs : node.type.startsWith('TextProcessing') ? processingInputs : formatInputs)(node.settings?.inputCount); } catch { inputs = {}; }
   return { ...definition, inputs, optionalInputs: Object.keys(inputs) };
 }
-const translators = ['OpusMtJaEn', 'OpusMtEnJa'];
 export function graphNode(type, id, x = 20, y = 20) {
   const definition = Object.hasOwn(NODE_TYPES, type) ? NODE_TYPES[type] : undefined;
   if (!definition) throw new Error(`Unknown Node type: ${type}`);
   return { id, type, settings: { ...Object.fromEntries(Object.entries(definition.settings || {}).map(([key, values]) => [key, values[0]])), ...Object.fromEntries(Object.entries({ ...definition.textSettings, ...definition.numberSettings }).map(([key, spec]) => [key, spec.default])) }, position: { x, y } };
 }
 // New/reset graphs explicitly recognize Japanese; translation is explicit.
-export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
-  direction = direction === 'en-ja' ? 'en-ja' : 'ja-en';
+export function defaultGraph() {
   const nodes = [graphNode('ChromeTabAudio', 'audio', 20, 30),
-    graphNode(direction === 'en-ja' ? 'SpeechToTextMoonshineMediumEn' : 'SpeechToTextMoonshineSmallJa', 'speech', 270, 30),
+    graphNode('SpeechToTextMoonshineSmallJa', 'speech', 270, 30),
     graphNode('KeyedTextCoalesce', 'coalesce', 620, 30),
     graphNode('KeyedTextPair', 'pair', 960, 30),
     graphNode('KeyedPairedTextAccumulator', 'history', 1300, 30),
@@ -127,12 +123,7 @@ export function defaultGraph({ enabled = false, direction = 'ja-en' } = {}) {
     edge('speech', 'provisionalId', 'coalesce', 'id2'), edge('speech', 'provisional', 'coalesce', 'input2'),
     edge('coalesce', 'id', 'pair', 'id1'), edge('coalesce', 'text', 'pair', 'input1'),
     edge('pair', 'pair', 'history', 'pair'), edge('history', 'pairs', 'transcript', 'input1')];
-  if (enabled) {
-    nodes.push(graphNode(direction === 'en-ja' ? 'OpusMtEnJa' : 'OpusMtJaEn', 'translation', 620, 430));
-    edges.push(edge('speech', 'finalId', 'translation', 'id'), edge('speech', 'final', 'translation', 'text'),
-      edge('translation', 'id', 'pair', 'id2'), edge('translation', 'text', 'pair', 'input2'));
-  }
-  return { version: GRAPH_VERSION, translationDirection: direction, nodes, edges };
+  return { version: GRAPH_VERSION, nodes, edges };
 }
 export const edge = (source, output, target, input) => ({ from: [source, output], to: [target, input] });
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -161,7 +152,6 @@ export function validateGraph(graph, optionalWarnings = false, definitions = [])
   const definitionOf = type => Object.hasOwn(NODE_TYPES, type) ? NODE_TYPES[type] : undefined;
   const errors = [], warnings = [];
   if (!record(graph) || graph.version !== GRAPH_VERSION || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return optionalWarnings ? [] : [`Expected version ${GRAPH_VERSION} graph with nodes and edges arrays.`];
-  if (graph.translationDirection !== undefined && !['ja-en', 'en-ja'].includes(graph.translationDirection)) errors.push('Invalid translation direction preference.');
   const nodes = new Map(), incoming = new Map(), outgoing = new Map(), emitting = new Map(), seen = new Set();
   for (const node of graph.nodes) {
     if (!record(node) || typeof node.id !== 'string' || !/^[a-zA-Z][\w-]{0,63}$/.test(node.id)) { errors.push('Invalid Node ID.'); continue; }
@@ -287,11 +277,8 @@ export function assertGraph(graph, definitions = []) {
   if (errors.length) throw new Error(errors.join('\n'));
   return structuredClone(graph);
 }
-export function graphPreferences(graph) {
-  const translation = graph.nodes.find(node => [...translators, 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'Plamo3Translate2B'].includes(node.type));
-  return { enabled: !!translation, direction: translation
-    ? (['OpusMtEnJa', 'TranslateGemmaEnJa'].includes(translation.type) ? 'en-ja' : 'ja-en')
-    : graph.translationDirection || 'ja-en' };
+export function hasTranslation(graph) {
+  return graph.nodes.some(node => ['TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'Plamo3Translate2B'].includes(node.type));
 }
 // Legacy-only API for standalone graph consumers. MV3 pages must resolve a
 // stable library ID via graph-library.js; never implicitly edit another graph.

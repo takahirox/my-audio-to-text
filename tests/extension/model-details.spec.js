@@ -11,8 +11,6 @@ const notices = {
   'if-condition': ['Moritz Laurer', 'Microsoft', 'MIT License'],
   'moonshine-small-ja': ['Moonshine', 'quantized_26_08_23', 'MIT'],
   'moonshine-medium-en': ['Useful Sensors', 'Moonshine AI', 'MIT', 'moonshine-third-party.txt', 'available-models.md'],
-  'opus-ja-en': ['Helsinki-NLP', 'ONNX Community', '05470cd69b62aa32e3ee64ccfd41279789ee4b1e', 'creativecommons.org/licenses/by/4.0/'],
-  'opus-en-ja': ['Helsinki-NLP', 'Kadonox', '225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e', 'Apache License'],
   translategemma: ['Google', 'ONNX Community', 'ai.google.dev/gemma/terms', 'ai.google.dev/gemma/prohibited_use_policy', 'Redistributors'],
   'plamo-3-translate-2b': ['PLaMo Community License Agreement', 'Preferred Networks', '1 billion yen', 'Prior registration', 'Redistribution and Attribution'],
   supertonic3: ['Supertone Inc.', 'OpenRAIL-M', 'supertonic-model.txt'],
@@ -22,9 +20,9 @@ const notices = {
 test('every card has one collapsed Details with working attribution, license and source destinations', async ({ graphExtension: f }) => {
   const page = await f.context.newPage();
   await page.goto(f.url.replace('recorder.html', 'model-cache.html'));
-  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(14);
-  await expect(page.locator('.model-card details')).toHaveCount(14);
-  await expect(page.locator('.model-card summary')).toHaveText(Array(14).fill('Details'));
+  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(12);
+  await expect(page.locator('.model-card details')).toHaveCount(12);
+  await expect(page.locator('.model-card summary')).toHaveText(Array(12).fill('Details'));
   await expect(page.locator('.model-card details[open], details details')).toHaveCount(0);
   await expect(page.getByText('Attribution & notices', { exact: true })).toHaveCount(0);
   const checked = new Map();

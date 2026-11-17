@@ -1,7 +1,7 @@
 import { NUMBER } from '../web/port-contracts.js';
 import { finiteNumber } from '../web/number-node.js';
 import { Pipeline } from '../web/pipeline.js';
-import { OpusMtTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
+import { TranslateGemmaTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
 import { validateTranslateGemmaContext } from '../web/translategemma-context.js';
 import { updatePlamoLanguages, plamoLanguages } from '../web/plamo-policy.js';
 
@@ -16,7 +16,7 @@ export class TranslationSchedulerNode {
   inputs = { text: TEXT, provisional: TEXT, id: NUMBER, provisionalId: NUMBER };
   outputs = TRANSLATION_OUTPUTS;
   outputGroups = TRANSLATION_OUTPUT_GROUPS;
-  constructor({ prepare, workerFactory, TranslationNode = OpusMtTranslationNode, modelName = 'OPUS-MT', onState = () => {} } = {}) {
+  constructor({ prepare, workerFactory, TranslationNode = TranslateGemmaTranslationNode, modelName = 'TranslateGemma 4B', onState = () => {} } = {}) {
     this.TranslationNode = TranslationNode; this.prepare = prepare; this.workerFactory = workerFactory; this.onState = onState;
     this.modelName = modelName;
     this.acceptsContext = TranslationNode.supportsContext === true;

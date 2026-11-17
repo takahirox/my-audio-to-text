@@ -4,7 +4,7 @@ import { graphNode, edge, defaultGraph } from '../../extension/graph.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-for (const translator of ['TranslateGemmaEnJa','TranslateGemmaJaEn','OpusMtEnJa','OpusMtJaEn']) test(`${translator}: MV3 editor connects ASR previews and window text in either order and saves incomplete drafts`, async ({ graphExtension:f }) => {
+for (const translator of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']) test(`${translator}: MV3 editor connects ASR previews and window text in either order and saves incomplete drafts`, async ({ graphExtension:f }) => {
   test.setTimeout(90000);
   const live=await openGraph(f, { live: false }), editor=live.editor;
   for(const source of ['speech','window']) for(const ports of [['provisional','text'],['text','provisional']]) {

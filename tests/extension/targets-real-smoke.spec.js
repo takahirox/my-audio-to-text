@@ -25,7 +25,7 @@ test('real pinned ASR: native toolbar/tab audio fans out to Live and the same-ta
     const live = await context.newPage(); await live.goto(`chrome-extension://${id}/extension/recorder.html`); live.on('pageerror', error => pageErrors.push(error.message));
     await live.evaluate(async () => {
       const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
-      const graph = defaultGraph({ enabled: false });
+      const graph = defaultGraph();
       graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'field'));
       graph.edges.push(edge('speech', 'final', 'field', 'text'));
       await saveLiveGraphData(localStorage, graph); window.dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));

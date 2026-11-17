@@ -51,13 +51,13 @@ test('MV3 palette search/categories, contextual settings, keyboard controls and 
 
 test('MV3 compact controls precede live outputs; preview, current value and independent translation Nodes reflect the graph', async ({ graphExtension: f }) => {
   // Layout coverage substitutes inference replies; asset preparation stays real.
-  for (const role of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(f.root, 'web', role), `
+  for (const role of ['translategemma-worker.js']) await writeFile(path.join(f.root, 'web', role), `
     self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready',id:data.id});if(data.type==='translate')postMessage({type:'result',id:data.id,texts:[data.text]});if(data.type==='drain')postMessage({type:'drained',id:data.id});};`);
   const live = await openGraph(f), editor = live.editor;
   await live.evaluate(async () => {
     const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
-    graph.nodes.push(graphNode('Display', 'value'), graphNode('OpusMtJaEn', 'forward'), graphNode('OpusMtEnJa', 'reverse'), graphNode('Display', 'forward-output'), graphNode('Display', 'reverse-output'));
+    graph.nodes.push(graphNode('Display', 'value'), graphNode('TranslateGemmaJaEn', 'forward'), graphNode('TranslateGemmaEnJa', 'reverse'), graphNode('Display', 'forward-output'), graphNode('Display', 'reverse-output'));
     graph.edges.push(edge('speech', 'final', 'value', 'input1'), edge('speech', 'final', 'forward', 'text'), edge('speech', 'final', 'reverse', 'text'), edge('forward', 'text', 'forward-output', 'input1'), edge('reverse', 'text', 'reverse-output', 'input1'));
     await saveLiveGraphData(localStorage, (graph));
   });

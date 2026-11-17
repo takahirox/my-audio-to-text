@@ -1175,7 +1175,7 @@ test('missing verified translation cache fails before PCM streaming and releases
   await t.library.evaluate(async id => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js'), { graphNode, edge } = await import('./graph.js');
     const entry = readLibrary(localStorage).graphs.find(e => e.id === id), graph = entry.graph;
-    graph.nodes.push(graphNode('OpusMtJaEn', 'translate')); graph.edges[1] = edge('asr', 'final', 'translate', 'text'); graph.edges.push(edge('translate', 'text', 'field', 'text'));
+    graph.nodes.push(graphNode('TranslateGemmaJaEn', 'translate')); graph.edges[1] = edge('asr', 'final', 'translate', 'text'); graph.edges.push(edge('translate', 'text', 'field', 'text'));
     await new GraphLibrary(localStorage).save(id, entry.revision, graph);
   }, t.graphId);
   await start(t); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error'); await idle(t);

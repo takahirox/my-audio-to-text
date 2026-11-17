@@ -5,7 +5,7 @@ async function openModels(f) {
   await page.goto(f.url.replace('recorder.html', 'model-cache.html'));
   return page;
 }
-const card = page => page.locator('#opus-ja-en');
+const card = page => page.locator('#translategemma');
 const state = (page, value) => expect(card(page)).toHaveAttribute('data-state', value);
 // Headless Chrome does not send window focus events when switching tabs.
 const focus = page => page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -17,44 +17,44 @@ async function download(page) {
 test('Models automatically inspects on open, focus and cross-page updates; corruption and eviction recover without a manual check', async ({ graphExtension: f }) => {
   const first = await openModels(f), second = await openModels(f);
   for (const page of [first, second]) {
-    await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(14);
+    await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(12);
     await expect(page.getByRole('button', { name: 'Check cache', includeHidden: true })).toHaveCount(0);
   }
   expect(f.requests).toEqual([]);
   await download(first);
   await state(second, 'Ready'); // Preparation broadcasts to the other Models page.
-  expect(f.requests).toHaveLength(7);
+  expect(f.requests).toHaveLength(8);
   await second.reload(); await state(second, 'Ready');
-  expect(f.requests).toHaveLength(7);
+  expect(f.requests).toHaveLength(8);
 
   // Returning from another page must revalidate bytes, even if size matches.
   await second.evaluate(async () => {
-    const { opusMtManifest } = await import('./opus-mt-manifest.js');
-    const file = (await opusMtManifest()).files[0];
+    const { translateGemmaManifest } = await import('./translategemma-cache.js');
+    const file = (await translateGemmaManifest()).files[0];
     await (await caches.open('transformers-cache')).put(file.url,
       new Response(new Uint8Array(file.bytes), { headers: { 'Content-Length': String(file.bytes) } }));
   });
   await focus(first); await state(first, 'Not downloaded');
   await expect(card(first).locator('li').first()).toContainText('Missing');
   await expect(card(first).locator('li').nth(1)).toContainText('Cached');
-  expect(f.requests).toHaveLength(7); // Inspection never downloads.
+  expect(f.requests).toHaveLength(8); // Inspection never downloads.
   await download(first); await state(second, 'Ready');
-  expect(f.requests).toHaveLength(8); // Only the corrupt file is fetched again.
+  expect(f.requests).toHaveLength(9); // Only the corrupt file is fetched again.
 
   // A relevant update from another extension page must also detect eviction.
   await second.evaluate(async () => {
-    const { opusMtManifest } = await import('./opus-mt-manifest.js');
-    await (await caches.open('transformers-cache')).delete((await opusMtManifest()).files[1].url);
+    const { translateGemmaManifest } = await import('./translategemma-cache.js');
+    await (await caches.open('transformers-cache')).delete((await translateGemmaManifest()).files[1].url);
     const channel = new BroadcastChannel('model-cache-updates');
-    channel.postMessage({ id: 'opus-ja-en' }); channel.close();
+    channel.postMessage({ id: 'translategemma' }); channel.close();
   });
   await state(first, 'Not downloaded'); await state(second, 'Not downloaded');
   await expect(card(first).locator('li').nth(1)).toContainText('Missing');
   await download(first); await state(second, 'Ready');
-  expect(f.requests).toHaveLength(9);
+  expect(f.requests).toHaveLength(10);
   await card(second).getByRole('button', { name: 'Delete cached assets', exact: true }).click();
   await state(second, 'Not downloaded'); await state(first, 'Not downloaded');
-  await expect(card(first).locator('li')).toHaveText(Array(7).fill(/: Missing$/));
+  await expect(card(first).locator('li')).toHaveText(Array(8).fill(/: Missing$/));
 });
 
 test('Models inspection errors give actionable recovery through focus and Retry', async ({ graphExtension: f }) => {
@@ -75,5 +75,5 @@ test('Models inspection errors give actionable recovery through focus and Retry'
   await expect(card(page).getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
   await download(page);
   await expect(card(page).locator('.model-error')).toBeEmpty();
-  expect(f.requests).toHaveLength(7);
+  expect(f.requests).toHaveLength(8);
 });

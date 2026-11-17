@@ -3,7 +3,7 @@
 export const asrPages = ['moonshine-medium', 'moonshine-small-ja'];
 export const textPages = ['text-summary-lfm2', 'text-summary-qwen35', 'if-condition'];
 export const streamPages = ['qwen3-tts', 'cosyvoice3'];
-export const modelPages = [...asrPages, 'opus-mt', 'opus-mt-en-ja', 'translategemma', 'plamo-3-translate-2b', ...textPages, 'kokoro', 'supertonic3', ...streamPages];
+export const modelPages = [...asrPages, 'translategemma', 'plamo-3-translate-2b', ...textPages, 'kokoro', 'supertonic3', ...streamPages];
 
 export function wavFixture(seconds = 0.3) {
   const samples = Math.floor(seconds * 16000), bytes = Buffer.alloc(44 + samples * 2);

@@ -2,7 +2,7 @@ import { ButtonNode } from '../web/button-node.js';
 import { HoldNode } from '../web/hold-node.js';
 import { TextProcessingNode } from '../web/text-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
-import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode, Plamo3Translate2BTranslationNode } from '../web/translation-nodes.js';
+import { TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode, Plamo3Translate2BTranslationNode } from '../web/translation-nodes.js';
 import { verifiedPlamoCache } from './plamo-cache.js';
 import { verifiedTranslateGemmaCache } from './translategemma-cache.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
@@ -174,10 +174,6 @@ export function buildGraph(graph, options) {
           TranslationNode: spec.type === 'TranslateGemmaEnJa' ? EnglishToJapaneseTranslateGemmaTranslationNode : TranslateGemmaTranslationNode,
           modelName: 'TranslateGemma 4B', workerFactory: options.translationWorkerFactory,
           onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
-      case 'OpusMtJaEn': case 'OpusMtEnJa':
-        node = new TranslationSchedulerNode({ prepare: signal => options.prepareTranslation?.(signal, spec.type === 'OpusMtEnJa' ? 'en-ja' : 'ja-en'),
-          TranslationNode: spec.type === 'OpusMtEnJa' ? EnglishToJapaneseOpusMtTranslationNode : OpusMtTranslationNode,
-          workerFactory: options.translationWorkerFactory, onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
       case 'Supertonic3': case 'Kokoro': {
         const Node = spec.type === 'Supertonic3' ? Supertonic3TextToSpeechNode : KokoroTextToSpeechNode;
         const production = new Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,

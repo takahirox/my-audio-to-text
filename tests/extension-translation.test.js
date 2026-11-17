@@ -1,15 +1,13 @@
+import { translationGraph } from './fixtures/translation-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { Pipeline } from '../web/pipeline.js';
-import { TEXT, TextOutputNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
-import { OPUS_MT, OPUS_MT_EN_JA } from '../web/translation-models.js';
+import { TEXT, TextOutputNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
 import { TranslationSchedulerNode, TRANSLATION_OUTPUTS } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
-import { defaultGraph, graphNode, edge, NODE_TYPES } from '../extension/graph.js';
-import { defineAssetSet, HASH_CHUNK_BYTES } from '../extension/model-asset-cache.js';
-import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
+import { graphNode, edge } from '../extension/graph.js';
+import { TextFormatterNode } from '../web/text-nodes.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function workerFixture({ holdLoad = false, failLoad = false, failTranslate = false, empty = false } = {}) {
@@ -38,8 +36,8 @@ async function schedulerGraph(options = {}) {
   const f = workerFixture(options), outputs = [], states = [], plain = [], formatted = [];
   let emit, emitOutputs;
   const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory, prepare: options.prepare,
-    TranslationNode: { 'en-ja': EnglishToJapaneseOpusMtTranslationNode, 'gemma-en-ja': EnglishToJapaneseTranslateGemmaTranslationNode, 'gemma-ja-en': TranslateGemmaTranslationNode }[options.direction],
-    modelName: options.direction?.startsWith('gemma') ? 'TranslateGemma 4B' : 'OPUS-MT',
+    TranslationNode: { 'en-ja': EnglishToJapaneseTranslateGemmaTranslationNode, 'ja-en': TranslateGemmaTranslationNode }[options.direction],
+    modelName: 'TranslateGemma 4B',
     onState: state => states.push(state) });
   const pipeline = new Pipeline({ nodes: {
     source: { outputs: { text: TEXT, provisional: TEXT, context: TEXT }, start(c) { emit = c.emit; emitOutputs = c.emitOutputs; } }, scheduler,
@@ -57,26 +55,18 @@ async function schedulerGraph(options = {}) {
     setContext: text => emit('context', text), emitOutputs };
 }
 
-test('production pinned manifest includes all seven runtime files and reviewed bounded hashes', () => {
-  const files = JSON.parse(readFileSync('extension/opus-mt-assets.json'));
-  const set = defineAssetSet({ ...OPUS_MT, files });
-  assert.equal(set.bytes, 238978729);
-  assert.deepEqual(files.map(file => file.path), ['config.json', 'generation_config.json', 'tokenizer_config.json',
-    'tokenizer.json', 'special_tokens_map.json', 'onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_merged_quantized.onnx']);
-  assert.ok(set.files.every(file => file.url.includes(OPUS_MT.revision) && file.sha256Chunks.length === Math.ceil(file.bytes / HASH_CHUNK_BYTES)));
-});
 
-for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
+for (const direction of ['en-ja', 'ja-en']) {
   const graph = options => schedulerGraph({ ...options, direction });
   test(`${direction}: committed results are atomic, FIFO, repeat-safe and ignore duplicate worker replies`, async () => {
     const f = await graph();
-    assert.deepEqual(Object.keys(f.scheduler.inputs), direction.startsWith('gemma') ? ['text', 'provisional', 'id', 'provisionalId', 'context'] : ['text', 'provisional', 'id', 'provisionalId']);
+    assert.deepEqual(Object.keys(f.scheduler.inputs), ['text', 'provisional', 'id', 'provisionalId', 'context']);
     assert.deepEqual(Object.keys(f.scheduler.outputs), Object.keys(TRANSLATION_OUTPUTS));
     f.send('same'); f.send('same'); f.send(''); f.send('  '); f.send('last'); await tick();
     assert.deepEqual(f.outputs, [], 'pending emits no formatter rows'); assert.equal(f.requests.length, 1);
     assert.equal(f.workers[0].messages[0].cacheOnly, true);
-    assert.ok(f.workers[0].url.pathname.endsWith(direction.startsWith('gemma') ? '/translategemma-worker.js' : direction === 'en-ja' ? '/opus-mt-en-ja-worker.js' : '/opus-mt-worker.js'));
-    if (direction.startsWith('gemma')) assert.equal(f.workers[0].messages[0].direction, direction.slice(6));
+    assert.ok(f.workers[0].url.pathname.endsWith('/translategemma-worker.js'));
+    assert.equal(f.workers[0].messages[0].direction, direction);
     f.complete(0, 'first'); await tick(); f.complete(0, 'stale duplicate'); await tick();
     assert.equal(f.requests.length, 2); f.complete(1, 'second'); await tick();
     assert.equal(f.requests.length, 3); assert.equal(f.requests[2].text, 'last');
@@ -113,7 +103,7 @@ for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
   test(`${direction}: a recoverable per-utterance error clears stale translation and preserves later successful routing`, async () => {
     const f = await graph(); f.send('first'); f.send('x'.repeat(1001)); f.send('last'); await tick();
     f.complete(0, 'translated first'); await tick();
-    assert.match(f.formatted[1], /\|\|(?:OPUS-MT|TranslateGemma 4B) accepts/);
+    assert.match(f.formatted[1], /\|\|TranslateGemma 4B accepts/);
     assert.doesNotMatch(f.formatted[1], /translated first/);
     assert.ok(f.states.some(state => /Translation unavailable: .*accepts at most 1,000/.test(state)));
     f.complete(1, 'translated last'); await f.pipeline.stop();
@@ -133,7 +123,7 @@ for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
 function sessionFixture(translation = workerFixture()) {
   const asr = [], views = [];
   const session = new TabSession(view => views.push(view), {
-    translationWorkerFactory: translation.workerFactory, prepareTranslation: async () => {},
+    translationWorkerFactory: translation.workerFactory, prepareTranslateGemma: async () => {},
     sourceFactory: () => ({ start() {}, stop() {} }),
     workerFactory(path) {
       const worker = { path, terminated: false, postMessage(data) {
@@ -147,15 +137,6 @@ function sessionFixture(translation = workerFixture()) {
 }
 
 const display = (f, id = 'transcript') => domText(f.session.view.displays[id]) || '';
-test('English → Japanese has a distinct pinned complete manifest and cache keys', () => {
-  const files = JSON.parse(readFileSync('extension/opus-mt-en-ja-assets.json'));
-  const set = defineAssetSet({ ...OPUS_MT_EN_JA, files });
-  const original = defineAssetSet({ ...OPUS_MT, files: JSON.parse(readFileSync('extension/opus-mt-assets.json')) });
-  assert.equal(set.bytes, 252634769);
-  assert.equal(set.files.length, 7);
-  assert.ok(set.files.every(file => file.url.includes(OPUS_MT_EN_JA.revision) && !original.files.some(old => old.url === file.url)));
-  assert.ok(files.every(file => /^[a-f0-9]{64}$/.test(file.sha256) && file.sha256Chunks.length === Math.ceil(file.bytes / HASH_CHUNK_BYTES)));
-});
 
 test('scheduler accepts only TEXT and emits successful strings once to independent fan-out without diagnostic connections', async () => {
   const f = workerFixture(), a = [], b = [];
@@ -179,13 +160,14 @@ test('scheduler accepts only TEXT and emits successful strings once to independe
 });
 
 test('multiple translator runtime statuses retain each branch failure independently of Live labels', async () => {
-  const f = sessionFixture(), graph = defaultGraph({ enabled: true });
-  graph.nodes.push(graphNode('OpusMtEnJa', 'reverse'), graphNode('Display', 'reverse-display'));
+  const f = sessionFixture(), graph = translationGraph({ enabled: true });
+  graph.nodes.push(graphNode('Plamo3Translate2B', 'reverse'), graphNode('Display', 'reverse-display'));
   graph.edges.push(edge('speech', 'final', 'reverse', 'text'), edge('reverse', 'text', 'reverse-display', 'input1'));
-  f.session.prepareTranslation = async (signal, direction) => { if (direction === 'ja-en') throw Error('Forward cache unavailable'); };
+  f.session.prepareTranslateGemma = async () => { throw Error('Forward cache unavailable'); };
+  f.session.preparePlamo = async () => {};
   f.session.setGraph((graph)); await f.session.start(42); await tick();
   assert.match(f.session.view.translationStatus, /translation: Translation unavailable: Forward cache unavailable/);
-  assert.match(f.session.view.translationStatus, /reverse: Local OPUS-MT ready/);
+  assert.match(f.session.view.translationStatus, /reverse: Local PLaMo 3 Translate 2B ready/);
   assert.equal(f.session.view.error, 'translation: Translation unavailable: Forward cache unavailable');
   assert.equal(f.session.view.modelRecovery, true);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
@@ -204,9 +186,9 @@ test('empty committed input is a successful empty value even when model preparat
 });
 
 test('saved label/direction changes apply only to fresh Nodes and keep the active graph immutable', async () => {
-  const f = sessionFixture(); f.session.setGraph(defaultGraph({ enabled: true, direction: 'en-ja' })); await f.session.start(42);
+  const f = sessionFixture(); f.session.setGraph(translationGraph({ enabled: true, direction: 'en-ja' })); await f.session.start(42);
   const active = f.session.view.activeGraph;
-  const next = defaultGraph({ enabled: true, direction: 'ja-en' });
+  const next = translationGraph({ enabled: true, direction: 'ja-en' });
   next.nodes.find(n => n.id === 'transcript').position.x += 10; f.session.setGraph(next);
   assert.equal(f.session.view.activeGraph, active);
   f.session.session.speechNodes.get('speech').receiveEvent({ type: 'final', text: 'Hello' }); await tick();
@@ -227,7 +209,7 @@ test('optional error wire is not required to clear a previous translation in the
   assert.deepEqual(f.plain, ['previous translation']); await f.pipeline.dispose();
 });
 
-for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
+for (const direction of ['en-ja', 'ja-en']) {
   test(`${direction}: explicit preview family replaces, clears on final acceptance, and shares one priority FIFO Worker`, async () => {
     const f = await schedulerGraph({ direction });
     f.preview('old'); await tick();
@@ -308,7 +290,7 @@ test('independent atomic output families clear omitted siblings without clearing
   await pipeline.stop(); assert.equal(values.at(-1), 'committed|keep||'); await pipeline.dispose();
 });
 
-for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
+for (const direction of ['en-ja', 'ja-en']) {
   for (const phase of ['prepare', 'load']) test(`${direction}: Cancel during preview ${phase} clears only the preview route and suppresses late startup`, async () => {
     let finish;
     const f = await schedulerGraph({ direction, holdLoad: phase === 'load',
@@ -323,7 +305,7 @@ for (const direction of ['ja-en', 'en-ja', 'gemma-en-ja', 'gemma-ja-en']) {
   });
 }
 
-for (const direction of ['gemma-en-ja', 'gemma-ja-en']) {
+for (const direction of ['en-ja', 'ja-en']) {
   test(`${direction}: context-only updates, grouped snapshots, FIFO and explicit empty reset`, async () => {
     const f = await schedulerGraph({ direction, holdLoad: true });
     f.send('default'); f.setContext('first context'); f.send('one');
@@ -394,9 +376,3 @@ for (const direction of ['gemma-en-ja', 'gemma-ja-en']) {
     assert.equal(f.requests.length, 0); await f.pipeline.dispose(); assert.equal(f.scheduler.translationContext, '');
   });
 }
-
-test('OPUS-MT has no context capability', () => {
-  for (const type of ['OpusMtJaEn', 'OpusMtEnJa']) assert.equal(Object.hasOwn(NODE_TYPES[type].inputs, 'context'), false);
-  const node = new TranslationSchedulerNode();
-  assert.throws(() => node.receive('context', 'unused'), /Expected TEXT/);
-});

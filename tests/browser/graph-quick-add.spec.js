@@ -28,7 +28,7 @@ test('eight flat sorted categories combine search/filter and refresh dynamic Jap
   ]);
   for (const [name, types] of [
     ['AI Models / Speech Recognition', ['SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa']],
-    ['AI Models / Translation', ['OpusMtEnJa', 'OpusMtJaEn', 'Plamo3Translate2B', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn']],
+    ['AI Models / Translation', ['Plamo3Translate2B', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn']],
     ['AI Models / Text', ['IfCondition', 'TextProcessingLfm2', 'TextProcessingQwen35']],
     ['AI Models / Speech Synthesis', ['CosyVoice3Streaming', 'Kokoro', 'Qwen3TtsStreaming', 'Supertonic3']],
   ]) {
@@ -94,10 +94,10 @@ test('eight flat sorted categories combine search/filter and refresh dynamic Jap
   await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
     '✧✦Text ProcessingLFM2.5 1.2B JP', '✧✦Text ProcessingQwen3.5 2B',
   ]);
-  await category.selectOption('AI Models / Translation'); await search.fill('OPUS');
+  await category.selectOption('AI Models / Translation'); await search.fill('Gemma');
   await expect(page.locator('.graph-node-group > .muted')).toHaveText(['AI Models / Translation']);
   await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
-    '✧✦Translation · EN → JAOPUS-MT', '✧✦Translation · JA → ENOPUS-MT',
+    '✧✦Translation · EN → JATranslateGemma 4B', '✧✦Translation · JA → ENTranslateGemma 4B',
   ]);
   await category.selectOption('Outputs'); await search.fill('Number');
   await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(0);

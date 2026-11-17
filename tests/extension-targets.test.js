@@ -1,3 +1,4 @@
+import { translationGraph } from './fixtures/translation-graph.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, GRAPH_KEY, NODE_TYPES, GRAPH_VERSION } from '../extension/graph.js';
@@ -9,7 +10,7 @@ import { Pipeline } from '../web/pipeline.js';
 import { TabSession } from '../extension/session.js';
 
 function fieldGraph(translated = false) {
-  const graph = defaultGraph({ enabled: translated });
+  const graph = translationGraph({ enabled: translated });
   graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'field'));
   graph.edges.push(edge(translated ? 'translation' : 'speech', translated ? 'text' : 'final', 'field', 'text'));
   return graph;
@@ -132,7 +133,7 @@ test('SpeechToText deduplicates worker IDs before direct TEXT fan-out; equal str
 
 test('microphone toolbar selection never requests permission; cancellation releases a late grant before model/capture startup', async () => {
   const { TabSession } = await import('../extension/session.js');
-  const graph = defaultGraph({ enabled: false }); graph.nodes[0].type = 'MicrophoneAudio';
+  const graph = translationGraph({ enabled: false }); graph.nodes[0].type = 'MicrophoneAudio';
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
   let requests = 0, grant, stops = 0;
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { mediaDevices: { getUserMedia() { requests++; return new Promise(resolve => { grant = resolve; }); } } } });

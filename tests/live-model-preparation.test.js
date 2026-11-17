@@ -1,3 +1,4 @@
+import { translationGraph } from './fixtures/translation-graph.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TabSession } from '../extension/session.js';
@@ -42,7 +43,7 @@ function fixture(graph, options = {}) {
   const session = new TabSession(view => views.push(view), { graph, workerFactory, moonshineJapaneseWorkerFactory: workerFactory,
     textProcessingWorkerFactory: workerFactory, ifConditionWorkerFactory: workerFactory, translationWorkerFactory: workerFactory,
     prepareModelAssets: async () => {},
-    ttsWorkerFactory: workerFactory, prepareTranslation: async () => {}, prepareTts: async () => {},
+    ttsWorkerFactory: workerFactory, prepareTranslateGemma: async () => {}, prepareTts: async () => {},
     sourceFactory: id => ({ start() { captures.push(id); }, stop() {} }),
     onSynthesizedAudio: audio => outputs.push(audio), ...options });
   const messages = type => workers.flatMap(worker => worker.messages.filter(message => message.type === type));
@@ -131,7 +132,7 @@ test('Web dictation can retain cache-only preflight without opting into Live dow
 
 test('multi-model graph initializes every executable instance without inference/output; parked models stay inert', async t => {
   const graph = textGraph();
-  for (const type of ['TextProcessingQwen35', 'IfCondition', 'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Supertonic3', 'Kokoro', 'Qwen3TtsStreaming', 'CosyVoice3Streaming']) {
+  for (const type of ['TextProcessingQwen35', 'IfCondition', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Supertonic3', 'Kokoro', 'Qwen3TtsStreaming', 'CosyVoice3Streaming']) {
     graph.nodes.push(graphNode(type, type));
     graph.edges.push(edge('source', 'value', type, type.startsWith('TextProcessing') ? 'input1' : 'text'));
     const output = ['Supertonic3', 'Kokoro'].includes(type) ? 'audio' : type.endsWith('Streaming') ? 'stream' : type === 'IfCondition' ? 'yes' : type.startsWith('TextProcessing') ? 'result' : 'text';
@@ -143,7 +144,7 @@ test('multi-model graph initializes every executable instance without inference/
   const f = fixture(graph, { prepareTranslateGemma: async () => {} }); t.after(() => f.session.close());
   await f.session.prepareModels();
   assert.equal(f.session.view.error, ''); assert.equal(f.session.view.modelState, 'ready');
-  assert.equal(f.workers.length, 11); assert.equal(f.messages('load').length, 11);
+  assert.equal(f.workers.length, 9); assert.equal(f.messages('load').length, 9);
   assert.deepEqual([...new Set(f.workers.flatMap(worker => worker.messages.map(message => message.type)))], ['load']);
   assert.deepEqual(f.outputs, []); assert.deepEqual(f.captures, []); assert.deepEqual(f.session.view.displays, {});
   assert.equal(f.session.prepared.pipeline.entries.has('parked'), false);
@@ -235,8 +236,8 @@ test('idle GPU/Worker failure invalidates Ready and releases all models', async 
 
 test('eviction between file preparation and runtime initialization blocks readiness without capture or automatic retry', async t => {
   let inspections = 0;
-  const graph = defaultGraph({ enabled: true });
-  const f = fixture(graph, { prepareTranslation: async () => { inspections++; throw Error('Translation files missing or corrupt.'); } });
+  const graph = translationGraph({ enabled: true });
+  const f = fixture(graph, { prepareTranslateGemma: async () => { inspections++; throw Error('Translation files missing or corrupt.'); } });
   t.after(() => f.session.close());
   await f.session.prepareModels(); assert.equal(f.session.view.modelState, 'error');
   assert.match(f.session.view.error, /translation.*files missing or corrupt/);

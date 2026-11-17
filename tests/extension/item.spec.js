@@ -7,7 +7,7 @@ import { test, expect, openGraph, startGraph } from './graph-fixture.js';
 import { itemGraph } from '../fixtures/item-graph.js';
 
 test('MV3 portable ITEM graph keeps final rows visible through queued Worker replies, internal cancellation and restart', async ({ graphExtension: f }) => {
-  await writeFile(path.join(f.root, 'web/opus-mt-en-ja-worker.js'), `const pending=[]; self.onmessage=({data})=>{
+  await writeFile(path.join(f.root, 'web/translategemma-worker.js'), `const pending=[]; self.onmessage=({data})=>{
     if(data.type==='load')postMessage({type:'ready',id:data.id});
     if(data.type==='translate')pending.push(data);
     if(data.type==='fixture-complete'){const job=pending.shift();postMessage({type:job.text==='fail'?'error':'result',id:job.id,texts:['translated:'+job.text],message:'controlled failure'});}
@@ -19,8 +19,8 @@ test('MV3 portable ITEM graph keeps final rows visible through queued Worker rep
   await settleAutoSave(live.editor);
   expect(await live.editor.evaluate(() => (() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })())).toEqual(graph);
   await live.evaluate(async () => { const { TabSession } = await import('./session.js'); const start = TabSession.prototype.prepareModels;
-    TabSession.prototype.prepareModels = function(...args) { this.prepareTranslation = async () => {}; return start.apply(this, args); };
-    window.keyedReply = () => graphWorkers.findLast(worker => worker.url.endsWith('opus-mt-en-ja-worker.js') && !worker.released).postMessage({ type: 'fixture-complete' });
+    TabSession.prototype.prepareModels = function(...args) { this.prepareTranslateGemma = async () => {}; return start.apply(this, args); };
+    window.keyedReply = () => graphWorkers.findLast(worker => worker.url.endsWith('translategemma-worker.js') && !worker.released).postMessage({ type: 'fixture-complete' });
   });
   await startGraph(live); const rows = live.locator('[data-display="display"] tr'), cells = live.locator('[data-display="display"] td');
   await live.evaluate(() => speech.receiveEvent({ type: 'partial', id: 0, text: 'draft' })); await expect(cells).toHaveText(['draft', '']);

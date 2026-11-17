@@ -11,7 +11,7 @@ Select an audio file, then Run. Stop finalizes the accepted prefix; Cancel
 releases resources. Pages show genuine provisional and final output, loading time
 and replay/inference time. Neither model detects or switches languages.
 
-Translation pages test OPUS-MT in each direction and TranslateGemma. Text pages
+Translation pages test TranslateGemma and PLaMo in both directions. Text pages
 test both text processing models and IfCondition. Speech synthesis pages test Kokoro,
 Supertonic 3, Qwen3-TTS and CosyVoice3. Experimental transcript correction has its
 own page. All inference stays on the device; only explicit actions start downloads.
