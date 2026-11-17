@@ -1,3 +1,4 @@
+import { MAX_PROCESSING_INPUTS } from '../web/text-summary-policy.js';
 import { assertSubgraph, assertExtractionPorts, extractSubgraph, resolveSubgraphs } from './subgraphs.js';
 import { assertSubgraphUpdate } from './graph-library.js';
 import { MAX_DISPLAY_INPUTS } from '../web/display-node.js';
@@ -717,16 +718,18 @@ export class GraphEditor {
   }
   resizeInputs(node, delta) {
     const count = node.settings.inputCount + delta;
-    if (count < 1 || (node.type === 'Display' && count > MAX_DISPLAY_INPUTS)) return;
+    if (count < 1 || (node.type === 'Display' && count > MAX_DISPLAY_INPUTS) || (node.type.startsWith('TextProcessing') && count > MAX_PROCESSING_INPUTS)) return;
     node.settings.inputCount = count;
     if (node.type === 'Display' && delta < 0 && node.settings.inputLabels) delete node.settings.inputLabels[`input${count + 1}`];
-    // Remove only the last port; numbering and all unaffected wires stay stable.
-    this.draft.edges = this.draft.edges.filter(route => route.to[0] !== node.id || route.to[1] !== `input${count + 1}` || delta > 0);
+    // Processing keeps stale wires for explicit validation/recovery. Other variable
+    // nodes retain their existing remove-last-wire behavior.
+    if (!node.type.startsWith('TextProcessing')) this.draft.edges = this.draft.edges.filter(route => route.to[0] !== node.id || route.to[1] !== `input${count + 1}` || delta > 0);
     this.selected = null; this.draw();
   }
   updateSetting(node, key, value) {
     node.settings[key] = value;
-    // Settings do not change canvas geometry or ports. Keep controls in place
+    // Most settings do not change canvas geometry. Input count redraws after
+    // committing its transaction. Keep ordinary text controls in place
     // so a field's blur/change cannot remove the target of a pending click.
     // Validation and checkpointing run once when the typing transaction ends.
   }
@@ -788,8 +791,8 @@ export class GraphEditor {
       label.append(select); this.inspector.append(label);
     }
     for (const [key, spec] of Object.entries(definition.textSettings || {})) {
-      const label = el('label', key + ' '), control = el(spec.multiline ? 'textarea' : 'input');
-      control.setAttribute('aria-label', `${node.id} ${key}`); if (spec.maxLength !== undefined) control.maxLength = spec.maxLength; control.value = node.settings[key] ?? spec.default;
+      const label = el('label', (spec.label || key) + ' '), control = el(spec.multiline ? 'textarea' : 'input');
+      control.setAttribute('aria-label', `${node.id} ${spec.label || key}`); if (spec.maxLength !== undefined) control.maxLength = spec.maxLength; control.value = node.settings[key] ?? spec.default;
       // Capture every keystroke before a cross-page storage update can redraw
       // the Inspector; a focused, unblurred edit must still count as a draft.
       control.oninput = () => this.updateSetting(node, key, control.value);
@@ -803,13 +806,27 @@ export class GraphEditor {
       control.oninput = () => this.updateSetting(node, 'inputLabels', { ...node.settings.inputLabels, [port]: control.value });
       label.append(control); this.inspector.append(label);
     }
-    if (['TextFormatter', 'Display'].includes(node.type)) {
-      this.inspector.append(el('p', `${node.settings.inputCount} ${node.type === 'Display' ? 'ITEM' : 'TEXT'} inputs. Remove deletes only the last input and its wire. ${node.type === 'Display' ? 'Each input is a Live tab. Blank labels use Input 1, Input 2, etc. Auto Save applies next session.' : 'Template references remain editable.'}`));
+    if (['TextFormatter', 'Display', 'TextProcessingLfm2', 'TextProcessingQwen35'].includes(node.type)) {
+      const processing = node.type.startsWith('TextProcessing');
+      if (processing) {
+        const label = el('label', 'Input count (1–32) '), count = el('input');
+        count.type = 'number'; count.min = '1'; count.max = '32'; count.step = '1'; count.value = node.settings.inputCount;
+        count.setAttribute('aria-label', `${node.id} Input count`);
+        count.onchange = () => { this.updateSetting(node, 'inputCount', count.valueAsNumber); this.commitEdit(); this.draw(); };
+        label.append(count); this.inspector.append(label);
+        // A removed port has no canvas connector, but its retained wire must
+        // still be reviewable and explicitly disconnectable in Settings.
+        for (const route of this.draft.edges.filter(route => route.to[0] === node.id && !Object.hasOwn(definition.inputs, route.to[1]))) {
+          this.inspector.append(el('p', `Unknown port: ${route.from.join('.')} → ${route.to.join('.')}`),
+            button(`Disconnect ${route.from.join('.')} to ${route.to.join('.')}`, null, () => this.disconnect(route)));
+        }
+      }
+      this.inspector.append(el('p', `${node.settings.inputCount} ${node.type === 'Display' ? 'ITEM' : 'TEXT'} inputs. ${processing ? 'Removed inputs keep their wires as visible validation errors; disconnect them explicitly.' : 'Remove deletes only the last input and its wire.'} ${node.type === 'Display' ? 'Each input is a Live tab. Blank labels use Input 1, Input 2, etc. Auto Save applies next session.' : processing ? 'System prompt can refer to Input 1, Input 2, etc. Auto Save applies next session.' : 'Template references remain editable.'}`));
       const add = button('Add input', null, () => this.resizeInputs(node, 1));
       const remove = button('Remove last input', null, () => this.resizeInputs(node, -1));
       add.setAttribute('aria-label', `${node.id} Add input`); remove.setAttribute('aria-label', `${node.id} Remove last input`);
       remove.disabled = node.settings.inputCount <= 1;
-      add.disabled = node.type === 'Display' && node.settings.inputCount >= MAX_DISPLAY_INPUTS;
+      add.disabled = (node.type === 'Display' && node.settings.inputCount >= MAX_DISPLAY_INPUTS) || (processing && node.settings.inputCount >= MAX_PROCESSING_INPUTS);
       this.inspector.append(add, remove);
     }
     for (const key of Object.keys(definition.numberSettings || {}).filter(key => key !== 'inputCount')) {

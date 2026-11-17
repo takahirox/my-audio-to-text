@@ -1,174 +1,138 @@
-# Local text summaries
+# Local text processing
 
-**Text Summary · LFM2.5 1.2B JP** and **Text Summary · Qwen3.5 2B**
-accept one `text: TEXT` and emit one complete `summary: TEXT` per successful
-input, even when the result is unchanged. They own no prior-summary history,
-window timer, batching, or evidence reconciliation. Each input makes one local
-request and one generation for articles, technical material, conversations,
-transcripts or any other text. Each Node owns an independent Worker with the
-same existing local model backend.
+**Text Processing · LFM2.5 1.2B JP** and **Text Processing · Qwen3.5 2B**
+are independent local AI Nodes in **Add Node → AI Models / Text**. They replace
+the Summary nodes. Each owns its own WebGPU Worker; duplicate instances share
+verified stored assets only. The historical module, playground URL, preparation
+command and cache names remain stable so existing model downloads are reused.
 
-## Settings
+## Settings and ports
 
-Both Nodes expose a multiline **prompt** field and **language** (`ja` or `en`).
-The default prompt is exactly `Summarize the input text.`. Customize it with,
-for example, `Summarize in three bullets. Focus on technical highlights.` or
-`Give a chronological summary.`. It is an instruction, not an input port.
-There are no implicit sections, meeting rules, ownership checks, correction
-heuristics or semantic rejection/repair passes.
+- **System prompt** (`settings.prompt`): saved, nonempty multiline text, up to
+  **4,096 UTF-16 code units**. Specify the task, output language and format here.
+  The generic default asks the model to process supplied inputs as data.
+- **Input count** (`settings.inputCount`): a whole number from **1 to 32**, default
+  **1**. Inputs are `input1 … inputN: TEXT`. There is no prompt input port.
+- **result: TEXT**: one complete nonempty output for each successful generation,
+  including results equal to the previous output. Token progress is telemetry,
+  not a streaming result.
 
-The system message contains the saved prompt followed only by
-`Use Japanese unless the instruction above requests another language.` (or
-English for `en`). Thus language provides a fallback; an explicit language in
-prompt takes precedence. It does not impose a summary structure. The complete
-input is JSON-quoted in the user message, escaping angle-bracket chat delimiters.
+The exact saved prompt is the **system role**, with no added language, summary
+or meeting instructions. The **user role** is an ordered JSON array such as
+`[{"input":"Input 1","value":"…"},{"input":"Input 2","value":"…"}]`. JSON escaping
+preserves quotes, backslashes, newlines and Unicode; angle brackets are escaped
+to avoid raw chat delimiters. Input content never enters the system message.
+Refer to **Input 1**, **Input 2**, etc. in your prompt. No template language is
+introduced. Models can still follow malicious input or generate inaccurate
+results; verify against the source.
 
-Prompt must be a nonempty string of at most **4,096 UTF-16 code units**.
-Invalid settings and combined token-budget overflow are errors; instructions
-and input are never silently truncated. Auto Save, Undo/Redo and JSON Import preserve
-literal newlines. Graph actions → Export graph JSON downloads the validated draft, including
-the prompt and its newlines. Edits do not affect an already active session. Auto Save applies both settings
-to the next session; each generation uses that session's saved instruction.
+Input count changes update editor connectors and validation. Removing a port
+**retains its wire as a visible validation error**, without reconnecting its data
+to another input. Disconnect the obsolete edge explicitly or Undo the count
+change. Exposed Subgraph endpoints must also refer to existing ports; obsolete
+exposures block saving. Undo/Redo, Auto Save and JSON import/export preserve
+settings and literal prompt newlines. Changes apply to the next session; an
+active run keeps its saved settings.
 
-## Incremental example with Hold
+## Examples
 
-[Import this minimal graph](examples/incremental-text-summary.json) in Graph
-Editor. It contains a Text constant as a small, repeatable demonstration; Start
-begins with empty previous summary. TextWindow emits the text after its normal
-1.5-second deadline (or on Stop). Auto Save prepares the selected summary model.
-For live transcripts, replace Text with your ASR's `final: TEXT` output. Leave the
-other connections unchanged:
+| Task | System prompt | Inputs |
+| --- | --- | --- |
+| Summarization | Summarize Input 1 in two Japanese bullets. | An article in input1 |
+| Proofreading | Proofread Input 1. Return corrected English text only. | A draft in input1 |
+| Extraction | Extract names and deadlines from Input 1 as JSON. | Notes in input1 |
+| Comparison | Compare Input 1 and Input 2 in English. List differences. | Two independent texts in input1 and input2 |
 
-```text
-ASR.final → TextWindow.text → TextFormatter.input2
-Hold.value                → TextFormatter.input1
-TextFormatter.text        → TextSummary.text
-TextSummary.summary    → Hold.input
-TextSummary.summary    → Display.input1
-```
+Import [proofreading](examples/text-processing-proofreading.json),
+[extraction](examples/text-processing-extraction.json), or
+[two-input comparison](examples/text-processing-comparison.json) in Graph Editor.
+The two-input example deliberately uses independent Text updates: the first
+request sees the other input empty; the second sees both. Atomic grouped
+producers deliver both values in one request. The standalone Playground also
+has these four examples and a configurable input count.
 
-Set the formatter to two inputs and this template (literal newlines):
+## Updates, snapshots and flow control
 
-```text
-Previous summary:
-{1}
+Each TEXT delivery updates the latest value of that port and requests **one**
+generation from the complete numbered input snapshot. Unset ports are empty.
+An atomic grouped delivery applies all its values before generating once;
+omitted siblings of that producer's atomic family clear, like TextFormatter.
+Independent inputs retain their latest values. Duplicate events still request
+inference. No inference happens merely on Start or model preparation.
 
-New text:
-{2}
-```
+The Pipeline queues accepted deliveries FIFO through awaited inference. Each
+request owns its immutable input snapshot; later updates cannot change it.
+There is no hidden conversation, accumulated transcript, debounce or replayed
+summary history. Frequent updates run the large model repeatedly. Use existing
+**TextWindow**, **Hold** and **Button** nodes to choose the desired frequency.
 
-Set TextSummary's **prompt** explicitly for rolling updates, as the example
-does:
-
-```text
-Update the previous summary using the new text. Preserve still-relevant facts and explicit corrections. Return the complete updated summary.
-```
-
-That instruction belongs to the saved graph; the implementation does not
-interpret the formatter's labels or assume a transcript.
-
-In this feedback example, leave the optional `Hold.trigger: ANY` disconnected.
-Hold has typed `input: TEXT` and sole `value: TEXT` ports. Sampled `value` starts
-as `''`. Its input **stores** the latest value without emitting. The runtime
-**samples** value together with the next ordinary delivery at the connected
-consumer. Updating Hold alone never formats text or generates a summary.
-No source identities, special data types, edge flags or separate loop manager
-are involved. Hold works with any TEXT producer/consumer.
-
-A new TextWindow event produces exactly one formatted string. While its summary
-is generating, later windows wait FIFO **before** reading Hold. For concurrent
-A/B/C windows, the requests are `S1=f('',A)`, `S2=f(S1,B)`, `S3=f(S2,C)`.
-There is only one request in flight on this path. The runtime awaits receive
-promises and causally forwarded deliveries on the path to storage in Hold.
-Unchanged results still complete; unrelated TEXT events cannot release waiting
-work. A feedback path that finishes without storing a causal result fails
-visibly, rather than continuing on stale context. Async processors used on this
-path must await their work and emit through their supplied receive context, or
-retain that obligation with an explicit `context.defer()` work handle;
-background/timer emissions from a startup context cannot signal completion.
-
-An independent translation/display branch is supported:
+For explicit rolling summaries, import
+[incremental-text-summary.json](examples/incremental-text-summary.json). It
+formats held previous output and the next window into Input 1 using an explicit
+saved rolling-summary instruction. A direct two-input equivalent is:
 
 ```text
-TextSummary.summary ──┬──→ Hold.input
-                        └──→ TranslateGemmaEnJa.text → Display.input1
+Hold.value                 → TextProcessing.input1
+ASR.final → TextWindow.text → TextProcessing.input2
+TextProcessing.result      → Hold.input
+TextProcessing.result      → Display.input1
 ```
 
-Hold stores the original completed summary. When S1 has been stored, the next
-window may summarize using S1 while translation T1 is still running. The same
-behavior applies to TranslateGemma, PLaMo and other independent consumers. Feedback stays
-serial; translation keeps its own bounded committed FIFO and replaceable
-preview. Translation errors remain visible without replacing or corrupting the
-original held summary. An overloaded translation branch stops visibly while
-healthy summary updates continue. Stop still drains accepted translations;
-Cancel/disposal suppress late replies and release Workers. New runs start fresh.
-If translation is instead placed on the path **back into Hold**, its completion
-necessarily precedes the next summary. The runtime uses ordinary graph
-reachability and [explicit async ownership](pipeline-runtime.md#queued-asynchronous-work-207),
-without changing TEXT ports, graph versions or Auto Save/Undo.
+Set Input count to 2 and System prompt to `Update Input 1 using Input 2. Preserve
+relevant facts and corrections. Return the complete updated summary in Japanese.`
+Leave Hold.trigger disconnected. Hold is sampled without emitting, and later
+windows wait until the preceding causal result is stored before reading Hold:
+`S1=f('', A)`, `S2=f(S1, B)`, `S3=f(S2, C)`. Updating Hold alone never infers.
+Ordinary event cycles are rejected. Independent translation/display branches
+retain their own queues and do not delay the next feedback request once Hold
+has stored the result. See [async ownership](pipeline-runtime.md#queued-asynchronous-work-207).
 
-Only non-emitting sampled edges break cycle validation. Every ordinary event
-cycle remains invalid in both the editor and Pipeline. Hold connections save and
-reload as normal graph edges. Existing graph version 15 and strict primitive
-port compatibility remain unchanged.
+For manual generation, import
+[manual-text-summary.json](examples/manual-text-summary.json). Button →
+Hold.trigger emits the latest accumulated transcript on demand; result goes to
+the second Display tab. See [Graph Actions](graph-actions.md).
 
 ## Existing saved graphs: explicit recovery
 
-Legacy `MeetingSummaryLfm2` and `MeetingSummaryQwen35` types are deliberately
-rejected with recovery instructions on both Load and Import. They are not
-palette entries or runtime aliases. This avoids silently replacing the old
-meeting instruction with a generic instruction and changing a rolling graph's
-meaning. Invalid saved JSON stays in storage; Live reports the error, and Graph
-Editor exposes the original under **Graph actions → Saved JSON**. Merely opening
-the editor does not overwrite it or rewire any edge.
+Legacy `TextSummaryLfm2`, `TextSummaryQwen35`, `MeetingSummaryLfm2` and
+`MeetingSummaryQwen35` are rejected with repair guidance on Load/Import. They
+are not palette entries or runtime aliases. Original invalid JSON is retained;
+Graph Editor exposes it under **Graph actions → Saved JSON**. Opening an old
+graph does not overwrite it or silently change its wiring.
 
-1. Copy the original JSON before saving a replacement draft.
-2. Change each old type to `TextSummaryLfm2` or `TextSummaryQwen35`, respectively.
-3. Add `settings.prompt` to each summary Node. Use `Summarize the input text.`
-   for standalone summaries, or write an explicit rolling-update instruction
-   such as the example above. Keep the existing language.
-4. Keep every Node ID, position, other setting and edge unchanged. Import the
-   edited JSON, validate it and wait for Auto Save. Do not Reset or save the fallback default
-   graph over your work.
+1. Copy the original JSON before making changes.
+2. Replace the type with `TextProcessingLfm2` or `TextProcessingQwen35`.
+3. Set `settings.inputCount` to `1`. Keep or add `settings.prompt` with an
+   explicit task. Move any desired `language` instruction into this prompt and
+   remove `settings.language`; no fallback language is appended by code.
+4. Change only that node's input endpoint `text` to `input1`, and output endpoint
+   `summary` to `result`, in edges and exposed Subgraph interfaces. Keep IDs,
+   positions, text, prompt and every other connection unchanged.
+5. Validate and import the repaired graph as a new Library entry. Keep the
+   original until the repaired graph has been checked.
 
-The cache keys, asset manifests, packaged runtime directory and license paths
-retain their historical `meeting-summary` names so verified weights are reused.
-Model checkpoints, checksums, downloads and translation/TTS assets are unchanged.
-Preparation/review commands now use `text-summary` names.
+## Bounds and lifecycle
 
-## Bounds and session lifecycle
+All inputs together must contain non-whitespace text and at most **32,768 UTF-16
+code units**; individual missing or empty inputs are allowed. Invalid ports or
+non-TEXT values fail visibly. Inputs, prompt, JSON framing and up to **1,024 new
+tokens** share an **8,192-token** runtime budget. No truncation or splitting is
+performed. A result must be nonempty and at most **6,000 code units**. Empty,
+oversized or incomplete output, shader-f16 unavailability, GPU loss, cache/model
+errors and Worker errors publish no replacement result.
 
-TextWindow controls window boundaries; configure its existing NUMBER thresholds
-to choose a cadence suitable for inference speed. Default thresholds are 600
-UTF-16 code units or 1.5 seconds. Each sampled consumer permits at most **32
-accepted deliveries and 32,768 ordinary-input characters**, including its active
-update. Overflow rejects the new delivery and visibly stops that branch,
-canceling its accepted waiting work; it does not silently coalesce windows.
-A sampled update has a **four-minute** deadline. Failed, missing, or timed-out
-completion stops the branch and reports an error. Independent paths remain
-usable. Reduce input rate and Start a new session after fixing the cause.
+The pending-delivery bound is **32 deliveries / 32,768 incoming characters**,
+including active work. A combined snapshot is checked separately before each
+request. Overflow visibly stops the branch and cancels waiting work. Loading
+and inference each time out after three minutes; sampled feedback also has the
+existing four-minute deadline. Failure retains the last displayed success and
+requires a fresh session after repair. No output is fabricated.
 
-TextSummary accepts a nonempty formatted input of at most **32,768 code
-units**; empty or oversized input fails explicitly. It never splits or truncates
-evidence. Prompt plus output must fit the **8,192-token** runtime budget, with
-up to **1,024 new tokens** and a **6,000-code-unit** nonempty result. A too-large
-prompt, exhausted generation budget, malformed result, model/Worker error or
-GPU loss publishes no replacement. Loading and generation each have a
-three-minute deadline. Nonempty, bounded output is required, without a
-domain-specific factual validator or repair generation.
-
-Stop flushes TextWindow's remaining tail, drains accepted FIFO updates through
-Hold and Display, then releases the model Worker. Stop may report an explicit
-branch failure; it does not discard successful displayed work. Cancel/abort and
-disposal immediately invalidate pending updates and late replies and release
-Workers; they discard waiting windows and TextWindow tails. Cancel retains the
-last successful display. Fresh Start creates fresh nodes, empty Hold state and
-no model history. Calling Start again on the same Pipeline is rejected.
-
-Input commands are quoted data, but prompt-injection resistance and model
-quality are not guaranteed. Summaries can omit, invent or distort facts; verify
-against the source text. Historical #130 and #202 evidence does not validate the
-new generic prompt or arbitrary user instructions.
+Stop drains accepted work, including TextWindow's flushed tail, then releases
+the owned Worker. Cancel/abort/dispose discard queued work, suppress late replies
+and release resources immediately. Fresh Start creates new nodes and empty
+input/Hold state. Existing licenses, verified downloads and offline WebGPU
+execution are unchanged. No CPU/cloud fallback or recording-time download.
 
 ## Pinned models, runtime and terms
 
@@ -195,7 +159,7 @@ exhausted output budgets are errors, never successful truncated snapshots.
 Prompt plus output is checked against an 8,192-token application budget without
 silently truncating evidence. LFM's published card specifies 32,768 context
 (its config says 128,000); Qwen config specifies 262,144. Temporary generation
-caches are released after each update; the Worker stores no summary history.
+caches are released after each update; the Worker stores no conversation history.
 
 The single request records prompt/output tokens, first-token time and total
 generation time; progress is internal telemetry rather than a public port.
@@ -247,7 +211,7 @@ Start stays disabled until Ready. Inference still runs only on TEXT delivery.
 See [manual Graph Actions](graph-actions.md). Missing/evicted/corrupt data
 keeps Start disabled with recovery instructions. Only canonical allowlisted cached model
 URLs can be loaded; optional lookups get local misses. No model downloads after
-Start and no transcript or summary leaves the browser for inference. Auto Save
+Start and no input or result leaves the browser for inference. Auto Save
 downloads contact the model host; those requests contain no input text.
 
 ## Reproduction and test boundaries
@@ -255,32 +219,23 @@ downloads contact the model host; those requests contain no input text.
 ```sh
 npm ci
 npm test
-npm run test:browser -- tests/browser/hold-feedback.spec.js
-npm run test:extension -- tests/extension/graph-hold-feedback.spec.js
-# Full asset-backed package (see chrome-extension.md for other prerequisites):
+npm run test:browser -- tests/browser/model-playground.spec.js --project=chromium
+npm run test:extension -- tests/extension/graph-text-summary.spec.js tests/extension/graph-hold-feedback.spec.js
+# Optional real inference: first prepare the pinned runtime and model assets.
+# See chrome-extension.md for the other full-package runtime prerequisites.
 npm run prepare:text-summary-assets
 npm run build:extension
 TEXT_SUMMARY_SMOKE=1 npm run test:extension -- tests/extension/graph-text-summary-smoke.spec.js
 ```
 
-The deterministic browser/MV3 checks use controlled model replies with the
-production Hold, Pipeline, formatter and TextSummary node. The MV3 feedback
-test packages source in an isolated fixture extension; it does not assert that
-the complete model-bearing distribution builds. Unit tests separately cover
-bounds, missing/failed/unrelated completion, cancellation and typed graph
-validation. The opt-in real-model test uses the same explicit feedback graph,
-real pinned runtime/models and offline inference; it must be run separately to
-assess this prompt. See [Issue #210 validation](evidence/text-summary-210.md) for actual results
-and unperformed checks, and [Issue #202](evidence/hold-feedback-202.md) for
-historical feedback validation. Old [#130 model evidence](evidence/meeting-summary-130.md)
-remains historical and must not be reported as verification of this change.
-
-## Manual on-demand summaries
-
-Import [manual-text-summary.json](examples/manual-text-summary.json) for continuous
-transcription with a **Generate summary** Button. Hold silently retains the
-accumulator text and emits one snapshot only on each accepted Button trigger.
-Transcription and summaries occupy separate Display tabs. Model initialization
-finishes when Live becomes Ready, before Start or the first request; UI actions have bounded visible
-busy handling. The 32,768-character input cap still rejects oversized recordings
-without truncation. See [Graph Actions](graph-actions.md) for full contracts and lifecycle.
+Default CI uses controlled Workers/tokenizers/models and does not download large
+weights. Tests exercise the production Node, policy, Worker RPC, cache-only loader,
+Pipeline, editor and persistence. They verify prompt roles/escaping, summary,
+proofreading, extraction and comparison requests, atomic groups, duplicates,
+missing inputs, FIFO snapshots under slow inference, Hold feedback, Stop/Cancel,
+timeouts, failures, independent Workers, bounds, and model cache reuse. These
+checks establish transport and lifecycle behavior, not model accuracy or speed.
+The opt-in smoke test additionally records real outputs for these tasks.
+Historical [#210](evidence/text-summary-210.md), [#202](evidence/hold-feedback-202.md)
+and [#130](evidence/meeting-summary-130.md) evidence describes earlier implementations;
+it is not verification of configurable multi-input processing.

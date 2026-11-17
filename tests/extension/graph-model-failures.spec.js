@@ -12,9 +12,9 @@ async function setup(f, type, phase) {
   await writeFile(path.join(f.root, 'web/text-summary-worker.js'), `
     self.onmessage = ({data}) => {
       if (data.type === 'load') postMessage({id:data.id, type:${JSON.stringify(phase === 'load' ? 'error' : 'ready')}, message:'Controlled model load failure'});
-      if (data.type === 'summarize') {
-        if (data.text.includes('slow')) { setTimeout(() => postMessage({id:data.id,type:'result',summary:'stale notes'}),1500); return; }
-        postMessage({id:data.id,type:data.text.includes('fail')?'error':'result',message:'Controlled inference failure',summary:'committed notes'});
+      if (data.type === 'process') {
+        if (data.inputs[0].includes('slow')) { setTimeout(() => postMessage({id:data.id,type:'result',result:'stale notes'}),1500); return; }
+        postMessage({id:data.id,type:data.inputs[0].includes('fail')?'error':'result',message:'Controlled inference failure',result:'committed notes'});
       }
     };`);
   const page = await openGraph(f);
@@ -26,7 +26,7 @@ async function setup(f, type, phase) {
     const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode(type, 'summary'), graphNode('Display', 'notes'));
-    graph.edges.push(edge('speech', 'final', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input1'));
+    graph.edges.push(edge('speech', 'final', 'summary', 'input1'), edge('summary', 'result', 'notes', 'input1'));
     await saveLiveGraphData(localStorage, graph);
   }, type);
   return page;
@@ -34,7 +34,7 @@ async function setup(f, type, phase) {
 const settle = page => page.evaluate(() => window.modelPipeline.entries.get('summary').queue);
 const state = page => page.evaluate(() => ({ failed:window.modelPipeline.entries.get('summary').failed, errors:window.modelPipeline.errors.map(e=>e.message), state:window.modelPipeline.state }));
 
-for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
+for (const type of ['TextProcessingLfm2', 'TextProcessingQwen35']) {
   for (const phase of ['load', 'inference']) test(`${type}: ${phase === 'load' ? 'load failure blocks Start and allows explicit retry' : 'inference failure is tracked once; transcription survives Stop and restart'}`, async ({ graphExtension: f }) => {
     const page = await setup(f, type, phase);
     if (phase === 'load') {
@@ -52,7 +52,7 @@ for (const type of ['TextSummaryLfm2', 'TextSummaryQwen35']) {
       await emitFinal(page, 'first'); await settle(page); await expect(notes(page)).toHaveText('committed notes');
       await emitFinal(page, 'fail'); await settle(page);
     }
-    await expect(page.locator('#summary-status')).toContainText(phase === 'load' ? 'Controlled model load failure' : 'Controlled inference failure');
+    await expect(page.locator('#processing-status')).toContainText(phase === 'load' ? 'Controlled model load failure' : 'Controlled inference failure');
     expect(await state(page)).toMatchObject({ failed:true, state:'running' });
     expect((await state(page)).errors).toHaveLength(1);
     await expect(page.locator('#errors')).toContainText(phase === 'load' ? 'Controlled model load failure' : 'Controlled inference failure');

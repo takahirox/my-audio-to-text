@@ -88,7 +88,7 @@ test('saved trigger connection determines cycle validation, executable selection
 });
 
 test('an incomplete saved trigger branch cannot silently convert an event Hold to sampled mode', () => {
-  const g = { version: GRAPH_VERSION, nodes: ['Text', 'Hold', 'TextSummaryLfm2', 'Display'].map((type, i) => graphNode(type, 'n' + i)), edges: [edge('n0', 'value', 'n1', 'input'), edge('n2', 'summary', 'n1', 'trigger'), edge('n1', 'value', 'n3', 'input1'), edge('n0', 'value', 'n3', 'input2')] };
+  const g = { version: GRAPH_VERSION, nodes: ['Text', 'Hold', 'TextProcessingLfm2', 'Display'].map((type, i) => graphNode(type, 'n' + i)), edges: [edge('n0', 'value', 'n1', 'input'), edge('n2', 'result', 'n1', 'trigger'), edge('n1', 'value', 'n3', 'input1'), edge('n0', 'value', 'n3', 'input2')] };
   g.nodes[3].settings.inputCount = 2;
   assert.deepEqual(validateGraph(g), []);
   assert.deepEqual(executableGraph(g).nodes.map(n => n.id), ['n0', 'n3']);
@@ -123,7 +123,7 @@ test('Button labels persist by ID, allow a blank fallback, and reject overlong o
 });
 
 function manualGraph() {
-  const g = { version: GRAPH_VERSION, nodes: ['Text', 'Hold', 'Button', 'Button', 'TextSummaryLfm2', 'Display'].map((type, i) => graphNode(type, ['input', 'held', 'z', 'a', 'summary', 'view'][i])), edges: [edge('input', 'value', 'held', 'input'), edge('z', 'trigger', 'held', 'trigger'), edge('held', 'value', 'summary', 'text'), edge('summary', 'summary', 'view', 'input2'), edge('input', 'value', 'view', 'input1'), edge('a', 'trigger', 'other', 'trigger'), edge('otherText', 'value', 'other', 'input'), edge('other', 'value', 'otherView', 'input1')] };
+  const g = { version: GRAPH_VERSION, nodes: ['Text', 'Hold', 'Button', 'Button', 'TextProcessingLfm2', 'Display'].map((type, i) => graphNode(type, ['input', 'held', 'z', 'a', 'summary', 'view'][i])), edges: [edge('input', 'value', 'held', 'input'), edge('z', 'trigger', 'held', 'trigger'), edge('held', 'value', 'summary', 'input1'), edge('summary', 'result', 'view', 'input2'), edge('input', 'value', 'view', 'input1'), edge('a', 'trigger', 'other', 'trigger'), edge('otherText', 'value', 'other', 'input'), edge('other', 'value', 'otherView', 'input1')] };
   g.nodes[0].settings.value = 'A'; g.nodes[5].settings.inputCount = 2;
   g.nodes.push(graphNode('Hold', 'other'), graphNode('Text', 'otherText'), graphNode('Display', 'otherView'), graphNode('Button', 'parked'));
   g.nodes.find(n => n.id === 'otherText').settings.value = 'independent';
@@ -132,14 +132,14 @@ function manualGraph() {
 }
 function sessionFixture({ holdLoad = false, failLoad = false } = {}) {
   const workers = [], states = [];
-  const session = new TabSession(view => states.push(view), { graph: manualGraph(), textSummaryWorkerFactory: () => {
+  const session = new TabSession(view => states.push(view), { graph: manualGraph(), textProcessingWorkerFactory: () => {
     const worker = { messages: [], postMessage(data) {
       this.messages.push(data);
       if (data.type === 'load' && !holdLoad) queueMicrotask(() => this.reply(data.id, failLoad ? 'error' : 'ready', { message: 'Missing prepared model' }));
     }, reply(id, type, fields = {}) { this.onmessage?.({ data: { id, type, ...fields } }); }, terminate() { this.terminated = true; } };
     workers.push(worker); return worker;
   } });
-  return { session, workers, states, request: () => workers.at(-1)?.messages.at(-1), complete: (summary = 'result') => { const worker = workers.at(-1); worker.reply(worker.messages.at(-1).id, 'result', { summary }); } };
+  return { session, workers, states, request: () => workers.at(-1)?.messages.at(-1), complete: (summary = 'result') => { const worker = workers.at(-1); worker.reply(worker.messages.at(-1).id, 'result', { result: summary }); } };
 }
 
 test('manual actions: no audio permission or eager model load; duplicate captions, fan-out, FIFO snapshot, busy and Stop draining', async () => {
@@ -157,15 +157,15 @@ test('manual actions: no audio permission or eager model load; duplicate caption
   // A disjoint action with the same caption remains usable.
   assert.equal(await s.view.graphActions.find(a => a.id === 'a').invoke(), true);
   assert.equal(domText(s.view.displays.otherView.input1), 'independent');
-  await tick(); assert.equal(f.request().text, 'A');
+  await tick(); assert.equal(f.request().inputs[0], 'A');
   p.entries.get('input').context.emit('value', 'B'); await tick();
-  assert.equal(domText(s.view.displays.view.input1), 'B'); assert.equal(f.request().text, 'A');
+  assert.equal(domText(s.view.displays.view.input1), 'B'); assert.equal(f.request().inputs[0], 'A');
   f.complete('S1'); assert.equal(await work, true);
-  const next = s.view.graphActions.find(a => a.id === 'z').invoke(); await tick(); assert.equal(f.request().text, 'B');
+  const next = s.view.graphActions.find(a => a.id === 'z').invoke(); await tick(); assert.equal(f.request().inputs[0], 'B');
   const stopped = s.stop(); assert.equal(await s.pressButton('z'), false); assert.equal(s.view.state, 'stopping');
   f.complete('S2'); await next; await stopped;
   assert.equal(domText(s.view.displays.view.input2), 'S2'); assert.ok(f.workers[0].terminated);
-  assert.equal(f.workers[0].messages.filter(m => m.type === 'summarize').length, 2);
+  assert.equal(f.workers[0].messages.filter(m => m.type === 'process').length, 2);
 });
 
 for (const phase of ['loading', 'generating']) test(`Cancel during lazy ${phase}, stale callbacks and restart never target replacement contexts`, async () => {
@@ -173,7 +173,7 @@ for (const phase of ['loading', 'generating']) test(`Cancel during lazy ${phase}
   await s.start(); const stale = s.view.graphActions.find(a => a.id === 'z').invoke;
   const work = stale(); await tick(); const worker = f.workers[0], late = worker.onmessage, id = f.request().id;
   await s.cancel(); await work; assert.ok(worker.terminated);
-  late({ data: { id, type: phase === 'loading' ? 'ready' : 'result', summary: 'late' } });
+  late({ data: { id, type: phase === 'loading' ? 'ready' : 'result', result: 'late' } });
   await s.start(); await tick(); assert.equal(await stale(), false); assert.equal(f.workers.length, 1);
   assert.equal(domText(s.view.displays.view.input2), ''); assert.equal(s.session.pipeline.entries.get('held').node.value, 'A');
   await s.stop();
@@ -187,7 +187,7 @@ test('inference and oversized-input errors disable only affected actions and pre
     const work = s.view.graphActions.find(a => a.id === 'z').invoke(); await tick();
     if (!oversized) f.workers[0].reply(f.request().id, 'error', { message: 'GPU lost' });
     await work;
-    assert.match(s.view.summaryStatus, oversized ? /32,768/ : /GPU lost/);
+    assert.match(s.view.processingStatus, oversized ? /32,768/ : /GPU lost/);
     assert.equal(domText(s.view.displays.view.input1), input); assert.equal(domText(s.view.displays.view.input2), '');
     assert.equal(s.view.graphActions.find(a => a.id === 'z').disabled, true); assert.equal(s.view.graphActions.find(a => a.id === 'a').disabled, false);
     if (oversized) assert.equal(f.workers.length, 0, 'invalid input never loads model resources');
@@ -199,8 +199,8 @@ test('first manual request reports deferred load failure without inference or tr
   const f = sessionFixture({ failLoad: true }), s = f.session;
   await s.start(); assert.equal(f.workers.length, 0);
   await s.view.graphActions.find(a => a.id === 'z').invoke();
-  assert.match(s.view.summaryStatus, /Missing prepared model/);
-  assert.equal(f.workers[0].messages.filter(m => m.type === 'summarize').length, 0);
+  assert.match(s.view.processingStatus, /Missing prepared model/);
+  assert.equal(f.workers[0].messages.filter(m => m.type === 'process').length, 0);
   assert.ok(f.workers[0].terminated);
   assert.equal(s.view.graphActions.find(a => a.id === 'z').disabled, true);
   assert.equal(domText(s.view.displays.view.input1), 'A'); await s.stop();
@@ -210,11 +210,11 @@ test('ordinary trigger producers retain every identical event and snapshot FIFO 
   const f = sessionFixture(), s = f.session; await s.start(); await tick();
   const p = s.session.pipeline, source = p.entries.get('input').context, button = p.entries.get('z').context;
   button.emit('trigger', 1); source.emit('value', 'B'); button.emit('trigger', 1); button.emit('trigger', 1);
-  await tick(); assert.equal(f.request().text, 'A');
-  f.complete('same'); await tick(); assert.equal(f.request().text, 'B');
-  f.complete('same'); await tick(); assert.equal(f.request().text, 'B');
+  await tick(); assert.equal(f.request().inputs[0], 'A');
+  f.complete('same'); await tick(); assert.equal(f.request().inputs[0], 'B');
+  f.complete('same'); await tick(); assert.equal(f.request().inputs[0], 'B');
   f.complete('same'); await s.stop();
-  assert.deepEqual(f.workers[0].messages.filter(m => m.type === 'summarize').map(m => m.text), ['A', 'B', 'B']);
+  assert.deepEqual(f.workers[0].messages.filter(m => m.type === 'process').map(m => m.inputs[0]), ['A', 'B', 'B']);
   assert.equal(domText(s.view.displays.view.input2), 'same');
 });
 
@@ -223,9 +223,9 @@ test('programmatic trigger overflow is bounded and visible while transcript rema
   const p = s.session.pipeline, button = p.entries.get('z').context;
   button.emit('trigger', 1); await tick();
   for (let i = 0; i < 32; i++) button.emit('trigger', 1);
-  await tick(); assert.match(s.view.summaryStatus, /backlog exceeded/);
+  await tick(); assert.match(s.view.processingStatus, /backlog exceeded/);
   assert.equal(p.entries.get('summary').failed, true); assert.equal(p.errors.length, 1);
-  assert.equal(f.workers[0].messages.filter(m => m.type === 'summarize').length, 1);
+  assert.equal(f.workers[0].messages.filter(m => m.type === 'process').length, 1);
   assert.ok(f.workers[0].terminated);
   p.entries.get('input').context.emit('value', 'still transcribing'); await tick();
   assert.equal(domText(s.view.displays.view.input1), 'still transcribing'); await s.stop();

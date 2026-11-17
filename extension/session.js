@@ -15,12 +15,12 @@ export class TabSession {
     sourceFactory, microphoneSourceFactory, pageConnectionFactory, moonshineWorkerFactory, moonshineJapaneseWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph(), graphId = null, graphName = 'Saved graph',
-    textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, preparePlamo, onSynthesizedAudio = () => {}, speakerContextFactory,
+    textProcessingWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, preparePlamo, onSynthesizedAudio = () => {}, speakerContextFactory,
     prepareModelAssets = prepareGraphModelAssets,
   } = {}) {
     this.onSourceEnded = onSourceEnded;
     this.prepareModelAssets = prepareModelAssets;
-    this.textSummaryWorkerFactory = textSummaryWorkerFactory;
+    this.textProcessingWorkerFactory = textProcessingWorkerFactory;
     this.ifConditionWorkerFactory = ifConditionWorkerFactory;
     this.moonshineWorkerFactory = moonshineWorkerFactory; this.moonshineJapaneseWorkerFactory = moonshineJapaneseWorkerFactory;
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
@@ -31,7 +31,7 @@ export class TabSession {
     this.speakerContextFactory = speakerContextFactory;
     this.modelLoadTimeoutMs = modelLoadTimeoutMs;
     const translationEnabled = hasTranslation(this.graph);
-    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', prompt: '', error: '', signal: '', translationEnabled, activeGraph: null, savedGraph: this.graph, savedGraphId: graphId, savedGraphName: graphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: 'Translation off' };
+    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', prompt: '', error: '', signal: '', translationEnabled, activeGraph: null, savedGraph: this.graph, savedGraphId: graphId, savedGraphName: graphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', processingStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: 'Translation off' };
     this.update();
   }
   update(values = {}) {
@@ -193,7 +193,7 @@ export class TabSession {
     session.started = new Promise(resolve => { session.markStarted = resolve; });
     this.session = session;
     if (this.livePreparation) this.update({ modelState: 'active' });
-    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, activeGraphId: this.view.savedGraphId, activeGraphName: this.view.savedGraphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: session.translationEnabled ? 'Local translation ready' : 'Translation off', status: this.livePreparation ? 'Starting prepared graph…' : graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
+    this.update({ state: 'loading', tabId, activeGraph: graph, activeSavedGraph: snapshot, activeGraphId: this.view.savedGraphId, activeGraphName: this.view.savedGraphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', processingStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: session.translationEnabled ? 'Local translation ready' : 'Translation off', status: this.livePreparation ? 'Starting prepared graph…' : graph.nodes.filter(node => ASR_TYPES.includes(node.type)).map(node => `${node.id}: Loading ${NODE_TYPES[node.type].label}…`).join('\n') || `Preparing ${graph.nodes.length} active Nodes…`, error: '', signal: '' });
     try {
       for (const spec of speakers) {
         const node = session.speakers.get(spec.id) || new SpeakerOutputNode({ contextFactory: this.speakerContextFactory, onState: state => {
@@ -273,12 +273,12 @@ export class TabSession {
           session.holdStates ||= {}; session.holdStates[id] = state;
           this.update({ holdStatus: Object.entries(session.holdStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
-        textSummaryWorkerFactory: this.textSummaryWorkerFactory,
-        onTextSummaryEvent: (event, id) => {
+        textProcessingWorkerFactory: this.textProcessingWorkerFactory,
+        onTextProcessingEvent: (event, id) => {
           if (!this.ownsRuntime(session)) return;
           this.nodeEvent(event, id);
-          session.summaryStates ||= {}; session.summaryStates[id] = event.message || event.type;
-          this.update({ summaryStatus: Object.entries(session.summaryStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
+          session.processingStates ||= {}; session.processingStates[id] = event.message || event.type;
+          this.update({ processingStatus: Object.entries(session.processingStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
         ifConditionWorkerFactory: this.ifConditionWorkerFactory,
         onIfConditionEvent: (event, id) => {

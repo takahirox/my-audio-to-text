@@ -20,7 +20,7 @@ for (const type of ['EnglishToJapaneseTranslateGemmaTranslationNode']) {
         let count = 0; const pending = [];
         self.onmessage = ({ data }) => {
           if (data.type === 'load') postMessage({ type: 'ready', id: data.id });
-          if (data.type === 'summarize') postMessage({ type: 'result', id: data.id, summary: 'S' + ++count });
+          if (data.type === 'process') postMessage({ type: 'result', id: data.id, result: 'S' + ++count });
           if (data.type === 'translate') pending.push(data.id);
           if (data.type === 'complete' && pending.shift() === data.result.id) postMessage(data.result);
           if (data.type === 'drain') postMessage({ type: 'drained', id: data.id });

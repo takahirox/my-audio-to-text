@@ -12,19 +12,19 @@ export const meetingBatches = [
 export function summaryGraph(type) {
   const nodes = [graphNode('Text', 'input'), graphNode(type, 'summary'), graphNode('Display', 'notes'), graphNode('Display', 'transcript')];
   nodes[0].settings.value = meetingBatches[0];
-  return ({ version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'text'), edge('summary', 'summary', 'notes', 'input1'), edge('input', 'value', 'transcript', 'input1')] });
+  return ({ version: GRAPH_VERSION, nodes, edges: [edge('input', 'value', 'summary', 'input1'), edge('summary', 'result', 'notes', 'input1'), edge('input', 'value', 'transcript', 'input1')] });
 }
 
 // Generic sampled feedback example; the model has no private summary history.
-export function summaryFeedbackGraph(type = 'TextSummaryLfm2') {
+export function summaryFeedbackGraph(type = 'TextProcessingLfm2') {
   const graph = summaryGraph(type);
-  graph.nodes.find(n => n.id === 'summary').settings.prompt = 'Update the previous summary using the new text. Preserve still-relevant facts and explicit corrections. Return the complete updated summary.';
+  graph.nodes.find(n => n.id === 'summary').settings.prompt = 'Update the previous summary using the new text. Preserve still-relevant facts and explicit corrections. Return the complete updated summary in Japanese.';
   const formatter = graphNode('TextFormatter', 'format');
   formatter.settings = { inputCount: 2, template: 'Previous summary:\n{1}\n\nNew transcript:\n{2}' };
   graph.nodes.push(graphNode('Hold', 'previous'), graphNode('TextWindow', 'window'), formatter, graphNode('TextAccumulator', 'transcript-history'));
   graph.edges = [edge('input', 'value', 'window', 'text'), edge('window', 'text', 'format', 'input2'),
-    edge('previous', 'value', 'format', 'input1'), edge('format', 'text', 'summary', 'text'),
-    edge('summary', 'summary', 'previous', 'input'), edge('summary', 'summary', 'notes', 'input1'),
+    edge('previous', 'value', 'format', 'input1'), edge('format', 'text', 'summary', 'input1'),
+    edge('summary', 'result', 'previous', 'input'), edge('summary', 'result', 'notes', 'input1'),
     edge('input', 'value', 'transcript-history', 'append'), edge('transcript-history', 'text', 'transcript', 'input1')];
   return graph;
 }

@@ -17,7 +17,7 @@ test('Live gates Start on actual Worker readiness, warms gated models, restores 
     await cp('extension/manifest.json', path.join(root, 'manifest.json'));
     const worker = `self.onmessage=({data})=>{
       if(data.type==='load')postMessage({type:'ready',id:data.id});
-      if(data.type==='summarize')postMessage({type:'result',id:data.id,summary:'Ready summary'});
+      if(data.type==='process')postMessage({type:'result',id:data.id,result:'Ready summary'});
       if(data.type==='drain')postMessage({type:'drained',id:data.id});
       if(data.type==='fixture-fatal')postMessage({type:'error',fatal:true,message:'GPU device lost: controlled failure'});
     };`;
@@ -29,8 +29,8 @@ test('Live gates Start on actual Worker readiness, warms gated models, restores 
     await writeSummaryAssetFixture(root, base);
     const editor = await context.newPage(); await editor.goto(base + 'graph-editor.html');
     const source = graphNode('Text', 'source'); source.settings.value = 'Evidence';
-    const graph = { version: GRAPH_VERSION, nodes: [source, graphNode('Button', 'button'), graphNode('Hold', 'held'), graphNode('TextSummaryLfm2', 'summary'), graphNode('Display', 'display'), graphNode('TextSummaryQwen35', 'parked')],
-      edges: [edge('source', 'value', 'held', 'input'), edge('button', 'trigger', 'held', 'trigger'), edge('held', 'value', 'summary', 'text'), edge('summary', 'summary', 'display', 'input1')] };
+    const graph = { version: GRAPH_VERSION, nodes: [source, graphNode('Button', 'button'), graphNode('Hold', 'held'), graphNode('TextProcessingLfm2', 'summary'), graphNode('Display', 'display'), graphNode('TextProcessingQwen35', 'parked')],
+      edges: [edge('source', 'value', 'held', 'input'), edge('button', 'trigger', 'held', 'trigger'), edge('held', 'value', 'summary', 'input1'), edge('summary', 'result', 'display', 'input1')] };
     await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
     const page = await context.newPage(), errors = [], remoteRequests = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -63,7 +63,7 @@ test('Live gates Start on actual Worker readiness, warms gated models, restores 
     expect(await page.evaluate(() => modelWorkers[0].messages)).toEqual(['load']);
     await page.locator('#graph-action-buttons button').click();
     await expect(page.locator('#live-displays')).toContainText('Ready summary');
-    expect(await page.evaluate(() => modelWorkers[0].messages)).toEqual(['load', 'summarize']);
+    expect(await page.evaluate(() => modelWorkers[0].messages)).toEqual(['load', 'process']);
     await page.evaluate(() => { holdModelLoads = true; });
     await page.locator('#stop').click();
     await expect(page.locator('#model-status')).toContainText('Preparing models…');

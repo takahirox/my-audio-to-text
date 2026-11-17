@@ -17,7 +17,7 @@ async function mutate(page, mode) {
   await page.evaluate(async mode => {
     const { MODEL_CACHE_NAME } = await import('./model-asset-cache.js');
     const { textSummaryManifest } = await import('./text-summary-cache.js');
-    const manifest = await textSummaryManifest('TextSummaryLfm2'), cache = await caches.open(MODEL_CACHE_NAME);
+    const manifest = await textSummaryManifest('TextProcessingLfm2'), cache = await caches.open(MODEL_CACHE_NAME);
     const file = manifest.files[1];
     if (mode === 'corrupt') await cache.put(file.url, new Response(new Uint8Array(file.bytes)));
     else if (mode === 'evict') await caches.delete(MODEL_CACHE_NAME);
@@ -28,7 +28,7 @@ async function mutate(page, mode) {
 test('clean cache downloads executable requirements, then waits for actual runtime readiness; cached reopen needs no download', async ({ live: f }) => {
   await f.save(); f.mode('hold');
   const page = await f.open({ holdModels: true });
-  await expect(page.locator('#model-status')).toContainText('Downloading model… Text Summary · LFM2');
+  await expect(page.locator('#model-status')).toContainText('Downloading model… Text Processing · LFM2');
   await expect(page.locator('#model-status')).toContainText('bytes');
   await expect(page.locator('#start')).toBeDisabled();
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
@@ -72,7 +72,7 @@ test('explicit graph selection resolves subgraph requirements without downloadin
     const saved = await store.create({ name: 'Chosen parent', graph: extracted.parent });
     const id = saved.graphs.at(-1).id;
     // An unrelated default graph would require a different (blocked) manifest.
-    graph.nodes.find(node => node.id === 'summary').type = 'TextSummaryQwen35';
+    graph.nodes.find(node => node.id === 'summary').type = 'TextProcessingQwen35';
     const other = await store.create({ name: 'Unrelated assignment', graph });
     await store.assign('live', other.graphs.at(-1).id, readLibrary(localStorage).revision);
     return id;
@@ -181,7 +181,7 @@ for (const owner of ['manual', 'Auto Save']) test(`canceling the ${owner} downlo
       const { ModelAssetCache } = await import('./model-asset-cache.js');
       const { textSummaryManifest } = await import('./text-summary-cache.js');
       window.downloadController = new AbortController();
-      void new ModelAssetCache(await textSummaryManifest('TextSummaryLfm2'))
+      void new ModelAssetCache(await textSummaryManifest('TextProcessingLfm2'))
         .prepare({ signal: downloadController.signal });
     } else {
       const { GraphModelPreparation } = await import('./graph-model-preparation.js');

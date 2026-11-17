@@ -6,8 +6,8 @@ const simple = text => {
   return { version: 15, nodes: [node, graphNode('Display', 'display')], edges: [edge('source', 'value', 'display', 'input1')] };
 };
 const summary = text => {
-  const graph = simple(text); graph.nodes.push(graphNode('TextSummaryLfm2', 'summary'));
-  graph.edges = [edge('source', 'value', 'summary', 'text'), edge('summary', 'summary', 'display', 'input1')];
+  const graph = simple(text); graph.nodes.push(graphNode('TextProcessingLfm2', 'summary'));
+  graph.edges = [edge('source', 'value', 'summary', 'input1'), edge('summary', 'result', 'display', 'input1')];
   return graph;
 };
 const menu = async (f, menuItemId, tabId = 123) => f.worker.evaluate(({ menuItemId, tabId }) => toolbarEvents.menu({ menuItemId }, { id: tabId }), { menuItemId, tabId });

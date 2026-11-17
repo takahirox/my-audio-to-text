@@ -25,7 +25,7 @@ export const test = base.extend({
 
       await writeFile(path.join(root, 'web/text-summary-worker.js'), `self.onmessage=({data})=>{
         if(data.type==='load')postMessage({type:'ready',id:data.id});
-        if(data.type==='summarize')postMessage({type:'result',id:data.id,summary:'Summary from selected graph'});
+        if(data.type==='process')postMessage({type:'result',id:data.id,result:'Summary from selected graph'});
         if(data.type==='drain')postMessage({type:'drained',id:data.id});
       };`);
       const launch = () => chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,

@@ -12,19 +12,19 @@ export async function checkDisplayTabs(page, expect, packaged = false) {
     b.settings.value = a.settings.value.replaceAll('Source', 'Translation');
     const main = graphNode('Display', 'main');
     main.settings = { title: 'Main', inputCount: 3, inputLabels: { input1: 'Transcript', input2: 'Translation', input3: 'Summary' } };
-    const graph = { version: GRAPH_VERSION, nodes: [a, b, main, graphNode('TextSummaryLfm2', 'processor')], edges: [
+    const graph = { version: GRAPH_VERSION, nodes: [a, b, main, graphNode('TextProcessingLfm2', 'processor')], edges: [
       edge('a', 'value', 'main', 'input1'), edge('b', 'value', 'main', 'input2'),
-      edge('a', 'value', 'processor', 'text'), edge('processor', 'summary', 'main', 'input3'),
+      edge('a', 'value', 'processor', 'input1'), edge('processor', 'result', 'main', 'input3'),
     ] };
     window.summaryRequests = [];
     const session = new TabSession(view => {
       renderTextRegions(document.querySelector('#live-displays'), view.activeGraph || view.savedGraph, view.displays);
-    }, { graph, textSummaryWorkerFactory: () => {
+    }, { graph, textProcessingWorkerFactory: () => {
       const worker = { postMessage(message) {
         if (message.type === 'load') queueMicrotask(() => worker.onmessage?.({ data: { id: message.id, type: 'ready' } }));
-        if (message.type === 'summarize') {
-          summaryRequests.push(message.text);
-          queueMicrotask(() => worker.onmessage?.({ data: { id: message.id, type: 'result', summary: message.text } }));
+        if (message.type === 'process') {
+          summaryRequests.push(message.inputs[0]);
+          queueMicrotask(() => worker.onmessage?.({ data: { id: message.id, type: 'result', result: message.inputs[0] } }));
         }
       }, terminate() {} }; return worker;
     } });

@@ -24,10 +24,10 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
       const jobs=[];
       self.onmessage=({data})=>{
         if(data.type==='load')postMessage({type:'ready',id:data.id});
-        if(data.type==='summarize')jobs.push(data);
+        if(data.type==='process')jobs.push(data);
         if(data.type==='complete'){
           const job=jobs.shift(); if(!job)return;
-          postMessage(job.text.includes('FAIL')?{type:'error',id:job.id,message:'Controlled inference failure'}:{type:'result',id:job.id,summary:'Summary: '+job.text});
+          postMessage(job.inputs[0].includes('FAIL')?{type:'error',id:job.id,message:'Controlled inference failure'}:{type:'result',id:job.id,result:'Summary: '+job.inputs[0]});
         }
       };`);
     context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
@@ -64,7 +64,7 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
           this.summary = String(args[0]).includes('text-summary-worker');
           if (this.summary) summaryWorkers.push(this);
         }
-        postMessage(data, ...rest) { if (data.type === 'summarize') requests.push(data.text); super.postMessage(data, ...rest); }
+        postMessage(data, ...rest) { if (data.type === 'process') requests.push(data.inputs[0]); super.postMessage(data, ...rest); }
         terminate() { this.released = true; super.terminate(); }
       };
     });
@@ -118,7 +118,7 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     await page.locator('#start').click(); await expect(action).toBeEnabled();
     await page.evaluate(() => emitFinal('FAIL')); await action.tap();
     await expect.poll(() => page.evaluate(() => requests.length)).toBe(4);
-    await page.evaluate(() => complete()); await expect(page.locator('#summary-status')).toContainText('Controlled inference failure');
+    await page.evaluate(() => complete()); await expect(page.locator('#processing-status')).toContainText('Controlled inference failure');
     await expect(action).toBeDisabled(); await expect(page.locator('#graph-action-status')).toContainText('unavailable');
     await page.getByRole('tab', { name: 'Transcript', exact: true }).tap();
     await page.evaluate(() => emitFinal('D')); await expect(page.getByRole('tabpanel', { name: 'Transcript', exact: true })).toContainText('FAIL\nD');

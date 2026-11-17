@@ -1,2 +1,2 @@
 import { mountTextAiPage } from '../text-ai-page.js';
-mountTextAiPage('TextSummaryLfm2');
+mountTextAiPage('TextProcessingLfm2');

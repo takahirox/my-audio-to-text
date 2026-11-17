@@ -1,6 +1,6 @@
 import { japaneseFrontendManifest } from './japanese-frontend-cache.js';
 import { textSummaryManifest } from './text-summary-cache.js';
-import { TEXT_SUMMARY_TYPES, textSummaryModel } from '../web/text-summary-models.js';
+import { TEXT_PROCESSING_TYPES, textProcessingModel } from '../web/text-summary-models.js';
 import { ModelAssetCache } from './model-asset-cache.js';
 import { translateGemmaManifest } from './translategemma-cache.js';
 import { plamoManifest } from './plamo-cache.js';
@@ -18,9 +18,9 @@ export function graphModelRequirements(graph) {
     let requirement;
     const add = (key, title, manifest) => requirements.set(key, { key, id: key, title, manifest });
     if (node.type === 'Kokoro' && node.settings.voice === 'jf_alpha') add('kokoro-japanese', 'Kokoro Japanese · OpenJTalk frontend voice', japaneseFrontendManifest);
-    if (TEXT_SUMMARY_TYPES.includes(node.type)) {
-      const model = textSummaryModel(node.type), type = node.type;
-      requirement = { key: model.key, id: model.key, title: model.label + (type === 'TextSummaryLfm2'
+    if (TEXT_PROCESSING_TYPES.includes(node.type)) {
+      const model = textProcessingModel(node.type), type = node.type;
+      requirement = { key: model.key, id: model.key, title: model.label + (type === 'TextProcessingLfm2'
         ? ' · 749 MB · allow 2 GB storage, 4 GB free RAM/GPU per Node (estimate) · WebGPU shader-f16 · LFM 1.0 terms apply (Models)'
         : ' · 1.403 GB · allow 3 GB storage, 6 GB free RAM/GPU per Node (estimate) · WebGPU shader-f16 · Apache 2.0 (Models)'), manifest: () => textSummaryManifest(type) };
     }

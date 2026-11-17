@@ -116,11 +116,11 @@ export async function checkLiveUI(page, expect, screenshot) {
   await expect(page.locator('#session-state')).toHaveText('Error');
   await expect(page.locator('#errors')).toBeInViewport();
   await expect(page.locator('#model-recovery')).toBeVisible();
-  await expect(page.locator('#summary-status')).toBeHidden();
+  await expect(page.locator('#processing-status')).toBeHidden();
   await screenshot('error-390', null);
   await page.evaluate(async () => {
     const { graphNode, GRAPH_KEY, GRAPH_VERSION } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
-    liveUISession.update({ error: '', summaryStatus: '', status: 'Ready' });
+    liveUISession.update({ error: '', processingStatus: '', status: 'Ready' });
     await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes: [graphNode('Text', 'only-source')], edges: [] });
     dispatchEvent(new StorageEvent('storage', { key: GRAPH_KEY }));
   });

@@ -6,17 +6,17 @@ import { graphNode, edge, GRAPH_VERSION } from '../extension/graph.js';
 import { domText } from './fixtures/dom.js';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
-const types = ['TextSummaryLfm2', 'TextSummaryQwen35', 'IfCondition'];
+const types = ['TextProcessingLfm2', 'TextProcessingQwen35', 'IfCondition'];
 
 function graph(type) {
   const nodes = [graphNode('Text', 'source'), graphNode(type, 'model'), graphNode('FocusedInputTextOutputNode', 'field')];
   nodes[0].settings.value = 'first';
-  const edges = [edge('source', 'value', 'model', 'text'), edge('source', 'value', 'field', 'text')];
+  const edges = [edge('source', 'value', 'model', type === 'IfCondition' ? 'text' : 'input1'), edge('source', 'value', 'field', 'text')];
   function display(id, from, port) {
     nodes.push(graphNode('TextAccumulator', id + '-history'), graphNode('Display', id));
     edges.push(edge(from, port, id + '-history', 'append'), edge(id + '-history', 'text', id, 'input'));
   }
-  display('model-output', 'model', type === 'IfCondition' ? 'yes' : 'summary');
+  display('model-output', 'model', type === 'IfCondition' ? 'yes' : 'result');
   if (type === 'IfCondition') display('no-output', 'model', 'no');
   display('peer', 'source', 'value');
   for (const [type, id] of [['TranslateGemmaJaEn', 'forward'], ['TranslateGemmaEnJa', 'reverse']]) {
@@ -37,8 +37,8 @@ function workers() {
         queueMicrotask(() => this.reply(data, controls.phase === data.type));
       },
       reply(data, fail = false) {
-        this.onmessage?.({ data: { id: data.id, type: fail ? 'error' : ({ load: 'ready', summarize: 'result', decide: 'result', drain: 'drained' }[data.type]),
-          message: 'Controlled model failure', summary: 'committed summary', branch: 'yes', confidence: .99 } });
+        this.onmessage?.({ data: { id: data.id, type: fail ? 'error' : ({ load: 'ready', process: 'result', decide: 'result', drain: 'drained' }[data.type]),
+          message: 'Controlled model failure', result: 'committed summary', branch: 'yes', confidence: .99 } });
       },
     };
     all.push(worker); return worker;
@@ -49,7 +49,7 @@ function workers() {
 function fixture(type) {
   const model = workers(), translations = [], inserted = [];
   const session = new TabSession(() => {}, { graph: graph(type),
-    textSummaryWorkerFactory: model.factory, ifConditionWorkerFactory: model.factory,
+    textProcessingWorkerFactory: model.factory, ifConditionWorkerFactory: model.factory,
     prepareTranslateGemma: async () => {}, translationWorkerFactory: () => {
       const worker = { postMessage(data) {
         queueMicrotask(() => this.onmessage?.({ data: { id: data.id, type: { load: 'ready', translate: 'result', drain: 'drained' }[data.type], texts: ['translated ' + data.text] } }));
@@ -66,8 +66,8 @@ function fixture(type) {
 }
 
 for (const type of types) {
-  const infer = type === 'IfCondition' ? 'decide' : 'summarize';
-  const status = type === 'IfCondition' ? 'conditionStatus' : 'summaryStatus';
+  const infer = type === 'IfCondition' ? 'decide' : 'process';
+  const status = type === 'IfCondition' ? 'conditionStatus' : 'processingStatus';
   for (const phase of ['load', infer, 'stop']) for (const end of phase === 'stop' ? ['stop'] : ['stop', 'cancel']) {
     test(`${type}: ${phase} failure is recorded once; independent paths survive ${end}/restart`, async t => {
       const f = fixture(type); t.after(() => f.session.cancel());
@@ -107,7 +107,7 @@ for (const type of types) {
       assert.equal(f.session.view.error.match(/Controlled model failure/g)?.length, 1, 'one actionable error per Node');
       assert.match(f.session.view.error, type === 'IfCondition'
         ? /No decision was fabricated\. Fix the input or Save graph/
-        : /Last successful summary retained; pending work stopped\. Save graph/,
+        : /Last successful result retained; pending work stopped\. Save graph/,
       'the duplicate Pipeline report preserves the structured failure recovery instructions');
       assert.equal(f.session.view.modelRecovery, true);
       assert.equal(f.session.view[status].match(/Controlled model failure/g)?.length, 1);
@@ -149,7 +149,7 @@ for (const type of types) {
     await f.session.start(42); await f.flush();
     const snapshot = () => Object.fromEntries(Object.entries(f.session.view.displays).map(([id, dom]) => [id, domText(dom)]));
     const before = snapshot();
-    late({ data: { id: request.id, type: heldRequest === 'load' ? 'ready' : heldRequest === 'drain' ? 'drained' : 'result', summary: 'stale summary', branch: 'no', confidence: .99 } });
+    late({ data: { id: request.id, type: heldRequest === 'load' ? 'ready' : heldRequest === 'drain' ? 'drained' : 'result', result: 'stale summary', branch: 'no', confidence: .99 } });
     await turn();
     assert.deepEqual(snapshot(), before);
     assert.equal(f.session.session.pipeline.errors.length, 0);
@@ -162,7 +162,7 @@ for (const type of types) {
     const g = graph(type); g.nodes = g.nodes.filter(node => ['source', 'model'].includes(node.id) || node.id.startsWith('model-output'));
     g.edges = g.edges.filter(route => g.nodes.some(node => node.id === route.from[0]) && g.nodes.some(node => node.id === route.to[0]));
     const f = workers(); f.controls.phase = 'load'; const errors = [];
-    const { pipeline } = buildGraph(g, { textSummaryWorkerFactory: f.factory, ifConditionWorkerFactory: f.factory, onError: error => errors.push(error) });
+    const { pipeline } = buildGraph(g, { textProcessingWorkerFactory: f.factory, ifConditionWorkerFactory: f.factory, onError: error => errors.push(error) });
     await assert.rejects(pipeline.start(), /Controlled model failure/);
     assert.equal(pipeline.state, 'disposed'); assert.equal(pipeline.entries.get('model').failed, true);
     assert.equal(errors.length, 1); assert.equal(f.all[0].released, true);
@@ -174,9 +174,9 @@ for (const type of types.filter(type => type !== 'IfCondition')) test(`${type}: 
   await f.session.start(42); await f.flush();
   const pipeline = f.session.session.pipeline, node = pipeline.entries.get('model').node;
   await f.send('x'.repeat(32769)); await f.flush();
-  assert.match(f.session.view.summaryStatus, /32,768/);
+  assert.match(f.session.view.processingStatus, /32,768/);
   assert.equal(f.display('model-output'), 'committed summary');
-  assert.deepEqual(f.model.all[0].messages.filter(m => m.type === 'summarize').map(m => m.text), ['first']);
+  assert.deepEqual(f.model.all[0].messages.filter(m => m.type === 'process').map(m => m.inputs[0]), ['first']);
   assert.equal(node.disposed, true); assert.equal(pipeline.entries.get('model').failed, true);
   assert.equal(pipeline.errors.filter(e => e.message.startsWith('Node model:')).length, 1);
   await f.send('peer survives'); assert.equal(f.display('peer').split('\n').at(-1), 'peer survives');

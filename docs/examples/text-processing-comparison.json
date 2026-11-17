@@ -1,0 +1,83 @@
+{
+  "version": 15,
+  "nodes": [
+    {
+      "id": "source1",
+      "type": "Text",
+      "settings": {
+        "value": "Plan A costs $10 and takes two days."
+      },
+      "position": {
+        "x": 20,
+        "y": 0
+      }
+    },
+    {
+      "id": "source2",
+      "type": "Text",
+      "settings": {
+        "value": "Plan B costs $15 and takes one day."
+      },
+      "position": {
+        "x": 20,
+        "y": 260
+      }
+    },
+    {
+      "id": "processor",
+      "type": "TextProcessingLfm2",
+      "settings": {
+        "prompt": "Compare Input 1 and Input 2 in English. List differences in cost and time.",
+        "inputCount": 2
+      },
+      "position": {
+        "x": 360,
+        "y": 20
+      }
+    },
+    {
+      "id": "display",
+      "type": "Display",
+      "settings": {
+        "title": "",
+        "inputCount": 1
+      },
+      "position": {
+        "x": 700,
+        "y": 20
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "source1",
+        "value"
+      ],
+      "to": [
+        "processor",
+        "input1"
+      ]
+    },
+    {
+      "from": [
+        "source2",
+        "value"
+      ],
+      "to": [
+        "processor",
+        "input2"
+      ]
+    },
+    {
+      "from": [
+        "processor",
+        "result"
+      ],
+      "to": [
+        "display",
+        "input1"
+      ]
+    }
+  ]
+}

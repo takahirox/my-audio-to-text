@@ -156,7 +156,7 @@ export async function openGraph(f, { live = true, tabId = 42 } = {}) {
     window.Worker = class extends NativeWorker {
       constructor(...args) { super(...args); this.url = String(args[0]); this.messages = []; this.released = false; window.graphWorkers.push(this); }
       postMessage(data, ...rest) {
-        this.messages.push({ type: data.type, text: data.text, language: data.language, ...(data.context === undefined ? {} : { context: data.context }) });
+        this.messages.push({ type: data.type, text: data.text, language: data.language, ...(data.inputs === undefined ? {} : { inputs: data.inputs }), ...(data.context === undefined ? {} : { context: data.context }) });
         if (window.holdTtsLoad && this.url.match(/supertonic3-worker|kokoro-worker/) && data.type === 'load') return;
         super.postMessage(data, ...rest);
       }

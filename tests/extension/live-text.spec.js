@@ -7,14 +7,14 @@ const region = (page, id) => page.locator(`[data-display="${id}"]`);
 test('MV3 summary TEXT snapshots render literally through Display.input, drain Stop and retain committed output during pagehide cancellation', async ({ graphExtension: f }) => {
   await writeFile(path.join(f.root,'web/text-summary-worker.js'), `self.onmessage=({data})=>{
     if(data.type==='load')postMessage({type:'ready',id:data.id});
-    if(data.type==='summarize')setTimeout(()=>postMessage({type:'result',id:data.id,summary:data.text}),data.text==='slow'?1500:10);
+    if(data.type==='process')setTimeout(()=>postMessage({type:'result',id:data.id,result:data.inputs[0]}),data.inputs[0]==='slow'?1500:10);
   };`);
   const live=await openGraph(f), literal='<script>literal note</script>\nsecond line';
   await live.evaluate(async literal=>{
     const { graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const source=graphNode('Text','source');source.settings.value=literal;
-    await saveLiveGraphData(localStorage,{version:15,nodes:[source,graphNode('TextSummaryLfm2','summary'),graphNode('Display','notes')],
-      edges:[edge('source','value','summary','text'),edge('summary', 'summary', 'notes', 'input1')]});
+    await saveLiveGraphData(localStorage,{version:15,nodes:[source,graphNode('TextProcessingLfm2','summary'),graphNode('Display','notes')],
+      edges:[edge('source','value','summary','input1'),edge('summary', 'result', 'notes', 'input1')]});
     window.dispatchEvent(new StorageEvent('storage',{key:'processing-graph-library-v1'}));
     const {TabSession}=await import('./session.js'), start=TabSession.prototype.start;
     TabSession.prototype.start=function(...args){window.summarySession=this;return start.apply(this,args);};
@@ -23,13 +23,13 @@ test('MV3 summary TEXT snapshots render literally through Display.input, drain S
   const content=region(live,'notes').locator('.display-content');await expect(content).toHaveText(literal);
   await expect(content.locator('script')).toHaveCount(0);
   await live.evaluate(()=>window.summarySession.session.pipeline.entries.get('source').context.emit('value','slow'));
-  await expect(live.locator('#summary-status')).toContainText('summarizing text');
+  await expect(live.locator('#processing-status')).toContainText('processing text');
   await live.locator('#stop').click();await expect(live.locator('#status')).toHaveText('Finalizing graph outputs…');
   await expect(live.locator('#start')).toBeDisabled();
   await expect(live.locator('#start')).toBeEnabled();await expect(content).toHaveText('slow');
   await live.locator('#start').click();await expect(content).toHaveText(literal);
   await live.evaluate(()=>window.summarySession.session.pipeline.entries.get('source').context.emit('value','slow'));
-  await expect.poll(()=>live.evaluate(()=>window.graphWorkers.some(worker=>!worker.released&&worker.messages.some(message=>message.type==='summarize'&&message.text==='slow')))).toBe(true);
+  await expect.poll(()=>live.evaluate(()=>window.graphWorkers.some(worker=>!worker.released&&worker.messages.some(message=>message.type==='process'&&message.inputs[0]==='slow')))).toBe(true);
   await live.evaluate(() => window.dispatchEvent(new Event('pagehide')));await expect(live.locator('#start')).toBeDisabled();await expect(content).toHaveText(literal);
   expect(await live.evaluate(()=>window.graphWorkers.every(worker=>worker.released))).toBe(true);
 });

@@ -29,7 +29,7 @@ test('eight flat sorted categories combine search/filter and refresh dynamic Jap
   for (const [name, types] of [
     ['AI Models / Speech Recognition', ['SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa']],
     ['AI Models / Translation', ['Plamo3Translate2B', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn']],
-    ['AI Models / Text', ['IfCondition', 'TextSummaryLfm2', 'TextSummaryQwen35']],
+    ['AI Models / Text', ['IfCondition', 'TextProcessingLfm2', 'TextProcessingQwen35']],
     ['AI Models / Speech Synthesis', ['CosyVoice3Streaming', 'Kokoro', 'Qwen3TtsStreaming', 'Supertonic3']],
   ]) {
     const group = page.getByRole('group', { name, exact: true });
@@ -90,9 +90,9 @@ test('eight flat sorted categories combine search/filter and refresh dynamic Jap
     'Keyed paired text accumulator', 'Keyed text coalesce', 'Keyed text pair',
     'Text accumulator', 'Text formatter', 'Text sliding window', 'Text window',
   ]);
-  await category.selectOption('AI Models / Text'); await search.fill('summary');
+  await category.selectOption('AI Models / Text'); await search.fill('processing');
   await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
-    '✧✦Text SummarizationLFM2.5 1.2B JP', '✧✦Text SummarizationQwen3.5 2B',
+    '✧✦Text ProcessingLFM2.5 1.2B JP', '✧✦Text ProcessingQwen3.5 2B',
   ]);
   await category.selectOption('AI Models / Translation'); await search.fill('Gemma');
   await expect(page.locator('.graph-node-group > .muted')).toHaveText(['AI Models / Translation']);

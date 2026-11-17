@@ -30,16 +30,16 @@ for (const [name, manifest] of [['moonshine-small-ja', 'moonshineJapaneseManifes
     expect(result.text).toBe(payload.toString()); expect(result.progress.length).toBeGreaterThan(0); expect(downloads()).toBe(1);
   });
 }
-for (const [name, type] of [['meeting-summary-lfm2', 'TextSummaryLfm2'], ['meeting-summary-qwen35', 'TextSummaryQwen35'], ['if-condition', null]]) {
+for (const [name, type] of [['meeting-summary-lfm2', 'TextProcessingLfm2'], ['meeting-summary-qwen35', 'TextProcessingQwen35'], ['if-condition', null]]) {
   test(`${name}: browser-safe Transformer cache permits only verified assets and surfaces eviction`, async ({ page }) => {
     const downloads = await assetsFixture(page, name, { array: true }); await page.goto(prefix);
     const result = await page.evaluate(async type => {
       const assets = await import('./playground-model-assets.js'), env = {};
       if (type) await assets.cacheOnlyTextSummaryRuntime(env, type);
       else await assets.cacheOnlyIfConditionRuntime(env);
-      const { textSummaryModel } = await import('./text-summary-models.js');
+      const { textProcessingModel } = await import('./text-summary-models.js');
       const { IF_CONDITION_MODEL } = await import('./if-condition-model.js');
-      const spec = type ? textSummaryModel(type) : IF_CONDITION_MODEL;
+      const spec = type ? textProcessingModel(type) : IF_CONDITION_MODEL;
       const url = `https://huggingface.co/${spec.id}/resolve/${spec.revision}/fixture.bin`;
       const text = await (await env.customCache.match(url)).text();
       const unknown = await env.customCache.match('https://huggingface.co/unpinned/model/resolve/main/weights');

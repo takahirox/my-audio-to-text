@@ -1,15 +1,18 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Text Summary · LFM2.5 1.2B JP · Node Playground</title><link rel="stylesheet" href="../../style.css"></head>
+<title>Text Processing · LFM2.5 1.2B JP · Node Playground</title><link rel="stylesheet" href="../../style.css"></head>
 <body><main class="model-test"><p><a href="../../">Node Playground</a></p>
-<h1>Text Summary · LFM2.5 1.2B JP</h1>
+<h1>Text Processing · LFM2.5 1.2B JP</h1>
 
 <p>LiquidAI/LFM2.5-1.2B-JP-202606-ONNX. WebGPU with shader-f16; q4f16. Large download and several GB of RAM/GPU memory required. Maximum 8,192 runtime tokens, including up to 1,024 output tokens. Text stays on this device; downloads begin on Run.</p>
-<label for="input">Input text</label>
+<label>Example <select id="example"><option value="">Choose an example</option><option value="summary">Summarization</option><option value="proofreading">Proofreading</option><option value="extraction">Extraction</option><option value="comparison">Two-input comparison</option></select></label>
+<label>Input count <input id="input-count" type="number" min="1" max="32" step="1" value="1"></label>
+<label for="input">Input 1</label>
 <textarea id="input" rows="7" maxlength="32768">The team met on Monday. We agreed to release the update on Friday. Testing must finish on Thursday.</textarea>
-<label>Summary language <select id="language"><option value="ja">Japanese</option><option value="en">English</option></select></label>
-<label for="prompt">Instruction (optional)</label>
-<textarea id="prompt" rows="2" maxlength="4096" placeholder="Summarize the input text."></textarea>
+<div id="additional-inputs"></div>
+<label for="prompt">System prompt</label>
+<textarea id="prompt" rows="4" maxlength="4096" required></textarea>
+<p>Refer to Input 1, Input 2, etc. Input values are data in a separate user message. One atomic input snapshot produces one complete result; there is no conversation history. Combined input limit: 32,768 characters. In graphs, every TEXT update requests inference; use TextWindow / Hold / Button to control frequency.</p>
 <div class="controls"><button id="run" disabled>Run</button><button id="cancel" disabled>Cancel / release</button></div>
 <p id="status" role="status" aria-live="polite">Ready</p>
 <p id="errors" role="alert"></p>

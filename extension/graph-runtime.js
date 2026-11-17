@@ -1,6 +1,6 @@
 import { ButtonNode } from '../web/button-node.js';
 import { HoldNode } from '../web/hold-node.js';
-import { TextSummaryNode } from '../web/text-summary-node.js';
+import { TextProcessingNode } from '../web/text-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode, Plamo3Translate2BTranslationNode } from '../web/translation-nodes.js';
 import { verifiedPlamoCache } from './plamo-cache.js';
@@ -111,7 +111,7 @@ function sharedTabCapture(factory, stopping) {
 export function buildGraph(graph, options) {
   const description = executableGraph(graph);
   if (!description.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
-  // Defer summary resources on event-gated paths. Ordinary graphs retain
+  // Defer text processing resources on event-gated paths. Ordinary graphs retain
   // their startup/preflight behavior, including startup failure reporting.
   const gatedAncestor = id => {
     const pending = [id], visited = new Set();
@@ -140,9 +140,9 @@ export function buildGraph(graph, options) {
       case 'Button': node = new ButtonNode(); break;
       case 'Hold': node = new HoldNode({ onState: state => options.onHoldState?.(state, spec.id) }); break;
       case 'Text': node = new TextNode(spec.settings); break;
-      case 'TextSummaryLfm2': case 'TextSummaryQwen35':
-        node = new TextSummaryNode({ ...spec.settings, lazy: !options.preload && gatedAncestor(spec.id), type: spec.type, workerFactory: options.textSummaryWorkerFactory,
-          onEvent: event => options.onTextSummaryEvent?.(event, spec.id) }); break;
+      case 'TextProcessingLfm2': case 'TextProcessingQwen35':
+        node = new TextProcessingNode({ ...spec.settings, lazy: !options.preload && gatedAncestor(spec.id), type: spec.type, workerFactory: options.textProcessingWorkerFactory,
+          onEvent: event => options.onTextProcessingEvent?.(event, spec.id) }); break;
       case 'IfCondition':
         node = new IfConditionNode({ ...spec.settings, workerFactory: options.ifConditionWorkerFactory,
           onEvent: event => options.onIfConditionEvent?.(event, spec.id) }); break;

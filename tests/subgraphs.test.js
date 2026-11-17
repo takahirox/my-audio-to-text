@@ -352,7 +352,7 @@ test('explicit duplicate-and-rewire migration permits retiring a definition only
 test('two instances use distinct runtime nodes; model requirements include shared and parked models', () => {
   const graph = parent(); graph.nodes[1].settings.template = '{1}';
   const { shared, parent: extracted } = extractSubgraph(graph, ['language', 'asr'], 'asr');
-  shared.nodes.push(graphNode('TextSummaryLfm2', 'parked-summary'));
+  shared.nodes.push(graphNode('TextProcessingLfm2', 'parked-summary'));
   const definition = { id: 'asr', kind: 'subgraph', graph: shared, name: 'ASR' };
   const second = { ...structuredClone(extracted.nodes.find(node => node.type === 'Subgraph')), id: 'second' };
   extracted.nodes.push(second, graphNode('Display', 'second-output'));
@@ -361,7 +361,7 @@ test('two instances use distinct runtime nodes; model requirements include share
   const asrs = resolved.nodes.filter(node => node.type === 'SpeechToTextMoonshineSmallJa');
   assert.equal(asrs.length, 2); assert.notEqual(asrs[0].id, asrs[1].id);
   assert.deepEqual(graphModelRequirements(resolved).map(model => model.key), ['moonshine-small-ja', 'meeting-summary-lfm2']);
-  assert.equal(executableGraph(resolved).nodes.some(node => node.type === 'TextSummaryLfm2'), false);
+  assert.equal(executableGraph(resolved).nodes.some(node => node.type === 'TextProcessingLfm2'), false);
   const wrong = structuredClone(extracted); wrong.edges[0].from = ['second', 'out1'];
   assert.throws(() => resolveSubgraphs(wrong, [definition]), /Incompatible port types/);
 });
@@ -444,4 +444,25 @@ test('Live/Web snapshots own separate ASR workers; disposing one leaves the othe
   assert.equal(workers.filter(worker => worker.terminated).length, 1);
   assert.ok(!webSpeech.disposed);
   await web.pipeline.dispose(); assert.ok(workers.every(worker => worker.terminated));
+});
+
+for (const type of ['TextProcessingLfm2', 'TextProcessingQwen35']) test(`${type}: exposed numbered inputs track count without rerouting saved parent endpoints`, () => {
+  const processor = graphNode(type, 'processor'); processor.settings.inputCount = 2;
+  const shared = { version: 15, nodes: [processor], edges: [], interface: {
+    inputs: [{ id: 'first', name: 'First', node: 'processor', port: 'input1' }, { id: 'second', name: 'Second', node: 'processor', port: 'input2' }],
+    outputs: [{ id: 'output', name: 'Result', node: 'processor', port: 'result' }],
+  } };
+  assert.doesNotThrow(() => assertSubgraph(shared));
+  const definitions = [{ id: 'process', name: 'Process', kind: 'subgraph', graph: shared }];
+  const instance = { id: 'instance', type: 'Subgraph', subgraphId: 'process', settings: {}, position: { x: 20, y: 20 } };
+  assert.deepEqual(Object.keys(nodeDefinition(instance, null, definitions).inputs), ['first', 'second']);
+  const parent = { version: 15, nodes: [graphNode('Text', 'text'), instance, graphNode('Display', 'view')], edges: [edge('text', 'value', 'instance', 'second'), edge('instance', 'output', 'view', 'input1')] };
+  const expanded = resolveSubgraphs(parent, definitions);
+  assert.equal(expanded.edges[0].to[1], 'input2');
+  shared.nodes[0].settings.inputCount = 1;
+  assert.throws(() => assertSubgraph(shared), /exposed inputs port/);
+  assert.equal(nodeDefinition(instance, parent, definitions), undefined);
+  assert.throws(() => resolveSubgraphs(parent, definitions), /invalid subgraph/);
+  assert.deepEqual(parent.edges[0], edge('text', 'value', 'instance', 'second'));
+  assert.equal(shared.interface.inputs[1].port, 'input2');
 });

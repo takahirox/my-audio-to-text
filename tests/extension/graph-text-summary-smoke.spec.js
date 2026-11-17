@@ -8,15 +8,15 @@ import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { TEXT_SUMMARY_TYPES, textSummaryModel } from '../../web/text-summary-models.js';
+import { TEXT_PROCESSING_TYPES, textProcessingModel } from '../../web/text-summary-models.js';
 import { meetingBatches, summaryFeedbackGraph as summaryGraph, summaryGraph as directSummaryGraph } from '../fixtures/text-summary.js';
 
 // No inference/model/runtime mocks. Only a controllable committed TEXT producer.
 // Loopback serves exact pinned bytes to Save; Start and inference are offline.
-for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic text/prompts, rolling updates, Stop and pagehide`, async ({}, info) => {
+for (const type of TEXT_PROCESSING_TYPES) test(`${type}: real offline MV3 generic text/prompts, rolling updates, Stop and pagehide`, async ({}, info) => {
   test.skip(!process.env.TEXT_SUMMARY_SMOKE, 'Run review-text-summary-assets.py, prepare runtimes and build first.');
   test.setTimeout(900000);
-  const spec = textSummaryModel(type), temporary = await mkdtemp(path.join(os.tmpdir(), 'text-summary-'));
+  const spec = textProcessingModel(type), temporary = await mkdtemp(path.join(os.tmpdir(), 'text-summary-'));
   const root = path.join(temporary, 'extension'), requests = [], downloads = [], consoleErrors = [], runs = [], observations = [];
   let context, page, editor, server;
   const sourceSHA256 = {};
@@ -82,7 +82,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
     // Both options are production palette entries and remain after a reload.
     await editor.locator('#graph-palette-toggle').click();
     await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'AI Models / Text' });
-    for (const option of TEXT_SUMMARY_TYPES) await expect(editor.locator(`#graph-node-type [role="option"][data-type="${option}"]`)).toHaveCount(1);
+    for (const option of TEXT_PROCESSING_TYPES) await expect(editor.locator(`#graph-node-type [role="option"][data-type="${option}"]`)).toHaveCount(1);
     await editor.keyboard.press('Escape');
     await settleAutoSave(editor);
     await expectGraphModelsReady(editor, { timeout: 180000 });
@@ -104,9 +104,9 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
     const notes = page.locator('[data-display="notes"] .display-content');
     const started = Date.now(); await startReadyLive(page, { workers: 'summaryWorkers', timeout: 180000 });
     await expect(page.locator('#status')).toHaveText('Processing active', { timeout: 180000 });
-    expect(await page.locator('#summary-status').textContent()).not.toContain('unavailable');
+    expect(await page.locator('#processing-status').textContent()).not.toContain('unavailable');
     const loadMs = Date.now() - started;
-    console.log(`${type}: Start settled in ${loadMs} ms; ${await page.locator('#summary-status').textContent()}`);
+    console.log(`${type}: Start settled in ${loadMs} ms; ${await page.locator('#processing-status').textContent()}`);
     await observe('loaded');
     for (let index = 0; index < meetingBatches.length; index++) {
       const before = Date.now();
@@ -115,7 +115,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
       await page.waitForFunction(count => window.summaryEvidence.some(e => e.type === 'error') || window.summaryEvidence.filter(e => e.type === 'result').length === count, index + 1, { timeout: 180000 });
       const reply = await page.evaluate(() => window.summaryEvidence.findLast(event => event.type === 'result' || event.type === 'error'));
       expect(reply.type, reply.message).toBe('result');
-      await expect(notes).toHaveText(reply.summary);
+      await expect(notes).toHaveText(reply.result);
       const output = await notes.textContent();
       expect(output.trim()).not.toBe(''); expect(output).toMatch(/[\u3040-\u30ff\u3400-\u9fff]/);
       if (index === 1) expect(output).not.toBe(runs[0].output);
@@ -145,6 +145,9 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
     // Each fixture has an independent session and complete input, with no
     // meeting-only sections or semantic assertions. Record outputs for review.
     const genericCases = [
+      {kind: 'proofreading', text: 'She go to school yesterday.', prompt: 'Proofread Input 1. Return corrected English text only.'},
+      {kind: 'extraction', text: 'Ana will send the draft Friday. Bo will review it Monday.', prompt: 'Extract names and deadlines from Input 1 as JSON.'},
+      {kind: 'comparison', text: 'Plan A costs $10 and takes two days.', second: 'Plan B costs $15 and takes one day.', prompt: 'Compare Input 1 and Input 2 in English. Identify cost and time differences.'},
       {kind: 'article', text: 'A city park opened in April. It has shaded trails and a pond. Volunteers maintain the paths.', prompt: 'Summarize in one concise paragraph.'},
       {kind: 'article-bullets', text: 'A city park opened in April. It has shaded trails and a pond. Volunteers maintain the paths.', prompt: 'Summarize in two bullet points.'},
       {kind: 'technical', text: 'The compiler caches parsed syntax trees. This avoids reparsing unchanged files. Benchmarks measured 12 ms incremental latency compared with 45 ms without caching.', prompt: 'Summarize the technical mechanism and measurements.'},
@@ -155,18 +158,23 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
     for (const fixture of genericCases) {
       const graph = directSummaryGraph(type);
       graph.nodes.find(n => n.id === 'input').settings.value = fixture.text;
-      graph.nodes.find(n => n.id === 'summary').settings = {language: 'en', prompt: fixture.prompt};
+      graph.nodes.find(n => n.id === 'summary').settings = {inputCount: fixture.second ? 2 : 1, prompt: fixture.prompt};
+      if (fixture.second) {
+        const { graphNode, edge } = await import('../../extension/graph.js');
+        const second = graphNode('Text', 'second'); second.settings.value = fixture.second;
+        graph.nodes.push(second); graph.edges.push(edge('second', 'value', 'summary', 'input2'));
+      }
       await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
       const before = await page.evaluate(() => summaryEvidence.length);
       await startReadyLive(page, { workers: 'summaryWorkers', timeout: 180000 });
       await expect(page.locator('#status')).toHaveText('Processing active', {timeout: 180000});
-      await page.waitForFunction(index => summaryEvidence.slice(index).some(e => e.type === 'result' || e.type === 'error'), before, {timeout: 180000});
-      const reply = await page.evaluate(index => summaryEvidence.slice(index).find(e => e.type === 'result' || e.type === 'error'), before);
+      await page.waitForFunction(({index, count}) => summaryEvidence.slice(index).some(e => e.type === 'error') || summaryEvidence.slice(index).filter(e => e.type === 'result').length === count, {index: before, count: fixture.second ? 2 : 1}, {timeout: 180000});
+      const reply = await page.evaluate(index => summaryEvidence.slice(index).findLast(e => e.type === 'result' || e.type === 'error'), before);
       expect(reply.type, reply.message).toBe('result');
-      await expect(notes).toHaveText(reply.summary);
-      expect(reply.summary.trim()).not.toBe('');
+      await expect(notes).toHaveText(reply.result);
+      expect(reply.result.trim()).not.toBe('');
       expect(reply.metrics.attempts).toHaveLength(1);
-      runs.push({...fixture, output: reply.summary, metrics: reply.metrics});
+      runs.push({...fixture, output: reply.result, metrics: reply.metrics});
       await page.locator('#stop').click(); await expect(page.locator('#start')).toBeEnabled({timeout: 180000});
       await expectPreparedIdle(page, { workers: 'summaryWorkers', timeout: 180000 });
     }
@@ -181,7 +189,7 @@ for (const type of TEXT_SUMMARY_TYPES) test(`${type}: real offline MV3 generic t
       model: spec, runtime: JSON.parse(await readFile('scripts/text-summary-runtime.json', 'utf8')),
       host: await page.evaluate(() => ({ browser: navigator.userAgent, isolated: crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency })).catch(() => null),
       visibleNotes: await page.locator('[data-display="notes"] .display-content').textContent().catch(() => null),
-      status: await page.locator('#summary-status').textContent().catch(() => ''), replies: await page.evaluate(() => window.summaryEvidence).catch(() => []) }, null, 2));
+      status: await page.locator('#processing-status').textContent().catch(() => ''), replies: await page.evaluate(() => window.summaryEvidence).catch(() => []) }, null, 2));
     await context?.close(); if (server) await new Promise(resolve => server.close(resolve));
     await rm(temporary, { recursive: true, force: true });
   }

@@ -3,7 +3,7 @@
 // Nothing here reads extension storage or changes the extension's cache policy.
 import { defineAssetSet, ModelAssetCache, MODEL_CACHE_NAME } from './vendor/model-cache/model-asset-cache.js';
 import { optionalAsrFiles as readAsrFiles } from './vendor/model-cache/optional-asr-cache.js';
-import { textSummaryModel } from './text-summary-models.js';
+import { textProcessingModel } from './text-summary-models.js';
 import { IF_CONDITION_MODEL } from './if-condition-model.js';
 
 const browserError = error => new Error(String(error.message || error)
@@ -51,7 +51,7 @@ async function transformerRuntime(env, spec, progress) {
   env.useFSCache = false; env.useWasmCache = false;
 }
 export async function cacheOnlyTextSummaryRuntime(env, type, progress) {
-  const model = textSummaryModel(type);
+  const model = textProcessingModel(type);
   await transformerRuntime(env, await manifest(model.key, model), progress);
 }
 export async function cacheOnlyIfConditionRuntime(env, progress) {

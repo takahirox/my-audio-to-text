@@ -11,7 +11,7 @@ test('every built-in has an explicit Add Node category; new types must be classi
       'SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa',
     ],
     'AI Models / Translation': ['Plamo3Translate2B', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn'],
-    'AI Models / Text': ['IfCondition', 'TextSummaryLfm2', 'TextSummaryQwen35'],
+    'AI Models / Text': ['IfCondition', 'TextProcessingLfm2', 'TextProcessingQwen35'],
     'AI Models / Speech Synthesis': ['CosyVoice3Streaming', 'Kokoro', 'Qwen3TtsStreaming', 'Supertonic3'],
     'Processors': ['Hold', 'KeyedPairedTextAccumulator', 'KeyedTextCoalesce', 'KeyedTextPair', 'TextAccumulator', 'TextFormatter', 'TextSlidingWindow', 'TextWindow'],
     'Outputs': ['AudioOutput', 'Display', 'FocusedInputTextOutputNode', 'SpeakerOutput'],
@@ -80,7 +80,7 @@ test('category/query filters combine, keep sorted groups, match types or labels 
   assert.deepEqual([...groups.keys()], ['Sources / inputs', 'AI Models / Speech Recognition', 'AI Models / Text', 'Processors', 'Outputs']);
   const summary = groupPaletteEntries(entries, { query: 'text', category: 'AI Models / Text' });
   assert.deepEqual([...summary.keys()], ['AI Models / Text']);
-  assert.deepEqual(summary.get('AI Models / Text').map(([type]) => type), ['TextSummaryLfm2', 'TextSummaryQwen35']);
+  assert.deepEqual(summary.get('AI Models / Text').map(([type]) => type), ['TextProcessingLfm2', 'TextProcessingQwen35']);
   const translation = groupPaletteEntries(entries, { query: 'gemma', category: 'AI Models / Translation' });
   assert.deepEqual([...translation.keys()], ['AI Models / Translation']);
   assert.deepEqual(translation.get('AI Models / Translation').map(([type]) => type), ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']);
