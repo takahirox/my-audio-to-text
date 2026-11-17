@@ -275,6 +275,12 @@ export function assertGraph(graph, definitions = []) {
   if (errors.length) throw new Error(errors.join('\n'));
   return structuredClone(graph);
 }
+// Layout remains part of persistence, history and validation. Runtime owners
+// and pending-session notices compare the resolved graph without coordinates.
+// Remove only Node layout: settings (including any nested position) still count.
+export function graphExecutionFingerprint(graph) {
+  return JSON.stringify(graph && { ...graph, nodes: graph.nodes.map(({ position, ...node }) => node) });
+}
 export function hasTranslation(graph) {
   return graph.nodes.some(node => ['TranslateGemma4B', 'Plamo3Translate2B'].includes(node.type));
 }

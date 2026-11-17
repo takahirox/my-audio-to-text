@@ -50,6 +50,48 @@ function fixture(graph, options = {}) {
   return { session, workers, captures, outputs, controls, views, messages };
 }
 
+test('layout saves retain preparing and ready owners, asset preflight and the exact model instances', async t => {
+  let checks = 0;
+  const graph = textGraph('TextProcessingLfm2', true);
+  const f = fixture(graph, { prepareModelAssets: async () => { checks++; } });
+  t.after(() => f.session.close()); f.controls.hold = true;
+  const preparing = f.session.prepareModels(); await turn();
+  const owner = f.session.prepared;
+  graph.nodes[0].position.x += 10; f.session.setGraph(graph);
+  assert.equal(f.session.prepared, owner); assert.equal(owner.assetController.signal.aborted, false);
+  assert.equal(f.session.view.modelState, 'preparing'); assert.equal(checks, 1);
+  f.workers[0].reply(f.workers[0].messages[0]); await preparing;
+  const model = owner.pipeline.entries.get('model').node;
+  for (const offset of [10, -10, 10]) {
+    graph.nodes[0].position.y += offset; f.session.setGraph(graph);
+    await f.session.prepareModels();
+    assert.equal(f.session.prepared, owner); assert.equal(owner.pipeline.entries.get('model').node, model);
+    assert.equal(f.session.view.modelState, 'ready'); assert.equal(checks, 1); assert.equal(f.workers.length, 1);
+    assert.deepEqual(f.session.view.savedGraph, graph);
+  }
+  await f.session.start();
+  assert.equal(f.session.session, owner); assert.equal(f.messages('load').length, 1);
+});
+
+test('running layout saves leave state and snapshot intact; real settings take effect in the next runtime', async t => {
+  let checks = 0;
+  const graph = textGraph('TextProcessingLfm2', true);
+  const f = fixture(graph, { prepareModelAssets: async () => { checks++; } });
+  t.after(() => f.session.close()); await f.session.prepareModels(); await f.session.start();
+  const owner = f.session.session, snapshot = structuredClone(f.session.view.activeSavedGraph);
+  graph.nodes[0].position.x += 20; f.session.setGraph(graph); await turn();
+  assert.equal(f.session.session, owner); assert.equal(f.session.view.state, 'running');
+  assert.deepEqual(f.session.view.activeSavedGraph, snapshot);
+  assert.equal(checks, 1); assert.equal(f.workers.length, 1); assert.equal(f.workers[0].released, false);
+  await f.session.pressButton('button'); assert.equal(f.messages('process').length, 1);
+  graph.nodes.find(node => node.id === 'model').settings.prompt = 'New task'; f.session.setGraph(graph);
+  assert.equal(f.session.session, owner); assert.equal(checks, 1);
+  assert.notEqual(owner.description.nodes.find(node => node.id === 'model').settings.prompt, 'New task');
+  await f.session.stop();
+  assert.equal(f.session.view.modelState, 'ready'); assert.equal(checks, 2);
+  assert.equal(f.session.prepared.description.nodes.find(node => node.id === 'model').settings.prompt, 'New task');
+});
+
 test('hand-triggered summary is genuinely warm before Start; first Button action uses the same Worker', async t => {
   const f = fixture(textGraph('TextProcessingLfm2', true)); t.after(() => f.session.close());
   f.controls.hold = true;

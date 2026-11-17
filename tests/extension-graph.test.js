@@ -2,7 +2,7 @@ import { translationGraph } from './fixtures/translation-graph.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, GRAPH_KEY, GRAPH_VERSION, NODE_TYPES, nodeDefinition } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, saveGraph, graphExecutionFingerprint, GRAPH_KEY, GRAPH_VERSION, NODE_TYPES, nodeDefinition } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { DisplayNode } from '../web/display-node.js';
 import { Pipeline } from '../web/pipeline.js';
@@ -11,6 +11,28 @@ import { domText } from './fixtures/dom.js';
 
 const storage = () => { const values = new Map(); return { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v) }; };
 const removed = ['ViewBuilder', 'TextDisplay', 'LiveTextDisplay', 'TextToDOM', 'PairedTextToDOM', 'KeyedDOMAccumulator', 'DOMAccumulator', 'DOMCombiner', 'TranscriptView', 'TranslationView'];
+
+test('execution fingerprint excludes only Node coordinates and preserves every execution field without mutating storage', () => {
+  const graph = translationGraph(), before = structuredClone(graph), fingerprint = graphExecutionFingerprint(graph);
+  graph.nodes[0].position.x += 100;
+  assert.equal(graphExecutionFingerprint(graph), fingerprint);
+  assert.notDeepEqual(graph, before);
+  for (const change of [
+    g => { g.nodes[0].id = 'other'; },
+    g => { g.nodes[1].type = 'SpeechToTextMoonshineMediumEn'; },
+    g => { g.edges[0].to[1] = 'another-port'; },
+    g => { g.edges.pop(); },
+    g => { g.nodes[1].settings.prompt = 'A new task'; },
+    g => { g.nodes[1].settings.language = 'en'; },
+    g => { g.nodes[1].settings.voice = 'af_heart'; },
+    g => { g.nodes[1].settings.position = { x: 20, y: 30 }; },
+    g => { g.interface = { inputs: [{ id: 'input', node: 'speech', port: 'audio' }], outputs: [] }; },
+  ]) {
+    const changed = structuredClone(graph); change(changed);
+    assert.notEqual(graphExecutionFingerprint(changed), fingerprint);
+  }
+  assert.deepEqual(before, translationGraph());
+});
 
 test('default/reset and explicit translated history graphs use only current contracts and exact runtime ports', async () => {
   for (const enabled of [false, true]) for (const direction of ['ja-en', 'en-ja']) {

@@ -41,6 +41,12 @@ export function graphModelRequirements(graph) {
   return [...requirements.values()];
 }
 
+// Requirement keys already include model-affecting settings such as voice.
+// Order, duplicate Nodes, connections and layout do not change shared assets.
+export function graphModelRequirementsFingerprint(graph) {
+  return JSON.stringify(graphModelRequirements(graph).map(requirement => requirement.key).sort());
+}
+
 // The caller supplies the resolved executable snapshot. Unlike Auto Save this
 // must finish successfully before inference resources are initialized. prepare
 // checks hashes under the shared model lock and fetches only missing files.
@@ -76,11 +82,14 @@ export async function prepareGraphModelAssets(graph, { signal, onChange = () => 
 export class GraphModelPreparation {
   constructor({ createCache = manifest => new ModelAssetCache(manifest), onChange = () => {}, onComplete = () => {} } = {}) {
     Object.assign(this, { createCache, onChange, onComplete });
-    this.entries = []; this.closed = false; this.runs = new Map();
+    this.entries = []; this.closed = false; this.runs = new Map(); this.requirementsFingerprint = null;
   }
   replace(graph, { inspect = false } = {}) {
     if (this.closed) return;
+    const fingerprint = graphModelRequirementsFingerprint(graph);
+    if (fingerprint === this.requirementsFingerprint) return;
     const requirements = graphModelRequirements(graph), previous = new Map(this.entries.map(entry => [entry.key, entry]));
+    this.requirementsFingerprint = fingerprint;
     for (const entry of this.entries) if (!requirements.some(item => item.key === entry.key)) entry.controller?.abort();
     this.entries = requirements.map(requirement => previous.get(requirement.key) || { ...requirement, view: { state: 'Queued', downloadedBytes: 0, totalBytes: 0, error: '' } });
     this.onChange(this.entries);
@@ -133,7 +142,7 @@ export class GraphModelPreparation {
   clear() {
     if (this.closed) return;
     for (const entry of this.entries) entry.controller?.abort();
-    this.entries = []; this.onChange(this.entries);
+    this.entries = []; this.requirementsFingerprint = null; this.onChange(this.entries);
   }
   close() {
     this.closed = true;

@@ -222,7 +222,7 @@ test('named graphs share verified assets by identity; Save prepares only the ope
   expect(await copy.evaluate(() => window.graphWorkers.length)).toBe(0);
 });
 
-test('saved subgraph requirements inspect headlessly in read-only sessions, prepare on Auto Save and track Models deletion/recovery', async ({ graphExtension: f }) => {
+test('saved subgraph requirements inspect headlessly, prepare on changed requirements and track Models deletion/recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
   await editor.evaluate(async () => {
     const { defaultGraph, graphNode } = await import('./graph.js');
@@ -244,6 +244,10 @@ test('saved subgraph requirements inspect headlessly in read-only sessions, prep
   await noModelPanel(viewer); expect(f.requests).toEqual([]);
   const workspace = await editor.locator('.graph-workspace').boundingBox();
   await editor.getByRole('button', { name: 'Select subgraph', exact: true }).press('ArrowRight');
+  await save(editor);
+  await expect(editor.locator('#graph-model-warning')).toContainText('needs model files');
+  expect(f.requests).toEqual([]);
+  await add(editor, 'TextProcessingLfm2');
   await save(editor); await expectGraphModelsReady(editor);
   await expect(live.models.locator('#translategemma')).toHaveAttribute('data-state', 'Ready');
   await expect(viewer.locator('#graph-model-warning')).toBeEmpty();

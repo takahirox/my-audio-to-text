@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { graphModelRequirements, GraphModelPreparation, prepareGraphModelAssets } from '../extension/graph-model-preparation.js';
+import { graphModelRequirements, graphModelRequirementsFingerprint, GraphModelPreparation, prepareGraphModelAssets } from '../extension/graph-model-preparation.js';
 import { defaultGraph, graphNode } from '../extension/graph.js';
 
 test('all ASR dependencies and Japanese frontend are explicit and deduplicated, including parked Nodes', () => {
@@ -16,6 +16,41 @@ const modelFreeGraph = () => ({ ...defaultGraph(), nodes: [graphNode('Text', 'te
 
 const settled = async () => { await new Promise(resolve => setImmediate(resolve)); };
 const graph = () => { const graph = modelFreeGraph(); graph.nodes.push(graphNode('TranslateGemma4B', 'parked')); return graph; };
+
+test('asset dependency fingerprint ignores layout and execution-only edits but tracks model and voice requirements', () => {
+  const saved = graph(); saved.nodes.push(graphNode('Kokoro', 'voice'), graphNode('SpeechToTextMoonshineMediumEn', 'speech'));
+  const fingerprint = graphModelRequirementsFingerprint(saved);
+  saved.nodes.reverse(); saved.nodes[0].position.x += 10;
+  saved.nodes.push(graphNode('TranslateGemma4B', 'duplicate'));
+  saved.nodes.find(node => node.type === 'Text').settings.value = 'Changed language or context';
+  assert.equal(graphModelRequirementsFingerprint(saved), fingerprint);
+  saved.nodes.find(node => node.id === 'voice').settings.voice = 'af_heart';
+  assert.notEqual(graphModelRequirementsFingerprint(saved), fingerprint);
+  const changedVoice = graphModelRequirementsFingerprint(saved);
+  saved.nodes.find(node => node.id === 'speech').type = 'SpeechToTextMoonshineSmallJa';
+  assert.notEqual(graphModelRequirementsFingerprint(saved), changedVoice);
+});
+
+test('unchanged missing requirements do not turn an inspection into preparation; explicit recovery still checks and prepares', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => [{ path: 'weights', bytes: 1, sha256Chunks: ['0'.repeat(64)] }] });
+  let inspections = 0, preparations = 0, changes = 0;
+  try {
+    const preparation = new GraphModelPreparation({ onChange: () => changes++, createCache: () => ({
+      inspect: async () => { inspections++; return { state: 'Not downloaded' }; },
+      prepare: async () => { preparations++; return { state: 'Ready' }; },
+    }) });
+    const saved = graph(); preparation.replace(saved, { inspect: true }); await settled();
+    const count = changes;
+    saved.nodes[0].position.x += 10;
+    preparation.replace(saved); await settled();
+    assert.equal(inspections, 1); assert.equal(preparations, 0); assert.equal(changes, count);
+    preparation.inspect(); await settled(); assert.equal(inspections, 2);
+    await preparation.run(preparation.entries[0]); assert.equal(preparations, 1);
+    preparation.clear(); preparation.replace(saved, { inspect: true }); await settled();
+    assert.equal(inspections, 3); preparation.close();
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 test('blocking asset preparation skips download preparation for verified and model-free graphs', async () => {
   const originalFetch = globalThis.fetch;

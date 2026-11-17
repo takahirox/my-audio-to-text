@@ -2,7 +2,7 @@ import { graphModelRequirements, prepareGraphModelAssets } from './graph-model-p
 import { microphoneCaptureError } from './media-source.js';
 import { authorizePage } from './page-target.js';
 import { buttonLabel } from '../web/button-node.js';
-import { assertGraph, executableGraph, defaultGraph, hasTranslation, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
+import { assertGraph, executableGraph, graphExecutionFingerprint, defaultGraph, hasTranslation, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
 import { SpeakerOutputNode } from '../web/speaker-output.js';
 
@@ -47,7 +47,7 @@ export class TabSession {
     this.downloadModelAssets = download;
     if (this.closed || this.session) return Promise.resolve();
     if (this.graphUnavailable) { this.update({ modelState: 'error', modelStatus: 'Saved graph unavailable', modelRecovery: true, error: this.graphUnavailable }); return Promise.resolve(); }
-    const snapshot = assertGraph(this.graph), key = JSON.stringify([this.view.savedGraphId, snapshot]);
+    const snapshot = assertGraph(this.graph), key = JSON.stringify([this.view.savedGraphId, graphExecutionFingerprint(snapshot)]);
     if (this.prepared?.key === key && ['preparing', 'ready'].includes(this.view.modelState)) return this.preparing;
     const previous = this.prepared;
     this.prepared = null;
@@ -469,7 +469,7 @@ export class TabSession {
   }
   setGraph(graph, { id = this.view.savedGraphId, name = this.view.savedGraphName } = {}) {
     const next = assertGraph(graph);
-    const changed = !!this.graphUnavailable || id !== this.view.savedGraphId || JSON.stringify(this.graph) !== JSON.stringify(next);
+    const changed = !!this.graphUnavailable || id !== this.view.savedGraphId || graphExecutionFingerprint(this.graph) !== graphExecutionFingerprint(next);
     this.graphUnavailable = ''; this.graph = next;
     const translationEnabled = hasTranslation(this.graph);
     this.update({ savedGraph: this.graph, savedGraphId: id, savedGraphName: name, translationEnabled,
