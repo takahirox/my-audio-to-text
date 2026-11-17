@@ -1,7 +1,9 @@
 import { test, expect, chromium } from '@playwright/test';
 import path from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { PLAMO_3_TRANSLATE_2B } from '../../web/plamo-policy.js';
+import { plamoSmokeSamples } from '../plamo-smoke-samples.js';
+import { servePlamoSmokeWeight } from '../plamo-smoke-fixture.js';
 
 test('real PLaMo 3 Translate 2B: both directions, auto source, cache reuse and cancellation', async ({}, testInfo) => {
   test.skip(process.env.PLAMO_SMOKE !== '1' || testInfo.project.name !== 'chromium', 'Opt-in real 1.81 GB model; desktop Chrome and sufficient memory required.');
@@ -10,6 +12,13 @@ test('real PLaMo 3 Translate 2B: both directions, auto source, cache reuse and c
   // It never opens or modifies a user's normal Chrome profile.
   const context = await chromium.launchPersistentContext(path.resolve('.cache/plamo-review/browser-profile'), {
     channel: process.env.TRANSLATION_CHANNEL || 'chrome', headless: !process.env.TRANSLATION_HEADED,
+  });
+  const localWeight = process.env.PLAMO_SMOKE_GGUF
+    ? await servePlamoSmokeWeight(path.resolve(process.env.PLAMO_SMOKE_GGUF)) : null;
+  if (localWeight) await context.route('**/vendor/model-cache/plamo-assets.json', async route => {
+    const files = JSON.parse(await readFile('extension/plamo-assets.json', 'utf8'));
+    files[0].sourceURL = localWeight.url;
+    await route.fulfill({ json: files });
   });
   const page = await context.newPage(), browser = context.browser();
   const requests = [], errors = [], runs = [];
@@ -25,11 +34,7 @@ test('real PLaMo 3 Translate 2B: both directions, auto source, cache reuse and c
     console.log('PLaMo:', await page.locator('#status').textContent().catch(() => 'closed'));
   }, 30000);
   try {
-    for (const sample of [
-      { text: '会議は来週の月曜日に変更されました。', source: '', target: '', expected: /meeting.*(?:next Monday|Monday next week)/i },
-      { text: 'The weather is nice today.', source: 'en', target: 'ja', expected: /今日.*(?:天気|晴)/ },
-      { text: 'Please open the project dashboard.', source: 'auto', target: 'ja', expected: /(?:ダッシュボード|管理画面)/ },
-    ]) {
+    for (const sample of plamoSmokeSamples) {
       await page.locator('#input').fill(sample.text);
       await page.locator('#source-lang').fill(sample.source);
       await page.locator('#target-lang').fill(sample.target);
@@ -72,5 +77,6 @@ test('real PLaMo 3 Translate 2B: both directions, auto source, cache reuse and c
     await writeFile('.cache/plamo-review/browser-evidence.json', evidence);
     await testInfo.attach('plamo-evidence', { path, contentType: 'application/json' });
     await context.close();
+    await localWeight?.close();
   }
 });

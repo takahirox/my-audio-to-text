@@ -9,7 +9,7 @@ const expected = {
   SpeechToTextMoonshineMediumEn: ['Speech Recognition · EN / Streaming', 'Moonshine Medium Streaming English'],
   TranslateGemmaJaEn: ['Translation · JA → EN', 'TranslateGemma 4B'],
   TranslateGemmaEnJa: ['Translation · EN → JA', 'TranslateGemma 4B'],
-  Plamo3Translate2B: ['Translation · JA ↔ EN', 'PLaMo 3 Translate 2B'],
+  Plamo3Translate2B: ['Translation', 'PLaMo 3 Translate 2B'],
   TextProcessingLfm2: ['Text Processing', 'LFM2.5 1.2B JP'],
   TextProcessingQwen35: ['Text Processing', 'Qwen3.5 2B'],
   IfCondition: ['Condition Check · Yes/No', 'XtremeDistil'],

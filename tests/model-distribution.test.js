@@ -38,6 +38,7 @@ test('Pages staging and packaged extension inventory exclude retired assets and 
       assert.equal(inventory.modelWeights, 0);
       for (const { path } of inventory.files) assert.doesNotMatch(path, retired);
       for (const path of ['web/translategemma-worker.js', 'web/plamo-worker.js', 'web/translation-worker.js',
+        'web/plamo-policy.js', 'web/plamo-chat-template.jinja', 'web/licenses/plamo-community-en.txt', 'web/licenses/plamo-community-ja.txt',
         'web/vendor/translation/transformers.js', 'extension/model-asset-cache.js']) {
         assert.ok(inventory.files.some(file => file.path === path), path);
       }

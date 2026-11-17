@@ -28,8 +28,11 @@ async function fixture(page, { corrupt = false, mode = 'success' } = {}) {
         if (!config.prompt.endsWith('<|plamo:msg|>') || config.prompt.includes('>auto')) throw Error('Wrong PFML3 language');
         if (config.temperature !== 0 || config.max_tokens !== 256) throw Error('Wrong decoding');
         if (${JSON.stringify(mode)} === 'inference') await new Promise(() => {});
-        const target = config.prompt.match(/output<\\|plamo:key\\|>lang<\\|plamo:val\\|>(en|ja)/)[1];
-        return { choices: [{ text: target === 'ja' ? '日本語の翻訳' : 'English translation', finish_reason: 'stop' }] };
+        const match = config.prompt.match(/output<\\|plamo:key\\|>lang<\\|plamo:val\\|>([a-z-]+)/);
+        const target = match?.[1];
+        if (!target && !config.prompt.includes('input<|plamo:key|>lang<|plamo:val|>ja/en')) throw Error('Missing native auto switch');
+        const japanese = target === 'ja' || (!target && config.prompt.includes('Hello.'));
+        return { choices: [{ text: japanese ? '日本語の翻訳' : target && target !== 'en' ? 'translation:' + target : 'English translation', finish_reason: 'stop' }] };
       }
     }` }));
   return () => downloads;
@@ -41,7 +44,14 @@ test('standalone PLaMo: no eager weights, typed language configuration, both dir
   const downloads = await fixture(page);
   await expect(page.locator('select')).toHaveCount(0);
   await expect(page.locator('#run')).toBeEnabled(); expect(downloads()).toBe(0);
-  for (const [source, target, output] of [['', '', 'English translation'], ['en', 'ja', '日本語の翻訳'], ['auto', 'ja', '日本語の翻訳']]) {
+  for (const [text, source, target, output] of [
+    ['こんにちは。', '', '', 'English translation'], ['Hello.', '', '', '日本語の翻訳'],
+    ['Hello.', 'auto', 'auto', '日本語の翻訳'], ['Hello.', 'en', 'ja', '日本語の翻訳'],
+    ['Bonjour.', 'fr', 'ja', '日本語の翻訳'], ['안녕하세요.', 'ko', 'en', 'English translation'],
+    ['你好。', 'zh-hans', 'ja', '日本語の翻訳'], ['你好。', 'zh-hant', 'fr', 'translation:fr'],
+    ['Hello.', 'auto', 'zh-hant', 'translation:zh-hant'],
+  ]) {
+    await page.locator('#input').fill(text);
     await page.locator('#source-lang').fill(source); await page.locator('#target-lang').fill(target);
     await page.locator('#run').click(); await expect(page.locator('#status')).toHaveText('Complete');
     await expect(page.locator('#output')).toHaveText(output);
@@ -49,8 +59,12 @@ test('standalone PLaMo: no eager weights, typed language configuration, both dir
   }
   expect(downloads()).toBe(1);
   expect((await page.evaluate(() => window.modelWorkers)).every(w => w.terminated === 1)).toBe(true);
-  await page.locator('#target-lang').fill('fr'); await page.locator('#run').click();
+  await page.locator('#target-lang').fill('xx'); await page.locator('#run').click();
   await expect(page.locator('#status')).toHaveText('Error'); await expect(page.locator('#errors')).toContainText('target_lang');
+  await page.locator('#source-lang').fill('fr'); await page.locator('#target-lang').fill('');
+  await page.locator('#run').click();
+  await expect(page.locator('#status')).toHaveText('Error');
+  await expect(page.locator('#errors')).toContainText('source_lang requires a concrete target_lang');
   await page.locator('#target-lang').fill('ja'); await page.locator('#run').click();
   await expect(page.locator('#status')).toHaveText('Complete');
 });
