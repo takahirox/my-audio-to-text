@@ -1,13 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { ordinaryEnglishFixtures } from '../fixtures/translation-en-ja.js';
-import { OPUS_MT, OPUS_MT_EN_JA, TRANSLATE_GEMMA } from '../../web/translation-models.js';
+import { TRANSLATE_GEMMA } from '../../web/translation-models.js';
 
-for (const [choice, slug] of [['opus', 'opus-mt'], ['opus-en-ja', 'opus-mt-en-ja'], ['gemma', 'translategemma']]) {
-  test(`real ${choice}: ${choice === 'opus-en-ja' ? 'English → Japanese' : 'Japanese → English'} initialization, inference and repeat`, async ({ page, browser }, testInfo) => {
+for (const [choice, slug] of [['gemma', 'translategemma']]) {
+  test(`real ${choice}: Japanese → English initialization, inference and repeat`, async ({ page, browser }, testInfo) => {
     test.skip(process.env.TRANSLATION_SMOKE !== choice || testInfo.project.name !== 'chromium', 'Opt-in real translation inference; large downloads and suitable device required.');
     test.setTimeout(900000);
-    const fixtures = choice === 'opus-en-ja' ? ordinaryEnglishFixtures : [{ text: '今日は良い天気です。', meanings: [/[A-Za-z]/] }];
+    const fixtures = [{ text: '今日は良い天気です。', meanings: [/[A-Za-z]/] }];
     const requests = [], errors = [];
     page.on('request', request => requests.push({ url: new URL(request.url()).origin + new URL(request.url()).pathname, method: request.method(), hasBody: request.postData() !== null, containsInput: fixtures.some(({ text }) => request.url().includes(text) || request.url().includes(encodeURIComponent(text))) }));
     page.on('pageerror', error => errors.push(error.message));
@@ -44,7 +43,7 @@ for (const [choice, slug] of [['opus', 'opus-mt'], ['opus-en-ja', 'opus-mt-en-ja
         if (url.origin !== new URL(page.url()).origin) {
           expect(['huggingface.co', 'hf.co'].some(host => url.hostname === host || url.hostname.endsWith('.' + host))).toBe(true);
           if (url.hostname === 'huggingface.co') {
-            const model = choice === 'opus' ? OPUS_MT : choice === 'opus-en-ja' ? OPUS_MT_EN_JA : TRANSLATE_GEMMA;
+            const model = TRANSLATE_GEMMA;
             // Hugging Face redirects small assets to a pinned metadata-cache
             // GET endpoint. This is asset delivery, not inference.
             expect(url.pathname.startsWith(`/${model.id}/resolve/${model.revision}/`)
@@ -54,7 +53,7 @@ for (const [choice, slug] of [['opus', 'opus-mt'], ['opus-en-ja', 'opus-mt-en-ja
       }
     } finally {
       const path = testInfo.outputPath('translation-evidence.json');
-      await writeFile(path, JSON.stringify({ choice, time: new Date().toISOString(), browser: browser.version(), capabilities, fixtures: fixtures.map(({ text }) => text), model: choice === 'opus' ? OPUS_MT : choice === 'opus-en-ja' ? OPUS_MT_EN_JA : TRANSLATE_GEMMA, runs, errors, requests }, null, 2) + '\n');
+      await writeFile(path, JSON.stringify({ choice, time: new Date().toISOString(), browser: browser.version(), capabilities, fixtures: fixtures.map(({ text }) => text), model: TRANSLATE_GEMMA, runs, errors, requests }, null, 2) + '\n');
       await testInfo.attach('translation-evidence', { path, contentType: 'application/json' });
     }
   });

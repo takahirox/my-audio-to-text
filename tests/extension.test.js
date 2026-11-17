@@ -1,3 +1,4 @@
+import { translationGraph } from './fixtures/translation-graph.js';
 import { ITEM } from '../web/port-contracts.js';
 import { domText } from './fixtures/dom.js';
 import { accumulateDisplay } from './fixtures/text-accumulator.js';
@@ -56,7 +57,7 @@ function fixture({ holdLoad = false, holdSource = false, asyncFlush = false, sou
 const drain = () => new Promise(resolve => setImmediate(resolve));
 
 function fieldOutputs({ live = true } = {}) {
-  const graph = defaultGraph({ enabled: false });
+  const graph = translationGraph({ enabled: false });
   if (!live) {
     graph.nodes = graph.nodes.filter(node => node.id !== 'transcript');
     graph.edges = graph.edges.filter(edge => edge.to[0] !== 'transcript');

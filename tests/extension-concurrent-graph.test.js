@@ -1,3 +1,4 @@
+import { translationGraph } from './fixtures/translation-graph.js';
 import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +18,7 @@ test('large current drafts retain every Node, route, setting and position beyond
 });
 
 test('saveable incomplete paths do not contaminate a complete sibling, while either available paired input activates its display', async () => {
-  const graph = defaultGraph({ enabled: true });
+  const graph = translationGraph({ enabled: true });
   graph.edges = graph.edges.filter(route => route.to[0] !== 'translation');
   graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'parked-asr'));
   graph.edges.push(edge('mic','audio','parked-asr','audio'));

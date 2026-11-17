@@ -28,7 +28,7 @@ const button = (page, id, name) => page.locator(`#${id}`).getByRole('button', { 
 
 test('Models removes storage controls and keeps discoverable legal links; model-free editing and Live never request persistence', async ({ graphExtension: f }) => {
   const calls = await trackPersistence(f), live = await openModelFreeGraph(f), models = live.models;
-  await expect(models.locator('.model-card')).toHaveCount(14);
+  await expect(models.locator('.model-card')).toHaveCount(12);
   await expect(models.locator('#persist, #persistence, main > details')).toHaveCount(0);
   await expect(models.getByText('Storage and cache management', { exact: true })).toHaveCount(0);
   await expect(models.locator('footer')).toHaveCount(0);
@@ -43,7 +43,7 @@ test('Models removes storage controls and keeps discoverable legal links; model-
     await expect(link).toBeVisible(); await expect(link).toHaveAttribute('href', href);
   }
   await models.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Not downloaded');
+  await expect(models.locator('#plamo-3-translate-2b')).toHaveAttribute('data-state', 'Not downloaded');
   // Load an existing, genuinely model-free graph through the same saved library.
   await live.editor.evaluate(async () => {
     const { GRAPH_VERSION, graphNode, edge } = await import('./graph.js');
@@ -64,19 +64,19 @@ test('concurrent manual downloads on separate Models pages request once; denial 
   const calls = await trackPersistence(f), live = await openModelFreeGraph(f), first = live.models;
   const second = await f.context.newPage(); await second.goto(first.url());
   await Promise.all([
-    button(first, 'opus-ja-en', 'Download').click(),
-    button(second, 'opus-en-ja', 'Download').click(),
+    button(first, 'plamo-3-translate-2b', 'Download').click(),
+    button(second, 'translategemma', 'Download').click(),
   ]);
-  await expect(first.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Ready');
-  await expect(second.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Ready');
+  await expect(first.locator('#plamo-3-translate-2b')).toHaveAttribute('data-state', 'Ready');
+  await expect(second.locator('#translategemma')).toHaveAttribute('data-state', 'Ready');
   expect(operations(calls)).toEqual(['persisted', 'persist']);
-  expect(f.requests).toHaveLength(14);
+  expect(f.requests).toHaveLength(9);
   await first.close(); await second.reload();
-  await button(second, 'opus-en-ja', 'Delete cached assets').click();
-  await expect(second.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Not downloaded');
-  await button(second, 'opus-en-ja', 'Download').click();
-  await expect(second.locator('#opus-en-ja')).toHaveAttribute('data-state', 'Ready');
-  expect(f.requests).toHaveLength(21);
+  await button(second, 'translategemma', 'Delete cached assets').click();
+  await expect(second.locator('#translategemma')).toHaveAttribute('data-state', 'Not downloaded');
+  await button(second, 'translategemma', 'Download').click();
+  await expect(second.locator('#translategemma')).toHaveAttribute('data-state', 'Ready');
+  expect(f.requests).toHaveLength(17);
   expect(operations(calls)).toEqual(['persisted', 'persist']);
 });
 
@@ -87,18 +87,18 @@ test('Auto Save requests persistence only after saving a model-bearing graph; a 
     const persist = navigator.storage.persist;
     navigator.storage.persist = async () => {
       const library = JSON.parse(localStorage.getItem('processing-graph-library-v1'));
-      window.savedBeforePersistence = library.graphs.some(entry => entry.graph.nodes.some(node => node.type === 'OpusMtEnJa'));
+      window.savedBeforePersistence = library.graphs.some(entry => entry.graph.nodes.some(node => node.type === 'TranslateGemmaEnJa'));
       return persist();
     };
   });
-  await openPalette(editor); await editor.locator('#graph-node-type [data-type="OpusMtEnJa"]').click();
+  await openPalette(editor); await editor.locator('#graph-node-type [data-type="TranslateGemmaEnJa"]').click();
   await settleAutoSave(editor);
   await expectGraphModelsReady(editor);
   expect(await editor.evaluate(() => window.savedBeforePersistence)).toBe(true);
   expect(operations(calls)).toEqual(['persisted', 'persist']);
   expect(calls.every(call => call.page.includes('graph-editor.html'))).toBe(true);
-  await button(live.models, 'opus-ja-en', 'Download').click();
-  await expect(live.models.locator('#opus-ja-en')).toHaveAttribute('data-state', 'Ready');
+  await button(live.models, 'plamo-3-translate-2b', 'Download').click();
+  await expect(live.models.locator('#plamo-3-translate-2b')).toHaveAttribute('data-state', 'Ready');
   expect(operations(calls)).toEqual(['persisted', 'persist']);
-  expect(f.requests).toHaveLength(14);
+  expect(f.requests).toHaveLength(9);
 });

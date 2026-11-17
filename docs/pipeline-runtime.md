@@ -271,7 +271,7 @@ record transcript and latency evidence without making downloads a default gate.
 
 [`web/translation-nodes.js`](../web/translation-nodes.js) declares a shared `TEXT`
 contract for plain strings. `TextInputNode.text` connects to either
-`OpusMtTranslationNode.text` or `TranslateGemmaTranslationNode.text`, whose text
+`TranslateGemmaTranslationNode.text` or `Plamo3Translate2BTranslationNode.text`, whose text
 output connects to `TextOutputNode.text`. Each translation node owns its dedicated
 module Worker. The adapters use correlated load/translate/drain replies;
 `receive()` waits for and emits all returned strings in order. Blank input has

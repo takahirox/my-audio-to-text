@@ -1,9 +1,8 @@
 // Browser-origin preparation, called only by an explicitly started model Worker.
 // Reuse the production manifests, integrity checks, leases and cache readers.
 // Nothing here reads extension storage or changes the extension's cache policy.
-import { defineAssetSet, ModelAssetCache } from './vendor/model-cache/model-asset-cache.js';
+import { defineAssetSet, ModelAssetCache, MODEL_CACHE_NAME } from './vendor/model-cache/model-asset-cache.js';
 import { optionalAsrFiles as readAsrFiles } from './vendor/model-cache/optional-asr-cache.js';
-import { cacheOnlyOpusRuntime } from './vendor/model-cache/opus-mt-cache.js';
 import { textSummaryModel } from './text-summary-models.js';
 import { IF_CONDITION_MODEL } from './if-condition-model.js';
 
@@ -32,11 +31,22 @@ export async function optionalAsrFiles(spec, label, progress) {
 }
 async function transformerRuntime(env, spec, progress) {
   await prepare(spec, progress);
-  try { await cacheOnlyOpusRuntime(env, () => spec, 'Playground model'); }
-  catch (error) { throw browserError(error); }
-  const match = env.customCache.match;
-  env.customCache.match = async request => {
-    try { return await match(request); } catch (error) { throw browserError(error); }
+  const view = await new ModelAssetCache(spec).inspect({ retain: true });
+  if (view.state !== 'Ready') throw Error(view.error || 'Playground model assets missing or evicted. Run again online on this page.');
+  const cache = await caches.open(MODEL_CACHE_NAME);
+  const allowed = new Set(spec.files.map(file => file.url));
+  env.allowLocalModels = true; env.allowRemoteModels = false;
+  env.localModelPath = new URL('./missing-models/', import.meta.url).href;
+  env.useBrowserCache = false; env.useCustomCache = true;
+  env.customCache = {
+    async match(request) {
+      const url = typeof request === 'string' ? request : request.url;
+      if (!allowed.has(url)) return undefined;
+      const response = await cache.match(url);
+      if (!response) throw Error('Playground model cache evicted during load. Run again online on this page.');
+      return response;
+    },
+    async put() { /* Verified preparation is the only cache writer. */ },
   };
   env.useFSCache = false; env.useWasmCache = false;
 }

@@ -46,9 +46,11 @@ runtime validation checks value shape against the declared concrete type.
 | `KeyedTextPair.pair` | `KeyedPairedTextAccumulator.pair` |
 | `KeyedPairedTextAccumulator.pairs` | `Display.input1` |
 
-Import the [example graph](evidence/item-198.json) in Graph Editor. The
-[executable fixture](../tests/fixtures/item-graph.js) also accepts either OPUS-MT
-or TranslateGemma direction, or `null` for transcription alone.
+Import the [example graph](examples/bilingual-history.json) in Graph Editor. The
+[executable fixture](../tests/fixtures/item-graph.js) accepts either TranslateGemma
+direction, PLaMo, or `null` for transcription alone. PLaMo defaults to automatic
+source identification and English output; its optional `source_lang` /
+`target_lang` inputs select languages.
 
 `KeyedTextPair` keeps its four independently connectable NUMBER/TEXT inputs and
 emits only immutable

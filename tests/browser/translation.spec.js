@@ -8,8 +8,8 @@ async function modelFixture(page, mode = 'success') {
       export const env = { backends: { onnx: { wasm: {} } } };
       export async function pipeline(task, model, options) {
         if (!/^[a-f0-9]{40}$/.test(options.revision)) throw Error('Unpinned revision');
-        if (options.device !== (task === 'translation' ? 'wasm' : 'webgpu')) throw Error('Wrong device');
-        if (options.dtype !== (task === 'translation' ? 'q8' : 'q4')) throw Error('Wrong dtype');
+        if (options.device !== 'webgpu') throw Error('Wrong device');
+        if (options.dtype !== 'q4') throw Error('Wrong dtype');
         options.progress_callback({ status: 'progress', file: 'weights', progress: 50 });
         if (${JSON.stringify(mode)} === 'load-error') throw Error('Offline cache miss');
         if (${JSON.stringify(mode)} === 'loading') await new Promise(resolve => setTimeout(resolve, 1000));
@@ -23,8 +23,7 @@ async function modelFixture(page, mode = 'success') {
           }
           await new Promise(resolve => setTimeout(resolve, text === 'slow' ? 1000 : 10));
           if (text === 'zero') return [];
-          return (text === 'multi' ? ['first', 'second'] : [(model === 'Kadonox/opus-tatoeba-en-ja-onnx' || (typeof input !== 'string' && input[0].content[0].target_lang_code === 'ja') ? 'Japanese: ' : 'English: ') + text]).map(output => task === 'translation'
-            ? { translation_text: output } : { generated_text: [...input, { role: 'assistant', content: output }] });
+          return (text === 'multi' ? ['first', 'second'] : [(input[0].content[0].target_lang_code === 'ja' ? 'Japanese: ' : 'English: ') + text]).map(output => ({ generated_text: [...input, { role: 'assistant', content: output }] }));
         };
         translate.tokenizer = text => ({ input_ids: { dims: [1, text === 'tokens' ? 513 : 10] } });
         return translate;
@@ -66,19 +65,19 @@ async function observe(page) {
     };
   });
 }
-for (const slug of ['opus-mt', 'opus-mt-en-ja', 'translategemma']) {
+for (const slug of ['translategemma']) {
   test(`${slug}: navigation, real node/worker pipeline, latency, repeat and prefix assets`, async ({ page }) => {
     await modelFixture(page); if (slug === 'translategemma') await workerGpuFixture(page);
     const prefix = !process.env.ASR_BASE_URL && !process.env.ASR_BENCHMARK ? './my-audio-to-text/' : './';
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(prefix);
-    await page.getByRole('link', { name: slug === 'opus-mt' ? 'OPUS-MT Translation (Japanese → English)' : slug === 'opus-mt-en-ja' ? 'OPUS-MT Translation (English → Japanese)' : 'TranslateGemma 4B Translation (Japanese ↔ English)', exact: true }).click();
+    await page.getByRole('link', { name: 'TranslateGemma 4B Translation (Japanese ↔ English)', exact: true }).click();
     await expect(page.locator('#run')).toBeEnabled(); await expect(page.locator('select')).toHaveCount(slug === 'translategemma' ? 1 : 0);
     await observe(page);
-    for (const input of ['今日は良い天気です。', 'multi', 'zero', ...(slug === 'opus-mt-en-ja' ? ['HELLO.', 'WE NEED TO FINISH THIS PROJECT BY FRIDAY.'] : [])]) {
+    for (const input of ['今日は良い天気です。', 'multi', 'zero', ]) {
       await page.locator('#input').fill(input); await page.locator('#run').click();
       await expect(page.locator('#status')).toHaveText('Complete');
-      await expect(page.locator('#output')).toHaveText(input === 'multi' ? 'first\nsecond' : input === 'zero' ? '' : (slug === 'opus-mt-en-ja' ? 'Japanese: ' : 'English: ') + (input === 'HELLO.' ? 'Hello.' : input === 'WE NEED TO FINISH THIS PROJECT BY FRIDAY.' ? 'We need to finish this project by Friday.' : input));
+      await expect(page.locator('#output')).toHaveText(input === 'multi' ? 'first\nsecond' : input === 'zero' ? '' : 'English: ' + input);
       await expect(page.locator('#latency')).toContainText('ms'); await expect(page.locator('#load-time')).toContainText('ms');
       await expect(page.locator('#run')).toBeEnabled();
       await expect(page.locator('#input')).toHaveValue(input);
@@ -88,12 +87,12 @@ for (const slug of ['opus-mt', 'opus-mt-en-ja', 'translategemma']) {
       types: [...window.translationGraphs[0].entries.values()].map(e => e.node.constructor.name),
       states: window.translationGraphs.map(g => g.state),
     }));
-    expect(evidence.types).toEqual(['TextInputNode', slug === 'opus-mt' ? 'OpusMtTranslationNode' : slug === 'opus-mt-en-ja' ? 'EnglishToJapaneseOpusMtTranslationNode' : 'TranslateGemmaTranslationNode', 'TextOutputNode']);
-    expect(evidence.states).toEqual(Array(slug === 'opus-mt-en-ja' ? 5 : 3).fill('disposed'));
-    expect(evidence.workers).toHaveLength(slug === 'opus-mt-en-ja' ? 5 : 3);
+    expect(evidence.types).toEqual(['TextInputNode', 'TranslateGemmaTranslationNode', 'TextOutputNode']);
+    expect(evidence.states).toEqual(Array(3).fill('disposed'));
+    expect(evidence.workers).toHaveLength(3);
     for (const worker of evidence.workers) {
       expect(worker.terminated).toBe(1);
-      expect(worker.url).toBe(new URL(`../../${slug === 'opus-mt' ? 'opus-mt' : slug === 'opus-mt-en-ja' ? 'opus-mt-en-ja' : 'translategemma'}-worker.js`, page.url()).href);
+      expect(worker.url).toBe(new URL(`../../translategemma-worker.js`, page.url()).href);
     }
     await page.getByRole('link', { name: 'Node Playground', exact: true }).click();
     await expect(page).toHaveTitle('Node Playground'); expect(errors).toEqual([]);
@@ -119,7 +118,7 @@ for (const slug of ['opus-mt', 'opus-mt-en-ja', 'translategemma']) {
       await page.locator('#cancel').click(); await expect(page.locator('#status')).toHaveText('Canceled');
       await page.locator('#input').fill('fresh'); await page.locator('#run').click();
       await expect(page.locator('#status')).toHaveText('Complete');
-      await expect(page.locator('#output')).toHaveText(slug === 'opus-mt-en-ja' ? 'Japanese: fresh' : 'English: fresh');
+      await expect(page.locator('#output')).toHaveText('English: fresh');
       expect(await page.evaluate(() => window.translationWorkers.map(w => w.terminated))).toEqual([1, 1]);
     });
   }
@@ -135,11 +134,6 @@ test('TranslateGemma unsupported Worker WebGPU fails before runtime/model fetch'
   await expect(page.locator('#errors')).toContainText('requires WebGPU'); expect(downloads).toEqual([]);
 });
 
-test('OPUS token limit is reported instead of silently truncating', async ({ page }) => {
-  await modelFixture(page); await page.goto('./nodes/opus-mt/'); await expect(page.locator('#run')).toBeEnabled();
-  await page.locator('#input').fill('tokens'); await page.locator('#run').click();
-  await expect(page.locator('#errors')).toContainText('512 tokens'); await expect(page.locator('#output')).toBeEmpty();
-});
 
 test('TranslateGemma missing GPU adapter is actionable and does not fetch runtime/model assets', async ({ page }) => {
   await workerGpuFixture(page, 'no-adapter');

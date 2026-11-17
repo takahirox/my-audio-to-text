@@ -223,14 +223,14 @@ test('Library manages independent named graphs, portable JSON, persistent target
 });
 
 test('Required models stays visible through selection, model search and resolved subgraph refreshes', async ({ libraryExtension: { page, context, url } }) => {
-  const graph = simple(); graph.nodes.push(graphNode('OpusMtJaEn', 'translate'), graphNode('IfCondition', 'condition'));
+  const graph = simple(); graph.nodes.push(graphNode('TranslateGemmaJaEn', 'translate'), graphNode('IfCondition', 'condition'));
   const modelId = await create(page, 'Processing graph', graph), plainId = await create(page, 'Plain graph', simple());
   const parentId = await page.evaluate(async () => {
     const { graphNode, edge } = await import('./graph.js');
     const { GraphLibrary } = await import('./graph-library.js');
     const { extractSubgraph } = await import('./subgraphs.js');
     const extracted = extractSubgraph({ version: 15,
-      nodes: [graphNode('Text', 'source'), graphNode('OpusMtJaEn', 'translate'), graphNode('Display', 'display')],
+      nodes: [graphNode('Text', 'source'), graphNode('TranslateGemmaJaEn', 'translate'), graphNode('Display', 'display')],
       edges: [edge('source', 'value', 'translate', 'text'), edge('translate', 'text', 'display', 'input1')] }, ['translate'], 'shared-translation');
     const store = new GraphLibrary(localStorage);
     await store.create({ id: 'shared-translation', name: 'Shared processor', kind: 'subgraph', graph: extracted.shared });
@@ -242,30 +242,30 @@ test('Required models stays visible through selection, model search and resolved
   await expect(page.locator('#graph-list button[data-id]')).toHaveCount(1);
   await expand(page, modelId);
   await expect(value).toBeVisible();
-  await expect(value).toHaveText('OPUS-MT · Japanese → English, IfCondition · XtremeDistil');
+  await expect(value).toHaveText('TranslateGemma 4B · several GB RAM/GPU memory, IfCondition · XtremeDistil');
   await expect(page.locator('#selected > dl > dt')).toHaveText('Required models');
   await expect(value).toHaveRole('definition');
   await expect(page.locator('#graph-metadata, #graph-updated, #graph-cache, #check-cache, #cache-hint, #selected details')).toHaveCount(0);
   await expect(page.locator('#selected')).not.toContainText(/Models & saved information|File cache|Check model files|Live verifies runtime readiness|Manage model files/);
   await expect(page.locator('#selected a[href="model-cache.html"]')).toHaveCount(0);
   expect(await value.evaluate(node => node.parentElement === document.querySelector('#selected').lastElementChild)).toBe(true);
-  await page.locator('#search').fill('opus-mt');
+  await page.locator('#search').fill('translategemma');
   await expect(page.locator('#graph-list .graph-row-name')).toHaveText(['Parent graph', 'Processing graph', 'Shared processor · Subgraph']);
   await page.locator('#search').fill(''); await expand(page, plainId);
   await expect(value).toBeVisible(); await expect(value).toHaveText('None');
   await expand(page, parentId);
-  await expect(value).toBeVisible(); await expect(value).toHaveText('OPUS-MT · Japanese → English');
+  await expect(value).toBeVisible(); await expect(value).toHaveText('TranslateGemma 4B · several GB RAM/GPU memory');
   expect(await library(page)).toEqual(original);
-  // Updating the shared definition in another page refreshes the selected parent.
+  // Both directions share the same required model after a shared definition refresh.
   const other = await context.newPage(); await other.goto(url + 'graph-library.html');
   await other.evaluate(async () => {
     const { GraphLibrary, readLibrary, entryGraph } = await import('./graph-library.js');
     const entry = readLibrary(localStorage).graphs.find(entry => entry.id === 'shared-translation');
-    const graph = entryGraph(entry); graph.nodes.find(node => node.id === 'translate').type = 'OpusMtEnJa';
+    const graph = entryGraph(entry); graph.nodes.find(node => node.id === 'translate').type = 'TranslateGemmaEnJa';
     await new GraphLibrary(localStorage).save(entry.id, entry.revision, graph);
   });
-  await expect(value).toHaveText('OPUS-MT · English → Japanese');
-  await page.reload(); await expect(value).toBeVisible(); await expect(value).toHaveText('OPUS-MT · English → Japanese');
+  await expect(value).toHaveText('TranslateGemma 4B · several GB RAM/GPU memory');
+  await page.reload(); await expect(value).toBeVisible(); await expect(value).toHaveText('TranslateGemma 4B · several GB RAM/GPU memory');
   expect((await library(page)).graphs.find(entry => entry.id === parentId)).toEqual(original.graphs.find(entry => entry.id === parentId));
   expect(await page.evaluate(() => modelWorkers.length)).toBe(0);
 });
@@ -604,7 +604,7 @@ test('export waits for autosave, and a later selection cancels an earlier pendin
 });
 
 test('inline accordion and direct actions fit desktop, mobile, zoom and forced colors', async ({ libraryExtension: { page } }) => {
-  const graph = simple(); graph.nodes.push(graphNode('OpusMtJaEn', 'translate'), graphNode('IfCondition', 'condition'));
+  const graph = simple(); graph.nodes.push(graphNode('TranslateGemmaJaEn', 'translate'), graphNode('IfCondition', 'condition'));
   const id = await create(page, 'A long graph name that wraps on small screens', graph);
   await page.reload();
   const row = page.locator(`#graph-list button[data-id="${id}"]`);
@@ -640,7 +640,7 @@ test('inline accordion and direct actions fit desktop, mobile, zoom and forced c
     }
     await page.keyboard.press('Tab'); await expect(page.locator('#graph-name')).toBeFocused();
     await expect(page.locator('#graph-models')).toBeVisible();
-    await expect(page.locator('#graph-models')).toHaveText('OPUS-MT · Japanese → English, IfCondition · XtremeDistil');
+    await expect(page.locator('#graph-models')).toHaveText('TranslateGemma 4B · several GB RAM/GPU memory, IfCondition · XtremeDistil');
     const form = await page.locator('#details-form').boundingBox();
     for (const field of [page.locator('.required-models dt'), page.locator('#graph-models')]) {
       const box = await field.boundingBox();

@@ -2,8 +2,7 @@
 
 Add **Translation · JA ↔ EN**, model subtitle **PLaMo 3 Translate 2B**, in
 AI Models / Translation. Search by translation, PLaMo or the internal stable
-type `Plamo3Translate2B`. This is one additional experimental Node; OPUS-MT,
-TranslateGemma and the default graph remain available with their existing models.
+type `Plamo3Translate2B`. This is an experimental Node; TranslateGemma and the default graph remain available with their existing models.
 
 Connect text to `text: TEXT`. Optional ordinary Text constants configure:
 
@@ -125,4 +124,4 @@ download, and exercises the packaged graph/runtime under MV3 CSP and COOP/COEP.
 Its test-only `sourceURL` override changes asset delivery, never inference or hashes.
 `python3 scripts/review-plamo-assets.py` independently checks the upstream pinned
 LFS hash, every committed chunk, template and both license files. Timings and exact
-generated strings are recorded in [real-model evidence](evidence/plamo-385.md).
+generated strings are recorded in real-model evidence.

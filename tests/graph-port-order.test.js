@@ -1,3 +1,4 @@
+import { translationGraph } from './fixtures/translation-graph.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ASR_TYPES, NODE_TYPES, graphNode, nodeDefinition, portDisplayEntries, defaultGraph, assertGraph } from '../extension/graph.js';
@@ -5,7 +6,7 @@ import { asrOutputs, ASR_OUTPUT_GROUPS } from '../web/transcription-nodes.js';
 import { TRANSLATION_OUTPUTS, TRANSLATION_OUTPUT_GROUPS } from '../extension/translation-scheduler.js';
 
 const names = (definition, side) => portDisplayEntries(definition, side).map(([name]) => name);
-const translators = ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa'];
+const translators = ['TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Plamo3Translate2B'];
 for (const type of ASR_TYPES) test(`${type} shows committed data/ID before preview without changing runtime declarations`, () => {
   const definition = nodeDefinition(graphNode(type, 'asr'));
   const preview = Object.hasOwn(definition.outputs, 'provisional');
@@ -22,7 +23,7 @@ for (const type of ['KeyedTextCoalesce', 'KeyedTextPair']) test(`${type} shows e
 });
 for (const type of translators) test(`${type} keeps data/ID adjacent, context last and output families intact`, () => {
   const definition = nodeDefinition(graphNode(type, 'translation'));
-  assert.deepEqual(names(definition, 'input'), ['text', 'id', 'provisional', 'provisionalId', ...(type.startsWith('TranslateGemma') ? ['context'] : [])]);
+  assert.deepEqual(names(definition, 'input'), ['text', 'id', 'provisional', 'provisionalId', ...(type.startsWith('TranslateGemma') ? ['context'] : ['source_lang', 'target_lang'])]);
   assert.deepEqual(names(definition, 'output'), ['text', 'id', 'source', 'error', 'provisionalText', 'provisionalId', 'provisionalSource', 'provisionalError']);
   assert.deepEqual(Object.keys(definition.inputs).slice(0, 4), ['text', 'provisional', 'id', 'provisionalId']);
   assert.equal(definition.outputs, TRANSLATION_OUTPUTS);
@@ -57,7 +58,7 @@ test('every instance port appears exactly once with its original contract, inclu
 });
 
 test('render ordering never mutates saved version-15 graph data, named edges, settings or positions', () => {
-  const graph = defaultGraph({ enabled: true }), before = JSON.stringify(graph);
+  const graph = translationGraph({ enabled: true }), before = JSON.stringify(graph);
   for (const node of graph.nodes) for (const side of ['input', 'output']) portDisplayEntries(nodeDefinition(node, graph), side);
   assert.equal(JSON.stringify(graph), before);
   assert.deepEqual(assertGraph(JSON.parse(before)), graph);

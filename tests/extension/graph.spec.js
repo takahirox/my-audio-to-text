@@ -20,7 +20,7 @@ test('fresh install and Reset use current transcription; saved model requirement
   await emitFinal(page, 'active graph stays unchanged');
   await expect(page.locator('.display-content')).toContainText('active graph stays unchanged');
   await page.locator('#stop').click();
-  await expect(page.locator('#errors')).toContainText('assets missing');
+  await expect(page.locator('#errors')).toContainText('missing assets');
   await expect(page.locator('#start')).toBeDisabled();
   await page.editor.getByRole('button', { name: /^Select translation:/ }).click();
   await page.editor.getByRole('button', { name: 'Remove translation', exact: true }).click();
@@ -39,8 +39,8 @@ for (const type of ['Supertonic3', 'Kokoro']) {
     page.on('request', request => requests.push({ url: request.url(), method: request.method(), body: request.postData() }));
     f.mode('error'); await addAudioPath(page, type); await expect(page.editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(page.locator('#tts-status')).toContainText('assets missing');
-    await expect(page.locator('#errors')).toContainText('assets missing');
+    await expect(page.locator('#tts-status')).toContainText('missing assets');
+    await expect(page.locator('#errors')).toContainText('missing assets');
     await expect(page.locator('#model-recovery')).toBeVisible();
     await expect(page.locator('#start')).toBeDisabled();
     expect(f.requests.length).toBeGreaterThan(0);
@@ -85,7 +85,7 @@ for (const type of ['Supertonic3', 'Kokoro']) {
       await cache.delete(keys.find(request => request.url.includes('.onnx')));
     });
     await reopened.close(); const evicted = await openGraph(f);
-    await expect(evicted.locator('#errors')).toContainText('assets missing');
+    await expect(evicted.locator('#errors')).toContainText('missing assets');
     await expect(evicted.locator('#start')).toBeDisabled();
     await expect(evicted.locator('#audio-outputs audio')).toHaveCount(0);
     expect(f.requests).toHaveLength(count);
@@ -157,7 +157,7 @@ test('wide editor has a palette, typed keyboard/drag ports, inspector, zoom and 
   await settleAutoSave(editor);
   expect((await saved(live)).nodes.find(n => n.id === 'speech').position).toEqual({ x: 320, y: 50 });
   await expect(editor.locator('#graph-save-error')).toBeEmpty();
-  expect(f.requests).toHaveLength(7);
+  expect(f.requests).toHaveLength(8);
 });
 
 test('three screen layouts show actual provisional/final state and capture-free Models (deterministic screenshots)', async ({ graphExtension: f }) => {
@@ -173,9 +173,9 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.editor.setViewportSize({ width: 1440, height: 1000 });
   await live.models.setViewportSize({ width: 1200, height: 1000 });
   await expect(live.models.locator('#moonshine-small-ja').getByText('Moonshine Small Streaming Japanese (123M)', { exact: true })).toBeVisible();
-  await expect(live.models.locator('.model-card')).toHaveCount(14);
+  await expect(live.models.locator('.model-card')).toHaveCount(12);
   await expect(live.models.locator('#moonshine-small-ja .model-status')).toHaveText('Ready · Cached and verified');
-  await expect(live.models.locator('.model-card:not(#moonshine-small-ja) .model-status')).toHaveText(Array(13).fill('Not downloaded'));
+  await expect(live.models.locator('.model-card:not(#moonshine-small-ja) .model-status')).toHaveText(Array(11).fill('Not downloaded'));
   await expect(live.models.getByText('CosyVoice3 0.5B · streaming', { exact: true })).toBeVisible();
   expect(await live.models.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.editor.evaluate(() => window.graphWorkers.length)).toBe(0);

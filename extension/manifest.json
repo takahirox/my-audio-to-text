@@ -3,7 +3,7 @@
   "name": "My Audio to Text",
   "version": "0.1.0",
   "minimum_chrome_version": "116",
-  "description": "Transcribe tab audio locally and compose translation with OPUS-MT or TranslateGemma 4B English/Japanese Nodes.",
+  "description": "Transcribe tab audio locally and compose translation with TranslateGemma 4B or PLaMo 3 Translate 2B Nodes.",
   "permissions": ["activeTab", "tabCapture", "scripting", "storage", "offscreen", "contextMenus"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "icons": {

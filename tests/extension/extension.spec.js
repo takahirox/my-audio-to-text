@@ -41,7 +41,6 @@ const test = base.extend({
       // These legacy capture/lifecycle cases intentionally use a migrated
       // transcription-only preference. Fresh-install graph behavior is covered
       // by graph.spec.js.
-      await context.addInitScript(() => localStorage.setItem('opus-mt-translation-preferences', JSON.stringify({ enabled: false, direction: 'ja-en' })));
       await use({ context, cdp, id, root, url: `chrome-extension://${id}/extension/recorder.html` });
     } finally { await context.close(); await rm(temporary, { recursive: true, force: true }); }
   },

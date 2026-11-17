@@ -19,7 +19,7 @@ function graph(type) {
   display('model-output', 'model', type === 'IfCondition' ? 'yes' : 'summary');
   if (type === 'IfCondition') display('no-output', 'model', 'no');
   display('peer', 'source', 'value');
-  for (const [type, id] of [['OpusMtJaEn', 'forward'], ['OpusMtEnJa', 'reverse']]) {
+  for (const [type, id] of [['TranslateGemmaJaEn', 'forward'], ['TranslateGemmaEnJa', 'reverse']]) {
     nodes.push(graphNode(type, id)); edges.push(edge('source', 'value', id, 'text')); display(id + '-output', id, 'text');
   }
   return { version: GRAPH_VERSION, nodes, edges };
@@ -50,7 +50,7 @@ function fixture(type) {
   const model = workers(), translations = [], inserted = [];
   const session = new TabSession(() => {}, { graph: graph(type),
     textSummaryWorkerFactory: model.factory, ifConditionWorkerFactory: model.factory,
-    prepareTranslation: async () => {}, translationWorkerFactory: () => {
+    prepareTranslateGemma: async () => {}, translationWorkerFactory: () => {
       const worker = { postMessage(data) {
         queueMicrotask(() => this.onmessage?.({ data: { id: data.id, type: { load: 'ready', translate: 'result', drain: 'drained' }[data.type], texts: ['translated ' + data.text] } }));
       }, terminate() { this.released = true; } };

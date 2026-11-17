@@ -3,7 +3,7 @@ import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { defaultGraph, graphNode, edge, saveGraph, readGraph, executableGraph, graphPreferences, NODE_TYPES } from '../extension/graph.js';
+import { defaultGraph, graphNode, edge, saveGraph, readGraph, executableGraph, hasTranslation, NODE_TYPES } from '../extension/graph.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { TRANSLATE_GEMMA } from '../web/translation-models.js';
@@ -52,7 +52,7 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
     graph.nodes[5].settings.value = 'Other branch';
     const entries = new Map(), storage = { getItem: key => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value), removeItem: key => entries.delete(key) };
     saveGraph(storage, (graph)); assert.deepEqual(readGraph(storage), graph);
-    assert.deepEqual(graphPreferences(graph), { enabled: true, direction });
+    assert.equal(hasTranslation(graph), true);
     assert.equal(executableGraph((graph)).nodes.some(n => n.id === 'parked'), false);
     for (const fail of [false, true]) {
       const workers = [], displays = {}, states = [];

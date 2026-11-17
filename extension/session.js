@@ -2,9 +2,7 @@ import { graphModelRequirements, prepareGraphModelAssets } from './graph-model-p
 import { microphoneCaptureError } from './media-source.js';
 import { authorizePage } from './page-target.js';
 import { buttonLabel } from '../web/button-node.js';
-import { verifiedOpusCache } from './opus-mt-cache.js';
-import { verifiedEnglishToJapaneseOpusCache } from './opus-mt-en-ja-cache.js';
-import { assertGraph, executableGraph, defaultGraph, graphPreferences, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
+import { assertGraph, executableGraph, defaultGraph, hasTranslation, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
 import { SpeakerOutputNode } from '../web/speaker-output.js';
 
@@ -16,10 +14,8 @@ export class TabSession {
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url)), { type: 'module' }),
     sourceFactory, microphoneSourceFactory, pageConnectionFactory, moonshineWorkerFactory, moonshineJapaneseWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
-    graph = defaultGraph({ enabled: false }), graphId = null, graphName = 'Saved graph',
+    graph = defaultGraph(), graphId = null, graphName = 'Saved graph',
     textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, preparePlamo, onSynthesizedAudio = () => {}, speakerContextFactory,
-    prepareTranslation = (signal, direction) => direction === 'en-ja'
-      ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
     prepareModelAssets = prepareGraphModelAssets,
   } = {}) {
     this.onSourceEnded = onSourceEnded;
@@ -30,12 +26,12 @@ export class TabSession {
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
     this.microphoneSourceFactory = microphoneSourceFactory; this.pageConnectionFactory = pageConnectionFactory; this.outputTarget = null;
     this.nodeErrors = new Map();
-    this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation; this.prepareTranslateGemma = prepareTranslateGemma; this.preparePlamo = preparePlamo;
+    this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslateGemma = prepareTranslateGemma; this.preparePlamo = preparePlamo;
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
     this.speakerContextFactory = speakerContextFactory;
     this.modelLoadTimeoutMs = modelLoadTimeoutMs;
-    const preferences = graphPreferences(this.graph);
-    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', prompt: '', error: '', signal: '', translationEnabled: preferences.enabled, translationDirection: preferences.direction, activeGraph: null, savedGraph: this.graph, savedGraphId: graphId, savedGraphName: graphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: 'Translation off' };
+    const translationEnabled = hasTranslation(this.graph);
+    this.view = { state: 'idle', status: 'Invoke the toolbar action on a tab to begin.', prompt: '', error: '', signal: '', translationEnabled, activeGraph: null, savedGraph: this.graph, savedGraphId: graphId, savedGraphName: graphName, displays: {}, ttsStatus: '', speakerStatus: '', speakerNeedsActivation: false, holdStatus: '', summaryStatus: '', conditionStatus: '', outputStatus: '', modelRecovery: false, preparingOutput: false, translationStatus: 'Translation off' };
     this.update();
   }
   update(values = {}) {
@@ -59,10 +55,10 @@ export class TabSession {
     // Retain the teardown barrier even when an intervening owner has not built
     // a pipeline yet. Successive Saves and close must await all older GPU owners.
     const released = this.releasing = Promise.allSettled([this.releasing, previous?.pipeline?.dispose()]);
-    const preferences = graphPreferences(snapshot);
+    const translationEnabled = hasTranslation(snapshot);
     const owner = this.prepared = { key, snapshot, assetController: new AbortController(), speakers: new Map(), speakerStates: Object.create(null),
       microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null),
-      targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
+      targetStates: {}, activeFieldOutputs: new Set(), translationEnabled };
     this.nodeErrors.clear();
     this.update({ modelState: 'preparing', modelStatus: 'Preparing models…', ...(clearErrors ? { error: '', modelRecovery: false } : {}) });
     return this.preparing = Promise.resolve(released).then(async () => {
@@ -181,7 +177,7 @@ export class TabSession {
       snapshot = assertGraph(this.graph); graph = executableGraph(snapshot);
       if (!graph.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination in Graph Editor.');
     } catch (error) { this.update({ error: error.message }); return; }
-    const preferences = graphPreferences(graph);
+    const translationEnabled = hasTranslation(graph);
     const speakers = graph.nodes.filter(node => node.type === 'SpeakerOutput');
     const sources = graph.nodes.filter(n => INPUT_TYPES.includes(n.type));
     const microphones = sources.filter(n => n.type === 'MicrophoneAudio');
@@ -190,7 +186,7 @@ export class TabSession {
     }
     if (microphones.length && !microphoneGesture) { this.update({ tabId, status: 'Microphone selected. Press Start to request browser permission.', prompt: 'Press Start to request microphone permission.' }); return; }
     if (speakers.length && !speakerGesture) { this.update({ tabId, status: 'Speaker selected. Press Start to enable audio. Keep this window open.', prompt: 'Press Start to enable speaker audio.' }); return; }
-    const session = this.prepared || { speakers: new Map(), speakerStates: Object.create(null), microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targetStates: {}, activeFieldOutputs: new Set(), direction: preferences.direction, translationEnabled: preferences.enabled };
+    const session = this.prepared || { speakers: new Map(), speakerStates: Object.create(null), microphoneStreams: new Map(), endedSources: new Set(), sourceStates: Object.create(null), tabId, outputTarget: this.outputTarget && structuredClone(this.outputTarget), targetStates: {}, activeFieldOutputs: new Set(), translationEnabled };
     this.prepared = null;
     session.tabId = tabId;
     session.outputTarget = this.outputTarget && structuredClone(this.outputTarget);
@@ -271,7 +267,7 @@ export class TabSession {
           }
         },
         workerFactory: this.workerFactory, moonshineWorkerFactory: this.moonshineWorkerFactory, moonshineJapaneseWorkerFactory: this.moonshineJapaneseWorkerFactory, sourceFactory: this.sourceFactory,
-        translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
+        translationWorkerFactory: this.translationWorkerFactory,
         onHoldState: (state, id) => {
           if (!this.ownsRuntime(session)) return;
           session.holdStates ||= {}; session.holdStates[id] = state;
@@ -475,9 +471,9 @@ export class TabSession {
     const next = assertGraph(graph);
     const changed = !!this.graphUnavailable || id !== this.view.savedGraphId || JSON.stringify(this.graph) !== JSON.stringify(next);
     this.graphUnavailable = ''; this.graph = next;
-    const preferences = graphPreferences(this.graph);
-    this.update({ savedGraph: this.graph, savedGraphId: id, savedGraphName: name, translationEnabled: preferences.enabled, translationDirection: preferences.direction,
-      ...(this.session ? {} : { translationStatus: preferences.enabled ? 'Translation enabled for the next session' : 'Translation off' }) });
+    const translationEnabled = hasTranslation(this.graph);
+    this.update({ savedGraph: this.graph, savedGraphId: id, savedGraphName: name, translationEnabled,
+      ...(this.session ? {} : { translationStatus: translationEnabled ? 'Translation enabled for the next session' : 'Translation off' }) });
     if (changed && this.livePreparation && !this.session && !this.closed) void this.prepareModels();
   }
   tabEnded(tabId) {
