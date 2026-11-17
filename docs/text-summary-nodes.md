@@ -11,8 +11,9 @@ command and cache names remain stable so existing model downloads are reused.
 - **System prompt** (`settings.prompt`): saved, nonempty multiline text, up to
   **4,096 UTF-16 code units**. Specify the task, output language and format here.
   The generic default asks the model to process supplied inputs as data.
-- **Input count** (`settings.inputCount`): a whole number from **1 to 32**, default
-  **1**. Inputs are `input1 … inputN: TEXT`. There is no prompt input port.
+- **Inputs**: use **+** (Add input) / **−** (Remove last input) in Settings. The
+  saved `settings.inputCount` is a whole number from **1 to 32**, default **1**.
+  Inputs are `input1 … inputN: TEXT`. There is no prompt input port.
 - **result: TEXT**: one complete nonempty output for each successful generation,
   including results equal to the previous output. Token progress is telemetry,
   not a streaming result.
@@ -78,8 +79,8 @@ TextProcessing.result      → Hold.input
 TextProcessing.result      → Display.input1
 ```
 
-Set Input count to 2 and System prompt to `Update Input 1 using Input 2. Preserve
-relevant facts and corrections. Return the complete updated summary in Japanese.`
+Add a second input under **Inputs** and set **System prompt** to
+`Update Input 1 using Input 2. Preserve relevant facts and corrections. Return the complete updated summary in Japanese.`
 Leave Hold.trigger disconnected. Hold is sampled without emitting, and later
 windows wait until the preceding causal result is stored before reading Hold:
 `S1=f('', A)`, `S2=f(S1, B)`, `S3=f(S2, C)`. Updating Hold alone never infers.

@@ -58,6 +58,10 @@
 .editor-page :is(.graph-subgraph-dialog, .graph-inspector) fieldset > div { display: grid; gap: .4rem; margin-bottom: 1rem; }
 .editor-page :is(.graph-subgraph-dialog, .graph-inspector) fieldset > div > button { justify-self: start; }
 
+.editor-page .graph-inspector .graph-inputs { margin-inline: 0; }
+.editor-page .graph-inspector .graph-input-actions { display: flex; gap: .5rem; margin-bottom: 0; }
+.editor-page .graph-input-actions > button { min-width: 44px; min-height: 44px; margin: 0; font-size: 1.25rem; }
+
 .editor-page .graph-recovery:empty, .editor-page .graph-recovery > p:empty, .editor-page #graph-save-error:empty { display: none; }
 .editor-page #graph-save-error { color: var(--warning); overflow-wrap: anywhere; }
 .editor-page .graph-recovery textarea { width: 100%; min-height: 8rem; box-sizing: border-box; }

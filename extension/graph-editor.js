@@ -728,9 +728,8 @@ export class GraphEditor {
   }
   updateSetting(node, key, value) {
     node.settings[key] = value;
-    // Most settings do not change canvas geometry. Input count redraws after
-    // committing its transaction. Keep ordinary text controls in place
-    // so a field's blur/change cannot remove the target of a pending click.
+    // Keep ordinary text controls in place so a field's blur/change cannot
+    // remove the target of a pending click.
     // Validation and checkpointing run once when the typing transaction ends.
   }
   selectDetails(node = null, connection = null, extend = false) {
@@ -798,22 +797,27 @@ export class GraphEditor {
       control.oninput = () => this.updateSetting(node, key, control.value);
       label.append(control); this.inspector.append(label);
     }
-    if (node.type === 'Display') for (let i = 1; i <= node.settings.inputCount; i++) {
-      const port = `input${i}`, label = el('label', `Input ${i} tab label `), control = el('input');
-      control.setAttribute('aria-label', `${node.id} ${port} tab label`);
-      control.maxLength = 120; control.placeholder = `Input ${i}`;
-      control.value = node.settings.inputLabels?.[port] ?? '';
-      control.oninput = () => this.updateSetting(node, 'inputLabels', { ...node.settings.inputLabels, [port]: control.value });
-      label.append(control); this.inspector.append(label);
-    }
     if (['TextFormatter', 'Display', 'TextProcessingLfm2', 'TextProcessingQwen35'].includes(node.type)) {
       const processing = node.type.startsWith('TextProcessing');
+      const inputs = el('fieldset', undefined, 'graph-inputs');
+      inputs.append(el('legend', 'Inputs'));
+      const actions = el('div', undefined, 'graph-input-actions');
+      const add = button('+', null, () => this.resizeInputs(node, 1));
+      const remove = button('−', null, () => this.resizeInputs(node, -1));
+      add.setAttribute('aria-label', `${node.id} Add input`); remove.setAttribute('aria-label', `${node.id} Remove last input`);
+      remove.disabled = node.settings.inputCount <= 1;
+      add.disabled = (node.type === 'Display' && node.settings.inputCount >= MAX_DISPLAY_INPUTS) || (processing && node.settings.inputCount >= MAX_PROCESSING_INPUTS);
+      actions.append(add, remove); inputs.append(actions);
+      if (node.type === 'Display') for (let i = 1; i <= node.settings.inputCount; i++) {
+        const port = `input${i}`, label = el('label', `Input ${i} tab label `), control = el('input');
+        control.setAttribute('aria-label', `${node.id} ${port} tab label`);
+        control.maxLength = 120; control.placeholder = `Input ${i}`;
+        control.value = node.settings.inputLabels?.[port] ?? '';
+        control.oninput = () => this.updateSetting(node, 'inputLabels', { ...node.settings.inputLabels, [port]: control.value });
+        label.append(control); inputs.append(label);
+      }
+      this.inspector.append(inputs);
       if (processing) {
-        const label = el('label', 'Input count (1–32) '), count = el('input');
-        count.type = 'number'; count.min = '1'; count.max = '32'; count.step = '1'; count.value = node.settings.inputCount;
-        count.setAttribute('aria-label', `${node.id} Input count`);
-        count.onchange = () => { this.updateSetting(node, 'inputCount', count.valueAsNumber); this.commitEdit(); this.draw(); };
-        label.append(count); this.inspector.append(label);
         // A removed port has no canvas connector, but its retained wire must
         // still be reviewable and explicitly disconnectable in Settings.
         for (const route of this.draft.edges.filter(route => route.to[0] === node.id && !Object.hasOwn(definition.inputs, route.to[1]))) {
@@ -821,13 +825,6 @@ export class GraphEditor {
             button(`Disconnect ${route.from.join('.')} to ${route.to.join('.')}`, null, () => this.disconnect(route)));
         }
       }
-      this.inspector.append(el('p', `${node.settings.inputCount} ${node.type === 'Display' ? 'ITEM' : 'TEXT'} inputs. ${processing ? 'Removed inputs keep their wires as visible validation errors; disconnect them explicitly.' : 'Remove deletes only the last input and its wire.'} ${node.type === 'Display' ? 'Each input is a Live tab. Blank labels use Input 1, Input 2, etc. Auto Save applies next session.' : processing ? 'System prompt can refer to Input 1, Input 2, etc. Auto Save applies next session.' : 'Template references remain editable.'}`));
-      const add = button('Add input', null, () => this.resizeInputs(node, 1));
-      const remove = button('Remove last input', null, () => this.resizeInputs(node, -1));
-      add.setAttribute('aria-label', `${node.id} Add input`); remove.setAttribute('aria-label', `${node.id} Remove last input`);
-      remove.disabled = node.settings.inputCount <= 1;
-      add.disabled = (node.type === 'Display' && node.settings.inputCount >= MAX_DISPLAY_INPUTS) || (processing && node.settings.inputCount >= MAX_PROCESSING_INPUTS);
-      this.inspector.append(add, remove);
     }
     for (const key of Object.keys(definition.numberSettings || {}).filter(key => key !== 'inputCount')) {
       const label = el('label', key + ' '), control = el('input');

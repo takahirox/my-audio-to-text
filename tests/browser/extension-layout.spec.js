@@ -19,11 +19,11 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/extension/graph-editor.html');
 });
 
-for (const width of [390, 1440]) {
-  test(`Inspector keeps editable settings and dynamic inputs without node help at ${width}px`, async ({ page }) => {
+for (const width of [320, 390, 1440]) {
+  test(`Inspector keeps editable settings and dynamic inputs without node help at ${width}px`, async ({ page, browserName }) => {
     await page.setViewportSize({ width, height: 844 });
     const inspector = page.locator('.graph-inspector');
-    for (const type of ['Text', 'Number', 'Display', 'TextFormatter']) {
+    for (const type of ['Text', 'Number', 'Display', 'TextFormatter', 'TextProcessingLfm2', 'TextProcessingQwen35']) {
       await openPalette(page);
       await page.locator(`#graph-node-type [data-type="${type}"]`).click();
       const id = type.toLowerCase();
@@ -41,30 +41,56 @@ for (const width of [390, 1440]) {
       } else {
         const inputs = page.locator(`[data-node="${id}"] [data-side="input"]`);
         const count = await inputs.count();
-        await inspector.getByRole('button', { name: `${id} Add input`, exact: true }).click();
+        const group = inspector.getByRole('group', { name: 'Inputs', exact: true });
+        const add = group.getByRole('button', { name: `${id} Add input`, exact: true });
+        const remove = group.getByRole('button', { name: `${id} Remove last input`, exact: true });
+        await expect(group.locator('legend')).toHaveText('Inputs');
+        await expect(add).toHaveText('+'); await expect(remove).toHaveText('−');
+        await expect(inspector.getByText(/Input count|\d+ (TEXT|ITEM) inputs\.|Removed inputs keep their wires|Remove deletes only|Each input is a Live tab|Auto Save applies next session|Template references remain editable|System prompt can refer/)).toHaveCount(0);
+        await expect(inspector.getByRole('spinbutton', { name: /Input count/ })).toHaveCount(0);
+        const minimum = type !== 'TextFormatter';
+        if (minimum) await expect(remove).toBeDisabled();
+        await add.press('Space');
+        await expect(add).toBeFocused();
+        expect(await add.evaluate(el => getComputedStyle(el).outlineStyle)).toBe('solid');
+        const a = await add.boundingBox(), r = await remove.boundingBox();
+        expect(a.width).toBeGreaterThanOrEqual(44); expect(a.height).toBeGreaterThanOrEqual(44);
+        expect(r.width).toBeGreaterThanOrEqual(44); expect(r.height).toBeGreaterThanOrEqual(44);
+        expect(a.y).toBe(r.y); expect(a.x + a.width).toBeLessThan(r.x);
+        await add.press(browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab');
+        await expect(remove).toBeFocused();
         await expect(inputs).toHaveCount(count + 1);
         if (type === 'Display') {
           await inspector.getByLabel('display title', { exact: true }).fill('Results');
-          const label = inspector.getByLabel(`display input${count + 1} tab label`, { exact: true });
+          const label = group.getByLabel(`display input${count + 1} tab label`, { exact: true });
+          await expect(label).toHaveAttribute('placeholder', `Input ${count + 1}`);
           await label.fill('Extra tab'); await label.blur();
           await expect(label).toHaveValue('Extra tab');
-        } else {
+        } else if (type === 'TextFormatter') {
           await inspector.getByLabel('textformatter template', { exact: true }).fill('{99}');
           await expect(page.locator('#graph-errors')).toContainText('Input {99} is not configured');
           await inspector.getByLabel('textformatter template', { exact: true }).fill('{1}');
           await expect(page.locator('#graph-errors')).toBeEmpty();
         }
-        await inspector.getByRole('button', { name: `${id} Remove last input`, exact: true }).click();
+        if (type.startsWith('TextProcessing')) {
+          const prompt = inspector.getByLabel(`${id} System prompt`, { exact: true });
+          await prompt.fill('Compare Input 1 and Input 2.'); await prompt.blur();
+          await expect(prompt).toHaveValue('Compare Input 1 and Input 2.');
+        }
+        await remove.press('Enter');
+        if (minimum) await expect(remove).toBeDisabled();
         await expect(inputs).toHaveCount(count);
       }
       expect(await inspector.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     }
-    await inspector.getByRole('button', { name: 'Remove textformatter', exact: true }).click();
-    await expect(page.locator('[data-node="textformatter"]')).toHaveCount(0);
+    await inspector.getByRole('button', { name: 'Remove textprocessingqwen35', exact: true }).click();
+    await expect(page.locator('[data-node="textprocessingqwen35"]')).toHaveCount(0);
     await expect(inspector).toContainText('Select a node or connection.');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
+}
 
+for (const width of [390, 1440]) {
   test(`node settings and Models terms remain accessible without help panels at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 844 });
     await context.route('**/*', serveExtension);
