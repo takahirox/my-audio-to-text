@@ -1,6 +1,6 @@
 import { defineAssetSet, ModelAssetCache, MODEL_CACHE_NAME } from './model-asset-cache.js';
 
-export async function parakeetManifest() { return readManifest('parakeet-v3-assets.json'); }
+export async function moonshineJapaneseManifest() { return readManifest('moonshine-small-ja-assets.json'); }
 export async function moonshineManifest() { return readManifest('moonshine-medium-en-assets.json'); }
 async function readManifest(file) {
   const response = await fetch(new URL(file, import.meta.url));

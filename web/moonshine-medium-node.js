@@ -7,7 +7,7 @@ export class SpeechToTextMoonshineMediumEnNode extends OptionalAsrNode {
   outputs = asrOutputs();
   constructor({ workerFactory, ...options } = {}) {
     super(options);
-    this.core = new OptionalAsrCore(event => this.receiveEvent(event), { workerFactory, workerPath: './moonshine-medium-worker.js', label: 'Moonshine Medium English Streaming' });
+    this.core = new OptionalAsrCore(event => this.receiveEvent(event), { workerFactory, workerPath: './moonshine-medium-worker.js', label: 'Moonshine Medium Streaming English' });
   }
   receive(port, value) {
     if (port !== 'audio') throw Error(`Unknown Moonshine Medium input: ${port}`);

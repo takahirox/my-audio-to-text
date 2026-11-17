@@ -10,21 +10,20 @@ models before enabling Start.
 
 Build/load the extension as described in [the extension guide](chrome-extension.md).
 Open **Models** from Graph Library, Graph Editor or Live.
-The Models page manages real OPUS-MT Japanese → English,
-OPUS-MT English → Japanese, TranslateGemma 4B English ↔ Japanese, Supertonic 3, Kokoro, Parakeet v3 and Moonshine Medium English Streaming in the existing verified cache.
-ReazonSpeech ja-en, Silero VAD, Whisper tiny, Zipformer English and the Japanese
-Kokoro frontend voice use these same controls. No model has a Bundled status.
-ReazonSpeech and Whisper declare Silero as a separate, shared dependency; Zipformer
-does not use it. Japanese Kokoro additionally prepares its frontend voice.
+The Models page manages both language-specific Moonshine streaming recognizers,
+both OPUS-MT directions, TranslateGemma, text summary, IfCondition and all speech
+synthesis families. Japanese Kokoro additionally prepares its OpenJTalk frontend
+voice. No model has a Bundled status.
 The **Models** heading identifies the page; its header navigation contains only
 **Library**, which opens Graph Library in a separate tab and supports keyboard activation.
 Opening Models checks files only. A successful valid **Auto Save** in Graph Editor
 prepares the weights required by actual saved model Node types and
 voices, including parked Nodes. Repeated equivalent Nodes are deduplicated; each
 direction and voice remains independent, with shared verified files reused.
-ASR is checked through the same manifests as other processors. The optional [Parakeet v3 / Moonshine
-Medium Streaming Nodes](optional-asr-nodes.md) prepare 1.26 GB / 305 MB after Auto Save;
-the editor shows memory, GPU and storage guidance before Auto Save. Opening a graph
+ASR uses the same cache contracts as other processors. [Moonshine streaming Nodes](optional-asr-nodes.md)
+prepare 305 MB for English Medium or 122 MB for Japanese Small after Auto Save.
+The editor shows model/language/runtime facts.
+Opening a graph
 in Graph Editor checks cached files only. Edits auto-save before preparation; failed validation or
 storage prevents preparation. Storage finishes before preparation; download
 failure does not roll it back. No capture, inference, Workers or remote executable
@@ -209,19 +208,6 @@ There is no default multi-GB download or large-model CI smoke for this issue.
 
 ## Automated validation
 
-```sh
-npm ci
-npm run prepare:assets
-npm run prepare:translation-assets # existing Web browser suite prerequisites
-npm run prepare:whisper-assets
-npm run prepare:tts-assets
-npm run prepare:zipformer-assets
-npm run build:extension
-npm test
-npm run test:browser
-npm run test:extension
-```
-
 Unit tests cover first preparation/progress, all-files readiness, recreation,
 partial/interrupted retries, byte/hash corruption, cache eviction/deletion,
 quota/network/storage errors, cancellation, immutable keys and persistence
@@ -277,3 +263,6 @@ an overlapping model or voice is in use, deletion fails visibly without partial
 deletion. Close Live or cancel/release its session to retry. A warm prepared idle
 session still owns its Workers. Browser cache eviction remains detectable on the
 next preparation/start. See the [complete packaging audit](model-assets.md).
+
+
+Speech recognition uses only language-specific [Moonshine streaming Nodes](optional-asr-nodes.md). The new default graph is Japanese Small; English examples select English Medium explicitly.

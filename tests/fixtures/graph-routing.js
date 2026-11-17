@@ -12,6 +12,7 @@ export async function loadRoutingGraph(page, dense = false) {
   await page.reload(); await expect(page.locator('.graph-wire')).toHaveCount(dense ? 60 : 1);
 }
 export async function assertRoutingGeometry(page) {
+  await expect(page.locator('.graph-canvas')).toBeVisible();
   await expect.poll(() => page.evaluate(() => {
     const errors = [], canvas = document.querySelector('.graph-canvas'), origin = canvas.getBoundingClientRect();
     const scale = origin.width / parseFloat(canvas.style.width);

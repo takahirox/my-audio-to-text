@@ -3,10 +3,9 @@ import { domText } from './fixtures/dom.js';
 import { accumulateDisplay } from './fixtures/text-accumulator.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { SpeechToTextParakeetV3Node } from '../web/parakeet-v3-node.js';
+import { readFileSync, existsSync } from 'node:fs';
+import { SpeechToTextMoonshineSmallJaNode } from '../web/moonshine-small-ja-node.js';
 import { SpeechToTextMoonshineMediumEnNode } from '../web/moonshine-medium-node.js';
-import { ParakeetV3Segments } from '../web/parakeet-v3-segments.js';
 import { OptionalAsrCore } from '../web/optional-asr-core.js';
 import { MONO_16KHZ_PCM, TEXT } from '../web/transcription-nodes.js';
 import { assertGraph, defaultGraph, graphNode, edge, executableGraph, saveGraph, readGraph, ASR_TYPES } from '../extension/graph.js';
@@ -16,7 +15,7 @@ import { defineAssetSet } from '../extension/model-asset-cache.js';
 import { TabSession } from '../extension/session.js';
 
 const types = [
-  ['SpeechToTextParakeetV3', SpeechToTextParakeetV3Node, 'parakeet-v3', 'parakeetWorkerFactory', false],
+  ['SpeechToTextMoonshineSmallJa', SpeechToTextMoonshineSmallJaNode, 'moonshine-small-ja', 'moonshineJapaneseWorkerFactory', true],
   ['SpeechToTextMoonshineMediumEn', SpeechToTextMoonshineMediumEnNode, 'moonshine-medium-en', 'moonshineWorkerFactory', true],
 ];
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -36,7 +35,7 @@ const graph = () => {
 for (const [type, Node, key, factoryKey, partial] of types) {
   test(`${type}: concrete ports, bounded owned PCM, ordered finals, Stop waits for every ack and tail; warm repeat is isolated`, async () => {
     const worker = new Worker(), events = [], output = [];
-    const node = new Node({ workerFactory: path => { assert.match(path, key.startsWith('parakeet') ? /parakeet-v3-worker/ : /moonshine-medium-worker/); return worker; }, onEvent: event => events.push(event) });
+    const node = new Node({ workerFactory: path => { assert.match(path, key === 'moonshine-small-ja' ? /moonshine-small-ja-worker/ : /moonshine-medium-worker/); return worker; }, onEvent: event => events.push(event) });
     assert.deepEqual(node.inputs, { audio: MONO_16KHZ_PCM });
     assert.deepEqual(node.outputs, partial ? { provisional: TEXT, provisionalId: NUMBER, final: TEXT, finalId: NUMBER } : { final: TEXT, finalId: NUMBER });
     const ready = node.load(); worker.send({ type: 'ready' }); await ready;
@@ -98,7 +97,7 @@ for (const [type, Node, key, factoryKey, partial] of types) {
     const manifest = defineAssetSet(specification);
     assert.equal(manifest.bytes, specification.files.reduce((sum, file) => sum + file.bytes, 0));
     assert.equal(specification.files.every(file => /^[a-f0-9]{64}$/.test(file.sha256)), true);
-    const saved = defaultGraph(); saved.nodes.find(n => n.type === 'SpeechToTextReazonSpeech').type = type; if (!partial) saved.edges = saved.edges.filter(e => !['provisional', 'provisionalId'].includes(e.from[1])); saved.nodes.push(graphNode(type, 'parked'), graphNode(type, 'parked2'));
+    const saved = defaultGraph(); saved.nodes.find(n => n.type === 'SpeechToTextMoonshineSmallJa').type = type; if (!partial) saved.edges = saved.edges.filter(e => !['provisional', 'provisionalId'].includes(e.from[1])); saved.nodes.push(graphNode(type, 'parked'), graphNode(type, 'parked2'));
     const original = structuredClone(saved), selected = graphModelRequirements(saved);
     assert.deepEqual(selected.map(item => item.key), [key]);
     assert.equal(executableGraph(saved).nodes.some(node => node.id === 'parked'), false);
@@ -116,8 +115,8 @@ for (const [type, Node, key, factoryKey, partial] of types) {
   });
 }
 
-test('new independent paths retain Graph v11/default/migrations, save/reload exactly, bind production types and fan out plain TEXT', () => {
-  const original = defaultGraph(); assert.equal(original.version, 15); assert.deepEqual(graphModelRequirements(original).map(r => r.key), ['silero', 'reazon']);
+test('current independent paths retain default graphs, save/reload exactly, bind production types and fan out plain TEXT', () => {
+  const original = defaultGraph(); assert.equal(original.version, 15); assert.deepEqual(graphModelRequirements(original).map(r => r.key), ['moonshine-small-ja']);
   const description = graph(); description.nodes.push(graphNode('TextFormatter', 'format'), graphNode('OpusMtEnJa', 'translate'), graphNode('FocusedInputTextOutputNode', 'field'));
   description.edges.push(edge('asr0', 'final', 'format', 'input1'), edge('asr1', 'final', 'translate', 'text'), edge('asr0', 'final', 'field', 'text'));
   assertGraph(description);
@@ -143,22 +142,6 @@ test('bounded transport rejects nonfinite PCM, overflow/crashes release one work
   }
 });
 
-test('Parakeet endpointing preserves exact irregular PCM including sub-frame Stop tail; silence emits nothing and hard cap is FIFO', async () => {
-  const input = Float32Array.from({ length: 16000 * 25 + 13 }, (_, i) => 0.2 + i % 13 / 1000), accepted = [], output = [];
-  const segments = new ParakeetV3Segments(async audio => { accepted.push(audio); return { utterance_text: ' real text ' }; }, event => output.push(event));
-  for (let offset = 0; offset < input.length; offset += 701) await segments.push(input.subarray(offset, offset + 701));
-  await segments.finish();
-  assert.deepEqual(accepted.map(audio => audio.length), [192000, 192000, 16013]);
-  const restored = new Float32Array(input.length); let offset = 0; for (const audio of accepted) { restored.set(audio, offset); offset += audio.length; }
-  assert.deepEqual(restored, input); assert.deepEqual(output.map(e => e.id), [0, 1, 2]);
-  const quiet = new ParakeetV3Segments(() => assert.fail('silence inference'), () => assert.fail('silence output'));
-  await quiet.push(new Float32Array(200000)); await quiet.finish();
-  const endpoints = [];
-  const endpoint = new ParakeetV3Segments(async pcm => { endpoints.push(pcm.length); return { utterance_text: 'yes' }; }, () => {});
-  await endpoint.push(new Float32Array(16000).fill(0.1)); await endpoint.push(new Float32Array(12800));
-  assert.deepEqual(endpoints, [28800]); await endpoint.finish(); assert.equal(endpoints.length, 1);
-});
-
 test('session keeps healthy independent optional ASR path alive after peer load failure and releases both on Stop', async () => {
   const workers = [];
   const factory = broken => () => {
@@ -171,14 +154,14 @@ test('session keeps healthy independent optional ASR path alive after peer load 
     return worker;
   };
   let audio, view;
-  const session = new TabSession(value => { view = value; }, { graph: (graph()), parakeetWorkerFactory: factory(true), moonshineWorkerFactory: factory(false), sourceFactory: (id, onAudio) => ({ start() { audio = onAudio; }, stop() {} }) });
-  await session.start(42); assert.equal(view.state, 'running'); assert.match(view.error, /asr0.*assets missing/);
+  const session = new TabSession(value => { view = value; }, { graph: (graph()), moonshineJapaneseWorkerFactory: factory(false), moonshineWorkerFactory: factory(false), sourceFactory: (id, onAudio) => ({ start() { audio = onAudio; }, stop() {} }) });
+  await session.start(42); assert.equal(view.state, 'running'); workers[0].send({ type: 'error', session: 1, message: 'assets missing; Save and Retry' }); assert.match(view.error, /asr0.*assets missing/);
   audio(new Float32Array(1600)); await tick(); assert.deepEqual(domText(view.displays.out1), 'peer survived');
   await session.stop(); assert.equal(view.state, 'idle'); assert.equal(workers.every(w => w.released), true);
 });
 
 test('Moonshine uses only incomplete native lines as provisional; commits once, bounds 30s history, preserves tails and releases native streams', async () => {
-  const { MoonshineMediumStream } = await import('../web/moonshine-medium-stream.js');
+  const { MoonshineStream } = await import('../web/moonshine-stream.js');
   const streams = [], output = [], accepted = [];
   const transcriber = { createStream(options) {
     assert.equal(options.updateInterval, 0.5);
@@ -187,7 +170,7 @@ test('Moonshine uses only incomplete native lines as provisional; commits once, 
       transcribe() {}, stop() { if (this.samples) this.listener.onLineCompleted({ line: { id: 17, text: 'tail', isComplete: true } }); }, close() { this.closed = true; } };
     streams.push(stream); return stream;
   } };
-  const engine = new MoonshineMediumStream(transcriber, e => output.push(e));
+  const engine = new MoonshineStream(transcriber, e => output.push(e));
   const listener = streams[0].listener;
   listener.onLineStarted({ line: { id: 4, text: 'one', isComplete: false } });
   listener.onLineTextChanged({ line: { id: 4, text: 'one two', isComplete: false } });
@@ -203,23 +186,11 @@ test('Moonshine uses only incomplete native lines as provisional; commits once, 
   assert.deepEqual(accepted.map(a => a.length), [480000, 13]);
   assert.deepEqual(output.filter(e => e.type === 'final').map(e => e.id), [0, 1, 2]);
   assert.deepEqual(output.filter(e => e.type === 'final').map(e => e.text), ['one two three', 'tail', 'tail']);
-  const canceled = new MoonshineMediumStream(transcriber, () => assert.fail('Cancel must not finalize'));
+  const canceled = new MoonshineStream(transcriber, () => assert.fail('Cancel must not finalize'));
   canceled.push(new Float32Array(13)); canceled.dispose(); assert.equal(streams.at(-1).closed, true);
 });
 
-test('production Parakeet Worker rejects absent/incompatible GPU before reading model bytes', async () => {
-  const { runInNewContext } = await import('node:vm');
-  const code = readFileSync('web/parakeet-v3-worker.js', 'utf8').replace(/^import .*;\n/gm, '').replaceAll('import.meta.url', JSON.stringify('chrome-extension://test/web/parakeet-v3-worker.js'));
-  for (const gpu of [undefined, { requestAdapter: async () => null }, { requestAdapter: async () => ({ features: new Set() }) }]) {
-    const events = [], self = {};
-    runInNewContext(code, { self, navigator: { gpu }, postMessage: event => events.push(event),
-      optionalAsrFiles: () => assert.fail('GPU preflight must precede model reads') });
-    self.onmessage({ data: { type: 'load' } }); await tick();
-    assert.equal(events.at(-1).type, 'error'); assert.match(events.at(-1).message, /GPU|WebGPU/);
-  }
-});
-
-test('runtime packaging pins the actual compatible ORT artifacts and original/patched sources; CSP adapter preserves closures without new Function', async () => {
+test('runtime packaging pins release artifacts and original/patched sources; CSP adapter preserves closures without new Function', { skip: !existsSync('.cache/moonshine-voice-wasm-v016.tar.gz') && 'Run prepare:optional-asr-assets to check the runtime archive (no model weights).' }, async () => {
   const { spawnSync } = await import('node:child_process');
   const result = spawnSync('python3', ['-c', `
 import importlib.util, json, hashlib
@@ -227,10 +198,11 @@ from pathlib import Path
 spec = importlib.util.spec_from_file_location('csp', 'scripts/moonshine-csp.py')
 module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 manifest=json.loads(Path('scripts/optional-asr-runtime.json').read_text())
-assert manifest['packages']['onnxruntime-web'] == '1.24.3'
-assert {'ort/ort-wasm-simd-threaded.asyncify.mjs', 'ort/ort-wasm-simd-threaded.asyncify.wasm'} <= {f['path'] for f in manifest['files']}
+assert manifest['archive']['sha256'] == '47a8b94f0b10f9b0687491d86e4606a3cd2b332e566766774f8eb0f984d0ed42'
+assert all(f['path'].startswith('moonshine/') for f in manifest['files'])
 entry=next(f for f in manifest['files'] if f['path']=='moonshine/moonshine.mjs')
-source=(Path('node_modules')/entry['source']).read_bytes()
+import tarfile
+with tarfile.open(Path('.cache')/manifest['archive']['cache']) as package: source=package.extractfile(entry['source']).read()
 assert hashlib.sha256(source).hexdigest()==entry['sha256']
 patched=module.patch(source.decode()).encode()
 assert hashlib.sha256(patched).hexdigest()==entry['packagedSha256']
@@ -242,12 +214,12 @@ assert b'function(...values)' in patched
 
 test('production Moonshine Worker reports the original inference error even if native cleanup also throws', async () => {
   const { runInNewContext } = await import('node:vm');
-  const code = readFileSync('web/moonshine-medium-worker.js', 'utf8').replace(/^import .*;\n/gm, '');
+  const code = readFileSync('web/moonshine-worker.js', 'utf8').replace(/^import .*;\n/gm, '').replace('export function', 'function') + '\ninstallMoonshineWorker();';
   const events = [], self = {}; let streamClosed = false, modelClosed = false;
   runInNewContext(code, { self, postMessage: event => events.push(event),
     moonshineManifest: async () => ({}), optionalAsrFiles: async () => new Map(), ModelArch: { MediumStreaming: 5 },
     Transcriber: { load: async () => ({ close() { modelClosed = true; throw Error('secondary model cleanup'); } }) },
-    MoonshineMediumStream: class { push() { throw Error('original inference failure'); } dispose() { streamClosed = true; throw Error('secondary stream cleanup'); } },
+    MoonshineStream: class { push() { throw Error('original inference failure'); } dispose() { streamClosed = true; throw Error('secondary stream cleanup'); } },
   });
   self.onmessage({ data: { type: 'load' } }); await tick();
   self.onmessage({ data: { type: 'start', session: 1 } }); await tick();
@@ -255,4 +227,39 @@ test('production Moonshine Worker reports the original inference error even if n
   assert.equal(streamClosed, true); assert.equal(modelClosed, true);
   assert.equal(events.filter(e => e.type === 'error').length, 1);
   assert.equal(events.at(-1).message, 'original inference failure');
+});
+
+test('each production Worker selects its own verified tokenizer/files and architecture; only Japanese raises the token guard', async () => {
+  const { runInNewContext } = await import('node:vm');
+  const source = readFileSync('web/moonshine-worker.js', 'utf8').replace(/^import .*;\n/gm, '').replace('export function', 'function');
+  for (const japanese of [false, true]) {
+    const events = [], self = {}, selected = [], files = new Map([['tokenizer.bin', new Uint8Array([japanese ? 2 : 1])]]);
+    let config;
+    runInNewContext(source + `\ninstallMoonshineWorker({ japanese: ${japanese} });`, {
+      self, postMessage: event => events.push(event),
+      moonshineManifest: async () => 'en', moonshineJapaneseManifest: async () => 'ja',
+      optionalAsrFiles: async manifest => { selected.push(manifest); return files; },
+      ModelArch: { MediumStreaming: 5, SmallStreaming: 4 },
+      Transcriber: { load: async options => { config = options; assert.equal(options.files.get('tokenizer.bin')[0], japanese ? 2 : 1); return {}; } },
+    });
+    self.onmessage({ data: { type: 'load' } }); await tick();
+    assert.deepEqual(selected, [japanese ? 'ja' : 'en']);
+    assert.equal(config.modelArch, japanese ? 4 : 5);
+    assert.equal(config.options.max_tokens_per_second, japanese ? '13' : undefined);
+    assert.equal(config.options.identify_speakers, 'false');
+    assert.equal(config.options.return_audio_data, 'false');
+    assert.equal(files.size, 0);
+    assert.equal(events.find(event => event.type === 'configuration').language, japanese ? 'ja' : 'en');
+    assert.equal(events.at(-1).type, 'ready');
+  }
+});
+
+test('unsupported graph types fail normal validation without substitution; both supported models round-trip', () => {
+  const supported = graph();
+  const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  assert.deepEqual(ASR_TYPES, ['SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa']);
+  saveGraph(storage, supported); assert.deepEqual(readGraph(storage), supported);
+  const unsupported = structuredClone(supported); unsupported.nodes.find(node => node.id === 'asr0').type = 'UnsupportedRecognizer';
+  assert.throws(() => assertGraph(unsupported), /Unknown Node type: UnsupportedRecognizer.*Recreate or reset/);
+  assert.equal(unsupported.nodes.find(node => node.id === 'asr0').type, 'UnsupportedRecognizer');
 });

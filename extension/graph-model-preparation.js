@@ -1,29 +1,23 @@
-import { reazonManifest, sileroManifest, whisperManifest, zipformerManifest, japaneseFrontendManifest } from './local-asr-cache.js';
+import { japaneseFrontendManifest } from './japanese-frontend-cache.js';
 import { textSummaryManifest } from './text-summary-cache.js';
 import { TEXT_SUMMARY_TYPES, textSummaryModel } from '../web/text-summary-models.js';
 import { ModelAssetCache } from './model-asset-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
 import { translateGemmaManifest } from './translategemma-cache.js';
-import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
+import { moonshineManifest, moonshineJapaneseManifest } from './optional-asr-cache.js';
 import { ifConditionManifest } from './if-condition-cache.js';
 import { ttsManifest } from './tts-cache.js';
 import { qwen3TtsManifest } from './qwen3-tts-cache.js';
 import { cosyVoice3Manifest } from './cosyvoice3-cache.js';
 
 // Follow every saved model-bearing Node, including parked Nodes. Language does
-// not change Supertonic's weights; its voice does. Every ASR model follows Auto Save; Silero is a distinct shared dependency.
+// not change Supertonic's weights; its voice does. Every ASR model follows Auto Save.
 export function graphModelRequirements(graph) {
   const requirements = new Map();
   for (const node of graph.nodes) {
     let requirement;
     const add = (key, title, manifest) => requirements.set(key, { key, id: key, title, manifest });
-    if (['SpeechToTextReazonSpeech', 'SpeechToTextWhisper'].includes(node.type)) {
-      add('silero', 'Silero VAD · shared ReazonSpeech / Whisper dependency', sileroManifest);
-      if (node.type === 'SpeechToTextReazonSpeech') add('reazon', 'ReazonSpeech ja-en · speech recognition', reazonManifest);
-      else add('whisper', 'Whisper tiny · multilingual q8', whisperManifest);
-    }
-    if (node.type === 'SpeechToTextZipformerEn') add('zipformer', 'Zipformer English · streaming speech recognition', zipformerManifest);
     if (node.type === 'Kokoro' && node.settings.voice === 'jf_alpha') add('kokoro-japanese', 'Kokoro Japanese · OpenJTalk frontend voice', japaneseFrontendManifest);
     if (TEXT_SUMMARY_TYPES.includes(node.type)) {
       const model = textSummaryModel(node.type), type = node.type;
@@ -35,8 +29,8 @@ export function graphModelRequirements(graph) {
     else if (node.type === 'OpusMtJaEn') requirement = { key: 'opus-ja-en', id: 'opus-ja-en', title: 'OPUS-MT · Japanese → English', manifest: opusMtManifest };
     else if (node.type === 'OpusMtEnJa') requirement = { key: 'opus-en-ja', id: 'opus-en-ja', title: 'OPUS-MT · English → Japanese', manifest: englishToJapaneseOpusMtManifest };
     else if (['TranslateGemmaEnJa', 'TranslateGemmaJaEn'].includes(node.type)) requirement = { key: 'translategemma', id: 'translategemma', title: 'TranslateGemma 4B · 3.112 GB download · several GB RAM/GPU memory · WebGPU · Gemma Terms apply', manifest: translateGemmaManifest };
-    else if (node.type === 'SpeechToTextParakeetV3') requirement = { key: 'parakeet-v3', id: 'parakeet-v3', title: 'Parakeet v3 · 1.26 GB download · WebGPU shader-f16 · allow 6 GB RAM/GPU memory, 3 GB storage', manifest: parakeetManifest };
-    else if (node.type === 'SpeechToTextMoonshineMediumEn') requirement = { key: 'moonshine-medium-en', id: 'moonshine-medium-en', title: 'Moonshine Medium English Streaming · 305 MB download · CPU WASM · allow 2 GB RAM, 700 MB storage', manifest: moonshineManifest };
+    else if (node.type === 'SpeechToTextMoonshineMediumEn') requirement = { key: 'moonshine-medium-en', id: 'moonshine-medium-en', title: 'Moonshine Medium Streaming English · 305 MB download · CPU WASM · allow 2 GB RAM, 700 MB storage', manifest: moonshineManifest };
+    else if (node.type === 'SpeechToTextMoonshineSmallJa') requirement = { key: 'moonshine-small-ja', id: 'moonshine-small-ja', title: 'Moonshine Small Streaming Japanese · 122 MB download · CPU WASM · allow 2 GB RAM, 300 MB storage', manifest: moonshineJapaneseManifest };
     else if (node.type === 'Qwen3TtsStreaming') requirement = { key: 'qwen3-tts', id: 'qwen3-tts', title: 'Qwen3-TTS 0.6B CustomVoice · 690 MB · desktop WebGPU · allow 2 GB storage, 6 GB free RAM/GPU (estimate) · Apache 2.0', manifest: qwen3TtsManifest };
     else if (node.type === 'CosyVoice3Streaming') requirement = { key: 'cosyvoice3', id: 'cosyvoice3', title: 'CosyVoice3 0.5B · 917 MB · desktop WebGPU · allow 3 GB storage, 6 GB free RAM/GPU (estimate) · Apache 2.0 + CC BY 4.0 voice', manifest: cosyVoice3Manifest };
     else if (['Supertonic3', 'Kokoro'].includes(node.type)) {

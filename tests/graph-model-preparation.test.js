@@ -5,9 +5,9 @@ import { defaultGraph, graphNode } from '../extension/graph.js';
 
 test('all ASR dependencies and Japanese frontend are explicit and deduplicated, including parked Nodes', () => {
   const graph = defaultGraph();
-  graph.nodes.push(graphNode('SpeechToTextWhisper', 'whisper'), graphNode('SpeechToTextZipformerEn', 'zipformer'), graphNode('SpeechToTextReazonSpeech', 'duplicate'));
-  assert.deepEqual(graphModelRequirements(graph).map(r => r.key), ['silero', 'reazon', 'whisper', 'zipformer']);
-  assert.deepEqual(graphModelRequirements({ nodes: [graphNode('SpeechToTextZipformerEn', 'zip')] }).map(r => r.key), ['zipformer']);
+  graph.nodes.push(graphNode('SpeechToTextMoonshineMediumEn', 'english'), graphNode('SpeechToTextMoonshineSmallJa', 'duplicate'));
+  assert.deepEqual(graphModelRequirements(graph).map(r => r.key), ['moonshine-small-ja', 'moonshine-medium-en']);
+  assert.deepEqual(graphModelRequirements({ nodes: [graphNode('SpeechToTextMoonshineMediumEn', 'zip')] }).map(r => r.key), ['moonshine-medium-en']);
   graph.nodes.push(graphNode('Kokoro', 'jp')); graph.nodes.at(-1).settings.voice = 'jf_alpha';
   assert.deepEqual(graphModelRequirements(graph).map(r => r.key).slice(-2), ['kokoro-japanese', 'kokoro:jf_alpha']);
   assert.deepEqual(graphModelRequirements(modelFreeGraph()), []);

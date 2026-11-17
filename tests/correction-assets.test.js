@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory() as temporary:
     prepare.ROOT = root = Path(temporary)
     cache = root / '.cache'
     cache.mkdir()
-    speech = root / 'web' / 'vendor' / 'sherpa-ja-en' / 'model.data'
+    speech = root / 'web' / 'vendor' / 'unrelated-runtime' / 'model.data'
     speech.parent.mkdir(parents=True)
     speech.write_bytes(b'unchanged speech')
     packages = []

@@ -1,3 +1,4 @@
+import { moonshineWorkerFixture } from '../fixtures/moonshine-worker.js';
 import { build } from 'esbuild';
 import { toolbarHarness } from './toolbar-harness.js';
 import { test as base, expect, chromium } from '@playwright/test';
@@ -26,8 +27,8 @@ const test = base.extend({
     const pageErrors = [], remote = [];
     try {
       // Assemble the current extension sources directly. Real mode includes
-      // the pinned Reazon/Silero bundle; no unrelated optional weights required.
-      if (real) await readFile('web/vendor/manifest.json');
+      // the pinned Moonshine runtime; no unrelated optional weights required.
+      if (real) await readFile('scripts/optional-asr-runtime.json');
       await cp('extension', path.join(root, 'extension'), { recursive: true });
       await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(tts-assets|correction-assets)(\/|$)/.test(source) && (real || !/\/vendor(\/|$)/.test(source)) });
       await cp('extension/manifest.json', path.join(root, 'manifest.json'));
@@ -35,16 +36,7 @@ const test = base.extend({
         // Insertion assertions recognize one utterance, regardless of Chromium's fake
         // microphone tone/silence cycle or how long placement checks take.
         const singleUtterance = /^(active recording stays|closed-shadow modal|stacked modal dialogs)/.test(info.title);
-        for (const role of ['sherpa', 'silero', 'whisper']) await writeFile(path.join(root, `web/${role}-worker.js`), `let samples=0;self.onmessage=({data})=>{
-          if(data.type==='load')postMessage({type:'ready'});
-          if(data.type==='vad-start')samples=0;
-          if(data.type==='vad-audio'){
-            const speaking=${singleUtterance ? 'samples < 8000' : 'data.audio.some(x=>Math.abs(x)>.001)'};samples+=data.audio.length;
-            postMessage({type:'vad',session:data.session,frames:[{audio:data.audio,speaking}]});
-          }
-          if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});
-          if(data.type==='decode'){postMessage({type:data.final?'final':'partial',text:data.final?'${role === 'whisper' ? 'whisper fixture' : 'confirmed fixture'}':'pending fixture',session:data.session,id:data.id});postMessage({type:'decoded',session:data.session});}
-        };`);
+        for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture());
       }
       if (info.title.includes('transport measurements')) {
         // Opt into the production worklet timestamps for the concurrent Live
@@ -79,7 +71,7 @@ const test = base.extend({
       if (!real) {
         // Mock Workers still use Live's real verified-asset preparation. Package
         // tiny deterministic files so overlap/isolation checks never fetch weights.
-        for (const kind of ['reazon', 'silero', 'whisper']) {
+        for (const kind of ['moonshine-small-ja', 'moonshine-medium-en']) {
           const file = path.join(root, 'extension', `${kind}-assets.json`);
           const manifest = JSON.parse(await readFile(file, 'utf8'));
           manifest.revision = createHash('sha256').update(`web-voice-fixture-${kind}`).digest('hex');
@@ -110,8 +102,8 @@ const test = base.extend({
             this.addEventListener('message', ({ data }) => { if (data.type === 'final') { const item = { id: data.id, text: data.text }; window.voiceFinals.push(item); console.debug('voice-test-final:' + JSON.stringify(item)); } });
           }
           postMessage(data, ...rest) {
-            if (data.type === 'vad-audio') { window.voiceResources.audioSamples += data.audio.length; if (voiceResources.arrivals.length < 2000) voiceResources.arrivals.push(performance.timeOrigin + performance.now()); }
-            if (window.voiceDelay && ['load', 'vad-stop'].includes(data.type)) { setTimeout(() => super.postMessage(data, ...rest), window.voiceDelay); return; }
+            if (data.type === 'audio') { window.voiceResources.audioSamples += data.audio.length; if (voiceResources.arrivals.length < 2000) voiceResources.arrivals.push(performance.timeOrigin + performance.now()); }
+            if (window.voiceDelay && ['load', 'stop'].includes(data.type)) { setTimeout(() => super.postMessage(data, ...rest), window.voiceDelay); return; }
             return super.postMessage(data, ...rest);
           }
           terminate() { this.released = true; super.terminate(); }
@@ -132,7 +124,7 @@ const test = base.extend({
       await expect(library.locator('#graph-list button[data-id]')).toHaveCount(1);
       const graphId = await library.evaluate(async () => {
         const { GraphLibrary, readLibrary } = await import('./graph-library.js'), { graphNode, edge } = await import('./graph.js');
-        const graph = { version: 15, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
+        const graph = { version: 15, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
           edges: [edge('mic','audio','asr','audio'),edge('asr','final','field','text')] };
         const store = new GraphLibrary(localStorage), next = await store.create({ name: 'Dictation', graph }, readLibrary(localStorage).revision);
         const id = next.graphs.at(-1).id; await store.assign('webVoice', id, next.revision); return id;
@@ -475,7 +467,7 @@ test('rejected menu permission request offers a small explicit consent button wi
 async function assignLiveMicrophone(t) {
   await t.library.evaluate(async () => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js'), { graphNode, edge, GRAPH_VERSION } = await import('./graph.js');
-    const graph = { version: GRAPH_VERSION, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('Display', 'display')],
+    const graph = { version: GRAPH_VERSION, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('Display', 'display')],
       edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'display', 'input1')] };
     const store = new GraphLibrary(localStorage), next = await store.create({ name: 'Independent Live', graph }, readLibrary(localStorage).revision);
     await store.assign('live', next.graphs.at(-1).id, next.revision);
@@ -491,7 +483,7 @@ async function expectLiveRecording(live) {
   await expect(live.locator('#session-state')).toHaveText('Recording');
   await expect(live.locator('#errors')).toBeEmpty();
   expect(await live.evaluate(() => ({ workers: voiceResources.workers.filter(w => !w.released).length,
-    tracks: voiceResources.streams.flatMap(s => s.getTracks()).filter(t => t.readyState === 'live').length }))).toEqual({ workers: 2, tracks: 1 });
+    tracks: voiceResources.streams.flatMap(s => s.getTracks()).filter(t => t.readyState === 'live').length }))).toEqual({ workers: 1, tracks: 1 });
 }
 
 test('Material Symbols circle: isolated styles, light/dark, focus, hover, reduced motion and forced colors', async ({ voice: t }, info) => {
@@ -926,13 +918,13 @@ async function realEvidence(t) {
   const sourceSha256 = {};
   for (const name of ['extension/session.js', 'extension/media-source.js', 'extension/page-target.js',
     'extension/web-voice-runtime.js', 'extension/web-voice-background.js', 'extension/web-voice-content.js',
-    'web/local-asr-core.js', 'web/transcription-nodes.js']) {
+    'web/optional-asr-core.js', 'web/transcription-nodes.js']) {
     const bytes = await readFile(name);
     expect((await readFile(path.join(t.root, name))).equals(bytes), `Use current source: ${name}`).toBe(true);
     sourceSha256[name] = createHash('sha256').update(bytes).digest('hex');
   }
   return { sourceSha256, fixtureSha256: createHash('sha256').update(await readFile('tests/fixtures/ordinary-english.wav')).digest('hex'),
-    model: 'ReazonSpeech ja-en + Silero VAD, CPU/WASM', assetManifest: JSON.parse(await readFile('web/vendor/manifest.json', 'utf8')) };
+    model: 'Moonshine streaming, CPU/WASM', assetManifest: JSON.parse(await readFile('scripts/optional-asr-runtime.json', 'utf8')) };
 }
 
 test('already granted input and textarea dictation stays in place, drains exactly once and closes offscreen resources', async ({ voice: t }, info) => {
@@ -998,7 +990,7 @@ test('multiple Web sessions share one offscreen document and stop independently 
   const r = await runtime(t), other = await t.context.newPage(); await other.goto(t.website.url() + '?other');
   const second = { ...t, website: other };
   await start(second); await recording(second); await noVisibleRuntime(t);
-  expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(4);
+  expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
   expect((await pageCapture(t)).streams).toBe(1); expect((await pageCapture(second)).streams).toBe(1);
   await t.website.locator('#second').focus(); await t.website.waitForTimeout(650);
   await stop(t); await recording(second);
@@ -1006,7 +998,7 @@ test('multiple Web sessions share one offscreen document and stop independently 
   await expect(t.website.locator('#first')).toHaveValue('before after');
   await expect(t.website.locator('#second')).toHaveValue('left right');
   await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
-  expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
+  expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(1);
   expect((await pageCapture(t)).streams).toBe(0);
   // OFF preserves finals already committed and does not drain provisional text.
   await toolbarVoice(t, false); await idle(t);
@@ -1065,7 +1057,7 @@ for (const reason of ['worker failure', 'device end', 'navigation', 'tab close',
     await start(t); await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'preparing'); await mic(t.website);
   }
   if (!['navigation', 'tab close'].includes(reason)) await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'error');
-  await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
+  await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(1);
   expect((await pageCapture(peer)).streams).toBe(1);
   if (!t.website.isClosed()) expect((await pageCapture(t)).streams).toBe(0);
   await recording(peer); await expectLiveRecording(live);
@@ -1251,7 +1243,7 @@ test('target removal during Stop retains final text and releases only that owner
   await t.website.locator('#first').evaluate(e => { window.removedVoiceField = e; e.remove(); });
   await expect(widget(t.website)).toHaveAttribute('data-voice-state', 'idle');
   await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
-  await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
+  await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(1);
   expect((await pageCapture(peer)).streams).toBe(1);
   if (!t.website.isClosed()) expect((await pageCapture(t)).streams).toBe(0);
   expect(await t.website.evaluate(() => removedVoiceField.value)).toBe(previous);
@@ -1265,7 +1257,7 @@ test('device startup failure is actionable and preserves another Web owner', asy
   await pageCapture(peer, 'fail');
   await start(peer); await expect(widget(other)).toHaveAttribute('data-voice-state', 'error');
   await expect(widget(other)).toHaveAttribute('title', /microphone|device/i); await recording(t);
-  await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
+  await expect.poll(() => r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(1);
   await expect(other.locator('#first')).toHaveValue('before after');
   await t.website.waitForTimeout(650); await stop(t); await idle(t); await r.detach();
 });
@@ -1576,7 +1568,7 @@ test('zero compatible graphs can stay explicitly enabled; adding a saved path re
   await t.library.evaluate(async () => {
     const { GraphLibrary } = await import('./graph-library.js'), { graphNode, edge } = await import('./graph.js');
     await new GraphLibrary(localStorage).create({ name: 'New dictation', graph: { version: 15,
-      nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
+      nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
       edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] } });
   });
   await expect(widget(t.website)).toBeVisible(); await rightMic(t);
@@ -1692,7 +1684,7 @@ for (const reason of ['rejected insertion', 'target removed', 'focus change', 'a
   // live, through the actual offscreen graph and authenticated output relay.
   const r = await runtime(t);
   await r.evaluate(async () => {
-    const { SpeechToTextNode } = await import('../web/transcription-nodes.js');
+    const { OptionalAsrNode: SpeechToTextNode } = await import('../web/optional-asr-node.js');
     // Existing instances inherit this method, so the next decode is observed.
     const receive = SpeechToTextNode.prototype.receiveEvent;
     SpeechToTextNode.prototype.receiveEvent = function(event) {
@@ -1705,7 +1697,7 @@ for (const reason of ['rejected insertion', 'target removed', 'focus change', 'a
   await r.evaluate(() => finalProbe.receiveEvent({ type: 'final', id: 100, text: 'retained final' }));
   await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
   await recording(t); expect((await pageCapture(t)).streams).toBe(1);
-  expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2);
+  expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(1);
   await expect(t.website.locator('#second')).toHaveValue('left right');
   if (reason === 'target removed') {
     await t.website.evaluate(() => { const replacement = document.createElement('input'); replacement.id = 'first'; replacement.value = 'replacement'; document.body.append(replacement); replacement.focus(); });
@@ -1773,7 +1765,7 @@ for (const id of ['lexical', 'draft']) for (const route of ['website mic', 'tool
     await enable(t); await start(t, selector); await recording(t);
     r = await runtime(t);
     await r.evaluate(async () => {
-      const { SpeechToTextNode } = await import('../web/transcription-nodes.js');
+      const { OptionalAsrNode: SpeechToTextNode } = await import('../web/optional-asr-node.js');
       const receive = SpeechToTextNode.prototype.receiveEvent;
       SpeechToTextNode.prototype.receiveEvent = function(event) {
         globalThis.finalProbe = this;
@@ -1823,7 +1815,7 @@ for (const id of ['lexical', 'draft']) for (const route of ['website mic', 'tool
   await send('\nretained'); await send(' tail');
   await expect(t.website.locator('[data-local-text-recovery]')).toBeVisible();
   expect(await t.website.evaluate(id => editors[id].read(), id)).toBe('hello voice voice voice\nnext manual\nfinal');
-  if (r) { await recording(t); expect((await pageCapture(t)).streams).toBe(1); expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(2); }
+  if (r) { await recording(t); expect((await pageCapture(t)).streams).toBe(1); expect(await r.evaluate(() => voiceResources.workers.filter(w => !w.released).length)).toBe(1); }
   else expect(await t.library.evaluate(() => ({ failed: !!toolbarOutput.failed, severity: toolbarOutputStates.at(-1)[2] }))).toEqual({ failed: false, severity: 'warning' });
   await t.website.locator(selector).evaluate(element => element.removeEventListener('paste', rejectMultiline, true));
   await recoveryAction(t, 'Retry in original field');

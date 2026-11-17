@@ -1,9 +1,9 @@
 // Native worker fixtures keep the production nodes, pipeline, PCM transport and
 // incremental speaker real, while CI downloads no weights or inference runtime.
-export const asrPages = ['whisper', 'zipformer', 'parakeet-v3', 'moonshine-medium'];
+export const asrPages = ['moonshine-medium', 'moonshine-small-ja'];
 export const textPages = ['text-summary-lfm2', 'text-summary-qwen35', 'if-condition'];
 export const streamPages = ['qwen3-tts', 'cosyvoice3'];
-export const modelPages = ['speech-to-text', ...asrPages, 'opus-mt', 'opus-mt-en-ja', 'translategemma', ...textPages, 'kokoro', 'supertonic3', ...streamPages];
+export const modelPages = [...asrPages, 'opus-mt', 'opus-mt-en-ja', 'translategemma', ...textPages, 'kokoro', 'supertonic3', ...streamPages];
 
 export function wavFixture(seconds = 0.3) {
   const samples = Math.floor(seconds * 16000), bytes = Buffer.alloc(44 + samples * 2);
@@ -38,7 +38,7 @@ export async function modelWorkers(page, slug, mode = 'success') {
         if (d.type === 'start') session = d.session;
         if (d.type === 'audio') {
           if (!(d.audio instanceof Float32Array) || !d.audio.length) throw Error('Missing real decoded PCM');
-          if (${JSON.stringify(['zipformer', 'moonshine-medium'].includes(slug))}) postMessage({ type: 'partial', text: 'Streaming preview', session, id: 1 });
+          if (${JSON.stringify(['moonshine-small-ja', 'moonshine-medium'].includes(slug))}) postMessage({ type: 'partial', text: 'Streaming preview', session, id: 1 });
           postMessage({ type: 'consumed', sequence: d.sequence, session });
         }
         if (d.type === 'stop') {
@@ -65,13 +65,7 @@ export async function modelWorkers(page, slug, mode = 'success') {
         }
       };`,
   }));
-  if (slug === 'whisper') await page.context().route('**/silero-worker.js', route => route.fulfill({
-    contentType: 'text/javascript', headers: { 'Cross-Origin-Embedder-Policy': 'require-corp' }, body: `self.onmessage = ({ data: d }) => {
-      if (d.type === 'load') postMessage({ type: 'ready' });
-      if (d.type === 'vad-audio') postMessage({ type: 'vad', session: d.session, frames: [{ audio: d.audio, speaking: true }] });
-      if (d.type === 'vad-stop') postMessage({ type: 'vad-stopped', session: d.session });
-    };`,
-  }));
+
 }
 
 export async function observeModels(page) {

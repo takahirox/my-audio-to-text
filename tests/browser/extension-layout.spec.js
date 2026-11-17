@@ -121,7 +121,7 @@ for (const width of [390, 1440]) {
     const labels = await page.evaluate(async () => {
       const { defaultGraph, graphNode, nodeDefinition } = await import('/extension/graph.js'); const { saveLiveGraphData } = await import('/extension/graph-library.js');
       const graph = defaultGraph();
-      graph.nodes.push(graphNode('SpeechToTextReazonSpeech', 'speech-second', 270, 330));
+      graph.nodes.push(graphNode('SpeechToTextMoonshineSmallJa', 'speech-second', 270, 330));
       await saveLiveGraphData(localStorage, graph);
       return graph.nodes.map(node => {
         const definition = nodeDefinition(node);
@@ -136,8 +136,8 @@ for (const width of [390, 1440]) {
     const first = page.getByRole('button', { name: /^Select speech:/ });
     const second = page.getByRole('button', { name: /^Select speech-second:/ });
     await expect(second).toHaveText(await first.textContent());
-    await expect(first).toHaveAccessibleName('Select speech: Speech Recognition · JA/EN · ReazonSpeech ja-en · AI');
-    await expect(second).toHaveAccessibleName('Select speech-second: Speech Recognition · JA/EN · ReazonSpeech ja-en · AI');
+    await expect(first).toHaveAccessibleName('Select speech: Speech Recognition · JA / Streaming · Moonshine Small Streaming Japanese · AI');
+    await expect(second).toHaveAccessibleName('Select speech-second: Speech Recognition · JA / Streaming · Moonshine Small Streaming Japanese · AI');
     await first.click();
     const inspector = page.getByRole('complementary', { name: 'Graph details inspector' });
     await expect(inspector.getByText('Instance ID: speech', { exact: true })).toBeVisible();

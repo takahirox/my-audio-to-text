@@ -9,7 +9,7 @@ export default defineConfig({
   ],
   use: { baseURL: publishedURL || 'http://127.0.0.1:8000', headless: !process.env.TRANSLATION_HEADED },
   webServer: publishedURL ? undefined : {
-    command: process.env.ASR_BENCHMARK ? 'python3 scripts/serve-reazon-benchmark.py' : 'python3 tests/browser/serve-playground.py',
+    command: 'python3 tests/browser/serve-playground.py',
     url: 'http://127.0.0.1:8000', reuseExistingServer: false,
   },
 });

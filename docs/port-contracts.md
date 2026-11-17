@@ -1,7 +1,7 @@
 # Primitive-first Node/Port contracts
 
 Issues #91, #95, #99, #119 and #134 audit shared Nodes, the Node Playground, and the extension.
-Ordinary text uses shared `TEXT`; Number constants and speech duration use shared `NUMBER`
+Ordinary text uses shared `TEXT`; Number constants and numeric IDs use shared `NUMBER`
 from `web/port-contracts.js`; portable keyed pairs/history use `KEYED_PAIRED_TEXT`/`KEYED_PAIRED_TEXT_LIST`; abstract `ITEM` accepts those concrete types and TEXT. No BOOLEAN value is consumed, so none is introduced.
 Contracts are identities; receiving Nodes validate their payloads. A compatible
 ordinary edge’s type compatibility never depends on producer type, output name,
@@ -11,32 +11,6 @@ producers as well as atomic deliveries. Graph validation checks structure, contr
 drafts remain saveable. Consumers own value limits, startup timing, correlation,
 queues and failure reporting. Model selection, cache verification, permissions and
 runtime allocation remain specialized. See the [#134 audit](evidence/composition-134.md).
-
-| Boundary | Public ports and values | Internal or observer bookkeeping |
-| --- | --- | --- |
-| Capture sources: microphone, browser tab, extension tab | `audio: MONO_16KHZ_PCM`, normalized mono 16 kHz Float32Array | Target, permission, resampler and diagnostics |
-| Button | `trigger: NUMBER` (1), no inputs | One ordinary emission per accepted Live Graph Action; caption and session ownership stay in UI |
-| Hold | `input: TEXT`, optional sink-only `trigger: ANY`; sole `value: TEXT` output | Silent storage; sampled when trigger disconnected, ordinary emission on each trigger when connected |
-| Text | `value: TEXT`, any literal string, including empty | One ordinary emission at session start |
-| SpeechToTextWhisper | `audio: PCM`, optional startup `language: TEXT` (en/ja; default en); `final: TEXT` only | Multilingual tiny q8, Silero, fixed 6 s segments; Stop drains / Cancel releases |
-| SpeechToTextParakeetV3 | `audio: PCM → final: TEXT` only | Exact v3 ONNX; GPU encoder/CPU decoder; quiet/12 s chunks; Stop drains / Cancel releases |
-| SpeechToTextMoonshineMediumEn | `audio: PCM → provisional: TEXT, final: TEXT` | Exact 245M English Medium Streaming; native incremental lines; 30 s stream renewal; Stop drains / Cancel releases |
-| Number | `value: NUMBER`, finite numeric constant | Consumers define units and domain limits |
-| SpeechToTextReazonSpeech / TranscriptOutput / speech Playground | `audio: PCM`, optional startup `maxDuration: NUMBER` in seconds; `provisional: TEXT`, `final: TEXT`, plain strings | Frozen session cap (default 6 s, supported 1–12 s), core session/utterance IDs, load/drain state, VAD; duplicate final IDs suppressed before fan-out |
-| OPUS-MT (both directions), TranslateGemma / translation Playground | `text: TEXT → text: TEXT` | Worker request IDs and inference state; input queue preserves order |
-| SpeechTranscriptCorrection / correction Playground | `text: TEXT → text: TEXT` | Candidate validation, worker IDs, bypass/error diagnostics |
-| Extension TranslationScheduler (both directions) | `text: TEXT`, optional `provisional: TEXT` inputs; `source/text/error` and `provisionalSource/provisionalText/provisionalError`: two atomic TEXT output families | FIFO committed utterances, inference IDs, model failure and Stop policy; no public status/index metadata ports |
-| KeyedTextPair | independent id1/input1/id2/input2: NUMBER/TEXT → pair: KEYED_PAIRED_TEXT | Complete immutable same-ID pair; no DOM or history accumulation |
-| KeyedPairedTextAccumulator | pair: KEYED_PAIRED_TEXT → pairs: KEYED_PAIRED_TEXT_LIST | Generic ordered append/replace, full owned history snapshots, arrival order |
-| Display | Configurable input1…inputN: ITEM; no outputs | One Live view with a switchable tab per input, independent latest TEXT/pair/list snapshots, and only one visible panel; no accumulation or processing |
-| TextWindow | text: TEXT; optional maxChars: NUMBER, maxWaitSeconds: NUMBER → text: TEXT | Exact generic batching; independent defaults 600 / 1.5 s; length/time/Stop only; Stop flushes once, Cancel discards; no threshold Settings or preview output |
-| TextAccumulator | append: TEXT → text: TEXT | Exact newline-separated committed segments |
-| [TextSlidingWindow](text-sliding-window.md) | text: TEXT, optional maxChars: NUMBER → text: TEXT | Rolling bounded history; sentence/word eviction, code-point-safe suffix fallback; limit updates emit nothing |
-| TextFormatter | instance-configured input1…inputN: TEXT → text: TEXT | Bounded template, latest values; no implicit branch correlation |
-| TextInput / TextOutput, focused field | `text: TEXT`, plain strings | Field insertion sequencing/document targeting and UI state |
-| Supertonic 3 / Kokoro / TTS Playground | `text: TEXT → audio: SYNTHESIZED_AUDIO` | Language/voice, inference RPCs, timing |
-| AudioOutput / playback and WAV adapter | `audio: SYNTHESIZED_AUDIO`, `{ samples: Float32Array, sampleRate: positive integer, channels: 1 }` | Playback URLs and cleanup |
-| Qwen3-TTS / CosyVoice3 streaming | [`stream: AUDIO_STREAM`](streaming-tts.md#public-port-limits-and-lifecycle), explicit start/chunk/end/abort events | Ordered utterance IDs, chunk sequences and native-rate PCM; distinct from a completed clip |
 
 Portable public values include keyed pairs, ordered pair lists, synthesized audio
 and explicit audio stream events. Browser rendering stays inside Display; no DOM
@@ -121,7 +95,6 @@ text never emits or triggers that consumer. It starts empty on each session.
 This node capability breaks feedback without adding edge flags or changing
 primitive compatibility. [Feedback example and limits](text-summary-nodes.md).
 
-
 Speaker's single `audio` input is the input-only union
 `SYNTHESIZED_AUDIO | AUDIO_STREAM`. `inputUnion(...contracts)` composes shared
 concrete identities (including nested unions); `compatiblePorts` accepts only
@@ -131,3 +104,6 @@ Pipeline exposes validated concrete source identities in `context.inputContracts
 and snapshots/validates audio before queued delivery and fan-out. Speaker
 validates every payload using its connected concrete contract and keeps that
 kind for the execution. Subgraph outputs retain their concrete identities.
+
+
+Speech recognition uses only language-specific [Moonshine streaming Nodes](optional-asr-nodes.md). The new default graph is Japanese Small; English examples select English Medium explicitly.

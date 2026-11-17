@@ -2,7 +2,6 @@ import { ButtonNode } from '../web/button-node.js';
 import { HoldNode } from '../web/hold-node.js';
 import { TextSummaryNode } from '../web/text-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
-import { SpeechToTextNode } from '../web/transcription-nodes.js';
 import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
 import { verifiedTranslateGemmaCache } from './translategemma-cache.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
@@ -16,12 +15,10 @@ import { TranslationSchedulerNode } from './translation-scheduler.js';
 import { FocusedInputTextOutputNode } from './page-output-node.js';
 import { ExtensionMicrophoneAudioNode } from './media-source.js';
 import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
-import { executableGraph, INPUT_TYPES, ASR_TYPES, nodeDefinition } from './graph.js';
+import { executableGraph, INPUT_TYPES, ASR_TYPES } from './graph.js';
 import { verifiedTtsCache } from './tts-cache.js';
 import { TextNode } from '../web/text-constant-node.js';
-import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
-import { SpeechToTextZipformerEnNode } from '../web/zipformer-node.js';
-import { SpeechToTextParakeetV3Node } from '../web/parakeet-v3-node.js';
+import { SpeechToTextMoonshineSmallJaNode } from '../web/moonshine-small-ja-node.js';
 import { SpeechToTextMoonshineMediumEnNode } from '../web/moonshine-medium-node.js';
 import { IfConditionNode } from '../web/if-condition-node.js';
 import { NumberNode } from '../web/number-node.js';
@@ -110,69 +107,6 @@ function sharedTabCapture(factory, stopping) {
   };
 }
 
-// Evaluate only configuration ancestors, with fresh data-node state and the
-// ordinary Pipeline delivery/grouping/sampling semantics. Resource owners,
-// buttons, triggered gates and sinks are inert declarations: this pass cannot
-// capture, infer, fire a trigger or publish output. Dispose even timer-backed
-// data nodes before initializing models; Start gets untouched processing state.
-const startupDataNodes = { Text: TextNode, Number: NumberNode, TextFormatter: TextFormatterNode,
-  TextAccumulator: TextAccumulatorNode, TextSlidingWindow: TextSlidingWindowNode, TextWindow: TextWindowNode,
-  KeyedTextCoalesce: KeyedTextCoalesceNode, KeyedTextPair: KeyedTextPairNode,
-  KeyedPairedTextAccumulator: KeyedPairedTextAccumulatorNode, Hold: HoldNode };
-async function startupValues(graph, configurations, signal, timeoutMs) {
-  const needed = new Set(), pending = [...configurations.values()].map(route => route.from[0]);
-  while (pending.length) {
-    const id = pending.pop();
-    if (needed.has(id)) continue;
-    needed.add(id);
-    for (const route of graph.edges) if (route.to[0] === id) pending.push(route.from[0]);
-  }
-  const nodes = {}, connections = graph.edges.filter(route => needed.has(route.from[0]) && needed.has(route.to[0]));
-  for (const spec of graph.nodes.filter(node => needed.has(node.id))) {
-    const Node = startupDataNodes[spec.type];
-    const triggered = spec.type === 'Hold' && graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'trigger');
-    const definition = nodeDefinition(spec, graph);
-    nodes[spec.id] = Node && !triggered ? new Node(spec.settings)
-      : { inputs: definition.inputs, outputs: definition.outputs, receive() {} };
-  }
-  const values = new Map();
-  let wake;
-  for (const [id, route] of configurations) {
-    let sink = `${id}:startup`;
-    while (Object.hasOwn(nodes, sink)) sink += ':';
-    nodes[sink] = { inputs: { value: nodeDefinition(graph.nodes.find(node => node.id === id), graph).inputs[route.to[1]] },
-      outputs: {}, receive: (_, value) => { values.set(id, value); wake?.(); } };
-    connections.push({ from: route.from, to: [sink, 'value'] });
-  }
-  const startup = new Pipeline({ nodes, connections, onError: () => wake?.() });
-  const abort = () => { void startup.dispose(); };
-  signal.addEventListener('abort', abort, { once: true });
-  try {
-    signal.throwIfAborted();
-    await startup.start();
-    const deadline = Date.now() + timeoutMs;
-    while (true) {
-      // Settle startup deliveries without Stop's synthetic tail flushes. A
-      // constant-fed TextWindow may legitimately deliver after its own timer.
-      for (const entry of startup.order) await startup.wait(entry, entry.queue);
-      if (startup.errors.length || values.size === configurations.size || !startup.order.some(entry => entry.node.timer != null)) break;
-      let timer;
-      try {
-        await startup.wait(startup.order[0], new Promise(resolve => {
-          wake = resolve; timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
-        }));
-      } finally { wake = null; clearTimeout(timer); }
-      if (Date.now() >= deadline && values.size !== configurations.size) throw Error('Startup configuration timed out. Supply configuration before capture in Graph Editor and wait for Auto Save.');
-    }
-    signal.throwIfAborted();
-    if (startup.errors.length) throw startup.errors[0];
-    return values;
-  } finally {
-    signal.removeEventListener('abort', abort);
-    await startup.dispose();
-  }
-}
-
 export function buildGraph(graph, options) {
   const description = executableGraph(graph);
   if (!description.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
@@ -218,16 +152,10 @@ export function buildGraph(graph, options) {
         node = new ExtensionMicrophoneAudioNode(options.microphoneStreams?.get(spec.id), { microphoneSourceFactory: options.microphoneSourceFactory, onAudio: pcm => options.onCapturedAudio?.(pcm, spec.id), onEnded: () => options.onEnded?.(spec.id) }); break;
       case 'FocusedInputTextOutputNode':
         node = new FocusedInputTextOutputNode({ target: options.outputTarget?.tabId === options.tabId ? options.outputTarget : undefined, connectionFactory: options.pageConnectionFactory, onState: (state, active, severity) => options.onTargetState?.(spec.id, state, active, severity) }); break;
-      case 'SpeechToTextParakeetV3':
-        node = new SpeechToTextParakeetV3Node({ workerFactory: options.parakeetWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
+      case 'SpeechToTextMoonshineSmallJa':
+        node = new SpeechToTextMoonshineSmallJaNode({ workerFactory: options.moonshineJapaneseWorkerFactory || options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'SpeechToTextMoonshineMediumEn':
-        node = new SpeechToTextMoonshineMediumEnNode({ workerFactory: options.moonshineWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
-      case 'SpeechToTextZipformerEn':
-        node = new SpeechToTextZipformerEnNode({ workerFactory: options.zipformerWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
-      case 'SpeechToTextWhisper':
-        node = new SpeechToTextWhisperNode({ configurationConnected: graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'language'), workerFactory: options.whisperWorkerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
-      case 'SpeechToTextReazonSpeech':
-        node = new SpeechToTextNode({ configurationConnected: graph.edges.some(route => route.to[0] === spec.id && route.to[1] === 'maxDuration'), workerFactory: options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
+        node = new SpeechToTextMoonshineMediumEnNode({ workerFactory: options.moonshineWorkerFactory || options.workerFactory, onEvent: event => options.onSpeechEvent?.(event, spec.id) }); break;
       case 'KeyedTextPair': node = new KeyedTextPairNode(); break;
       case 'KeyedPairedTextAccumulator': node = new KeyedPairedTextAccumulatorNode(); break;
       case 'Display': node = new DisplayNode((dom, port) => options.onDisplay?.(spec.id, dom, port), spec.settings); break;
@@ -265,20 +193,9 @@ export function buildGraph(graph, options) {
     if (INPUT_TYPES.includes(spec.type)) resources.audioSources.set(spec.id, node);
     if (ASR_TYPES.includes(spec.type)) resources.speechNodes.set(spec.id, node);
   }
-  // Resolve startup data on isolated composition nodes, without running the
-  // Live graph's hooks. Remove just these deliveries in the Live runtime
-  // so Start cannot run a second configuration pass against already warm ASR.
-  const configurations = new Map();
-  if (options.preload) for (const [id, node] of resources.speechNodes) {
-    // Preserve intent even if the configuration producer is incomplete/parked.
-    const route = graph.edges.find(route => route.to[0] === id && route.to[1] === node.configurationPort);
-    if (route) configurations.set(id, route);
-  }
-  const connections = description.edges.filter(route => configurations.get(route.to[0])?.to[1] !== route.to[1]);
-  pipeline = new Pipeline({ nodes, connections, onError: options.onError });
+  pipeline = new Pipeline({ nodes, connections: description.edges, onError: options.onError });
   let preparing;
   const prepareModels = () => preparing ??= (async () => {
-    const values = configurations.size ? await startupValues(graph, configurations, pipeline.order[0].controller.signal, options.modelLoadTimeoutMs ?? 180000) : new Map();
     const models = description.nodes.filter(spec => ASR_TYPES.includes(spec.type) || graphModelRequirements({ nodes: [spec] }).length);
     for (const [index, spec] of models.entries()) {
       const entry = pipeline.entries.get(spec.id), node = entry.node;
@@ -290,13 +207,6 @@ export function buildGraph(graph, options) {
           timeout = setTimeout(() => reject(Error('Model initialization timed out. Check browser support and free RAM/GPU memory, then Retry models.')), options.modelLoadTimeoutMs ?? 180000);
         })]));
         if (resources.speechNodes.has(spec.id)) {
-          const route = configurations.get(spec.id);
-          if (route) {
-            if (!values.has(spec.id)) throw Error('Startup configuration is unavailable before capture. Connect startup data in Graph Editor and wait for Auto Save; audio, model output and button-triggered values are not available yet.');
-            node.receive(node.configurationPort, values.get(spec.id));
-          }
-          node.configurationConnected = false;
-          node.preconfigured = true;
           await bounded(node.load());
           if (node.unavailable || node.core?.state !== 'ready') throw Error('ASR model did not become ready. Check model assets, browser support and available memory.');
         } else {

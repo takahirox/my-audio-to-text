@@ -34,7 +34,7 @@ export const test = base.extend({
       const { id } = await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root });
       // Persisted default ASR now has ordinary downloadable dependencies. These
       // UI-only checks serve small verified data fixtures, without remote models.
-      for (const name of ['reazon', 'silero']) {
+      for (const name of ['moonshine-small-ja', 'moonshine-medium-en']) {
         const file = path.join(root, 'extension', `${name}-assets.json`);
         const manifest = JSON.parse(await readFile(file, 'utf8')), body = Buffer.from('UI-only ASR fixture');
         await writeFile(path.join(root, 'extension', `${name}-fixture.bin`), body);

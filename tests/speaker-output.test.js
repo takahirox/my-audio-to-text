@@ -174,7 +174,7 @@ test('Cancel during microphone permission releases the already unlocked speaker 
   } } });
   t.after(() => { if (original) Object.defineProperty(globalThis, 'navigator', original); else delete globalThis.navigator; });
   const graph = speakerGraph('Kokoro');
-  graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'));
+  graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'));
   graph.edges[0] = edge('asr', 'final', 'tts', 'text'); graph.edges.push(edge('mic', 'audio', 'asr', 'audio'));
   const audio = speakerContext();
   const session = new TabSession(() => {}, { graph, speakerContextFactory: () => audio });

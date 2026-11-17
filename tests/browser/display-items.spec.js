@@ -23,7 +23,7 @@ for (const ending of ['stop', 'cancel']) test(`paired history: interleaved ASR, 
     const factory = () => {
       const worker = { postMessage(data) {
         if (data.type === 'translate') { pending.push(() => worker.onmessage?.({ data: { type: 'result', id: data.id, texts: ['translated:' + data.text] } })); return; }
-        const type = { load: 'ready', 'vad-stop': 'vad-stopped', drain: 'drained' }[data.type];
+        const type = { load: 'ready', 'stop': 'stopped', drain: 'drained' }[data.type];
         if (type) queueMicrotask(() => worker.onmessage?.({ data: { type, id: data.id, session: data.session } }));
       }, terminate() { this.released = true; } }; workers.push(worker); return worker;
     };

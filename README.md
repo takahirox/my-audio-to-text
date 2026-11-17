@@ -1,12 +1,10 @@
 # my-audio-to-text
 
-The extension ships **no AI model weights**. All models, including ReazonSpeech,
-Silero VAD, Whisper and Zipformer, use the same verified on-demand cache.
-Auto Save prepares only the saved graph's dependencies; Models supports manual
-Download/retry, progress, cancellation, inspection and deletion. Live verifies
-cached assets before Start and never downloads during inference. Prepared assets
-work offline; model-free graphs need no downloads. See the [asset lifecycle and
-packaging audit](docs/model-assets.md).
+The extension ships **no AI model weights**. All models use the same verified,
+on-demand cache. Auto Save prepares saved graph dependencies; Models provides
+Download/retry, progress, cancellation, inspection and deletion. Inference reads
+verified cached assets locally. Prepared graphs work offline. See the
+[asset lifecycle and packaging audit](docs/model-assets.md).
 
 The Chrome extension also supports [local IfCondition branching](docs/if-condition-node.md):
 edit a natural-language condition and route the original TEXT to Yes or No with
@@ -23,29 +21,11 @@ A local-first composable processing system that connects reusable input and proc
 
 ## Current implemented capabilities
 
-Speech-to-text is the most-developed processing capability today. The Node Playground speech test page and Chrome extension provide the **first concrete pipeline**:
-
-```text
-Microphone / browser-tab / Chrome-extension tab audio
-        ↓
-Local ASR Core
-        ↓
-ReazonSpeech ja-en + Silero/hayamimi
-        ↓
-provisional / final transcript
-```
-
-Capture helpers normalize audio to mono 16 kHz PCM before passing it to the [Local ASR Core](docs/local-asr-core.md). ReazonSpeech ja-en, sherpa-onnx, Silero VAD and the hayamimi-inspired simulated-streaming policy are the core's current implementation. This replaceable ASR baseline is one processing capability within the product vision.
-
-The [minimal Node/Port runtime](docs/pipeline-runtime.md) provides typed named ports, explicit connections, fan-out, asynchronous processing, graceful draining and cancellation. The Node Playground speech test page connects microphone or browser-tab source nodes to `SpeechToTextNode` and a transcript sink, with separate provisional/final ports on one ASR node. These adapters reuse the capture helpers and `LocalAsrCore`; the Chrome extension uses the same runtime and speech node with its own capture adapter and UI. Independent direction-specific OPUS-MT (Japanese → English and English → Japanese, WASM) and bidirectional TranslateGemma 4B (WebGPU) text processors also use this runtime; their dedicated Playground pages run string source → translation node → string sink graphs. The extension also composes ASR or Text constants with optional OPUS-MT or TranslateGemma 4B (English → Japanese and Japanese → English) through the same scheduling adapter. TranslateGemma requires a 3.112 GB Auto Save download, Worker WebGPU and several GB RAM/GPU memory; Google Gemma Terms and Prohibited Use Policy apply. Shared ASR, correction and translation outputs use plain `TEXT` strings for direct composition and fan-out to TTS or field output; the extension groups committed `source/text/error` and preview `provisionalSource/provisionalText/provisionalError` as separate TEXT families sharing one owned Worker. Committed `text` can feed history or TTS directly; `provisionalText` replaces a separate preview display and clears on final input, Stop and Cancel. Unsupported saved Nodes/ports require Reset or Import of a current graph and automatic persistence of a repaired graph copy. See the [contract audit](docs/port-contracts.md). The generic [TextWindow batcher](docs/windowed-translation.md) concatenates exact TEXT and emits only at a character/time threshold or Stop, with optional NUMBER inputs (defaults 600 characters / 1.5 seconds) and one TEXT output. Old TextWindow ports/settings are unsupported; use the current contract. The extension supports bounded incremental text-summary drafts; persistent history storage and broader summary/history composition remain future work, described in the [processing pipeline architecture](docs/processing-pipeline.md). Previous macOS, Moonshine, two-pass and Japanese-only ReazonSpeech experiments remain recoverable from Git history; backward compatibility with removed experiments is not required.
+Speech-to-text is the most-developed processing capability today. The Chrome extension composes tab/microphone capture → Moonshine streaming recognition → formatting, translation, display or focused text insertion. The standalone pages accept audio files to test each model independently.
 
 ## Node Playground
 
 Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
-
-The standalone index groups every supported model by task, with a direct independent test for each: ReazonSpeech, Whisper tiny, Zipformer English, Parakeet v3, Moonshine Medium Streaming English; both OPUS-MT directions and both TranslateGemma directions; LFM2.5 and Qwen3.5 text summaries and XtremeDistil IfCondition; Kokoro, Supertonic 3, Qwen3-TTS and CosyVoice3. No extension install, Graph Editor or saved graph is needed. Inputs stay in the browser. Run/Generate explicitly downloads the selected model's pinned weights; Cancel releases its workers and audio resources.
-
-ReazonSpeech keeps its microphone/tab capture page. The other ASR pages replay an uploaded audio file through their production nodes, showing real provisional updates where supported. Text pages accept independent text; streaming TTS pages play PCM as it arrives and also offer a completed WAV. Model loading and inference times are separate; replay timing includes audio duration and describes only the current machine.
 
 For local setup: `npm ci && npm run prepare:playground-assets && npm run serve`, then open `http://127.0.0.1:8000/`. Preparation stages pinned JS/WASM, notices and manifests, without model weights. See [model requirements, source/license links, deterministic tests and opt-in heavyweight smoke checks](docs/node-playground.md).
 
@@ -69,12 +49,6 @@ PCM → Speaker, with explicit preparation and cache-only Start.
 [CosyVoice3 local streaming](docs/cosyvoice3-streaming.md) uses repaired pinned
 flow/HiFT exports with the same stream and Speaker contracts. English/Japanese
 packaged Chrome evidence and hardware/resource limitations are recorded separately.
-
-The retained hayamimi-inspired path uses 0.8-second pre-roll, provisional recognition about every 0.5 seconds of active speech, a 0.35-second trailing-silence endpoint, and a 6-second default maximum audio segment including pre-roll. The extension's reusable Number source can configure a 1–12 second cap, including decimals, through optional SpeechToTextReazonSpeech.maxDuration before session startup; saved edits apply next session. Continuous speech splits without audio gaps. This is an audio cap, not final-result latency: mid-sentence cuts may reduce accuracy. See [configuration and validation limits](docs/extension-graph.md). Stop finalizes active speech. Silero VAD and ASR run in separate workers; inference is serialized, superseded previews are coalesced, and pending audio is bounded at 30 seconds. ReazonSpeech uses the evidence-based one-thread default from [Issue #38](docs/evidence/reazon-38.md).
-
-Microphone or browser-tab audio feeds normalized PCM into the documented [local ASR core boundary](docs/local-asr-core.md); capture/resampling stays outside recognition orchestration. For tab audio, use a desktop Chromium browser and choose a tab with “Share tab audio” enabled in the browser sharing picker.
-
-See [setup, testing, and limitations](docs/asr-manual-testing.md). Automated Chromium/WebKit checks cover list navigation, loading, provisional/final output, Stop, Cancel, repeat, worker isolation, and stale-result rejection. The [Issue #45 validation record](docs/evidence/reazon-45.md) records the baseline checks; [Issue #59 validation](docs/evidence/playground-pipeline-59.md) covers the pipeline migration; [Issue #63 validation](docs/evidence/node-playground-63.md) covers the node list and nested speech page, with required post-merge Pages verification pending. The [Issue #65 validation record](docs/evidence/translation-65.md) records deterministic translation checks and real OPUS-MT/TranslateGemma browser inference, with post-merge Pages verification pending. The [historical acceptance record](docs/asr-acceptance.md) and [experiment evidence](docs/evidence/) preserve completed comparisons and publication observations; they are not instructions for the current baseline.
 
 A minimal [Chrome extension PoC](docs/chrome-extension.md) opens Live for the
 toolbar's current tab without the sharing picker. Live initializes executable
@@ -111,22 +85,6 @@ From a fresh checkout, build the unpacked extension with one command:
 npm run setup:extension
 ```
 
-The extension Graph Editor shows function-first **Speech Recognition** titles
-with an AI sparkles icon and smaller model subtitles: **ReazonSpeech ja-en**,
-**Whisper tiny (multilingual)** and **Zipformer English**. Search by function or
-model name; Settings shows read-only Model, Languages and Runtime facts above
-editable controls. A reusable **Text** constant supplies language input. Whisper defaults to English; connect `Text.value → SpeechToTextWhisper.language` with `ja` for
-Japanese. Whisper exposes only `final: TEXT`; connect it to
-`final → TextAccumulator.append → text → Display.input1` for completed segments.
-For provisional/final history, use the [keyed display path](docs/display-items.md).
-
-The extension also offers independent **Parakeet TDT 0.6B v3** (WebGPU, final
-TEXT only) and **Moonshine Medium Streaming English 245M** (CPU WASM, real
-provisional/final TEXT) Nodes. Auto Save prepares their optional verified weights
-(1.26 GB / 305 MB). Budget substantial memory, especially for both together.
-See [setup, exact pins, licensing, limits and real-model tests](docs/optional-asr-nodes.md)
-and [packaged/native inference evidence](docs/evidence/optional-asr-121.md).
-
 Setup installs npm dependencies and prepares pinned, weight-free runtimes, then
 produces `dist/chrome-extension/` without downloading model weights. Every model's
 **weights** prepare after **Auto Save** for saved processor Nodes; Models provides
@@ -154,7 +112,6 @@ Validation evidence recorded on October 2, 2026 (JST; evidence timestamps use UT
 | Actual mobile browser | **Passed — user-reported physical-device check.** Pixel 7a with Chrome rendered `my-audio-to-text` and `The Web playground is deployed. Placeholder revision 2.` at the canonical URL. The report was recorded at `2026-10-01T22:01:26.247000+00:00` (UTC; October 2, 2026 JST). Browser version was not supplied. See [mobile evidence](docs/evidence/pages-redeployment.md#actual-mobile-browser). |
 | Subsequent reviewed change and automatic redeployment | **Passed.** PR #19 merged as `28f0badabb1834a1a8fe15dc248aaeebbb393412`. Automatic [push run 36931736950](https://github.com/takahirox/my-audio-to-text/actions/runs/36931736950) succeeded. The canonical URL rendered `The Web playground is deployed. Placeholder revision 2.`; see [the recorded browser check](docs/evidence/pages-redeployment.md). |
 
-
 [PR #19](https://github.com/takahirox/my-audio-to-text/pull/19) supplied the reviewed placeholder revision; [PR #22](https://github.com/takahirox/my-audio-to-text/pull/22) recorded its successful automatic redeployment, desktop screenshot, and user-reported physical-mobile result. The [redeployment evidence](docs/evidence/pages-redeployment.md) and [original partial PR description](docs/evidence/pages-validation-pr.md) retain those historical checks.
 
 ## Vision
@@ -172,8 +129,6 @@ outputs / derived information
 ```
 
 Future inputs may include files, Web/article text and platform-specific sources alongside today's microphone and tab audio. Future processing capabilities may include summarization, topic extraction/analysis, storage and visualization. These are architectural examples, not implemented features.
-
-Personalized ASR remains an important future capability/node within this system. It should learn from corrections to improve personal vocabulary, pronunciation, recurring mistakes and quiet speech, eventually including whisper speech. Success requires improvement on held-out real audio without unacceptable regression; personalization is not implemented today.
 
 See the [architecture guide](docs/processing-pipeline.md) for conceptual nodes, typed ports and examples that distinguish existing behavior from future composition.
 
@@ -232,17 +187,6 @@ errors. Graph Editor owns source/output connections; routine Node diagnostics ar
 available in Session details. There is no target panel. Microphone permission
 is requested by Start; focused-field output follows the toolbar tab automatically.
 
-The extension Live window shows each Display as an independent view with one
-switchable tab per `input1`, `input2`, … ITEM port and exactly one input panel
-visible at a time. Edit input tab labels in Display Settings; blank labels use
-`Input N`. A single-input Display omits tab navigation. See the
-[Display input-tab guide](docs/extension-graph.md). Fresh setup and
-Reset use Chrome tab audio → ReazonSpeech → KeyedTextCoalesce → KeyedTextPair →
-KeyedPairedTextAccumulator → Display for continuous transcription. Translation
-is an explicit graph addition: branch ASR.finalId/final to translator.id/text,
-then translator.id/text to KeyedTextPair.id2/input2. Originals remain visible
-while translation is pending; late translation updates only its own ID.
-
 `KeyedTextPair` has four independent NUMBER/TEXT inputs and exactly one output:
 `pair: KEYED_PAIRED_TEXT`, an immutable `{ id, first, second }`. Each side keeps
 its own ID and values; missing sides are empty strings. KeyedTextCoalesce selects
@@ -260,3 +204,24 @@ display Nodes and ports are unsupported. Graph Editor reports them visibly and
 keeps the original available for export. Repair it and import as a new Library
 entry; saving a recovery draft cannot overwrite an invalid original. Each Live region follows updates
 when reading near the bottom and preserves scroll position when reading above it.
+
+
+## Streaming speech recognition
+
+Exactly two local ASR Nodes are supported: **Moonshine Medium Streaming English**
+(245M, 305 MB) and **Moonshine Small Streaming Japanese** (123M, 122 MB).
+Both emit native provisional/final text on CPU WASM. The default/reset graph uses
+Japanese Small. Choose English Medium explicitly for English speech. Japanese
+Small is newly integrated; its quality on personal dictation needs evaluation.
+
+```
+npm run setup:extension
+npm test
+npm run test:playground
+```
+
+See [Moonshine assets, lifecycle, licensing and real inference checks](docs/optional-asr-nodes.md)
+and [standalone pages](docs/node-playground.md). Unsupported saved graph types
+must be recreated/reset; no automatic model substitution is performed.
+
+Personalized ASR remains an important future capability/node within this system. It should learn from corrections to improve personal vocabulary, pronunciation, recurring mistakes and quiet speech, eventually including very quiet speech. Success requires improvement on held-out real audio without unacceptable regression; personalization is not implemented today.

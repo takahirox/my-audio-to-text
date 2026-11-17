@@ -17,7 +17,7 @@ Voice/platform versions can produce different bytes; tests use the committed
 fixture, with no speech-synthesis dependency or network download at test time.
 
 The opt-in MV3 smoke plays this through a real tab and native tab capture, then
-runs the production ReazonSpeech and English → Japanese OPUS-MT Node/Worker. It
+runs the production Moonshine Medium Streaming English and English → Japanese OPUS-MT Node/Worker. It
 asserts meeting time, report request and project deadline meanings on the actual
 paired final rows, rather than merely requiring Japanese characters. ASR partials
 are recorded separately and may contain incomplete words. This fixture and the

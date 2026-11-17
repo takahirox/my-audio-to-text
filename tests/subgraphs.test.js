@@ -18,11 +18,11 @@ async function fixture() {
   return { storage, store, current: () => readLibrary(storage) };
 }
 function parent(source = 'ChromeTabAudio', sink = 'Display') {
-  return { version: 15, nodes: [graphNode(source, 'audio'), graphNode('Text', 'language'), graphNode('SpeechToTextWhisper', 'asr'), graphNode(sink, 'output')],
-    edges: [edge('audio', 'audio', 'asr', 'audio'), edge('language', 'value', 'asr', 'language'), edge('asr', 'final', 'output', sink === 'Display' ? 'input1' : 'text')] };
+  return { version: 15, nodes: [graphNode(source, 'audio'), graphNode('TextFormatter', 'language'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode(sink, 'output')],
+    edges: [edge('audio', 'audio', 'asr', 'audio'), edge('asr', 'final', 'language', 'input1'), edge('language', 'text', 'output', sink === 'Display' ? 'input1' : 'text')] };
 }
 async function sharedFixture() {
-  const f = await fixture(), source = parent(); source.nodes[1].settings.value = 'en';
+  const f = await fixture(), source = parent(); source.nodes[1].settings.template = '{1}';
   const extracted = extractSubgraph(source, ['language', 'asr'], 'shared-asr');
   await f.store.create({ id: 'shared-asr', name: 'Shared ASR', kind: 'subgraph', graph: extracted.shared });
   let library = await f.store.create({ name: 'Tab parent', graph: extracted.parent });
@@ -191,7 +191,7 @@ for (const assigned of [true, false]) test(`shared saves preserve Web voice comp
   const repaired = entryGraph(shared); repaired.nodes[0].settings.template = 'Updated: {1}';
   const saved = await f.store.save(shared.id, shared.revision, repaired);
   assert.deepEqual(find(saved, parentId), find(library, parentId));
-  assert.equal(webVoiceChoices(saved)[0].graph.nodes.find(node => node.type === 'TextFormatter').settings.template, 'Updated: {1}');
+  assert.equal(webVoiceChoices(saved)[0].graph.nodes.find(node => node.settings?.template === 'Updated: {1}').settings.template, 'Updated: {1}');
 });
 
 test('shared Live-only paths can use cumulative processing without Web voice restrictions', async () => {
@@ -218,7 +218,7 @@ test('extraction infers stable typed boundary ports, preserves fan-out, settings
   assert.deepEqual(Object.keys(instance).sort(), ['id', 'position', 'settings', 'subgraphId', 'type']);
   const flat = resolveSubgraphs(parent, [definition]);
   assert.equal(flat.nodes.length, graph.nodes.length); assert.equal(flat.edges.length, graph.edges.length);
-  const asr = flat.nodes.find(node => node.type === 'SpeechToTextReazonSpeech');
+  const asr = flat.nodes.find(node => node.type === 'SpeechToTextMoonshineSmallJa');
   assert.equal(flat.edges.filter(route => route.from[0] === asr.id && route.from[1] === 'final').length, 2);
   assert.deepEqual(assertGraph(flat), flat);
 });
@@ -236,15 +236,15 @@ test('extraction rejects disconnected groups, concrete capture/output nodes and 
 test('two unchanged parents automatically resolve the latest saved settings; running snapshots stay detached', async () => {
   const f = await sharedFixture(), library = f.current(), before = library.graphs.filter(entry => [f.tab, f.mic].includes(entry.id));
   const snapshot = resolvedEntryGraph(find(library, f.tab), library);
-  const shared = find(library, 'shared-asr'), draft = entryGraph(shared); draft.nodes[0].settings.value = 'ja';
+  const shared = find(library, 'shared-asr'), draft = entryGraph(shared); draft.nodes[0].settings.template = 'Result: {1}';
   await f.store.save(shared.id, shared.revision, draft);
   const current = f.current();
   assert.deepEqual(current.graphs.filter(entry => [f.tab, f.mic].includes(entry.id)), before);
-  for (const id of [f.tab, f.mic]) assert.equal(resolvedEntryGraph(find(current, id), current).nodes.find(node => node.type === 'Text').settings.value, 'ja');
-  assert.equal(snapshot.nodes.find(node => node.type === 'Text').settings.value, 'en');
+  for (const id of [f.tab, f.mic]) assert.equal(resolvedEntryGraph(find(current, id), current).nodes.find(node => node.type === 'TextFormatter').settings.template, 'Result: {1}');
+  assert.equal(snapshot.nodes.find(node => node.type === 'TextFormatter').settings.template, '{1}');
   await f.store.assign('live', f.tab, current.revision);
-  assert.equal(readLiveGraph(f.storage).graph.nodes.find(node => node.type === 'Text').settings.value, 'ja');
-  assert.equal(webVoiceGraph(resolvedEntryGraph(find(f.current(), f.mic), f.current())).nodes.find(node => node.type === 'Text').settings.value, 'ja');
+  assert.equal(readLiveGraph(f.storage).graph.nodes.find(node => node.type === 'TextFormatter').settings.template, 'Result: {1}');
+  assert.equal(webVoiceGraph(resolvedEntryGraph(find(f.current(), f.mic), f.current())).nodes.find(node => node.type === 'TextFormatter').settings.template, 'Result: {1}');
 });
 
 test('port labels and graph renaming retain identity; incompatible removal/type/addition lists parents and writes nothing', async () => {
@@ -254,7 +254,7 @@ test('port labels and graph renaming retain identity; incompatible removal/type/
   shared = find(f.current(), shared.id);
   await f.store.rename(shared.id, 'Renamed ASR', '', shared.revision);
   shared = find(f.current(), shared.id);
-  for (const change of [graph => graph.interface.outputs.pop(), graph => { graph.interface.outputs[0].port = 'finalId'; }, graph => graph.interface.outputs.push({ id: 'new', name: 'IDs', node: 'asr', port: 'finalId' })]) {
+  for (const change of [graph => graph.interface.outputs.pop(), graph => { graph.interface.outputs[0].node = 'asr'; graph.interface.outputs[0].port = 'finalId'; }, graph => graph.interface.outputs.push({ id: 'new', name: 'IDs', node: 'asr', port: 'finalId' })]) {
     const next = entryGraph(shared); change(next); const before = f.storage.getItem(LIBRARY_KEY);
     await assert.rejects(f.store.save(shared.id, shared.revision, next), /Referenced by: Tab parent, Mic parent.*Duplicate this subgraph/);
     assert.equal(f.storage.getItem(LIBRARY_KEY), before);
@@ -266,7 +266,7 @@ test('port labels and graph renaming retain identity; incompatible removal/type/
 
 test('revision conflicts, concurrent parent/definition saves, missing dependencies and referenced deletion fail safely', async () => {
   const f = await sharedFixture(), old = find(f.current(), 'shared-asr'), tab = find(f.current(), f.tab);
-  const changed = entryGraph(old); changed.nodes[0].settings.value = 'ja';
+  const changed = entryGraph(old); changed.nodes[0].settings.template = 'Result: {1}';
   const moved = entryGraph(tab, f.current()); moved.nodes[0].position.x = 120;
   await Promise.all([f.store.save(old.id, old.revision, changed), f.store.save(tab.id, tab.revision, moved)]);
   const before = f.storage.getItem(LIBRARY_KEY);
@@ -350,7 +350,7 @@ test('explicit duplicate-and-rewire migration permits retiring a definition only
 });
 
 test('two instances use distinct runtime nodes; model requirements include shared and parked models', () => {
-  const graph = parent(); graph.nodes[1].settings.value = 'en';
+  const graph = parent(); graph.nodes[1].settings.template = '{1}';
   const { shared, parent: extracted } = extractSubgraph(graph, ['language', 'asr'], 'asr');
   shared.nodes.push(graphNode('TextSummaryLfm2', 'parked-summary'));
   const definition = { id: 'asr', kind: 'subgraph', graph: shared, name: 'ASR' };
@@ -358,9 +358,9 @@ test('two instances use distinct runtime nodes; model requirements include share
   extracted.nodes.push(second, graphNode('Display', 'second-output'));
   extracted.edges.push(edge('audio', 'audio', 'second', 'in1'), edge('second', 'out1', 'second-output', 'input1'));
   const resolved = resolveSubgraphs(extracted, [definition]);
-  const asrs = resolved.nodes.filter(node => node.type === 'SpeechToTextWhisper');
+  const asrs = resolved.nodes.filter(node => node.type === 'SpeechToTextMoonshineSmallJa');
   assert.equal(asrs.length, 2); assert.notEqual(asrs[0].id, asrs[1].id);
-  assert.deepEqual(graphModelRequirements(resolved).map(model => model.key), ['silero', 'whisper', 'meeting-summary-lfm2']);
+  assert.deepEqual(graphModelRequirements(resolved).map(model => model.key), ['moonshine-small-ja', 'meeting-summary-lfm2']);
   assert.equal(executableGraph(resolved).nodes.some(node => node.type === 'TextSummaryLfm2'), false);
   const wrong = structuredClone(extracted); wrong.edges[0].from = ['second', 'out1'];
   assert.throws(() => resolveSubgraphs(wrong, [definition]), /Incompatible port types/);
@@ -387,7 +387,7 @@ test('ASR grouped final/ID and preview clear deliveries retain their correlation
     const worker = { terminated: false, postMessage(data) {
       queueMicrotask(() => {
         if (data.type === 'load') this.onmessage({ data: { type: 'ready' } });
-        if (data.type === 'vad-stop') this.onmessage({ data: { type: 'vad-stopped', session: data.session } });
+        if (data.type === 'stop') this.onmessage({ data: { type: 'stopped', session: data.session } });
       });
     }, terminate() { this.terminated = true; } };
     workers.push(worker); return worker;
@@ -435,13 +435,13 @@ test('Live/Web snapshots own separate ASR workers; disposing one leaves the othe
     }, terminate() { this.terminated = true; } };
     workers.push(worker); return worker;
   };
-  const live = buildGraph(resolvedEntryGraph(find(library, f.tab), library), { whisperWorkerFactory: workerFactory });
-  const web = buildGraph(webVoiceGraph(resolvedEntryGraph(find(library, f.mic), library)), { whisperWorkerFactory: workerFactory });
+  const live = buildGraph(resolvedEntryGraph(find(library, f.tab), library), { moonshineJapaneseWorkerFactory: workerFactory });
+  const web = buildGraph(webVoiceGraph(resolvedEntryGraph(find(library, f.mic), library)), { moonshineJapaneseWorkerFactory: workerFactory });
   const liveSpeech = [...live.speechNodes.values()][0], webSpeech = [...web.speechNodes.values()][0];
   await Promise.all([liveSpeech.load(), webSpeech.load()]);
-  assert.equal(workers.length, 4); assert.notEqual(liveSpeech, webSpeech);
+  assert.equal(workers.length, 2); assert.notEqual(liveSpeech, webSpeech);
   await live.pipeline.dispose();
-  assert.equal(workers.filter(worker => worker.terminated).length, 2);
+  assert.equal(workers.filter(worker => worker.terminated).length, 1);
   assert.ok(!webSpeech.disposed);
   await web.pipeline.dispose(); assert.ok(workers.every(worker => worker.terminated));
 });

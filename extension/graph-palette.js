@@ -5,8 +5,7 @@
 const categoryTypes = {
   'Sources / inputs': ['ChromeTabAudio', 'MicrophoneAudio', 'Button', 'Text', 'Number'],
   'AI Models / Speech Recognition': [
-    'SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn',
-    'SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn',
+    'SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa',
   ],
   'AI Models / Translation': [
     'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn',

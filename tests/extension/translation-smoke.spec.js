@@ -16,12 +16,8 @@ const reverse = direction === 'en-ja';
 test(`real extension ${direction}: native tab audio → ASR.final → committed OPUS-MT, offline repeat`, async ({}, testInfo) => {
   test.skip(process.env.EXTENSION_OPUS_SMOKE !== (reverse ? 'en-ja' : '1'), 'Opt-in real extension OPUS-MT smoke. Set EXTENSION_OPUS_SMOKE=1 (ja-en) or en-ja.');
   test.setTimeout(900000);
-  const specification = JSON.parse(await readFile('scripts/reazon-ja-en-assets.json', 'utf8'));
-  const fixture = reverse ? { name: 'Ordinary English (synthetic speech)', path: 'tests/fixtures/ordinary-english.wav', sha256: '21212faed6ae5f5958603d4d7cf60a423f1090fb6542d00e3a826ebe6235a768' }
-    : specification.fixtures.find(value => value.name === 'Japanese');
-  const wav = await readFile(reverse ? fixture.path : path.join('.cache/reazon-ja-en', fixture.path)).catch(error => {
-    throw new Error(`Real smoke fixture unavailable. Restore the committed English fixture or run python3 scripts/prepare-reazon-ja-en-fixtures.py for Japanese: ${error.message}`);
-  });
+  const fixture = JSON.parse(await readFile('tests/fixtures/moonshine-speech.json', 'utf8')).find(f => f.language === (reverse ? 'en' : 'ja'));
+  const wav = await readFile(fixture.path);
   expect(createHash('sha256').update(wav).digest('hex')).toBe(fixture.sha256);
   const profile = await mkdtemp(path.join(tmpdir(), 'extension-opus-real-'));
   const requests = [], errors = [], runs = [];

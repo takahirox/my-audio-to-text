@@ -3,18 +3,14 @@ import { test, expect } from './graph-fixture.js';
 // Validate the documents users actually reach, including provenance that used to
 // appear inline. A bare upstream license URL cannot supply these attributions.
 const notices = {
-  reazon: ['ReazonSpeech', 'epoch 35', 'Apache'],
-  silero: ['Silero Team', 'MIT', 'silero-vad.txt'],
-  whisper: ['OpenAI', 'ONNX conversion', 'whisper.txt'],
-  zipformer: ['csukuangfj', 'icefall', 'sherpa-onnx.txt'],
   'kokoro-japanese': ['Nagoya Institute of Technology', 'MMDAgent', 'CC BY 3.0'],
   'qwen3-tts': ['Qwen Team', 'Danyal Malik', 'speech decoder', 'model-LICENSE'],
   cosyvoice3: ['FunAudioLLM', 'Danyal Malik', 'Koizumi', '4446', 'CC BY 4.0', 'cosyvoice3-LICENSE'],
   'meeting-summary-lfm2': ['Liquid AI', '$10M', 'redistribution', '01b5a0a33d22253d5ee52b367d2375eeb113b7cd'],
   'meeting-summary-qwen35': ['Qwen Team', 'ONNX Community', 'ed446636739bf426e73c5a00714fd8e010d36c21', 'Apache License'],
   'if-condition': ['Moritz Laurer', 'Microsoft', 'MIT License'],
-  'parakeet-v3': ['NVIDIA', 'ysdede', 'istupakov', 'parakeet-v3-attribution.md', 'CC BY 4.0'],
-  'moonshine-medium-en': ['Useful Sensors', 'Moonshine AI', 'MIT', 'moonshine-third-party.txt', 'available-models/'],
+  'moonshine-small-ja': ['Moonshine', 'quantized_26_08_23', 'MIT'],
+  'moonshine-medium-en': ['Useful Sensors', 'Moonshine AI', 'MIT', 'moonshine-third-party.txt', 'available-models.md'],
   'opus-ja-en': ['Helsinki-NLP', 'ONNX Community', '05470cd69b62aa32e3ee64ccfd41279789ee4b1e', 'creativecommons.org/licenses/by/4.0/'],
   'opus-en-ja': ['Helsinki-NLP', 'Kadonox', '225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e', 'Apache License'],
   translategemma: ['Google', 'ONNX Community', 'ai.google.dev/gemma/terms', 'ai.google.dev/gemma/prohibited_use_policy', 'Redistributors'],
@@ -25,9 +21,9 @@ const notices = {
 test('every card has one collapsed Details with working attribution, license and source destinations', async ({ graphExtension: f }) => {
   const page = await f.context.newPage();
   await page.goto(f.url.replace('recorder.html', 'model-cache.html'));
-  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(17);
-  await expect(page.locator('.model-card details')).toHaveCount(17);
-  await expect(page.locator('.model-card summary')).toHaveText(Array(17).fill('Details'));
+  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(13);
+  await expect(page.locator('.model-card details')).toHaveCount(13);
+  await expect(page.locator('.model-card summary')).toHaveText(Array(13).fill('Details'));
   await expect(page.locator('.model-card details[open], details details')).toHaveCount(0);
   await expect(page.getByText('Attribution & notices', { exact: true })).toHaveCount(0);
   const checked = new Map();

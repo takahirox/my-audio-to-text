@@ -168,7 +168,7 @@ test('pair snapshots remain independent across same-ID changes; new accumulator 
 });
 
 test('importable ITEM graph matches the exact independently keyed ASR/translation fixture', () => {
-  const graph = JSON.parse(readFileSync(new URL('../docs/evidence/item-198.json', import.meta.url), 'utf8'));
+  const graph = JSON.parse(readFileSync(new URL('./fixtures/item-current.json', import.meta.url), 'utf8'));
   assert.deepEqual(assertGraph(graph), itemGraph()); assert.deepEqual(executableGraph(graph), itemGraph());
 });
 

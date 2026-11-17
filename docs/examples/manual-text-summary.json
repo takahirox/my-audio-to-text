@@ -12,7 +12,7 @@
     },
     {
       "id": "speech",
-      "type": "SpeechToTextReazonSpeech",
+      "type": "SpeechToTextMoonshineSmallJa",
       "settings": {},
       "position": {
         "x": 320,

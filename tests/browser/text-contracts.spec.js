@@ -12,7 +12,7 @@ test('ASR final TEXT → correction → translation fans out directly and drains
       const blob = URL.createObjectURL(new Blob([`
         self.onmessage=({data})=>{
           if(data.type==='load')postMessage({type:'ready',id:data.id});
-          if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});
+          if(data.type==='stop')postMessage({type:'stopped',session:data.session});
           if(data.type==='drain')postMessage({type:'drained',id:data.id});
           if(data.type==='translate')setTimeout(()=>postMessage({type:'result',id:data.id,texts:['Translated '+data.text]}),10);
         };`], { type: 'text/javascript' }));

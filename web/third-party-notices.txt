@@ -1,30 +1,4 @@
-sherpa-onnx 1.13.2 and ReazonSpeech ja-en Zipformer (epoch 35)
-  https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.2
-  Copyright (c) 2022-2026, the sherpa-onnx authors.
-  https://huggingface.co/reazon-research/reazonspeech-k2-v2-ja-en
-  Pinned mirror: https://huggingface.co/csukuangfj/reazonspeech-k2-v2-ja-en/tree/12b44671ff48b9aed622551d64e02fea9a2cf870
-  Runtime and model: Apache License 2.0.
-  License: ./licenses/sherpa-onnx.txt
-  Dependencies: https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.2/cmake
-
-Silero VAD
-  https://github.com/snakers4/silero-vad
-  Copyright (c) 2020-present Silero Team. MIT License.
-  Model: silero_vad.onnx downloaded on demand, byte-identical to the former
-  sherpa-onnx 1.13.2 preload (SHA-256 9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6).
-  Pinned CORS mirror: https://huggingface.co/mobilebytesensei/betterflow-silero-vad/tree/0ae41137f2cd00de5e8a286fe01bdd5e3644f2da
-  The distributed JS/WASM package contains no model preload data.
-  Browser wrapper from that same checksum-verified archive; scoped during staging
-  to avoid colliding with ASR's global configuration cleanup helpers.
-  License: ./licenses/silero-vad.txt
-
-The pinned WASM distribution includes ONNX Runtime and other upstream
-dependencies. Their respective licenses continue to apply. ONNX Runtime:
-https://github.com/microsoft/onnxruntime/blob/main/LICENSE
-
-This current development baseline makes no permanent production-backend decision.
-
-Text/model runtime (used by translation and Whisper Nodes)
+Text/model runtime (used by translation Nodes)
   Transformers.js 4.0.0-next.3, Hugging Face. Apache License 2.0.
   https://github.com/huggingface/transformers.js
   License: ./licenses/transformers.txt
@@ -82,60 +56,19 @@ Qwen3 0.6B transcript correction (optional; not included in extension graphs)
   versions/licenses as the translation runtime above. No remote inference.
   Setup and evaluation: docs/correction-node.md in the repository.
 
-Whisper tiny (multilingual, q8)
-  OpenAI Whisper, MIT License. Copyright (c) 2022 OpenAI.
-  https://github.com/openai/whisper
-  License: ./licenses/whisper.txt
-  ONNX conversion: https://huggingface.co/onnx-community/whisper-tiny/tree/ff4177021cc41f7db950912b73ea4fdf7d01d8e7
-  Base: https://huggingface.co/openai/whisper-tiny
-  Prepared checksum-pinned tokenizer/processor and q8 encoder/merged decoder
-  packaged locally for extension inference. No remote model fetches at session start.
-
-English streaming Zipformer 20M (2023-02-17, epoch 99)
-  Model and sherpa-onnx online runtime: Apache License 2.0.
-  Export: csukuangfj, derived from desh2608/icefall-asr-librispeech-pruned-transducer-stateless7-streaming-small.
-  https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/tree/d42f2d9f7ca24806fb667456a18a9f1b60f70d16
-  Runtime: sherpa-onnx v1.13.2 English online ASR SIMD WASM distribution.
-  https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.2/wasm/asr
-  License: ./licenses/sherpa-onnx.txt
-  Upstream model card retained in ./vendor/zipformer-en/model-README.md.
-  Preparation replaces the archive's larger ASR weights and preload table with
-  the pinned 20M int8 encoder/joiner and float decoder; runtime code is unchanged.
-  Pinned test_wavs/0.wav and 1.wav stay in the development cache only.
-  Upstream speech fixtures: English read speech distributed with this model;
-  the model card declares Apache 2.0. LibriSpeech corpus attribution:
-  Vassil Panayotov, Guoguo Chen, Daniel Povey, Sanjeev Khudanpur (ICASSP 2015),
-  derived from LibriVox recordings. Corpus license CC BY 4.0: https://www.openslr.org/12
-  https://creativecommons.org/licenses/by/4.0/
-  See docs/zipformer-node.md for pins, sizes, supported configuration and evidence.
-
-Optional extension Parakeet TDT 0.6B v3
-  NVIDIA Parakeet TDT 0.6B v3, CC BY 4.0.
-  https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
-  ONNX conversion: ysdede/parakeet-tdt-0.6b-v3-onnx at
-  f88260fa0777fe0868dda6df85d1a98f012a4a7a, based on istupakov's v3 conversion
-  at 8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce.
-  FP16 encoder (cast-fixed derivative), int8 decoder, JS mel preprocessing.
-  Full license: ./licenses/parakeet-v3-cc-by-4.0.txt
-  Conversion attribution retained: ./licenses/parakeet-v3-attribution.md
-  Retain NVIDIA and converter attribution, CC BY link, and identify modifications.
-  parakeet.js 1.4.4 (Yunus Seyhan Dede), MIT; pinned ORT Web 1.24.3, MIT.
-  Runtime licenses: ./vendor/optional-asr/parakeet.js-LICENSE and
-  ./licenses/optional-asr-onnxruntime.txt.
-  Local changes to parakeet.js: packaged ORT import/paths; sequential strict-GPU
-  session initialization. No model changes beyond the upstream conversion.
-
-Optional extension Moonshine Voice English Medium Streaming (245M)
+Moonshine Voice English Medium Streaming (245M) and Japanese Small Streaming (123M)
   Useful Sensors, Inc. / Moonshine AI; English streaming weights and runtime MIT.
-  Official dated quantized_26_07_30 checkpoint, pinned by file/chunk SHA-256.
-  @moonshine-ai/moonshine-wasm 0.1.5, source commit
-  234f60faa0eb388b01cdf7e60aca232af37aefda.
+  Official dated English quantized_26_07_30 and Japanese quantized_26_08_23
+  checkpoints, pinned by file/chunk SHA-256. Both streaming models are MIT.
+  Official moonshine-voice-wasm.tar.gz release v0.1.6, source commit
+  d8d8fa29d05ca67441a7719e70099f9f48917a93.
   https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30/
-  Source: https://moonshine-voice.readthedocs.io/en/latest/models/available-models/
+  https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/
+  Source: https://github.com/moonshine-ai/moonshine/blob/d8d8fa29d05ca67441a7719e70099f9f48917a93/docs/models/available-models.md
   License: ./licenses/moonshine.txt
   Bundled dependency notices and source availability (including unmodified
   MPL-covered Eigen): ./licenses/moonshine-third-party.txt
-  WASM binary unchanged. Generated JS adapts two Emscripten invoker factories
+  Official release WASM unchanged. Generated JS adapts two Emscripten invoker factories
   to ordinary closures for MV3 CSP; scripts/moonshine-csp.py records the changes.
   Neither model's weights are bundled by setup/build. Save graph prepares only
   saved-node requirements; inference is local/cache-only. Exact pins, download

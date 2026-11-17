@@ -18,7 +18,7 @@ async function assetsFixture(page, name, { array = false, corrupt = false } = {}
   return () => downloads;
 }
 
-for (const [name, manifest] of [['parakeet-v3', 'parakeetManifest'], ['moonshine-medium-en', 'moonshineManifest']]) {
+for (const [name, manifest] of [['moonshine-small-ja', 'moonshineJapaneseManifest'], ['moonshine-medium-en', 'moonshineManifest']]) {
   test(`${name}: web-origin loader downloads and validates pinned files without an extension`, async ({ page }) => {
     const downloads = await assetsFixture(page, name);
     await page.goto(prefix);
@@ -73,10 +73,10 @@ for (const [name, read] of [['qwen3-tts', 'qwen3TtsAssets'], ['cosyvoice3', 'cos
   });
 }
 test('corrupt web-origin assets fail integrity verification without becoming Ready', async ({ page }) => {
-  await assetsFixture(page, 'parakeet-v3', { corrupt: true }); await page.goto(prefix);
+  await assetsFixture(page, 'moonshine-small-ja', { corrupt: true }); await page.goto(prefix);
   const message = await page.evaluate(async () => {
     const assets = await import('./playground-model-assets.js');
-    try { await assets.optionalAsrFiles(await assets.parakeetManifest(), 'Fixture ASR'); }
+    try { await assets.optionalAsrFiles(await assets.moonshineJapaneseManifest(), 'Fixture ASR'); }
     catch (error) { return error.message; }
   });
   expect(message).toContain('Corrupt asset');

@@ -1,3 +1,4 @@
+import { moonshineWorkerFixture } from '../fixtures/moonshine-worker.js';
 import { settleAutoSave } from './ui-controls.js';
 import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { loadTranslationFixture } from './ui-controls.js';
@@ -45,11 +46,7 @@ const test = base.extend({
       }
       // Only ASR and model runtime are fixtures. Production Pipeline, scheduler,
       // OPUS Worker protocol, preparation, Worker cache access and UI are intact.
-      for (const role of ['sherpa', 'silero']) await writeFile(path.join(root, 'web', `${role}-worker.js`), `
-        self.onmessage=({data})=>{
-          if(data.type==='load')postMessage({type:'ready'});
-          if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});
-        };`);
+      for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, 'web', `${role}-worker.js`), moonshineWorkerFixture({}));
       const { mkdir } = await import('node:fs/promises');
       await mkdir(path.join(root, 'web/vendor/translation'), { recursive: true });
       await writeFile(path.join(root, 'web/vendor/translation/transformers.js'), `
@@ -70,7 +67,7 @@ const test = base.extend({
           translate.tokenizer=()=>({input_ids:{dims:[1,10]}});return translate;
         }`);
       context = await launch(profile); const id = await load(context, root);
-      for (const name of ['reazon', 'silero']) {
+      for (const name of ['moonshine-small-ja', 'moonshine-medium-en']) {
         const file = path.join(root, 'extension', `${name}-assets.json`), spec = JSON.parse(await readFile(file, 'utf8')), body = Buffer.alloc(16);
         await writeFile(path.join(root, 'extension', `${name}-fixture.bin`), body);
         spec.files = [{ path: 'fixture.bin', bytes: body.length, sha256Chunks: [createHash('sha256').update(body).digest('hex')], sourceURL: `chrome-extension://${id}/extension/${name}-fixture.bin` }];
@@ -93,7 +90,7 @@ const test = base.extend({
 async function openRecorder(f) {
   const page = await f.context.newPage(); await page.goto(`${f.url}?tab=42`);
   await page.evaluate(async () => {
-    const { SpeechToTextNode } = await import('../web/transcription-nodes.js');
+    const { OptionalAsrNode: SpeechToTextNode } = await import('../web/optional-asr-node.js');
     const start = SpeechToTextNode.prototype.start;
     SpeechToTextNode.prototype.start = function(context) { window.speech = this; return start.call(this, context); };
     const { ExtensionTabAudioNode } = await import('./tab-audio-node.js');

@@ -20,7 +20,7 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
   let context, page, server;
   try {
     await cp('dist/chrome-extension', root, { recursive: true });
-    for (const name of ['extension/session.js', 'extension/recorder.js', 'extension/graph-runtime.js', 'web/text-summary-worker.js', 'web/whisper-worker.js', 'web/opus-mt-worker.js', 'web/kokoro-worker.js', 'web/kokoro-english.js', 'web/tts-assets/phonemizer.js']) {
+    for (const name of ['extension/session.js', 'extension/recorder.js', 'extension/graph-runtime.js', 'web/text-summary-worker.js', 'web/moonshine-small-ja-worker.js', 'web/opus-mt-worker.js', 'web/kokoro-worker.js', 'web/kokoro-english.js', 'web/tts-assets/phonemizer.js']) {
       const bytes = await readFile(name);
       expect((await readFile(path.join(root, name))).equals(bytes), `Rebuild changed source: ${name}`).toBe(true);
       sourceSHA256[name] = createHash('sha256').update(bytes).digest('hex');
@@ -73,7 +73,7 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
     let graph;
     if (kind === 'asr-translation') {
       text.settings.value = 'ja';
-      graph = { version: GRAPH_VERSION, nodes: [text, graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextWhisper', 'asr'), graphNode('OpusMtJaEn', 'translation'), graphNode('Display', 'output')],
+      graph = { version: GRAPH_VERSION, nodes: [text, graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('OpusMtJaEn', 'translation'), graphNode('Display', 'output')],
         edges: [edge('text', 'value', 'asr', 'language'), edge('audio', 'audio', 'asr', 'audio'), edge('asr', 'final', 'translation', 'text'), edge('translation', 'text', 'output', 'input1')] };
     } else {
       const model = graphNode(kind === 'held-summary' ? 'TextSummaryLfm2' : 'Kokoro', 'model');
@@ -105,7 +105,6 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
     expect(prepared.workers.every(w => w.messages.length === 1 && w.messages[0].type === 'load')).toBe(true);
     expect(prepared.replies.filter(e => e.type === 'ready')).toHaveLength(prepared.workers.length);
     if (kind === 'asr-translation') {
-      expect(prepared.workers.find(w => w.url.endsWith('/whisper-worker.js')).messages[0].language).toBe('ja');
       // Preserve the real audio/VAD/ASR path, substituting only the tab source.
       await page.evaluate(async () => {
         const { ExtensionTabAudioNode } = await import('./tab-audio-node.js');
@@ -119,9 +118,9 @@ for (const kind of cases) test(`real Live preparation: ${kind}`, async ({}, info
       await expect(page.locator('#session-state')).toHaveAttribute('data-state', 'running');
       const count = await page.evaluate(() => graphWorkers.length);
       if (kind === 'asr-translation') {
-        const wav = await readFile('.cache/reazon-ja-en/test_wavs/test_ja_1.wav');
-        const fixtures = JSON.parse(await readFile('scripts/reazon-ja-en-assets.json', 'utf8')).fixtures;
-        expect(createHash('sha256').update(wav).digest('hex')).toBe(fixtures.find(f => f.path === 'test_wavs/test_ja_1.wav').sha256);
+        const wav = await readFile('tests/fixtures/moonshine-japanese.wav');
+        const fixtures = JSON.parse(await readFile('tests/fixtures/moonshine-speech.json', 'utf8'));
+        expect(createHash('sha256').update(wav).digest('hex')).toBe(fixtures.find(f => f.language === 'ja').sha256);
         let sampleRate, pcm;
         for (let offset = 12; offset + 8 <= wav.length;) {
           const size = wav.readUInt32LE(offset + 4), tag = wav.toString('ascii', offset, offset + 4);

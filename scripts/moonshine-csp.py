@@ -1,6 +1,6 @@
 """Replace the two Emscripten dynamic invoker factories with equivalent closures.
 
-The upstream 0.1.5 binary is unchanged. MV3 forbids the generated JS's new
+The upstream 0.1.6 binary is unchanged. MV3 forbids the generated JS's new
 Function even with wasm-unsafe-eval. Fail closed on upstream source changes.
 """
 import re

@@ -3,8 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT, NUMBER } from '../web/port-contracts.js';
-import { SpeechToTextNode } from '../web/transcription-nodes.js';
-import { SpeechToTextWhisperNode } from '../web/whisper-node.js';
+import { SpeechToTextMoonshineSmallJaNode as SpeechToTextNode } from '../web/moonshine-small-ja-node.js';
 import { TextAccumulatorNode, TextFormatterNode } from '../web/text-nodes.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { NODE_TYPES, GRAPH_VERSION, graphNode, edge, validateGraph, saveGraph, readGraph, defaultGraph } from '../extension/graph.js';
@@ -28,31 +27,6 @@ for (const translator of translators) test(`${translator}: every TEXT producer c
   }
 });
 
-test('Startup settings accept every contract-compatible edge in incomplete drafts', () => {
-  for (const [type, definition] of Object.entries(NODE_TYPES)) for (const [port, contract] of Object.entries(definition.outputs)) {
-    for (const [target, inputs] of [['SpeechToTextWhisper', ['language']], ['SpeechToTextReazonSpeech', ['maxDuration']]]) {
-      for (const input of inputs) if (NODE_TYPES[target].inputs[input] === contract) {
-        const graph = { version: GRAPH_VERSION, nodes: [graphNode(type,'producer'),graphNode(target,'consumer')], edges:[edge('producer',port,'consumer',input)] };
-        assert.deepEqual(validateGraph((graph)), [], `${type}.${port} → ${target}.${input}`);
-      }
-    }
-  }
-});
-
-function workers() {
-  const requests = [], owned = [];
-  const factory = () => {
-    const w = { postMessage(m) {
-      if (m.type === 'translate') requests.push({ ...m, w });
-      if (['load', 'drain'].includes(m.type)) queueMicrotask(() => w.onmessage?.({data:{id:m.id,type:m.type === 'load' ? 'ready' : 'drained'}}));
-      if (m.type === 'vad-stop') queueMicrotask(() => w.onmessage?.({data:{type:'vad-stopped',session:m.session}}));
-    }, terminate() { this.terminated = true; } };
-    owned.push(w); return w;
-  };
-  const complete = i => { const r = requests[i]; r.w.onmessage?.({data:{id:r.id,type:'result',texts:[`translated:${r.text}`]}}); };
-  return { factory, requests, complete, owned };
-}
-
 for (const translator of translators) test(`${translator}: direct ASR previews coalesce, finals stay FIFO including repeated equal text`, async () => {
   const f = workers(), displays = {};
   const graph = defaultGraph(); graph.nodes.push(graphNode(translator,'translator'), graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
@@ -71,42 +45,6 @@ for (const translator of translators) test(`${translator}: direct ASR previews c
     assert.equal(displays.translated,'translated:same\ntranslated:same'); assert.deepEqual(built.pipeline.errors,[]);
   } finally { await built.pipeline.dispose(); }
   assert.ok(f.owned.every(w=>w.terminated));
-});
-
-for (const kind of ['number','language']) test(`${kind}: arbitrary startup producer, bounded wait, consumer validation and late value rejection`, async () => {
-  const f=workers(), speech=kind==='number'?new SpeechToTextNode({workerFactory:f.factory}):new SpeechToTextWhisperNode({workerFactory:f.factory});
-  const port=kind==='number'?'maxDuration':'language'; let config,audio;
-  const pipeline=new Pipeline({nodes:{
-    settings:{outputs:{arbitrary:kind==='number'?NUMBER:TEXT},start(c){config=c;}},
-    audio:{outputs:{audio:speech.inputs.audio},start(c){audio=c;}},speech,
-    sink:{inputs:{value:TEXT},receive(){}},
-  },connections:[edge('settings','arbitrary','speech',port),edge('audio','audio','speech','audio'),edge('speech','final','sink','value')]});
-  await pipeline.start(); assert.equal(f.owned.length,0);
-  audio.emit('audio',new Float32Array(37)); await tick(); assert.equal(speech.pendingSamples,37);
-  config.emit('arbitrary',kind==='number'?2.5:'ja'); await tick();
-  assert.equal(f.owned.length,2); assert.equal(speech.core.state,'running'); assert.equal(speech.pendingSamples,0);
-  if(kind==='number')assert.equal(speech.core.simulation.maxSamples,40000); else assert.equal(speech.core.language,'ja');
-  config.emit('arbitrary',kind==='number'?3:'en'); await tick();
-  assert.match(pipeline.errors[0].message,/before .*startup|before model loading/); await pipeline.dispose();
-});
-
-for (const kind of ['number','language']) for (const finish of ['stop','overload']) test(`${kind}: missing startup value ${finish} fails visibly without model loading or default fallback`, async () => {
-  const f=workers(), speech=kind==='number'?new SpeechToTextNode({workerFactory:f.factory}):new SpeechToTextWhisperNode({workerFactory:f.factory});
-  const port=kind==='number'?'maxDuration':'language';
-  const c={signal:new AbortController().signal,connectedInputs:[port],fail(){}};
-  speech.start(c); assert.equal(f.owned.length,0);
-  if(finish==='stop')assert.throws(()=>speech.stop(),/unavailable/);
-  else assert.throws(()=>speech.receive('audio',new Float32Array(480001)),/unavailable/);
-  assert.equal(f.owned.length,0); speech.dispose();
-});
-
-test('an inactive configured producer never silently selects an ASR default', async () => {
-  const graph=defaultGraph(); graph.nodes.push(graphNode('TextFormatter','unready'),graphNode('SpeechToTextWhisper','unready-asr'));
-  graph.nodes[1].type='SpeechToTextWhisper'; graph.edges=graph.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
-  graph.edges.push(edge('unready-asr','final','unready','input1'),edge('unready','text','speech','language'));
-  const f=workers(), built=buildGraph((graph),{whisperWorkerFactory:f.factory,sourceFactory:()=>({start(){},stop(){}})});
-  await built.pipeline.start(); assert.equal(f.owned.length,0);
-  await assert.rejects(built.pipeline.stop(),/unavailable/); await built.pipeline.dispose();
 });
 
 test('Cancel retains committed formatter/fan-out snapshots while rejecting queued and late results', async () => {
@@ -167,19 +105,23 @@ test('Committed translator text is an ordinary TEXT producer for another transla
   await built.pipeline.stop();assert.deepEqual(built.pipeline.errors,[]);await built.pipeline.dispose();
 });
 
-test('session retains inactive configuration intent, shows waiting and loads no default model', async () => {
-  const {TabSession}=await import('../extension/session.js');const f=workers(),graph=defaultGraph();
-  graph.nodes[1].type='SpeechToTextWhisper';graph.edges=graph.edges.filter(e=>!['provisional','provisionalId'].includes(e.from[1]));
-  graph.nodes.push(graphNode('TextFormatter','unready'),graphNode('SpeechToTextWhisper','unready-asr'));
-  graph.edges.push(edge('unready-asr','final','unready','input1'),edge('unready','text','speech','language'));
-  const session=new TabSession(()=>{},{graph,whisperWorkerFactory:f.factory,sourceFactory:()=>({start(){},stop(){}})});
-  await session.start(42);assert.equal(f.owned.length,0);assert.match(session.view.signal,/speech: Waiting for startup language/);
-  await session.stop();assert.match(session.view.error,/language unavailable/);await session.cancel();
-});
-
 class TextSink {
   inputs = { input: TEXT }; outputs = {};
   constructor(callback) { this.callback = callback; }
   start() { this.callback(''); }
   receive(_, text, context) { if (!context.signal.aborted) this.callback(text); }
+}
+
+function workers() {
+  const requests = [], owned = [];
+  const factory = () => {
+    const w = { postMessage(m) {
+      if (m.type === 'translate') requests.push({ ...m, w });
+      if (['load', 'drain'].includes(m.type)) queueMicrotask(() => w.onmessage?.({data:{id:m.id,type:m.type === 'load' ? 'ready' : 'drained'}}));
+      if (m.type === 'stop') queueMicrotask(() => w.onmessage?.({data:{type:'stopped',session:m.session}}));
+    }, terminate() { this.terminated = true; } };
+    owned.push(w); return w;
+  };
+  const complete = i => { const r = requests[i]; r.w.onmessage?.({data:{id:r.id,type:'result',texts:[`translated:${r.text}`]}}); };
+  return { factory, requests, complete, owned };
 }

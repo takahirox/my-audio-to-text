@@ -1,9 +1,9 @@
+import { SpeechToTextMoonshineSmallJaNode as SpeechToTextNode } from '../web/moonshine-small-ja-node.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { BrowserTab, Microphone, Resampler, joinAudio } from '../web/audio.js';
-import { LocalAsrCore } from '../web/local-asr-core.js';
 import { CapturedTabSource } from '../extension/tab-capture-source.js';
 import { TabCaptureCoordinator } from '../extension/tab-capture-coordinator.js';
 // Native capture tests exercise the offscreen source; subscriptions have their
@@ -18,7 +18,7 @@ class ExtensionTab extends CapturedTabSource {
 }
 import { ExtensionTabAudioNode } from '../extension/tab-audio-node.js';
 import { Pipeline } from '../web/pipeline.js';
-import { createTabTranscriptionPipeline, MicrophoneAudioNode, SpeechToTextNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
+import { BrowserTabAudioNode, MicrophoneAudioNode, TranscriptOutputNode } from '../web/transcription-nodes.js';
 
 const deferred = () => {
   let resolve, reject;
@@ -177,16 +177,14 @@ for (const kind of ['tab', 'microphone', 'extension']) for (const rate of [16000
             const data = structuredClone(message, { transfer });
             queueMicrotask(() => {
               if (data.type === 'load') this.onmessage({ data: { type: 'ready' } });
-              if (data.type === 'vad-audio') {
+              if (data.type === 'audio') {
                 pcm.push(data.audio);
-                this.onmessage({ data: { type: 'vad', session: data.session,
-                  frames: [{ audio: data.audio, speaking: true }] } });
+                this.onmessage({ data: { type: 'partial', session: data.session, id: 0, text: 'provisional' } });
+                this.onmessage({ data: { type: 'consumed', session: data.session, sequence: data.sequence } });
               }
-              if (data.type === 'vad-stop') this.onmessage({ data: { type: 'vad-stopped', session: data.session } });
-              if (data.type === 'decode') {
-                this.onmessage({ data: { type: data.final ? 'final' : 'partial', session: data.session,
-                  id: data.id, text: data.final ? 'committed' : 'provisional' } });
-                this.onmessage({ data: { type: 'decoded', session: data.session } });
+              if (data.type === 'stop') {
+                this.onmessage({ data: { type: 'final', session: data.session, id: 0, text: 'committed' } });
+                this.onmessage({ data: { type: 'stopped', session: data.session } });
               }
             });
           },
@@ -196,15 +194,14 @@ for (const kind of ['tab', 'microphone', 'extension']) for (const rate of [16000
       },
     };
     let flow;
-    if (kind === 'tab') flow = createTabTranscriptionPipeline(options);
-    else {
+    {
       if (kind === 'extension') {
         Object.defineProperty(globalThis, 'chrome', { configurable: true, value: { tabCapture: {
           getMediaStreamId: async options => { assert.deepEqual(options, { targetTabId: 42 }); return 'id'; },
         } } });
         t.after(() => delete globalThis.chrome);
       }
-      const source = kind === 'extension' ? new ExtensionTabAudioNode(42, { sourceFactory: (...args) => new ExtensionTab(...args) }) : new MicrophoneAudioNode();
+      const source = kind === 'tab' ? new BrowserTabAudioNode() : kind === 'extension' ? new ExtensionTabAudioNode(42, { sourceFactory: (...args) => new ExtensionTab(...args) }) : new MicrophoneAudioNode();
       const speech = new SpeechToTextNode(options), transcript = new TranscriptOutputNode(options.onTranscript);
       flow = { source, speech, transcript, pipeline: new Pipeline({ nodes: { source, speech, transcript }, connections: [
         { from: ['source', 'audio'], to: ['speech', 'audio'] },
@@ -234,65 +231,6 @@ for (const kind of ['tab', 'microphone', 'extension']) for (const rate of [16000
     assert.ok(b.tracks.every(track => track.stops === 1));
     assert.equal(b.contexts[0].state, 'closed');
     await flow.pipeline.dispose(); assert.ok(workers.every(worker => worker.terminated));
-  });
-}
-
-for (const rate of [16000, 44100, 48000]) {
-  test(`tab stereo PCM at ${rate} Hz produces provisional/final events and flushes every tail sample`, async t => {
-    const b = browser(t, { rate }), events = [], messages = [], workers = [];
-    const core = new LocalAsrCore(event => events.push(event), { workerFactory() {
-      const worker = {
-        postMessage(message, transfer = []) { messages.push({ worker, ...structuredClone(message, { transfer }) }); },
-        terminate() {}, reply(data) { this.onmessage({ data }); },
-      };
-      workers.push(worker); return worker;
-    } });
-    core.load(); const [asr, vad] = workers;
-    asr.reply({ type: 'ready' }); vad.reply({ type: 'ready' }); core.start();
-    let classified = 0;
-    const classify = () => {
-      const inputs = messages.filter(m => m.type === 'vad-audio');
-      for (const message of inputs.slice(classified)) {
-        vad.reply({ type: 'vad', session: message.session, frames: [{ audio: message.audio, speaking: true }] });
-      }
-      classified = inputs.length;
-    };
-    const source = new BrowserTab(pcm => { core.push(pcm); classify(); });
-    await source.start();
-    assert.equal(b.requests[0].api, 'getDisplayMedia');
-    assert.equal(b.requests[0].options.audio, true);
-    assert.deepEqual(b.contexts[0].stream.tracks, [b.tracks[0]]);
-    assert.equal(source.gain.gain.value, 0);
-    const length = rate + 1;
-    for (let offset = 0; offset < length; offset += 128) {
-      const count = Math.min(128, length - offset);
-      source.node.processor.process([[new Float32Array(count).fill(0.02), new Float32Array(count).fill(0.08)]]);
-    }
-    const reply = message => {
-      asr.reply({ type: message.final ? 'final' : 'partial', text: 'controlled transcript', id: message.id, session: message.session });
-      asr.reply({ type: 'decoded', session: message.session });
-    };
-    let decoded = 0;
-    while (messages.filter(m => m.type === 'decode').length > decoded) reply(messages.filter(m => m.type === 'decode')[decoded++]);
-    assert.ok(events.some(e => e.type === 'partial'));
-    await source.stop();
-    const actual = joinAudio(messages.filter(m => m.type === 'vad-audio').map(m => m.audio));
-    assert.ok(Math.abs(actual.length - length * 16000 / rate) <= 1);
-    assert.ok(actual.every(sample => Math.abs(sample - 0.05) < 1e-6), 'stereo channels must be averaged');
-    const resampler = new Resampler(rate);
-    const expected = joinAudio([resampler.push(new Float32Array(length).fill(0.05)), resampler.flush()]);
-    assert.equal(actual.length, expected.length);
-    assert.ok(actual.every((sample, i) => Math.abs(sample - expected[i]) < 1e-6));
-    assert.equal(resampler.flush().length, 0);
-    core.stop(); vad.reply({ type: 'vad-stopped', session: core.session });
-    while (messages.filter(m => m.type === 'decode').length > decoded) reply(messages.filter(m => m.type === 'decode')[decoded++]);
-    const final = messages.find(m => m.type === 'decode' && m.final);
-    assert.deepEqual(final.audio, actual);
-    assert.equal(events.filter(e => e.type === 'final').length, 1);
-    assert.equal(events.filter(e => e.type === 'stopped').length, 1);
-    assert.ok(b.tracks.every(track => track.stops === 1 && track.onended === null));
-    assert.equal(b.contexts[0].state, 'closed');
-    core.release();
   });
 }
 

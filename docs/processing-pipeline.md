@@ -12,26 +12,11 @@ See the [README](../README.md#current-implemented-capabilities) for current stat
 
 ## Implemented foundation
 
-The first concrete pipeline captures microphone, browser-tab or Chrome-extension
-tab audio, normalizes it to mono 16 kHz PCM, passes it to the Local ASR Core and
-displays provisional/final transcripts. The core currently uses ReazonSpeech
-ja-en with sherpa-onnx, Silero VAD and hayamimi-inspired simulated streaming.
-ReazonSpeech is an offline recognizer repeatedly decoding bounded snapshots;
-this is not native streaming recognition.
-
-The [Local ASR Core](local-asr-core.md) separates recognition from capture,
-resampling and UI. The [Node Playground speech test page](node-playground.md)
-reuses this capability through microphone/tab source nodes, a speech-to-text
-node and a transcript sink connected by named ports. The Extension can run
-several such paths concurrently. The
-[Chrome extension](chrome-extension.md) uses the
-same runtime and speech node with its own tab source and UI. OPUS-MT and
-TranslateGemma provide separate local Japanese → English text nodes and test
-pages. The extension implements ASR-to-translation graph integration with generic
-DOM-only Live sinks and optional bounded text formatting. The extension also implements
-two [bounded incremental text-summary processors](text-summary-nodes.md)
-with recorded accuracy limitations. Topic processing, persistent history and
-personalized ASR remain future capabilities.
+Two language-specific native streaming Moonshine recognizers consume mono 16 kHz
+PCM. `OptionalAsrCore` bounds Worker transport while the shared Moonshine engine
+emits real provisional and final transcript events. Capture/resampling remains
+outside inference. Extension graphs compose tab or microphone audio; standalone
+model pages decode and replay short audio files.
 
 ## Node and port concepts
 
@@ -106,7 +91,7 @@ Committed TEXT can also feed the extension's text-summary Nodes directly;
 their complete summary snapshots feed Display.input1. History
 storage, article inputs and broader analysis connections remain future examples.
 In particular,
-`.provisional` is the SpeechToTextNode port for the existing core's `partial`
+`.provisional` is the Moonshine Node port for the existing core's `partial`
 events. Provisional replacements and committed events may feed different
 consumers from the same speech-to-text unit.
 
@@ -161,3 +146,6 @@ TextFormatter composes literal templates, TextAccumulator retains committed TEXT
 and keyed pair history belongs to KeyedPairedTextAccumulator. Live follows graph
 order and supports copy and independent scroll position. Unsupported saved Nodes
 and ports require an explicit Reset or current graph Import and wait for Auto Save.
+
+
+Speech recognition uses only language-specific [Moonshine streaming Nodes](optional-asr-nodes.md). The new default graph is Japanese Small; English examples select English Medium explicitly.

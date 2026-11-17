@@ -1,3 +1,5 @@
+import { writeMoonshineAssetFixture } from './moonshine-asset-fixture.js';
+import { moonshineWorkerFixture } from '../fixtures/moonshine-worker.js';
 import { expectPreparedIdle } from './live-lifecycle.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -34,23 +36,18 @@ const test = base.extend({
     let context;
     try {
       await cp(path.resolve('dist/chrome-extension'), root, { recursive: true, filter: source => !source.includes(`${path.sep}vendor`) });
-      for (const role of ['sherpa', 'silero']) await writeFile(path.join(root, `web/${role}-worker.js`), `
-        self.onmessage=({data})=>{
-          if(data.type==='load')postMessage({type:'ready'});
-          if(data.type==='vad-audio')postMessage({type:'vad',session:data.session,frames:[{audio:data.audio,speaking:data.audio.some(x=>Math.abs(x)>.001)}]});
-          if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});
-          if(data.type==='decode'){postMessage({type:data.final?'final':'partial',text:data.final?'confirmed fixture':'pending fixture',session:data.session,id:data.id});postMessage({type:'decoded',session:data.session});}
-        };`);
+      for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture({}));
       for (const name of ['opus-mt-worker.js', 'opus-mt-en-ja-worker.js']) await writeFile(path.join(root, 'web', name), `self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready',id:data.id});if(data.type==='translate')postMessage({type:'result',id:data.id,texts:['translated '+data.text]});if(data.type==='drain')postMessage({type:'drained',id:data.id});};`);
       context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: false,
         ignoreDefaultArgs: ['--disable-extensions', '--mute-audio'], args: ['--enable-unsafe-extension-debugging', '--use-fake-device-for-media-stream'] });
       const cdp = await context.browser().newBrowserCDPSession(), { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
+      await writeMoonshineAssetFixture(root, `chrome-extension://${id}/extension/`);
       const page = await context.newPage(); await page.goto(`chrome-extension://${id}/extension/recorder.html`);
       await page.evaluate(async () => {
         const { TabSession } = await import('./session.js'), start = TabSession.prototype.start;
         TabSession.prototype.start = function(...args) { window.targetSession = this; return start.apply(this, args); };
         const { defaultGraph } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js'); await saveLiveGraphData(localStorage, defaultGraph({ enabled: false }));
-        const { SpeechToTextNode } = await import('../web/transcription-nodes.js'), original = SpeechToTextNode.prototype.start;
+        const { OptionalAsrNode: SpeechToTextNode } = await import('../web/optional-asr-node.js'), original = SpeechToTextNode.prototype.start;
         SpeechToTextNode.prototype.start = function(context) { window.activeSpeech = this; return original.call(this, context); };
         const { ExtensionTabAudioNode } = await import('./tab-audio-node.js'), capture = ExtensionTabAudioNode.prototype.start;
         ExtensionTabAudioNode.prototype.start = function(context) {
@@ -343,8 +340,8 @@ test('native tab capture and permitted microphone run together; tab navigation d
   await t.page.evaluate(async () => {
     const { defaultGraph, graphNode, edge, GRAPH_KEY } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
-    graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextReazonSpeech','local-asr'),graphNode('Display','local'),
-      graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextReazonSpeech','copy-asr'),graphNode('Display','copy-display'),graphNode('TextAccumulator','local-accumulator'),graphNode('TextAccumulator','copy-accumulator'));
+    graph.nodes.push(graphNode('MicrophoneAudio','mic'),graphNode('SpeechToTextMoonshineSmallJa','local-asr'),graphNode('Display','local'),
+      graphNode('ChromeTabAudio','tab-copy'),graphNode('SpeechToTextMoonshineSmallJa','copy-asr'),graphNode('Display','copy-display'),graphNode('TextAccumulator','local-accumulator'),graphNode('TextAccumulator','copy-accumulator'));
     graph.edges.push(edge('mic','audio','local-asr','audio'),edge('local-asr','final','local-accumulator','append'),edge('local-accumulator','text','local','input1'),
       edge('tab-copy','audio','copy-asr','audio'),edge('copy-asr','final','copy-accumulator','append'),edge('copy-accumulator','text','copy-display','input1'));
     await saveLiveGraphData(localStorage, (graph));window.dispatchEvent(new StorageEvent('storage',{key:GRAPH_KEY}));

@@ -18,7 +18,7 @@ serveTranslationWorker(async (progress, { cacheOnly = false } = {}) => {
     });
   } catch (error) { throw modelLoadError(error); }
   return async text => {
-    // ReazonSpeech emits uppercase English. This case-sensitive Marian
+    // Speech input may contain uppercase English. This case-sensitive Marian
     // tokenizer/model loses ordinary words in that form. Normalize only fully
     // uppercase Latin input for inference; the source transcript stays intact.
     const input = /[A-Z]/.test(text) && !/[a-z]/.test(text)
