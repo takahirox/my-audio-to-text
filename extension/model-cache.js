@@ -6,6 +6,7 @@ import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
 import { ifConditionManifest } from './if-condition-cache.js';
 import { translateGemmaManifest } from './translategemma-cache.js';
+import { plamoManifest } from './plamo-cache.js';
 import { ttsManifest } from './tts-cache.js';
 import { qwen3TtsManifest } from './qwen3-tts-cache.js';
 import { cosyVoice3Manifest } from './cosyvoice3-cache.js';
@@ -30,6 +31,7 @@ const definitions = [
   { id: 'moonshine-small-ja', linkLabel: 'License & source', title: 'Moonshine Small Streaming Japanese (123M)', size: '122 MB download', requirements: 'Allow 300 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineJapaneseManifest, url: '../web/third-party-notices.txt' },
   { id: 'opus-ja-en', linkLabel: 'License & source', title: 'OPUS-MT · Japanese → English', size: 'About 239 MB', manifest: opusMtManifest, url: '../web/third-party-notices.txt' },
   { id: 'opus-en-ja', linkLabel: 'License & source', title: 'OPUS-MT · English → Japanese', size: 'About 253 MB', manifest: englishToJapaneseOpusMtManifest, url: '../web/third-party-notices.txt' },
+  { id: 'plamo-3-translate-2b', title: 'PLaMo 3 Translate 2B · Experimental · Japanese ↔ English', size: '1.81 GB download shared by both directions', requirements: 'Desktop Chromium CPU WASM, single thread. Allow 5 GB free storage and 6 GB free RAM per Node (estimate). Initial load and inference can be slow. Built with PLaMo.', manifest: plamoManifest, linkLabel: 'PLaMo Community License (full terms)', url: '../web/licenses/plamo-community-en.txt', links: [{ label: '日本語の利用規約', url: '../web/licenses/plamo-community-ja.txt' }, { label: 'Runtime notices', url: '../web/licenses/plamo-runtime.txt' }] },
   { id: 'translategemma', title: 'TranslateGemma 4B · English ↔ Japanese', size: '3.112 GB download shared by both directions', requirements: 'Allow 7 GB free storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback.', manifest: translateGemmaManifest, linkLabel: 'License / terms', url: '../web/licenses/gemma-notices.txt' },
   { id: 'supertonic3', linkLabel: 'License & source', type: 'Supertonic3', title: 'Supertonic 3', size: 'About 399 MB', voices: ['F1', 'M1'], url: '../web/licenses/tts-notices.txt' },
   { id: 'kokoro', linkLabel: 'License & source', type: 'Kokoro', title: 'Kokoro 82M', size: 'About 93 MB', requirements: 'Japanese jf_alpha also needs the separate Kokoro Japanese frontend voice entry.', voices: ['jf_alpha', 'af_heart'], url: '../web/licenses/tts-notices.txt', links: [{ label: 'eSpeak NG source / build bundle (GPL-3.0-or-later)', url: '../web/tts-assets/phonemizer-source.tar.gz' }] },
@@ -75,6 +77,10 @@ class ModelCard {
     }
     details.append(license);
     // Keep the Gemma usage warning visible before the download controls.
+    if (definition.id === 'plamo-3-translate-2b') {
+      const notice = el('p', 'Built with PLaMo. PLaMo Community License applies. Commercial use requires prior PFN registration and annual revenue/sales ≤1 billion yen; otherwise a separate PFN license is required. Read the full terms before download or use.');
+      notice.className = 'model-license'; root.append(notice);
+    }
     if (definition.id === 'translategemma') {
       const notice = el('p', 'Google Gemma use restrictions apply. Read the '); notice.className = 'model-license';
       const terms = el('a', 'Gemma Terms of Use'); terms.href = 'https://ai.google.dev/gemma/terms';

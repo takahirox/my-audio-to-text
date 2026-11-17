@@ -26,9 +26,9 @@ jobs:
       - run: npm run prepare:playground-assets
       - run: npx playwright install --with-deps chromium webkit
       - name: Model node and asset unit tests
-        run: node --test tests/playground-models.test.js tests/transcription-nodes.test.js tests/optional-asr.test.js tests/text-summary.test.js tests/if-condition.test.js tests/tts-nodes.test.js tests/streaming-tts.test.js tests/cosyvoice3.test.js tests/translation-nodes.test.js tests/model-asset-cache.test.js
+        run: node --test tests/playground-models.test.js tests/transcription-nodes.test.js tests/optional-asr.test.js tests/text-summary.test.js tests/if-condition.test.js tests/tts-nodes.test.js tests/streaming-tts.test.js tests/cosyvoice3.test.js tests/translation-nodes.test.js tests/model-asset-cache.test.js tests/plamo.test.js
       - name: Browser tests with fixtures (no weights)
         run: npm run test:playground -- --workers=2
       - run: npm run build:extension
       - name: Shared production nodes in the packaged extension (no weights)
-        run: npx playwright test --config playwright.extension.config.js tests/extension/graph-optional-asr.spec.js tests/extension/graph-text-summary.spec.js tests/extension/graph-if-condition.spec.js tests/extension/streaming-tts.spec.js
+        run: npx playwright test --config playwright.extension.config.js tests/extension/graph-optional-asr.spec.js tests/extension/graph-text-summary.spec.js tests/extension/graph-if-condition.spec.js tests/extension/streaming-tts.spec.js tests/extension/plamo.spec.js

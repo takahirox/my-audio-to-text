@@ -10,7 +10,7 @@ test('every built-in has an explicit Add Node category; new types must be classi
     'AI Models / Speech Recognition': [
       'SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa',
     ],
-    'AI Models / Translation': ['OpusMtEnJa', 'OpusMtJaEn', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn'],
+    'AI Models / Translation': ['OpusMtEnJa', 'OpusMtJaEn', 'Plamo3Translate2B', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn'],
     'AI Models / Text': ['IfCondition', 'TextSummaryLfm2', 'TextSummaryQwen35'],
     'AI Models / Speech Synthesis': ['CosyVoice3Streaming', 'Kokoro', 'Qwen3TtsStreaming', 'Supertonic3'],
     'Processors': ['Hold', 'KeyedPairedTextAccumulator', 'KeyedTextCoalesce', 'KeyedTextPair', 'TextAccumulator', 'TextFormatter', 'TextSlidingWindow', 'TextWindow'],

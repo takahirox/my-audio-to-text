@@ -1,5 +1,10 @@
 # Browser-local translation nodes (#65)
 
+Issue #385 adds one [experimental PLaMo 3 Translate 2B Node](plamo-translation.md)
+with optional TEXT language ports and a separate packaged GGUF/WASM runtime.
+It uses the existing translation scheduler/output families and does not change
+the fixed-direction OPUS-MT or TranslateGemma Nodes documented below.
+
 Checkpoint investigation preceded implementation. Each production processor has
 a fixed direction and plain string input/output. The original OPUS-MT and
 TranslateGemma nodes remain **Japanese → English**; #71 adds the independent

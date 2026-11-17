@@ -11,7 +11,7 @@ def main():
     shutil.rmtree(ROOT / 'web/vendor', ignore_errors=True)
     for name in ['assets', 'translation-assets', 'tts-assets', 'correction-assets',
                  'optional-asr-assets',
-                 'text-summary-assets']:
+                 'text-summary-assets', 'plamo-assets']:
         runpy.run_path(str(ROOT / 'scripts' / f'prepare-{name}.py'), run_name='__main__')
 
 

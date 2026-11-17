@@ -107,3 +107,17 @@ In-page Web voice control: Google Material Symbols Outlined
   mic, stop, error, progress_activity: 20dp, weight 400, fill 0, grade 0.
   Paths embedded as inline SVG with currentColor and accessibility attributes.
   Packaged originals, source details and license: ../extension/icons/material-symbols/
+
+Experimental PLaMo 3 Translate 2B (Issue #385) — Built with PLaMo
+  Preferred Networks, Inc. / NICT. Official Q4_K_M GGUF, including tokenizer:
+  https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF/tree/4f672106b847200bfdc0f6af6c321cd94eba1aed
+  Full PLaMo Community License: ./licenses/plamo-community-en.txt
+  Japanese terms: ./licenses/plamo-community-ja.txt
+  Commercial use requires prior PFN registration and annual revenue/sales at
+  most 1 billion yen; otherwise a separate PFN commercial license is required.
+  Redistribution, attribution, use and output conditions still apply. No model
+  weights are redistributed by this extension. The official PFML3 template is
+  retained in plamo-chat-template.jinja; direct PFML3 uses explicit targets.
+  Wllama 3.13.0 (Xuan Son Nguyen) and llama.cpp (ggml authors), MIT.
+  Full runtime licenses, source revisions and local static Worker modification:
+  ./licenses/plamo-runtime.txt. No remote executable code or inference service.

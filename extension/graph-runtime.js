@@ -2,7 +2,8 @@ import { ButtonNode } from '../web/button-node.js';
 import { HoldNode } from '../web/hold-node.js';
 import { TextSummaryNode } from '../web/text-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
-import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
+import { OpusMtTranslationNode, EnglishToJapaneseOpusMtTranslationNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode, Plamo3Translate2BTranslationNode } from '../web/translation-nodes.js';
+import { verifiedPlamoCache } from './plamo-cache.js';
 import { verifiedTranslateGemmaCache } from './translategemma-cache.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
 import { AudioOutputNode } from '../web/synthesized-audio.js';
@@ -164,6 +165,10 @@ export function buildGraph(graph, options) {
       case 'TextWindow': node = new TextWindowNode(); break;
       case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
       case 'KeyedTextCoalesce': node = new KeyedTextCoalesceNode(); break;
+      case 'Plamo3Translate2B':
+        node = new TranslationSchedulerNode({ prepare: options.preparePlamo || verifiedPlamoCache,
+          TranslationNode: Plamo3Translate2BTranslationNode, modelName: 'PLaMo 3 Translate 2B', workerFactory: options.translationWorkerFactory,
+          onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
       case 'TranslateGemmaEnJa': case 'TranslateGemmaJaEn':
         node = new TranslationSchedulerNode({ prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
           TranslationNode: spec.type === 'TranslateGemmaEnJa' ? EnglishToJapaneseTranslateGemmaTranslationNode : TranslateGemmaTranslationNode,

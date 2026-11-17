@@ -1,0 +1,146 @@
+{
+  "date": "2026-11-17",
+  "hardware": {
+    "cpu": "Apple M4 Max",
+    "memoryGiB": 64
+  },
+  "model": {
+    "id": "pfnet/plamo-3-translate-2b-GGUF",
+    "revision": "4f672106b847200bfdc0f6af6c321cd94eba1aed"
+  },
+  "sha256": "1ffd9073afcc70e35ccc942428aa2b73d7aa2b9ea779bf504b775369e0276c13",
+  "browser": {
+    "version": "157.0.8103.52",
+    "capabilities": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36",
+      "isolated": false,
+      "secure": true,
+      "jspi": true,
+      "storage": {
+        "quota": 12544622080,
+        "usage": 1807203840,
+        "usageDetails": {
+          "caches": 1807203840
+        }
+      }
+    },
+    "coldRuns": [
+      {
+        "text": "会議は来週の月曜日に変更されました。",
+        "source": "",
+        "target": "",
+        "expected": "/meeting.*(?:next Monday|Monday next week)/i",
+        "status": "Complete",
+        "errors": "",
+        "output": "The meeting has been rescheduled for next Monday.",
+        "load-time": "155076 ms",
+        "latency": "5377 ms",
+        "requests": 12
+      },
+      {
+        "text": "The weather is nice today.",
+        "source": "en",
+        "target": "ja",
+        "expected": "/今日.*(?:天気|晴)/",
+        "status": "Complete",
+        "errors": "",
+        "output": "今日はいい天気だ。",
+        "load-time": "4680 ms",
+        "latency": "4529 ms",
+        "requests": 10
+      },
+      {
+        "text": "Please open the project dashboard.",
+        "source": "auto",
+        "target": "ja",
+        "expected": "/(?:ダッシュボード|管理画面)/",
+        "status": "Complete",
+        "errors": "",
+        "output": "プロジェクトダッシュボードを開いてください。",
+        "load-time": "5134 ms",
+        "latency": "4118 ms",
+        "requests": 10
+      }
+    ],
+    "cachedRuns": [
+      {
+        "text": "会議は来週の月曜日に変更されました。",
+        "source": "",
+        "target": "",
+        "expected": "/meeting.*(?:next Monday|Monday next week)/i",
+        "status": "Complete",
+        "errors": "",
+        "output": "The meeting has been rescheduled for next Monday.",
+        "load-time": "5282 ms",
+        "latency": "5469 ms",
+        "requests": 10
+      },
+      {
+        "text": "The weather is nice today.",
+        "source": "en",
+        "target": "ja",
+        "expected": "/今日.*(?:天気|晴)/",
+        "status": "Complete",
+        "errors": "",
+        "output": "今日はいい天気だ。",
+        "load-time": "5031 ms",
+        "latency": "4644 ms",
+        "requests": 10
+      },
+      {
+        "text": "Please open the project dashboard.",
+        "source": "auto",
+        "target": "ja",
+        "expected": "/(?:ダッシュボード|管理画面)/",
+        "status": "Complete",
+        "errors": "",
+        "output": "プロジェクトダッシュボードを開いてください。",
+        "load-time": "4943 ms",
+        "latency": "4186 ms",
+        "requests": 10
+      }
+    ],
+    "pageErrors": [],
+    "cancelDuringInference": true,
+    "wasmWorkersReleasedAfterCancel": true,
+    "retryAfterCancel": "passed",
+    "network": "Only GETs, model data from pinned official Hugging Face revision; no text in network URLs or bodies. Cached repeats requested no remote assets."
+  },
+  "extension": {
+    "preparedMs": 1999.4350000023842,
+    "loadedMs": 4854.875,
+    "runs": [
+      {
+        "text": "会議は来週の月曜日に変更されました。",
+        "source": "auto",
+        "target": "en",
+        "output": "The meeting has been rescheduled for next Monday.",
+        "inferenceMs": 6734.004999995232
+      },
+      {
+        "text": "The weather is nice today.",
+        "source": "en",
+        "target": "ja",
+        "output": "今日はいい天気だ。",
+        "inferenceMs": 5445.740000009537
+      },
+      {
+        "text": "Please open the project dashboard.",
+        "source": "auto",
+        "target": "ja",
+        "output": "プロジェクトダッシュボードを開いてください。",
+        "inferenceMs": 4960
+      }
+    ],
+    "states": [
+      "Loading local PLaMo 3 Translate 2B…",
+      "Local PLaMo 3 Translate 2B ready"
+    ],
+    "disposed": true,
+    "capabilities": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+      "isolated": true,
+      "jspi": true
+    }
+  }
+}

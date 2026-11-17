@@ -9,7 +9,7 @@ export function mountTranslationPage(Node, { sourceLanguage = 'Japanese' } = {})
     element('run').disabled = value;
     element('cancel').disabled = !value;
     element('input').disabled = value;
-    document.querySelectorAll('select').forEach(select => { select.disabled = value; });
+    document.querySelectorAll('select, input').forEach(control => { control.disabled = value; });
   };
   element('run').onclick = async () => {
     const text = element('input').value;

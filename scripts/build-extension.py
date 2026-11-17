@@ -8,6 +8,7 @@ import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_FILES = (
+    "plamo-policy.js", "plamo-worker.js", "plamo-chat-template.jinja",
     "optional-model-assets.js",
     "optional-asr-core.js", "optional-asr-node.js", "moonshine-worker.js", "moonshine-small-ja-node.js", "moonshine-small-ja-worker.js", "moonshine-medium-node.js", "moonshine-medium-worker.js", "moonshine-stream.js",
     "text-constant-node.js",
