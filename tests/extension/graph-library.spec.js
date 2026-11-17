@@ -8,7 +8,7 @@ const simple = (text = 'Graph output') => {
   return { version: 15, nodes: [source, graphNode('Display', 'display', 300, 20)], edges: [edge('source', 'value', 'display', 'input1')] };
 };
 const microphoneGraph = () => ({ version: 15,
-  nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
+  nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
   edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] });
 async function assign(page, target, id) {
   await page.evaluate(async ({ target, id }) => {
@@ -151,7 +151,7 @@ test('Library manages independent named graphs, portable JSON, persistent target
   await expect(page.locator('#web-voice-enabled')).toHaveCount(0);
   await expect(page.locator('#selected')).toBeHidden(); await expand(page);
   await expect(page.locator('#graph-models')).toBeVisible();
-  await expect(page.locator('#graph-models')).toHaveText('Silero VAD · shared ReazonSpeech / Whisper dependency, ReazonSpeech ja-en · speech recognition');
+  await expect(page.locator('#graph-models')).toHaveText('Moonshine Small Streaming Japanese');
   await expect(page.locator('#delete')).toBeVisible();
   await expect(page.locator('#delete')).toBeDisabled();
   await expect(page.locator('#delete')).toHaveAccessibleDescription('Keep at least one usable graph.');
@@ -169,7 +169,7 @@ test('Library manages independent named graphs, portable JSON, persistent target
     const { GraphLibrary } = await import('./graph-library.js');
     await new GraphLibrary(localStorage).save(id, revision, graph);
   }, { id: voice.id, revision: voice.revision, graph: { version: 15,
-    nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
+    nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
     edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] } });
   await page.reload();
   await assign(page, 'webVoice', voice.id);

@@ -56,7 +56,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
   expect(await editor.evaluate(() => window.beforePersistence)).toEqual([false]);
   expect(await editor.locator('.graph-workspace').boundingBox()).toEqual(workspace);
   expect(await editor.evaluate(() => window.graphWorkers.length)).toBe(0);
-  expect(await live.evaluate(() => window.graphWorkers.every(worker => /sherpa-worker|silero-worker/.test(worker.url)))).toBe(true);
+  expect(await live.evaluate(() => window.graphWorkers.every(worker => /moonshine-small-ja-worker|moonshine-medium-worker/.test(worker.url)))).toBe(true);
   const before = await saved(live); expect(before.version).toBe(15); expect(before.edges).toEqual(initial.edges);
   await save(editor); await expectGraphModelsReady(editor); expect(f.requests).toHaveLength(7);
   for (const corrupt of [true, false]) {

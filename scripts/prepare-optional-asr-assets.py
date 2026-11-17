@@ -5,6 +5,8 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import subprocess
+import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = ROOT / 'scripts/optional-asr-runtime.json'
@@ -24,19 +26,26 @@ def main():
     spec = importlib.util.spec_from_file_location('moonshine_csp', ROOT/'scripts/moonshine-csp.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    archive = specification['archive']
+    cached = ROOT / '.cache' / archive['cache']
+    cached.parent.mkdir(exist_ok=True)
+    if not cached.exists():
+        partial = cached.with_suffix('.partial')
+        try:
+            subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error', '--output', str(partial), archive['url']], check=True)
+            if partial.stat().st_size != archive['bytes'] or digest(partial) != archive['sha256']:
+                raise SystemExit('Moonshine runtime archive integrity mismatch')
+            partial.replace(cached)
+        finally:
+            partial.unlink(missing_ok=True)
+    if cached.stat().st_size != archive['bytes'] or digest(cached) != archive['sha256']:
+        raise SystemExit('Invalid cached Moonshine runtime archive')
+    package = tarfile.open(cached)
     for file in specification['files']:
-        source = ROOT / 'node_modules' / file['source']
-        if not source.is_file() or digest(source) != file['sha256']:
-            raise SystemExit(f'Invalid optional ASR runtime: {file["source"]}. Run npm ci.')
-        content = source.read_bytes()
-        if file['path'] == 'parakeet/backend.js':
-            content = content.replace(b"import('onnxruntime-web')", b"import('../ort/ort.webgpu.min.mjs')")
-            # Upstream ignores wasmPaths; eliminate its remote executable fallback.
-            content = content.replace(b'`https://cdn.jsdelivr.net/npm/onnxruntime-web@${ver}/dist/`', b"new URL('../ort/', import.meta.url).href")
-        elif file['path'] == 'parakeet/parakeet.js':
-            # Strict WebGPU also needs sequential ORT backend initialization.
-            content = content.replace(b"if (backend === 'webgpu-hybrid') {\r\n      // avoid", b"if (backend.startsWith('webgpu')) {\r\n      // avoid")
-        elif file['path'] == 'moonshine/moonshine.mjs':
+        content = package.extractfile(file['source']).read()
+        if len(content) != file['bytes'] or hashlib.sha256(content).hexdigest() != file['sha256']:
+            raise SystemExit(f'Invalid Moonshine runtime member: {file["source"]}')
+        if file['path'] == 'moonshine/moonshine.mjs':
             content = module.patch(content.decode()).encode()
         output = staging / file['path']
         output.parent.mkdir(parents=True, exist_ok=True)

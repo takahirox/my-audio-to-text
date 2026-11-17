@@ -1,7 +1,7 @@
 // Preserve extension cache-only policy; normal web Workers prepare on explicit Run.
 const assets = cache => import(globalThis.location.protocol === 'chrome-extension:'
   ? `../extension/${cache}-cache.js` : './playground-model-assets.js');
-export async function parakeetManifest(...args) { return (await assets('optional-asr')).parakeetManifest(...args); }
+export async function moonshineJapaneseManifest(...args) { return (await assets('optional-asr')).moonshineJapaneseManifest(...args); }
 export async function moonshineManifest(...args) { return (await assets('optional-asr')).moonshineManifest(...args); }
 export async function optionalAsrFiles(...args) { return (await assets('optional-asr')).optionalAsrFiles(...args); }
 export async function cacheOnlyTextSummaryRuntime(...args) { return (await assets('text-summary')).cacheOnlyTextSummaryRuntime(...args); }

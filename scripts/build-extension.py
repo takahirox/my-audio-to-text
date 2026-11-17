@@ -9,10 +9,8 @@ import shutil
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_FILES = (
     "optional-model-assets.js",
-    "optional-asr-core.js", "optional-asr-node.js", "parakeet-v3-node.js", "parakeet-v3-worker.js", "parakeet-v3-segments.js",
-    "moonshine-medium-node.js", "moonshine-medium-worker.js", "moonshine-medium-stream.js",
-    "zipformer-node.js", "zipformer-worker.js", "zipformer-core.js", "zipformer-segments.js", "zipformer-config.js",
-    "whisper-node.js", "whisper-worker.js", "whisper-config.js", "text-constant-node.js",
+    "optional-asr-core.js", "optional-asr-node.js", "moonshine-worker.js", "moonshine-small-ja-node.js", "moonshine-small-ja-worker.js", "moonshine-medium-node.js", "moonshine-medium-worker.js", "moonshine-stream.js",
+    "text-constant-node.js",
     "text-summary-models.js", "text-summary-node.js", "text-summary-policy.js", "text-summary-worker.js", "gpu-lifecycle.js",
     "if-condition-model.js", "if-condition-node.js", "if-condition-policy.js", "if-condition-worker.js",
     "text-sliding-window-node.js", "text-window-node.js", "keyed-text-coalesce-node.js", "keyed-text-pair-node.js", "paired-text.js", "keyed-paired-text-accumulator-node.js", "display-node.js", "hold-node.js", "button-node.js", "pipeline.js", "port-contracts.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
@@ -21,13 +19,11 @@ SHARED_FILES = (
     "streaming-tts-node.js", "cosyvoice3-node.js", "cosyvoice3-worker.js", "cosyvoice3-runtime.js", "cosyvoice3-onnx.js",
     "kokoro-worker.js", "kokoro-english.js", "kokoro-japanese.js", "kokoro-hepburn.js",
     "translation-nodes.js", "translation-models.js", "translation-worker.js", "opus-mt-worker.js", "opus-mt-en-ja-worker.js", "translategemma-worker.js", "translategemma-context.js",
-    "local-model-assets.js", "audio.js", "capture-worklet.js", "local-asr-core.js", "local-asr-config.js",
-    "reazon-simulation.js", "reazon-config.js", "sherpa-worker.js", "silero-worker.js",
-    "third-party-notices.txt",
+    "local-model-assets.js", "audio.js", "capture-worklet.js", "third-party-notices.txt",
 )
 
 
-FORBIDDEN_SUFFIXES = {'.onnx', '.data', '.bin', '.safetensors', '.pt', '.pth', '.tflite', '.htsvoice', '.npz', '.npy', '.gguf', '.ggml', '.ckpt', '.pb', '.model', '.weights'}
+FORBIDDEN_SUFFIXES = {'.ort', '.onnx', '.data', '.bin', '.safetensors', '.pt', '.pth', '.tflite', '.htsvoice', '.npz', '.npy', '.gguf', '.ggml', '.ckpt', '.pb', '.model', '.weights'}
 
 
 def inventory(target):

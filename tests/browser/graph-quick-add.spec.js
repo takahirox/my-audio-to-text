@@ -27,7 +27,7 @@ test('eight flat sorted categories combine search/filter and refresh dynamic Jap
     'Button', 'Chrome tab audio', 'Microphone audio', 'Number', 'Text',
   ]);
   for (const [name, types] of [
-    ['AI Models / Speech Recognition', ['SpeechToTextMoonshineMediumEn', 'SpeechToTextParakeetV3', 'SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn']],
+    ['AI Models / Speech Recognition', ['SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa']],
     ['AI Models / Translation', ['OpusMtEnJa', 'OpusMtJaEn', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn']],
     ['AI Models / Text', ['IfCondition', 'TextSummaryLfm2', 'TextSummaryQwen35']],
     ['AI Models / Speech Synthesis', ['CosyVoice3Streaming', 'Kokoro', 'Qwen3TtsStreaming', 'Supertonic3']],

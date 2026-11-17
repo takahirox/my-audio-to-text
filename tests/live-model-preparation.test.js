@@ -29,7 +29,7 @@ function fixture(graph, options = {}) {
         if (data.type === 'translate') this.onmessage?.({ data: { id: data.id, type: 'result', texts: ['Translation'] } });
         if (data.type === 'generate') this.onmessage?.({ data: { id: data.id, type: 'result', audio: { samples: new Float32Array(10), sampleRate: 24000, channels: 1 } } });
         if (data.type === 'drain') this.onmessage?.({ data: { id: data.id, type: 'drained' } });
-        if (data.type === 'vad-stop') this.onmessage?.({ data: { session: data.session, type: 'vad-stopped' } });
+        if (data.type === 'stop') this.onmessage?.({ data: { session: data.session, type: 'stopped' } });
       },
       postMessage(data) {
         this.messages.push(data);
@@ -39,7 +39,7 @@ function fixture(graph, options = {}) {
     };
     workers.push(worker); return worker;
   };
-  const session = new TabSession(view => views.push(view), { graph, workerFactory, whisperWorkerFactory: workerFactory,
+  const session = new TabSession(view => views.push(view), { graph, workerFactory, moonshineJapaneseWorkerFactory: workerFactory,
     textSummaryWorkerFactory: workerFactory, ifConditionWorkerFactory: workerFactory, translationWorkerFactory: workerFactory,
     prepareModelAssets: async () => {},
     ttsWorkerFactory: workerFactory, prepareTranslation: async () => {}, prepareTts: async () => {},
@@ -150,28 +150,6 @@ test('multi-model graph initializes every executable instance without inference/
   assert.equal(f.session.prepared.pipeline.entries.has('parked-mic'), false);
 });
 
-for (const type of ['SpeechToTextWhisper', 'SpeechToTextReazonSpeech']) test(`${type} startup constant precedes initialization, without starting ASR or capture`, async t => {
-  const graph = defaultGraph({ enabled: true });
-  graph.nodes.find(node => node.id === 'speech').type = type;
-  if (type === 'SpeechToTextWhisper') graph.edges = graph.edges.filter(route => route.from[1] !== 'provisional' && route.from[1] !== 'provisionalId');
-  const constant = graphNode(type === 'SpeechToTextWhisper' ? 'Text' : 'Number', 'config');
-  constant.settings.value = type === 'SpeechToTextWhisper' ? 'ja' : 2.5;
-  graph.nodes.push(constant); graph.edges.push(edge('config', 'value', 'speech', type === 'SpeechToTextWhisper' ? 'language' : 'maxDuration'));
-  const f = fixture(graph); t.after(() => f.session.close());
-  await f.session.prepareModels();
-  assert.equal(f.session.view.error, ''); assert.equal(f.session.view.modelState, 'ready');
-  const speech = f.session.prepared.speechNodes.get('speech');
-  assert.equal(speech.core.state, 'ready'); assert.deepEqual(f.captures, []);
-  assert.equal(f.messages('vad-start').length, 0); assert.equal(f.messages('translate').length, 0);
-  if (type === 'SpeechToTextWhisper') assert.equal(f.workers.find(worker => worker.url.includes('whisper')).messages[0].language, 'ja');
-  else assert.equal(speech.maxDuration, 2.5);
-  const count = f.workers.length;
-  await f.session.start(42); await turn();
-  assert.equal(f.session.view.state, 'running'); assert.equal(f.workers.length, count); assert.equal(speech.core.state, 'running');
-  assert.deepEqual(f.captures, [42]); assert.equal(speech.sessionMaxDuration, type === 'SpeechToTextWhisper' ? 6 : 2.5);
-  assert.equal(f.session.session.pipeline.errors.length, 0);
-});
-
 test('a graph without AI becomes ready without starting constants or outputs', async t => {
   const graph = textGraph(); graph.nodes = graph.nodes.filter(node => node.id !== 'model'); graph.edges = [edge('source', 'value', 'display', 'input1')];
   const f = fixture(graph); t.after(() => f.session.close());
@@ -267,26 +245,6 @@ test('eviction between file preparation and runtime initialization blocks readin
   await f.session.start(42); await turn(); assert.equal(inspections, 1);
 });
 
-test('ASR retains inactive configuration intent and accepts constant-fed formatting before model initialization', async t => {
-  const graph = defaultGraph(); graph.nodes.find(node => node.id === 'speech').type = 'SpeechToTextWhisper';
-  graph.edges = graph.edges.filter(route => !['provisional', 'provisionalId'].includes(route.from[1]));
-  const language = graphNode('Text', 'language'); language.settings.value = 'ja';
-  graph.nodes.push(language, graphNode('TextFormatter', 'format'));
-  graph.edges.push(edge('language', 'value', 'format', 'input1'), edge('format', 'text', 'speech', 'language'));
-  const f = fixture(graph); t.after(() => f.session.close());
-  await f.session.prepareModels(); assert.equal(f.session.view.modelState, 'ready');
-  assert.equal(f.workers.find(worker => worker.url.includes('whisper')).messages[0].language, 'ja');
-  await f.session.start(42); await turn(); assert.equal(f.session.session.pipeline.errors.length, 0);
-  await f.session.stop();
-  graph.nodes.push(graphNode('SpeechToTextWhisper', 'inactive'));
-  graph.edges = graph.edges.filter(route => route.from[0] !== 'language');
-  graph.edges.push(edge('inactive', 'final', 'format', 'input1'));
-  const before = f.workers.length;
-  f.session.setGraph(graph); await f.session.preparing;
-  assert.equal(f.session.view.modelState, 'error'); assert.match(f.session.view.error, /speech.*Startup configuration is unavailable/);
-  assert.equal(f.workers.length, before, 'must not initialize using the default language');
-});
-
 test('multiple same-model instances keep separate state and transfer each ready Worker once', async t => {
   const graph = textGraph('TextSummaryLfm2', true);
   graph.nodes.push(graphNode('TextSummaryLfm2', 'second'), graphNode('Display', 'second-display'));
@@ -297,33 +255,6 @@ test('multiple same-model instances keep separate state and transfer each ready 
   assert.notEqual(first.worker, second.worker); assert.notEqual(first.pending, second.pending);
   await f.session.start(); await turn(); await f.session.pressButton('button');
   assert.equal(f.messages('load').length, 2); assert.equal(f.messages('summarize').length, 2);
-});
-
-for (const composed of ['KeyedTextCoalesce', 'TextFormatter', 'TextWindow']) test(`Whisper accepts startup ${composed} composition before one model load`, async t => {
-  const graph = defaultGraph({ enabled: true });
-  graph.nodes.find(node => node.id === 'speech').type = 'SpeechToTextWhisper';
-  graph.edges = graph.edges.filter(route => !['provisional', 'provisionalId'].includes(route.from[1]));
-  const language = graphNode('Text', 'language'); language.settings.value = 'ja';
-  const other = graphNode(composed === 'TextFormatter' ? 'Text' : 'Number', 'other');
-  other.settings.value = composed === 'TextFormatter' ? '' : composed === 'TextWindow' ? 0.005 : 1;
-  const compose = graphNode(composed, 'compose');
-  if (composed === 'TextFormatter') compose.settings.template = '{1}{2}';
-  graph.nodes.push(language, other, compose, graphNode('Display', 'config-display'));
-  graph.edges.push(edge('language', 'value', 'compose', composed === 'TextWindow' ? 'text' : 'input1'),
-    edge('other', 'value', 'compose', composed === 'KeyedTextCoalesce' ? 'id1' : composed === 'TextWindow' ? 'maxWaitSeconds' : 'input2'),
-    edge('compose', 'text', 'speech', 'language'), edge('compose', 'text', 'config-display', 'input1'));
-  const f = fixture(graph); t.after(() => f.session.close());
-  await f.session.prepareModels();
-  assert.equal(f.session.view.error, ''); assert.equal(f.session.view.modelState, 'ready');
-  const worker = f.workers.find(worker => worker.url.includes('whisper'));
-  assert.equal(worker.messages[0].language, 'ja');
-  assert.equal(worker.messages.filter(message => message.type === 'load').length, 1);
-  assert.deepEqual(f.session.view.displays, {}); assert.deepEqual(f.captures, []);
-  await f.session.start(42); await turn();
-  if (composed === 'TextWindow') await new Promise(resolve => setTimeout(resolve, 15));
-  assert.equal(f.session.view.state, 'running'); assert.equal(f.session.view.error, '');
-  assert.equal(worker.messages.filter(message => message.type === 'load').length, 1);
-  assert.equal(domText(f.session.view.displays['config-display'].input1), 'ja');
 });
 
 for (const close of [false, true]) test(`successive Saves retain pending teardown${close ? ' through close' : ' before Ready'}`, async () => {
@@ -344,37 +275,6 @@ for (const close of [false, true]) test(`successive Saves retain pending teardow
   assert.equal(f.workers.length, close ? 1 : 2);
   assert.equal(f.session.view.modelState, close ? 'closed' : 'ready');
   await f.session.close(); assert.ok(f.workers.every(worker => worker.released));
-});
-
-test('ReazonSpeech receives a composed numeric startup output before loading', async t => {
-  const graph = defaultGraph();
-  const text = graphNode('Text', 'text'); text.settings.value = 'keyed value';
-  const key = graphNode('Number', 'key'); key.settings.value = 2.5;
-  graph.nodes.push(text, key, graphNode('KeyedTextCoalesce', 'compose'));
-  graph.edges.push(edge('text', 'value', 'compose', 'input1'), edge('key', 'value', 'compose', 'id1'),
-    edge('compose', 'id', 'speech', 'maxDuration'));
-  const f = fixture(graph); t.after(() => f.session.close());
-  await f.session.prepareModels();
-  assert.equal(f.session.view.error, ''); assert.equal(f.session.view.modelState, 'ready');
-  const speech = f.session.prepared.speechNodes.get('speech');
-  assert.equal(speech.maxDuration, 2.5); assert.deepEqual(f.captures, []);
-  await f.session.start(42); await turn();
-  assert.equal(speech.sessionMaxDuration, 2.5); assert.equal(f.messages('load').length, 2);
-});
-
-for (const end of ['close', 'timeout']) test(`${end} interrupts pending startup composition before allocating ASR`, async t => {
-  const graph = defaultGraph(); graph.nodes.find(node => node.id === 'speech').type = 'SpeechToTextWhisper';
-  graph.edges = graph.edges.filter(route => !['provisional', 'provisionalId'].includes(route.from[1]));
-  const language = graphNode('Text', 'language'); language.settings.value = 'ja';
-  graph.nodes.push(language, graphNode('TextWindow', 'window'));
-  graph.edges.push(edge('language', 'value', 'window', 'text'), edge('window', 'text', 'speech', 'language'));
-  const f = fixture(graph, { modelLoadTimeoutMs: end === 'timeout' ? 5 : 180000 }); t.after(() => f.session.close());
-  const preparing = f.session.prepareModels(); await turn();
-  if (end === 'close') await f.session.close();
-  await preparing;
-  assert.deepEqual(f.workers, []); assert.deepEqual(f.captures, []);
-  assert.equal(f.session.view.modelState, end === 'close' ? 'closed' : 'error');
-  if (end === 'timeout') assert.match(f.session.view.error, /Startup configuration timed out/);
 });
 
 test('a Save during Cancel waits for the old GPU owner to finish releasing before allocating replacements', async t => {
@@ -457,7 +357,7 @@ test('an unavailable next assignment never prepares the previous saved graph aft
 });
 
 function isolatedSpeechGraph() {
-  return { version: GRAPH_VERSION, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextReazonSpeech', 'speech'), graphNode('Display', 'display')],
+  return { version: GRAPH_VERSION, nodes: [graphNode('ChromeTabAudio', 'audio'), graphNode('SpeechToTextMoonshineSmallJa', 'speech'), graphNode('Display', 'display')],
     edges: [edge('audio', 'audio', 'speech', 'audio'), edge('speech', 'final', 'display', 'input1')] };
 }
 
@@ -494,7 +394,7 @@ test('separate sessions overlap preparation, recording, Stop and restart without
   for (const [index, f] of [b, c].entries()) {
     assert.equal(f.session.session, owners[index + 1]);
     assert.ok(f.workers.every(worker => !worker.released));
-    assert.equal(f.messages('load').length, 2);
+    assert.equal(f.messages('load').length, 1);
   }
   await b.session.close();
   assert.ok(b.workers.every(worker => worker.released));
@@ -554,7 +454,7 @@ for (const [name, recovery] of [
   } });
   t.after(() => { if (previous) Object.defineProperty(navigator, 'mediaDevices', previous); else delete navigator.mediaDevices; });
   const peer = fixture(isolatedSpeechGraph()), graph = isolatedSpeechGraph();
-  graph.nodes[0].type = 'MicrophoneAudio'; graph.nodes[1].type = 'SpeechToTextWhisper';
+  graph.nodes[0].type = 'MicrophoneAudio'; graph.nodes[1].type = 'SpeechToTextMoonshineSmallJa';
   const affected = fixture(graph);
   t.after(() => Promise.all([peer.session.close(), affected.session.close()]));
   await Promise.all([peer.session.prepareModels(), affected.session.prepareModels()]);

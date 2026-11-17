@@ -1,3 +1,4 @@
+import { moonshineWorkerFixture } from '../fixtures/moonshine-worker.js';
 import { test, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -21,7 +22,7 @@ test('two independent Live graphs share native tab capture and one playback bran
     await cp('extension', path.join(root, 'extension'), { recursive: true });
     await cp('web', path.join(root, 'web'), { recursive: true, filter: file => !/\/(vendor|tts-assets|correction-assets)(\/|$)/.test(file) });
     await cp('extension/manifest.json', path.join(root, 'manifest.json'));
-    for (const name of ['reazon', 'silero']) {
+    for (const name of ['moonshine-small-ja', 'moonshine-medium-en']) {
       const file = path.join(root, 'extension', `${name}-assets.json`), manifest = JSON.parse(await readFile(file, 'utf8'));
       const body = Buffer.from('shared capture model fixture');
       await writeFile(path.join(root, 'extension', `${name}-fixture.bin`), body);
@@ -29,15 +30,7 @@ test('two independent Live graphs share native tab capture and one playback bran
       manifest.files = [{ path: 'fixture.bin', bytes: body.length, sha256Chunks: [createHash('sha256').update(body).digest('hex')], sourceURL: 'placeholder' }];
       await writeFile(file, JSON.stringify(manifest));
     }
-    await writeFile(path.join(root, 'web/silero-worker.js'), `self.onmessage=({data})=>{
-      if(data.type==='load')postMessage({type:'ready'});
-      if(data.type==='vad-audio')postMessage({type:'vad',session:data.session,frames:[{audio:data.audio,speaking:true}]});
-      if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});
-    };`);
-    await writeFile(path.join(root, 'web/sherpa-worker.js'), `self.onmessage=({data})=>{
-      if(data.type==='load')postMessage({type:'ready'});
-      if(data.type==='decode') {postMessage({type:data.final?'final':'partial',text:'PCM tone received',id:data.id,session:data.session});postMessage({type:'decoded',session:data.session});}
-    };`);
+    for (const name of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, 'web', `${name}-worker.js`), moonshineWorkerFixture({partial: 'PCM tone received', final: 'PCM tone received'}));
     await writeFile(path.join(root, 'extension/capture-test-probe.js'), `
       const contexts=[],tracks=[]; let playbackConnections=0, mediaRequests=0;
       const NativeContext=AudioContext;
@@ -57,7 +50,7 @@ test('two independent Live graphs share native tab capture and one playback bran
     const cdp = await context.browser().newBrowserCDPSession();
     const { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
     const url = `chrome-extension://${id}/extension/`;
-    for (const name of ['reazon', 'silero']) {
+    for (const name of ['moonshine-small-ja', 'moonshine-medium-en']) {
       const file = path.join(root, 'extension', `${name}-assets.json`), manifest = JSON.parse(await readFile(file, 'utf8'));
       manifest.files[0].sourceURL = url + name + '-fixture.bin'; await writeFile(file, JSON.stringify(manifest));
     }
@@ -101,7 +94,7 @@ test('two independent Live graphs share native tab capture and one playback bran
     const captureCount = async () => (await Promise.all([a,b].filter(page=>!page.isClosed()).map(page=>page.evaluate(()=>captureRequests.length)))).reduce((sum,count)=>sum+count,0);
     expect(await captureCount()).toBe(0);
     await expect(a.locator('#live-graph-name')).toHaveText('Tone A'); await expect(b.locator('#live-graph-name')).toHaveText('Tone B');
-    for(const page of [a,b]) expect(await page.evaluate(()=>modelWorkers.filter(worker=>!worker.released).length)).toBe(2);
+    for(const page of [a,b]) expect(await page.evaluate(()=>modelWorkers.filter(worker=>!worker.released).length)).toBe(1);
     await Promise.all([a.locator('#start').click(), b.locator('#start').click()]);
     await expect.poll(captureCount).toBeGreaterThan(0);
     for (const page of [a,b]) {

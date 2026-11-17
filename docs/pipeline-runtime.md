@@ -220,136 +220,52 @@ preview replacement, Stop, cancellation and disposal retire discarded handles;
 committed jobs retain FIFO order, IDs, context snapshots and their output family.
 This adds no payload fields or graph/editor persistence changes.
 
-## Node Playground speech page integration
+## Speech recognition composition
 
-[`web/nodes/speech-to-text/app.js`](../web/nodes/speech-to-text/app.js) uses the
-runtime for both input choices:
+`BrowserTabAudioNode` and `MicrophoneAudioNode` in `web/transcription-nodes.js`
+normalize capture to mono 16 kHz PCM. The concrete English Medium and Japanese
+Small Moonshine Nodes each own a bounded Worker transport and native stream.
+`provisional` and `final` carry plain TEXT; their corresponding NUMBER IDs allow
+correlation. Final and preview clear are atomic, duplicate finals are suppressed,
+and equal strings from distinct utterances remain distinct deliveries.
 
-```text
-MicrophoneAudioNode / BrowserTabAudioNode
-        ↓ audio (mono 16 kHz Float32Array)
-SpeechToTextNode
-        ├─ provisional → TranscriptOutputNode.provisional
-        └─ final       → TranscriptOutputNode.final
-```
+Standalone [model pages](node-playground.md) decode and replay files to test each
+language independently. Extension graphs support browser-tab and microphone
+capture. Both paths use the same recognition classes, typed ports and lifecycle.
+The extension adds targeting and UI around the shared Pipeline.
 
-The source nodes wrap the existing capture/resampling helpers. Their optional
-`onAudio(pcm)` observer supplies signal/RMS and captured-duration diagnostics;
-PCM reaches ASR only through the connected audio port. `MicrophoneAudioNode`
-stops on page hiding, including during pending permission; tab capture continues
-in the background. Source end during setup closes capture and settles startup
-so downstream nodes can drain without waiting for a late grant/worklet setup.
-Both nodes discard late callbacks on disposal.
-
-Load preloads `SpeechToTextNode` before enabling Start. Start executes
-`pipeline.start()` from the capture gesture. The UI observes core configuration,
-loading, pending-audio and speech events, while transcript rendering consumes
-only the sink's provisional/final ports. Stop awaits `pipeline.stop()` through
-the source tail, ASR finals and sink before showing Ready or measuring Stop
-latency. Cancel, source changes, reload, errors and page teardown dispose the
-graph and invalidate its UI observer generation.
-
-Repeat uses fresh nodes and contexts without reloading the model. After a
-successful **whole-pipeline drain**, `speech.nextSession({ onEvent })` transfers
-sole ownership of its ready core to a fresh `SpeechToTextNode`. The old node
-loses the core and cannot transfer it again; disposing its old graph releases
-source/sink resources without terminating the transferred workers. The new
-node's disposal owns worker release. This explicit adapter handoff retains the
-same two workers and the core's session checks; it is not graph restart, node
-reuse between graphs, worker pooling or a change to the generic runtime. Failed,
-canceled, already-transferred or undrained speech nodes cannot hand off a core.
-The playground builds its replacement graph before enabling Start again.
-
-## Executable browser-tab transcription example
-
-[`web/transcription-nodes.js`](../web/transcription-nodes.js) exports the real
-adapters and `createTabTranscriptionPipeline()`:
-
-```text
-BrowserTabAudioNode.audio (mono 16 kHz Float32Array)
-        ↓
-SpeechToTextNode.audio
-        ├─ provisional → TranscriptOutputNode.provisional
-        └─ final       → TranscriptOutputNode.final
-```
-
-`BrowserTabAudioNode` uses the existing `BrowserTab` capture/resampling helper.
-`SpeechToTextNode` owns exactly one existing `LocalAsrCore`, including its
-dedicated ASR worker and dedicated VAD worker. The existing two-worker internal
-boundary is retained; there is no worker pool or implicit resource sharing.
-Lightweight source/sink wrappers create no processing workers. `partial` events
-map to the `provisional` port; `final` events map to the `final` port. Both carry
-plain `TEXT` strings. Utterance IDs remain inside the ASR core/node; duplicate
-final IDs are suppressed before fan-out, while equal strings from distinct
-utterances are delivered separately. The core's
-ReazonSpeech ja-en/Silero/hayamimi policy uses a 6-second default audio segment
-cap; provisional fallback remains local to each segment ID.
-`onEvent` optionally observes original core diagnostics/lifecycle events;
-transcript processing belongs on the ports. `TranscriptOutputNode` accepts an
-async callback `(port, text, signal)` and can serve as a UI, storage or test sink.
-
-`SpeechToTextNode.maxDuration` is an optional shared `NUMBER` input in seconds
-(finite 1–12, decimals supported). Configure with `speech.receive('maxDuration',
-2.5)` before `pipeline.start()`, or pass `{ maxDuration: 2.5 }` to the constructor.
-With a connected configuration input, the consumer waits for its first ordinary
-port delivery before loading its model. Any compatible producer can supply it;
-there is no constant extraction or special synchronous edge. While waiting, it
-owns a buffer of at most 30 seconds of PCM. Missing configuration on Stop or
-buffer overflow fails visibly, with no default fallback or model startup. Invalid
-values fail before loading. The first valid value freezes the configuration;
-updates arriving after loading begins fail visibly. Without a connection, the
-constructor/default value applies. Whisper.language follows the same policy with
-`en`/`ja` validation. Saving graph edits affects only fresh instances. No universal
-configuration scheduler is involved.
-
-After [preparing assets and serving the playground](asr-manual-testing.md#local-setup),
-open the Speech-to-Text test page from the Node Playground list and allow its
-isolation setup to complete. The following executable
-example can be entered in the browser console; leave the playground's own model
-unloaded. Load before clicking the example button to preserve the capture gesture:
+A browser-tab graph can be composed explicitly:
 
 ```js
-const { createTabTranscriptionPipeline } = await import('../../transcription-nodes.js');
-const flow = createTabTranscriptionPipeline({
-  onTranscript: (port, transcript) => console.log(port, transcript),
-  onEvent: event => { if (event.type === 'progress') console.log(event.message); },
-  onError: error => console.error(error),
-});
-await flow.speech.load(); // optional preloading; start also loads if necessary
+const { Pipeline } = await import('../../pipeline.js');
+const { BrowserTabAudioNode, TranscriptOutputNode } = await import('../../transcription-nodes.js');
+const { SpeechToTextMoonshineMediumEnNode } = await import('../../moonshine-medium-node.js');
+const speech = new SpeechToTextMoonshineMediumEnNode();
+const transcript = new TranscriptOutputNode((port, text) => console.log(port, text));
+const tab = new BrowserTabAudioNode({ onEnded: () => void pipeline.stop() });
+const pipeline = new Pipeline({ nodes: { tab, speech, transcript }, connections: [
+  { from: ['tab', 'audio'], to: ['speech', 'audio'] },
+  { from: ['speech', 'provisional'], to: ['transcript', 'provisional'] },
+  { from: ['speech', 'final'], to: ['transcript', 'final'] },
+] });
+await speech.load();
 const button = document.createElement('button');
-button.textContent = 'Start pipeline tab capture';
-button.onclick = () => flow.pipeline.start().catch(console.error);
+button.textContent = 'Capture English tab speech';
+button.onclick = () => pipeline.start().catch(console.error);
 document.body.append(button);
-// Click the button, select a tab, and enable Share tab audio.
 ```
 
-Later, stop and drain before releasing:
+Load before clicking the capture button. A browser sharing picker requires a
+user gesture and tab-audio support. Stop with `await pipeline.stop()` to drain
+accepted audio, then `await pipeline.dispose()` to release resources. Cancel with
+`await pipeline.dispose()` to discard queued work. Catch failures and dispose.
+Each graph is single-use; `speech.nextSession()` can transfer a successfully
+drained warm core to a fresh Node. Fresh extension sessions release and initialize
+their own Workers. No state is shared between languages or sessions.
 
-```js
-await flow.pipeline.stop();
-await flow.pipeline.dispose();
-// Or cancel immediately with flow.pipeline.dispose().
-```
-
-The helper gracefully stops when sharing ends. Catch Start/Stop failures and
-dispose the graph; a new run creates a new helper instance. Tab permissions,
-HTTPS/localhost, cross-origin isolation, model assets and browser limitations
-are the same as the playground. No external API integration is required.
-
-The Chrome extension uses the same runtime and speech node with its own capture
-adapter and UI; the Node Playground does not host or package its UI. Deterministic
-tests exercise the playground and adapters using real microphone/tab helpers,
-capture worklet, resampling and `LocalAsrCore`, with browser permission APIs and
-model worker replies controlled. Browser tests execute the playground and
-helper with native Web Audio, native worklet/fallback capture and real Worker
-messaging in Chromium and WebKit. They verify provisional/final fallback, PCM,
-draining and resource release. Unit tests additionally cover validation,
-fan-out, multiple inputs/outputs, async lifecycle, independent branches,
-failures, disposal during load/input/drain and stale output across fresh graphs.
-
-Run `npm test`, `npm run test:browser -- --workers=2` and the existing
-[extension checks](chrome-extension.md). These deterministic checks do not claim
-new recognition accuracy or physical-device performance.
+See [model assets, licenses and native streaming behavior](optional-asr-nodes.md).
+Deterministic tests verify transport/capture/lifecycle; opt-in real-model tests
+record transcript and latency evidence without making downloads a default gate.
 
 ## Independent text translation nodes
 
@@ -412,7 +328,7 @@ routing, atomic deliveries and fan-out apply without runtime special cases. See 
 ## Optional transcript correction
 
 `SpeechTranscriptCorrectionNode` owns a Qwen3 0.6B Worker and exposes plain
-`TEXT` input/output. Connect `SpeechToTextNode.final` directly to
+`TEXT` input/output. Connect `Moonshine Node.final` directly to
 `SpeechTranscriptCorrectionNode.text`; fan out the final string to preserve a
 separate original transcript branch. Connect the correction's `text` output
 directly to translation or other `TEXT` consumers. It can be omitted or
@@ -478,3 +394,6 @@ only when trigger is disconnected. With trigger connected, normal event cycle
 checks apply. ANY inputs represent arrivals: payloads are discarded before
 retention, and sampled outputs do not inject values into ANY inputs. See
 [Graph Actions](graph-actions.md) for ordering, UI admission and session ownership.
+
+
+Speech recognition uses only language-specific [Moonshine streaming Nodes](optional-asr-nodes.md). The new default graph is Japanese Small; English examples select English Medium explicitly.

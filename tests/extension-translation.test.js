@@ -138,7 +138,7 @@ function sessionFixture(translation = workerFixture()) {
     workerFactory(path) {
       const worker = { path, terminated: false, postMessage(data) {
         if (data.type === 'load') queueMicrotask(() => this.reply({ type: 'ready' }));
-        if (data.type === 'vad-stop') queueMicrotask(() => this.reply({ type: 'vad-stopped', session: data.session }));
+        if (data.type === 'stop') queueMicrotask(() => this.reply({ type: 'stopped', session: data.session }));
       }, reply(data) { this.onmessage?.({ data }); }, terminate() { this.terminated = true; } };
       asr.push(worker); return worker;
     },

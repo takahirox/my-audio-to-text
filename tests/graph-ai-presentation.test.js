@@ -5,10 +5,7 @@ import { createHash } from 'node:crypto';
 import { NODE_TYPES, graphNode, assertGraph, saveGraph } from '../extension/graph.js';
 import { groupPaletteEntries, NODE_PALETTE_CATEGORIES } from '../extension/graph-palette.js';
 const expected = {
-  SpeechToTextReazonSpeech: ['Speech Recognition · JA/EN', 'ReazonSpeech ja-en'],
-  SpeechToTextWhisper: ['Speech Recognition · Multilingual', 'Whisper tiny (multilingual)'],
-  SpeechToTextZipformerEn: ['Speech Recognition · EN / Streaming', 'Zipformer English'],
-  SpeechToTextParakeetV3: ['Speech Recognition', 'Parakeet TDT 0.6B v3'],
+  SpeechToTextMoonshineSmallJa: ['Speech Recognition · JA / Streaming', 'Moonshine Small Streaming Japanese'],
   SpeechToTextMoonshineMediumEn: ['Speech Recognition · EN / Streaming', 'Moonshine Medium Streaming English'],
   OpusMtJaEn: ['Translation · JA → EN', 'OPUS-MT'],
   OpusMtEnJa: ['Translation · EN → JA', 'OPUS-MT'],
@@ -22,8 +19,8 @@ const expected = {
   Qwen3TtsStreaming: ['Speech Synthesis · Streaming', 'Qwen3-TTS 0.6B CustomVoice'],
   CosyVoice3Streaming: ['Speech Synthesis · Streaming', 'CosyVoice3 0.5B'],
 };
-test('exactly the 16 AI types have function/model facts, independently of ports or names', () => {
-  assert.equal(Object.keys(expected).length, 16);
+test('exactly the 13 AI types have function/model facts, independently of ports or names', () => {
+  assert.equal(Object.keys(expected).length, 13);
   for (const [type, definition] of Object.entries(NODE_TYPES)) {
     if (!expected[type]) { assert.equal(definition.ai, undefined, type); continue; }
     assert.deepEqual([definition.label, definition.ai.model], expected[type]);
@@ -35,16 +32,12 @@ test('exactly the 16 AI types have function/model facts, independently of ports 
       assert.ok(matches.some(([id]) => id === type), `${type}: ${query}`);
     }
   }
-  assert.match(NODE_TYPES.SpeechToTextWhisper.ai.languages, /English \(en, default\), Japanese \(ja\)/);
-  assert.equal(NODE_TYPES.SpeechToTextReazonSpeech.inputs.language, undefined);
-  assert.match(NODE_TYPES.SpeechToTextParakeetV3.ai.runtime, /WebGPU.*WASM/);
 });
 test('colliding functions sort by model name with stable order in each category', () => {
   const entries = Object.entries(NODE_TYPES);
   const grouped = groupPaletteEntries(entries);
   assert.deepEqual(groupPaletteEntries(entries.reverse()), grouped);
   const sameTitle = title => [...grouped.values()].flat().filter(([,d])=>d.label===title).map(([,d])=>d.ai.model);
-  assert.deepEqual(sameTitle('Speech Recognition · EN / Streaming'), ['Moonshine Medium Streaming English', 'Zipformer English']);
   assert.deepEqual(sameTitle('Translation · JA → EN'), ['OPUS-MT', 'TranslateGemma 4B']);
   assert.deepEqual(sameTitle('Text Summarization'), ['LFM2.5 1.2B JP', 'Qwen3.5 2B']);
   assert.deepEqual(sameTitle('Speech Synthesis'), ['Kokoro 82M', 'Supertonic 3']);

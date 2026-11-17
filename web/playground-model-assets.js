@@ -24,7 +24,7 @@ async function prepare(spec, progress = () => {}) {
   if (result.state !== 'Ready') throw Error(`${result.error} Check network/CORS access, free storage and memory, then Run again.`);
   return spec;
 }
-export const parakeetManifest = () => manifest('parakeet-v3');
+export const moonshineJapaneseManifest = () => manifest('moonshine-small-ja');
 export const moonshineManifest = () => manifest('moonshine-medium-en');
 export async function optionalAsrFiles(spec, label, progress) {
   try { return await readAsrFiles(await prepare(spec, progress), label); }

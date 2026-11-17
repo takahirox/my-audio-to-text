@@ -1,3 +1,4 @@
+import { moonshineWorkerFixture } from '../fixtures/moonshine-worker.js';
 import { writeSummaryAssetFixture } from './summary-asset-fixture.js';
 import { test as base, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
@@ -14,20 +15,7 @@ const test = base.extend({
     await cp('extension', path.join(root, 'extension'), { recursive: true });
     await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(vendor|tts-assets|correction-assets)(\/|$)/.test(source) });
     await cp('extension/manifest.json', path.join(root, 'manifest.json'));
-    for (const role of ['sherpa', 'silero']) {
-      await writeFile(path.join(root, 'web', `${role}-worker.js`), `
-        self.onmessage = ({data}) => {
-          if (data.type === 'load') postMessage({type:'ready'});
-          if (data.type === 'fixture-error') postMessage({type:'error',message:'Controlled worker failure'});
-          if (data.type === 'fixture-progress') postMessage({type:'progress',message:'Loading fixture models…'});
-          if (data.type === 'vad-audio') postMessage({type:'vad',session:data.session,frames:[{audio:data.audio,speaking:true}]});
-          if (data.type === 'vad-stop') postMessage({type:'vad-stopped',session:data.session});
-          if (data.type === 'decode') {
-            postMessage({type:data.final ? 'final' : 'partial',text:data.final ? ' ' : 'extension transcript',id:data.id,session:data.session});
-            postMessage({type:'decoded',session:data.session});
-          }
-        };`);
-    }
+    for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, 'web', `${role}-worker.js`), moonshineWorkerFixture({ partial: 'extension transcript', final: 'extension transcript' }));
     const context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), {
       channel: 'chromium', headless: true,
       // Playwright's default mute flag also silences native tabCapture input.
@@ -39,7 +27,7 @@ const test = base.extend({
       const { id } = await cdp.send('Extensions.loadUnpacked', { path: root });
       // These are capture/lifecycle tests, with fixture Workers. Keep model
       // preparation deterministic as well, rather than downloading real weights.
-      for (const name of ['reazon', 'silero']) {
+      for (const name of ['moonshine-small-ja', 'moonshine-medium-en']) {
         const file = path.join(root, 'extension', `${name}-assets.json`), spec = JSON.parse(await readFile(file, 'utf8'));
         const body = Buffer.from('capture lifecycle model fixture');
         await writeFile(path.join(root, 'extension', `${name}-fixture.bin`), body);
@@ -152,7 +140,7 @@ async function released(page, count = 1, ready = true) {
   await expect.poll(() => page.evaluate(() => window.streams.every(s => s.context.state === 'closed'))).toBe(true);
   if (ready) {
     await expect(page.locator('#model-status')).toHaveText('Ready');
-    expect(await page.evaluate(() => window.workers.length - window.terminated)).toBe(2);
+    expect(await page.evaluate(() => window.workers.length - window.terminated)).toBe(1);
   } else expect(await page.evaluate(() => window.workers.length - window.terminated)).toBe(0);
 }
 
@@ -161,12 +149,12 @@ for (const fallback of [false, true]) {
     const page = await setup(extension, { fallback });
     await expect(page.locator('#status')).toHaveText('Transcription active');
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
-    expect(await graphTypes(page)).toEqual(['ExtensionTabAudioNode', 'SpeechToTextNode', 'KeyedTextCoalesceNode', 'KeyedTextPairNode', 'KeyedPairedTextAccumulatorNode', 'DisplayNode']);
+    expect(await graphTypes(page)).toEqual(['ExtensionTabAudioNode', 'SpeechToTextMoonshineSmallJaNode', 'KeyedTextCoalesceNode', 'KeyedTextPairNode', 'KeyedPairedTextAccumulatorNode', 'DisplayNode']);
     expect(await page.evaluate(() => window.requests)).toEqual([{ targetTabId: 42 }]);
     expect(await page.evaluate(() => window.mediaOptions.audio.mandatory)).toEqual({ chromeMediaSource: 'tab', chromeMediaSourceId: 'fixture-id' });
     expect(await page.evaluate(() => window.mediaOptions.video)).toBe(false);
     await expect(page.locator('#signal')).toHaveText('audio: Audio signal detected.');
-    const inputs = await page.evaluate(() => window.inputs.filter(m => m.type === 'vad-audio'));
+    const inputs = await page.evaluate(() => window.inputs.filter(m => m.type === 'audio'));
     expect(inputs.length).toBeGreaterThan(0);
     expect(inputs.every(m => m.float32 && m.length <= 2048)).toBe(true);
     expect(inputs.some(m => Math.abs(m.last - 0.05) < 1e-5)).toBe(true);
@@ -174,11 +162,11 @@ for (const fallback of [false, true]) {
     await expect(page.locator('#status')).toContainText('Stopped');
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
      await released(page);
-    expect(await page.evaluate(() => window.terminated)).toBe(2);
+    expect(await page.evaluate(() => window.terminated)).toBe(1);
     await page.locator('#start').click();
     await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
     await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
-    await released(page, 2); expect(await page.evaluate(() => window.terminated)).toBe(4);
+    await released(page, 2); expect(await page.evaluate(() => window.terminated)).toBe(2);
     await expect(page.locator('#errors')).toBeEmpty();
     expect(await page.evaluate(() => window.pipelineCalls)).toEqual([
       { hook: 'start', id: 0 }, { hook: 'stop', id: 0 }, { hook: 'dispose', id: 0 },
@@ -201,7 +189,7 @@ test('Stop waits for the final transcript port before completion and disposal', 
   await expect(page.locator('#status')).toContainText('Stopped');
   await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
   await released(page);
-  expect(await page.evaluate(() => window.terminated)).toBe(2);
+  expect(await page.evaluate(() => window.terminated)).toBe(1);
 });
 
 test('teardown while the transcript sink drains suppresses late output and releases workers', async ({ extension }) => {
@@ -211,7 +199,7 @@ test('teardown while the transcript sink drains suppresses late output and relea
   await page.locator('#stop').click();
   await expect.poll(() => page.evaluate(() => !!window.releaseTranscript)).toBe(true);
   await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
-  expect(await page.evaluate(() => window.terminated)).toBe(2);
+  expect(await page.evaluate(() => window.terminated)).toBe(1);
   await page.evaluate(() => window.releaseTranscript());
   await released(page, 1, false);
   await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
@@ -250,7 +238,7 @@ for (const action of ['navigate', 'close']) {
     if (action === 'navigate') await page.goto(extension.url.replace('recorder.html', 'model-cache.html'));
     else await page.close();
     await expect.poll(() => observer.evaluate(() => JSON.parse(localStorage.getItem('live-teardown')))).toEqual({
-      terminated: 3, stops: [1], ended: true, hooks: ['start', 'dispose'],
+      terminated: 2, stops: [1], ended: true, hooks: ['start', 'dispose'],
     });
   });
 }
@@ -265,7 +253,7 @@ test('model preload progress and cancellation leave capture unrequested and retr
   expect(await page.evaluate(() => window.requests)).toEqual([]);
   await page.locator('#stop').click();
   await expect(page.locator('#model-status')).toContainText('Preparation canceled');
-  expect(await page.evaluate(() => window.terminated)).toBe(2);
+  expect(await page.evaluate(() => window.terminated)).toBe(1);
   expect(await page.evaluate(() => window.requests)).toEqual([]);
   expect(await page.evaluate(() => window.pipelineCalls)).toEqual([{ hook: 'dispose', id: 0 }]);
   await page.evaluate(() => { window.holdLoad = false; });
@@ -282,7 +270,7 @@ test('model preload progress and cancellation leave capture unrequested and retr
 for (const phase of ['loading', 'running']) {
   test(`worker failure during ${phase} reports locally and permits retry`, async ({ extension }) => {
     const page = await setup(extension, { mode: phase === 'loading' ? 'loading' : 'audio' });
-    await expect.poll(() => page.evaluate(() => window.workers.length)).toBe(2);
+    await expect.poll(() => page.evaluate(() => window.workers.length)).toBe(1);
     if (phase === 'running') await expect(page.locator('[data-display="transcript"] .display-content')).toHaveText('extension transcript');
     await page.evaluate(() => window.workers[0].postMessage({ type: 'fixture-error' }));
     await expect(page.locator('#errors')).toContainText('Controlled worker failure');
@@ -295,7 +283,7 @@ for (const phase of ['loading', 'running']) {
       await expect(page.locator('#start')).toBeDisabled();
       expect(await page.evaluate(() => window.requests)).toEqual([]);
     }
-    expect(await page.evaluate(() => window.terminated)).toBe(2);
+    expect(await page.evaluate(() => window.terminated)).toBe(1);
     await page.evaluate(() => { window.holdLoad = false; });
     if (phase === 'loading') await page.locator('#retry-models').click();
     await expect(page.locator('#start')).toBeEnabled();
@@ -315,7 +303,7 @@ for (const mode of ['api-error', 'media-error', 'no-audio']) {
     await expect(page.locator('#start')).toBeEnabled();
     await expect(page.locator('#stop')).toBeDisabled();
     await expect.poll(() => page.evaluate(() => window.contexts.every(c => c.state === 'closed'))).toBe(true);
-    expect(await page.evaluate(() => window.terminated)).toBe(2);
+    expect(await page.evaluate(() => window.terminated)).toBe(1);
     expect(await page.evaluate(() => window.inputs)).toEqual([]);
   });
 }
@@ -349,7 +337,7 @@ test('window teardown during capture setup releases late media without stale out
   await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
   await page.evaluate(() => window.grant()); await released(page, 1, false);
   expect(await page.evaluate(() => window.inputs)).toEqual([]);
-  expect(await page.evaluate(() => window.terminated)).toBe(2);
+  expect(await page.evaluate(() => window.terminated)).toBe(1);
   await expect(page.locator('#errors')).toBeEmpty();
 });
 
@@ -369,7 +357,7 @@ test('a late capture grant cannot feed or end a replacement session', async ({ e
   await expect(page.locator('#errors')).toBeEmpty();
   await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Stopped');
   await released(page, 2);
-  expect(await page.evaluate(() => window.terminated)).toBe(4);
+  expect(await page.evaluate(() => window.terminated)).toBe(2);
 });
 
 test('native tab capture requires the user-invoked tab grant', async ({ extension }) => {

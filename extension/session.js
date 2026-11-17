@@ -13,8 +13,8 @@ import { SpeakerOutputNode } from '../web/speaker-output.js';
 export class TabSession {
   constructor(render, {
     onSourceEnded,
-    workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url))),
-    sourceFactory, microphoneSourceFactory, pageConnectionFactory, whisperWorkerFactory, zipformerWorkerFactory, parakeetWorkerFactory, moonshineWorkerFactory, modelLoadTimeoutMs,
+    workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url)), { type: 'module' }),
+    sourceFactory, microphoneSourceFactory, pageConnectionFactory, moonshineWorkerFactory, moonshineJapaneseWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph({ enabled: false }), graphId = null, graphName = 'Saved graph',
     textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, onSynthesizedAudio = () => {}, speakerContextFactory,
@@ -26,8 +26,7 @@ export class TabSession {
     this.prepareModelAssets = prepareModelAssets;
     this.textSummaryWorkerFactory = textSummaryWorkerFactory;
     this.ifConditionWorkerFactory = ifConditionWorkerFactory;
-    this.parakeetWorkerFactory = parakeetWorkerFactory; this.moonshineWorkerFactory = moonshineWorkerFactory;
-    this.whisperWorkerFactory = whisperWorkerFactory; this.zipformerWorkerFactory = zipformerWorkerFactory;
+    this.moonshineWorkerFactory = moonshineWorkerFactory; this.moonshineJapaneseWorkerFactory = moonshineJapaneseWorkerFactory;
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
     this.microphoneSourceFactory = microphoneSourceFactory; this.pageConnectionFactory = pageConnectionFactory; this.outputTarget = null;
     this.nodeErrors = new Map();
@@ -271,7 +270,7 @@ export class TabSession {
             this.nodeEvent({ severity, message: state }, id);
           }
         },
-        workerFactory: this.workerFactory, whisperWorkerFactory: this.whisperWorkerFactory, zipformerWorkerFactory: this.zipformerWorkerFactory, parakeetWorkerFactory: this.parakeetWorkerFactory, moonshineWorkerFactory: this.moonshineWorkerFactory, sourceFactory: this.sourceFactory,
+        workerFactory: this.workerFactory, moonshineWorkerFactory: this.moonshineWorkerFactory, moonshineJapaneseWorkerFactory: this.moonshineJapaneseWorkerFactory, sourceFactory: this.sourceFactory,
         translationWorkerFactory: this.translationWorkerFactory, prepareTranslation: this.prepareTranslation,
         onHoldState: (state, id) => {
           if (!this.ownsRuntime(session)) return;
@@ -360,9 +359,7 @@ export class TabSession {
       `${node.id}: ${session.sourceStates[node.id] || (node.type === 'MicrophoneAudio'
         ? 'No audio signal yet. Check microphone permission, input volume and device selection.'
         : 'No audio signal yet. Play audio or check whether the tab is muted.')}`);
-    const waiting = [...session.speechNodes].filter(([, node]) => node.waitingConfiguration && !node.disposed)
-      .map(([id, node]) => `${id}: Waiting for startup ${node.configurationPort}; model has not started.`);
-    return [...sources, ...waiting].join('\n');
+    return sources.join('\n');
   }
   sourceEnded(session, id) {
     if (this.onSourceEnded && this.session === session && !session.stopping) { this.onSourceEnded(id); return; }

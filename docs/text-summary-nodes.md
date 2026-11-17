@@ -202,7 +202,7 @@ generation time; progress is internal telemetry rather than a public port.
 
 The isolated packaged runtime is Transformers.js **4.2.0** with its exact
 `onnxruntime-web` **1.26.0-dev.20260416-b7804b056c** dependency. Runtime archives
-and packaged files have SHA-256 pins. Existing translation, Whisper, TTS and
+and packaged files have SHA-256 pins. Existing translation, TTS and
 optional ASR runtimes are unchanged. JavaScript and native WebGPU asyncify WASM are packaged;
 no executable code is fetched at run time. See `scripts/text-summary-runtime.json`.
 Its AutoTokenizer discovery probes `main` without forwarding the requested

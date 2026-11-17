@@ -8,7 +8,7 @@ const saved = page => page.evaluate(() => (() => { const library = JSON.parse(lo
 
 test('fresh install and Reset use current transcription; saved model requirements apply next session', async ({ graphExtension: f }) => {
   const page = await openGraph(f), minimal = await saved(page);
-  expect(minimal.nodes.map(n => n.type)).toEqual(['ChromeTabAudio', 'SpeechToTextReazonSpeech', 'KeyedTextCoalesce', 'KeyedTextPair', 'KeyedPairedTextAccumulator', 'Display']);
+  expect(minimal.nodes.map(n => n.type)).toEqual(['ChromeTabAudio', 'SpeechToTextMoonshineSmallJa', 'KeyedTextCoalesce', 'KeyedTextPair', 'KeyedPairedTextAccumulator', 'Display']);
   expect(minimal.edges).toContainEqual({ from: ['pair', 'pair'], to: ['history', 'pair'] });
   expect(f.requests).toEqual([]); await startGraph(page);
   await emitFinal(page, 'fresh default'); await expect(page.locator('.display-content')).toHaveText('fresh default');
@@ -172,9 +172,10 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.setViewportSize({ width: 620, height: 900 });
   await live.editor.setViewportSize({ width: 1440, height: 1000 });
   await live.models.setViewportSize({ width: 1200, height: 1000 });
-  await expect(live.models.locator('#reazon').getByText('ReazonSpeech ja-en', { exact: true })).toBeVisible();
-  await expect(live.models.locator('.model-card')).toHaveCount(17);
-  await expect(live.models.locator('.model-card .model-status')).toHaveText(Array(17).fill('Not downloaded'));
+  await expect(live.models.locator('#moonshine-small-ja').getByText('Moonshine Small Streaming Japanese (123M)', { exact: true })).toBeVisible();
+  await expect(live.models.locator('.model-card')).toHaveCount(13);
+  await expect(live.models.locator('#moonshine-small-ja .model-status')).toHaveText('Ready · Cached and verified');
+  await expect(live.models.locator('.model-card:not(#moonshine-small-ja) .model-status')).toHaveText(Array(12).fill('Not downloaded'));
   await expect(live.models.getByText('CosyVoice3 0.5B · streaming', { exact: true })).toBeVisible();
   expect(await live.models.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.editor.evaluate(() => window.graphWorkers.length)).toBe(0);

@@ -28,7 +28,7 @@ const button = (page, id, name) => page.locator(`#${id}`).getByRole('button', { 
 
 test('Models removes storage controls and keeps discoverable legal links; model-free editing and Live never request persistence', async ({ graphExtension: f }) => {
   const calls = await trackPersistence(f), live = await openModelFreeGraph(f), models = live.models;
-  await expect(models.locator('.model-card')).toHaveCount(17);
+  await expect(models.locator('.model-card')).toHaveCount(13);
   await expect(models.locator('#persist, #persistence, main > details')).toHaveCount(0);
   await expect(models.getByText('Storage and cache management', { exact: true })).toHaveCount(0);
   await expect(models.locator('footer')).toHaveCount(0);

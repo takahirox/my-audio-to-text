@@ -100,7 +100,7 @@ await graph.start();
 // Later: await graph.stop(); await graph.dispose();
 ```
 
-Connect `SpeechToTextNode.final` directly to `correction.text`. Both ASR ports
+Connect `Moonshine Node.final` directly to `correction.text`. Both ASR ports
 carry `TEXT` strings; choosing **final** is an explicit graph policy for consumers
 that commit text. ASR IDs remain inside the core/node. The Pipeline serializes
 inputs and drains candidate delivery in order. Downstream applications decide

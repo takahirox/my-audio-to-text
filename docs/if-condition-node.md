@@ -2,7 +2,7 @@
 
 Add **IfCondition · local AI** from the Graph Editor's **AI Models / Text** category. It
 accepts `text: TEXT`, has one editable natural-language `condition`, and exposes
-`yes: TEXT` / `no: TEXT`. For example, connect `SpeechToTextReazonSpeech.final`
+`yes: TEXT` / `no: TEXT`. For example, connect `SpeechToTextMoonshineSmallJa.final`
 to `IfCondition.text`, set `Is this a question?`, and connect the two outputs to
 separate Live text displays. Text, translators and other ordinary TEXT producers
 can use the same Node. Auto Save/reload preserves each instance's independent condition

@@ -5,7 +5,7 @@ import { voiceEnabled, voicePosition } from '../extension/web-voice-preference.j
 import { graphNode, edge, defaultGraph } from '../extension/graph.js';
 
 function voice() {
-  return { version: 15, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
+  return { version: 15, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
     edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] };
 }
 test('enablement requires exact versioned boolean consent; assignment cannot enable it', () => {
@@ -46,7 +46,7 @@ test('provisional, cumulative, startup text, duplicate field sinks and incomplet
 });
 
 test('existing ASRs, translation, formatting, batching and summary processors retain typed graph flexibility', () => {
-  for (const type of ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn', 'SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn']) {
+  for (const type of ['SpeechToTextMoonshineSmallJa', 'SpeechToTextMoonshineMediumEn']) {
     const graph = voice(); graph.nodes[1] = graphNode(type, 'asr'); assert.equal(webVoiceError(graph), '', type);
   }
   for (const [type, output] of [['OpusMtJaEn','text'], ['OpusMtEnJa','text'], ['TranslateGemmaJaEn','text'], ['TranslateGemmaEnJa','text'], ['TextWindow','text'], ['TextSummaryLfm2','summary'], ['TextSummaryQwen35','summary']]) {

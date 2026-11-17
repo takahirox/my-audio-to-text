@@ -57,7 +57,7 @@ test('real packaged TranslateGemma: direct translation, bounded batches and ASR 
           tabId: 42, sourceFactory: () => ({ start() {}, stop() {} }),
           workerFactory: () => ({ postMessage(m) {
             if (m.type === 'load') queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } }));
-            if (m.type === 'vad-stop') queueMicrotask(() => this.onmessage?.({ data: { type: 'vad-stopped', session: m.session } }));
+            if (m.type === 'stop') queueMicrotask(() => this.onmessage?.({ data: { type: 'stopped', session: m.session } }));
           }, terminate() {} }),
           onDisplay: (id, s) => { if (id === 'display') display = s.textContent; else previews.push(s.textContent); displayEvents.push({ id, ms: now(), text: s.textContent }); } });
         const scheduler = built.translations[0], emit = scheduler.emit.bind(scheduler);
@@ -97,7 +97,7 @@ test('real packaged TranslateGemma: direct translation, bounded batches and ASR 
         if (mode !== 'baseline') graph.nodes.find(n => n.id === 'window-wait').settings.value = 30;
         if (mode === 'direct-asr') {
           graph.nodes = graph.nodes.filter(n => !['window', 'window-chars', 'window-wait'].includes(n.id));
-          Object.assign(graph.nodes.find(n => n.id === 'input'), { type: 'SpeechToTextReazonSpeech', settings: {} });
+          Object.assign(graph.nodes.find(n => n.id === 'input'), { type: 'SpeechToTextMoonshineSmallJa', settings: {} });
           graph.nodes.push({ id: 'preview-display', type: 'Display', settings: {}, position: { x: 0, y: 0 } });
           graph.edges.push({ from: ['translator', 'provisionalText'], to: ['preview-display', 'input'] });
           graph.nodes.push({ id: 'audio', type: 'ChromeTabAudio', settings: {}, position: { x: 0, y: 0 } });

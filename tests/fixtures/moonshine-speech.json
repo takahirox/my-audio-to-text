@@ -1,0 +1,18 @@
+[
+  {
+    "language": "en",
+    "path": "tests/fixtures/ordinary-english.wav",
+    "bytes": 403992,
+    "sha256": "21212faed6ae5f5958603d4d7cf60a423f1090fb6542d00e3a826ebe6235a768",
+    "text": "The meeting starts at ten. Please send me the report. We need to finish this project by Friday.",
+    "provenance": "macOS offline Samantha English synthetic speech, mono 16 kHz PCM; one second leading and two seconds trailing silence"
+  },
+  {
+    "language": "ja",
+    "path": "tests/fixtures/moonshine-japanese.wav",
+    "bytes": 403120,
+    "sha256": "a336f01038d254933d19128b36e241395c4e78296aac5da4ea64e8aaab9820e5",
+    "text": "今日は東京で会議があります。新しい音声認識のテストをしています。明日の午後三時に資料を送ってください。",
+    "provenance": "macOS offline Kyoko Japanese synthetic speech, mono 16 kHz PCM; one second leading and two seconds trailing silence"
+  }
+]

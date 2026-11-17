@@ -80,7 +80,7 @@ selection, then tested through the production Node/Worker and extension cache
 model ID/revision keys cannot reuse the rejected checkpoint's cached bytes.
 Neither direction is reversible, and no automatic language detection is performed.
 The English → Japanese Worker recases fully uppercase Latin input from
-ReazonSpeech to sentence case, including the pronoun I and weekday names;
+speech recognition to sentence case, including the pronoun I and weekday names;
 mixed-case text and the displayed original are preserved. This case-sensitive
 checkpoint mistranslates uppercase English without that preparation. The
 opt-in smoke checks five ordinary English meanings in both normal and ASR
@@ -205,9 +205,8 @@ and `TranslateGemmaJaEn` (**Japanese → English**). Both now share the explicit
 committed/preview port contract with OPUS-MT (graph v14). Add either processor; there is no translation
 preset. Connect `Text.value → TranslateGemmaEnJa.text → TextAccumulator.append`
 (using the processor's `text` output), or
-`ChromeTabAudio.audio → SpeechToTextZipformerEn.audio`,
-`SpeechToTextZipformerEn.final → TranslateGemmaEnJa.text`. English Whisper,
-Moonshine, Parakeet or ReazonSpeech final TEXT can feed the same input.
+`ChromeTabAudio.audio → SpeechToTextMoonshineMediumEn.audio`,
+`SpeechToTextMoonshineMediumEn.final → TranslateGemmaEnJa.text`. Language-appropriate Moonshine final TEXT can feed the same input.
 
 For bilingual history, connect `source`, `text`, `error` directly to three
 `TextFormatter` inputs and set a template such as

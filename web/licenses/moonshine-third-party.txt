@@ -1,10 +1,10 @@
-Moonshine WASM 0.1.5 bundled third-party notices
-Source (including unmodified MPL-covered Eigen): https://github.com/moonshine-ai/moonshine/tree/234f60faa0eb388b01cdf7e60aca232af37aefda
+Moonshine WASM 0.1.6 bundled third-party notices
+Source (including unmodified MPL-covered Eigen): https://github.com/moonshine-ai/moonshine/tree/d8d8fa29d05ca67441a7719e70099f9f48917a93
 Eigen Source Code Form is available at the above immutable source tree in core/third-party/Eigen.
 
 
 core/cpp-annote/LICENSE
-https://raw.githubusercontent.com/moonshine-ai/moonshine/234f60faa0eb388b01cdf7e60aca232af37aefda/core/cpp-annote/LICENSE
+https://raw.githubusercontent.com/moonshine-ai/moonshine/d8d8fa29d05ca67441a7719e70099f9f48917a93/core/cpp-annote/LICENSE
 
 MIT License
 
@@ -29,7 +29,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 core/third-party/Eigen/COPYING.MPL2
-https://raw.githubusercontent.com/moonshine-ai/moonshine/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/Eigen/COPYING.MPL2
+https://raw.githubusercontent.com/moonshine-ai/moonshine/d8d8fa29d05ca67441a7719e70099f9f48917a93/core/third-party/Eigen/COPYING.MPL2
 
 Mozilla Public License Version 2.0
 ==================================
@@ -407,7 +407,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 
 core/third-party/kaldi-native-fbank/LICENSE
-https://raw.githubusercontent.com/moonshine-ai/moonshine/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/kaldi-native-fbank/LICENSE
+https://raw.githubusercontent.com/moonshine-ai/moonshine/d8d8fa29d05ca67441a7719e70099f9f48917a93/core/third-party/kaldi-native-fbank/LICENSE
 
 
                                  Apache License
@@ -614,7 +614,7 @@ https://raw.githubusercontent.com/moonshine-ai/moonshine/234f60faa0eb388b01cdf7e
 
 
 core/third-party/kissfft/COPYING
-https://raw.githubusercontent.com/moonshine-ai/moonshine/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/kissfft/COPYING
+https://raw.githubusercontent.com/moonshine-ai/moonshine/d8d8fa29d05ca67441a7719e70099f9f48917a93/core/third-party/kissfft/COPYING
 
 Copyright (c) 2003-2010 Mark Borgerding . All rights reserved.
 
@@ -630,7 +630,7 @@ according with:
 
 
 core/third-party/nlohmann/LICENSE.MIT
-https://raw.githubusercontent.com/moonshine-ai/moonshine/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/nlohmann/LICENSE.MIT
+https://raw.githubusercontent.com/moonshine-ai/moonshine/d8d8fa29d05ca67441a7719e70099f9f48917a93/core/third-party/nlohmann/LICENSE.MIT
 
 MIT License
 
@@ -656,7 +656,7 @@ SOFTWARE.
 
 
 core/third-party/onnxruntime/LICENSE.txt
-https://raw.githubusercontent.com/moonshine-ai/moonshine/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/onnxruntime/LICENSE.txt
+https://raw.githubusercontent.com/moonshine-ai/moonshine/d8d8fa29d05ca67441a7719e70099f9f48917a93/core/third-party/onnxruntime/LICENSE.txt
 
 MIT License
 
@@ -682,7 +682,7 @@ SOFTWARE.
 
 
 core/third-party/utf-8/LICENSE.txt
-https://raw.githubusercontent.com/moonshine-ai/moonshine/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/utf-8/LICENSE.txt
+https://raw.githubusercontent.com/moonshine-ai/moonshine/d8d8fa29d05ca67441a7719e70099f9f48917a93/core/third-party/utf-8/LICENSE.txt
 
 Boost Software License - Version 1.0 - August 17th, 2003
 
@@ -710,7 +710,7 @@ DEALINGS IN THE SOFTWARE.
 
 
 core/third-party/utf8proc/LICENSE.md
-https://raw.githubusercontent.com/moonshine-ai/moonshine/234f60faa0eb388b01cdf7e60aca232af37aefda/core/third-party/utf8proc/LICENSE.md
+https://raw.githubusercontent.com/moonshine-ai/moonshine/d8d8fa29d05ca67441a7719e70099f9f48917a93/core/third-party/utf8proc/LICENSE.md
 
 ## utf8proc license ##
 

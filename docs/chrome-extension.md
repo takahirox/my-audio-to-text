@@ -1,22 +1,10 @@
 # Current-tab transcription Chrome extension
 
-This desktop Chromium Manifest V3 PoC starts local transcription for the tab
-on which you invoke its toolbar action. It uses the same ReazonSpeech ja-en,
-Silero VAD and hayamimi utterance policy as the [Node Playground speech test page](node-playground.md). There is no
-recognition server. Graph Editor also offers local multilingual Whisper tiny for
-English or Text-driven Japanese recognition; see [Whisper setup and testing](whisper-node.md). For incremental English previews,
-choose [Streaming Zipformer English ASR](zipformer-node.md), or opt into the independent
-[Parakeet v3 and Moonshine Medium Streaming Nodes](optional-asr-nodes.md). The default whole-tab
-graph needs no page injection or
-media picker. Optional microphone and page-field outputs are
-configured in Graph Editor. Focused output follows the toolbar tab automatically;
-microphone permission is requested by Start.
-
 The extension uses the shared Node/Port runtime:
 
 ```text
 Shared offscreen tab capture → ExtensionTab subscription → ExtensionTabAudioNode.audio
-  → SpeechToTextNode.audio
+  → Moonshine Node.audio
     ├─ provisional → TranscriptOutputNode.provisional
     └─ final       → TranscriptOutputNode.final
 ```
@@ -48,9 +36,11 @@ and Models keep their dark appearance:
   groups reset, validation, import/export and optional warnings. Edits save automatically. Saving prepares required optional
   model weights with progress, cancellation and retry. Models provides asset
   requirements and terms. Changes apply next session; external revisions retain recoverable drafts and offer Reload latest graph in recovery controls. Reset is undoable.
-- **Models** opens a dedicated tab from Graph Library, Graph Editor or Live, with
-  verified cache controls for ReazonSpeech, Silero, Whisper, Zipformer and both OPUS-MT
-  directions, TranslateGemma 4B (English ↔ Japanese) and Supertonic 3/Kokoro voices. Each card has one collapsed **Details** disclosure for verified files, bytes, requirements and license/source notices. TranslateGemma also keeps its terms link before Download. Opening Models never downloads weights.
+- **Models** opens a dedicated tab from Graph Library, Graph Editor or Live.
+  It manages the two Moonshine streaming recognizers, text/translation models,
+  speech synthesis models and their dependencies. Each card has one collapsed
+  **Details** disclosure with verified files, requirements and source/license
+  notices. Opening Models checks storage without downloading weights.
 
 The execution window's **Library**, **Edit graph** and **Models** links open
 separate tabs while capture continues. **Edit graph** opens this window's active
@@ -73,18 +63,9 @@ From a fresh checkout, run this single command in the repository root:
 npm run setup:extension
 ```
 
-It runs `npm ci`, `prepare:assets`, `prepare:translation-assets`,
-`prepare:whisper-assets`, `prepare:tts-assets`, `prepare:zipformer-assets`,
-`prepare:optional-asr-assets`, `prepare:text-summary-assets` and
-`build:extension` in that order, stopping at the first
-failure. Individual preparation commands remain available and preserve other runtime directories.
-
-Setup prepares only pinned, weight-free runtime JS/WASM, linguistic frontends,
-configuration and license/source notices. ReazonSpeech/Silero and Zipformer
-runtimes come from the reproducible 6.9 MB `scripts/sherpa-runtime.tar.gz` package;
-no upstream model archive is downloaded during setup. Whisper uses the translation
-runtime. OpenJTalk's statistical HTS voice is downloaded only for a Japanese
-Kokoro graph, separately from its packaged dictionary and WASM frontend.
+Setup stages pinned, weight-free runtimes and frontend resources. The shared
+Moonshine release build is archive/member-checksummed and contains no speech
+weights. OpenJTalk's frontend voice remains an on-demand Kokoro TTS dependency.
 
 Every model's weights follow successful **Auto Save** or explicit **Download** or
 **Retry** in Models. Setup/build does not prepare the model cache. Building copies
@@ -250,7 +231,7 @@ Edit a graph with whole-tab and/or microphone Inputs and
 one or more outputs. Multiple independent ASRs and displays run concurrently;
 parked or unfinished Nodes remain saved but inactive. See the
 [execution and permission policy](extension-graph.md). Graph Editor owns source
-and output choices; Live shows actionable errors without target controls. Connect `SpeechToTextReazonSpeech.final → FocusedInputTextOutputNode.text`
+and output choices; Live shows actionable errors without target controls. Connect `SpeechToTextMoonshineSmallJa.final → FocusedInputTextOutputNode.text`
 or `OPUS-MT.text → FocusedInputTextOutputNode.text` directly. These plain TEXT
 strings can fan out to TTS and other consumers. For final-only output, select
 ASR `final` or translation `text`. Bilingual formatting uses grouped primitive
@@ -522,19 +503,6 @@ preparation and capture, independent teardown, late-event rejection, model/cache
 and device errors, permission removal, navigation/target removal, back-forward
 cache, native service-worker stop/restart, offscreen loss and extension reload.
 
-The feasibility probe uses a disposable minimal extension and fresh offscreen
-context for each native permission state. It verifies AudioWorklet, isolated
-Worker/shared-memory WASM and records WebGPU adapter availability. Real-model
-mode uses the weight-free runtime from `prepare:assets` and prepares the pinned
-ReazonSpeech/Silero assets through the verified cache, without requiring unrelated
-model packages. It runs
-actual CPU/WASM inference on `ordinary-english.wav` supplied by Chrome's fake
-microphone device. It compares final events with text inserted in native input
-and textarea, and runs concurrent Live/Web sessions. Historical real-model results and source hashes are in
-[#263 evidence](evidence/web-voice-263.md); they exercised the former offscreen
-capture design. Current page-capture checks are recorded in
-[#275 evidence](evidence/web-voice-275.md).
-
 Native permission-bubble buttons are outside this automated suite. Website grants
 use a disposable installation/upgrade fixture, restored to the production
 optional-only manifest before feature tests. Microphone decisions use site-scoped native
@@ -582,23 +550,6 @@ npm test
 npm run test:browser
 npm run test:extension
 ```
-
-The extension tests launch isolated Chrome-for-Testing profiles, load the actual
-unpacked manifest via the browser DevTools `Extensions.loadUnpacked` API, and
-exercise the extension page under its real CSP. This test-only debugger flag
-and profile do not change installed Chrome or the extension's permissions.
-The suite includes controlled API streams with real stereo Web Audio and
-AudioWorklet/fallback processing, the production ASR core with deterministic
-recognition workers, the actual shared pipeline graph, lifecycle/error/resource
-checks, delayed transcript delivery and disposal, and real pinned
-ReazonSpeech/Silero initialization and pipeline silence finalization under MV3 CSP.
-The real-toolbar test uses `Extensions.triggerAction` on three generated audio tabs
-with simultaneous native tab capture and independent window cleanup; deterministic decoding isolates capture behavior from
-speech accuracy. A native permission check verifies that opening the extension
-page without invoking its action cannot capture an arbitrary tab. Unit tests
-also verify normalized PCM at 16/44.1/48 kHz,
-playback routing, Stop/repeat, and stale-session rejection.
-See the [Issue #61 validation evidence](evidence/extension-pipeline-61.md).
 
 An optional manual speech check can use Google Meet, YouTube or another tab:
 confirm audible playback, evolving provisional text, final text after Stop,
@@ -699,12 +650,6 @@ not establish real model inference.
 
 Opt-in real-model smoke (no inference, ASR or capture mocks):
 
-```sh
-python3 scripts/prepare-reazon-ja-en-fixtures.py
-EXTENSION_OPUS_SMOKE=1 npm run test:extension -- tests/extension/translation-smoke.spec.js
-EXTENSION_OPUS_SMOKE=en-ja npm run test:extension -- tests/extension/translation-smoke.spec.js
-```
-
 This launches an isolated Chrome-for-Testing profile, triggers the actual toolbar
 action on a tab playing checksum-pinned upstream Japanese or English WAV audio, explicitly
 downloads real OPUS assets under MV3 CSP, and checks original ASR previews and committed translation
@@ -750,3 +695,6 @@ commands](translation-nodes.md#translategemma-in-the-extension-124) and
 superiority to OPUS-MT is assumed.
 
 Connect complete TEXT snapshots directly to `Display.input1`. For continuous source/translation history, use [portable keyed pairs](display-items.md). Unsupported saved Nodes/ports require Reset or Import and automatic persistence of a repaired graph copy.
+
+
+Speech recognition uses only language-specific [Moonshine streaming Nodes](optional-asr-nodes.md). The new default graph is Japanese Small; English examples select English Medium explicitly.

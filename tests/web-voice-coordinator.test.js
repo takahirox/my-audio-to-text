@@ -14,7 +14,7 @@ const event = () => {
 };
 async function fixture(t, { existingDocument = false } = {}) {
   const library = { assignments: { webVoice: 'voice' }, graphs: [{ id: 'voice', name: 'Dictation', graph: { version: 15,
-    nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
+    nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
     edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] } }] };
   const preferences = {};
   const timers = new Set(), created = [], removed = [], relays = [], setups = [];

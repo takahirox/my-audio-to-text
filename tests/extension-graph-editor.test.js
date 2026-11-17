@@ -30,7 +30,7 @@ test('type mismatch, self-connection, unknown ports, cycles preserve the prior e
   connect(e, 'audio', 'audio', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'translation', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'speech', 'final', 'history', 'pair'); assert.deepEqual(e.draft.edges, before);
-  e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToTextReazonSpeech.outputs.final };
+  e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToTextMoonshineSmallJa.outputs.final };
   e.connect('translation', 'text', NODE_TYPES.OpusMtJaEn.inputs.text); assert.deepEqual(e.draft.edges, before);
   assert.match(e.error, /Unknown port/);
   e.draft.nodes.push(graphNode('OpusMtEnJa', 'second'));
@@ -50,35 +50,6 @@ for (const ports of [['input1','input2'],['input2','input1']]) test(`paired edit
     assert.deepEqual(validateGraph(e.draft),[]);
   }
 });
-
-test('Number connects only to NUMBER; consumer value limits do not restrict edge construction', () => {
-  const e = editor(defaultGraph()); e.draft.nodes.push(graphNode('Number', 'duration'));
-  const before = structuredClone(e.draft.edges);
-  connect(e, 'duration', 'value', 'speech', 'audio'); assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'speech', 'maxDuration'); assert.deepEqual(e.draft.edges, before);
-  connect(e, 'audio', 'audio', 'speech', 'maxDuration'); assert.deepEqual(e.draft.edges, before);
-  e.draft.nodes.at(-1).settings.value = 0;
-  connect(e, 'duration', 'value', 'speech', 'maxDuration');
-  assert.deepEqual(e.draft.edges, [...before, edge('duration', 'value', 'speech', 'maxDuration')]);
-  e.draft.nodes.at(-1).settings.value = 2.5;
-  connect(e, 'duration', 'value', 'speech', 'maxDuration');
-  assert.deepEqual(e.draft.edges.at(-1), edge('duration', 'value', 'speech', 'maxDuration'));
-});
-
-test('Whisper editor rejects provisional and accepts final directly into Display.input', () => {
-  const graph = defaultGraph(); graph.nodes[1].type = 'SpeechToTextWhisper';
-  graph.edges = graph.edges.filter(route => !['provisional', 'provisionalId'].includes(route.from[1]));
-  graph.edges = graph.edges.filter(e => e.to[0] !== 'transcript');
-  graph.edges = graph.edges.filter(route => route.to[0] !== 'transcript');
-  const e = editor(graph), before = structuredClone(graph.edges);
-  e.selected = { id: 'speech', port: 'provisional', contract: NODE_TYPES.SpeechToTextWhisper.outputs.final };
-  e.connect('transcript', 'input1', NODE_TYPES.Display.inputs.input1);
-  assert.match(e.error, /Unknown port: speech.provisional → transcript.input/);
-  assert.deepEqual(e.draft.edges, before);
-  connect(e, 'speech', 'final', 'transcript', 'input1');
-  assert.deepEqual(e.draft.edges, [...before, edge('speech', 'final', 'transcript', 'input1')]);
-});
-
 
 test('formatter Add/Remove changes only that instance and the removed last wire; invalid template draft remains editable', () => {
   const graph = defaultGraph(); graph.nodes.push(graphNode('TextFormatter', 'a'), graphNode('TextFormatter', 'b'));

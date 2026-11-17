@@ -4,7 +4,7 @@ import { defaultGraph, graphNode, edge, validateGraph, assertGraph, readGraph, G
 import { FocusedInputTextOutputNode } from '../extension/page-output-node.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { TEXT } from '../web/translation-nodes.js';
-import { SpeechToTextNode } from '../web/transcription-nodes.js';
+import { SpeechToTextMoonshineSmallJaNode as SpeechToTextNode } from '../web/moonshine-small-ja-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { TabSession } from '../extension/session.js';
 
@@ -32,7 +32,7 @@ test('toolbar preparation authorizes only executable focused outputs, leaving pa
   try {
     const parked = defaultGraph(); parked.nodes.push(graphNode('FocusedInputTextOutputNode', 'parked'));
     const incomplete = defaultGraph();
-    incomplete.nodes.push(graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'field'));
+    incomplete.nodes.push(graphNode('SpeechToTextMoonshineSmallJa', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'field'));
     incomplete.edges.push(edge('unfinished', 'final', 'field', 'text'));
     for (const graph of [parked, incomplete, fieldGraph()]) {
       const session = new TabSession(() => {}, { graph });

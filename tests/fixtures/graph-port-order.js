@@ -2,7 +2,7 @@ import { settleAutoSave } from '../extension/ui-controls.js';
 import { expect } from '@playwright/test';
 import { assertRoutingGeometry } from './graph-routing.js';
 
-const asrTypes = ['SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn', 'SpeechToTextParakeetV3', 'SpeechToTextMoonshineMediumEn'];
+const asrTypes = ['SpeechToTextMoonshineSmallJa', 'SpeechToTextMoonshineMediumEn'];
 const translatorTypes = ['OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaJaEn', 'TranslateGemmaEnJa'];
 const keyedInputs = ['input1', 'id1', 'input2', 'id2'];
 const translationOutputs = ['text', 'id', 'source', 'error', 'provisionalText', 'provisionalId', 'provisionalSource', 'provisionalError'];
@@ -30,7 +30,7 @@ export async function loadPortOrderGraph(page) {
 export async function checkPortOrderAndInspector(page, tabKey = 'Tab') {
   const graph = await loadPortOrderGraph(page);
   const expected = node => {
-    if (asrTypes.includes(node.type)) return { output: ['final', 'finalId', ...(['SpeechToTextWhisper', 'SpeechToTextParakeetV3'].includes(node.type) ? [] : ['provisional', 'provisionalId'])] };
+    if (asrTypes.includes(node.type)) return { output: ['final', 'finalId', 'provisional', 'provisionalId'] };
     if (translatorTypes.includes(node.type)) return { input: ['text', 'id', 'provisional', 'provisionalId', ...(node.type.startsWith('TranslateGemma') ? ['context'] : [])], output: translationOutputs };
     if (['KeyedTextCoalesce', 'KeyedTextPair'].includes(node.type)) return { input: keyedInputs, output: node.type === 'KeyedTextCoalesce' ? ['text', 'id'] : ['pair'] };
     if (['Display', 'TextFormatter'].includes(node.type)) return { input: Array.from({ length: node.settings.inputCount }, (_, i) => `input${i + 1}`) };

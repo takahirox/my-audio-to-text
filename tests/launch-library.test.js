@@ -14,7 +14,7 @@ async function fixture() {
   return { storage, store, locks, get writes() { return writes; }, launch: (op, id) => launchLibrary(storage, op, id, locks) };
 }
 const simple = () => ({ version: 15, nodes: [graphNode('Text', 'source'), graphNode('Display', 'display')], edges: [edge('source', 'value', 'display', 'input1')] });
-const voice = () => ({ version: 15, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextReazonSpeech', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')], edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] });
+const voice = () => ({ version: 15, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')], edges: [edge('mic', 'audio', 'asr', 'audio'), edge('asr', 'final', 'field', 'text')] });
 
 test('valid last selection survives rename and reorder; checking a window never changes it', async () => {
   const f = await fixture();

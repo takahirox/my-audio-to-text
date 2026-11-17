@@ -50,7 +50,7 @@ for (const slug of [...asrPages, ...textPages, ...streamPages]) {
     await page.goto(`./nodes/${slug}/`); await expect(page.locator('#run')).toBeEnabled();
     if (asrPages.includes(slug)) await page.locator('#file').setInputFiles(wavFixture(3));
     await page.locator('#run').click();
-    const expected = phase === 'loading' ? 'load' : asrPages.includes(slug) ? (slug === 'whisper' ? 'decode' : 'audio') : slug === 'if-condition' ? 'decide' : textPages.includes(slug) ? 'summarize' : 'generate';
+    const expected = phase === 'loading' ? 'load' : asrPages.includes(slug) ? 'audio' : slug === 'if-condition' ? 'decide' : textPages.includes(slug) ? 'summarize' : 'generate';
     await expect.poll(() => page.evaluate(type => window.modelWorkers.some(w => w.messages.some(m => m.type === type)), expected)).toBe(true);
     await page.locator('#cancel').click(); await expect(page.locator('#status')).toHaveText('Canceled');
     expect((await page.evaluate(() => window.modelWorkers)).every(worker => worker.terminated === 1)).toBe(true);
@@ -94,7 +94,7 @@ for (const slug of streamPages) test(`${slug}: plays a chunk before generation e
   expect(await page.evaluate(() => window.modelWorkers[0].terminated)).toBe(1);
 });
 
-for (const slug of ['zipformer', 'moonshine-medium']) test(`${slug}: real provisional UI during replay; Stop finalizes the accepted prefix`, async ({ page }) => {
+for (const slug of asrPages) test(`${slug}: real provisional UI during replay; Stop finalizes the accepted prefix`, async ({ page }) => {
   await modelWorkers(page, slug); await page.goto(`./nodes/${slug}/`); await expect(page.locator('#run')).toBeEnabled();
   await page.locator('#file').setInputFiles(wavFixture(3)); await page.locator('#run').click();
   await expect(page.locator('#partial')).toHaveText('Streaming preview');
@@ -103,7 +103,7 @@ for (const slug of ['zipformer', 'moonshine-medium']) test(`${slug}: real provis
 });
 
 test('invalid audio fails visibly before model download and can be replaced', async ({ page }) => {
-  await observeModels(page); await page.goto('./nodes/whisper/'); await expect(page.locator('#run')).toBeEnabled();
+  await observeModels(page); await page.goto('./nodes/moonshine-small-ja/'); await expect(page.locator('#run')).toBeEnabled();
   await page.locator('#file').setInputFiles({ name: 'bad.wav', mimeType: 'audio/wav', buffer: Buffer.from('invalid') });
   await page.locator('#run').click(); await expect(page.locator('#errors')).toContainText('Cannot decode');
   expect(await page.evaluate(() => window.modelWorkers)).toEqual([]); await expect(page.locator('#run')).toBeEnabled();
@@ -115,13 +115,12 @@ test('IfCondition shows both independent decisions', async ({ page }) => {
   await expect(page.locator('#status')).toHaveText('Complete'); await expect(page.locator('#output')).toHaveText('No');
 });
 
-for (const slug of ['whisper', 'text-summary-lfm2', 'text-summary-qwen35', ...streamPages]) test(`${slug}: supported language/voice/prompt settings reach only the selected model`, async ({ page }) => {
+for (const slug of ['text-summary-lfm2', 'text-summary-qwen35', ...streamPages]) test(`${slug}: supported language/voice/prompt settings reach only the selected model`, async ({ page }) => {
   await modelWorkers(page, slug); await observeModels(page);
   await page.goto(`./nodes/${slug}/`); await expect(page.locator('#run')).toBeEnabled();
   await page.locator('#language').selectOption(streamPages.includes(slug) ? 'japanese' : 'ja');
   if (slug === 'qwen3-tts') await page.locator('#voice').selectOption('ryan');
   if (textPages.includes(slug)) await page.locator('#prompt').fill('Give one concise sentence.');
-  if (slug === 'whisper') await page.locator('#file').setInputFiles(wavFixture());
   await page.locator('#run').click(); await expect(page.locator('#status')).toHaveText('Complete');
   const messages = await page.evaluate(() => window.modelWorkers.flatMap(worker => worker.messages));
   expect(messages.some(message => message.language === (streamPages.includes(slug) ? 'japanese' : 'ja'))).toBe(true);
@@ -132,7 +131,7 @@ for (const slug of ['whisper', 'text-summary-lfm2', 'text-summary-qwen35', ...st
   if (streamPages.includes(slug)) expect(messages.some(message => message.voice === (slug === 'qwen3-tts' ? 'ryan' : 'libritts-r-4446'))).toBe(true);
 });
 
-for (const slug of ['parakeet-v3', 'text-summary-lfm2', 'text-summary-qwen35', ...streamPages]) test(`${slug}: GPU preflight fails clearly before downloading weights`, async ({ page }) => {
+for (const slug of ['text-summary-lfm2', 'text-summary-qwen35', ...streamPages]) test(`${slug}: GPU preflight fails clearly before downloading weights`, async ({ page }) => {
   const worker = slug.startsWith('text-summary') ? 'text-summary' : slug, downloads = [];
   await page.context().route(`**/${worker}-worker.js`, async route => {
     const original = await route.fetch();
@@ -148,7 +147,7 @@ for (const slug of ['parakeet-v3', 'text-summary-lfm2', 'text-summary-qwen35', .
   await expect(page.locator('#run')).toBeEnabled(); expect(downloads).toEqual([]);
 });
 
-for (const slug of ['parakeet-v3', 'text-summary-lfm2', 'qwen3-tts']) test(`${slug}: cancel pending browser GPU setup prevents a late model load`, async ({ page }) => {
+for (const slug of ['text-summary-lfm2', 'qwen3-tts']) test(`${slug}: cancel pending browser GPU setup prevents a late model load`, async ({ page }) => {
   await modelWorkers(page, slug); await observeModels(page);
   await page.goto(`./nodes/${slug}/`); await expect(page.locator('#run')).toBeEnabled();
   if (asrPages.includes(slug)) await page.locator('#file').setInputFiles(wavFixture());

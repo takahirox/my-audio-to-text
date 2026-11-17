@@ -1,7 +1,7 @@
-import { reazonManifest, sileroManifest, whisperManifest, zipformerManifest, japaneseFrontendManifest } from './local-asr-cache.js';
+import { japaneseFrontendManifest } from './japanese-frontend-cache.js';
 import { textSummaryManifest } from './text-summary-cache.js';
 import { ModelAssetCache } from './model-asset-cache.js';
-import { parakeetManifest, moonshineManifest } from './optional-asr-cache.js';
+import { moonshineManifest, moonshineJapaneseManifest } from './optional-asr-cache.js';
 import { opusMtManifest } from './opus-mt-manifest.js';
 import { englishToJapaneseOpusMtManifest } from './opus-mt-en-ja-manifest.js';
 import { ifConditionManifest } from './if-condition-cache.js';
@@ -20,18 +20,14 @@ try { savedNodes = readLibrary(localStorage).graphs.flatMap(entry => {
   try { return entryGraph(entry).nodes; } catch { return []; }
 }); } catch { /* Global asset recovery remains available with broken library storage. */ }
 const definitions = [
-  { id: 'reazon', linkLabel: 'License & source', title: 'ReazonSpeech ja-en', size: 'About 77 MB · Japanese/English speech recognition', requirements: 'Graph preparation also requires the shared Silero VAD entry.', manifest: reazonManifest, url: '../web/third-party-notices.txt' },
-  { id: 'silero', linkLabel: 'License & source', title: 'Silero VAD', size: '644 KB · shared voice activity detection for ReazonSpeech and Whisper', requirements: 'Deleting this entry affects preparation of both ASR paths.', manifest: sileroManifest, url: '../web/third-party-notices.txt' },
-  { id: 'whisper', linkLabel: 'License & source', title: 'Whisper tiny · multilingual q8', size: 'About 44 MB', requirements: 'Requires shared Silero VAD for segmentation.', manifest: whisperManifest, url: '../web/third-party-notices.txt' },
-  { id: 'zipformer', linkLabel: 'License & source', title: 'Zipformer English · streaming', size: 'About 45 MB', requirements: 'Owns segmentation; does not require Silero.', manifest: zipformerManifest, url: '../web/third-party-notices.txt' },
   { id: 'kokoro-japanese', linkLabel: 'License & source', title: 'Kokoro Japanese · OpenJTalk frontend voice', size: 'About 1 MB', requirements: 'Statistical voice required only by the Japanese frontend, in addition to Kokoro weights.', manifest: japaneseFrontendManifest, url: '../web/licenses/kokoro-japanese.txt' },
   { id: 'qwen3-tts', linkLabel: 'License & source', title: 'Qwen3-TTS 0.6B CustomVoice · streaming', size: '690 MB', requirements: 'Shared by Japanese/English and both voices. Desktop Worker WebGPU required; allow 2 GB storage, 6 GB free RAM/GPU memory (planning estimate). No CPU/cloud fallback.', manifest: qwen3TtsManifest, url: '../web/licenses/qwen3-tts.txt' },
   { id: 'cosyvoice3', linkLabel: 'License & source', title: 'CosyVoice3 0.5B · streaming', size: '917 MB', requirements: 'Shared by English/Japanese. Desktop Worker WebGPU; allow 3 GB storage and 6 GB free RAM/GPU per Node (planning estimates). One reviewed reference voice. No CPU/cloud fallback; other languages/mobile unqualified.', manifest: cosyVoice3Manifest, url: '../web/licenses/cosyvoice3.txt' },
   { id: 'meeting-summary-lfm2', linkLabel: 'License / terms', title: 'Text Summary · LFM2.5 1.2B JP', size: '749 MB download', requirements: 'Allow 2 GB storage and 4 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Summary history is lossy.', manifest: () => textSummaryManifest('TextSummaryLfm2'), url: '../web/licenses/meeting-summary-lfm2.txt' },
   { id: 'meeting-summary-qwen35', linkLabel: 'License & source', title: 'Text Summary · Qwen3.5 2B', size: '1.403 GB download', requirements: 'Allow 3 GB storage and 6 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. Summary history is lossy.', manifest: () => textSummaryManifest('TextSummaryQwen35'), url: '../web/licenses/meeting-summary-qwen35.txt' },
   { id: 'if-condition', linkLabel: 'License & source', title: 'IfCondition · XtremeDistil', size: '14 MB download', requirements: 'Allow 40 MB storage and 250 MB free RAM per active Node. CPU WASM.', manifest: ifConditionManifest, url: '../web/licenses/if-condition-model.txt' },
-  { id: 'parakeet-v3', linkLabel: 'License & source', title: 'Parakeet TDT 0.6B v3', size: '1.26 GB download', requirements: 'Allow 3 GB storage, 6 GB free RAM/GPU memory. WebGPU shader-f16 required.', manifest: parakeetManifest, url: '../web/third-party-notices.txt' },
   { id: 'moonshine-medium-en', linkLabel: 'License & source', title: 'Moonshine Medium Streaming English (245M)', size: '305 MB download', requirements: 'Allow 700 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineManifest, url: '../web/third-party-notices.txt' },
+  { id: 'moonshine-small-ja', linkLabel: 'License & source', title: 'Moonshine Small Streaming Japanese (123M)', size: '122 MB download', requirements: 'Allow 300 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineJapaneseManifest, url: '../web/third-party-notices.txt' },
   { id: 'opus-ja-en', linkLabel: 'License & source', title: 'OPUS-MT · Japanese → English', size: 'About 239 MB', manifest: opusMtManifest, url: '../web/third-party-notices.txt' },
   { id: 'opus-en-ja', linkLabel: 'License & source', title: 'OPUS-MT · English → Japanese', size: 'About 253 MB', manifest: englishToJapaneseOpusMtManifest, url: '../web/third-party-notices.txt' },
   { id: 'translategemma', title: 'TranslateGemma 4B · English ↔ Japanese', size: '3.112 GB download shared by both directions', requirements: 'Allow 7 GB free storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback.', manifest: translateGemmaManifest, linkLabel: 'License / terms', url: '../web/licenses/gemma-notices.txt' },

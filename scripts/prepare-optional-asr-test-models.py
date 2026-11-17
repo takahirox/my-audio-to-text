@@ -25,9 +25,9 @@ def verify(path, entry):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--model', choices=['parakeet-v3', 'moonshine-medium-en', 'both'], default='both')
+    parser.add_argument('--model', choices=['moonshine-small-ja', 'moonshine-medium-en', 'both'], default='both')
     args = parser.parse_args()
-    for key in (['parakeet-v3', 'moonshine-medium-en'] if args.model == 'both' else [args.model]):
+    for key in (['moonshine-small-ja', 'moonshine-medium-en'] if args.model == 'both' else [args.model]):
         manifest = json.loads((ROOT / f'extension/{key}-assets.json').read_text())
         for entry in manifest['files']:
             target = ROOT / '.cache/new-asr' / key / entry['path']
@@ -44,7 +44,7 @@ def main():
                 partial.replace(target)
             finally:
                 partial.unlink(missing_ok=True)
-    print('Verified optional ASR test weights. Prepare Zipformer fixtures separately.')
+    print('Verified optional ASR test weights.')
 
 
 if __name__ == '__main__':

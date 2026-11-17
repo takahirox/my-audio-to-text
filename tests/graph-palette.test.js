@@ -8,8 +8,7 @@ test('every built-in has an explicit Add Node category; new types must be classi
   const expected = {
     'Sources / inputs': ['Button', 'ChromeTabAudio', 'MicrophoneAudio', 'Number', 'Text'],
     'AI Models / Speech Recognition': [
-      'SpeechToTextMoonshineMediumEn', 'SpeechToTextParakeetV3',
-      'SpeechToTextReazonSpeech', 'SpeechToTextWhisper', 'SpeechToTextZipformerEn',
+      'SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa',
     ],
     'AI Models / Translation': ['OpusMtEnJa', 'OpusMtJaEn', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn'],
     'AI Models / Text': ['IfCondition', 'TextSummaryLfm2', 'TextSummaryQwen35'],
@@ -34,7 +33,7 @@ test('category and label order are independent of registration order and port co
   const misleading = [
     ['TextFormatter', { label: 'AI inference', inputs: {}, outputs: {} }],
     ['IfCondition', { label: 'Ordinary utility', inputs: {}, outputs: {} }],
-    ['Subgraph:ai', { label: 'Whisper ASR', inputs: {}, outputs: {} }],
+    ['Subgraph:ai', { label: 'Moonshine ASR', inputs: {}, outputs: {} }],
   ];
   assert.deepEqual([...groupPaletteEntries(misleading).keys()], ['AI Models / Text', 'Processors', 'Subgraphs']);
   assert.deepEqual(expected.get('Sources / inputs').map(([, definition]) => definition.label),

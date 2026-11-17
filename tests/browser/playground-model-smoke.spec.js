@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { test, expect } from '@playwright/test';
 import { asrPages, textPages, streamPages, wavFixture } from './model-playground-fixture.js';
 
@@ -15,13 +16,17 @@ for (const slug of pages) test(`${slug}: real standalone model readiness and loc
   test.skip(!enabled || !selected.includes(slug), 'Opt-in selected real-model check; downloads weights and requires matching hardware.');
   test.setTimeout(30 * 60 * 1000);
   await page.goto(`./nodes/${slug}/`); await expect(page.locator('#run')).toBeEnabled();
-  if (asrPages.includes(slug)) await page.locator('#file').setInputFiles(process.env.PLAYGROUND_AUDIO_FILE || wavFixture(1));
+  if (asrPages.includes(slug)) {
+    const fixture = JSON.parse(await readFile('tests/fixtures/moonshine-speech.json', 'utf8')).find(f => f.language === (slug === 'moonshine-small-ja' ? 'ja' : 'en'));
+    await page.locator('#file').setInputFiles(fixture.path);
+  }
   if (textPages.includes(slug) && slug !== 'if-condition') await page.locator('#language').selectOption('en');
   await page.locator('#run').click();
   await expect(page.locator('#status')).toHaveText(/^(Complete|Error|Browser setup failed)$/, { timeout: 29 * 60 * 1000 });
   await expect(page.locator('#errors')).toBeEmpty();
   await expect(page.locator('#status')).toHaveText('Complete');
   await expect(page.locator('#load-time')).toContainText('ms'); await expect(page.locator('#latency')).toContainText('ms');
+  if (asrPages.includes(slug)) await expect(page.locator('#output')).toContainText(slug === 'moonshine-small-ja' ? /東京|音声認識|資料/ : /meeting|report|Friday/i);
   if (textPages.includes(slug)) await expect(page.locator('#output')).not.toBeEmpty();
   if (streamPages.includes(slug)) {
     await expect(page.locator('#waveform')).toContainText('PCM chunks');

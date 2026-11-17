@@ -17,7 +17,7 @@ function pcm16(wav) {
   return pcm;
 }
 for (const [key, type, module, className, partials] of [
-  ['parakeet-v3', 'SpeechToTextParakeetV3', 'parakeet-v3-node', 'SpeechToTextParakeetV3Node', false],
+  ['moonshine-small-ja', 'SpeechToTextMoonshineSmallJa', 'moonshine-small-ja-node', 'SpeechToTextMoonshineSmallJaNode', true],
   ['moonshine-medium-en', 'SpeechToTextMoonshineMediumEn', 'moonshine-medium-node', 'SpeechToTextMoonshineMediumEnNode', true],
 ]) test(`real packaged ${key}: local finals, Stop, Cancel and repeat`, async ({}, info) => {
   test.skip(!process.env.OPTIONAL_ASR_SMOKE, 'Opt in: prepare optional ASR validation weights, build, then npm run test:optional-asr-real.');
@@ -77,10 +77,10 @@ for (const [key, type, module, className, partials] of [
       if (window.view.modelState !== 'ready') throw Error(window.view.error);
       if (window.events.some(e => ['final','partial'].includes(e.type))) throw Error('Preparation ran inference');
     }, { type, module, className });
-    const fixtureSpec = JSON.parse(await readFile('scripts/zipformer-assets.json', 'utf8'));
-    for (const fixture of ['0.wav', '1.wav', '0.wav']) {
-      const wav = await readFile(`.cache/zipformer-en/test_wavs/${fixture}`);
-      expect(createHash('sha256').update(wav).digest('hex')).toBe(fixtureSpec.files.find(f => f.path === `test_wavs/${fixture}`).sha256);
+    const fixture = JSON.parse(await readFile('tests/fixtures/moonshine-speech.json', 'utf8')).find(f => f.language === (key === 'moonshine-small-ja' ? 'ja' : 'en'));
+    for (let repeat = 0; repeat < 2; repeat++) {
+      const wav = await readFile(fixture.path);
+      expect(createHash('sha256').update(wav).digest('hex')).toBe(fixture.sha256);
       const pcm = pcm16(wav);
       const loadMs = await page.evaluate(async () => { window.events = []; window.fed = 0; const at = performance.now(); window.activeWorkers = window.workers.filter(w => !w.released); const ready = window.session.prepared.pipeline; await window.session.start(42); if (window.session.session.pipeline !== ready) throw Error('Prepared runtime replaced'); if (window.view.state !== 'running') throw Error(JSON.stringify(window.view)); return performance.now() - at; });
       const feedAt = await page.evaluate(() => performance.now());
@@ -94,10 +94,14 @@ for (const [key, type, module, className, partials] of [
       await page.evaluate(async () => { await window.session.stop(); if (window.view.error) throw Error(window.view.error); });
       const result = await page.evaluate(() => ({ events: window.events, displays: Object.fromEntries(Object.entries(window.view.displays).map(([id,ports])=>[id,ports.input1.textContent])), workersReleased: window.activeWorkers.every(w => w.released), modelState: window.view.modelState, liveWorkers: window.workers.filter(w => !w.released).length, end: performance.now() }));
       const finals = result.events.filter(e => e.type === 'final');
-      runs.push({ fixture, loadMs, feedAt, stopAt, ...result });
-      console.log(key, fixture, JSON.stringify({ loadMs, finals, partials: result.events.filter(e => e.type === 'partial').length, drainMs: result.end - stopAt }));
+      runs.push({ fixture: fixture.path, repeat, loadMs, feedAt, stopAt, ...result });
+      console.log(key, fixture.path, JSON.stringify({ loadMs, finals, partials: result.events.filter(e => e.type === 'partial').length, drainMs: result.end - stopAt }));
       expect(finals.length).toBeGreaterThan(0);
-      expect(finals.map(e => e.text).join(' ')).toMatch(fixture === '0.wav' ? /yellow lamps.*light.*quarter/i : /direct consequence.*lovely child.*heaven/i);
+      const recognized = finals.map(e => e.text).join(' ');
+      const expectedClauses = key === 'moonshine-small-ja'
+        ? [/東京で会議/, /音声認識のテスト/, /午後[三3]時に資料/]
+        : [/meeting.*(?:ten|10)/i, /send me the report/i, /finish.*project.*Friday/i];
+      for (const clause of expectedClauses) expect(recognized).toMatch(clause);
       expect(new Set(finals.map(e => e.id)).size).toBe(finals.length);
       expect(result.displays.out).toBe(finals.map(e => e.text).join('\n'));
       expect(result.workersReleased).toBe(true); expect(result.modelState).toBe('ready'); expect(result.liveWorkers).toBe(1);
@@ -118,7 +122,7 @@ for (const [key, type, module, className, partials] of [
     expect(requests).toEqual([]); expect(errors).toEqual([]);
   } finally {
     const evidence = info.outputPath(`${key}-evidence.json`);
-    await writeFile(evidence, JSON.stringify({ time: new Date().toISOString(), host, spec: { ...spec, files: spec.files.map(({ sha256Chunks, ...file }) => file) }, inference: 'Production packaged MV3 TabSession/graph/Node/Worker/backend. Pinned English PCM replaces capture hardware. No production runtime replacements.', runs, requests, errors }, null, 2));
+    await writeFile(evidence, JSON.stringify({ time: new Date().toISOString(), host, spec: { ...spec, files: spec.files.map(({ sha256Chunks, ...file }) => file) }, inference: 'Production packaged MV3 TabSession/graph/Node/Worker/backend. Known English/Japanese synthetic PCM replaces capture hardware. No production runtime replacements.', runs, requests, errors }, null, 2));
     await info.attach('real-model-evidence', { path: evidence, contentType: 'application/json' });
     await context?.close(); await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true });
   }

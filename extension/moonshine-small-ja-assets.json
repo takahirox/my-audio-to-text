@@ -1,0 +1,193 @@
+{
+  "id": "moonshine/small-streaming-ja",
+  "revision": "330a8fedc2c613a96902275ecf6f622bda1271d820221427c19ac2cea230ffee",
+  "origin": "https://download.moonshine.ai",
+  "files": [
+    {
+      "path": "adapter.ort",
+      "bytes": 2869296,
+      "sha256": "edcf20b9d0bc0a92bc0ddf37d8b96599de35a6cbee970368ed74c774b055e546",
+      "sha256Chunks": [
+        "60bc06455e136fbdc0adf94e2d2cb939bcc22333029808f14d40b760b4b8e2d8",
+        "84ed23531a608d9eabd91e3cf38d3facfb10c4e8b821f71bcc8751420943aab7",
+        "d089de9b78a4ae262ae8f7aca3c1e8c982ba60c031dfd338ebb972720007abff"
+      ],
+      "sourceURL": "https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/adapter.ort"
+    },
+    {
+      "path": "cross_kv.ort",
+      "bytes": 5358752,
+      "sha256": "fbd18ec7b9514391d7121f4d4abec1be05a60e94a0f174061428380bf772c3e7",
+      "sha256Chunks": [
+        "31375dbde749d3294676d632dfdd1b5a921a98cfca7814bf710e1aff3695fe2c",
+        "422568232eb54629413c253c71d2398a52164d0472d9aa058054357facdb9b8f",
+        "c25b096bdc8cb4fc8fa2d9bb24940ffb9b5bae214c91a98376fa62c0c6ed6835",
+        "662490d2fa61080aa5b51ed2144639c2c3592bc845141b2119876c3dcb4135e0",
+        "496f26316590b5e1ae3a506ce154dd25ff66e17109b4cc56847f89431dd2c676",
+        "4e991504e79e581ff7077e330094e2b6690b38126dc2b6d8add041f2cb1c3dcd"
+      ],
+      "sourceURL": "https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/cross_kv.ort"
+    },
+    {
+      "path": "decoder_kv.ort",
+      "bytes": 61314512,
+      "sha256": "1246d81eeb96df05d0163dcd48ce271a061b01aa3aea047239fbde22485248be",
+      "sha256Chunks": [
+        "6cdf36779cbfbff2ea14cbbd0c1e308ca3732d0452af51b207b8cc32df6fffcf",
+        "b1e5677a4a56a3930b9e8e5628a43558815afa6a53147fb02b09afcc9ad1ed0c",
+        "61a4de1043a7003119f01c7d513c5fa49687ae7a82dcde80af25506f11e5c795",
+        "fd20eb912caeabcdf170c6cea68281d9719957114670b1dec06595caa424949b",
+        "fff112e6e03f1e1a5ee9925a2dca3c6e25781781037080e9754590a4fab3770f",
+        "9db510b1525b68a5312c878a8404c24b1013e44078f0d76874932b166d1fd2d8",
+        "1a3f4fcdac6c272396bcdd771efca1c9531ea45719778e8f385bc18d15b15c24",
+        "aa6f8c585b82ec8c8edb65396818e39a0efcddfc05dcfd328910c2869d47a605",
+        "33284c08a0955cfe1e39a4121b79e1230149f104c5322ce4e5911ff6572629b7",
+        "062f014831e6a3ea8384bd57e939a1c16ef48c8e5969055edb5a4bb3575d16ba",
+        "9905cc8f99bc06dc267968c5a0a1cfbd89d86c7fcdd4ab32bd0e75392922f467",
+        "c5098b154509abbd6a0c84dedb179f854d2b098bf3849943f0ebbdba69807a14",
+        "4c691e1d9889d829061d16a1415b707ff15d5515bc9b739a5f72f383c9f24c95",
+        "de02ec654ed0df50a3a5ce6fd7798937d8576e49048f0bb83cfb7ddae846f929",
+        "d9d3d47ac82b17c070c4fb1b3101e0de4ca5d665b545687f9cf159afc16136b0",
+        "ba5e2d378b1a9fc6846b9c4cf8baa42ac6c3bd41ffd4599af7740890bf8df2dc",
+        "c56825e96b5f57ae6d1ab9be5fe54cd8d34a0c6b2ad86fb1ec6af38517240e5b",
+        "692014335c5560761c9c88fad285da4199f5b50d6298faf2817e37710b14ef21",
+        "3572fb4224f2bedb62028cf1dca3470d927715e66251dbd29ccf79a43c0935e8",
+        "099d3532cf92cfd57888c6b81acca9777bcca4d1b9853ca0d4e13e10d508f0e1",
+        "4e96eb25b6398ba83c9fe1574b8f6288d66fec6efa07c23a3bb42d4e66c385ea",
+        "639acf79e74be759fcc012a472721927b18981defcf375f8851b2c117a6fb9a7",
+        "a069e0752867b976e20f74f796f7e80351e45dddc6606cedd3c898f3ad2a6b66",
+        "b3cf081aabfa4ac169a77505836105dd35e40450f7f8918ae3be4763c34dccb4",
+        "357f5d569671a070f63ebc757a629ad8d07218e2d9eb5f1f86140c721f9893cf",
+        "b6c79fdc5e49018c8d1291a835a4ed537c43f6cb62da4b7c6ae8d8e3c7eea81a",
+        "16955a2cd5a849b6d709c21f0f258a367e26344213285618b3546b45b6e9b578",
+        "e9d2bd3aefdc3fbd028c873370f42b93ac1208814253c8e4911c81ea5fee866b",
+        "082f62d24bf29f6b209606fed9d50bc894a193c992b21bd135dc5984ab3e1b9d",
+        "6aec75198f26d47525f9ae254d7a5e51037092b1376ba634ac4b0c4ed3f6d914",
+        "7f9cc13b33e3f120939bfb7d655b1ef3adb8249306efb354325d1ab53c192543",
+        "95b2aca7788bd2ed1a858c74849175dfcbbeb9ef25d64ae96cfba1ba2322381d",
+        "cc6e18ff5f416234ad2fc349f7019f8f2846e915a429b340ba279db5bd0e3d47",
+        "12e69b7fb9c6dc25c95b85be886aa587a97f503ca704c1e1fe70aecae6cf09c9",
+        "c37f66902a8a0c3cb944902b3b3bff555cf3b427087f3835de68091b7799720b",
+        "b6d7050b7b451dda65cba98dddd04bc001a2f91fd2556ea057a0edb18e536cd1",
+        "5057dc6f3516a609c0ff1fc0bc3d3f84e0955c1685fe3c1e2c4a79d7510e00cc",
+        "c4cee2d2caae58eb6b60a79486d6ef0ca239094e7964a18a681c20830c9b1c91",
+        "6b14db837c9bc4f0ab89f0fe3f87002a95e4bd29ff3113ffb3fd8994fcebcd02",
+        "2d85ab603faa7c368bb1bf4aee2972cf1e28a4ec85024793d91136dbe8f7e70e",
+        "cc4d8de063ef9d5dbe6a046bc4f6b6e57d9dd2b1a6707ea183d99572ab0b90cd",
+        "ff605018f0dad0383d2772ad0319bb3a21193f875f4d9dfc69b29d1853429a91",
+        "701bb69cb8c18b1392a09c42b212157f6e5e67fefa3bc3c943fec88e49dcc85a",
+        "9410f3f55c7af2ff715ce60f39101246a7dcc68d0697b7652254f6e4efbb30c8",
+        "cee14401e21233b991e425d8e81a26a3e27629561a4e48b50cd00a1bdac2d3e6",
+        "98b5c3645d29464a7b8516b2421a68bf74cd2118d716778b9dee6e5da7910063",
+        "bcafc04884649855150309ccdeff647c867d6971848282ccbe7e6bb40869ddf6",
+        "3834d707176b84d6b6243d81ea29b2b50f208683bcd8850b4a96f5648d20048e",
+        "0903790326001d1ec4317b2b9cc74a384fd032d58856dee6a8ba607230d1c2cb",
+        "2e3f182414a07f84fa187bccb67f9f503ad02babbbfc12ffa05425f26f965ead",
+        "6a87b2a3092922a50b1d040073d38177cdffdde42d5626d8adcdb19c98423fbb",
+        "9ca432abcd054e5f8f237c890504ae1a6f146baf28ff4e335b1545c9d8d748c9",
+        "031724f8dedca004e2a34d0185867ade0a0a23e80afd103e6dd2339b1e1a8a47",
+        "14369a74df068c90ff0327b960173a0e4d48100f976751872191b144f7bf2c25",
+        "f0d350223fbd03faaf6a27c83dcbee6093a5791e481954255703c5425aec1c05",
+        "8412c60116cd2010dae0230173f179e820959ef8d90714d98ae2606d796fb2a4",
+        "b38ab02d6710a72472eefc6b77219034d75a37409644c4922df0c93c04484b89",
+        "97d620c24f8067a9b483289ce3816388bc486e5203f7f8ff3ac30c845b379dcd",
+        "11856575482a49f6c32973d580fb9fe66b2bb4e53efb8405975314e29aa27b04"
+      ],
+      "sourceURL": "https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/decoder_kv.ort"
+    },
+    {
+      "path": "encoder.ort",
+      "bytes": 44358376,
+      "sha256": "1da7cc82cb91d30ad9dc4e338fb80e7a2336b2c8ad634b826419222698fbe3a5",
+      "sha256Chunks": [
+        "a891d793823526e7a03e4c5e8614cee5dd8516dcba8178ef18a6f11862a4153e",
+        "1bc0c1f7c546b28457967be7865b934146deeea59cf6e61886edb03cff10fca8",
+        "7d1233f06a4de4c8dc0fcfeaf17e4cbacfd24b34cf13594a3835c8bc2356be72",
+        "07b72d37030d9d96f979a1ba9a24063b08dec79eb90014c69df5a5227bed9dde",
+        "45b004e8e6ed5e350574228326319d073d85a58ab5abdd9cb9d7149705441d17",
+        "2c8834c8015790b48cf4babe70f36a61b312bf554749cf2fc16dc07e826fd899",
+        "c0381754a582f6361197050a4008095c3e12f0e9136706567c77f695f3de124c",
+        "1143b4eb01da66005f9e18b890164c967857b0a157ba3b081c60767ff747809e",
+        "6af3ff0370a2fe08d2d2a3fb3b5e39bc16ae41c468ef38b3a26cce77d954eebc",
+        "ec6c3423b0fe1548997a73712daf1bdcbc5cd0dfc6ff28b2a74478693a9df885",
+        "6a784e006b706f0202f0a03dd965e2a3aa11d33ad9d3a1d354f06d8e13c2cb3c",
+        "cda36b7eb09d39b7e9d0080894bd83e4fee696253cb0bfdd1e249687ea807c45",
+        "843dec78b508b1695889f4594ac01ae05a99819b885b4bc710a760d1fd200e97",
+        "1c85a989ff6d1f2df59a2e6ec9aaab306f0831b9c7832b0a37eb4082404aa3ae",
+        "6ecb2d6345f0b50402bc10e31b1c00de69dc668b945100c842544c3a092a75b0",
+        "ebb2848547cbf38e53cf00320712fd25aff1790dbbf6ba369b94de996411802d",
+        "bd1f003d00718e9e11ec6f22d736c7a720cc79776c114fc99292fc1bf8a22e80",
+        "ba7dce1d8d95ff663b916c01f6ffe4c6905675cd85874c32df02857d7239204a",
+        "05b96bab951cec4a04d890d8f52a0d61ec7724e8773fdda3dd828a2a81c046b0",
+        "908e828001f8348315df5e9223b576de74f7c80d8d1c40188e28a7f1f9e5d733",
+        "1621932d1a73d04440121db666217183727abbf30d058d92c47f3f5b0572d35d",
+        "eaa457706a39259b2cc4008500d43ed65d5e47e43eae252df22c35800a768dca",
+        "55fe3a34c40dd641c7897027baee3fb7200ee8d9e5de3cf1132a50723a0ced15",
+        "69a8ecfa0c03751fc907b69d8fd1e100d75d9731e847c24bf3a64f1707725980",
+        "832fc76830fd9847427bc9bed02add93c21c1dc2d9ef00158a90166b56a626bb",
+        "797adeeed66934bce1f02635fc4f005e5fd6a2929071741681b1ecf95e128a5d",
+        "82eeb8d50d47d75896ac83804aba083d656ffefa30a51ca0c29555f9cdd2b216",
+        "3e7756deee58f5bd27b405540fe78dcdd1ce9525542722c06441ccdb2e90d3df",
+        "8d8a92f36822b249dc46e4d8e85eee318e8215155ffc8cde4da0a8c06ed911be",
+        "e0115d3d7f9c5ef2b55ee1ae1ca219e2000525d3766b89bdcc36df8b707f81c5",
+        "77c6340c4125b08e58b5c443094e02775f43bbd6ebee598f8ee4c9c2edea0239",
+        "8bf09bdb6039e12e680bc1b48594092d8f00ac0a2e8d41db1974f30827caf373",
+        "1176551fcccc1357af2b00870400081b96b6cea0192007abd7375c73426b143f",
+        "28caedfe81b357470aed8c9cbd3be15e1ea5d9fde4c9bcd47ed7bd87f91b5d55",
+        "a9e919d3ef21975a8a9bd0b7fbbcb34adbf064cbd57a8f6d472c29d243b8e83c",
+        "c33626fcd2683906fa25d0b9dfd12fa65478775bc5f73936d4a530d1be6f39f5",
+        "bdf8ed98b6001793facd32dff7c2b5da8b286ef594c362615b16f4d9390357d7",
+        "471cdd42fc411a9200da28bbc342da490f9faec695a87fc7fc1d516084c51ee5",
+        "8b3b5f55fd60308e4c623c62137c3e1184eaea0bcf1e86a53dcd9d85533fea0c",
+        "4f9cd7376c86ccca2a1ebe802b4a3d05d721140349c4ad6e9ebf93fcaa30461d",
+        "bb529ef8be8315b9fc324e16602e2a5c6249cfd39bf6daddd4b34d7482d8b6fe",
+        "617a8a9479a8435973a09d73842693f88fde6f55872f0d03b55da54e3acb034c",
+        "7b84779592db2cb703ae8eb865864c76962eb4031b11deb36c15ec79bde3d2cf"
+      ],
+      "sourceURL": "https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/encoder.ort"
+    },
+    {
+      "path": "frontend.model.ort",
+      "bytes": 31208,
+      "sha256": "de65092295f011a39ee569f03d073e3564d94252efd74ebde16d720bcc43e38b",
+      "sha256Chunks": [
+        "de65092295f011a39ee569f03d073e3564d94252efd74ebde16d720bcc43e38b"
+      ],
+      "sourceURL": "https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/frontend.model.ort"
+    },
+    {
+      "path": "frontend.weights.ort",
+      "bytes": 7769288,
+      "sha256": "4e89578a495a6c4dd5632e7acaf2fc38841e6831738c2702ef10f873125a14ec",
+      "sha256Chunks": [
+        "2bcadf1e9ad34f550fbbf1c3efa02aadf59cc916a88d55691e2afe602df558d0",
+        "18ebae1f5426c262c1caca1c9b7ce72a5529465b0a6e1380808b60d6de780fed",
+        "70e7049e55409eae22f7ef815c6898adea07076ede574983ca17787a9de72de1",
+        "06d5ccc247fec93c181332952fa1d28e8b5a71e0b43b8ba8540bcc3bbc714cf5",
+        "eb6668dcf2f9e6700c4a51ee0bd182d78d550676c0e439e5fb3c45f820d4ab8b",
+        "f2c912a80afe7143c9e7f1057f5cb2eba4484ea587bb69783475056d61136aa3",
+        "f6c51e60ad6f0683cda4927fb12f5f04da0bd832974d1cdb7c2fc7c4c14a0a06",
+        "07af55727b4a2fd51ff16f7b735887c25acb795e03d0242c0698f7ee2b0e0891"
+      ],
+      "sourceURL": "https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/frontend.weights.ort"
+    },
+    {
+      "path": "streaming_config.json",
+      "bytes": 512,
+      "sha256": "12d16c7f5ea6734d197b79baf47914ea7e996d6fca8d303a19aca10d0617cecc",
+      "sha256Chunks": [
+        "12d16c7f5ea6734d197b79baf47914ea7e996d6fca8d303a19aca10d0617cecc"
+      ],
+      "sourceURL": "https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/streaming_config.json"
+    },
+    {
+      "path": "tokenizer.bin",
+      "bytes": 101836,
+      "sha256": "9f2599f20c3a9b03d79dbe122e443647c6589ce8e5c73e65e5c5d6f73485d5de",
+      "sha256Chunks": [
+        "9f2599f20c3a9b03d79dbe122e443647c6589ce8e5c73e65e5c5d6f73485d5de"
+      ],
+      "sourceURL": "https://download.moonshine.ai/model/small-streaming-ja/quantized_26_08_23/tokenizer.bin"
+    }
+  ]
+}

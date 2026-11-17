@@ -130,17 +130,6 @@ as a new entry. Its original is never overwritten by an editor recovery draft.
 
 See [toolbar launch and Library validation](evidence/toolbar-launch-267.md).
 
-**Models & saved information** in the detail panel holds timestamps, required
-models and **File cache**, distinct from Live's runtime/GPU readiness:
-model-bearing graphs initially show **Unknown**, not an unconditional Ready.
-**More → Check model files** inspects the selected graph's actual manifests without
-starting Workers, GPU work or downloads. It reports Ready (verified cached files),
-Needs preparation or Error. ReazonSpeech, Silero, Whisper and Zipformer use the
-same manifest-based file checks as every other model. Graphs without model files can report Ready on that basis. Model
-cache notifications/focus invalidate old observations to Unknown. Models remains
-the global asset inspection/recovery screen; shared weights retain their existing
-asset-identity cache and are not duplicated per library graph.
-
 The version-1 library envelope is stored atomically in one localStorage value,
 `processing-graph-library-v1`: graph IDs, names, descriptions, timestamps,
 per-entry revisions, graphs and `{ live, webVoice }` legacy assignments. The
@@ -199,18 +188,6 @@ then **Preparing models…** with real Node/step counts when available. Start st
 disabled through file verification and runtime initialization. A graph without AI
 becomes Ready after ordinary executable-graph validation.
 
-**Ready** means inference resources are initialized, rather than just cached.
-Start transfers the same runtime, Workers and model instances to the session;
-only then do sources, startup TEXT/NUMBER emissions, outputs, and explicit
-microphone/speaker/capture gestures run. Preloading runs no inference, dummy input,
-trigger, capture or output hook. Hold still gates execution. Whisper.language and
-ReazonSpeech.maxDuration constants are read and validated before model loading,
-and their configuration deliveries are consumed exactly once. A single constant-fed
-TextFormatter can supply startup text too. A configuration
-dependent on future session data cannot be ready before Start: Live reports the
-Node/port and asks for a Text/Number startup constant instead of guessing a default.
-Other consumers of those constants still receive ordinary session startup values.
-
 The model lifecycle is separate from the session's recording state:
 
 | Model state | Admission and transition |
@@ -258,91 +235,7 @@ There is no automatic retry loop or model substitution. Ordinary session branch
 errors remain visible while healthy paths finish. Opening Graph/Models alone
 never opts into this GPU lifetime.
 
-Developer checks: `tests/live-model-preparation.test.js` covers gated and multiple
-models, parked/no-model graphs, configured ASR with translation, graph replacement,
-failures, timeouts, cancellation and repeated ownership transfers.
-`tests/extension/live-model-preparation.spec.js` exercises the real MV3 Live UI
-with controlled Workers, including disabled Start, controlled asset downloads, recovery
-and replacement. `tests/extension/live-model-download.spec.js` covers real verified
-cache preparation, missing/partial/corrupt/evicted files, concurrent consumers,
-cancellation and download failures. These deterministic fixtures establish
-lifecycle behavior; hardware/model inference qualification remains in the opt-in real-model suites.
-For production preloading coverage, run `npm run setup:extension`, then
-`python3 scripts/review-opus-mt-assets.py`,
-`python3 scripts/review-text-summary-assets.py`,
-`python3 scripts/review-tts-assets.py` and
-`python3 scripts/prepare-reazon-ja-en-fixtures.py` to seed the pinned test assets.
-`npm run test:live-model-real` checks real Whisper + OPUS-MT, a Button/Hold-gated
-LFM2 summary and both Kokoro phonemizers. It verifies readiness before Start,
-no pre-Start permissions/inference, Worker reuse on first use, two sessions,
-Stop/reprepare and pagehide termination, with networking blocked during Live.
-Each case saves its source hashes, Worker observations, outputs and host details
-to `test-results`; retained validation is in
-[`evidence/live-model-preparation-239.json`](evidence/live-model-preparation-239.json).
-
 ## Editor and saved graphs
-
-Use Add Node to open a searchable list beside the toolbar button. Categories
-always appear in this order: **Sources / inputs** (including Text and Number),
-**AI Models / Speech Recognition**, **AI Models / Translation**,
-**AI Models / Text** (summaries and condition AI), **AI Models / Speech Synthesis**,
-**Processors** (deterministic transformations, including Text formatter and Hold),
-**Outputs**, then **Subgraphs**. Within each category, displayed names sort
-automatically in Japanese-aware alphabetical / kana order with natural numbers,
-by functional title then model name for AI nodes.
-AI nodes show a shared sparkles indicator (accessible name **AI**), a function-first
-title, and a smaller persistent model subtitle on the canvas and in Add Node.
-Search matches both function and model names, including competing models with the
-same function. Settings lists read-only **Model**, **Languages**, and **Runtime**
-facts above the existing editable controls; the Model fact does not switch models.
-Whisper accepts English (default) and Japanese here. Parakeet detects its 25
-European languages automatically and uses a WebGPU encoder plus WASM decoder
-([model language reference](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)).
-These are display facts only: graph type IDs, settings, ports and version-15
-save/import/export stay unchanged.
-These eight categories are independent choices in the primary selector.
-**All categories** shows all groups; a category filter and search can be combined.
-New built-in Node types must be classified in `extension/graph-palette.js`;
-saved subgraphs join the sorted Subgraphs group automatically. Search or
-filter by category, then click/tap a result to add it immediately near the center
-of the visible canvas. Opening the list leaves every result unselected. Typing a
-nonempty search highlights its first match; clearing search or changing category
-clears the highlight. From no selection, Arrow Down selects the first result and
-Arrow Up selects the last; further arrows navigate results. Enter adds only the
-highlighted Node and does nothing with no selection. Escape or clicking outside
-dismisses the list and clears selection. Adding keeps the current
-zoom and pan, selects and focuses the new Node, and saves changes automatically. The toolbar shows Saving… / Saved / Save failed for the editor draft and a separate
-green **Active** indicator only when this graph is running in Live, alongside Add
-Node, Undo, Redo and Graph actions (…). Hover Active for the capture tab ID;
-the number does not occupy canvas space. Idle and routine active sessions have no
-status row below the toolbar. At the narrowest widths, draft and Live status stack
-within the toolbar; controls wrap as needed, keeping every action available. An exceptional
-warning below the toolbar wraps in full: **earlier graph; saved edits apply next
-session** means Live is still running its immutable older snapshot. A saved graph
-changed elsewhere warning preserves your draft; export it if needed, then choose
-**Reload latest graph** in the recovery controls. Both warnings remain readable when
-they occur together. Select a heading for settings; click it again, press
-Escape, or click blank canvas to clear selection. The Inspector identifies the
-Node by type and Instance ID, with Remove Node beside Settings. Drag headings or use arrow
-keys to move Nodes. Connect an output to a compatible input; reconnecting replaces only that input's wire. Select a wire
-for details or Disconnect. Canvas navigation floats at the bottom-left: −, the
-Canvas zoom chooser, +, and Fit. The chooser retains 25%, 50%, 75%, 100%, 125%,
-and 150%, plus the actual custom zoom (shown to two decimal places), including
-Fit scales below 25%. The − / + buttons change zoom by 10 percentage points.
-Ctrl + mouse wheel and Chromium trackpad pinch zoom continuously around the
-pointer: wheel up / pinch out magnifies, wheel down / pinch in reduces. Both use
-the same viewport-local Ctrl+wheel handler, which prevents browser zoom only
-over the canvas. Ordinary wheel / trackpad scrolling still pans; Inspector,
-search, navigation controls and overlay menus keep their native behavior.
-Zoom is clamped to 1%–150%, including Fit. Wheel line deltas use 16 CSS pixels
-per line, page deltas use the viewport height, and single-event deltas are capped
-at 10 pixels (about a 10% zoom change) to avoid large spikes. Pointer anchoring
-accounts for pan and scale; native scroll bounds can limit it near an edge. Modified wheel gestures
-during a node or port drag are consumed without changing zoom.
-Choose 100% to resume editing with focus on the last edited port, heading or selected wire.
-Scroll or swipe to pan; controls stay in place and extra bottom scroll space
-lets the final ports move clear of them.
-Settings, essential port names and accessibility labels remain visible.
 
 Create Subgraph stays beside Add Node in the toolbar, enabled when two or more
 nodes are selected. Settings shows the last selected node; selection is indicated
@@ -532,7 +425,7 @@ Checks executed for #265 (2026-11-10):
 Fresh setup and Reset create:
 
 ```text
-ChromeTabAudio.audio → SpeechToTextReazonSpeech.audio
+ChromeTabAudio.audio → SpeechToTextMoonshineSmallJa.audio
 ASR.final/finalId → KeyedTextCoalesce.input1/id1
 ASR.provisional/provisionalId → KeyedTextCoalesce.input2/id2
 KeyedTextCoalesce.text/id → KeyedTextPair.input1/id1
@@ -661,27 +554,6 @@ connections. Each input accepts one edge. Validation rejects unknown ports,
 invalid settings, duplicate IDs/edges and cycles. Consumers validate their own
 payloads, startup configuration and correlation.
 
-| Nodes | Contracts and purpose |
-| --- | --- |
-| ChromeTabAudio, MicrophoneAudio | Normalized mono 16 kHz PCM sources |
-| SpeechToTextReazonSpeech, SpeechToTextZipformerEn, SpeechToTextMoonshineMediumEn | PCM → provisional/final TEXT and numeric IDs |
-| SpeechToTextWhisper, SpeechToTextParakeetV3 | PCM → final TEXT and numeric ID |
-| Text, Number | Literal TEXT and finite NUMBER constants |
-| KeyedTextCoalesce | Independent id1/input1/id2/input2 → id/text; per-ID nonempty preference |
-| KeyedTextPair | Same four independent inputs → pair only; complete `{ id, first, second }` |
-| KeyedPairedTextAccumulator | pair → complete ordered pairs; append/replace by ID |
-| Display | Configurable input1…inputN: ITEM → switchable input tabs in one Live view; title/inputCount/inputLabels Settings, no outputs or processing |
-| TextAccumulator | append: TEXT → complete newline-separated TEXT history |
-| TextFormatter | Configurable numbered TEXT inputs and literal multiline template → TEXT |
-| TextSlidingWindow, TextWindow | Generic bounded TEXT processing; see their documentation |
-| OPUS-MT and TranslateGemma in either direction | Independent committed and provisional translation families |
-| TextSummaryLfm2, TextSummaryQwen35 | Complete summary: TEXT snapshots |
-| IfCondition | TEXT → exactly one yes/no TEXT branch |
-| FocusedInputTextOutputNode | Append TEXT to the user-focused editable field |
-| Supertonic3, Kokoro | Committed TEXT → completed synthesized audio |
-| Qwen3TtsStreaming, CosyVoice3Streaming | Committed TEXT → explicit audio stream events |
-| AudioOutput, SpeakerOutput | Audio player/WAV and Speaker playback (completed or streaming audio) |
-
 ## Capture, output and lifecycle
 
 Whole-tab capture uses the toolbar-invoked tab. Microphone capture requires
@@ -757,13 +629,6 @@ records the superseded node-tab/column presentation.
 
 ## Feature setup and validation
 
-- [Port contracts](port-contracts.md) and [runtime lifecycle](pipeline-runtime.md)
-- [Chrome extension setup and permissions](chrome-extension.md)
-- [Whisper](whisper-node.md), [Zipformer](zipformer-node.md), [optional ASRs](optional-asr-nodes.md)
-- [Translation](translation-nodes.md), [windowed translation](windowed-translation.md)
-- [Text sliding windows](text-sliding-window.md), [text summaries](text-summary-nodes.md), [IfCondition](if-condition-node.md)
-- [TTS and streaming playback](streaming-tts.md)
-
 Run `npm test`, relevant Playwright browser/extension suites, and
 `npm run build:extension` with prepared pinned assets. Controlled Worker tests
 verify composition, safe rendering, persistence and lifecycle; they do not
@@ -802,10 +667,4 @@ to a formatter alongside TextWindow, then route the summary back to Hold.input.
 Only TextWindow triggers the next update. [Importable example, limits and Stop /
 Cancel behavior](text-summary-nodes.md). Ordinary event cycles remain invalid.
 
-All ASR model files now follow the on-demand lifecycle described in
-[model assets](model-assets.md). ReazonSpeech and Whisper each require the shared
-Silero VAD entry; Zipformer owns segmentation and has no Silero dependency. Graph
-Auto Save and Models only inspect/download assets, without inference Workers.
-Live automatically downloads missing, corrupt or evicted assets for executable
-nodes, then initializes their runtimes before enabling Start. Download or runtime
-failures offer **Retry models** inside Live; Models remains optional manual management.
+Speech recognition uses only language-specific [Moonshine streaming Nodes](optional-asr-nodes.md). The new default graph is Japanese Small; English examples select English Medium explicitly.

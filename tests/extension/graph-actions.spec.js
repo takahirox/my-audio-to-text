@@ -1,3 +1,6 @@
+import { writeSummaryAssetFixture } from './summary-asset-fixture.js';
+import { writeMoonshineAssetFixture } from './moonshine-asset-fixture.js';
+import { moonshineWorkerFixture } from '../fixtures/moonshine-worker.js';
 import { settleAutoSave } from './ui-controls.js';
 import { test, expect, chromium } from '@playwright/test';
 import { cp, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
@@ -16,8 +19,7 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     await cp('extension', path.join(root, 'extension'), { recursive: true });
     await cp('web', path.join(root, 'web'), { recursive: true, filter: file => !file.includes('/vendor') && !file.includes('/tts-assets') });
     await cp('extension/manifest.json', path.join(root, 'manifest.json'));
-    for (const role of ['sherpa', 'silero']) await writeFile(path.join(root, `web/${role}-worker.js`), `
-      self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready'});if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});};`);
+    for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture({}));
     await writeFile(path.join(root, 'web/text-summary-worker.js'), `
       const jobs=[];
       self.onmessage=({data})=>{
@@ -35,6 +37,8 @@ test('Live Graph Actions: manual ASR snapshots, keyboard/touch, busy, tabs, Stop
     context.setDefaultTimeout(5000);
     const { id } = await (await context.browser().newBrowserCDPSession()).send('Extensions.loadUnpacked', { path: root });
     const base = `chrome-extension://${id}/extension/`;
+    await writeMoonshineAssetFixture(root, base);
+    await writeSummaryAssetFixture(root, base);
     const editor = await context.newPage(); await editor.goto(base + 'graph-editor.html');
     const graph = JSON.parse(await readFile('docs/examples/manual-text-summary.json', 'utf8'));
     // Exercise production Import; resource preparation is separately tested in

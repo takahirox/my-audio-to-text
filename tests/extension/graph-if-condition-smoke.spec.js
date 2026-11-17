@@ -12,7 +12,7 @@ test('real packaged IfCondition: Save preparation, offline Yes/No, original text
  test.setTimeout(600000);
  await conditionAssets(f,true);const page=await openGraph(f);await seedConditionGraph(page.editor);
  await settleAutoSave(page.editor);await expectGraphModelsReady(page.editor,{timeout:180000});
- expect(await page.evaluate(()=>window.graphWorkers.flatMap(w=>w.messages).some(m=>['vad-start','decide'].includes(m.type)))).toBe(false);
+ expect(await page.evaluate(()=>window.graphWorkers.flatMap(w=>w.messages).some(m=>['start','decide'].includes(m.type)))).toBe(false);
  const downloads=f.requests.length;await settleAutoSave(page.editor);await expectGraphModelsReady(page.editor,{timeout:30000});expect(f.requests.length).toBe(downloads);
  const assets=JSON.parse(await readFile('extension/if-condition-assets.json','utf8'));
  const host=await page.evaluate(()=>({browser:navigator.userAgent,isolated:crossOriginIsolated}));

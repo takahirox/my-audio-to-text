@@ -11,11 +11,8 @@ import path from 'node:path';
 
 export const test = base.extend({
   graphExtension: async ({}, use, info) => {
-    const concurrentReal = info.file.endsWith('graph-concurrent-smoke.spec.js');
-    const zipformerReal = info.file.endsWith('graph-zipformer-smoke.spec.js');
-    const whisperReal = info.file.endsWith('graph-whisper-smoke.spec.js');
     const ifConditionReal = info.file.endsWith('graph-if-condition-smoke.spec.js');
-    const real = ifConditionReal || concurrentReal || zipformerReal || whisperReal || info.file.endsWith('graph-tts-smoke.spec.js');
+    const real = ifConditionReal || info.file.endsWith('graph-tts-smoke.spec.js');
     const temporary = await mkdtemp(path.join(tmpdir(), 'extension-graph-'));
     const root = path.join(temporary, 'extension'), profile = path.join(temporary, 'profile');
     let context;
@@ -41,7 +38,7 @@ export const test = base.extend({
     try {
       if (real) {
         await cp(path.resolve('dist/chrome-extension'), root, { recursive: true,
-          filter: source => (ifConditionReal || concurrentReal || zipformerReal || whisperReal || !source.includes(`${path.sep}vendor`)) });
+          filter: source => (ifConditionReal || !source.includes(`${path.sep}vendor`)) });
       } else {
         await cp('extension', path.join(root, 'extension'), { recursive: true });
         await cp('web', path.join(root, 'web'), { recursive: true, filter: source => !/\/(vendor|tts-assets|correction-assets)(\/|$)/.test(source) });
@@ -49,16 +46,14 @@ export const test = base.extend({
       }
       // ASR/capture are fixtures even in TTS smoke. TTS smoke uses every real
       // packaged TTS runtime/frontend and real checkpoint, with no replacements.
-      for (const role of (whisperReal || concurrentReal ? [] : ['sherpa', 'silero'])) await writeFile(path.join(root, `web/${role}-worker.js`), `
-        self.onmessage=({data})=>{if(data.type==='load')postMessage({type:'ready'});if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});};`);
       if (!real) {
-        for (const key of ['reazon', 'silero', 'whisper', 'zipformer', 'kokoro-japanese', 'parakeet-v3', 'moonshine-medium-en', 'qwen3-tts', 'cosyvoice3']) {
+        for (const key of ['kokoro-japanese', 'moonshine-small-ja', 'moonshine-medium-en', 'qwen3-tts', 'cosyvoice3']) {
           const file = `${key}-assets.json`, spec = JSON.parse(await readFile(path.join(root, 'extension', file), 'utf8'));
           const body = Buffer.alloc(8192, 17); bodies.set(file, body);
           spec.files = [{ path: 'weights.bin', bytes: body.length, sha256Chunks: [createHash('sha256').update(body).digest('hex')], sourceURL: `http://127.0.0.1:${server.address().port}/${file}` }];
           await writeFile(path.join(root, 'extension', file), JSON.stringify(spec));
         }
-        for (const file of ['parakeet-v3-worker.js', 'moonshine-medium-worker.js']) await writeFile(path.join(root, 'web', file), `
+        for (const file of ['moonshine-small-ja-worker.js', 'moonshine-medium-worker.js']) await writeFile(path.join(root, 'web', file), `
           let session;
           self.onmessage = ({data}) => {
             if (data.type === 'load') postMessage({type:'ready'});
@@ -137,7 +132,7 @@ export const test = base.extend({
       }
       context = await launch(); const id = await load();
       if (!real) await writeSummaryAssetFixture(root, `chrome-extension://${id}/extension/`);
-      if (!real) for (const key of ['reazon', 'silero', 'whisper', 'zipformer', 'kokoro-japanese']) {
+      if (!real) for (const key of (info.file.endsWith('graph-optional-asr.spec.js') ? ['kokoro-japanese'] : ['moonshine-small-ja', 'moonshine-medium-en', 'kokoro-japanese'])) {
         const filename = path.join(root, 'extension', `${key}-assets.json`);
         const spec = JSON.parse(await readFile(filename, 'utf8'));
         await writeFile(path.join(root, 'extension', `${key}-fixture.bin`), Buffer.alloc(8192, 17));
@@ -175,7 +170,7 @@ export async function openGraph(f, { live = true, tabId = 42 } = {}) {
     // Retain internal cancellation/replacement coverage after removing the UI control.
     const { TabSession } = await import('./session.js'), sessionStart = TabSession.prototype.start;
     TabSession.prototype.start = function(...args) { window.graphSession = this; return sessionStart.apply(this, args); };
-    const { SpeechToTextNode } = await import('../web/transcription-nodes.js');
+    const { OptionalAsrNode: SpeechToTextNode } = await import('../web/optional-asr-node.js');
     const start = SpeechToTextNode.prototype.start;
     SpeechToTextNode.prototype.start = function(context) { window.speech = this; return start.call(this, context); };
     const { ExtensionTabAudioNode } = await import('./tab-audio-node.js');

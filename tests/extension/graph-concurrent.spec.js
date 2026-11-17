@@ -1,3 +1,4 @@
+import { moonshineWorkerFixture } from '../fixtures/moonshine-worker.js';
 import { settleAutoSave } from './ui-controls.js';
 import { startReadyLive, expectPreparedIdle } from './live-lifecycle.js';
 import { test, expect, openGraph } from './graph-fixture.js';
@@ -9,8 +10,8 @@ async function saveConcurrent(page) {
   return page.evaluate(async () => {
     const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
-    graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextWhisper', 'local'), graphNode('Display', 'local-display'),
-      graphNode('MicrophoneAudio', 'parked-mic'), graphNode('Kokoro', 'parked-tts'), graphNode('SpeechToTextWhisper', 'unfinished-model'));
+    graph.nodes.push(graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineMediumEn', 'local'), graphNode('Display', 'local-display'),
+      graphNode('MicrophoneAudio', 'parked-mic'), graphNode('Kokoro', 'parked-tts'), graphNode('SpeechToTextMoonshineSmallJa', 'unfinished-model'));
     graph.edges.push(edge('mic', 'audio', 'local', 'audio'), edge('local', 'final', 'local-display', 'input1'));
     await saveLiveGraphData(localStorage, (graph)); return graph;
   });
@@ -22,7 +23,7 @@ test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauth
     const { defaultGraph, graphNode, edge } = await import('./graph.js'); const { saveLiveGraphData } = await import('./graph-library.js');
     const graph = defaultGraph();
     graph.nodes.push(graphNode('FocusedInputTextOutputNode', 'parked-output'),
-      graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'unfinished-output'));
+      graphNode('SpeechToTextMoonshineSmallJa', 'unfinished'), graphNode('FocusedInputTextOutputNode', 'unfinished-output'));
     graph.edges.push(edge('unfinished', 'final', 'unfinished-output', 'text'));
     await saveLiveGraphData(localStorage, (graph));
     window.pageAllocations = [];
@@ -41,17 +42,7 @@ test('MV3 toolbar invocation leaves parked and incomplete focused outputs unauth
 });
 
 test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop, Cancel and repeat', async ({ graphExtension: f }) => {
-  for (const [file, label] of [['sherpa-worker.js', 'remote'], ['whisper-worker.js', 'local']]) {
-    await writeFile(path.join(f.root, 'web', file), `self.onmessage=({data})=>{
-      if(data.type==='load')postMessage({type:'ready'});
-      if(data.type==='decode') { postMessage({type:data.final?'final':'partial',session:data.session,id:data.id,text:'${label}'});postMessage({type:'decoded',session:data.session}); }
-    };`);
-  }
-  await writeFile(path.join(f.root, 'web/silero-worker.js'), `self.onmessage=({data})=>{
-    if(data.type==='load')postMessage({type:'ready'});
-    if(data.type==='vad-audio')postMessage({type:'vad',session:data.session,frames:[{audio:data.audio,speaking:true}]});
-    if(data.type==='vad-stop')postMessage({type:'vad-stopped',session:data.session});
-  };`);
+  for (const [file, label] of [['moonshine-small-ja-worker.js', 'remote'], ['moonshine-medium-worker.js', 'local']]) await writeFile(path.join(f.root, 'web', file), moonshineWorkerFixture({partial: label, final: label}));
   await f.context.addInitScript(() => {
     window.captureStreams = []; window.mediaRequests = [];
     const NativeContext = AudioContext;
@@ -86,7 +77,7 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
     await page.locator('#start').click(); await expect(page.locator('#status')).toHaveText('Transcription active');
     expect(await page.evaluate(() => window.mediaRequests.slice(-2).sort())).toEqual(['mic', 'tab']);
     expect(await page.evaluate(() => window.mediaRequests.length)).toBe(before + 2);
-    expect(await page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(4);
+    expect(await page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(2);
     await expect(page.locator('#saved-state')).toBeEmpty();
     await expect(page.locator('.live-text-region')).toHaveCount(2);
     await expect(page.locator('#signal')).toContainText('audio: Audio signal detected.');
@@ -97,7 +88,7 @@ test('MV3 concurrent tab/mic capture, separate models/displays, branch end, Stop
       await page.evaluate(() => window.captureStreams.find(record => record.kind==='tab'&&!record.stopped).stream.getAudioTracks()[0].dispatchEvent(new Event('ended')));
       await expect(page.locator('[data-display="transcript"] .display-content')).toContainText('remote');
       await expect(page.locator('#status')).toHaveText('Transcription active');
-      await expect.poll(() => page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(2);
+      await expect.poll(() => page.evaluate(() => window.graphWorkers.filter(w => !w.released).length)).toBe(1);
       expect(await page.evaluate(() => window.captureStreams.some(record => record.kind==='mic'&&!record.stopped))).toBe(true);
     }
     if (mode === 'cancel') await page.evaluate(() => window.graphSession.cancel());
@@ -118,7 +109,7 @@ test('MV3 drafts ignore the legacy warnings preference; Validate graph shows war
   const page = await openGraph(f), editor = page.editor;
   const alternateId = await page.evaluate(async () => {
     const { GRAPH_VERSION, graphNode } = await import('./graph.js'); const { GraphLibrary, saveLiveGraphData } = await import('./graph-library.js');
-    const graph = { version: GRAPH_VERSION, nodes: [graphNode('MicrophoneAudio', 'parked'), graphNode('SpeechToTextWhisper', 'unfinished'), graphNode('Number', 'duration')], edges: [] };
+    const graph = { version: GRAPH_VERSION, nodes: [graphNode('MicrophoneAudio', 'parked'), graphNode('SpeechToTextMoonshineSmallJa', 'unfinished'), graphNode('Number', 'duration')], edges: [] };
     localStorage.setItem('graph-show-optional-warnings', 'true');
     await saveLiveGraphData(localStorage, graph);
     const library = await new GraphLibrary(localStorage).create({ name: 'Another incomplete draft', graph });
