@@ -14,6 +14,7 @@ const notices = {
   'opus-ja-en': ['Helsinki-NLP', 'ONNX Community', '05470cd69b62aa32e3ee64ccfd41279789ee4b1e', 'creativecommons.org/licenses/by/4.0/'],
   'opus-en-ja': ['Helsinki-NLP', 'Kadonox', '225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e', 'Apache License'],
   translategemma: ['Google', 'ONNX Community', 'ai.google.dev/gemma/terms', 'ai.google.dev/gemma/prohibited_use_policy', 'Redistributors'],
+  'plamo-3-translate-2b': ['PLaMo Community License Agreement', 'Preferred Networks', '1 billion yen', 'Prior registration', 'Redistribution and Attribution'],
   supertonic3: ['Supertone Inc.', 'OpenRAIL-M', 'supertonic-model.txt'],
   kokoro: ['hexgrad', 'jf_alpha', 'af_heart', 'Apache-2.0', 'kokoro-japanese.txt', 'GPL-3.0-or-later', 'phonemizer-source.tar.gz'],
 };
@@ -21,9 +22,9 @@ const notices = {
 test('every card has one collapsed Details with working attribution, license and source destinations', async ({ graphExtension: f }) => {
   const page = await f.context.newPage();
   await page.goto(f.url.replace('recorder.html', 'model-cache.html'));
-  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(13);
-  await expect(page.locator('.model-card details')).toHaveCount(13);
-  await expect(page.locator('.model-card summary')).toHaveText(Array(13).fill('Details'));
+  await expect(page.locator('.model-card[data-state="Not downloaded"]')).toHaveCount(14);
+  await expect(page.locator('.model-card details')).toHaveCount(14);
+  await expect(page.locator('.model-card summary')).toHaveText(Array(14).fill('Details'));
   await expect(page.locator('.model-card details[open], details details')).toHaveCount(0);
   await expect(page.getByText('Attribution & notices', { exact: true })).toHaveCount(0);
   const checked = new Map();
@@ -58,7 +59,8 @@ test('every card has one collapsed Details with working attribution, license and
   await expect(policy).toBeVisible();
   await expect(policy).toHaveAttribute('href', 'https://ai.google.dev/gemma/prohibited_use_policy');
   expect(await before.evaluate(p => !!(p.compareDocumentPosition(p.parentElement.querySelector('.actions')) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
-  await expect(page.locator('.model-card > .model-license')).toHaveCount(1);
+  await expect(page.locator('#plamo-3-translate-2b > .model-license')).toContainText('prior PFN registration');
+  await expect(page.locator('.model-card > .model-license')).toHaveCount(2);
   await expect(page.locator('footer')).toHaveCount(0);
   expect(f.requests).toEqual([]);
 });

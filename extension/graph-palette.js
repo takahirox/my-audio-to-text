@@ -8,7 +8,7 @@ const categoryTypes = {
     'SpeechToTextMoonshineMediumEn', 'SpeechToTextMoonshineSmallJa',
   ],
   'AI Models / Translation': [
-    'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn',
+    'OpusMtJaEn', 'OpusMtEnJa', 'TranslateGemmaEnJa', 'TranslateGemmaJaEn', 'Plamo3Translate2B',
   ],
   'AI Models / Text': [
     'TextSummaryLfm2', 'TextSummaryQwen35', 'IfCondition',

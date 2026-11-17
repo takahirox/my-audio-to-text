@@ -1,5 +1,9 @@
 # Node Playground
 
+The experimental [PLaMo 3 Translate 2B page](../web/nodes/plamo-3-translate-2b/index.html)
+tests the same official 2B model as the graph Node, with optional TEXT language
+configuration in both directions. See [setup, runtime and terms](plamo-translation.md).
+
 The [index](../web/index.html) links to independent browser-local model tests.
 Speech recognition has exactly two pages: [Moonshine Medium Streaming English](../web/nodes/moonshine-medium/)
 and [Moonshine Small Streaming Japanese](../web/nodes/moonshine-small-ja/).

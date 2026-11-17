@@ -17,7 +17,7 @@ export class TabSession {
     sourceFactory, microphoneSourceFactory, pageConnectionFactory, moonshineWorkerFactory, moonshineJapaneseWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
     graph = defaultGraph({ enabled: false }), graphId = null, graphName = 'Saved graph',
-    textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, onSynthesizedAudio = () => {}, speakerContextFactory,
+    textSummaryWorkerFactory, ifConditionWorkerFactory, ttsWorkerFactory, prepareTts, prepareTranslateGemma, preparePlamo, onSynthesizedAudio = () => {}, speakerContextFactory,
     prepareTranslation = (signal, direction) => direction === 'en-ja'
       ? verifiedEnglishToJapaneseOpusCache(signal) : verifiedOpusCache(signal),
     prepareModelAssets = prepareGraphModelAssets,
@@ -30,7 +30,7 @@ export class TabSession {
     this.render = render; this.workerFactory = workerFactory; this.sourceFactory = sourceFactory;
     this.microphoneSourceFactory = microphoneSourceFactory; this.pageConnectionFactory = pageConnectionFactory; this.outputTarget = null;
     this.nodeErrors = new Map();
-    this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation; this.prepareTranslateGemma = prepareTranslateGemma;
+    this.translationWorkerFactory = translationWorkerFactory; this.prepareTranslation = prepareTranslation; this.prepareTranslateGemma = prepareTranslateGemma; this.preparePlamo = preparePlamo;
     this.graph = assertGraph(graph); this.ttsWorkerFactory = ttsWorkerFactory; this.prepareTts = prepareTts; this.onSynthesizedAudio = onSynthesizedAudio;
     this.speakerContextFactory = speakerContextFactory;
     this.modelLoadTimeoutMs = modelLoadTimeoutMs;
@@ -292,6 +292,7 @@ export class TabSession {
           this.update({ conditionStatus: Object.entries(session.conditionStates).map(([id, state]) => `${id}: ${state}`).join('\n') });
         },
         prepareTranslateGemma: this.prepareTranslateGemma,
+        preparePlamo: this.preparePlamo,
         ttsWorkerFactory: this.ttsWorkerFactory, prepareTts: this.prepareTts,
         onTtsState: (ttsStatus, id, event) => {
           if (!this.ownsRuntime(session)) return;

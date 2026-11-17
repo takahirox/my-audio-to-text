@@ -1,5 +1,6 @@
 import { finiteNumber } from './number-node.js';
 import { TEXT, NUMBER } from './port-contracts.js';
+import { updatePlamoLanguages, plamoLanguages } from './plamo-policy.js';
 export { TEXT } from './port-contracts.js';
 
 // Private transport only: every node instance owns its Worker and pending RPCs.
@@ -133,6 +134,22 @@ export class TranslateGemmaTranslationNode extends WorkerTranslationNode {
 }
 export class EnglishToJapaneseTranslateGemmaTranslationNode extends TranslateGemmaTranslationNode {
   constructor(options) { super(options, 'en-ja'); }
+}
+
+export class Plamo3Translate2BTranslationNode extends WorkerTranslationNode {
+  static supportsLanguages = true;
+  inputs = { text: TEXT, id: NUMBER, source_lang: TEXT, target_lang: TEXT };
+  languages = Object.freeze({});
+  constructor(options) {
+    super(new URL('./plamo-worker.js', import.meta.url), options);
+    this.getTranslationLanguages = options?.getTranslationLanguages;
+  }
+  receiveInputs(values, context) {
+    this.languages = updatePlamoLanguages(this.languages, values, context.groupInputs);
+    const textValues = Object.fromEntries(Object.entries(values).filter(([port]) => !['source_lang', 'target_lang'].includes(port)));
+    return super.receiveInputs(textValues, context);
+  }
+  translationPayload() { return plamoLanguages(this.getTranslationLanguages?.() ?? this.languages); }
 }
 
 export class TextInputNode {

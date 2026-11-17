@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "setup:extension": "npm ci && npm run prepare:assets && npm run prepare:translation-assets && npm run prepare:tts-assets && npm run prepare:optional-asr-assets && npm run prepare:text-summary-assets && npm run build:extension",
+    "setup:extension": "npm ci && npm run prepare:assets && npm run prepare:translation-assets && npm run prepare:tts-assets && npm run prepare:optional-asr-assets && npm run prepare:text-summary-assets && npm run prepare:plamo-assets && npm run build:extension",
     "build:extension": "python3 scripts/build-extension.py",
     "test:extension": "playwright test --config playwright.extension.config.js",
     "test:live-model-real": "LIVE_MODEL_REAL=1 playwright test --config playwright.extension.config.js tests/extension/live-model-real.spec.js",
@@ -24,7 +24,9 @@
     "test:text-summary-real": "TEXT_SUMMARY_SMOKE=1 playwright test --config playwright.extension.config.js tests/extension/graph-text-summary-smoke.spec.js",
     "prepare:playground-assets": "python3 scripts/prepare-playground-assets.py",
     "test:playground-real": "PLAYGROUND_MODEL_SMOKE=1 playwright test tests/browser/playground-model-smoke.spec.js --project=chromium --workers=1",
-    "test:playground": "playwright test tests/browser/model-playground.spec.js tests/browser/playground-assets.spec.js tests/browser/translation.spec.js tests/browser/tts.spec.js tests/browser/correction.spec.js"
+    "test:playground": "playwright test tests/browser/model-playground.spec.js tests/browser/playground-assets.spec.js tests/browser/translation.spec.js tests/browser/tts.spec.js tests/browser/correction.spec.js tests/browser/plamo.spec.js",
+    "prepare:plamo-assets": "python3 scripts/prepare-plamo-assets.py",
+    "test:plamo-real": "PLAMO_SMOKE=1 TRANSLATION_CHANNEL=chrome playwright test tests/browser/plamo-smoke.spec.js --project=chromium --workers=1"
   },
   "devDependencies": {
     "@lexical/history": "0.38.2",

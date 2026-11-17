@@ -173,9 +173,9 @@ test('three screen layouts show actual provisional/final state and capture-free 
   await live.editor.setViewportSize({ width: 1440, height: 1000 });
   await live.models.setViewportSize({ width: 1200, height: 1000 });
   await expect(live.models.locator('#moonshine-small-ja').getByText('Moonshine Small Streaming Japanese (123M)', { exact: true })).toBeVisible();
-  await expect(live.models.locator('.model-card')).toHaveCount(13);
+  await expect(live.models.locator('.model-card')).toHaveCount(14);
   await expect(live.models.locator('#moonshine-small-ja .model-status')).toHaveText('Ready · Cached and verified');
-  await expect(live.models.locator('.model-card:not(#moonshine-small-ja) .model-status')).toHaveText(Array(12).fill('Not downloaded'));
+  await expect(live.models.locator('.model-card:not(#moonshine-small-ja) .model-status')).toHaveText(Array(13).fill('Not downloaded'));
   await expect(live.models.getByText('CosyVoice3 0.5B · streaming', { exact: true })).toBeVisible();
   expect(await live.models.evaluate(() => window.graphWorkers.length)).toBe(0);
   expect(await live.editor.evaluate(() => window.graphWorkers.length)).toBe(0);

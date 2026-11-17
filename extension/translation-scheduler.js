@@ -3,6 +3,7 @@ import { finiteNumber } from '../web/number-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { OpusMtTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
 import { validateTranslateGemmaContext } from '../web/translategemma-context.js';
+import { updatePlamoLanguages, plamoLanguages } from '../web/plamo-policy.js';
 
 export const TRANSLATION_OUTPUT_GROUPS = Object.freeze([
   Object.freeze(['source', 'text', 'error', 'id']),
@@ -20,6 +21,9 @@ export class TranslationSchedulerNode {
     this.modelName = modelName;
     this.acceptsContext = TranslationNode.supportsContext === true;
     if (this.acceptsContext) this.inputs = { ...this.inputs, context: TEXT };
+    this.acceptsLanguages = TranslationNode.supportsLanguages === true;
+    if (this.acceptsLanguages) this.inputs = { ...this.inputs, source_lang: TEXT, target_lang: TEXT };
+    this.languages = Object.freeze({});
     this.translationContext = '';
     this.ids = {};
     this.finals = [];
@@ -38,7 +42,8 @@ export class TranslationSchedulerNode {
     const source = { inputs: {}, outputs: { text: TEXT }, start: context => { this.send = text => context.emit('text', text); } };
     // Read the active job's accepted snapshot, never the mutable latest context.
     const translator = new this.TranslationNode({ workerFactory: this.workerFactory, loadOptions: { cacheOnly: true }, requireSingleOutput: true,
-      getTranslationContext: () => this.active?.job.translationContext ?? '' });
+      getTranslationContext: () => this.active?.job.translationContext ?? '',
+      getTranslationLanguages: () => this.active?.job.languages ?? {} });
     const sink = new TextOutputNode(text => this.active?.resolve(text));
     this.translation = new Pipeline({ nodes: { source, translator, sink }, connections: [
       { from: ['source', 'text'], to: ['translator', 'text'] },
@@ -73,6 +78,11 @@ export class TranslationSchedulerNode {
         ? 'Expected TEXT on text, provisional or context.' : 'Expected TEXT on text or provisional.');
     }
     // Apply metadata before accepting either target, irrespective of port order.
+    if (this.acceptsLanguages) {
+      this.languages = updatePlamoLanguages(this.languages, values, context.groupInputs);
+      try { plamoLanguages(this.languages); }
+      catch (error) { this.onState(`Translation configuration: ${error.message}`, 'error'); }
+    }
     if (Object.hasOwn(values, 'context')) {
       validateTranslateGemmaContext(values.context);
       this.translationContext = values.context;
@@ -90,7 +100,8 @@ export class TranslationSchedulerNode {
   accept(port, source, context, id) {
     if (port === 'provisional' && source.length > 1000) throw Error('Provisional translation accepts at most 1,000 characters.');
     this.revision++;
-    const snapshot = { ...(id === undefined ? {} : { id }), ...(this.acceptsContext ? { translationContext: this.translationContext } : {}) };
+    const snapshot = { ...(id === undefined ? {} : { id }), ...(this.acceptsContext ? { translationContext: this.translationContext } : {}),
+      ...(this.acceptsLanguages ? { languages: this.languages } : {}) };
     // One replaceable pending preview, and at most one running inference.
     // Committed input invalidates every older preview regardless of producer.
     this.preview?.complete();
@@ -127,6 +138,7 @@ export class TranslationSchedulerNode {
       if (job.provisional) this.preview = null;
       else this.queuedChars -= job.source.length;
       try {
+        if (this.acceptsLanguages) plamoLanguages(job.languages);
         if (!job.source.trim()) { this.emit(job, ''); continue; }
         if (this.error) { this.emit(job, undefined, this.error); continue; }
         if (job.source.length > 1000) {
@@ -173,6 +185,7 @@ export class TranslationSchedulerNode {
     this.preview?.complete(); this.active?.job.complete();
     this.finals = []; this.preview = null; this.queuedChars = 0;
     this.translationContext = '';
+    this.languages = Object.freeze({});
     this.active?.reject(new DOMException('Translation canceled.', 'AbortError'));
     return this.translation?.dispose();
   }

@@ -64,7 +64,7 @@ export const test = base.extend({
             if (data.type === 'audio') postMessage({type:'consumed',session,sequence:data.sequence});
             if (data.type === 'stop') postMessage({type:'stopped',session});
           };`);
-        for (const file of ['opus-mt-assets.json', 'opus-mt-en-ja-assets.json', 'translategemma-assets.json', 'supertonic3-assets.json', 'kokoro-assets.json']) {
+        for (const file of ['opus-mt-assets.json', 'opus-mt-en-ja-assets.json', 'translategemma-assets.json', 'plamo-assets.json', 'supertonic3-assets.json', 'kokoro-assets.json']) {
           const entries = JSON.parse(await readFile(path.join(root, 'extension', file), 'utf8')).map(entry => {
             const key = file + '/' + entry.path;
             let body = Buffer.alloc(entry.path.endsWith('.bin') ? 510 * 256 * 4 : 8192);

@@ -195,6 +195,26 @@
       "path": "vendor/optional-asr/moonshine/moonshine.wasm",
       "bytes": 13345086,
       "sha256": "aeb17e8b7f614796998bfb8ecaffbabf66366cb9faab9ca4de5ef39b95155830"
+    },
+    {
+      "path": "vendor/plamo/wllama.js",
+      "bytes": 274881,
+      "sha256": "ec957fe8b4c7a6128b8118f3b42e4aef8ef56a1ffec192b132b5f01861e33e9e"
+    },
+    {
+      "path": "vendor/plamo/wllama-worker.js",
+      "bytes": 155268,
+      "sha256": "d2cfefe61b61531ebfcac79e5b3ac5a16a956c87e900fb6005a675d4d3f863d3"
+    },
+    {
+      "path": "vendor/plamo/wllama.wasm",
+      "bytes": 10244628,
+      "sha256": "79ac5be917b71d50571a4f584436a9f6baf6b6e57719d094ed8bd950e9a65780"
+    },
+    {
+      "path": "vendor/plamo/LICENSE",
+      "bytes": 1071,
+      "sha256": "5866e3bd7e3cbd3f7c8bea6efd8a1e7fa7cc8de68c30f428aff7c6584a0fb720"
     }
   ]
 }

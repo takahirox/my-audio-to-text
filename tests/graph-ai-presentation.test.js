@@ -11,6 +11,7 @@ const expected = {
   OpusMtEnJa: ['Translation · EN → JA', 'OPUS-MT'],
   TranslateGemmaJaEn: ['Translation · JA → EN', 'TranslateGemma 4B'],
   TranslateGemmaEnJa: ['Translation · EN → JA', 'TranslateGemma 4B'],
+  Plamo3Translate2B: ['Translation · JA ↔ EN', 'PLaMo 3 Translate 2B'],
   TextSummaryLfm2: ['Text Summarization', 'LFM2.5 1.2B JP'],
   TextSummaryQwen35: ['Text Summarization', 'Qwen3.5 2B'],
   IfCondition: ['Condition Check · Yes/No', 'XtremeDistil'],
@@ -19,8 +20,8 @@ const expected = {
   Qwen3TtsStreaming: ['Speech Synthesis · Streaming', 'Qwen3-TTS 0.6B CustomVoice'],
   CosyVoice3Streaming: ['Speech Synthesis · Streaming', 'CosyVoice3 0.5B'],
 };
-test('exactly the 13 AI types have function/model facts, independently of ports or names', () => {
-  assert.equal(Object.keys(expected).length, 13);
+test('exactly the 14 AI types have function/model facts, independently of ports or names', () => {
+  assert.equal(Object.keys(expected).length, 14);
   for (const [type, definition] of Object.entries(NODE_TYPES)) {
     if (!expected[type]) { assert.equal(definition.ai, undefined, type); continue; }
     assert.deepEqual([definition.label, definition.ai.model], expected[type]);
