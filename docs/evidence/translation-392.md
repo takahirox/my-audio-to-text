@@ -5,10 +5,9 @@ Implemented one `TranslateGemma4B` graph type, visible as **Translation** with
 `ja`/`en`. One loaded Worker accepts per-request languages; the model revision,
 q4/WebGPU options, manifest, integrity verification and cache identity are unchanged.
 
-Saved version-15 directional graphs upgrade on read/import. EN→JA gains ordinary
-Text constants; JA→EN retains its defined defaults. IDs, positions, context,
-existing edges and exposed subgraph ports survive. Normal edits persist the
-canonical graph without keeping legacy runtime types.
+Old directional Node types are unsupported and receive no migration. Users
+recreate graphs with the unified Node and explicit language ports as needed.
+Unified-node save/reload retains language connections, context, IDs and wiring.
 
 ## Upstream verification
 
@@ -36,7 +35,7 @@ en→ja, fr→de and en_GB→zh_Hant, alongside the existing token/safety probes
   20 passed, four intended WebKit skips.
 - MV3 TranslateGemma plus graph port-order suites: 14 passed. Includes three
   language pairs on one loaded production Worker, immutable queued contexts,
-  offline verified cache, errors, Cancel, recovery and legacy save/reload.
+  offline verified cache, errors, Cancel, recovery and unified-node save/reload.
 - MV3 graph-models and translation-ports suites: 14 passed. Includes existing
   ASR → translation → independently keyed history/Display behavior.
 - Browser AI presentation/quick-add suites: 23 passed.
@@ -46,3 +45,34 @@ en→ja, fr→de and en_GB→zh_Hant, alongside the existing token/safety probes
 Real-model WebGPU inference was not run. The opt-in browser and MV3 smoke tests
 now exercise ja→en, en→ja and fr→de using the same loaded checkpoint. Default CI
 uses deterministic inference fixtures, including the new MV3 TranslateGemma suite.
+
+## Review fixes and revalidation
+
+Removed the directional TranslateGemma graph conversion and its compatibility
+fixtures/tests. Unified-node persistence is covered by saving/reloading a graph
+with connected language, context and ID ports, then executing that reloaded graph;
+exposed subgraph ports also round-trip. Old directional types use ordinary unknown
+Node validation and require graph recreation.
+
+Integrated main `73d58a5d931e55c768880794011fbf9a2a206582`, resolving conflicts in
+translation documentation, graph definitions, model cards, presentation tests and
+the Playground index. Main's multilingual PLaMo behavior and its separate model
+card remain intact alongside the unified TranslateGemma Node.
+
+Checks after these fixes:
+
+- `npm test`: 919 passed, one skipped, zero failures.
+- Chromium browser suites `translation.spec.js`, `plamo.spec.js`,
+  `graph-ai-presentation.spec.js`, `graph-quick-add.spec.js`: 35 passed. The first
+  run passed 31 tests but failed four PLaMo tests because runtime cache helpers
+  had not been staged in this fresh worktree. After
+  `npm run prepare:playground-assets` (runtimes only), all four PLaMo tests passed.
+- MV3 suites `translategemma.spec.js`, `plamo.spec.js`, `graph-models.spec.js`,
+  `translation-ports.spec.js`, `graph-port-order.spec.js`: 29 passed.
+- `npm run build:extension`: 220 packaged files verified, zero model weights.
+- `node --test tests/model-distribution.test.js`: three passed.
+- `git diff --check`: passed.
+
+Real-model WebGPU inference remains unperformed. The review question requesting
+browser/GPU details and ja→en, en→ja and fr→de logs from one loaded pinned
+checkpoint remains open for human review after publication.

@@ -5,7 +5,7 @@ import { TEXT, NUMBER } from '../web/port-contracts.js';
 import { TranslateGemmaTranslationNode } from '../web/translation-nodes.js';
 import { translateGemmaLanguages, TRANSLATE_GEMMA_LANGUAGES } from '../web/translategemma-languages.js';
 import { TranslationSchedulerNode, TRANSLATION_OUTPUTS } from '../extension/translation-scheduler.js';
-import { NODE_TYPES, graphNode, edge, assertGraph, saveGraph, GRAPH_VERSION } from '../extension/graph.js';
+import { NODE_TYPES, graphNode, edge, assertGraph, saveGraph, readGraph, GRAPH_VERSION } from '../extension/graph.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
 import { assertSubgraph } from '../extension/subgraphs.js';
 import { buildGraph } from '../extension/graph-runtime.js';
@@ -120,52 +120,42 @@ test('language defaults and exact template vocabulary reject unsupported/blank c
     for (const port of ['source_lang', 'target_lang']) assert.throws(() => translateGemmaLanguages({ [port]: value }), new RegExp(port));
 });
 
-test('one concrete Translation type and narrow legacy migration preserve both directions, context, IDs, wires and saved reload', async () => {
+test('one concrete Translation type saves and reloads languages, context, IDs, wires and subgraph ports', async () => {
   assert.deepEqual(Object.keys(NODE_TYPES).filter(type => /TranslateGemma/.test(type)), ['TranslateGemma4B']);
   assert.equal(NODE_TYPES.TranslateGemma4B.label, 'Translation');
   assert.equal(NODE_TYPES.TranslateGemma4B.ai.model, 'TranslateGemma 4B');
   assert.deepEqual(graphNode('TranslateGemma4B', 'gemma').settings, {});
-  const longId = 'a'.repeat(64);
-  const old = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'),
-    { ...graphNode('TranslateGemma4B', longId), type: 'TranslateGemmaEnJa' },
-    { ...graphNode('TranslateGemma4B', 'forward'), type: 'TranslateGemmaJaEn' },
-    graphNode('Text', `${longId.slice(0,56)}`), graphNode('Display', 'out')], edges: [
-      edge('input', 'value', longId, 'text'), edge('context', 'value', longId, 'context'),
-      edge(longId, 'text', 'out', 'input1'), edge('input', 'value', 'forward', 'text'),
+  const graph = { version: GRAPH_VERSION, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'),
+    graphNode('TranslateGemma4B', 'gemma'), graphNode('Text', 'source'), graphNode('Text', 'target'),
+    graphNode('Number', 'requestId'), graphNode('Display', 'out')], edges: [
+      edge('input', 'value', 'gemma', 'text'), edge('context', 'value', 'gemma', 'context'),
+      edge('source', 'value', 'gemma', 'source_lang'), edge('target', 'value', 'gemma', 'target_lang'),
+      edge('requestId', 'value', 'gemma', 'id'), edge('gemma', 'text', 'out', 'input1'),
   ] };
-  old.nodes[0].settings.value = 'Hello'; old.nodes[1].settings.value = 'Reference';
-  const before = structuredClone(old), graph = assertGraph(old);
-  assert.deepEqual(old, before, 'migration is read-only until normal save');
-  assert.deepEqual(assertGraph(graph), graph, 'idempotent upgrade');
-  assert.deepEqual(graph.edges.slice(0, old.edges.length), old.edges);
-  assert.deepEqual(graph.nodes[2], { ...old.nodes[2], type: 'TranslateGemma4B' });
-  assert.equal(new Set(graph.nodes.map(node => node.id)).size, graph.nodes.length);
-  assert.ok(graph.nodes.every(node => node.id.length <= 64));
-  for (const [port, value] of [['source_lang','en'], ['target_lang','ja']]) {
-    const route = graph.edges.find(route => route.to[0] === longId && route.to[1] === port);
-    assert.equal(graph.nodes.find(node => node.id === route.from[0]).settings.value, value);
-  }
+  for (const [id, value] of [['input', 'Hello'], ['context', 'Reference'], ['source', 'en'], ['target', 'ja']])
+    graph.nodes.find(node => node.id === id).settings.value = value;
+  assert.deepEqual(assertGraph(graph), graph);
   const storage = new Map(); storage.getItem = key => storage.get(key) ?? null; storage.setItem = (key,value) => storage.set(key,value);
-  saveGraph(storage, old); assert.deepEqual(JSON.parse([...storage.values()][0]), graph);
-  assert.deepEqual(graphModelRequirements(graph).map(model => model.key), ['translategemma']);
-  const requests = [];
-  const built = buildGraph(old, { prepareTranslateGemma: async () => {}, translationWorkerFactory: () => ({
+  saveGraph(storage, graph);
+  const reloaded = readGraph(storage);
+  assert.deepEqual(reloaded, graph);
+  assert.deepEqual(graphModelRequirements(reloaded).map(model => model.key), ['translategemma']);
+  const requests = [], outputs = [];
+  const built = buildGraph(reloaded, { prepareTranslateGemma: async () => {}, translationWorkerFactory: () => ({
     postMessage(data) {
       if (data.type === 'translate') requests.push(data);
       queueMicrotask(() => this.onmessage?.({ data: { id: data.id, type: data.type === 'load' ? 'ready' : data.type === 'drain' ? 'drained' : 'result', texts: ['translated'] } }));
     }, terminate() {},
   }) });
-  built.pipeline.entries.get('out').node.render = () => {};
+  built.pipeline.entries.get('out').node.render = value => outputs.push(value);
   await built.pipeline.start(); await built.pipeline.stop(); await built.pipeline.dispose();
-  assert.equal(requests.length, 1, 'parked forward Node stays inert');
+  assert.equal(requests.length, 1);
   assert.equal(requests[0].source_lang, 'en'); assert.equal(requests[0].target_lang, 'ja');
   assert.equal(requests[0].context, 'Reference');
-  const subgraph = { version: GRAPH_VERSION, nodes: [before.nodes[2]], edges: [], interface: {
-    inputs: [{ id: 'text', name: 'Text', node: longId, port: 'text' }, { id: 'context', name: 'Context', node: longId, port: 'context' }],
-    outputs: [{ id: 'text', name: 'Translation', node: longId, port: 'text' }],
+  assert.ok(outputs.length > 0);
+  const subgraph = { version: GRAPH_VERSION, nodes: [graph.nodes[2]], edges: [], interface: {
+    inputs: ['text', 'context', 'source_lang', 'target_lang', 'id'].map(port => ({ id: port, name: port, node: 'gemma', port })),
+    outputs: [{ id: 'text', name: 'Translation', node: 'gemma', port: 'text' }],
   } };
-  const upgraded = assertSubgraph(subgraph);
-  assert.deepEqual(upgraded.interface, subgraph.interface);
-  assert.deepEqual(assertSubgraph(upgraded), upgraded);
-  assert.equal(upgraded.nodes.length, 3);
+  assert.deepEqual(assertSubgraph(JSON.parse(JSON.stringify(subgraph))), subgraph);
 });

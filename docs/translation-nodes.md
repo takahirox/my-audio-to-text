@@ -31,7 +31,10 @@ Blank Playground language fields represent unconnected ports; an explicit blank
 TEXT graph value is invalid. Optional context uses the same reference-only prompt.
 
 PLaMo has its own `Plamo3Translate2B` type, runtime, language policy, assets and
-license. See [its guide](plamo-translation.md). Independent graph Node instances
+license. Its **Translation** Node accepts 53 languages. Unconnected/auto target
+uses the official GGUF Japanese/English switch; other input languages need an
+explicit target. A concrete source requires a concrete target. See
+[its guide](plamo-translation.md). Independent graph Node instances
 still own separate Workers and runtime state.
 
 | Node | Immutable checkpoint | Execution | Weight assets |
@@ -145,13 +148,9 @@ Add `TranslateGemma4B` and connect `Text.value → text`, or
 For EN→JA, use English ASR and two Text constants (`en` → `source_lang`,
 `ja` → `target_lang`). All language ports accept any TEXT producer.
 
-Version 15 saved `TranslateGemmaJaEn` and `TranslateGemmaEnJa` nodes are upgraded
-on read/import, with no permanent legacy runtime. IDs, positions, context and
-existing edges are retained. JA→EN uses the defined defaults; EN→JA gains ordinary
-Text constants and language edges. Generated IDs avoid collisions, including
-64-character original IDs. The upgrade is deterministic and idempotent, applies
-to subgraphs too, and persists on the next normal save. Original library storage
-is retained until then. Invalid graphs retain existing recovery/export guidance.
+Old directional TranslateGemma Node types are unsupported and fail normal graph
+validation. Recreate those graphs using `TranslateGemma4B` and connect language
+ports for the desired direction. There is no old-graph migration.
 
 For bilingual history, connect `source`, `text`, `error` directly to three
 `TextFormatter` inputs and set a template such as

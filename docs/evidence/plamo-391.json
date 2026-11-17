@@ -1,0 +1,262 @@
+{
+  "date": "2026-11-17",
+  "issue": 391,
+  "environment": {
+    "os": "macOS-27.2.1-arm64-arm-64bit-Mach-O",
+    "architecture": "arm64",
+    "cpu": "Apple M4 Max",
+    "memoryGiB": 64.0
+  },
+  "model": {
+    "id": "pfnet/plamo-3-translate-2b-GGUF",
+    "revision": "4f672106b847200bfdc0f6af6c321cd94eba1aed"
+  },
+  "modelSha256": "1ffd9073afcc70e35ccc942428aa2b73d7aa2b9ea779bf504b775369e0276c13",
+  "templateSha256": "ad7eb87b161c6792be070d777a9f9da50c9e57a77e1fa5cca3a24b91b6bdb9e9",
+  "policySha256": "c46532d9e4c5975e830d2bbe4360c98386dafe182d03c3b9f1ca53c5b0553040",
+  "runtime": {
+    "wllama": "3.13.0",
+    "llamaCpp": "b12211-7d7f028",
+    "backend": "CPU WASM",
+    "threads": 1,
+    "gpuLayers": 0,
+    "contextTokens": 2048,
+    "maxOutputTokens": 256,
+    "temperature": 0,
+    "seed": 0
+  },
+  "assetReview": {
+    "wholeFileSha256Verified": true,
+    "allManifestChunksVerified": true,
+    "embeddedTemplateMatchesPackagedTemplate": true,
+    "officialTemplateAndLicenseBytesMatch": true,
+    "pinChanged": false
+  },
+  "delivery": "One official pinned GGUF WAN download; static loopback bytes for both tests, production canonical cache keys and hashes. No inference server.",
+  "packagedExtension": {
+    "browser": "153.0.8010.12",
+    "capabilities": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+      "isolated": true,
+      "secure": true,
+      "jspi": true
+    },
+    "preparedMs": 7278.384999990463,
+    "runs": [
+      {
+        "text": "会議は来週の月曜日に変更されました。",
+        "source": "",
+        "target": "",
+        "output": "The meeting has been rescheduled for next Monday.",
+        "loadedMs": 4219.9849999547005,
+        "inferenceMs": 6958.985000014305
+      },
+      {
+        "text": "The weather is nice today.",
+        "source": "",
+        "target": "",
+        "output": "今日はいい天気だ。",
+        "loadedMs": 4296.4849999547005,
+        "inferenceMs": 5002.814999997616
+      },
+      {
+        "text": "The weather is nice today.",
+        "source": "auto",
+        "target": "auto",
+        "output": "今日はいい天気だ。",
+        "loadedMs": 4150.185000002384,
+        "inferenceMs": 5102.3949999809265
+      },
+      {
+        "text": "会議は来週の月曜日に変更されました。",
+        "source": "",
+        "target": "en",
+        "output": "The meeting has been rescheduled for next Monday.",
+        "loadedMs": 4263.064999997616,
+        "inferenceMs": 6458.375
+      },
+      {
+        "text": "The weather is nice today.",
+        "source": "en",
+        "target": "ja",
+        "output": "今日はいい天気だ。",
+        "loadedMs": 4172.22000002861,
+        "inferenceMs": 5352.539999961853
+      },
+      {
+        "text": "La réunion aura lieu lundi prochain.",
+        "source": "fr",
+        "target": "ja",
+        "output": "会議は来週の月曜日に行われます。",
+        "loadedMs": 4071.0950000286102,
+        "inferenceMs": 7559.759999990463
+      },
+      {
+        "text": "회의는 다음 주 월요일에 열립니다.",
+        "source": "ko",
+        "target": "en",
+        "output": "The meeting will be held next Monday.",
+        "loadedMs": 4076.7450000047684,
+        "inferenceMs": 7543.475000023842
+      },
+      {
+        "text": "会议将在下周一举行。",
+        "source": "zh-hans",
+        "target": "ja",
+        "output": "会議は来週の月曜日に開かれます。",
+        "loadedMs": 4262.5,
+        "inferenceMs": 7283.814999997616
+      },
+      {
+        "text": "會議將於下週一舉行。",
+        "source": "zh-hant",
+        "target": "ja",
+        "output": "会議は来週の月曜日に開かれます。",
+        "loadedMs": 4077.600000023842,
+        "inferenceMs": 7445.27999997139
+      },
+      {
+        "text": "Please open the project dashboard.",
+        "source": "auto",
+        "target": "ja",
+        "output": "プロジェクトダッシュボードを開いてください。",
+        "loadedMs": 4256.409999966621,
+        "inferenceMs": 4854.829999983311
+      }
+    ],
+    "allSamplesPassed": true,
+    "allWorkersDisposed": true,
+    "configurationOrRuntimeErrors": []
+  },
+  "standalone": {
+    "browser": "157.0.8103.52",
+    "capabilities": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36",
+      "isolated": false,
+      "secure": true,
+      "jspi": true,
+      "storage": {
+        "quota": 10737418240,
+        "usage": 0,
+        "usageDetails": {}
+      }
+    },
+    "runs": [
+      {
+        "text": "会議は来週の月曜日に変更されました。",
+        "source": "",
+        "target": "",
+        "status": "Complete",
+        "errors": "",
+        "output": "The meeting has been rescheduled for next Monday.",
+        "load-time": "8464 ms",
+        "latency": "6040 ms"
+      },
+      {
+        "text": "The weather is nice today.",
+        "source": "",
+        "target": "",
+        "status": "Complete",
+        "errors": "",
+        "output": "今日はいい天気だ。",
+        "load-time": "5071 ms",
+        "latency": "4381 ms"
+      },
+      {
+        "text": "The weather is nice today.",
+        "source": "auto",
+        "target": "auto",
+        "status": "Complete",
+        "errors": "",
+        "output": "今日はいい天気だ。",
+        "load-time": "5242 ms",
+        "latency": "4309 ms"
+      },
+      {
+        "text": "会議は来週の月曜日に変更されました。",
+        "source": "",
+        "target": "en",
+        "status": "Complete",
+        "errors": "",
+        "output": "The meeting has been rescheduled for next Monday.",
+        "load-time": "5035 ms",
+        "latency": "5474 ms"
+      },
+      {
+        "text": "The weather is nice today.",
+        "source": "en",
+        "target": "ja",
+        "status": "Complete",
+        "errors": "",
+        "output": "今日はいい天気だ。",
+        "load-time": "5061 ms",
+        "latency": "4637 ms"
+      },
+      {
+        "text": "La réunion aura lieu lundi prochain.",
+        "source": "fr",
+        "target": "ja",
+        "status": "Complete",
+        "errors": "",
+        "output": "会議は来週の月曜日に行われます。",
+        "load-time": "5025 ms",
+        "latency": "6591 ms"
+      },
+      {
+        "text": "회의는 다음 주 월요일에 열립니다.",
+        "source": "ko",
+        "target": "en",
+        "status": "Complete",
+        "errors": "",
+        "output": "The meeting will be held next Monday.",
+        "load-time": "5791 ms",
+        "latency": "6621 ms"
+      },
+      {
+        "text": "会议将在下周一举行。",
+        "source": "zh-hans",
+        "target": "ja",
+        "status": "Complete",
+        "errors": "",
+        "output": "会議は来週の月曜日に開かれます。",
+        "load-time": "5148 ms",
+        "latency": "6257 ms"
+      },
+      {
+        "text": "會議將於下週一舉行。",
+        "source": "zh-hant",
+        "target": "ja",
+        "status": "Complete",
+        "errors": "",
+        "output": "会議は来週の月曜日に開かれます。",
+        "load-time": "4981 ms",
+        "latency": "6236 ms"
+      },
+      {
+        "text": "Please open the project dashboard.",
+        "source": "auto",
+        "target": "ja",
+        "status": "Complete",
+        "errors": "",
+        "output": "プロジェクトダッシュボードを開いてください。",
+        "load-time": "5015 ms",
+        "latency": "4165 ms"
+      }
+    ],
+    "allSamplesPassed": true,
+    "pageErrors": [],
+    "cancelDuringInferencePassed": true,
+    "workersAfterCancel": 0,
+    "freshWorkerCacheRetryPassed": true,
+    "networkAssertionsPassed": true
+  },
+  "checks": {
+    "unitTestsPassed": 936,
+    "deterministicPlamoBrowserTestsPassed": 4,
+    "extensionPlamoAndModelDetailsTestsPassed": 4,
+    "plamoExactPaletteAndCanvasTitleTestsPassed": true,
+    "packagedFiles": 219,
+    "packagedModelWeights": 0,
+    "npmAuditVulnerabilities": 0
+  }
+}

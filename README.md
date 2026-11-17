@@ -76,7 +76,12 @@ running; actual browser/device and memory limits can still cause session errors.
 Open a library entry in Graph Editor; Auto Save updates that entry only. Graph Editor and Models tabs provide executable graph editing and verified optional model preparation without
 interrupting capture. Optional local TranslateGemma and PLaMo translation pairs committed
 Japanese transcripts with English or English transcripts with Japanese using
-explicit translator Nodes and KeyedTextPair history. Saved
+explicit translator Nodes and KeyedTextPair history. PLaMo appears as **Translation**
+with the **PLaMo 3 Translate 2B** subtitle and supports 53 languages via optional
+TEXT language ports. Its unconnected/auto target follows the official GGUF
+Japanese ↔ English switch; specify a target for other input languages. A concrete
+source requires a concrete target. Connect target `en` for fixed English output.
+See [PLaMo translation](docs/plamo-translation.md) for supported codes and examples. Saved
 graph edits apply on the next session, after preparation of required model caches;
 transcripts remain window-local. See its
 guide for building/loading the unpacked extension,

@@ -9,9 +9,12 @@ test('one searchable PLaMo AI card, optional TEXT ports, no language Settings, s
   await editor.getByLabel('Search nodes', { exact: true }).fill('PLaMo');
   const option = editor.locator('#graph-node-type [data-type="Plamo3Translate2B"]');
   await expect(editor.locator('#graph-node-type [role="option"]')).toHaveCount(1);
-  await expect(option).toContainText('Translation · JA ↔ EN'); await expect(option).toContainText('PLaMo 3 Translate 2B');
+  await expect(option.locator('.graph-node-title > span:last-child')).toHaveText('Translation');
+  await expect(option.locator('.graph-node-model')).toHaveText('PLaMo 3 Translate 2B');
   await option.click();
   const node = editor.locator('[data-node="plamo3translate2b"]');
+  await expect(node.locator('.graph-node-title > span:last-child')).toHaveText('Translation');
+  await expect(node.locator('.graph-node-model')).toHaveText('PLaMo 3 Translate 2B');
   await expect(node.locator('.graph-ai-icon')).toHaveCount(1);
   for (const port of ['source_lang', 'target_lang']) await expect(editor.getByRole('button', { name: `plamo3translate2b input ${port}`, exact: true })).toBeVisible();
   await expect(editor.locator('.graph-inspector select')).toHaveCount(0);
@@ -21,6 +24,8 @@ test('one searchable PLaMo AI card, optional TEXT ports, no language Settings, s
   expect(await editor.evaluate(() => localStorage.getItem('processing-graph-library-v1'))).toBe(before);
   await models.evaluate(() => window.dispatchEvent(new Event('focus')));
   const card = models.locator('#plamo-3-translate-2b'); await expect(card).toHaveAttribute('data-state', 'Ready');
+  await expect(card).toContainText('53 languages');
+  await expect(card).toContainText('Unconnected/auto target switches Japanese ↔ English');
   await expect(card.locator(':scope > .model-license')).toContainText('prior PFN registration');
   await card.locator('summary').click();
   await expect(card.getByRole('link', { name: /PLaMo Community License/ })).toHaveAttribute('href', '../web/licenses/plamo-community-en.txt');

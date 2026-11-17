@@ -8,7 +8,7 @@ const expected = {
   SpeechToTextMoonshineSmallJa: ['Speech Recognition · JA / Streaming', 'Moonshine Small Streaming Japanese'],
   SpeechToTextMoonshineMediumEn: ['Speech Recognition · EN / Streaming', 'Moonshine Medium Streaming English'],
   TranslateGemma4B: ['Translation', 'TranslateGemma 4B'],
-  Plamo3Translate2B: ['Translation · JA ↔ EN', 'PLaMo 3 Translate 2B'],
+  Plamo3Translate2B: ['Translation', 'PLaMo 3 Translate 2B'],
   TextProcessingLfm2: ['Text Processing', 'LFM2.5 1.2B JP'],
   TextProcessingQwen35: ['Text Processing', 'Qwen3.5 2B'],
   IfCondition: ['Condition Check · Yes/No', 'XtremeDistil'],
@@ -36,7 +36,7 @@ test('colliding functions sort by model name with stable order in each category'
   const grouped = groupPaletteEntries(entries);
   assert.deepEqual(groupPaletteEntries(entries.reverse()), grouped);
   const sameTitle = title => [...grouped.values()].flat().filter(([,d])=>d.label===title).map(([,d])=>d.ai.model);
-  assert.deepEqual(sameTitle('Translation'), ['TranslateGemma 4B']);
+  assert.deepEqual(sameTitle('Translation'), ['PLaMo 3 Translate 2B', 'TranslateGemma 4B']);
   assert.deepEqual(sameTitle('Text Processing'), ['LFM2.5 1.2B JP', 'Qwen3.5 2B']);
   assert.deepEqual(sameTitle('Speech Synthesis'), ['Kokoro 82M', 'Supertonic 3']);
   assert.deepEqual(sameTitle('Speech Synthesis · Streaming'), ['CosyVoice3 0.5B', 'Qwen3-TTS 0.6B CustomVoice']);
@@ -54,8 +54,8 @@ test('pre-change AI graph JSON and all non-presentation node contracts remain id
   // hashes include every original field except label (ports, defaults, help, etc.).
   const fixture = JSON.parse(readFileSync(new URL('./fixtures/ai-node-compatibility.json', import.meta.url)));
   // Processing (#389) and unified translation (#392) intentionally replace
-  // legacy contracts; migration has dedicated language/persistence coverage.
-  fixture.graph.nodes = fixture.graph.nodes.filter(node => !node.type.startsWith('TextSummary') && !node.type.startsWith('TranslateGemma'));
+  // these contracts; current unified translation has dedicated persistence coverage.
+  fixture.graph.nodes = fixture.graph.nodes.filter(node => !node.type.startsWith('TextSummary'));
   const serialized = JSON.stringify(fixture.graph);
   assert.equal(JSON.stringify(assertGraph(JSON.parse(serialized))), serialized);
   const storage = new Map(); storage.getItem = key => storage.get(key) ?? null; storage.setItem = (k,v) => storage.set(k,v);
