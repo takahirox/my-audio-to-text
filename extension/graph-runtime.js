@@ -2,7 +2,7 @@ import { ButtonNode } from '../web/button-node.js';
 import { HoldNode } from '../web/hold-node.js';
 import { TextProcessingNode } from '../web/text-summary-node.js';
 import { Pipeline } from '../web/pipeline.js';
-import { TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode, Plamo3Translate2BTranslationNode } from '../web/translation-nodes.js';
+import { TranslateGemmaTranslationNode, Plamo3Translate2BTranslationNode } from '../web/translation-nodes.js';
 import { verifiedPlamoCache } from './plamo-cache.js';
 import { verifiedTranslateGemmaCache } from './translategemma-cache.js';
 import { Supertonic3TextToSpeechNode, KokoroTextToSpeechNode } from '../web/tts-nodes.js';
@@ -169,9 +169,9 @@ export function buildGraph(graph, options) {
         node = new TranslationSchedulerNode({ prepare: options.preparePlamo || verifiedPlamoCache,
           TranslationNode: Plamo3Translate2BTranslationNode, modelName: 'PLaMo 3 Translate 2B', workerFactory: options.translationWorkerFactory,
           onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
-      case 'TranslateGemmaEnJa': case 'TranslateGemmaJaEn':
+      case 'TranslateGemma4B':
         node = new TranslationSchedulerNode({ prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
-          TranslationNode: spec.type === 'TranslateGemmaEnJa' ? EnglishToJapaneseTranslateGemmaTranslationNode : TranslateGemmaTranslationNode,
+          TranslationNode: TranslateGemmaTranslationNode,
           modelName: 'TranslateGemma 4B', workerFactory: options.translationWorkerFactory,
           onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
       case 'Supertonic3': case 'Kokoro': {

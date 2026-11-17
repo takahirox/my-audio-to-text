@@ -14,7 +14,7 @@ export const closedWindows = [
   'y Friday',
 ];
 
-export function windowGraph(mode = 'window', translator = 'TranslateGemmaEnJa') {
+export function windowGraph(mode = 'window', translator = 'TranslateGemma4B') {
   const nodes = [graphNode('Text', 'input'), graphNode(translator, 'translator'), graphNode('Display', 'display')];
   const edges = [];
   if (mode === 'baseline') edges.push(edge('input', 'value', 'translator', 'text'));

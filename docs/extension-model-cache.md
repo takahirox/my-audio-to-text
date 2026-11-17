@@ -19,7 +19,8 @@ The **Models** heading identifies the page; its header navigation contains only
 Opening Models checks files only. A successful valid **Auto Save** in Graph Editor
 prepares the weights required by actual saved model Node types and
 voices, including parked Nodes. Repeated equivalent Nodes are deduplicated; each
-direction and voice remains independent, with shared verified files reused.
+Node session remains independent, with shared verified files reused. TranslateGemma
+language changes use the same loaded model and cache identity.
 ASR uses the same cache contracts as other processors. [Moonshine streaming Nodes](optional-asr-nodes.md)
 prepare 305 MB for English Medium or 122 MB for Japanese Small after Auto Save.
 The editor shows model/language/runtime facts.
@@ -232,7 +233,7 @@ measure real device persistence and multi-GB performance separately.
 
 ### TranslateGemma 4B (#124)
 
-`TranslateGemmaEnJa` and `TranslateGemmaJaEn` share one pinned q4 manifest and
+All `TranslateGemma4B` instances and language pairs share one pinned q4 manifest and
 cache: **3,111,911,678 bytes**, including both ONNX external-data shards and the
 translation template. Auto Save prepares it only when either Node is saved (parked
 Nodes included). Models exposes a single TranslateGemma card with integrity

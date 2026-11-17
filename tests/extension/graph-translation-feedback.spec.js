@@ -5,7 +5,7 @@ import path from 'node:path';
 
 // Source-only MV3 package: production Pipeline/scheduler/summary nodes, native
 // module Workers and CSP; deterministic replies, no model assets or inference.
-for (const type of ['EnglishToJapaneseTranslateGemmaTranslationNode']) {
+for (const type of ['TranslateGemmaTranslationNode']) {
   test(`MV3 ${type}: independent feedback, FIFO translation, Stop and Cancel/restart`, async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'translation-feedback-'));
     let browser;

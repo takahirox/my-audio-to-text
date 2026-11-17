@@ -19,7 +19,7 @@ function graph(type) {
   display('model-output', 'model', type === 'IfCondition' ? 'yes' : 'result');
   if (type === 'IfCondition') display('no-output', 'model', 'no');
   display('peer', 'source', 'value');
-  for (const [type, id] of [['TranslateGemmaJaEn', 'forward'], ['TranslateGemmaEnJa', 'reverse']]) {
+  for (const [type, id] of [['TranslateGemma4B', 'forward'], ['TranslateGemma4B', 'reverse']]) {
     nodes.push(graphNode(type, id)); edges.push(edge('source', 'value', id, 'text')); display(id + '-output', id, 'text');
   }
   return { version: GRAPH_VERSION, nodes, edges };

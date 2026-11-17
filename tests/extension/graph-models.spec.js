@@ -34,7 +34,7 @@ test('direct palette/canvas/settings use ordinary Text formatter; Graph actions 
   await save(editor); expect(f.requests).toEqual([]);
 });
 
-test('Save prepares only saved English → Japanese Nodes once, after persistence, without capture or inference Workers; verified cache reuse and invalid cache retry', async ({ graphExtension: f }) => {
+test('Save prepares only saved TranslateGemma Nodes once, after persistence, without capture or inference Workers; verified cache reuse and invalid cache retry', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor, initial = await saved(live);
   await editor.evaluate(() => {
     window.beforePersistence = [];
@@ -42,12 +42,12 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
     // The shared asset worker asks a Window for persistence immediately before
     // its first download; fetch itself no longer belongs to the editor.
     navigator.storage.persisted = () => {
-      window.beforePersistence.push(!(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'TranslateGemmaEnJa'));
+      window.beforePersistence.push(!(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().nodes.some(node => node.type === 'TranslateGemma4B'));
       return persisted();
     };
     navigator.mediaDevices.getUserMedia = () => { throw Error('Save must not capture'); };
   });
-  await add(editor, 'TranslateGemmaEnJa'); await add(editor, 'TranslateGemmaEnJa');
+  await add(editor, 'TranslateGemma4B'); await add(editor, 'TranslateGemma4B');
   expect(f.requests).toEqual([]); expect(await saved(live)).toEqual(initial);
   const workspace = await editor.locator('.graph-workspace').boundingBox();
   await save(editor); await noModelPanel(editor);
@@ -79,7 +79,7 @@ test('Save prepares only saved English → Japanese Nodes once, after persistenc
 test('no optional model requests on load, invalid Save, storage failure or unrelated saved model dependencies', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor, before = await saved(live);
   await save(editor); expect(f.requests).toEqual([]);
-  await add(editor, 'TranslateGemmaEnJa'); await add(editor, 'Number');
+  await add(editor, 'TranslateGemma4B'); await add(editor, 'Number');
   await editor.getByLabel('number value', { exact: true }).fill('');
   await settleAutoSave(editor); await expect(editor.locator('#graph-errors')).toContainText('finite number');
   expect(await saved(live)).toEqual(before); expect(f.requests).toEqual([]); await noModelPanel(editor);
@@ -98,7 +98,7 @@ test('no optional model requests on load, invalid Save, storage failure or unrel
 
 test('multiple parked model types and voices prepare distinct sets once and reuse shared weights', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor, initial = await saved(live);
-  for (const [type, settings] of [['Plamo3Translate2B', {}], ['TranslateGemmaEnJa', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Kokoro', {}], ['Kokoro', {}]]) await add(editor, type, settings);
+  for (const [type, settings] of [['Plamo3Translate2B', {}], ['TranslateGemma4B', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Supertonic3', {}], ['Kokoro', {}], ['Kokoro', {}]]) await add(editor, type, settings);
   // Individual inspector settings, including a different language with the same
   // voice, choose equivalent weights without modifying any routes.
   for (const [id, settings] of [['supertonic3-1', { language: 'en' }], ['supertonic3-2', { voice: 'M1' }], ['kokoro-1', { voice: 'af_heart' }]]) {
@@ -118,13 +118,13 @@ test('multiple parked model types and voices prepare distinct sets once and reus
 
 for (const mode of ['error', 'short', 'corrupt']) test(`Save remains persisted after ${mode} download failure; Models recovery clears the editor warning`, async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
-  f.mode(mode); await add(editor, 'TranslateGemmaEnJa'); await save(editor);
+  f.mode(mode); await add(editor, 'TranslateGemma4B'); await save(editor);
   await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
   await expect(editor.locator('#graph-model-warning')).toBeVisible();
   await expect(editor.locator('#graph-model-warning a')).toHaveAttribute('href', 'model-cache.html');
   await expect(editor.locator('#graph-state')).toHaveText('Saved');
   await noModelPanel(editor);
-  const before = await saved(live); expect(before.nodes.some(node => node.type === 'TranslateGemmaEnJa')).toBe(true);
+  const before = await saved(live); expect(before.nodes.some(node => node.type === 'TranslateGemma4B')).toBe(true);
   await expect(editor.locator('#graph-errors')).toBeEmpty();
   f.mode('normal'); await live.models.locator('#translategemma').getByRole('button', { name: /^(Download|Retry)$/ }).click();
   await expectGraphModelsReady(editor); expect(await saved(live)).toEqual(before);
@@ -133,16 +133,16 @@ for (const mode of ['error', 'short', 'corrupt']) test(`Save remains persisted a
 
 test('requirement changes and page teardown cancel background preparation and allow Models recovery', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
-  f.mode('hold'); await add(editor, 'TranslateGemmaEnJa'); await save(editor);
+  f.mode('hold'); await add(editor, 'TranslateGemma4B'); await save(editor);
   await expect.poll(() => f.requests.length).toBeGreaterThan(0);
   await noModelPanel(editor);
-  await editor.getByRole('button', { name: 'Remove translategemmaenja', exact: true }).click();
+  await editor.getByRole('button', { name: 'Remove translategemma4b', exact: true }).click();
   await save(editor);
   // Acquiring the model lock in Models proves obsolete work released it.
   const models = live.models.locator('#translategemma');
   await live.models.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(models).toHaveAttribute('data-state', 'Not downloaded');
-  await add(editor, 'TranslateGemmaEnJa'); await save(editor);
+  await add(editor, 'TranslateGemma4B'); await save(editor);
   await expect.poll(() => f.requests.length).toBeGreaterThan(1);
   const before = await saved(live);
   await editor.close(); f.mode('normal');
@@ -152,7 +152,7 @@ test('requirement changes and page teardown cancel background preparation and al
 
 test('an external revision cancels obsolete preparation and protects a dirty draft while the second editor is read-only', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor, initial = await saved(live);
-  f.mode('hold'); await add(editor, 'TranslateGemmaEnJa'); await save(editor);
+  f.mode('hold'); await add(editor, 'TranslateGemma4B'); await save(editor);
   await expect.poll(() => f.requests.length).toBeGreaterThan(0);
   const other = await f.context.newPage(); await other.goto(editor.url());
   await expect(other.locator('#graph-state')).toHaveText('Read-only');
@@ -168,7 +168,7 @@ test('an external revision cancels obsolete preparation and protects a dirty dra
   await live.models.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(live.models.locator('#translategemma')).toHaveAttribute('data-state', 'Not downloaded');
   await expect(editor.locator('[data-node=text]')).toHaveCount(1);
-  await expect(editor.locator('[data-node=translategemmaenja]')).toHaveCount(1);
+  await expect(editor.locator('[data-node=translategemma4b]')).toHaveCount(1);
   expect(await saved(live)).toEqual(initial);
   await settleAutoSave(editor); await expect(editor.locator('#graph-save-error')).toContainText('reload the latest');
 });
@@ -206,7 +206,7 @@ test('formatter instances add inputs above four, preserve wires, validate edits 
 
 test('named graphs share verified assets by identity; Save prepares only the open entry', async ({ graphExtension: f }) => {
   const live = await openGraph(f, { live: false }), editor = live.editor;
-  await add(editor, 'TranslateGemmaEnJa'); await save(editor);
+  await add(editor, 'TranslateGemma4B'); await save(editor);
   await expectGraphModelsReady(editor);
   expect(f.requests).toHaveLength(8);
   const { id, original } = await editor.evaluate(async () => {
@@ -228,7 +228,7 @@ test('saved subgraph requirements inspect headlessly in read-only sessions, prep
     const { defaultGraph, graphNode } = await import('./graph.js');
     const { GraphLibrary, readLibrary } = await import('./graph-library.js');
     const { extractSubgraph } = await import('./subgraphs.js');
-    const graph = defaultGraph(); graph.nodes.push(graphNode('TranslateGemmaEnJa', 'translator'));
+    const graph = defaultGraph(); graph.nodes.push(graphNode('TranslateGemma4B', 'translator'));
     const extracted = extractSubgraph(graph, ['translator'], 'weights');
     const store = new GraphLibrary(localStorage);
     await store.create({ id: 'weights', name: 'Translation weights', kind: 'subgraph', graph: extracted.shared });

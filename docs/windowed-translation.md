@@ -11,8 +11,8 @@ Connect these named ports:
 
 ```text
 ASR.final → TextWindow.text
-TextWindow.text → TranslateGemmaEnJa.text
-TranslateGemmaEnJa.text → TextAccumulator.append
+TextWindow.text → TranslateGemma4B.text
+TranslateGemma4B.text → TextAccumulator.append
 TextAccumulator.text → Display.input1
 ```
 
@@ -86,7 +86,7 @@ ASR.provisional (or explicit TEXT snapshots) → Translator.provisional
 Translator.provisionalText → PreviewDisplay.input1
 ```
 
-Translator means TranslateGemmaEnJa, TranslateGemmaJaEn or Plamo3Translate2B.
+Translator means TranslateGemma4B or Plamo3Translate2B.
 PreviewDisplay is an ordinary separate Display instance. Any compatible TEXT
 producer can supply provisional snapshots independently of the committed source
 and edge order. TextWindow emits only completed batches and creates no previews.

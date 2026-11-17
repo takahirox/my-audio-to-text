@@ -6,7 +6,7 @@ import { asrOutputs, ASR_OUTPUT_GROUPS } from '../web/transcription-nodes.js';
 import { TRANSLATION_OUTPUTS, TRANSLATION_OUTPUT_GROUPS } from '../extension/translation-scheduler.js';
 
 const names = (definition, side) => portDisplayEntries(definition, side).map(([name]) => name);
-const translators = ['TranslateGemmaJaEn', 'TranslateGemmaEnJa', 'Plamo3Translate2B'];
+const translators = ['TranslateGemma4B', 'Plamo3Translate2B'];
 for (const type of ASR_TYPES) test(`${type} shows committed data/ID before preview without changing runtime declarations`, () => {
   const definition = nodeDefinition(graphNode(type, 'asr'));
   const preview = Object.hasOwn(definition.outputs, 'provisional');
@@ -23,7 +23,7 @@ for (const type of ['KeyedTextCoalesce', 'KeyedTextPair']) test(`${type} shows e
 });
 for (const type of translators) test(`${type} keeps data/ID adjacent, context last and output families intact`, () => {
   const definition = nodeDefinition(graphNode(type, 'translation'));
-  assert.deepEqual(names(definition, 'input'), ['text', 'id', 'provisional', 'provisionalId', ...(type.startsWith('TranslateGemma') ? ['context'] : ['source_lang', 'target_lang'])]);
+  assert.deepEqual(names(definition, 'input'), ['text', 'id', 'provisional', 'provisionalId', ...(type.startsWith('TranslateGemma') ? ['context', 'source_lang', 'target_lang'] : ['source_lang', 'target_lang'])]);
   assert.deepEqual(names(definition, 'output'), ['text', 'id', 'source', 'error', 'provisionalText', 'provisionalId', 'provisionalSource', 'provisionalError']);
   assert.deepEqual(Object.keys(definition.inputs).slice(0, 4), ['text', 'provisional', 'id', 'provisionalId']);
   assert.equal(definition.outputs, TRANSLATION_OUTPUTS);

@@ -92,17 +92,17 @@ export const test = base.extend({
                 if (settings.max_new_tokens !== 256 || settings.do_sample !== false) throw Error('Wrong generation settings');
                 if (typeof messages === 'string') {
                   if (settings.add_special_tokens !== false || settings.return_full_text !== false || settings.tokenizer_encode_kwargs.truncation !== false) throw Error('Wrong context tokenization');
-                  const target = messages.includes('English (en) to Japanese (ja)') ? 'Japanese' : 'English';
+                  const target = messages.match(/ to ([^()]+) \\([^)]+\\) translator/)[1];
                   const marker = 'text into ' + target + ':\\n\\n\\n';
                   if (!messages.includes('<reference_context>\\n') || !messages.includes(marker)) throw Error('Missing official-aligned context/target sections');
                   const text = messages.split(marker).at(-1).split('<end_of_turn>')[0];
                   return [{ generated_text: target + ': ' + text }];
                 }
                 const c = messages[0].content[0];
-                if (c.type !== 'text' || !['en','ja'].includes(c.source_lang_code) || c.target_lang_code === c.source_lang_code) throw Error('Wrong direction prompt');
+                if (c.type !== 'text' || !['en','ja','fr','de'].includes(c.source_lang_code) || c.target_lang_code === c.source_lang_code) throw Error('Wrong direction prompt');
                 if (c.text === 'slow') await new Promise(r => setTimeout(r,2000));
                 if (c.text === 'fail') throw Error('Controlled GPU memory failure');
-                return [{ generated_text: [...messages,{role:'assistant',content:(c.target_lang_code === 'ja' ? 'Japanese: ' : 'English: ')+c.text}] }];
+                return [{ generated_text: [...messages,{role:'assistant',content:({ ja: 'Japanese: ', en: 'English: ', de: 'German: ', fr: 'French: ' }[c.target_lang_code])+c.text}] }];
               };
               translate.tokenizer = () => ({ input_ids: { dims: [1, 100] } });
               return translate;
@@ -156,7 +156,7 @@ export async function openGraph(f, { live = true, tabId = 42 } = {}) {
     window.Worker = class extends NativeWorker {
       constructor(...args) { super(...args); this.url = String(args[0]); this.messages = []; this.released = false; window.graphWorkers.push(this); }
       postMessage(data, ...rest) {
-        this.messages.push({ type: data.type, text: data.text, language: data.language, ...(data.inputs === undefined ? {} : { inputs: data.inputs }), ...(data.context === undefined ? {} : { context: data.context }) });
+        this.messages.push({ type: data.type, text: data.text, language: data.language, ...(data.source_lang === undefined ? {} : { source_lang: data.source_lang }), ...(data.target_lang === undefined ? {} : { target_lang: data.target_lang }), ...(data.inputs === undefined ? {} : { inputs: data.inputs }), ...(data.context === undefined ? {} : { context: data.context }) });
         if (window.holdTtsLoad && this.url.match(/supertonic3-worker|kokoro-worker/) && data.type === 'load') return;
         super.postMessage(data, ...rest);
       }

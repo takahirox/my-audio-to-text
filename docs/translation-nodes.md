@@ -1,18 +1,41 @@
 # Browser-local translation nodes (#65)
 
-Issue #385 adds one [experimental PLaMo 3 Translate 2B Node](plamo-translation.md)
-with optional TEXT language ports and a separate packaged GGUF/WASM runtime.
-Issue #391 extends it to 53 languages and labels it **Translation**. Omitted/auto
-target follows the official GGUF Japanese/English switch; specify a target for
-other input languages. A concrete source requires a concrete target.
-It uses the existing translation scheduler/output families and does not change
-the fixed-direction TranslateGemma Nodes documented below.
+The extension has one **Translation** Node with the **TranslateGemma 4B**
+subtitle and stable type `TranslateGemma4B`. Optional `source_lang: TEXT` and
+`target_lang: TEXT` inputs select languages per request. Connect ordinary
+`Text.value` outputs; there are no language Settings. Unconnected defaults are
+**ja → en**. Explicit blank/unsupported codes are errors, not automatic detection.
 
-TranslateGemma provides fixed-direction `TranslateGemmaJaEn` and
-`TranslateGemmaEnJa` graph Nodes sharing one checkpoint. The Playground selects
-either direction before Run. Independent Nodes own their Workers and runtime
-state. PLaMo provides `Plamo3Translate2B` with optional `source_lang` and
-`target_lang` TEXT inputs; see its guide for the separate GGUF/WASM runtime.
+The [pinned chat template](https://huggingface.co/onnx-community/translategemma-text-4b-it-ONNX/blob/f7874a1ac60758872a4f78aac0df95b17b776994/chat_template.jinja)
+requires both language codes, with no source detection or useful unspecified
+default. We therefore retain the original JA→EN defaults and send both codes
+explicitly on every request. `web/translategemma-languages.js` contains its exact
+581-code vocabulary and language names. Codes are case sensitive; underscores
+normalize to hyphens just as in the upstream template (`en_GB` → `en-GB`). Examples:
+`ja`, `en`, `fr`, `de`, `es`, `ko`, `zh-Hant`. Arbitrary codes, `auto`, whitespace
+and incorrect case are rejected. The template vocabulary is broader than the
+[55 languages in Google's model card](https://huggingface.co/google/translategemma-4b-it):
+recognition by the template does not establish quality for every language pair.
+Japanese, English, French and German provide representative test pairs.
+
+Each accepted committed or provisional text owns an immutable snapshot of its
+languages, context and ID. Language/context-only updates never infer; later
+updates affect future jobs. Grouped delivery applies metadata first; omitted
+connected metadata restores its defaults instead of borrowing a previous group.
+The FIFO, separate preview family, replacement/clearing, ID matching, Stop drain
+and Cancel behavior remain unchanged.
+
+The independent Playground uses this same production Node and loaded Worker
+across Runs, including language changes. Cancel/page exit releases the Worker.
+Blank Playground language fields represent unconnected ports; an explicit blank
+TEXT graph value is invalid. Optional context uses the same reference-only prompt.
+
+PLaMo has its own `Plamo3Translate2B` type, runtime, language policy, assets and
+license. Its **Translation** Node accepts 53 languages. Unconnected/auto target
+uses the official GGUF Japanese/English switch; other input languages need an
+explicit target. A concrete source requires a concrete target. See
+[its guide](plamo-translation.md). Independent graph Node instances
+still own separate Workers and runtime state.
 
 | Node | Immutable checkpoint | Execution | Weight assets |
 | --- | --- | --- | --- |
@@ -36,11 +59,9 @@ There are no floating CDN runtime imports. This version follows the compatible
 and its lockfile. The original `google/translategemma-4b-it` safetensors are not
 browser ONNX assets; the chosen conversion removes the image tower. Only text is
 accepted. The model-specific content object and pinned tokenizer chat template
-supply `source_lang_code: 'ja'` / `target_lang_code: 'en'` for the original Node
-and `source_lang_code: 'en'` / `target_lang_code: 'ja'` for
-`EnglishToJapaneseTranslateGemmaTranslationNode`. Each concrete Node fixes its
-direction in the load request, validated inside the owned Worker; no global
-model/language setting or new conversion is needed.
+supply explicit `source_lang_code` / `target_lang_code` values from each request.
+`TranslateGemmaTranslationNode` loads the pinned model once per session. Switching
+languages never reloads the model or changes the cache identity.
 
 ## Attribution and distribution
 
@@ -75,8 +96,9 @@ before its runtime or weight downloads. Model-load errors include guidance for
 network, offline cache and device memory failures.
 
 Browser Cache API caches downloaded model assets on a best-effort basis.
-Quota failures or eviction require re-download. A fresh run owns a fresh Worker
-and session; cached bytes may be reused, but models are initialized again. Cancel
+Quota failures or eviction require re-download. Each graph session owns a fresh
+Worker; the Playground reuses its Worker across Runs until Cancel or page exit.
+Cached bytes may be reused across sessions, but model instances are initialized again. Cancel
 terminates the Worker immediately, interrupting loading or GPU/WASM inference,
 rejecting pending requests and discarding late results. No shared manager or
 worker pool is involved. Closing/hiding via page teardown releases the graph.
@@ -121,13 +143,14 @@ do not establish translation quality.
 
 ## TranslateGemma in the extension (#124)
 
-The extension provides `TranslateGemmaEnJa` (**TranslateGemma 4B English → Japanese**)
-and `TranslateGemmaJaEn` (**Japanese → English**). Both use the explicit
-committed/preview port contract (graph version 15). Add either processor; there is no translation
-preset. Connect `Text.value → TranslateGemmaEnJa.text → TextAccumulator.append`
-(using the processor's `text` output), or
-`ChromeTabAudio.audio → SpeechToTextMoonshineMediumEn.audio`,
-`SpeechToTextMoonshineMediumEn.final → TranslateGemmaEnJa.text`. Language-appropriate Moonshine final TEXT can feed the same input.
+Add `TranslateGemma4B` and connect `Text.value → text`, or
+`SpeechToTextMoonshineSmallJa.final → text` for the default JA→EN direction.
+For EN→JA, use English ASR and two Text constants (`en` → `source_lang`,
+`ja` → `target_lang`). All language ports accept any TEXT producer.
+
+Old directional TranslateGemma Node types are unsupported and fail normal graph
+validation. Recreate those graphs using `TranslateGemma4B` and connect language
+ports for the desired direction. There is no old-graph migration.
 
 For bilingual history, connect `source`, `text`, `error` directly to three
 `TextFormatter` inputs and set a template such as
@@ -139,7 +162,7 @@ committed FIFO; repeated input remains separate. Each active processor owns its
 Worker and GPU session; independent branches retain separate state and memory.
 
 Auto Save graph persists first, then prepares only referenced optional model weights,
-including parked Nodes. Both Gemma directions share the same eight-file manifest,
+including parked Nodes. Every Gemma Node/language shares the same eight-file manifest,
 **3,111,911,678 bytes** including `chat_template.jinja`, and one cache identity.
 [`extension/translategemma-assets.json`](../extension/translategemma-assets.json)
 contains immutable URLs, whole-file SHA-256 and 1 MiB chunk hashes.
@@ -191,8 +214,8 @@ not comparative quality evidence. No post-merge-only check is introduced by #124
 
 ## Optional TranslateGemma context (#173)
 
-Both extension TranslateGemma Nodes accept optional `context: TEXT` from any
-TEXT producer, for example `Text.value → TranslateGemmaEnJa.context`. There is
+The extension TranslateGemma Node accepts optional `context: TEXT` from any
+TEXT producer, for example `Text.value → TranslateGemma4B.context`. There is
 no prompt setting, new Node or model instance.
 Current graphs use version 15: adding an optional input needs no migration, and
 Auto Save/reload preserves an explicitly connected context edge.

@@ -37,7 +37,7 @@ test('Models removes storage controls and keeps discoverable legal links; model-
     ['supertonic3', 'License & source for Supertonic 3', '../web/licenses/tts-notices.txt'],
     ['kokoro', 'License & source for Kokoro 82M', '../web/licenses/tts-notices.txt'],
     ['kokoro', 'eSpeak NG source / build bundle (GPL-3.0-or-later)', '../web/tts-assets/phonemizer-source.tar.gz'],
-    ['translategemma', 'License / terms for TranslateGemma 4B · English ↔ Japanese', '../web/licenses/gemma-notices.txt'],
+    ['translategemma', 'License / terms for TranslateGemma 4B', '../web/licenses/gemma-notices.txt'],
   ]) {
     const link = models.locator(`#${id}`).getByRole('link', { name, exact: true });
     await expect(link).toBeVisible(); await expect(link).toHaveAttribute('href', href);
@@ -87,11 +87,11 @@ test('Auto Save requests persistence only after saving a model-bearing graph; a 
     const persist = navigator.storage.persist;
     navigator.storage.persist = async () => {
       const library = JSON.parse(localStorage.getItem('processing-graph-library-v1'));
-      window.savedBeforePersistence = library.graphs.some(entry => entry.graph.nodes.some(node => node.type === 'TranslateGemmaEnJa'));
+      window.savedBeforePersistence = library.graphs.some(entry => entry.graph.nodes.some(node => node.type === 'TranslateGemma4B'));
       return persist();
     };
   });
-  await openPalette(editor); await editor.locator('#graph-node-type [data-type="TranslateGemmaEnJa"]').click();
+  await openPalette(editor); await editor.locator('#graph-node-type [data-type="TranslateGemma4B"]').click();
   await settleAutoSave(editor);
   await expectGraphModelsReady(editor);
   expect(await editor.evaluate(() => window.savedBeforePersistence)).toBe(true);

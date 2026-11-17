@@ -19,11 +19,11 @@ async function modelFixture(page, mode = 'success') {
           const text = typeof input === 'string' ? input : input[0].content[0].text;
           if (typeof input !== 'string') {
             const content = input[0].content[0];
-            if (!['ja-en', 'en-ja'].includes(content.source_lang_code + '-' + content.target_lang_code) || content.type !== 'text') throw Error('Wrong translation template');
+            if (!['ja-en', 'en-ja', 'fr-de'].includes(content.source_lang_code + '-' + content.target_lang_code) || content.type !== 'text') throw Error('Wrong translation template');
           }
           await new Promise(resolve => setTimeout(resolve, text === 'slow' ? 1000 : 10));
           if (text === 'zero') return [];
-          return (text === 'multi' ? ['first', 'second'] : [(input[0].content[0].target_lang_code === 'ja' ? 'Japanese: ' : 'English: ') + text]).map(output => ({ generated_text: [...input, { role: 'assistant', content: output }] }));
+          return (text === 'multi' ? ['first', 'second'] : [({ ja: 'Japanese: ', en: 'English: ', de: 'German: ' }[input[0].content[0].target_lang_code]) + text]).map(output => ({ generated_text: [...input, { role: 'assistant', content: output }] }));
         };
         translate.tokenizer = text => ({ input_ids: { dims: [1, text === 'tokens' ? 513 : 10] } });
         return translate;
@@ -31,18 +31,19 @@ async function modelFixture(page, mode = 'success') {
     `,
   }));
 }
-test('TranslateGemma direction selection runs each production direction independently', async ({ page }) => {
-  await modelFixture(page, 'loading'); await workerGpuFixture(page);
+test('TranslateGemma changes language ports across Runs with one loaded production Worker', async ({ page }) => {
+  await modelFixture(page); await workerGpuFixture(page);
   await page.goto('./nodes/translategemma/'); await observe(page);
-  for (const [direction, text, output] of [['en-ja', 'Hello.', 'Japanese: Hello.'], ['ja-en', 'こんにちは。', 'English: こんにちは。']]) {
-    await page.locator('#input').fill(text); await page.locator('#direction').selectOption(direction);
-    await expect(page.locator('#input')).toHaveValue(text);
-    await page.locator('#run').click(); await expect(page.locator('#direction')).toBeDisabled();
+  await expect(page.locator('select')).toHaveCount(0);
+  for (const [source, target, text, output] of [['en','ja','Hello.','Japanese: Hello.'], ['ja','en','こんにちは。','English: こんにちは。'], ['fr','de','Bonjour.','German: Bonjour.']]) {
+    await page.locator('#source-lang').fill(source); await page.locator('#target-lang').fill(target);
+    await page.locator('#input').fill(text); await page.locator('#run').click();
     await expect(page.locator('#status')).toHaveText('Complete'); await expect(page.locator('#output')).toHaveText(output);
-    await expect(page.locator('#direction')).toBeEnabled();
   }
-  expect(await page.evaluate(() => window.translationGraphs.map(graph => graph.entries.get('translation').node.constructor.name)))
-    .toEqual(['EnglishToJapaneseTranslateGemmaTranslationNode', 'TranslateGemmaTranslationNode']);
+  expect(await page.evaluate(() => window.translationWorkers.length)).toBe(1);
+  expect(await page.evaluate(() => window.translationGraphs.map(graph => graph.entries.get('translation').node.constructor.name))).toEqual(['TranslateGemmaTranslationNode']);
+  await page.locator('#target-lang').fill('xx'); await page.locator('#run').click();
+  await expect(page.locator('#status')).toHaveText('Error'); await expect(page.locator('#errors')).toContainText('target_lang');
 });
 async function workerGpuFixture(page, available = true) {
   // GPU availability is controlled in the real processing Worker, not window.
@@ -71,14 +72,14 @@ for (const slug of ['translategemma']) {
     const prefix = !process.env.ASR_BASE_URL && !process.env.ASR_BENCHMARK ? './my-audio-to-text/' : './';
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(prefix);
-    await page.getByRole('link', { name: 'TranslateGemma 4B Translation (Japanese ↔ English)', exact: true }).click();
-    await expect(page.locator('#run')).toBeEnabled(); await expect(page.locator('select')).toHaveCount(slug === 'translategemma' ? 1 : 0);
+    await page.getByRole('link', { name: 'Translation · TranslateGemma 4B', exact: true }).click();
+    await expect(page.locator('#run')).toBeEnabled(); await expect(page.locator('select')).toHaveCount(0);
     await observe(page);
     for (const input of ['今日は良い天気です。', 'multi', 'zero', ]) {
       await page.locator('#input').fill(input); await page.locator('#run').click();
       await expect(page.locator('#status')).toHaveText('Complete');
       await expect(page.locator('#output')).toHaveText(input === 'multi' ? 'first\nsecond' : input === 'zero' ? '' : 'English: ' + input);
-      await expect(page.locator('#latency')).toContainText('ms'); await expect(page.locator('#load-time')).toContainText('ms');
+      await expect(page.locator('#latency')).toContainText('ms'); await expect(page.locator('#load-time')).toHaveText(/ms|Already loaded/);
       await expect(page.locator('#run')).toBeEnabled();
       await expect(page.locator('#input')).toHaveValue(input);
     }
@@ -88,12 +89,14 @@ for (const slug of ['translategemma']) {
       states: window.translationGraphs.map(g => g.state),
     }));
     expect(evidence.types).toEqual(['TextInputNode', 'TranslateGemmaTranslationNode', 'TextOutputNode']);
-    expect(evidence.states).toEqual(Array(3).fill('disposed'));
-    expect(evidence.workers).toHaveLength(3);
+    expect(evidence.states).toEqual(['running']);
+    expect(evidence.workers).toHaveLength(1);
     for (const worker of evidence.workers) {
-      expect(worker.terminated).toBe(1);
+      expect(worker.terminated).toBe(0);
       expect(worker.url).toBe(new URL(`../../translategemma-worker.js`, page.url()).href);
     }
+    await page.locator('#cancel').click();
+    expect(await page.evaluate(() => window.translationWorkers[0].terminated)).toBe(1);
     await page.getByRole('link', { name: 'Node Playground', exact: true }).click();
     await expect(page).toHaveTitle('Node Playground'); expect(errors).toEqual([]);
   });
@@ -119,7 +122,7 @@ for (const slug of ['translategemma']) {
       await page.locator('#input').fill('fresh'); await page.locator('#run').click();
       await expect(page.locator('#status')).toHaveText('Complete');
       await expect(page.locator('#output')).toHaveText('English: fresh');
-      expect(await page.evaluate(() => window.translationWorkers.map(w => w.terminated))).toEqual([1, 1]);
+      expect(await page.evaluate(() => window.translationWorkers.map(w => w.terminated))).toEqual([1, 0]);
     });
   }
 }

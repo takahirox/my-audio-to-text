@@ -4,7 +4,7 @@ import { graphNode, edge, defaultGraph } from '../../extension/graph.js';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-for (const translator of ['TranslateGemmaEnJa', 'TranslateGemmaJaEn']) test(`${translator}: MV3 editor connects ASR previews and window text in either order and saves incomplete drafts`, async ({ graphExtension:f }) => {
+for (const translator of ['TranslateGemma4B']) test(`${translator}: MV3 editor connects ASR previews and window text in either order and saves incomplete drafts`, async ({ graphExtension:f }) => {
   test.setTimeout(90000);
   const live=await openGraph(f, { live: false }), editor=live.editor;
   for(const source of ['speech','window']) for(const ports of [['provisional','text'],['text','provisional']]) {
@@ -31,7 +31,7 @@ test('MV3 direct ASR → TranslateGemma provisional/final uses production schedu
       if(m.type==='translate')setTimeout(()=>postMessage({id:m.id,type:'result',texts:['translated:'+m.text]}),20);
     };`);
   const live=await openGraph(f, { live: false });
-  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemmaEnJa','translator'),graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
+  const graph=defaultGraph();graph.nodes.push(graphNode('TranslateGemma4B','translator'),graphNode('TextAccumulator','acc'),graphNode('Display','translated'),graphNode('Display','preview'));
   graph.edges.push(edge('speech','provisional','translator','provisional'),edge('speech','final','translator','text'),
     edge('translator','text','acc','append'),edge('translator','provisionalText','preview','input1'),edge('acc','text','translated','input1'));
   const result=await live.evaluate(async graph=>{

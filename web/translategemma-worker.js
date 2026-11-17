@@ -1,11 +1,10 @@
+import { translateGemmaLanguages } from './translategemma-languages.js';
 import { TRANSLATE_GEMMA } from './translation-models.js';
 import { serveTranslationWorker, translationRuntime, modelLoadError } from './translation-worker.js';
 import { translateGemmaContextPrompt, validateTranslateGemmaContext, validateTranslateGemmaPrompt } from './translategemma-context.js';
 import { watchGpuDevice } from './gpu-lifecycle.js';
 
-serveTranslationWorker(async (progress, { cacheOnly = false, direction = 'ja-en' } = {}) => {
-  if (!['ja-en', 'en-ja'].includes(direction)) throw new Error('Unsupported TranslateGemma direction.');
-  const [source_lang_code, target_lang_code] = direction.split('-');
+serveTranslationWorker(async (progress, { cacheOnly = false } = {}) => {
   // Extension Workers must never use the Playground's network model loader.
   if (self.location.protocol === 'chrome-extension:' && !cacheOnly) throw new Error('Prepare TranslateGemma weights with Save graph or Models before starting.');
   // Check in the processing Worker: window support alone is insufficient.
@@ -24,10 +23,11 @@ serveTranslationWorker(async (progress, { cacheOnly = false, direction = 'ja-en'
     });
     watchGpuDevice(env.backends.onnx.webgpu, error => self.postMessage({ type: 'error', fatal: true, message: error.message }));
   } catch (error) { throw modelLoadError(new Error(`TranslateGemma 4B needs several GB of free RAM/GPU memory and a compatible WebGPU adapter. ${error.message || error}`)); }
-  return async (text, { context = '' } = {}) => {
+  return async (text, { context = '', ...languages } = {}) => {
+    const { source_lang: source_lang_code, target_lang: target_lang_code } = translateGemmaLanguages(languages);
     validateTranslateGemmaContext(context);
     if (context !== '') {
-      const prompt = translateGemmaContextPrompt(text, context, direction);
+      const prompt = translateGemmaContextPrompt(text, context, languages);
       validateTranslateGemmaPrompt(translate, prompt);
       let result;
       try {

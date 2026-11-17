@@ -3,7 +3,7 @@ import { domText } from './fixtures/dom.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pipeline } from '../web/pipeline.js';
-import { TEXT, TextOutputNode, TranslateGemmaTranslationNode, EnglishToJapaneseTranslateGemmaTranslationNode } from '../web/translation-nodes.js';
+import { TEXT, TextOutputNode, TranslateGemmaTranslationNode } from '../web/translation-nodes.js';
 import { TranslationSchedulerNode, TRANSLATION_OUTPUTS } from '../extension/translation-scheduler.js';
 import { TabSession } from '../extension/session.js';
 import { graphNode, edge } from '../extension/graph.js';
@@ -36,9 +36,10 @@ async function schedulerGraph(options = {}) {
   const f = workerFixture(options), outputs = [], states = [], plain = [], formatted = [];
   let emit, emitOutputs;
   const scheduler = new TranslationSchedulerNode({ workerFactory: f.workerFactory, prepare: options.prepare,
-    TranslationNode: { 'en-ja': EnglishToJapaneseTranslateGemmaTranslationNode, 'ja-en': TranslateGemmaTranslationNode }[options.direction],
+    TranslationNode: TranslateGemmaTranslationNode,
     modelName: 'TranslateGemma 4B',
     onState: state => states.push(state) });
+  if (options.direction === 'en-ja') scheduler.languages = Object.freeze({ source_lang: 'en', target_lang: 'ja' });
   const pipeline = new Pipeline({ nodes: {
     source: { outputs: { text: TEXT, provisional: TEXT, context: TEXT }, start(c) { emit = c.emit; emitOutputs = c.emitOutputs; } }, scheduler,
     sink: { inputs: TRANSLATION_OUTPUTS, async receiveInputs(values) { await options.receiveInputs?.(values); outputs.push(values); } },
@@ -60,13 +61,15 @@ for (const direction of ['en-ja', 'ja-en']) {
   const graph = options => schedulerGraph({ ...options, direction });
   test(`${direction}: committed results are atomic, FIFO, repeat-safe and ignore duplicate worker replies`, async () => {
     const f = await graph();
-    assert.deepEqual(Object.keys(f.scheduler.inputs), ['text', 'provisional', 'id', 'provisionalId', 'context']);
+    assert.deepEqual(Object.keys(f.scheduler.inputs), ['text', 'provisional', 'id', 'provisionalId', 'context', 'source_lang', 'target_lang']);
     assert.deepEqual(Object.keys(f.scheduler.outputs), Object.keys(TRANSLATION_OUTPUTS));
     f.send('same'); f.send('same'); f.send(''); f.send('  '); f.send('last'); await tick();
     assert.deepEqual(f.outputs, [], 'pending emits no formatter rows'); assert.equal(f.requests.length, 1);
     assert.equal(f.workers[0].messages[0].cacheOnly, true);
     assert.ok(f.workers[0].url.pathname.endsWith('/translategemma-worker.js'));
-    assert.equal(f.workers[0].messages[0].direction, direction);
+    assert.equal(f.workers[0].messages[0].direction, undefined);
+    assert.equal(f.requests[0].source_lang, direction.split('-')[0]);
+    assert.equal(f.requests[0].target_lang, direction.split('-')[1]);
     f.complete(0, 'first'); await tick(); f.complete(0, 'stale duplicate'); await tick();
     assert.equal(f.requests.length, 2); f.complete(1, 'second'); await tick();
     assert.equal(f.requests.length, 3); assert.equal(f.requests[2].text, 'last');

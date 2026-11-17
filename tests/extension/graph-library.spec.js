@@ -223,14 +223,14 @@ test('Library manages independent named graphs, portable JSON, persistent target
 });
 
 test('Required models stays visible through selection, model search and resolved subgraph refreshes', async ({ libraryExtension: { page, context, url } }) => {
-  const graph = simple(); graph.nodes.push(graphNode('TranslateGemmaJaEn', 'translate'), graphNode('IfCondition', 'condition'));
+  const graph = simple(); graph.nodes.push(graphNode('TranslateGemma4B', 'translate'), graphNode('IfCondition', 'condition'));
   const modelId = await create(page, 'Processing graph', graph), plainId = await create(page, 'Plain graph', simple());
   const parentId = await page.evaluate(async () => {
     const { graphNode, edge } = await import('./graph.js');
     const { GraphLibrary } = await import('./graph-library.js');
     const { extractSubgraph } = await import('./subgraphs.js');
     const extracted = extractSubgraph({ version: 15,
-      nodes: [graphNode('Text', 'source'), graphNode('TranslateGemmaJaEn', 'translate'), graphNode('Display', 'display')],
+      nodes: [graphNode('Text', 'source'), graphNode('TranslateGemma4B', 'translate'), graphNode('Display', 'display')],
       edges: [edge('source', 'value', 'translate', 'text'), edge('translate', 'text', 'display', 'input1')] }, ['translate'], 'shared-translation');
     const store = new GraphLibrary(localStorage);
     await store.create({ id: 'shared-translation', name: 'Shared processor', kind: 'subgraph', graph: extracted.shared });
@@ -261,7 +261,7 @@ test('Required models stays visible through selection, model search and resolved
   await other.evaluate(async () => {
     const { GraphLibrary, readLibrary, entryGraph } = await import('./graph-library.js');
     const entry = readLibrary(localStorage).graphs.find(entry => entry.id === 'shared-translation');
-    const graph = entryGraph(entry); graph.nodes.find(node => node.id === 'translate').type = 'TranslateGemmaEnJa';
+    const graph = entryGraph(entry); graph.nodes.find(node => node.id === 'translate').position.x += 20;
     await new GraphLibrary(localStorage).save(entry.id, entry.revision, graph);
   });
   await expect(value).toHaveText('TranslateGemma 4B · several GB RAM/GPU memory');
@@ -604,7 +604,7 @@ test('export waits for autosave, and a later selection cancels an earlier pendin
 });
 
 test('inline accordion and direct actions fit desktop, mobile, zoom and forced colors', async ({ libraryExtension: { page } }) => {
-  const graph = simple(); graph.nodes.push(graphNode('TranslateGemmaJaEn', 'translate'), graphNode('IfCondition', 'condition'));
+  const graph = simple(); graph.nodes.push(graphNode('TranslateGemma4B', 'translate'), graphNode('IfCondition', 'condition'));
   const id = await create(page, 'A long graph name that wraps on small screens', graph);
   await page.reload();
   const row = page.locator(`#graph-list button[data-id="${id}"]`);

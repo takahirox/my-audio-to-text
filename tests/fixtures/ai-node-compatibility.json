@@ -47,24 +47,6 @@
         }
       },
       {
-        "id": "TranslateGemmaEnJa",
-        "type": "TranslateGemmaEnJa",
-        "settings": {},
-        "position": {
-          "x": 20,
-          "y": 20
-        }
-      },
-      {
-        "id": "TranslateGemmaJaEn",
-        "type": "TranslateGemmaJaEn",
-        "settings": {},
-        "position": {
-          "x": 20,
-          "y": 20
-        }
-      },
-      {
         "id": "Supertonic3",
         "type": "Supertonic3",
         "settings": {
@@ -119,8 +101,6 @@
     "TextSummaryLfm2": "fb88c267e5cbab536a941549397efd7b6c979392af44841a6335b25fad6a5bbc",
     "TextSummaryQwen35": "fb88c267e5cbab536a941549397efd7b6c979392af44841a6335b25fad6a5bbc",
     "IfCondition": "11974f97c53a0e6862b0a39cd4b794640de61c8910b032fb52bfcb672e66b4cf",
-    "TranslateGemmaEnJa": "4d48c31f99db4e10bb841d68b7ef71a338cd9d7927519234a5ed8a168a40dc48",
-    "TranslateGemmaJaEn": "cb39f1861291803d3b14705aa554f40508e4f5cbba562583908ee63665f3ace7",
     "Supertonic3": "d2667dd28eebb5c38dfa9d778bb6fc81f1c37c697a8e0cd8d355c24093857d10",
     "Kokoro": "c69283323bff8272bdb2ddaac8cf9d46dace5cc1bd40e493bef5d743ef269c7e",
     "Qwen3TtsStreaming": "c0e90163a3806580d8a77b3eae9e844dc08dc56ddcc5a1e0131490ba97a4f96f",

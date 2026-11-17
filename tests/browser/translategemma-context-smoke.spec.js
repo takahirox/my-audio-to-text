@@ -49,13 +49,13 @@ for (const direction of ['en-ja', 'ja-en']) test(`real TranslateGemma ${directio
         const requestId = ++id; pending.set(requestId, { resolve, reject }); worker.postMessage({ id: requestId, ...payload });
       });
       try {
-        await request({ type: 'load', direction });
+        await request({ type: 'load' });
         for (const probe of probes) {
           const run = { text: probe.text, context: probe.context };
           runs.push(run);
           for (const [mode, context] of [['official', undefined], ['contextual', probe.context], ['reset', '']]) {
             const start = performance.now();
-            const reply = await request({ type: 'translate', text: probe.text, ...(context === undefined ? {} : { context }) });
+            const reply = await request({ type: 'translate', text: probe.text, source_lang: direction.split('-')[0], target_lang: direction.split('-')[1], ...(context === undefined ? {} : { context }) });
             run[mode] = reply.texts; run[mode + 'Ms'] = performance.now() - start;
           }
         }

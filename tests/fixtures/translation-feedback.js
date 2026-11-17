@@ -4,12 +4,12 @@ import { TextFormatterNode } from '../../web/text-nodes.js';
 import { TextWindowNode } from '../../web/text-window-node.js';
 import { TextProcessingNode } from '../../web/text-summary-node.js';
 import { TEXT } from '../../web/port-contracts.js';
-import { EnglishToJapaneseTranslateGemmaTranslationNode } from '../../web/translation-nodes.js';
+import { TranslateGemmaTranslationNode } from '../../web/translation-nodes.js';
 import { TranslationSchedulerNode, TRANSLATION_OUTPUTS } from '../../extension/translation-scheduler.js';
 
 // Deterministic summary replies, explicitly controlled translation completion.
 // Runs unchanged in Node and the source-only MV3 fixture package.
-export async function translationFeedback({ TranslationNode = EnglishToJapaneseTranslateGemmaTranslationNode,
+export async function translationFeedback({ TranslationNode = TranslateGemmaTranslationNode,
   workerFactory, failLoad = false, failTranslate = false, reverse = false, preview = false,
   translatedFeedback = false, summaryResult = count => 'S' + count } = {}) {
   const workers = [], requests = [], summaries = [], outputs = [], accepted = [], states = [];

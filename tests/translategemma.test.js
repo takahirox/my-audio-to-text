@@ -20,15 +20,15 @@ test('Gemma directions share a complete immutable q4 manifest, including both ex
   assert.ok(set.files.every(f => f.url.includes(TRANSLATE_GEMMA.revision)));
   const graph = defaultGraph(), before = structuredClone(graph);
   assert.deepEqual(graphModelRequirements(graph).map(r => r.key), ['moonshine-small-ja']);
-  graph.nodes.push(graphNode('TranslateGemmaEnJa', 'en'), graphNode('TranslateGemmaJaEn', 'ja'), graphNode('TranslateGemmaEnJa', 'duplicate'));
+  graph.nodes.push(graphNode('TranslateGemma4B', 'en'), graphNode('TranslateGemma4B', 'ja'), graphNode('TranslateGemma4B', 'duplicate'));
   assert.deepEqual(graphModelRequirements(graph).map(r => r.key), ['moonshine-small-ja', 'translategemma']);
   assert.deepEqual(defaultGraph(), before);
 });
 
-for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGemmaJaEn', 'ja-en']]) {
+for (const type of ['TranslateGemma4B']) {
   test(`${type}: optional context persists explicitly without changing settings, graph version or existing routes`, () => {
-    assert.deepEqual(NODE_TYPES[type].inputs, { text: TEXT, provisional: TEXT, id: NUMBER, provisionalId: NUMBER, context: TEXT });
-    assert.deepEqual(NODE_TYPES[type].optionalInputs, ['provisional', 'id', 'provisionalId', 'context']);
+    assert.deepEqual(NODE_TYPES[type].inputs, { text: TEXT, provisional: TEXT, id: NUMBER, provisionalId: NUMBER, context: TEXT, source_lang: TEXT, target_lang: TEXT });
+    assert.deepEqual(NODE_TYPES[type].optionalInputs, ['provisional', 'id', 'provisionalId', 'context', 'source_lang', 'target_lang']);
     assert.deepEqual(graphNode(type, 'translation').settings, {});
     const graph = { version: 15, nodes: [graphNode('Text', 'input'), graphNode('Text', 'context'), graphNode(type, 'translation'), graphNode('Display', 'out')],
       edges: [edge('input', 'value', 'translation', 'text'), edge('translation', 'text', 'out', 'input1')] };
@@ -72,7 +72,7 @@ for (const [type, direction] of [['TranslateGemmaEnJa', 'en-ja'], ['TranslateGem
       assert.deepEqual(displays.paired, fail ? 'Original source||weights evicted' : 'Original source|Translated|');
       assert.equal(workers.length, fail ? 0 : 1);
       if (!fail) {
-        assert.equal(workers[0].messages[0].direction, direction);
+        assert.equal(workers[0].messages[0].direction, undefined);
         assert.equal(workers[0].messages[0].cacheOnly, true); assert.equal(workers[0].terminated, true);
         assert.ok(states.includes('Local TranslateGemma 4B ready'));
       }

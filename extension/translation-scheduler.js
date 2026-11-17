@@ -3,7 +3,6 @@ import { finiteNumber } from '../web/number-node.js';
 import { Pipeline } from '../web/pipeline.js';
 import { TranslateGemmaTranslationNode, TEXT, TextOutputNode } from '../web/translation-nodes.js';
 import { validateTranslateGemmaContext } from '../web/translategemma-context.js';
-import { updatePlamoLanguages, plamoLanguages } from '../web/plamo-policy.js';
 
 export const TRANSLATION_OUTPUT_GROUPS = Object.freeze([
   Object.freeze(['source', 'text', 'error', 'id']),
@@ -79,14 +78,14 @@ export class TranslationSchedulerNode {
     }
     // Apply metadata before accepting either target, irrespective of port order.
     if (this.acceptsLanguages) {
-      this.languages = updatePlamoLanguages(this.languages, values, context.groupInputs);
-      try { plamoLanguages(this.languages); }
+      this.languages = this.TranslationNode.updateLanguages(this.languages, values, context.groupInputs);
+      try { this.TranslationNode.languagePolicy(this.languages); }
       catch (error) { this.onState(`Translation configuration: ${error.message}`, 'error'); }
     }
     if (Object.hasOwn(values, 'context')) {
       validateTranslateGemmaContext(values.context);
       this.translationContext = values.context;
-    }
+    } else if (this.acceptsContext && context.groupInputs?.includes('context')) this.translationContext = '';
     for (const [id, text] of [['id', 'text'], ['provisionalId', 'provisional']]) {
       if (Object.hasOwn(values, id)) this.ids[id] = values[id];
       // An explicit snapshot without an ID cannot borrow a previous job's ID.
@@ -138,7 +137,7 @@ export class TranslationSchedulerNode {
       if (job.provisional) this.preview = null;
       else this.queuedChars -= job.source.length;
       try {
-        if (this.acceptsLanguages) plamoLanguages(job.languages);
+        if (this.acceptsLanguages) this.TranslationNode.languagePolicy(job.languages);
         if (!job.source.trim()) { this.emit(job, ''); continue; }
         if (this.error) { this.emit(job, undefined, this.error); continue; }
         if (job.source.length > 1000) {

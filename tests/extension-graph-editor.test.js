@@ -32,9 +32,9 @@ test('type mismatch, self-connection, unknown ports, cycles preserve the prior e
   connect(e, 'translation', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, before);
   connect(e, 'speech', 'final', 'history', 'pair'); assert.deepEqual(e.draft.edges, before);
   e.selected = { id: 'speech', port: 'missing', contract: NODE_TYPES.SpeechToTextMoonshineSmallJa.outputs.final };
-  e.connect('translation', 'text', NODE_TYPES.TranslateGemmaJaEn.inputs.text); assert.deepEqual(e.draft.edges, before);
+  e.connect('translation', 'text', NODE_TYPES.TranslateGemma4B.inputs.text); assert.deepEqual(e.draft.edges, before);
   assert.match(e.error, /Unknown port/);
-  e.draft.nodes.push(graphNode('TranslateGemmaEnJa', 'second'));
+  e.draft.nodes.push(graphNode('TranslateGemma4B', 'second'));
   e.draft.edges.push(edge('translation', 'text', 'second', 'text'));
   const withSecond = structuredClone(e.draft.edges);
   connect(e, 'second', 'text', 'translation', 'text'); assert.deepEqual(e.draft.edges, withSecond);

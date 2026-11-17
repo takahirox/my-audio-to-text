@@ -1,3 +1,5 @@
+import { translateGemmaLanguages, updateTranslateGemmaLanguages } from './translategemma-languages.js';
+import { validateTranslateGemmaContext } from './translategemma-context.js';
 import { finiteNumber } from './number-node.js';
 import { TEXT, NUMBER } from './port-contracts.js';
 import { updatePlamoLanguages, plamoLanguages } from './plamo-policy.js';
@@ -114,24 +116,37 @@ class WorkerTranslationNode {
 
 export class TranslateGemmaTranslationNode extends WorkerTranslationNode {
   static supportsContext = true;
-  constructor(options, direction = 'ja-en') {
-    super(new URL('./translategemma-worker.js', import.meta.url), {
-      ...options, loadOptions: { ...options?.loadOptions, direction },
-    });
-    // Internal scheduler adapter; context is snapshotted by the scheduler.
+  static supportsLanguages = true;
+  static languagePolicy = translateGemmaLanguages;
+  static updateLanguages = updateTranslateGemmaLanguages;
+  inputs = { text: TEXT, id: NUMBER, context: TEXT, source_lang: TEXT, target_lang: TEXT };
+  languages = Object.freeze({});
+  translationContext = '';
+  constructor(options) {
+    super(new URL('./translategemma-worker.js', import.meta.url), options);
     this.getTranslationContext = options?.getTranslationContext;
+    this.getTranslationLanguages = options?.getTranslationLanguages;
+  }
+  receiveInputs(values, context) {
+    this.languages = updateTranslateGemmaLanguages(this.languages, values, context.groupInputs);
+    if (Object.hasOwn(values, 'context')) {
+      validateTranslateGemmaContext(values.context);
+      this.translationContext = values.context;
+    } else if (context.groupInputs?.includes('context')) this.translationContext = '';
+    return super.receiveInputs(Object.fromEntries(Object.entries(values).filter(([port]) =>
+      !['context', 'source_lang', 'target_lang'].includes(port))), context);
   }
   translationPayload() {
-    const translationContext = this.getTranslationContext?.() ?? '';
-    return translationContext ? { context: translationContext } : {};
+    const languages = translateGemmaLanguages(this.getTranslationLanguages?.() ?? this.languages);
+    const context = this.getTranslationContext?.() ?? this.translationContext;
+    return { ...languages, ...(context ? { context } : {}) };
   }
-}
-export class EnglishToJapaneseTranslateGemmaTranslationNode extends TranslateGemmaTranslationNode {
-  constructor(options) { super(options, 'en-ja'); }
 }
 
 export class Plamo3Translate2BTranslationNode extends WorkerTranslationNode {
   static supportsLanguages = true;
+  static languagePolicy = plamoLanguages;
+  static updateLanguages = updatePlamoLanguages;
   inputs = { text: TEXT, id: NUMBER, source_lang: TEXT, target_lang: TEXT };
   languages = Object.freeze({});
   constructor(options) {
