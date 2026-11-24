@@ -23,7 +23,7 @@ export class X11Target {
         this.onShortcut(message.shortcut);
       }
       const complete = this.pending.get(message.request);
-      complete?.(message.error);
+      complete?.(message);
     });
     const lost = () => this.disconnect(worker, 'X11 accessibility is unavailable. Check AT-SPI and reopen the text field.');
     process.on('error', lost);
@@ -39,7 +39,11 @@ export class X11Target {
     if (action === 'bind-shortcut' || action === 'bind-tray') worker.token = token;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.disconnect(worker, 'The accessibility service did not respond. Voice typing stopped.'), 7000);
-      this.pending.set(request, error => {
+      this.pending.set(request, ({ error, waiting }) => {
+        if (waiting) {
+          timer.refresh();
+          return;
+        }
         clearTimeout(timer);
         this.pending.delete(request);
         if (action === 'release' && worker.token === token) worker.token = null;
@@ -55,7 +59,7 @@ export class X11Target {
     if (this.worker !== worker) return;
     this.worker = null;
     worker.process.kill();
-    for (const complete of this.pending.values()) complete(error);
+    for (const complete of this.pending.values()) complete({ error });
     if (worker.token) this.onInvalid(worker.token, error);
     this.onLost(error);
   }
