@@ -60,11 +60,8 @@ Reopen the target after changing accessibility settings.
 ### Focused fields
 
 Desktop insertion uses the AT-SPI `Text` and `EditableText` interfaces. It
-supports GTK 3 plain-text editor views with an editable run at the caret and
-Firefox plain-text web textboxes exposed as multiline editable `div` elements
-with `role="textbox"` and no accessible child objects. The package was tested
-with Firefox 162.0b1 and a `contenteditable="plaintext-only"` textbox with
-`white-space: pre-wrap`. Firefox output supports LF line breaks.
+supports GTK 3 plain-text editor views with an editable run at the caret.
+Those views preserve Unicode, spaces, and line breaks.
 
 Place a caret with no selection. The app stops if the field closes, becomes
 unavailable, loses focus, or rejects the output. The shortcut uses the field
@@ -72,11 +69,14 @@ focused at the key press, even while the toolkit restores focus after the X11
 keyboard grab. Tray Start uses the field focused before the XEmbed menu opened
 and requires that same field when the menu closes.
 
-GTK single-line entries and Firefox `input` and `textarea` elements can enforce
-length limits that AT-SPI cannot read. The app refuses them before recording
-to prevent a partial edit from reaching the field or its input listeners.
-Password fields, rich-text editors, and fields that rewrite inserted text are
-outside the support scope.
+The app refuses GTK single-line entries because AT-SPI cannot establish their
+length limits. Password fields, rich-text editors, read-only controls, and fields
+that rewrite inserted text are outside the support scope.
+
+Extension-free browser insertion remains an open acceptance requirement.
+Chromium 156 on Debian X11 exposes focused web text inputs through AT-SPI but
+lacks `EditableText` on those controls. The app refuses Chromium web fields
+before recording. Firefox support is deferred for the first desktop release.
 
 Wayland, macOS, Windows, mobile, newer field families, system audio capture,
 and a public installer are follow-up scope.
@@ -139,19 +139,20 @@ run independently. Concurrent sessions use their own memory.
 ```sh
 npm ci
 npm test
-sudo apt-get install xvfb xauth openbox trayer xdotool pulseaudio-utils \
+sudo apt-get install chromium xvfb xauth openbox trayer xdotool pulseaudio-utils \
   gir1.2-gtk-3.0
 npm run test:desktop
 DESKTOP_REAL_ASR=1 npm run test:desktop
 ```
 
 The X11 suite starts the packaged application, an independent GTK editor, and
-Firefox 162.0b1 without extensions. The browser test starts and stops from the
-global shortcut. It checks retained focus, one input event with the full
-Unicode text at the original caret, zero form submissions, and cancellation
-on a same-window focus change. Rejected edits leave the fields intact.
-Put that Firefox build on `PATH` or set `DESKTOP_TEST_FIREFOX` to its executable
-path. The model smoke additionally downloads the pinned
+Chromium with a fresh profile and extensions disabled. The GTK tests check
+shortcut Start and Stop, exactly-once Unicode insertion at the caret, and safe
+cancellation when the target changes. The Chromium test checks that the shortcut
+reports a refusal while leaving the values, caret, and focus intact in each
+tested field, with zero edit events and zero form submissions. Put `chromium`
+on `PATH` or set `DESKTOP_TEST_CHROMIUM` to its executable path.
+The model smoke additionally downloads the pinned
 weights, plays a licensed speech fixture into a virtual microphone, and tests
 the prepared cache with HTTP blocked. Run the Desktop suite in an isolated
 session. Its test profile and virtual audio server are disposable.
@@ -175,6 +176,6 @@ docker run --rm --init --platform linux/arm64 --cap-add SYS_ADMIN --security-opt
       DESKTOP_REAL_ASR=1 npm run test:desktop'
 ```
 
-The container settings allow Chromium's Linux sandbox to run inside the VM.
+The container settings allow the Electron and Chromium sandboxes to run inside the VM.
 See [desktop validation evidence](evidence/desktop-401.md) for the tested
 environment, results, and fixture output.

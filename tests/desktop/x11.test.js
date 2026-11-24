@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -67,30 +67,13 @@ async function browser(t, dir) {
   http.listen(0, '127.0.0.1');
   await once(http, 'listening');
   t.after(() => http.close());
-  const profile = join(dir, 'firefox');
-  await mkdir(profile);
-  await writeFile(join(profile, 'user.js'), `
-    user_pref("browser.aboutwelcome.enabled", false);
-    user_pref("browser.shell.checkDefaultBrowser", false);
-    user_pref("browser.startup.homepage_override.mstone", "ignore");
-    user_pref("browser.startup.firstrunSkipsHomepage", true);
-    user_pref("browser.preonboarding.enabled", false);
-    user_pref("datareporting.policy.dataSubmissionEnabled", false);
-    user_pref("termsofuse.bypassNotification", true);
-  `);
-  child(t, process.env.DESKTOP_TEST_FIREFOX || 'firefox', ['--no-remote', '--profile', profile, `http://127.0.0.1:${http.address().port}/`]);
-  const id = await eventually(() => x('search', '--onlyvisible', '.').split('\n')
-    .find(candidate => x('getwindowname', candidate).includes('Voice typing test browser')),
-  'Firefox window did not load the test page', 30000);
-  await eventually(() => state?.point, 'Firefox did not report the test field geometry');
+  child(t, process.env.DESKTOP_TEST_CHROMIUM || 'chromium', [
+    '--no-first-run', '--disable-extensions', '--force-renderer-accessibility',
+    `--user-data-dir=${join(dir, 'chromium')}`, `http://127.0.0.1:${http.address().port}/`,
+  ]);
+  const id = await windowId('^Voice typing test browser', 30000);
   x('windowactivate', '--sync', id);
-  x('key', 'Escape');
-  x('mousemove', ...state.point.map(String), 'click', '1');
-  x('key', 'Home', 'Right', 'Right', 'Right', 'Right', 'Right');
-  await eventually(() => {
-    assert.deepEqual([state.active, state.focus, state.caret], [true, 0, 5]);
-    return true;
-  }, 'Firefox did not focus the test caret');
+  await eventually(() => state?.active && state.focus === 'field', 'Chromium did not focus the test input');
   return { id, get: () => state };
 }
 
@@ -377,106 +360,48 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.deepEqual(errors, []);
 });
 
-test('packaged app inserts at the focused Firefox caret and refuses unsafe edits', { timeout: 90000 }, async t => {
-  const dir = await mkdtemp(join(tmpdir(), 'desktop-firefox-'));
+test('packaged app refuses unsupported Chromium targets before any edit', { timeout: 90000 }, async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'desktop-chromium-'));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
-  const { app, page, view, phase, show } = await launch(t);
-  const committed = ' [東京🙂]\n ';
-  await importGraph(page, 'Firefox fixture', literalGraph('{1}', FOCUSED_OUTPUT, committed));
-  await importGraph(page, 'Focus fixture', literalGraph('{1}', FOCUSED_OUTPUT, ''));
-  await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, 'abcdef'));
-  await selectGraph(page, 'Firefox fixture');
+  const { app, page, view } = await launch(t);
+  await importGraph(page, 'Browser fixture', literalGraph('{1}', FOCUSED_OUTPUT, ' [東京🙂] '));
+  await selectGraph(page, 'Browser fixture');
   x('key', 'alt+F4');
-  const firefox = await browser(t, dir);
-  const expectedValue = `left|${committed}right`;
-  const assertInsertion = () => {
-    const { active, focus, caret, values, edits, submits } = firefox.get();
-    assert.deepEqual({ active, focus, caret, values, edits, submits }, {
-      active: true, focus: 0, caret: 5 + committed.length,
-      values: [expectedValue, 'xy', 'secret', 'xy'],
-      edits: [{ id: 'field', value: expectedValue }], submits: 0,
-    });
-    assert.equal(x('getactivewindow'), firefox.id);
-    assert.equal(x('getwindowfocus'), firefox.id);
-    return true;
-  };
-
-  await trigger(firefox.id);
-  await phase('running');
-  await eventually(assertInsertion, 'Firefox did not receive exactly one committed edit at the original caret');
-  await trigger(firefox.id);
-  await phase('idle');
-  assert.equal((await view()).session.error, '');
-  const report = firefox.get().report;
-  await eventually(() => firefox.get().report > report && firefox.get().active,
-    'Firefox did not retain focus after Stop');
-  assertInsertion();
-
-  await show();
-  await selectGraph(page, 'Focus fixture');
-  await trigger(firefox.id);
-  await phase('running');
-  x('key', 'Tab');
-  await eventually(() => firefox.get().focus === 1, 'Firefox focus did not move to the textarea');
-  await phase('idle');
-  assert.match((await view()).session.error, /lost focus|changed|closed/i);
-
-  await show();
-  await selectGraph(page, 'Length fixture');
-  x('windowactivate', '--sync', firefox.id);
-
-  x('key', 'Tab', 'Tab', 'Home', 'Right');
-  await eventually(() => firefox.get().focus === 3 && firefox.get().limitedCaret === 1,
-    'Firefox length-limited input did not receive the test caret');
-
-  const rejectEdit = async () => {
-    await trigger(firefox.id);
-    const session = await eventually(async () => {
-      const { session } = await view();
-      return session.phase === 'idle' && session.error && session;
-    }, 'Firefox did not report a refusal');
-    const report = firefox.get().report;
-    await eventually(() => firefox.get().report > report && firefox.get().active,
-      'Firefox did not report its focused state after the refusal');
-    return session;
-  };
-
-  const assertNoEdit = () => {
-    const { values, edits, submits } = firefox.get();
-    assert.deepEqual({ values, edits, submits }, {
-      values: [expectedValue, 'xy', 'secret', 'xy'],
-      edits: [{ id: 'field', value: expectedValue }], submits: 0,
-    });
-    assert.equal(x('getwindowfocus'), firefox.id);
-  };
-
-  const limited = await rejectEdit();
-  assertNoEdit();
-  assert.equal(firefox.get().focus, 3);
-  assert.equal(firefox.get().limitedCaret, 1);
-  assert.match(limited.error, /Firefox.*length limit/);
-
+  const chromium = await browser(t, dir);
   const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
-  const dismissError = async () => {
-    await indicator.getByRole('button', { name: 'Dismiss' }).click();
-    await eventually(async () => !(await view()).session.error, 'The Firefox error was not dismissed');
+  const values = {
+    field: 'left|right', limited: 'xy', multiline: 'xy', editable: 'xy', readonly: 'xy', password: 'secret',
   };
-  await dismissError();
-  x('key', 'shift+Tab', 'shift+Tab', 'Home', 'Right');
-  await eventually(() => firefox.get().focus === 1 && firefox.get().multilineCaret === 1,
-    'Firefox textarea did not receive the test caret');
-  const textarea = await rejectEdit();
-  assertNoEdit();
-  assert.equal(firefox.get().focus, 1);
-  assert.equal(firefox.get().multilineCaret, 1);
-  assert.match(textarea.error, /Firefox.*length limit/);
 
-  await dismissError();
-  x('key', 'Tab');
-  await eventually(() => firefox.get().focus === 2, 'Firefox password field did not receive focus');
-  assert.match((await rejectEdit()).error, /editable plain-text/);
-  assertNoEdit();
-  assert.equal(firefox.get().focus, 2);
+  for (const target of Object.keys(values)) {
+    if (target !== 'field') x('key', 'Tab');
+    if (target !== 'readonly') x('key', 'Home', 'Right');
+    const before = await eventually(() => {
+      const state = chromium.get();
+      return state.active && state.focus === target && (target === 'readonly' || state.caret === 1) && state;
+    }, `Chromium did not focus the test caret in ${target}`);
+
+    await trigger(chromium.id);
+    await eventually(async () => {
+      const { session } = await view();
+      if (session.phase !== 'idle' || !/editable plain-text|authorized text field/.test(session.error)) {
+        throw Error(JSON.stringify(session));
+      }
+      return true;
+    }, `Desktop did not report a refusal for ${target}`);
+    const report = chromium.get().report;
+    await eventually(() => chromium.get().report > report && chromium.get().active,
+      'Chromium did not report its focused state after the refusal');
+
+    const { focus, caret, values: currentValues, edits, submits } = chromium.get();
+    assert.deepEqual({ focus, caret, values: currentValues, edits, submits }, {
+      focus: target, caret: before.caret, values, edits: [], submits: 0,
+    });
+    assert.equal(x('getactivewindow'), chromium.id);
+    assert.equal(x('getwindowfocus'), chromium.id);
+    await indicator.getByRole('button', { name: 'Dismiss' }).click();
+    await eventually(async () => !(await view()).session.error, 'The desktop error was not dismissed');
+  }
 });
 
 test('committed text waits for the Stop shortcut grab and stays bound to the original GTK field', { timeout: 60000 }, async t => {

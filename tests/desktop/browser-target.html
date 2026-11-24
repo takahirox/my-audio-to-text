@@ -1,15 +1,15 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8"><title>Voice typing test browser</title>
-<style>
-  #field { display: block; border: 1px solid; width: 20em; white-space: pre-wrap; }
-</style>
+<style>label { display: block; }</style>
 <form>
-  <div id="field" role="textbox" aria-label="Text" aria-multiline="true"
-    contenteditable="plaintext-only" spellcheck="false">left|right</div>
-  <label>Multiline <textarea id="multiline" maxlength="4">xy</textarea></label>
-  <label>Password <input id="password" type="password" value="secret"></label>
+  <label>Text <input id="field" type="text" autofocus value="left|right"></label>
   <label>Limited <input id="limited" maxlength="4" value="xy"></label>
+  <label>Multiline <textarea id="multiline" maxlength="4">xy</textarea></label>
+  <div id="editable" role="textbox" aria-label="Editable text" aria-multiline="true"
+    contenteditable="plaintext-only">xy</div>
+  <label>Read only <input id="readonly" readonly value="xy"></label>
+  <label>Password <input id="password" type="password" value="secret" autocomplete="off"></label>
   <button>Submit</button>
 </form>
 <script>
@@ -18,32 +18,29 @@
   let report = 0;
   let submits = 0;
   document.querySelector('form').onsubmit = event => { event.preventDefault(); submits++; };
-  const field = document.querySelector('#field');
-  const value = target => target === field ? target.textContent : target.value;
+  const password = document.querySelector('#password');
+  const editable = document.querySelector('#editable');
   for (const target of fields) {
+    target.addEventListener('beforeinput', () => edits.push(['beforeinput', target.id]));
     target.addEventListener('input', () => {
-      edits.push({ id: target.id, value: value(target) });
-      if (target.id === 'limited') field.focus();
+      edits.push(['input', target.id]);
+      if (target.id === 'limited') password.focus();
     });
   }
   function caret() {
+    if (document.activeElement !== editable) return document.activeElement.selectionStart;
     const selection = document.getSelection();
-    if (!field.contains(selection.anchorNode) || !selection.isCollapsed) return -1;
+    if (!editable.contains(selection.anchorNode) || !selection.isCollapsed) return -1;
     const range = document.createRange();
-    range.selectNodeContents(field);
+    range.selectNodeContents(editable);
     range.setEnd(selection.anchorNode, selection.anchorOffset);
     return range.toString().length;
   }
   setInterval(() => {
-    const bounds = field.getBoundingClientRect();
     fetch('/state', { method: 'POST', body: JSON.stringify({
-      report: ++report, values: fields.map(value),
-      focus: fields.indexOf(document.activeElement), submits, edits,
+      report: ++report, values: Object.fromEntries(fields.map(target => [target.id, target.value ?? target.textContent])),
+      focus: document.activeElement.id, submits, edits,
       caret: caret(), active: document.hasFocus(),
-      multilineCaret: document.querySelector('#multiline').selectionStart,
-      limitedCaret: document.querySelector('#limited').selectionStart,
-      point: [Math.round(window.mozInnerScreenX + bounds.x + bounds.width / 2),
-        Math.round(window.mozInnerScreenY + bounds.y + bounds.height / 2)],
     }) }).catch(() => {});
   }, 100);
 </script>

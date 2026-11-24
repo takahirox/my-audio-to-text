@@ -109,13 +109,54 @@ a length-limited entry. The test using the pinned Moonshine revision and the
 virtual microphone again inserted `こんにちは、こんにちは、こんにちは`
 into GTK with HTTP(S) blocked after model preparation.
 
-## Limits
-
-Firefox `input` and `textarea` elements remain outside the desktop support
-scope because their length limits are unavailable through AT-SPI.
+That revision refused Firefox `input` and `textarea` elements because AT-SPI
+did not expose their length limits.
 Firefox ESR 153 fails to apply AT-SPI editing operations. This is an upstream
 Firefox defect and the desktop detects the unchanged field and stops.
 [Mozilla bug 2087495](https://bugzilla.mozilla.org/show_bug.cgi?id=2087495).
+
+## Firefox deferral and Chromium X11 validation
+
+Firefox support is deferred for the first desktop release. The desktop
+helper now accepts only supported GTK editor views.
+
+The browser probe used Chromium 156.0.8078.108 on Debian 12 arm64
+with a fresh profile, extensions disabled, and renderer accessibility enabled.
+AT-SPI showed `Text` for the ordinary HTML text input and reported
+`maxlength=4` on the constrained input. Neither control exposed
+`EditableText`. Falkon 22.12.1 and GNOME Web 43.1 also exposed `Text` without
+`EditableText` on focused HTML inputs. NetSurf GTK 3.10 did not expose a
+separate accessible object for the web input in the probe.
+
+Separate paste probes in the same Chromium build showed that a page can shift
+focus to a password input from a `paste` handler and receive the edit there.
+A `beforeinput` handler that added a length limit to an ordinary input
+committed only `a` from `abcd`. Checking the original focus and maxlength
+before sending a paste command would permit both outcomes. The packaged helper
+keeps browser writes disabled. The mandatory successful extension-free browser
+insertion remains open.
+
+Two runs of `npm run build:desktop` produced the Debian 12 arm64 archive with
+SHA-256 `aa10decb0db3fc483dc665d201265b88ea1889c503aeb64a9737af824eaa03fd`.
+`npm test` passed all 940 checks. The focused MV3 suite
+(`graph-interactions`, `graph-autosave`, `graph-optional-asr`) passed all
+33 checks. The standalone Chromium suite (`graph-selection`,
+`graph-routing`, `model-playground`) passed all 75 checks.
+
+The Chromium shortcut test launched the extracted package and invoked the
+registered global shortcut on a plain input, a length-limited input, a
+length-limited textarea, a plain-text contenteditable, a read-only input,
+and a password input. The package reported a refusal for each field.
+The X11 and DOM focus, caret, and field values stayed intact. Chromium
+reported zero `beforeinput` or `input` events and zero form submissions.
+
+`DESKTOP_TEST_BINARY=dist/verify/my-audio-to-text/my-audio-to-text DESKTOP_REAL_ASR=1 npm run test:desktop`
+passed all five X11 checks on a fresh rerun. The GTK held-shortcut check
+ended early on one earlier run. The offline smoke inserted
+`こんにちは、こんにちは、こんにちは` from the same licensed fixture and pinned
+Moonshine revision as the original validation. `git diff --check` passed.
+
+## Limits
 
 Physical devices, other application toolkit controls, Wayland, macOS and
 Windows were outside this validation. Required post-merge verification is none.
