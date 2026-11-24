@@ -39,7 +39,7 @@ field when its menu opens. [Electron Linux tray behavior](https://www.electronjs
 
 1. Open **Models**, prepare Moonshine Small Streaming Japanese, and wait for
    **Ready**. Allow at least 300 MB of free disk space and 2 GB of available RAM.
-2. Place a caret in an editable plain-text control in another application.
+2. Place a caret in a writable Mousepad document.
 3. Press **Ctrl+Alt+Shift+D**. The status indicator shows **Preparing** while the
    graph loads, then **Recording** once microphone capture starts.
 4. Speak Japanese. Committed text goes to the authorized caret. Press the same
@@ -76,10 +76,11 @@ doesn't expose the buffer's custom handlers. The app refuses other GTK text
 views and all GTK single-line entries before sending an edit. Password fields,
 rich-text editors, read-only controls, and locked text ranges are unsupported.
 
-Extension-free browser insertion remains an open acceptance requirement.
-Chromium 156 on Debian X11 exposes focused web text inputs through AT-SPI but
-lacks `EditableText` on those controls. The app refuses Chromium web fields
-before recording. Firefox support is deferred for the first desktop release.
+Desktop dictation into extension-free browser fields remains an open acceptance
+requirement. Chromium 156 on Debian X11 exposes focused web text inputs through
+AT-SPI without `EditableText`, and the packaged app refuses them before
+recording. Firefox support is deferred. See the
+[packaged browser refusal results](evidence/desktop-401.md#packaged-refusal-and-held-stop-regression).
 
 Wayland, macOS, Windows, mobile, newer field families, system audio capture,
 and a public installer are follow-up scope.
@@ -151,7 +152,8 @@ DESKTOP_REAL_ASR=1 npm run test:desktop
 The X11 suite starts the packaged application, Mousepad, a GTK safety fixture,
 and Chromium with a fresh profile and extensions disabled. The Mousepad tests
 check shortcut Start and Stop, exactly-once Unicode insertion at the caret,
-and safe cancellation when the target changes. The GTK fixture verifies that
+and safe cancellation when the target changes, including when the Stop
+shortcut is released. The GTK fixture verifies that
 length-limited buffers and protected fields retain their values and focus
 with zero edits to the constrained fields. The Chromium test checks that the
 shortcut reports a refusal while leaving the values, caret, and focus intact

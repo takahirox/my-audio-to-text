@@ -118,8 +118,10 @@ Contracts and behavior should be reusable across Web, browser extensions,
 desktop and mobile while models, implementations and runtimes remain
 replaceable. The [Linux X11 desktop host](desktop.md) reuses the saved graph format, Pipeline
 and Moonshine WASM worker. It supplies its own microphone, AT-SPI focused
-TEXT output, tray, shortcut, storage and model cache. The Chrome extension
-and standalone Web pages continue to run with their own resources.
+TEXT output, tray, shortcut, storage and model cache. Focused TEXT insertion is
+verified in Mousepad on Debian X11. Desktop insertion into extension-free
+browser fields remains open. The Chrome extension and standalone Web pages
+continue to run with their own resources.
 Future hosts can choose different runtimes, including native ONNX.
 
 ## Next architectural step
