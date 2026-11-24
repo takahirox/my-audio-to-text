@@ -9,6 +9,7 @@ import gi
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, GLib
 from Xlib import X, Xatom, display, error
+from x11_shortcut import Shortcut
 
 
 class TargetError(Exception):
@@ -37,6 +38,7 @@ class Focus:
     def __init__(self):
         self.x = display.Display()
         self.root = self.x.screen().root
+        self.shortcut = Shortcut(self.x, self.root)
         self.active_atom = self.x.intern_atom("_NET_ACTIVE_WINDOW")
         self.pid_atom = self.x.intern_atom("_NET_WM_PID")
         self.window_type_atom = self.x.intern_atom("_NET_WM_WINDOW_TYPE")
@@ -48,6 +50,8 @@ class Focus:
         self.focused = None
         self.grabbed = False
         self.shortcut_target = None
+        self.shortcut_release = None
+        self.shortcut_sequence = 0
         self.tray_target = None
         self.tray_window = None
         self.tray_deadline = 0
@@ -195,13 +199,15 @@ class Focus:
         self.caret(focused)
         self.bound = (token, window, frame, focused)
 
-    def bind_after_grab(self, token, action, reply):
+    def bind_after_grab(self, token, action, release, reply):
         now = time.monotonic()
         if action == "bind-tray":
             target, self.tray_target = self.tray_target, None
             if target is None or (self.tray_window is None and now > self.tray_deadline):
                 raise TargetError(LOST_TARGET)
         else:
+            if release is None or release != self.shortcut_release:
+                raise TargetError(NO_TARGET)
             target, self.shortcut_target = self.shortcut_target, None
             if target is None or now - target[2] > 1:
                 raise TargetError(NO_TARGET)
@@ -382,12 +388,20 @@ class Focus:
             event = self.x.next_event()
             active_changed |= event.type == X.PropertyNotify and event.atom == self.active_atom
             self.track_tray_menu(event)
+            if self.shortcut.released(event):
+                self.shortcut_sequence += 1
+                self.shortcut_release = self.shortcut_sequence
+                if self.shortcut_target:
+                    window, node, _ = self.shortcut_target
+                    self.shortcut_target = (window, node, time.monotonic())
+                send({"shortcut": self.shortcut.value, "release": self.shortcut_release})
             if not self.watched or getattr(getattr(event, "window", None), "id", None) != self.watched[0]:
                 continue
             if event.type == X.FocusOut and event.mode == X.NotifyGrab:
                 # X11 delivers the passive keyboard grab before the toolkit's
                 # transient accessibility focus loss. Keep the pre-grab object.
                 self.grabbed = True
+                self.shortcut_release = None
                 self.shortcut_target = (self.watched, self.focused, time.monotonic()) if self.focused is not None else None
                 self.focused = None
             elif event.type == X.FocusIn and event.mode == X.NotifyUngrab:
@@ -426,16 +440,18 @@ class Focus:
             action = message["action"]
             if action in ("bind-shortcut", "bind-tray"):
                 self.x_event()
-                self.bind_after_grab(message["token"], action, reply)
+                self.bind_after_grab(message["token"], action, message.get("text"), reply)
                 return
             elif action == "insert":
                 self.x_event()
                 self.insert(message["token"], message["text"])
             elif action == "release":
                 self.release(message["token"])
+            elif action == "set-shortcut":
+                self.shortcut.set(message["text"])
             else:
                 raise TargetError("Unknown accessibility request.")
-        except TargetError as error:
+        except (TargetError, ValueError) as error:
             reply["error"] = str(error)
         except Exception:
             reply["error"] = (LOST_TARGET if action == "insert" else

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, protocol, screen, session, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, protocol, screen, session, Tray } from 'electron';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
@@ -26,7 +26,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'local-voice', privileges: {
 
 let library, controller, target, tray, runtime, management, indicator, runtimeReady;
 let modelView, shortcutError = '', registeredShortcut, quitting = false, shutDown = false;
-let modelOperation, shortcutTimer, runtimeSequence = 0;
+let modelOperation, shortcutTimer, shortcutChanging = false, runtimeSequence = 0;
 const pendingCommands = new Map(), displayItems = new Map();
 
 function isFrom(event, window, page) {
@@ -121,33 +121,32 @@ function trayToggle() {
   }
 }
 
-let lastShortcut = -Infinity;
-function shortcutPressed() {
-  const time = performance.now(), elapsed = time - lastShortcut;
-  lastShortcut = time;
-  if (elapsed <= 250) return;
+function shortcutReleased(value) {
+  if (quitting || value !== registeredShortcut) return;
   if (!controller.current) {
     void start(library.value.selected, 'dictation', 'bind-shortcut');
   } else {
-    // Give the keyboard grab time to release before draining into the bound field.
+    // Let accessibility focus settle after the keyboard grab before draining.
     const session = controller.current;
+    clearTimeout(shortcutTimer);
     shortcutTimer = setTimeout(() => { if (controller.current === session) toggle(); }, 90);
   }
 }
 
-function registerShortcut(value, save = false) {
+async function registerShortcut(value, save = false) {
   if (value === registeredShortcut) return;
   const modifiers = value.split('+').slice(0, -1);
   if (!/^(?:(?:Control|Alt|Shift|Super)\+){2,4}(?:[A-Z0-9]|F(?:[1-9]|1[0-2]))$/.test(value)
       || new Set(modifiers).size !== modifiers.length || !modifiers.some(key => key !== 'Shift')) {
     throw Error('Use at least two distinct modifiers (Control, Alt, Shift, Super) and a letter, digit, or F1–F12.');
   }
-  if (!globalShortcut.register(value, shortcutPressed)) {
-    throw Error(`${value} is unavailable. Choose a different shortcut in Settings.`);
-  }
+  await target.request('set-shortcut', null, value);
   try { if (save) library.shortcut(value); }
-  catch (error) { globalShortcut.unregister(value); throw error; }
-  if (registeredShortcut) globalShortcut.unregister(registeredShortcut);
+  catch (error) {
+    try { await target.request('set-shortcut', null, registeredShortcut || ''); }
+    catch { target.close(); }
+    throw error;
+  }
   registeredShortcut = value;
   const previousError = shortcutError;
   shortcutError = '';
@@ -251,7 +250,7 @@ function resetRuntime(error) {
   if (!quitting) {
     createRuntime();
     if (controller.current) void controller.cancel(error);
-    else controller.update({ error });
+    else if (!['modelStatus', 'modelPrepare'].includes(modelOperation)) controller.update({ error });
   }
 }
 
@@ -279,11 +278,14 @@ function bindIPC() {
     if (!result.canceled && result.filePath) await writeFile(result.filePath, JSON.stringify(valid, null, 2) + '\n', { mode: 0o600 });
   });
   ui('select', id => { library.select(id); publish(); });
-  ui('shortcut', value => {
+  ui('shortcut', async value => {
+    if (shortcutChanging) throw Error('Wait for the current shortcut change to finish.');
+    shortcutChanging = true;
     try {
       if (typeof value !== 'string' || value.length > 64) throw Error('Enter a supported key combination.');
-      registerShortcut(value.trim(), true);
+      await registerShortcut(value.trim(), true);
     } catch (error) { shortcutError = error.message; publish(); throw error; }
+    finally { shortcutChanging = false; }
   });
   ui('live', id => { if (typeof id === 'string') void start(id, 'live'); });
   ui('stop', () => { void controller.stop(); });
@@ -298,15 +300,16 @@ function bindIPC() {
     if (action === 'modelDelete' && controller.current) throw Error('Stop the active session before deleting the model.');
     modelOperation = action;
     try {
-      if (action === 'modelPrepare') {
+      if (action === 'modelPrepare' || action === 'modelStatus') {
         modelView = { state: 'Checking cache…' };
         send(management, 'management:model', modelView);
       }
       modelView = await run(action);
     } catch (error) {
-      if (action !== 'modelPrepare') throw error;
+      if (action !== 'modelPrepare' && action !== 'modelStatus') throw error;
       modelView = { ...modelView, state: 'Error', error: error.message };
     } finally { modelOperation = null; }
+    if (action === 'modelStatus' && modelView.state === 'Error') modelView.retry = action;
     send(management, 'management:model', modelView);
     return modelView;
   });
@@ -327,7 +330,6 @@ app.on('before-quit', event => {
   if (quitting) return;
   quitting = true;
   clearTimeout(shortcutTimer);
-  globalShortcut.unregisterAll();
   tray?.destroy();
   indicator?.hide();
   const deadline = setTimeout(() => {
@@ -354,7 +356,16 @@ else {
     mkdirSync(path, { recursive: true, mode: 0o700 });
     library = new DesktopLibrary(join(path, 'desktop-library.json'));
     await installProtocol();
-    target = new X11Target(join(import.meta.dirname, 'x11-accessibility.py'), (id, error) => { void controller.cancel(error, id); });
+    target = new X11Target(join(import.meta.dirname, 'x11-accessibility.py'), {
+      onInvalid: (id, error) => { void controller.cancel(error, id); },
+      onShortcut: shortcutReleased,
+      onLost: () => {
+        if (!registeredShortcut || quitting) return;
+        registeredShortcut = undefined;
+        shortcutError = 'The shortcut was released. Check X11 accessibility, then save the shortcut again in Settings.';
+        controller.update({ error: shortcutError });
+      },
+    });
     target.connect();
     controller = new DesktopSession({ target, run, onChange: publish, onDisplay: item => {
       displayItems.set(JSON.stringify([item.node, item.port]), item);
@@ -368,7 +379,7 @@ else {
     management.on('close', event => { if (!quitting) { event.preventDefault(); management.hide(); } });
     await management.loadURL(appURL('management'));
     tray = new Tray(icon);
-    try { registerShortcut(library.value.shortcut); }
+    try { await registerShortcut(library.value.shortcut); }
     catch (error) {
       shortcutError = error.message;
       controller.update({ error: shortcutError });

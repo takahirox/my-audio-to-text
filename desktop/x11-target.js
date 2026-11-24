@@ -2,9 +2,8 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 export class X11Target {
-  constructor(helper, onInvalid) {
-    this.helper = helper;
-    this.onInvalid = onInvalid;
+  constructor(helper, { onInvalid, onShortcut, onLost }) {
+    Object.assign(this, { helper, onInvalid, onShortcut, onLost });
     this.pending = new Map();
     this.sequence = 0;
   }
@@ -16,8 +15,13 @@ export class X11Target {
     this.worker = worker;
     const lines = createInterface({ input: process.stdout });
     lines.on('line', line => {
+      if (this.worker !== worker) return;
       const message = JSON.parse(line);
       if (message.invalid) this.onInvalid(message.invalid, message.error);
+      if (message.shortcut) {
+        worker.shortcutRelease = message.release;
+        this.onShortcut(message.shortcut);
+      }
       const complete = this.pending.get(message.request);
       complete?.(message.error);
     });
@@ -42,7 +46,8 @@ export class X11Target {
         if (error) reject(Error(error));
         else resolve();
       });
-      worker.process.stdin.write(JSON.stringify({ request, action, token, text }) + '\n');
+      const payload = action === 'bind-shortcut' ? worker.shortcutRelease : text;
+      worker.process.stdin.write(JSON.stringify({ request, action, token, text: payload }) + '\n');
     });
   }
 
@@ -52,6 +57,7 @@ export class X11Target {
     worker.process.kill();
     for (const complete of this.pending.values()) complete(error);
     if (worker.token) this.onInvalid(worker.token, error);
+    this.onLost(error);
   }
 
   close() {

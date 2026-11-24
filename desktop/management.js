@@ -130,8 +130,10 @@ function modelUpdate(model) {
   const busy = ['Checking cache…', 'Downloading'].includes(state);
   element('model-status').textContent = state;
   element('model-error').textContent = model?.error || '';
-  element('prepare').textContent = ['Error', 'Canceled'].includes(state) ? 'Retry' : 'Prepare';
-  element('prepare').disabled = busy || state === 'Ready';
+  const prepare = element('prepare');
+  prepare.textContent = ['Error', 'Canceled'].includes(state) ? 'Retry' : 'Prepare';
+  prepare.disabled = busy || state === 'Ready';
+  prepare.onclick = () => modelAction(model?.retry || 'modelPrepare');
   element('cancel-download').hidden = !busy || state === 'Checking cache…';
   element('delete-model').disabled = busy || !model?.cachedBytes || current?.session.phase !== 'idle';
   const progress = element('model-progress');
@@ -238,7 +240,6 @@ element('import-file').onchange = run(async ({ target }) => {
   } finally { target.value = ''; }
 });
 element('shortcut-form').onsubmit = run(async event => { event.preventDefault(); await host.shortcut(element('shortcut').value); });
-element('prepare').onclick = () => modelAction('modelPrepare');
 element('cancel-download').onclick = () => modelAction('modelCancel');
 element('delete-model').onclick = () => modelAction('modelDelete');
 element('start-live').onclick = run(async () => { await flush(); await host.startLive(element('live-graph').value); });

@@ -266,7 +266,15 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   await eventually(async () => !(await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows().some(win => win.webContents.getURL().endsWith('/management.html') && win.isVisible()))),
   'Management window remained visible after close');
-  await trigger(native.id);
+  if (x('getactivewindow') !== native.id) x('windowactivate', '--sync', native.id);
+  await wait(320);
+  x('keydown', hotkey);
+  try {
+    // Hold the real grab long enough for Xvfb to deliver keyboard auto-repeat.
+    await wait(1250);
+  } finally {
+    x('keyup', hotkey);
+  }
   await phase('running');
   await eventually(() => native.get().values[0] === 'left| 東京🙂\nright', 'GTK text did not arrive at original caret');
   assert.equal(x('getactivewindow'), native.id);
@@ -420,22 +428,43 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.deepEqual(errors, []);
 });
 
-test('Models can retry preparation after the packaged runtime crashes', { timeout: 60000 }, async t => {
+test('Models can retry cache inspection and preparation after the packaged runtime crashes', { timeout: 60000 }, async t => {
   const { app, page } = await launch(t);
   // Hold the model request open so the real download stays in progress without using the network.
   await app.evaluate(({ session }) => {
     session.defaultSession.webRequest.onBeforeRequest({ urls: ['https://download.moonshine.ai/*'] }, () => {});
   });
-  await page.getByRole('button', { name: 'Models' }).click();
-  const status = page.locator('#model-status');
-  const prepare = page.locator('#prepare');
-  await expect(status).toHaveText('Not downloaded');
-  await prepare.click();
-  await expect(status).toHaveText('Downloading');
-  await app.evaluate(({ BrowserWindow }) => {
+  const runtime = await eventually(() => app.windows().find(win => win.url().endsWith('/runtime.html')),
+    'Runtime renderer did not load');
+  // Pause the real first inspection at the cache boundary, before it can reply.
+  await runtime.evaluate(() => {
+    CacheStorage.prototype.open = () => {
+      window.inspectPending = true;
+      return new Promise(() => {});
+    };
+  });
+  const crashRuntime = () => app.evaluate(({ BrowserWindow }) => {
     const runtime = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().endsWith('/runtime.html'));
     runtime.webContents.forcefullyCrashRenderer();
   });
+  const status = page.locator('#model-status');
+  const prepare = page.locator('#prepare');
+  await page.getByRole('button', { name: 'Models' }).click();
+  await runtime.waitForFunction(() => window.inspectPending);
+  await expect(status).toHaveText('Checking cache…');
+  await expect(prepare).toBeDisabled();
+  await crashRuntime();
+  await expect(status).toHaveText('Error');
+  await expect(page.locator('#model-error')).toContainText('runtime closed unexpectedly');
+  await expect(prepare).toHaveText('Retry');
+  await prepare.click();
+  await expect(status).toHaveText('Not downloaded');
+  await expect(page.locator('#model-error')).toBeEmpty();
+  await expect(page.locator('#errors')).toBeEmpty();
+  await expect(prepare).toHaveText('Prepare');
+  await prepare.click();
+  await expect(status).toHaveText('Downloading');
+  await crashRuntime();
   await expect(status).toHaveText('Error');
   await expect(page.locator('#model-error')).toContainText('runtime closed unexpectedly');
   await expect(prepare).toHaveText('Retry');
