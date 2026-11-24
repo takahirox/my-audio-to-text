@@ -19,6 +19,7 @@ class TargetError(Exception):
 NO_TARGET = "Focus an editable plain-text field in another application and try again."
 LOST_TARGET = "Voice typing stopped because the authorized text field lost focus, changed, or closed."
 UNEDITABLE_CARET = "Place the caret in an editable plain-text region and try again."
+FOCUS_SETTLE_MS = 75
 
 
 def send(value):
@@ -49,6 +50,7 @@ class Focus:
         self.watched = None
         self.focused = None
         self.grabbed = False
+        self.focus_settles_at = 0
         self.shortcut_target = None
         self.shortcut_release = None
         self.shortcut_sequence = 0
@@ -164,6 +166,7 @@ class Focus:
         self.watched = window
         self.focused = None
         self.grabbed = False
+        self.focus_settles_at = 0
         self.shortcut_target = None
         self.tray_target = None
         if window:
@@ -235,7 +238,7 @@ class Focus:
             send(reply)
             return False
 
-        GLib.timeout_add(75, settle)
+        GLib.timeout_add(FOCUS_SETTLE_MS, settle)
 
     def current(self, token):
         if self.bound is None or self.bound[0] != token:
@@ -247,6 +250,38 @@ class Focus:
         except (TargetError, GLib.Error, error.XError) as failure:
             raise TargetError(LOST_TARGET) from failure
         raise TargetError(LOST_TARGET)
+
+    def focus_is_settling(self):
+        return self.grabbed or time.monotonic() < self.focus_settles_at
+
+    def insert_after_grab(self, token, text, reply):
+        next_update = 0
+
+        def settle():
+            nonlocal next_update
+            try:
+                self.x_event()
+                if not self.bound or self.bound[0] != token:
+                    raise TargetError(LOST_TARGET)
+                if self.focus_is_settling():
+                    # A held shortcut can outlast the host request timeout.
+                    now = time.monotonic()
+                    if now >= next_update:
+                        send({**reply, "waiting": True})
+                        next_update = now + 1
+                    return True
+                self.insert(token, text)
+            except TargetError as failure:
+                reply["error"] = str(failure)
+            except Exception:
+                reply["error"] = LOST_TARGET
+            send(reply)
+            return False
+
+        # Yield to X11, AT-SPI and release requests as the original field
+        # regains focus. insert() revalidates that field before mutating it.
+        if settle():
+            GLib.timeout_add(FOCUS_SETTLE_MS, settle)
 
     def insert(self, token, text):
         node, states = self.current(token)
@@ -319,7 +354,7 @@ class Focus:
             send({"invalid": token, "error": LOST_TARGET})
 
     def check(self):
-        if self.bound and not self.grabbed:
+        if self.bound and not self.focus_is_settling():
             try:
                 self.current(self.bound[0])
             except Exception:
@@ -359,7 +394,7 @@ class Focus:
                 if self.bound and token == self.bound[0]:
                     self.check()
                 return False
-            GLib.timeout_add(75, settled)
+            GLib.timeout_add(FOCUS_SETTLE_MS, settled)
 
     def track_tray_menu(self, event):
         if event.type in (X.UnmapNotify, X.DestroyNotify) and event.window.id == self.tray_window:
@@ -406,8 +441,9 @@ class Focus:
                 self.focused = None
             elif event.type == X.FocusIn and event.mode == X.NotifyUngrab:
                 self.grabbed = False
+                self.focus_settles_at = time.monotonic() + FOCUS_SETTLE_MS / 1000
             lost = event.type in (X.DestroyNotify, X.UnmapNotify)
-            if lost or (event.type == X.FocusOut and event.mode == X.NotifyNormal
+            if lost or (event.type == X.FocusOut and event.mode in (X.NotifyNormal, X.NotifyWhileGrabbed)
                         and event.detail != X.NotifyInferior):
                 self.focused = None
                 self.shortcut_target = None
@@ -419,7 +455,9 @@ class Focus:
             self.watch_window()
             if previous != self.watched:
                 self.binding = None
-            self.check()
+                self.invalidate()
+            else:
+                self.check()
         return True
 
     def receive(self, fd, _condition):
@@ -443,8 +481,8 @@ class Focus:
                 self.bind_after_grab(message["token"], action, message.get("text"), reply)
                 return
             elif action == "insert":
-                self.x_event()
-                self.insert(message["token"], message["text"])
+                self.insert_after_grab(message["token"], message["text"], reply)
+                return
             elif action == "release":
                 self.release(message["token"])
             elif action == "set-shortcut":
@@ -454,8 +492,7 @@ class Focus:
         except (TargetError, ValueError) as error:
             reply["error"] = str(error)
         except Exception:
-            reply["error"] = (LOST_TARGET if action == "insert" else
-                              "Accessibility could not verify the focused field. "
+            reply["error"] = ("Accessibility could not verify the focused field. "
                               "Check the X11 session and AT-SPI accessibility settings.")
         send(reply)
 

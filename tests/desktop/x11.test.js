@@ -428,6 +428,70 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.deepEqual(errors, []);
 });
 
+test('committed text waits for the Stop shortcut grab and stays bound to the original GTK field', { timeout: 60000 }, async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'desktop-stop-shortcut-'));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
+  const { app, page, view, phase, show } = await launch(t);
+  const native = await editor(t, dir);
+  await show();
+  await importGraph(page, 'Stop fixture', literalGraph('{1}', FOCUSED_OUTPUT, ''));
+  await selectGraph(page, 'Stop fixture');
+  const runtime = app.windows().find(window => window.url().endsWith('/runtime.html'));
+  // Deliver a deterministic final through the real runtime-to-host IPC while
+  // the native shortcut holds the keyboard grab.
+  await runtime.evaluate(() => {
+    window.runtimeHost.onCommand(({ action, args }) => {
+      if (action === 'start') window.testSession = args[0];
+    });
+  });
+
+  const committed = '東京🙂';
+  const queued = () => runtime.evaluate(text => {
+    window.testInsert = window.runtimeHost.insert(window.testSession, text).then(
+      () => ({ inserted: true }), error => ({ inserted: false, error: error.message }),
+    );
+  }, committed);
+  const initial = ['left|right', '', 'secret', 'xy'];
+  await trigger(native.id);
+  await phase('running');
+  x('keydown', hotkey);
+  try {
+    await queued();
+    // Exceed the helper's normal request timeout as well as the repeat delay.
+    await wait(7500);
+    assert.deepEqual(native.get().values, initial);
+    assert.equal((await view()).session.phase, 'running');
+  } finally {
+    x('keyup', hotkey);
+  }
+  await phase('idle');
+  assert.deepEqual(await runtime.evaluate(() => window.testInsert), { inserted: true });
+  assert.equal((await view()).session.error, '');
+  const afterStop = ['left|東京🙂right', '', 'secret', 'xy'];
+  await eventually(() => {
+    assert.deepEqual(native.get().values, afterStop);
+    return true;
+  }, 'Stop did not insert exactly one committed chunk');
+  assert.equal(native.get().focus, 0);
+  assert.equal(x('getwindowfocus'), native.id);
+
+  await trigger(native.id);
+  await phase('running');
+  x('keydown', hotkey);
+  try {
+    await queued();
+    await wait(350);
+    assert.equal((await view()).session.phase, 'running');
+  } finally {
+    x('keyup', '--delay', '1', hotkey, 'key', '--delay', '1', 'ctrl+Tab');
+  }
+  await eventually(() => native.get().focus === 1, 'GTK focus did not move during shortcut release');
+  await phase('idle');
+  assert.equal((await runtime.evaluate(() => window.testInsert)).inserted, false);
+  assert.match((await view()).session.error, /lost focus|changed|closed/i);
+  assert.deepEqual(native.get().values, afterStop);
+});
+
 test('Models can retry cache inspection and preparation after the packaged runtime crashes', { timeout: 60000 }, async t => {
   const { app, page } = await launch(t);
   // Hold the model request open so the real download stays in progress without using the network.
