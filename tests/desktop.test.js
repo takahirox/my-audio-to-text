@@ -43,7 +43,7 @@ test('focused output receives committed generic TEXT through a deterministic for
   const pipeline = new Pipeline({ nodes: {
     producer: { outputs: { text: TEXT }, start(value) { context = value; },
     },
-    formatter: new TextFormatterNode({ template: ' {1}\n', inputCount: 1 }),
+    formatter: new TextFormatterNode({ template: ' {1}\n', inputCount: 1 }, { separatePreviews: true }),
     target: new FocusedApplicationTextOutputNode(text => { output.push(text); }),
   }, connections: [edge('producer', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'target', 'text')] });
   await pipeline.start();
@@ -61,7 +61,7 @@ test('formatter previews stay out of focused output when independent producers c
   const pipeline = new Pipeline({ nodes: {
     first: { outputs: { preview: TEXT, final: TEXT }, provisionalOutputs: ['preview'], start(context) { first = context; } },
     second: { outputs: { final: TEXT }, start(context) { second = context; } },
-    formatter: new TextFormatterNode({ template: '{1}|{2}|{3}', inputCount: 3 }),
+    formatter: new TextFormatterNode({ template: '{1}|{2}|{3}', inputCount: 3 }, { separatePreviews: true }),
     target: new FocusedApplicationTextOutputNode(text => output.push(text)),
     display: { inputs: { text: TEXT }, receive(_, text) { live.push(text); } },
   }, connections: [
@@ -149,7 +149,7 @@ test('bind failure and microphone denial fail visibly, then a new Start succeeds
   let failBind = true;
   const controller = new DesktopSession({
     target: { request: async action => {
-      if (action === 'bind' && failBind) throw Error('Protected field');
+      if (action === 'bind-shortcut' && failBind) throw Error('Protected field');
       if (action === 'release') releases++;
     } },
     run: async action => {

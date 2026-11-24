@@ -62,11 +62,14 @@ Use a multiline editor for graph output containing line breaks. Place a caret
 with no selection. The app stops if the field closes, becomes unavailable,
 loses focus, or rejects the output. The shortcut uses the field focused at the
 key press, even while the toolkit restores focus after the X11 keyboard grab.
-Password fields, GTK single-line entries, rich-text editors, and fields whose
-application rewrites text are outside the current support scope. GTK entries
-can enforce a length limit that AT-SPI cannot read. If an ordinary Firefox input
-truncates the text, the app removes the inserted prefix and restores the caret
-when the surrounding text still matches, then stops with an error.
+Tray Start uses the field focused before the XEmbed menu opened and requires
+that same field when the menu closes. GTK editor views must expose an editable
+text run at the caret. Password fields, GTK single-line entries, rich-text
+editors, and fields whose application rewrites text are outside the current
+support scope. GTK entries can enforce a length limit that AT-SPI cannot read.
+If an ordinary Firefox input truncates the text, the app removes the inserted
+prefix and restores the caret when the surrounding text still matches, then
+stops with an error.
 Older Firefox releases including ESR 153 can acknowledge an edit without changing
 the value. Browser support requires the upstream AT-SPI editing fix.
 [Mozilla bug 2087495](https://bugzilla.mozilla.org/show_bug.cgi?id=2087495).

@@ -76,7 +76,7 @@ async function start(id, graph) {
         return recognizer;
       }
       case 'Text': return new TextNode(settings);
-      case 'TextFormatter': return new TextFormatterNode(settings);
+      case 'TextFormatter': return new TextFormatterNode(settings, { separatePreviews: true });
       case 'Display': return new DesktopDisplayNode(settings, (port, item) => {
         if (session.active) host.display(id, node, port, item);
       });

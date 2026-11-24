@@ -284,10 +284,24 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
     'Shortcut did not reject the focus change during Start');
   await phase('idle');
   assert.deepEqual(native.get().values, ['left| 東京🙂\nright', '', 'secret', 'xy']);
+  const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
+  await indicator.getByRole('button', { name: 'Dismiss' }).click();
+  await eventually(async () => !(await view()).session.error, 'The shortcut error was not dismissed');
   x('key', 'ctrl+shift+Tab');
   await eventually(() => native.get().focus === 0, 'GTK focus did not return to the first field');
 
   await trayClick(3);
+  x('key', '--delay', '1', 'Home', 'Return', 'ctrl+Tab');
+  await eventually(() => native.get().focus === 1, 'GTK focus did not move as the tray menu dismissed');
+  await eventually(async () => /lost focus|changed|closed/i.test((await view()).session.error),
+    'Tray Start did not reject the focus change during menu dismissal');
+  await phase('idle');
+  assert.deepEqual(native.get().values, ['left| 東京🙂\nright', '', 'secret', 'xy']);
+  x('key', 'ctrl+shift+Tab');
+  await eventually(() => native.get().focus === 0, 'GTK focus did not return after tray Start was rejected');
+
+  await trayClick(3);
+  await wait(1000);
   x('key', 'Home', 'Return');
   await phase('running');
   await eventually(() => native.get().values[0] === 'left| 東京🙂\n 東京🙂\nright',
@@ -313,6 +327,16 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
     'GTK length-limited entry did not report refusal');
   assert.equal(native.get().values[3], 'xy');
   assert.equal(native.get().limitedEdits, 0);
+
+  x('key', 'Tab');
+  await eventually(() => native.get().focus === 4, 'GTK tagged view did not receive focus');
+  x('key', 'z');
+  assert.equal(native.get().tagged, 'open locked tail');
+  await trigger(native.id);
+  await eventually(async () => (await view()).session.error.includes('editable plain-text region'),
+    'GTK protected range did not report refusal');
+  await phase('idle');
+  assert.equal(native.get().tagged, 'open locked tail');
 
   await show();
   await selectGraph(page, 'Browser fixture');

@@ -74,7 +74,7 @@ function updateTray() {
   tray.setToolTip(`My Audio to Text · ${statusText()} · ${registeredShortcut || 'Set a shortcut in Settings'}`);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: state.phase === 'preparing' ? 'Cancel preparation' : state.phase === 'idle' ? 'Start voice typing' : 'Stop voice typing',
-      enabled: !['stopping', 'canceling'].includes(state.phase), click: () => setTimeout(toggle, 90) },
+      enabled: !['stopping', 'canceling'].includes(state.phase), click: trayToggle },
     ...(state.phase === 'running' || state.phase === 'stopping' ? [
       { label: 'Cancel voice typing', click: () => { void controller.cancel(); } },
     ] : []),
@@ -97,24 +97,37 @@ function showManagement(page) {
   management.focus();
 }
 
-function start(id, mode, shortcut = false) {
+function start(id, mode, binding) {
   if (controller.current || quitting) return;
   try {
     const plan = planGraph(library.lookup(id).graph, mode);
     if (modelOperation === 'modelDelete') throw Error('Wait for model deletion to finish, then start again.');
     displayItems.clear();
-    return controller.start(plan, shortcut);
+    return controller.start(plan, binding);
   } catch (error) { controller.update({ error: error.message }); }
 }
 
-function toggle() { void controller.toggle(() => start(library.value.selected, 'dictation')); }
+function toggle() { void controller.toggle(); }
+
+function trayToggle() {
+  const session = controller.current;
+  if (session) {
+    setTimeout(() => { if (controller.current === session) toggle(); }, 90);
+  } else {
+    // Let GTK finish dismissing the menu before publish rebuilds it.
+    // The helper already owns the pre-menu focus snapshot.
+    const id = library.value.selected;
+    setImmediate(() => { void start(id, 'dictation', 'bind-tray'); });
+  }
+}
+
 let lastShortcut = -Infinity;
 function shortcutPressed() {
   const time = performance.now(), elapsed = time - lastShortcut;
   lastShortcut = time;
   if (elapsed <= 250) return;
   if (!controller.current) {
-    void start(library.value.selected, 'dictation', true);
+    void start(library.value.selected, 'dictation', 'bind-shortcut');
   } else {
     // Give the keyboard grab time to release before draining into the bound field.
     const session = controller.current;

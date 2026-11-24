@@ -26,11 +26,12 @@ export function parseTemplate(template, inputCount = 4) {
 
 export class TextFormatterNode {
   outputs = { text: TEXT };
-  constructor({ template = '{1}', inputCount = 4 } = {}) {
+  constructor({ template = '{1}', inputCount = 4 } = {}, { separatePreviews = false } = {}) {
     this.inputs = formatInputs(inputCount);
     this.parts = parseTemplate(template, inputCount);
     this.values = {};
-    this.previews = {};
+    // Desktop insertion needs committed inputs even when Live shows previews.
+    this.previews = separatePreviews ? {} : null;
   }
   receiveInputs(values, context) {
     if (context.signal.aborted) return;
@@ -42,14 +43,14 @@ export class TextFormatterNode {
     for (const port of new Set([...(context.groupInputs || []), ...Object.keys(values)])) {
       if (!Object.hasOwn(this.inputs, port)) continue;
       const value = values[port] ?? '';
-      if (context.provisionalInputs?.includes(port) ?? context.provisional) {
+      if (this.previews && (context.provisionalInputs?.includes(port) ?? context.provisional)) {
         this.previews[port] = value;
       } else {
         this.values[port] = value;
-        delete this.previews[port];
+        if (this.previews) delete this.previews[port];
       }
     }
-    const snapshot = context.provisional ? { ...this.values, ...this.previews } : this.values;
+    const snapshot = this.previews && context.provisional ? { ...this.values, ...this.previews } : this.values;
     context.emit('text', this.parts.map(part => typeof part === 'number' ? snapshot[`input${part}`] ?? '' : part).join(''));
   }
   receive(port, value, context) { return this.receiveInputs({ [port]: value }, context); }

@@ -17,6 +17,7 @@ class TargetError(Exception):
 
 NO_TARGET = "Focus an editable plain-text field in another application and try again."
 LOST_TARGET = "Voice typing stopped because the authorized text field lost focus, changed, or closed."
+UNEDITABLE_CARET = "Place the caret in an editable plain-text region and try again."
 
 
 def send(value):
@@ -38,13 +39,18 @@ class Focus:
         self.root = self.x.screen().root
         self.active_atom = self.x.intern_atom("_NET_ACTIVE_WINDOW")
         self.pid_atom = self.x.intern_atom("_NET_WM_PID")
-        self.root.change_attributes(event_mask=X.PropertyChangeMask)
+        self.window_type_atom = self.x.intern_atom("_NET_WM_WINDOW_TYPE")
+        self.popup_atom = self.x.intern_atom("_NET_WM_WINDOW_TYPE_POPUP_MENU")
+        self.root.change_attributes(event_mask=X.PropertyChangeMask | X.SubstructureNotifyMask)
         self.x.flush()
         self.bound = None
         self.watched = None
         self.focused = None
         self.grabbed = False
         self.shortcut_target = None
+        self.tray_target = None
+        self.tray_window = None
+        self.tray_deadline = 0
         self.binding = None
         self.input = b""
 
@@ -84,8 +90,32 @@ class Focus:
     @staticmethod
     def caret(node):
         offset = node.get_caret_offset()
-        if offset < 0 or offset > node.get_character_count() or node.get_n_selections():
+        count = node.get_character_count()
+        if offset < 0 or offset > count or node.get_n_selections():
             raise TargetError("Place a caret with no text selected in the authorized field.")
+        toolkit = node.get_toolkit_name()
+        if toolkit == "gtk":
+            # GtkTextView exposes GtkTextTag editability through AT-SPI. Check
+            # the runs on both sides, since an insertion can meet a tag boundary.
+            neighbors = [index for index in (offset - 1, offset) if 0 <= index < count]
+            default = node.get_default_attributes().get("editable")
+            if default != "true":
+                raise TargetError(UNEDITABLE_CARET)
+            for index in neighbors:
+                attributes, start, end = node.get_attribute_run(index, False)
+                if not start <= index < end or attributes.get("editable", default) != "true":
+                    raise TargetError(UNEDITABLE_CARET)
+        elif toolkit == "Gecko":
+            # Ordinary HTML text controls do not have individually editable runs.
+            # Focus events can leave an empty object-attribute cache.
+            attributes = node.get_attributes_as_array()
+            if not attributes:
+                node.clear_cache()
+                attributes = node.get_attributes_as_array()
+            if not {"tag:input", "tag:textarea"}.intersection(attributes):
+                raise TargetError(UNEDITABLE_CARET)
+        else:
+            raise TargetError(UNEDITABLE_CARET)
         return offset
 
     def locate(self, window):
@@ -131,6 +161,7 @@ class Focus:
         self.focused = None
         self.grabbed = False
         self.shortcut_target = None
+        self.tray_target = None
         if window:
             self.x.create_resource_object("window", window[0]).change_attributes(
                 event_mask=X.FocusChangeMask | X.StructureNotifyMask, onerror=error.CatchError())
@@ -152,10 +183,10 @@ class Focus:
             pass
         return False
 
-    def bind(self, token, expected=None):
+    def bind(self, token, expected):
         window = self.window()
         frame, focused = self.locate(window)
-        if expected is not None and (window != expected[0] or not same_node(focused, expected[1])):
+        if window != expected[0] or not same_node(focused, expected[1]):
             raise TargetError(LOST_TARGET)
         states = self.editable(focused)
         if not states.contains(Atspi.StateType.MULTI_LINE) and focused.get_toolkit_name() == "gtk":
@@ -164,13 +195,20 @@ class Focus:
         self.caret(focused)
         self.bound = (token, window, frame, focused)
 
-    def bind_shortcut(self, token, reply):
-        target = self.shortcut_target
-        self.shortcut_target = None
-        if target is None or time.monotonic() - target[2] > 1:
+    def bind_after_grab(self, token, action, reply):
+        now = time.monotonic()
+        if action == "bind-tray":
+            target, self.tray_target = self.tray_target, None
+            if target is None or (self.tray_window is None and now > self.tray_deadline):
+                raise TargetError(LOST_TARGET)
+        else:
+            target, self.shortcut_target = self.shortcut_target, None
+            if target is None or now - target[2] > 1:
+                raise TargetError(NO_TARGET)
+        if self.watched != target[0]:
             raise TargetError(NO_TARGET)
         self.binding = (token, target)
-        deadline = time.monotonic() + 1
+        deadline = now + 1
 
         def settle():
             self.x_event()
@@ -217,6 +255,8 @@ class Focus:
             # Gecko's ATK text pads non-BMP characters to preserve UTF-16 offsets.
             expected = "".join(character + ("\ufeff" if ord(character) > 0xFFFF else "") for character in text)
         self.current(token)
+        if self.caret(node) != offset:
+            raise TargetError(LOST_TARGET)
         acknowledged = node.insert_text(offset, text, len(text.encode("utf-8")))
         # A browser can acknowledge AT-SPI before its content process commits
         # the edit. Wait for the effect, never retry the mutation itself.
@@ -281,7 +321,7 @@ class Focus:
         node = event.source
         if self.watched and node.get_process_id() == self.watched[1]:
             if event.detail1:
-                target = self.binding[1] if self.binding else self.shortcut_target
+                target = self.binding[1] if self.binding else self.tray_target or self.shortcut_target
                 if (self.focused is None and target and node.get_role() == Atspi.Role.PANEL
                         and node.get_toolkit_name() == "Gecko"):
                     # Firefox reports browser chrome focus before restoring the
@@ -290,6 +330,8 @@ class Focus:
                 self.focused = node
                 if self.shortcut_target and not same_node(node, self.shortcut_target[1]):
                     self.shortcut_target = None
+                if self.tray_target and not same_node(node, self.tray_target[1]):
+                    self.tray_target = None
                 if self.binding and not same_node(node, self.binding[1][1]):
                     self.binding = None
             elif not self.grabbed and same_node(node, self.focused):
@@ -309,11 +351,33 @@ class Focus:
                 return False
             GLib.timeout_add(75, settled)
 
+    def track_tray_menu(self, event):
+        if event.type in (X.UnmapNotify, X.DestroyNotify) and event.window.id == self.tray_window:
+            self.tray_window = None
+            self.tray_deadline = time.monotonic() + 1
+        if event.type != X.MapNotify or not event.override or self.tray_window is not None:
+            return
+        try:
+            window = event.window
+            pid = window.get_full_property(self.pid_atom, Xatom.CARDINAL)
+            if pid is None or list(pid.value) != [os.getppid()]:
+                return
+            kind = window.get_full_property(self.window_type_atom, Xatom.ATOM)
+            if kind is None or self.popup_atom not in kind.value:
+                return
+        except error.XError:
+            return
+        # XEmbed opens a GTK popup after it takes the keyboard grab. Keep that
+        # grab's field for this menu even if the menu stays open for a while.
+        self.tray_window = window.id
+        self.tray_target = self.shortcut_target if self.grabbed else None
+
     def x_event(self, *_args):
         active_changed = False
         while self.x.pending_events():
             event = self.x.next_event()
             active_changed |= event.type == X.PropertyNotify and event.atom == self.active_atom
+            self.track_tray_menu(event)
             if not self.watched or getattr(getattr(event, "window", None), "id", None) != self.watched[0]:
                 continue
             if event.type == X.FocusOut and event.mode == X.NotifyGrab:
@@ -329,6 +393,7 @@ class Focus:
                         and event.detail != X.NotifyInferior):
                 self.focused = None
                 self.shortcut_target = None
+                self.tray_target = None
                 self.binding = None
                 self.invalidate()
         if active_changed:
@@ -355,13 +420,9 @@ class Focus:
         reply = {"request": message["request"]}
         try:
             action = message["action"]
-            if action == "bind":
-                # Flush queued X notifications before taking a new lease.
+            if action in ("bind-shortcut", "bind-tray"):
                 self.x_event()
-                self.bind(message["token"])
-            elif action == "bind-shortcut":
-                self.x_event()
-                self.bind_shortcut(message["token"], reply)
+                self.bind_after_grab(message["token"], action, reply)
                 return
             elif action == "insert":
                 self.x_event()

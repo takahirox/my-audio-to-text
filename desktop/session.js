@@ -10,13 +10,13 @@ export class DesktopSession {
     this.onChange(this.state);
   }
 
-  async start(plan, shortcut = false) {
+  async start(plan, binding = 'bind-shortcut') {
     if (this.current) return;
     const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false };
     this.current = session;
     this.update({ phase: 'preparing', error: '', microphone: false, displays: plan.displays });
     try {
-      if (plan.focused) await this.target.request(shortcut ? 'bind-shortcut' : 'bind', session.id);
+      if (plan.focused) await this.target.request(binding, session.id);
       if (this.current !== session || this.state.phase !== 'preparing') return;
       session.admitted = true;
       await this.run('start', session.id, plan.graph);
@@ -26,8 +26,7 @@ export class DesktopSession {
     } catch (error) { await this.cancel(error.message, session.id); }
   }
 
-  toggle(start) {
-    if (!this.current) return start();
+  toggle() {
     if (this.state.phase === 'preparing') return this.cancel();
     if (this.state.phase === 'running') return this.stop();
   }
