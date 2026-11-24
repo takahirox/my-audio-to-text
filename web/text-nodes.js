@@ -27,7 +27,10 @@ export function parseTemplate(template, inputCount = 4) {
 export class TextFormatterNode {
   outputs = { text: TEXT };
   constructor({ template = '{1}', inputCount = 4 } = {}) {
-    this.inputs = formatInputs(inputCount); this.parts = parseTemplate(template, inputCount); this.values = {};
+    this.inputs = formatInputs(inputCount);
+    this.parts = parseTemplate(template, inputCount);
+    this.values = {};
+    this.previews = {};
   }
   receiveInputs(values, context) {
     if (context.signal.aborted) return;
@@ -36,9 +39,18 @@ export class TextFormatterNode {
     }
     // Explicit groups are snapshots of this producer's connected inputs.
     // Omitted siblings clear; independently emitted values retain latest state.
-    for (const port of context.groupInputs || []) if (Object.hasOwn(this.inputs, port)) this.values[port] = '';
-    Object.assign(this.values, values);
-    context.emit('text', this.parts.map(part => typeof part === 'number' ? this.values[`input${part}`] ?? '' : part).join(''));
+    for (const port of new Set([...(context.groupInputs || []), ...Object.keys(values)])) {
+      if (!Object.hasOwn(this.inputs, port)) continue;
+      const value = values[port] ?? '';
+      if (context.provisionalInputs?.includes(port) ?? context.provisional) {
+        this.previews[port] = value;
+      } else {
+        this.values[port] = value;
+        delete this.previews[port];
+      }
+    }
+    const snapshot = context.provisional ? { ...this.values, ...this.previews } : this.values;
+    context.emit('text', this.parts.map(part => typeof part === 'number' ? snapshot[`input${part}`] ?? '' : part).join(''));
   }
   receive(port, value, context) { return this.receiveInputs({ [port]: value }, context); }
 }

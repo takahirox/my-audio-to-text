@@ -41,9 +41,14 @@ class Focus:
         self.root.change_attributes(event_mask=X.PropertyChangeMask)
         self.x.flush()
         self.bound = None
+        self.watched = None
+        self.focused = None
+        self.grabbed = False
+        self.shortcut_target = None
+        self.binding = None
         self.input = b""
 
-    def window(self):
+    def window(self, verify_focus=True):
         active = self.root.get_full_property(self.active_atom, Xatom.WINDOW)
         if active is None or len(active.value) != 1 or active.value[0] == 0:
             raise TargetError(NO_TARGET)
@@ -52,6 +57,8 @@ class Focus:
         pid = window.get_full_property(self.pid_atom, Xatom.CARDINAL)
         if pid is None or len(pid.value) != 1 or pid.value[0] == os.getppid():
             raise TargetError(NO_TARGET)
+        if not verify_focus:
+            return xid, int(pid.value[0])
         focused = self.x.get_input_focus().focus
         # Editors can use an input child window of their EWMH toplevel.
         while hasattr(focused, "id") and focused.id not in (xid, self.root.id):
@@ -81,9 +88,7 @@ class Focus:
             raise TargetError("Place a caret with no text selected in the authorized field.")
         return offset
 
-    def bind(self, token):
-        self.bound = None
-        window = self.window()
+    def locate(self, window):
         frames = []
         for app in children(Atspi.get_desktop(0)):
             if app is not None and app.get_process_id() == window[1]:
@@ -110,14 +115,83 @@ class Focus:
                 pending.extend(child for child in reversed(list(children(node))) if child is not None)
         if focused is None or pending or self.window() != window:
             raise TargetError(NO_TARGET)
+        return frames[0], focused
+
+    def watch_window(self):
+        try:
+            window = self.window(verify_focus=False)
+        except (TargetError, error.XError):
+            window = None
+        if window == self.watched:
+            return
+        if self.watched:
+            self.x.create_resource_object("window", self.watched[0]).change_attributes(
+                event_mask=0, onerror=error.CatchError())
+        self.watched = window
+        self.focused = None
+        self.grabbed = False
+        self.shortcut_target = None
+        if window:
+            self.x.create_resource_object("window", window[0]).change_attributes(
+                event_mask=X.FocusChangeMask | X.StructureNotifyMask, onerror=error.CatchError())
+            GLib.timeout_add(50, self.seed_focus, window)
+        self.x.flush()
+
+    def seed_focus(self, window):
+        # Some toolkits restore a field on window activation without sending
+        # another AT-SPI focus event. Seed only before a shortcut grab.
+        if self.watched is not window or self.focused is not None or self.grabbed:
+            return False
+        try:
+            if self.window() == window:
+                _, focused = self.locate(window)
+                self.x_event()
+                if self.watched is window and self.focused is None and not self.grabbed:
+                    self.focused = focused
+        except (TargetError, GLib.Error, error.XError):
+            pass
+        return False
+
+    def bind(self, token, expected=None):
+        window = self.window()
+        frame, focused = self.locate(window)
+        if expected is not None and (window != expected[0] or not same_node(focused, expected[1])):
+            raise TargetError(LOST_TARGET)
+        states = self.editable(focused)
+        if not states.contains(Atspi.StateType.MULTI_LINE) and focused.get_toolkit_name() == "gtk":
+            # GTK entries can truncate without exposing their capacity in AT-SPI.
+            raise TargetError("Use a GTK plain-text editor view. GTK entries may limit text length.")
         self.caret(focused)
-        xwindow = self.x.create_resource_object("window", window[0])
-        failed = error.CatchError()
-        xwindow.change_attributes(event_mask=X.FocusChangeMask | X.StructureNotifyMask, onerror=failed)
-        self.x.sync()
-        if failed.get_error():
+        self.bound = (token, window, frame, focused)
+
+    def bind_shortcut(self, token, reply):
+        target = self.shortcut_target
+        self.shortcut_target = None
+        if target is None or time.monotonic() - target[2] > 1:
             raise TargetError(NO_TARGET)
-        self.bound = (token, window, frames[0], focused)
+        self.binding = (token, target)
+        deadline = time.monotonic() + 1
+
+        def settle():
+            self.x_event()
+            try:
+                if self.binding != (token, target) or self.watched != target[0]:
+                    raise TargetError(LOST_TARGET)
+                if self.grabbed or not same_node(self.focused, target[1]):
+                    if time.monotonic() < deadline:
+                        return True
+                    raise TargetError(LOST_TARGET)
+                self.bind(token, target)
+            except TargetError as failure:
+                reply["error"] = str(failure)
+            except (GLib.Error, error.XError):
+                reply["error"] = LOST_TARGET
+            if self.binding == (token, target):
+                self.binding = None
+            send(reply)
+            return False
+
+        GLib.timeout_add(75, settle)
 
     def current(self, token):
         if self.bound is None or self.bound[0] != token:
@@ -136,29 +210,56 @@ class Focus:
             raise TargetError("Use a multiline field for text containing line breaks.")
         offset = self.caret(node)
         before = node.get_character_count()
+        prefix = node.get_text(0, offset)
+        suffix = node.get_text(offset, before)
+        expected = text
+        if node.get_toolkit_name() == "Gecko":
+            # Gecko's ATK text pads non-BMP characters to preserve UTF-16 offsets.
+            expected = "".join(character + ("\ufeff" if ord(character) > 0xFFFF else "") for character in text)
         self.current(token)
-        if not node.insert_text(offset, text, len(text.encode("utf-8"))):
-            raise TargetError("The authorized field rejected text insertion.")
+        acknowledged = node.insert_text(offset, text, len(text.encode("utf-8")))
         # A browser can acknowledge AT-SPI before its content process commits
         # the edit. Wait for the effect, never retry the mutation itself.
         deadline = time.monotonic() + 0.65
         while True:
             self.current(token)
-            added = node.get_character_count() - before
-            if added > 0 and node.get_text(offset, offset + added) == text:
-                break
+            count = node.get_character_count()
+            end = offset + count - before
+            if end > offset:
+                inserted = node.get_text(offset, end)
+                if inserted == expected:
+                    break
+                if inserted and expected.startswith(inserted) and node.get_text(0, -1) == prefix + inserted + suffix:
+                    self.restore_partial(token, node, offset, end, prefix + inserted + suffix, prefix + suffix)
+                    raise TargetError("The field could not fit the entire text. Voice typing stopped.")
             if time.monotonic() >= deadline:
                 raise TargetError("The field did not preserve the inserted text exactly. Voice typing stopped.")
+            if not acknowledged and end == offset:
+                raise TargetError("The authorized field rejected text insertion.")
             time.sleep(0.02)
         self.current(token)
-        if node.get_caret_offset() != offset + added and not node.set_caret_offset(offset + added):
+        if node.get_caret_offset() != end and not node.set_caret_offset(end):
             raise TargetError("The field could not advance its caret. Voice typing stopped.")
 
+    def restore_partial(self, token, node, offset, end, partial, original):
+        # Firefox can silently truncate maxlength inputs. Remove only the
+        # isolated inserted prefix, after checking the entire field again.
+        self.current(token)
+        if node.get_text(0, -1) != partial or not node.delete_text(offset, end):
+            raise TargetError("The field changed before the incomplete insertion could be restored.")
+        deadline = time.monotonic() + 0.65
+        while node.get_text(0, -1) != original:
+            if time.monotonic() >= deadline:
+                raise TargetError("The field did not restore its original text.")
+            time.sleep(0.02)
+        self.current(token)
+        if node.get_caret_offset() != offset:
+            node.set_caret_offset(offset)
+
     def release(self, token):
+        if self.binding and token == self.binding[0]:
+            self.binding = None
         if self.bound and token == self.bound[0]:
-            window = self.x.create_resource_object("window", self.bound[1][0])
-            window.change_attributes(event_mask=0, onerror=error.CatchError())
-            self.x.flush()
             self.bound = None
 
     def invalidate(self):
@@ -168,7 +269,7 @@ class Focus:
             send({"invalid": token, "error": LOST_TARGET})
 
     def check(self):
-        if self.bound:
+        if self.bound and not self.grabbed:
             try:
                 self.current(self.bound[0])
             except Exception:
@@ -176,13 +277,30 @@ class Focus:
         return True
 
     def focus_event(self, event):
+        self.x_event()
+        node = event.source
+        if self.watched and node.get_process_id() == self.watched[1]:
+            if event.detail1:
+                target = self.binding[1] if self.binding else self.shortcut_target
+                if (self.focused is None and target and node.get_role() == Atspi.Role.PANEL
+                        and node.get_toolkit_name() == "Gecko"):
+                    # Firefox reports browser chrome focus before restoring the
+                    # original control. The panel itself cannot authorize Start.
+                    return
+                self.focused = node
+                if self.shortcut_target and not same_node(node, self.shortcut_target[1]):
+                    self.shortcut_target = None
+                if self.binding and not same_node(node, self.binding[1][1]):
+                    self.binding = None
+            elif not self.grabbed and same_node(node, self.focused):
+                self.focused = None
         if not self.bound:
             return
-        token, window, _, node = self.bound
+        token, window, _, bound_node = self.bound
         if event.detail1:
-            if not same_node(event.source, node) and event.source.get_process_id() == window[1]:
+            if not same_node(node, bound_node) and node.get_process_id() == window[1]:
                 self.invalidate()
-        elif same_node(event.source, node):
+        elif same_node(node, bound_node):
             # A global accelerator's passive keyboard grab also emits a
             # transient unfocus/focus pair for an unchanged GTK control.
             def settled():
@@ -196,13 +314,28 @@ class Focus:
         while self.x.pending_events():
             event = self.x.next_event()
             active_changed |= event.type == X.PropertyNotify and event.atom == self.active_atom
-            if not self.bound or getattr(getattr(event, "window", None), "id", None) != self.bound[1][0]:
+            if not self.watched or getattr(getattr(event, "window", None), "id", None) != self.watched[0]:
                 continue
+            if event.type == X.FocusOut and event.mode == X.NotifyGrab:
+                # X11 delivers the passive keyboard grab before the toolkit's
+                # transient accessibility focus loss. Keep the pre-grab object.
+                self.grabbed = True
+                self.shortcut_target = (self.watched, self.focused, time.monotonic()) if self.focused is not None else None
+                self.focused = None
+            elif event.type == X.FocusIn and event.mode == X.NotifyUngrab:
+                self.grabbed = False
             lost = event.type in (X.DestroyNotify, X.UnmapNotify)
             if lost or (event.type == X.FocusOut and event.mode == X.NotifyNormal
                         and event.detail != X.NotifyInferior):
+                self.focused = None
+                self.shortcut_target = None
+                self.binding = None
                 self.invalidate()
-        if active_changed and self.bound:
+        if active_changed:
+            previous = self.watched
+            self.watch_window()
+            if previous != self.watched:
+                self.binding = None
             self.check()
         return True
 
@@ -226,6 +359,10 @@ class Focus:
                 # Flush queued X notifications before taking a new lease.
                 self.x_event()
                 self.bind(message["token"])
+            elif action == "bind-shortcut":
+                self.x_event()
+                self.bind_shortcut(message["token"], reply)
+                return
             elif action == "insert":
                 self.x_event()
                 self.insert(message["token"], message["text"])
@@ -248,6 +385,7 @@ if __name__ == "__main__":
     listener = Atspi.EventListener.new(focus.focus_event)
     if not listener.register("object:state-changed:focused"):
         raise SystemExit("AT-SPI focused-control events unavailable")
+    focus.watch_window()
     GLib.io_add_watch(focus.x.fileno(), GLib.PRIORITY_DEFAULT, GLib.IO_IN, focus.x_event)
     GLib.io_add_watch(sys.stdin.fileno(), GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP, focus.receive)
     GLib.timeout_add(300, focus.check)

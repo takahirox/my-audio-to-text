@@ -55,6 +55,31 @@ test('focused output receives committed generic TEXT through a deterministic for
   assert.deepEqual(output, [' 東京🙂\n', ' 東京🙂\n']);
 });
 
+test('formatter previews stay out of focused output when independent producers commit', async () => {
+  let first, second;
+  const output = [], live = [];
+  const pipeline = new Pipeline({ nodes: {
+    first: { outputs: { preview: TEXT, final: TEXT }, provisionalOutputs: ['preview'], start(context) { first = context; } },
+    second: { outputs: { final: TEXT }, start(context) { second = context; } },
+    formatter: new TextFormatterNode({ template: '{1}|{2}|{3}', inputCount: 3 }),
+    target: new FocusedApplicationTextOutputNode(text => output.push(text)),
+    display: { inputs: { text: TEXT }, receive(_, text) { live.push(text); } },
+  }, connections: [
+    edge('first', 'preview', 'formatter', 'input1'), edge('second', 'final', 'formatter', 'input2'),
+    edge('first', 'final', 'formatter', 'input3'), edge('formatter', 'text', 'target', 'text'),
+    edge('formatter', 'text', 'display', 'text'),
+  ] });
+  await pipeline.start();
+  first.emit('preview', 'unfinished hypothesis');
+  second.emit('final', 'confirmed text');
+  first.emitOutputs({ preview: 'next hypothesis', final: 'first final' });
+  second.emit('final', 'another final');
+  await pipeline.stop();
+  await pipeline.dispose();
+  assert.deepEqual(output, ['|confirmed text|', '|confirmed text|first final', '|another final|first final']);
+  assert.deepEqual(live, ['unfinished hypothesis||', ...output]);
+});
+
 test('focused output ignores cancellation deliveries even with a fresh cleanup signal', async () => {
   const output = [];
   const pipeline = new Pipeline({ nodes: {

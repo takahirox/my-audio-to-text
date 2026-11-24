@@ -97,13 +97,13 @@ function showManagement(page) {
   management.focus();
 }
 
-function start(id, mode) {
+function start(id, mode, shortcut = false) {
   if (controller.current || quitting) return;
   try {
     const plan = planGraph(library.lookup(id).graph, mode);
     if (modelOperation === 'modelDelete') throw Error('Wait for model deletion to finish, then start again.');
     displayItems.clear();
-    return controller.start(plan);
+    return controller.start(plan, shortcut);
   } catch (error) { controller.update({ error: error.message }); }
 }
 
@@ -112,9 +112,14 @@ let lastShortcut = -Infinity;
 function shortcutPressed() {
   const time = performance.now(), elapsed = time - lastShortcut;
   lastShortcut = time;
-  // X11 delivers the accelerator before releasing its passive keyboard grab.
-  // Give the target toolkit time to restore its accessible focus state.
-  if (elapsed > 250) shortcutTimer = setTimeout(toggle, 90);
+  if (elapsed <= 250) return;
+  if (!controller.current) {
+    void start(library.value.selected, 'dictation', true);
+  } else {
+    // Give the keyboard grab time to release before draining into the bound field.
+    const session = controller.current;
+    shortcutTimer = setTimeout(() => { if (controller.current === session) toggle(); }, 90);
+  }
 }
 
 function registerShortcut(value, save = false) {
@@ -334,6 +339,7 @@ else {
     library = new DesktopLibrary(join(path, 'desktop-library.json'));
     await installProtocol();
     target = new X11Target(join(import.meta.dirname, 'x11-accessibility.py'), (id, error) => { void controller.cancel(error, id); });
+    target.connect();
     controller = new DesktopSession({ target, run, onChange: publish, onDisplay: item => {
       displayItems.set(JSON.stringify([item.node, item.port]), item);
       send(management, 'management:display', item);

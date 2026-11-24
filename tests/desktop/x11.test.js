@@ -130,10 +130,10 @@ async function launch(t) {
   return { app, page, view, phase, show, errors };
 }
 
-function literalGraph(template, output = FOCUSED_OUTPUT) {
+function literalGraph(template, output = FOCUSED_OUTPUT, value = '東京🙂') {
   const nodes = [graphNode('Text', 'literal', 20, 50), graphNode('TextFormatter', 'format', 280, 50),
     graphNode(output, 'result', 570, 50)];
-  nodes[0].settings.value = '東京🙂';
+  nodes[0].settings.value = value;
   nodes[1].settings = { template, inputCount: 1 };
   return { version: GRAPH_VERSION, nodes,
     edges: [edge('literal', 'value', 'format', 'input1'), edge('format', 'text', 'result', output === 'Display' ? 'input1' : 'text')] };
@@ -200,6 +200,7 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   await page.getByRole('button', { name: 'Back to graphs' }).click();
   await importGraph(page, 'GTK fixture', literalGraph(' {1}\n'));
   await importGraph(page, 'Browser fixture', literalGraph(' [{1}] '));
+  await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, 'abcdef'));
   await importGraph(page, 'Live fixture', literalGraph(' {1}\n', 'Display'));
 
   const live = page.getByRole('article', { name: 'Live fixture', exact: true });
@@ -272,7 +273,19 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.equal(native.get().focus, 0);
   await trigger(native.id);
   await phase('idle');
-  assert.deepEqual(native.get().values, ['left| 東京🙂\nright', '', 'secret']);
+  assert.deepEqual(native.get().values, ['left| 東京🙂\nright', '', 'secret', 'xy']);
+
+  // Move to the second field before the toolkit has settled after the grab.
+  // Start must fail without redirecting the graph output to that field.
+  await wait(320);
+  x('key', '--delay', '1', hotkey, 'ctrl+Tab');
+  await eventually(() => native.get().focus === 1, 'GTK focus did not move immediately after the shortcut');
+  await eventually(async () => /lost focus|changed|closed|editable plain-text/i.test((await view()).session.error),
+    'Shortcut did not reject the focus change during Start');
+  await phase('idle');
+  assert.deepEqual(native.get().values, ['left| 東京🙂\nright', '', 'secret', 'xy']);
+  x('key', 'ctrl+shift+Tab');
+  await eventually(() => native.get().focus === 0, 'GTK focus did not return to the first field');
 
   await trayClick(3);
   x('key', 'Home', 'Return');
@@ -291,6 +304,17 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.equal(native.get().values[2], 'secret');
 
   await show();
+  await selectGraph(page, 'Length fixture');
+  x('windowactivate', '--sync', native.id);
+  x('key', 'Tab', 'Home', 'Right');
+  await eventually(() => native.get().focus === 3, 'GTK length-limited entry did not receive focus');
+  await trigger(native.id);
+  await eventually(async () => (await view()).session.error.includes('may limit text length'),
+    'GTK length-limited entry did not report refusal');
+  assert.equal(native.get().values[3], 'xy');
+  assert.equal(native.get().limitedEdits, 0);
+
+  await show();
   await selectGraph(page, 'Browser fixture');
   const firefox = await browser(t, dir);
   await trigger(firefox.id);
@@ -307,11 +331,30 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.equal(x('getwindowfocus'), firefox.id);
   const { values, focus, submits, caret, active } = firefox.get();
   assert.deepEqual({ values, focus, submits, caret, active },
-    { values: ['left| [東京🙂] right', '', 'secret'], focus: 0, submits: 0, caret: 13, active: true });
+    { values: ['left| [東京🙂] right', '', 'secret', 'xy'], focus: 0, submits: 0, caret: 13, active: true });
 
   await show();
+  await selectGraph(page, 'Length fixture');
+  x('windowactivate', '--sync', firefox.id);
+  x('key', 'Tab', 'Tab', 'Tab', 'Home', 'Right');
+  await eventually(() => firefox.get().focus === 3 && firefox.get().limitedCaret === 1,
+    'Firefox length-limited input did not receive the test caret');
+  await trigger(firefox.id);
+  await eventually(async () => (await view()).session.error.includes('could not fit the entire text'),
+    'Firefox length-limited input did not report the incomplete insertion');
+  await phase('idle');
+  await eventually(() => firefox.get().values[3] === 'xy' && firefox.get().limitedCaret === 1,
+    'Firefox text or caret still reflected an incomplete insertion');
+  assert.equal(firefox.get().submits, 0);
+
+  await show();
+  await selectGraph(page, 'Browser fixture');
   await page.reload();
   await expect(page.getByRole('article', { name: 'Browser fixture', exact: true }).getByText('Shortcut graph')).toBeVisible();
+  x('windowactivate', '--sync', firefox.id);
+  x('key', 'shift+Tab', 'shift+Tab', 'shift+Tab', 'Home', 'Right');
+  await eventually(() => firefox.get().focus === 0 && firefox.get().caret === 1,
+    'Firefox focus did not return to the text input caret');
   await trigger(firefox.id);
   await phase('running');
   x('key', 'alt+F4');

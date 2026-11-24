@@ -32,7 +32,7 @@ export class X11Target {
     if (action === 'release' && !this.worker) return Promise.resolve();
     const worker = this.connect();
     const request = ++this.sequence;
-    if (action === 'bind') worker.token = token;
+    if (action === 'bind' || action === 'bind-shortcut') worker.token = token;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.disconnect(worker, 'The accessibility service did not respond. Voice typing stopped.'), 7000);
       this.pending.set(request, error => {

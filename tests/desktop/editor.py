@@ -1,4 +1,4 @@
-"""Independent GTK editor with a normal, alternate and protected field."""
+"""Independent GTK editor with normal, protected and length-limited fields."""
 import json
 from pathlib import Path
 import sys
@@ -14,6 +14,16 @@ window.set_default_size(420, 230)
 box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 a, b = Gtk.TextView(), Gtk.TextView()
 password = Gtk.Entry(visibility=False, text="secret")
+limited = Gtk.Entry(text="xy", max_length=4)
+limited_edits = 0
+
+
+def count_edit(_entry):
+    global limited_edits
+    limited_edits += 1
+
+
+limited.connect("changed", count_edit)
 for control in [a, b]:
     control.set_size_request(-1, 55)
     buffer = control.get_buffer()
@@ -21,6 +31,7 @@ for control in [a, b]:
     buffer.place_cursor(buffer.get_iter_at_offset(5 if control is a else 0))
     box.pack_start(control, True, True, 0)
 box.pack_start(password, False, False, 0)
+box.pack_start(limited, False, False, 0)
 window.add(box)
 window.connect("destroy", Gtk.main_quit)
 window.show_all()
@@ -31,9 +42,11 @@ def report():
     for control in [a, b]:
         buffer = control.get_buffer()
         values.append(buffer.get_text(*buffer.get_bounds(), True))
-    values.append(password.get_text())
+    values.extend([password.get_text(), limited.get_text()])
     focused = window.get_focus()
-    value = {"values": values, "focus": [a, b, password].index(focused) if focused in [a, b, password] else -1}
+    controls = [a, b, password, limited]
+    value = {"values": values, "focus": controls.index(focused) if focused in controls else -1,
+             "limitedEdits": limited_edits}
     temp = state.with_suffix(".tmp")
     try:
         temp.write_text(json.dumps(value))
