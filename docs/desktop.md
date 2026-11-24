@@ -55,16 +55,12 @@ different combination in Settings and save it.
 Use your default system audio input. If the app reports a microphone error,
 check that this device is enabled and available to your desktop session.
 Accessibility must be enabled in both the session and the target application.
-On a minimal X11 session, Firefox can be started with `GNOME_ACCESSIBILITY=1`
-when the session has an AT-SPI D-Bus service. Reopen the target after changing
-accessibility settings.
+Reopen the target after changing accessibility settings.
 
 ### Focused fields
 
-The initial controls are GTK 3 plain-text editor views and ordinary Firefox
-162.0b1 text inputs that expose the AT-SPI `Text` and `EditableText` interfaces.
-Use a multiline editor for graph output containing line breaks. Firefox
-textareas require LF line endings. The app rejects CR and CRLF before editing.
+Desktop insertion supports GTK 3 plain-text editor views that expose the
+AT-SPI `Text` and `EditableText` interfaces.
 Place a caret with no selection. The app stops if the field closes, becomes unavailable,
 loses focus, or rejects the output. The shortcut uses the field focused at the
 key press, even while the toolkit restores focus after the X11 keyboard grab.
@@ -72,13 +68,11 @@ Tray Start uses the field focused before the XEmbed menu opened and requires
 that same field when the menu closes. GTK editor views must expose an editable
 text run at the caret. Password fields, GTK single-line entries, rich-text
 editors, and fields whose application rewrites text are outside the current
-support scope. GTK entries can enforce a length limit that AT-SPI cannot read.
-If an ordinary Firefox input truncates the text, the app removes the inserted
-prefix and restores the caret when the surrounding text still matches, then
-stops with an error.
-Older Firefox releases including ESR 153 can acknowledge an edit without changing
-the value. Browser support requires the upstream AT-SPI editing fix.
-[Mozilla bug 2087495](https://bugzilla.mozilla.org/show_bug.cgi?id=2087495).
+support scope. GTK entries and Firefox text inputs and textareas can enforce
+length limits that AT-SPI cannot read. The app rejects those controls before
+recording to prevent partial text from reaching the field or its input
+listeners. The Chrome extension provides voice typing in supported browser
+fields.
 
 Wayland, macOS, Windows, mobile, newer field families, system audio capture,
 and a public installer are follow-up scope.
@@ -148,8 +142,10 @@ DESKTOP_REAL_ASR=1 npm run test:desktop
 ```
 
 The X11 suite starts the packaged application, an independent GTK editor, and
-Firefox 162.0b1 without extensions. Install that Firefox build and put it on
-`PATH`, or set `DESKTOP_TEST_FIREFOX` to its executable path. The model smoke additionally downloads the pinned
+Firefox 162.0b1 without extensions. The Firefox regression verifies that
+rejected edits leave the field value and caret intact and fire no input events.
+Put that Firefox build on `PATH` or set `DESKTOP_TEST_FIREFOX` to its executable
+path. The model smoke additionally downloads the pinned
 weights, plays a licensed speech fixture into a virtual microphone, and tests
 the prepared cache with HTTP blocked. Run the Desktop suite in an isolated
 session. Its test profile and virtual audio server are disposable.

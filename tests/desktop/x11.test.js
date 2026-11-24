@@ -199,8 +199,6 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   await expect(page.locator('#editor-title')).toHaveText('New graph copy');
   await page.getByRole('button', { name: 'Back to graphs' }).click();
   await importGraph(page, 'GTK fixture', literalGraph(' {1}\n'));
-  await importGraph(page, 'Browser fixture', literalGraph(' [{1}] '));
-  await importGraph(page, 'CRLF fixture', literalGraph('{1}', FOCUSED_OUTPUT, '東京\r\n大阪'));
   await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, 'abcdef'));
   await importGraph(page, 'Live fixture', literalGraph(' {1}\n', 'Display'));
 
@@ -348,62 +346,13 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.equal(native.get().tagged, 'open locked tail');
 
   await show();
-  await selectGraph(page, 'Browser fixture');
-  const firefox = await browser(t, dir);
-  await trigger(firefox.id);
-  await phase('running');
-  await eventually(async () => {
-    assert.equal(firefox.get().values[0], 'left| [東京🙂] right', JSON.stringify((await view()).session));
-    return true;
-  }, 'Firefox text did not arrive at original caret');
-  assert.equal(x('getactivewindow'), firefox.id);
-  assert.equal(x('getwindowfocus'), firefox.id);
-  await trigger(firefox.id);
-  await phase('idle');
-  await eventually(() => firefox.get().active, 'Firefox focus did not recover after the keyboard grab');
-  assert.equal(x('getwindowfocus'), firefox.id);
-  const { values, focus, submits, caret, active } = firefox.get();
-  assert.deepEqual({ values, focus, submits, caret, active },
-    { values: ['left| [東京🙂] right', 'left|right', 'secret', 'xy'], focus: 0, submits: 0, caret: 13, active: true });
-
-  await show();
-  await selectGraph(page, 'CRLF fixture');
-  x('windowactivate', '--sync', firefox.id);
-  x('key', 'Tab', 'Home', 'Right');
-  await eventually(() => firefox.get().focus === 1 && firefox.get().multilineCaret === 1,
-    'Firefox textarea did not receive the test caret');
-  await trigger(firefox.id);
-  const lineEndingError = await eventually(async () => {
-    const { session } = await view();
-    return session.phase === 'idle' && session.error;
-  }, 'Firefox textarea did not report the unsupported line ending');
-  await eventually(() => firefox.get().active, 'Firefox textarea did not regain focus after the keyboard grab');
-  assert.deepEqual([firefox.get().values[1], firefox.get().multilineCaret], ['left|right', 1]);
-  assert.match(lineEndingError, /carriage returns/);
-
-  await show();
-  await selectGraph(page, 'Length fixture');
-  x('windowactivate', '--sync', firefox.id);
-  x('key', 'Tab', 'Tab', 'Home', 'Right');
-  await eventually(() => firefox.get().focus === 3 && firefox.get().limitedCaret === 1,
-    'Firefox length-limited input did not receive the test caret');
-  await trigger(firefox.id);
-  await eventually(async () => (await view()).session.error.includes('could not fit the entire text'),
-    'Firefox length-limited input did not report the incomplete insertion');
-  await phase('idle');
-  await eventually(() => firefox.get().values[3] === 'xy' && firefox.get().limitedCaret === 1,
-    'Firefox text or caret still reflected an incomplete insertion');
-  assert.equal(firefox.get().submits, 0);
-
-  await show();
-  await selectGraph(page, 'Browser fixture');
+  await selectGraph(page, 'GTK fixture');
   await page.reload();
-  await expect(page.getByRole('article', { name: 'Browser fixture', exact: true }).getByText('Shortcut graph')).toBeVisible();
-  x('windowactivate', '--sync', firefox.id);
-  x('key', 'shift+Tab', 'shift+Tab', 'shift+Tab', 'Home', 'Right');
-  await eventually(() => firefox.get().focus === 0 && firefox.get().caret === 1,
-    'Firefox focus did not return to the text input caret');
-  await trigger(firefox.id);
+  await expect(page.getByRole('article', { name: 'GTK fixture', exact: true }).getByText('Shortcut graph')).toBeVisible();
+  x('windowactivate', '--sync', native.id);
+  x('mousemove', '--window', native.id, '20', '20', 'click', '1');
+  await eventually(() => native.get().focus === 0, 'GTK focus did not return to the editor');
+  await trigger(native.id);
   await phase('running');
   x('key', 'alt+F4');
   await phase('idle');
@@ -426,6 +375,57 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   reclaimed.stdin.end();
   await once(reclaimed, 'exit');
   assert.deepEqual(errors, []);
+});
+
+test('Firefox input listeners never see a partial desktop insertion', { timeout: 60000 }, async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'desktop-firefox-'));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
+  const { app, page, view } = await launch(t);
+  await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, 'abcdef'));
+  await selectGraph(page, 'Length fixture');
+  const firefox = await browser(t, dir);
+
+  x('key', 'Tab', 'Tab', 'Tab', 'Home', 'Right');
+  await eventually(() => firefox.get().focus === 3 && firefox.get().limitedCaret === 1,
+    'Firefox length-limited input did not receive the test caret');
+
+  const rejectEdit = async () => {
+    await trigger(firefox.id);
+    const session = await eventually(async () => {
+      const { session } = await view();
+      return session.phase === 'idle' && session.error && session;
+    }, 'Firefox did not report a refusal');
+    const report = firefox.get().report;
+    await eventually(() => firefox.get().report > report && firefox.get().active,
+      'Firefox did not report its focused state after the refusal');
+    return session;
+  };
+
+  const assertNoEdit = () => {
+    const { values, edits, submits } = firefox.get();
+    assert.deepEqual({ values, edits, submits }, {
+      values: ['left|right', 'xy', 'secret', 'xy'], edits: [], submits: 0,
+    });
+    assert.equal(x('getwindowfocus'), firefox.id);
+  };
+
+  const limited = await rejectEdit();
+  assertNoEdit();
+  assert.equal(firefox.get().focus, 3);
+  assert.equal(firefox.get().limitedCaret, 1);
+  assert.match(limited.error, /Firefox.*length limit/);
+
+  const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
+  await indicator.getByRole('button', { name: 'Dismiss' }).click();
+  await eventually(async () => !(await view()).session.error, 'The Firefox error was not dismissed');
+  x('key', 'shift+Tab', 'shift+Tab', 'Home', 'Right');
+  await eventually(() => firefox.get().focus === 1 && firefox.get().multilineCaret === 1,
+    'Firefox textarea did not receive the test caret');
+  const textarea = await rejectEdit();
+  assertNoEdit();
+  assert.equal(firefox.get().focus, 1);
+  assert.equal(firefox.get().multilineCaret, 1);
+  assert.match(textarea.error, /Firefox.*length limit/);
 });
 
 test('committed text waits for the Stop shortcut grab and stays bound to the original GTK field', { timeout: 60000 }, async t => {
