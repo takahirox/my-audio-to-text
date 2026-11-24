@@ -377,15 +377,55 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.deepEqual(errors, []);
 });
 
-test('Firefox input listeners never see a partial desktop insertion', { timeout: 60000 }, async t => {
+test('packaged app inserts at the focused Firefox caret and refuses unsafe edits', { timeout: 90000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-firefox-'));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
-  const { app, page, view } = await launch(t);
+  const { app, page, view, phase, show } = await launch(t);
+  const committed = ' [東京🙂]\n ';
+  await importGraph(page, 'Firefox fixture', literalGraph('{1}', FOCUSED_OUTPUT, committed));
+  await importGraph(page, 'Focus fixture', literalGraph('{1}', FOCUSED_OUTPUT, ''));
   await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, 'abcdef'));
-  await selectGraph(page, 'Length fixture');
+  await selectGraph(page, 'Firefox fixture');
+  x('key', 'alt+F4');
   const firefox = await browser(t, dir);
+  const expectedValue = `left|${committed}right`;
+  const assertInsertion = () => {
+    const { active, focus, caret, values, edits, submits } = firefox.get();
+    assert.deepEqual({ active, focus, caret, values, edits, submits }, {
+      active: true, focus: 0, caret: 5 + committed.length,
+      values: [expectedValue, 'xy', 'secret', 'xy'],
+      edits: [{ id: 'field', value: expectedValue }], submits: 0,
+    });
+    assert.equal(x('getactivewindow'), firefox.id);
+    assert.equal(x('getwindowfocus'), firefox.id);
+    return true;
+  };
 
-  x('key', 'Tab', 'Tab', 'Tab', 'Home', 'Right');
+  await trigger(firefox.id);
+  await phase('running');
+  await eventually(assertInsertion, 'Firefox did not receive exactly one committed edit at the original caret');
+  await trigger(firefox.id);
+  await phase('idle');
+  assert.equal((await view()).session.error, '');
+  const report = firefox.get().report;
+  await eventually(() => firefox.get().report > report && firefox.get().active,
+    'Firefox did not retain focus after Stop');
+  assertInsertion();
+
+  await show();
+  await selectGraph(page, 'Focus fixture');
+  await trigger(firefox.id);
+  await phase('running');
+  x('key', 'Tab');
+  await eventually(() => firefox.get().focus === 1, 'Firefox focus did not move to the textarea');
+  await phase('idle');
+  assert.match((await view()).session.error, /lost focus|changed|closed/i);
+
+  await show();
+  await selectGraph(page, 'Length fixture');
+  x('windowactivate', '--sync', firefox.id);
+
+  x('key', 'Tab', 'Tab', 'Home', 'Right');
   await eventually(() => firefox.get().focus === 3 && firefox.get().limitedCaret === 1,
     'Firefox length-limited input did not receive the test caret');
 
@@ -404,7 +444,8 @@ test('Firefox input listeners never see a partial desktop insertion', { timeout:
   const assertNoEdit = () => {
     const { values, edits, submits } = firefox.get();
     assert.deepEqual({ values, edits, submits }, {
-      values: ['left|right', 'xy', 'secret', 'xy'], edits: [], submits: 0,
+      values: [expectedValue, 'xy', 'secret', 'xy'],
+      edits: [{ id: 'field', value: expectedValue }], submits: 0,
     });
     assert.equal(x('getwindowfocus'), firefox.id);
   };
@@ -416,8 +457,11 @@ test('Firefox input listeners never see a partial desktop insertion', { timeout:
   assert.match(limited.error, /Firefox.*length limit/);
 
   const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
-  await indicator.getByRole('button', { name: 'Dismiss' }).click();
-  await eventually(async () => !(await view()).session.error, 'The Firefox error was not dismissed');
+  const dismissError = async () => {
+    await indicator.getByRole('button', { name: 'Dismiss' }).click();
+    await eventually(async () => !(await view()).session.error, 'The Firefox error was not dismissed');
+  };
+  await dismissError();
   x('key', 'shift+Tab', 'shift+Tab', 'Home', 'Right');
   await eventually(() => firefox.get().focus === 1 && firefox.get().multilineCaret === 1,
     'Firefox textarea did not receive the test caret');
@@ -426,6 +470,13 @@ test('Firefox input listeners never see a partial desktop insertion', { timeout:
   assert.equal(firefox.get().focus, 1);
   assert.equal(firefox.get().multilineCaret, 1);
   assert.match(textarea.error, /Firefox.*length limit/);
+
+  await dismissError();
+  x('key', 'Tab');
+  await eventually(() => firefox.get().focus === 2, 'Firefox password field did not receive focus');
+  assert.match((await rejectEdit()).error, /editable plain-text/);
+  assertNoEdit();
+  assert.equal(firefox.get().focus, 2);
 });
 
 test('committed text waits for the Stop shortcut grab and stays bound to the original GTK field', { timeout: 60000 }, async t => {

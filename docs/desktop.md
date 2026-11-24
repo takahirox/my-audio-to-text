@@ -59,20 +59,24 @@ Reopen the target after changing accessibility settings.
 
 ### Focused fields
 
-Desktop insertion supports GTK 3 plain-text editor views that expose the
-AT-SPI `Text` and `EditableText` interfaces.
-Place a caret with no selection. The app stops if the field closes, becomes unavailable,
-loses focus, or rejects the output. The shortcut uses the field focused at the
-key press, even while the toolkit restores focus after the X11 keyboard grab.
-Tray Start uses the field focused before the XEmbed menu opened and requires
-that same field when the menu closes. GTK editor views must expose an editable
-text run at the caret. Password fields, GTK single-line entries, rich-text
-editors, and fields whose application rewrites text are outside the current
-support scope. GTK entries and Firefox text inputs and textareas can enforce
-length limits that AT-SPI cannot read. The app rejects those controls before
-recording to prevent partial text from reaching the field or its input
-listeners. The Chrome extension provides voice typing in supported browser
-fields.
+Desktop insertion uses the AT-SPI `Text` and `EditableText` interfaces. It
+supports GTK 3 plain-text editor views with an editable run at the caret and
+Firefox plain-text web textboxes exposed as multiline editable `div` elements
+with `role="textbox"` and no accessible child objects. The package was tested
+with Firefox 162.0b1 and a `contenteditable="plaintext-only"` textbox with
+`white-space: pre-wrap`. Firefox output supports LF line breaks.
+
+Place a caret with no selection. The app stops if the field closes, becomes
+unavailable, loses focus, or rejects the output. The shortcut uses the field
+focused at the key press, even while the toolkit restores focus after the X11
+keyboard grab. Tray Start uses the field focused before the XEmbed menu opened
+and requires that same field when the menu closes.
+
+GTK single-line entries and Firefox `input` and `textarea` elements can enforce
+length limits that AT-SPI cannot read. The app refuses them before recording
+to prevent a partial edit from reaching the field or its input listeners.
+Password fields, rich-text editors, and fields that rewrite inserted text are
+outside the support scope.
 
 Wayland, macOS, Windows, mobile, newer field families, system audio capture,
 and a public installer are follow-up scope.
@@ -142,8 +146,10 @@ DESKTOP_REAL_ASR=1 npm run test:desktop
 ```
 
 The X11 suite starts the packaged application, an independent GTK editor, and
-Firefox 162.0b1 without extensions. The Firefox regression verifies that
-rejected edits leave the field value and caret intact and fire no input events.
+Firefox 162.0b1 without extensions. The browser test starts and stops from the
+global shortcut. It checks retained focus, one input event with the full
+Unicode text at the original caret, zero form submissions, and cancellation
+on a same-window focus change. Rejected edits leave the fields intact.
 Put that Firefox build on `PATH` or set `DESKTOP_TEST_FIREFOX` to its executable
 path. The model smoke additionally downloads the pinned
 weights, plays a licensed speech fixture into a virtual microphone, and tests
@@ -162,7 +168,11 @@ docker run --rm --init --platform linux/arm64 --cap-add SYS_ADMIN --security-opt
         --exclude=.cache --exclude=web/vendor --exclude=web/tts-assets \
         --exclude=test-results --exclude=playwright-report -cf - . | tar -xf -
     npm ci && npm ci --prefix desktop && npm exec --prefix desktop -- install-electron &&
-    npm run build:desktop && DESKTOP_REAL_ASR=1 npm run test:desktop'
+    npm run build:desktop &&
+    mkdir -p dist/verify &&
+    tar -xzf dist/my-audio-to-text-linux-arm64.tar.gz -C dist/verify &&
+    DESKTOP_TEST_BINARY=dist/verify/my-audio-to-text/my-audio-to-text \
+      DESKTOP_REAL_ASR=1 npm run test:desktop'
 ```
 
 The container settings allow Chromium's Linux sandbox to run inside the VM.

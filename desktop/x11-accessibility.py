@@ -16,6 +16,10 @@ class TargetError(Exception):
     pass
 
 
+class TargetDetailsPending(TargetError):
+    pass
+
+
 NO_TARGET = "Focus an editable plain-text field in another application and try again."
 LOST_TARGET = "Voice typing stopped because the authorized text field lost focus, changed, or closed."
 UNEDITABLE_CARET = "Place the caret in an editable plain-text region and try again."
@@ -96,22 +100,33 @@ class Focus:
     @staticmethod
     def caret(node, states):
         toolkit = node.get_toolkit_name()
-        if toolkit == "Gecko":
-            # Gecko's AT-SPI objects expose neither the maxlength of an input
-            # or textarea nor whether it is absent. InsertText can commit a
-            # prefix and notify page listeners before the helper can verify it.
-            raise TargetError(
-                "Firefox does not expose the field's length limit. Use a GTK plain-text editor view."
-            )
-        if toolkit != "gtk":
-            raise TargetError(UNEDITABLE_CARET)
-        if not states.contains(Atspi.StateType.MULTI_LINE):
-            raise TargetError("Use a GTK plain-text editor view. GTK entries may limit text length.")
-
         offset = node.get_caret_offset()
         count = node.get_character_count()
         if offset < 0 or offset > count or node.get_n_selections():
             raise TargetError("Place a caret with no text selected in the authorized field.")
+
+        if toolkit == "Gecko":
+            node.clear_cache()
+            attributes = node.get_attributes()
+            if not attributes:
+                # Gecko populates object attributes asynchronously on first read.
+                raise TargetDetailsPending("Firefox could not describe the focused field. Try again.")
+            if attributes.get("tag") in ("input", "textarea"):
+                # Firefox can commit a prefix before input listeners run.
+                raise TargetError("Firefox does not expose this field's length limit. "
+                                  "Use a plain-text editable web textbox or a GTK editor view.")
+            # An HTML editing host has no native maxlength. Restrict the
+            # initial scope to text-only, multiline web textboxes.
+            if (attributes.get("tag") != "div" or attributes.get("xml-roles") != "textbox"
+                    or not states.contains(Atspi.StateType.MULTI_LINE)
+                    or node.get_child_count()):
+                raise TargetError(UNEDITABLE_CARET)
+            return offset
+
+        if toolkit != "gtk":
+            raise TargetError(UNEDITABLE_CARET)
+        if not states.contains(Atspi.StateType.MULTI_LINE):
+            raise TargetError("Use a GTK plain-text editor view. GTK entries may limit text length.")
 
         # GtkTextView exposes GtkTextTag editability through AT-SPI. Check
         # the runs on both sides, since an insertion can meet a tag boundary.
@@ -226,6 +241,10 @@ class Focus:
                         return True
                     raise TargetError(LOST_TARGET)
                 self.bind(token, target)
+            except TargetDetailsPending as failure:
+                if time.monotonic() < deadline:
+                    return True
+                reply["error"] = str(failure)
             except TargetError as failure:
                 reply["error"] = str(failure)
             except (GLib.Error, error.XError):
@@ -284,6 +303,15 @@ class Focus:
         node, states = self.current(token)
         offset = self.caret(node, states)
         before = node.get_character_count()
+        expected = text
+        if "\0" in text:
+            raise TargetError("The accessibility service cannot insert null characters.")
+        if node.get_toolkit_name() == "Gecko":
+            if "\r" in text:
+                raise TargetError("Firefox cannot preserve carriage returns. Use LF line endings.")
+            # Gecko pads supplementary characters in AT-SPI reads so the
+            # reported character offsets still match UTF-16 offsets.
+            expected = "".join(char + ("\ufeff" if ord(char) > 0xFFFF else "") for char in text)
         _, states = self.current(token)
         if self.caret(node, states) != offset:
             raise TargetError(LOST_TARGET)
@@ -294,7 +322,7 @@ class Focus:
             self.current(token)
             count = node.get_character_count()
             end = offset + count - before
-            if end == offset + len(text) and node.get_text(offset, end) == text:
+            if end == offset + len(expected) and node.get_text(offset, end) == expected:
                 break
             if time.monotonic() >= deadline:
                 raise TargetError("The field did not preserve the inserted text exactly. Voice typing stopped.")

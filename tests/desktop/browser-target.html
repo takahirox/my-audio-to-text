@@ -1,34 +1,45 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8"><title>Voice typing test browser</title>
+<style>
+  #field { display: block; border: 1px solid; width: 20em; white-space: pre-wrap; }
+</style>
 <form>
-  <label>Text <input id="field" autofocus value="left|right"></label>
+  <div id="field" role="textbox" aria-label="Text" aria-multiline="true"
+    contenteditable="plaintext-only" spellcheck="false">left|right</div>
   <label>Multiline <textarea id="multiline" maxlength="4">xy</textarea></label>
   <label>Password <input id="password" type="password" value="secret"></label>
   <label>Limited <input id="limited" maxlength="4" value="xy"></label>
   <button>Submit</button>
 </form>
 <script>
-  const fields = [...document.querySelectorAll('input, textarea')];
+  const fields = [...document.querySelectorAll('[role=textbox], input, textarea')];
   const edits = [];
   let report = 0;
   let submits = 0;
   document.querySelector('form').onsubmit = event => { event.preventDefault(); submits++; };
   const field = document.querySelector('#field');
+  const value = target => target === field ? target.textContent : target.value;
   for (const target of fields) {
     target.addEventListener('input', () => {
-      edits.push({ id: target.id, value: target.value });
+      edits.push({ id: target.id, value: value(target) });
       if (target.id === 'limited') field.focus();
     });
   }
-  field.addEventListener('focus', () => field.setSelectionRange(5, 5), { once: true });
-  field.setSelectionRange(5, 5);
+  function caret() {
+    const selection = document.getSelection();
+    if (!field.contains(selection.anchorNode) || !selection.isCollapsed) return -1;
+    const range = document.createRange();
+    range.selectNodeContents(field);
+    range.setEnd(selection.anchorNode, selection.anchorOffset);
+    return range.toString().length;
+  }
   setInterval(() => {
     const bounds = field.getBoundingClientRect();
     fetch('/state', { method: 'POST', body: JSON.stringify({
-      report: ++report, values: fields.map(field => field.value),
+      report: ++report, values: fields.map(value),
       focus: fields.indexOf(document.activeElement), submits, edits,
-      caret: field.selectionStart, active: document.hasFocus(),
+      caret: caret(), active: document.hasFocus(),
       multilineCaret: document.querySelector('#multiline').selectionStart,
       limitedCaret: document.querySelector('#limited').selectionStart,
       point: [Math.round(window.mozInnerScreenX + bounds.x + bounds.width / 2),
