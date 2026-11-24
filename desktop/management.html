@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Audio to Text</title>
+  <link rel="stylesheet" href="../extension/recorder.css">
+  <link rel="stylesheet" href="../extension/app.css">
+  <link rel="stylesheet" href="../extension/graph.css">
+  <link rel="stylesheet" href="management.css">
+</head>
+<body class="app-page editor-page">
+  <header class="page-header">
+    <h1>My Audio to Text</h1>
+    <nav aria-label="View">
+      <button data-page="library" aria-current="page">Graph Library</button>
+      <button data-page="models">Models</button>
+      <button data-page="live">Live</button>
+      <button data-page="settings">Settings</button>
+    </nav>
+  </header>
+  <p id="errors" role="alert"></p>
+  <main>
+    <section id="library" aria-labelledby="library-title">
+      <div class="section-heading">
+        <h2 id="library-title">Saved graphs</h2>
+        <span class="muted">Global shortcut <kbd id="library-shortcut"></kbd></span>
+      </div>
+      <div id="graphs"></div>
+      <form id="add-graph" class="actions">
+        <input id="graph-name" aria-label="New graph name" placeholder="New graph name" required maxlength="120">
+        <button type="submit" class="primary">Create graph</button>
+        <button type="button" id="import">Import JSON</button>
+        <input id="import-file" type="file" accept=".json,application/json" hidden>
+      </form>
+    </section>
+    <section id="editor" aria-labelledby="editor-title" hidden>
+      <header class="section-heading">
+        <h2 id="editor-title"></h2>
+        <button id="back">Back to graphs</button>
+      </header>
+      <div id="graph-editor"></div>
+    </section>
+    <section id="models" aria-labelledby="models-title" hidden>
+      <h2 id="models-title">Models</h2>
+      <article class="panel model-card">
+        <div class="section-heading">
+          <h3>Moonshine Small Streaming Japanese</h3>
+          <span id="model-status" class="model-status" role="status"></span>
+        </div>
+        <p class="muted">Japanese · CPU / WASM · 122 MB</p>
+        <progress id="model-progress" aria-label="Model preparation" hidden></progress>
+        <p id="model-error" class="model-error" role="alert"></p>
+        <div class="actions">
+          <button class="primary" id="prepare">Prepare</button>
+          <button id="cancel-download" hidden>Cancel download</button>
+          <button class="danger" id="delete-model" disabled>Delete</button>
+        </div>
+      </article>
+    </section>
+    <section id="live" aria-labelledby="live-title" hidden>
+      <h2 id="live-title">Live</h2>
+      <div class="actions live-controls">
+        <label for="live-graph">Graph</label>
+        <select id="live-graph"></select>
+        <button class="primary" id="start-live">Start</button>
+        <button id="stop-live" hidden>Stop</button>
+        <button id="cancel-live" hidden>Cancel</button>
+        <span id="live-state" role="status"></span>
+      </div>
+      <div id="displays"></div>
+    </section>
+    <section id="settings" aria-labelledby="settings-title" hidden>
+      <h2 id="settings-title">Settings</h2>
+      <form id="shortcut-form" class="panel">
+        <label for="shortcut">Global shortcut</label>
+        <div class="actions">
+          <input id="shortcut" required maxlength="64" spellcheck="false" aria-describedby="shortcut-hint shortcut-error">
+          <button type="submit" class="primary">Save shortcut</button>
+        </div>
+        <p class="muted" id="shortcut-hint">Use Control, Alt, Shift or Super with a letter, number or function key.</p>
+        <p id="shortcut-error" role="alert"></p>
+      </form>
+      <details class="panel">
+        <summary>Microphone and accessibility</summary>
+        <p>Enable your microphone as the system default input. If capture fails, check your audio device and permissions, then start again.</p>
+        <p>Enable assistive technology in your X11 desktop session and reopen the target application. Place a caret in a supported text field before starting.</p>
+      </details>
+    </section>
+  </main>
+  <script type="module" src="management.js"></script>
+</body>
+</html>

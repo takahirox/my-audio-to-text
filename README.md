@@ -26,6 +26,13 @@ A local-first composable processing system that connects reusable input and proc
 
 Speech-to-text is the most-developed processing capability today. The Chrome extension composes tab/microphone capture → Moonshine streaming recognition → formatting, translation, display or focused text insertion. The standalone pages accept audio files to test each model independently.
 
+## Desktop
+
+The standalone [Linux X11 desktop app](docs/desktop.md) runs saved graphs and
+inserts committed Japanese dictation into supported text fields using a global
+shortcut. Its tray manages voice typing, models and settings. The desktop app,
+Chrome extension and Web Playground each run independently.
+
 ## Node Playground
 
 Published URL: [https://takahirox.github.io/my-audio-to-text/](https://takahirox.github.io/my-audio-to-text/).
@@ -185,7 +192,7 @@ Separate issues should define and implement:
 - Additional sources such as files or Web/article text when a real use case requires them.
 - Transcript/history storage and accumulated processing for summaries or topic analysis/visualization.
 - Personalized ASR data, feedback and held-out evaluation.
-- Platform-specific implementations across Web, extensions, desktop and mobile that reuse appropriate processing contracts.
+- Additional desktop environments and mobile hosts that reuse appropriate processing contracts.
 
 ## Contributing
 

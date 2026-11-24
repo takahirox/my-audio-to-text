@@ -3,7 +3,9 @@ import { Transcriber } from './vendor/optional-asr/moonshine/transcriber.js';
 import { ModelArch } from './vendor/optional-asr/moonshine/enums.js';
 import { MoonshineStream } from './moonshine-stream.js';
 
-export function installMoonshineWorker({ japanese = false } = {}) {
+export function installMoonshineWorker({ japanese = false, loadFiles = (label, report) => (
+  (japanese ? moonshineJapaneseManifest() : moonshineManifest()).then(manifest => optionalAsrFiles(manifest, label, report))
+) } = {}) {
   let transcriber, stream, session, failed = false, chain = Promise.resolve();
   const send = (type, values = {}) => postMessage({ type, ...(session === undefined ? {} : { session }), ...values });
   self.onmessage = ({ data }) => {
@@ -18,7 +20,7 @@ export function installMoonshineWorker({ japanese = false } = {}) {
   async function handle(data) {
     if (data.type === 'load') {
       send('progress', { message: `Checking verified Moonshine ${japanese ? 'Small Japanese' : 'Medium English'} Streaming cache…` });
-      const files = await optionalAsrFiles(await (japanese ? moonshineJapaneseManifest() : moonshineManifest()), japanese ? 'Moonshine Small Streaming Japanese' : 'Moonshine Medium Streaming English', message => send('progress', { message }));
+      const files = await loadFiles(japanese ? 'Moonshine Small Streaming Japanese' : 'Moonshine Medium Streaming English', message => send('progress', { message }));
       transcriber = await Transcriber.load({ files, modelArch: japanese ? ModelArch.SmallStreaming : ModelArch.MediumStreaming, options: { identify_speakers: 'false', return_audio_data: 'false', ...(japanese ? { max_tokens_per_second: '13' } : {}) } });
       files.clear();
       send('configuration', { model: japanese ? 'small-streaming-ja/quantized_26_08_23' : 'medium-streaming-en/quantized_26_07_30', language: japanese ? 'ja' : 'en', modelArch: japanese ? ModelArch.SmallStreaming : ModelArch.MediumStreaming, backend: 'CPU WASM', updateIntervalSeconds: 0.5 });

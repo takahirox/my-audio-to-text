@@ -35,8 +35,9 @@ const MIN_ZOOM = .01, MAX_ZOOM = 1.5, ZOOM_STEP = .1;
 const VIEWPORT_CONTROL_SPACE = 72;
 const typeLabel = contract => contract.name.split(' {')[0];
 export class GraphEditor {
-  constructor(root, graph, { onDraft = () => {}, readOnly = false, onRetry = () => {}, onFlush = async () => {}, invalidSaved = false, definitions = [], kind = 'graph', graphId, onCreateSubgraph, onExport, onEditSubgraph }) {
-    Object.assign(this, { definitions, kind, graphId, onCreateSubgraph, onExport, onEditSubgraph });
+  constructor(root, graph, { onDraft = () => {}, readOnly = false, onRetry = () => {}, onFlush = async () => {}, invalidSaved = false, definitions = [], kind = 'graph', graphId, onCreateSubgraph, onExport, onEditSubgraph,
+    nodeTypes = NODE_TYPES, makeDefault = defaultGraph, assertHostGraph = value => value, exportFile }) {
+    Object.assign(this, { definitions, kind, graphId, onCreateSubgraph, onExport, onEditSubgraph, nodeTypes, makeDefault, assertHostGraph, exportFile });
     this.multiSelection = new Set();
     this.isMac = /mac|iphone|ipad|ipod/i.test(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent);
     this.root = root; this.onDraft = onDraft;
@@ -70,7 +71,7 @@ export class GraphEditor {
     commands.append(
       button('Reset to default', 'graph-reset', () => {
         if (this.readOnly || !confirm('Reset the graph to default? You can Undo this change.')) return;
-        this.closeActions(); this.edit(() => { this.draft = this.kind === 'subgraph' ? { version: 15, nodes: [], edges: [], interface: { inputs: [], outputs: [] } } : defaultGraph(); this.selected = null; this.selectedNode = null; this.draw(); });
+        this.closeActions(); this.edit(() => { this.draft = this.kind === 'subgraph' ? { version: 15, nodes: [], edges: [], interface: { inputs: [], outputs: [] } } : this.makeDefault(); this.selected = null; this.selectedNode = null; this.draw(); });
       }),
       button('Validate graph', 'graph-validate', () => {
         this.closeActions(); this.showValidation();
@@ -88,12 +89,15 @@ export class GraphEditor {
       finally { importFile.value = ''; this.draw(); }
     };
     commands.append(button('Import graph JSON', 'graph-import', () => importFile.click()), importFile);
-    commands.append(button('Export graph JSON', 'graph-export', () => {
+    commands.append(button('Export graph JSON', 'graph-export', async () => {
       try {
         const graph = this.onExport ? structuredClone(this.draft) : this.assert(this.draft);
-        const url = URL.createObjectURL(new Blob([this.onExport ? this.onExport(graph) : JSON.stringify(graph, null, 2) + '\n'], { type: 'application/json' }));
-        const link = el('a'); link.href = url; link.download = 'processing-graph.json'; link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 0);
+        if (this.exportFile) await this.exportFile(graph);
+        else {
+          const url = URL.createObjectURL(new Blob([this.onExport ? this.onExport(graph) : JSON.stringify(graph, null, 2) + '\n'], { type: 'application/json' }));
+          const link = el('a'); link.href = url; link.download = 'processing-graph.json'; link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 0);
+        }
         this.error = ''; this.closeActions();
       } catch (error) { this.error = `Cannot export graph: ${error.message}`; }
       this.draw();
@@ -260,9 +264,16 @@ export class GraphEditor {
     if (this.wireFrame) return;
     this.wireFrame = requestAnimationFrame(() => { this.wireFrame = null; this.drawWires(); });
   }
-  assert(graph) { return assertGraph(graph, this.definitions); }
+  assert(graph) { return this.assertHostGraph(assertGraph(graph, this.definitions)); }
   definition(node) {
-    try { const definition = nodeDefinition(node, this.draft, this.definitions); if (definition) return definition; } catch { /* Keep a stale draft visible for recovery. */ }
+    try {
+      const definition = nodeDefinition(node, this.draft, this.definitions);
+      if (definition) {
+        const presentation = this.nodeTypes[node.type];
+        return presentation && presentation !== NODE_TYPES[node.type]
+          ? { ...definition, label: presentation.label, help: presentation.help } : definition;
+      }
+    } catch { /* Keep a stale draft visible for recovery. */ }
     return { label: `Unavailable subgraph ${node?.subgraphId || ''}`, inputs: {}, outputs: {} };
   }
   renderPortEditor(root, graph, changed, { title = 'Exposed ports', open = true, help = 'Names are editable labels; IDs preserve parent wires. Endpoint types are inferred. Incompatible changes are blocked while parents reference this definition.' } = {}) {
@@ -463,7 +474,7 @@ export class GraphEditor {
   }
   filterPalette() {
     this.types.replaceChildren();
-    const entries = [...Object.entries(NODE_TYPES), ...(this.kind === 'subgraph' ? [] : (this.definitions || []).filter(entry => entry.kind === 'subgraph').map(entry => [`Subgraph:${entry.id}`, { label: entry.name }]))];
+    const entries = [...Object.entries(this.nodeTypes), ...(this.kind === 'subgraph' ? [] : (this.definitions || []).filter(entry => entry.kind === 'subgraph').map(entry => [`Subgraph:${entry.id}`, { label: entry.name }]))];
     const groups = groupPaletteEntries(entries, { query: this.search.value, category: this.category.value });
     for (const [category, options] of groups) {
       const group = el('div', undefined, 'graph-node-group'), heading = el('div', category, 'muted');
@@ -585,7 +596,7 @@ export class GraphEditor {
   }
   addNode(type) {
     const shared = type.startsWith('Subgraph:') ? this.definitions.find(entry => entry.id === type.slice(9) && entry.kind === 'subgraph') : null;
-    if (!shared && !Object.hasOwn(NODE_TYPES, type)) return;
+    if (!shared && !Object.hasOwn(this.nodeTypes, type)) return;
     if (shared) { try { assertSubgraph(shared.graph); } catch (error) { this.error = error.message; this.draw(); return; } }
     const bounds = this.visibleGraphBounds();
     const pan = { left: this.scroll.scrollLeft, top: this.scroll.scrollTop };
