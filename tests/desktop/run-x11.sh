@@ -6,8 +6,9 @@ export GNOME_ACCESSIBILITY=1
 desktop_tmp=$(mktemp -d)
 export XDG_CONFIG_HOME="$desktop_tmp/config"
 export XDG_CACHE_HOME="$desktop_tmp/cache"
+export XDG_DATA_HOME="$desktop_tmp/data"
 export XDG_RUNTIME_DIR="$desktop_tmp/runtime"
-mkdir -m 700 -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
+mkdir -m 700 -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$XDG_RUNTIME_DIR"
 export PULSE_SERVER="unix:$XDG_RUNTIME_DIR/pulse/native"
 
 cleanup() {

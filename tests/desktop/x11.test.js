@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -47,6 +47,22 @@ function child(t, executable, args) {
 }
 
 async function editor(t, dir) {
+  const first = join(dir, 'first.txt');
+  const second = join(dir, 'second.txt');
+  await writeFile(first, 'left|right');
+  await writeFile(second, '');
+  const process = child(t, 'mousepad', ['--disable-server', second, first]);
+  const id = await windowId('first\\.txt.*Mousepad$');
+  const pid = x('getwindowpid', id);
+  const get = () => JSON.parse(execFileSync('/usr/bin/python3', ['tests/desktop/read-editor.py', pid], {
+    encoding: 'utf8', timeout: 2500,
+  }));
+  await eventually(() => get().focus === 1, 'Mousepad did not focus its first document');
+  x('key', 'Home', 'Right', 'Right', 'Right', 'Right', 'Right');
+  return { id, process, get };
+}
+
+async function gtkFixture(t, dir) {
   const path = join(dir, 'editor.json');
   const process = child(t, '/usr/bin/python3', ['tests/desktop/editor.py', path]);
   const id = await windowId('^Voice typing test editor$');
@@ -182,7 +198,6 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   await expect(page.locator('#editor-title')).toHaveText('New graph copy');
   await page.getByRole('button', { name: 'Back to graphs' }).click();
   await importGraph(page, 'GTK fixture', literalGraph(' {1}\n'));
-  await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, 'abcdef'));
   await importGraph(page, 'Live fixture', literalGraph(' {1}\n', 'Display'));
 
   const live = page.getByRole('article', { name: 'Live fixture', exact: true });
@@ -257,87 +272,61 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
     x('keyup', hotkey);
   }
   await phase('running');
-  await eventually(() => native.get().values[0] === 'left| 東京🙂\nright', 'GTK text did not arrive at original caret');
+  await eventually(() => native.get().values[1] === 'left| 東京🙂\nright', 'GTK text did not arrive at original caret');
   assert.equal(x('getactivewindow'), native.id);
   assert.equal(x('getwindowfocus'), native.id);
-  assert.equal(native.get().focus, 0);
+  assert.equal(native.get().focus, 1);
   await trigger(native.id);
   await phase('idle');
-  assert.deepEqual(native.get().values, ['left| 東京🙂\nright', '', 'secret', 'xy']);
+  assert.deepEqual(native.get().values, ['', 'left| 東京🙂\nright']);
 
   // Move to the second field before the toolkit has settled after the grab.
   // Start must fail without redirecting the graph output to that field.
   await wait(320);
-  x('key', '--delay', '1', hotkey, 'ctrl+Tab');
-  await eventually(() => native.get().focus === 1, 'GTK focus did not move immediately after the shortcut');
+  x('key', '--delay', '1', hotkey, 'ctrl+Page_Up');
+  await eventually(() => native.get().focus === 0, 'GTK focus did not move immediately after the shortcut');
   await eventually(async () => /lost focus|changed|closed|editable plain-text/i.test((await view()).session.error),
     'Shortcut did not reject the focus change during Start');
   await phase('idle');
-  assert.deepEqual(native.get().values, ['left| 東京🙂\nright', '', 'secret', 'xy']);
+  assert.deepEqual(native.get().values, ['', 'left| 東京🙂\nright']);
   const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
   await indicator.getByRole('button', { name: 'Dismiss' }).click();
   await eventually(async () => !(await view()).session.error, 'The shortcut error was not dismissed');
-  x('key', 'ctrl+shift+Tab');
-  await eventually(() => native.get().focus === 0, 'GTK focus did not return to the first field');
+  x('key', 'ctrl+Page_Down');
+  await eventually(() => native.get().focus === 1, 'GTK focus did not return to the first field');
 
   await trayClick(3);
-  x('key', '--delay', '1', 'Home', 'Return', 'ctrl+Tab');
-  await eventually(() => native.get().focus === 1, 'GTK focus did not move as the tray menu dismissed');
+  x('key', '--delay', '1', 'Home', 'Return', 'ctrl+Page_Up');
+  await eventually(() => native.get().focus === 0, 'GTK focus did not move as the tray menu dismissed');
   await eventually(async () => /lost focus|changed|closed/i.test((await view()).session.error),
     'Tray Start did not reject the focus change during menu dismissal');
   await phase('idle');
-  assert.deepEqual(native.get().values, ['left| 東京🙂\nright', '', 'secret', 'xy']);
-  x('key', 'ctrl+shift+Tab');
-  await eventually(() => native.get().focus === 0, 'GTK focus did not return after tray Start was rejected');
+  assert.deepEqual(native.get().values, ['', 'left| 東京🙂\nright']);
+  x('key', 'ctrl+Page_Down');
+  await eventually(() => native.get().focus === 1, 'GTK focus did not return after tray Start was rejected');
 
   await trayClick(3);
   await wait(1000);
   x('key', 'Home', 'Return');
   await phase('running');
-  await eventually(() => native.get().values[0] === 'left| 東京🙂\n 東京🙂\nright',
+  await eventually(() => native.get().values[1] === 'left| 東京🙂\n 東京🙂\nright',
     'The tray did not start a fresh session in the authorized editor');
-  x('key', 'ctrl+Tab');
-  await eventually(() => native.get().focus !== 0, 'GTK focus did not move');
+  x('key', 'ctrl+Page_Up');
+  await eventually(() => native.get().focus === 0, 'GTK focus did not move');
   await phase('idle');
   assert.match((await view()).session.error, /lost focus|changed|closed/i);
-  assert.equal(native.get().values[1], '');
-  x('key', 'ctrl+Tab');
-  await eventually(() => native.get().focus === 2, 'GTK password did not receive focus');
-  await trigger(native.id);
-  await eventually(async () => (await view()).session.error.includes('editable plain-text'), 'Protected target did not report refusal');
-  assert.equal(native.get().values[2], 'secret');
-
-  await show();
-  await selectGraph(page, 'Length fixture');
-  x('windowactivate', '--sync', native.id);
-  x('key', 'Tab', 'Home', 'Right');
-  await eventually(() => native.get().focus === 3, 'GTK length-limited entry did not receive focus');
-  await trigger(native.id);
-  await eventually(async () => (await view()).session.error.includes('may limit text length'),
-    'GTK length-limited entry did not report refusal');
-  assert.equal(native.get().values[3], 'xy');
-  assert.equal(native.get().limitedEdits, 0);
-
-  x('key', 'Tab');
-  await eventually(() => native.get().focus === 4, 'GTK tagged view did not receive focus');
-  x('key', 'z');
-  assert.equal(native.get().tagged, 'open locked tail');
-  await trigger(native.id);
-  await eventually(async () => (await view()).session.error.includes('editable plain-text region'),
-    'GTK protected range did not report refusal');
-  await phase('idle');
-  assert.equal(native.get().tagged, 'open locked tail');
+  assert.equal(native.get().values[0], '');
 
   await show();
   await selectGraph(page, 'GTK fixture');
   await page.reload();
   await expect(page.getByRole('article', { name: 'GTK fixture', exact: true }).getByText('Shortcut graph')).toBeVisible();
   x('windowactivate', '--sync', native.id);
-  x('mousemove', '--window', native.id, '20', '20', 'click', '1');
-  await eventually(() => native.get().focus === 0, 'GTK focus did not return to the editor');
+  x('key', 'ctrl+Page_Down');
+  await eventually(() => native.get().focus === 1, 'GTK focus did not return to the editor');
   await trigger(native.id);
   await phase('running');
-  x('key', 'alt+F4');
+  native.process.kill();
   await phase('idle');
   assert.match((await view()).session.error, /lost focus|changed|closed/i);
 
@@ -358,6 +347,48 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   reclaimed.stdin.end();
   await once(reclaimed, 'exit');
   assert.deepEqual(errors, []);
+});
+
+test('packaged app leaves unverified GTK buffers and protected controls untouched', { timeout: 60000 }, async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'desktop-gtk-limits-'));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
+  const { app, page, view } = await launch(t);
+  await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, 'abcdef'));
+  await selectGraph(page, 'Length fixture');
+  x('key', 'alt+F4');
+  const native = await gtkFixture(t, dir);
+  const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
+
+  x('key', 'ctrl+Tab', 'ctrl+Tab');
+  const targets = [
+    [2, 'editable plain-text'],
+    [3, 'may limit text length'],
+    [4, 'editable plain-text region'],
+    [5, 'cannot verify that this GTK buffer accepts whole edits'],
+  ];
+  for (const [focus, message] of targets) {
+    if (focus > 2) x('key', focus === 5 ? 'ctrl+Tab' : 'Tab');
+    if (focus === 3) x('key', 'Home', 'Right');
+    const before = await eventually(() => {
+      const state = native.get();
+      return state.focus === focus && state;
+    }, `GTK did not focus fixture control ${focus}`);
+    await trigger(native.id);
+    await eventually(async () => {
+      const { session } = await view();
+      assert.equal(session.phase, 'idle');
+      assert.ok(session.error.includes(message), session.error);
+      return true;
+    }, `Desktop did not refuse GTK fixture control ${focus}`);
+    assert.deepEqual(native.get(), before);
+    assert.equal(x('getwindowfocus'), native.id);
+    await indicator.getByRole('button', { name: 'Dismiss' }).click();
+    await eventually(async () => !(await view()).session.error, 'The desktop error was not dismissed');
+  }
+  assert.deepEqual(native.get(), {
+    values: ['left|right', '', 'secret', 'xy'], focus: 5, limitedEdits: 0,
+    tagged: 'open locked tail', constrained: 'left|right', constrainedCaret: 5, constrainedEdits: 0,
+  });
 });
 
 test('packaged app refuses unsupported Chromium targets before any edit', { timeout: 90000 }, async t => {
@@ -427,7 +458,7 @@ test('committed text waits for the Stop shortcut grab and stays bound to the ori
       () => ({ inserted: true }), error => ({ inserted: false, error: error.message }),
     );
   }, committed);
-  const initial = ['left|right', '', 'secret', 'xy'];
+  const initial = ['', 'left|right'];
   await trigger(native.id);
   await phase('running');
   x('keydown', hotkey);
@@ -443,12 +474,12 @@ test('committed text waits for the Stop shortcut grab and stays bound to the ori
   await phase('idle');
   assert.deepEqual(await runtime.evaluate(() => window.testInsert), { inserted: true });
   assert.equal((await view()).session.error, '');
-  const afterStop = ['left|東京🙂right', '', 'secret', 'xy'];
+  const afterStop = ['', 'left|東京🙂right'];
   await eventually(() => {
     assert.deepEqual(native.get().values, afterStop);
     return true;
   }, 'Stop did not insert exactly one committed chunk');
-  assert.equal(native.get().focus, 0);
+  assert.equal(native.get().focus, 1);
   assert.equal(x('getwindowfocus'), native.id);
 
   await trigger(native.id);
@@ -459,9 +490,9 @@ test('committed text waits for the Stop shortcut grab and stays bound to the ori
     await wait(350);
     assert.equal((await view()).session.phase, 'running');
   } finally {
-    x('keyup', '--delay', '1', hotkey, 'key', '--delay', '1', 'ctrl+Tab');
+    x('keyup', '--delay', '1', hotkey, 'key', '--delay', '1', 'ctrl+Page_Up');
   }
-  await eventually(() => native.get().focus === 1, 'GTK focus did not move during shortcut release');
+  await eventually(() => native.get().focus === 0, 'GTK focus did not move during shortcut release');
   await phase('idle');
   assert.equal((await runtime.evaluate(() => window.testInsert)).inserted, false);
   assert.match((await view()).session.error, /lost focus|changed|closed/i);
@@ -556,7 +587,7 @@ test('pinned Japanese Moonshine captures PulseAudio and inserts a real offline f
   const indicator = await windowId('^Voice typing status$');
   x('mousemove', '--window', indicator, '195', '25', 'click', '1');
   await phase('idle', 90000);
-  const text = native.get().values[0];
+  const text = native.get().values[1];
   assert.ok(text.startsWith('left|') && text.endsWith('right'));
   const transcript = text.slice(5, -5);
   assert.match(transcript, /\S/);

@@ -156,6 +156,37 @@ ended early on one earlier run. The offline smoke inserted
 `こんにちは、こんにちは、こんにちは` from the same licensed fixture and pinned
 Moonshine revision as the original validation. `git diff --check` passed.
 
+## Whole-text GTK insertion
+
+The shortcut now accepts writable document views in stock Debian Mousepad
+0.5.10. AT-SPI can't tell whether an arbitrary GTK text buffer runs a custom
+insertion handler. The packaged regression focuses a GTK 3 text view that
+would accept only two characters of `abcdef`. A direct AT-SPI insertion into
+the fixture acknowledged success and left `left|abright`. Through the desktop
+shortcut, the buffer stayed `left|right`, the caret stayed at offset 5, and
+the fixture recorded zero buffer changes. The password field, length-limited
+entry, and tagged read-only region also kept their original values.
+
+Two builds produced the same Debian 12 arm64 archive with SHA-256
+`b1a9f966db7ae822fbc26d7b9bce2f6d7d562f3c52485b95e3e76cbcd6838e90`.
+`npm test` passed all 940 tests. The standalone Chromium checks
+(`graph-selection`, `graph-routing`, `model-playground`) passed all 75 tests.
+The focused MV3 checks (`graph-interactions`, `graph-autosave`,
+`graph-optional-asr`) passed all 33 tests.
+`DESKTOP_TEST_BINARY=dist/verify/my-audio-to-text/my-audio-to-text DESKTOP_REAL_ASR=1 npm run test:desktop`
+passed all six checks against the extracted archive. The registered global
+shortcut inserted ` 東京🙂\n` exactly once per session in Mousepad, preserved
+window focus, and rejected output when the active document changed. The
+offline Moonshine smoke inserted `こんにちは、こんにちは、こんにちは` into
+Mousepad from the same fixture and pinned model revision as above after
+HTTP(S) was blocked.
+
+The Chromium 156 shortcut check still observed zero input events, edits, or
+submissions in the six unsupported browser controls. Pale Moon 35.0.3
+also left the web input inaccessible to the AT-SPI client in the Debian 12
+probe. Successful extension-free browser insertion remains open.
+Firefox remains deferred.
+
 ## Limits
 
 Physical devices, other application toolkit controls, Wayland, macOS and

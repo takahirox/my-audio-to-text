@@ -19,6 +19,7 @@ class TargetError(Exception):
 NO_TARGET = "Focus an editable plain-text field in a supported GTK editor and try again."
 LOST_TARGET = "Voice typing stopped because the authorized text field lost focus, changed, or closed."
 UNEDITABLE_CARET = "Place the caret in an editable plain-text region and try again."
+UNKNOWN_GTK_BUFFER = "Use a Mousepad document. Accessibility cannot verify that this GTK buffer accepts whole edits."
 FOCUS_SETTLE_MS = 75
 
 
@@ -117,6 +118,17 @@ class Focus:
                 raise TargetError(UNEDITABLE_CARET)
         return offset
 
+    @staticmethod
+    def whole_edit_supported(window):
+        # AT-SPI exposes neither GtkTextBuffer's insert-text signal handlers
+        # nor their limits. Accept the tested stock editor's document buffer.
+        try:
+            supported = os.path.samefile(f"/proc/{window[1]}/exe", "/usr/bin/mousepad")
+        except OSError:
+            supported = False
+        if not supported:
+            raise TargetError(UNKNOWN_GTK_BUFFER)
+
     def locate(self, window):
         frames = []
         for app in children(Atspi.get_desktop(0)):
@@ -189,6 +201,7 @@ class Focus:
         if window != expected[0] or not same_node(focused, expected[1]):
             raise TargetError(LOST_TARGET)
         self.caret(focused, self.editable(focused))
+        self.whole_edit_supported(window)
         self.bound = (token, window, frame, focused)
 
     def bind_after_grab(self, token, action, release, reply):
@@ -235,6 +248,7 @@ class Focus:
         _, window, frame, node = self.bound
         try:
             if self.window() == window and frame.get_state_set().contains(Atspi.StateType.ACTIVE):
+                self.whole_edit_supported(window)
                 return node, self.editable(node)
         except (TargetError, GLib.Error, error.XError) as failure:
             raise TargetError(LOST_TARGET) from failure

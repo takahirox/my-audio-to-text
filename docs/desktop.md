@@ -59,9 +59,11 @@ Reopen the target after changing accessibility settings.
 
 ### Focused fields
 
-Desktop insertion uses the AT-SPI `Text` and `EditableText` interfaces. It
-supports GTK 3 plain-text editor views with an editable run at the caret.
-Those views preserve Unicode, spaces, and line breaks.
+Desktop insertion uses the AT-SPI `Text` and `EditableText` interfaces. Use
+the stock Debian Mousepad editor (`sudo apt-get install mousepad`) and place the
+caret in a writable document. The packaged app was tested with Mousepad 0.5.10
+in Debian 12 arm64. Its GTK 3 document buffer preserves Unicode, spaces, and
+line breaks.
 
 Place a caret with no selection. The app stops if the field closes, becomes
 unavailable, loses focus, or rejects the output. The shortcut uses the field
@@ -69,9 +71,10 @@ focused at the key press, even while the toolkit restores focus after the X11
 keyboard grab. Tray Start uses the field focused before the XEmbed menu opened
 and requires that same field when the menu closes.
 
-The app refuses GTK single-line entries because AT-SPI cannot establish their
-length limits. Password fields, rich-text editors, read-only controls, and fields
-that rewrite inserted text are outside the support scope.
+GTK applications can intercept an insertion and commit only a prefix. AT-SPI
+doesn't expose the buffer's custom handlers. The app refuses other GTK text
+views and all GTK single-line entries before sending an edit. Password fields,
+rich-text editors, read-only controls, and locked text ranges are unsupported.
 
 Extension-free browser insertion remains an open acceptance requirement.
 Chromium 156 on Debian X11 exposes focused web text inputs through AT-SPI but
@@ -140,18 +143,20 @@ run independently. Concurrent sessions use their own memory.
 npm ci
 npm test
 sudo apt-get install chromium xvfb xauth openbox trayer xdotool pulseaudio-utils \
-  gir1.2-gtk-3.0
+  gir1.2-gtk-3.0 mousepad
 npm run test:desktop
 DESKTOP_REAL_ASR=1 npm run test:desktop
 ```
 
-The X11 suite starts the packaged application, an independent GTK editor, and
-Chromium with a fresh profile and extensions disabled. The GTK tests check
-shortcut Start and Stop, exactly-once Unicode insertion at the caret, and safe
-cancellation when the target changes. The Chromium test checks that the shortcut
-reports a refusal while leaving the values, caret, and focus intact in each
-tested field, with zero edit events and zero form submissions. Put `chromium`
-on `PATH` or set `DESKTOP_TEST_CHROMIUM` to its executable path.
+The X11 suite starts the packaged application, Mousepad, a GTK safety fixture,
+and Chromium with a fresh profile and extensions disabled. The Mousepad tests
+check shortcut Start and Stop, exactly-once Unicode insertion at the caret,
+and safe cancellation when the target changes. The GTK fixture verifies that
+length-limited buffers and protected fields retain their values and focus
+with zero edits to the constrained fields. The Chromium test checks that the
+shortcut reports a refusal while leaving the values, caret, and focus intact
+in each tested field, with zero edit events and zero form submissions. Put
+`chromium` on `PATH` or set `DESKTOP_TEST_CHROMIUM` to its executable path.
 The model smoke additionally downloads the pinned
 weights, plays a licensed speech fixture into a virtual microphone, and tests
 the prepared cache with HTTP blocked. Run the Desktop suite in an isolated
