@@ -303,9 +303,12 @@ function bindIPC() {
         send(management, 'management:model', modelView);
       }
       modelView = await run(action);
-      send(management, 'management:model', modelView);
-      return modelView;
+    } catch (error) {
+      if (action !== 'modelPrepare') throw error;
+      modelView = { ...modelView, state: 'Error', error: error.message };
     } finally { modelOperation = null; }
+    send(management, 'management:model', modelView);
+    return modelView;
   });
   handle('runtime', () => runtime, 'runtime:insert', (id, text) => controller.insert(id, text));
   fromRuntime('response', result => pendingCommands.get(result.request)?.(result));

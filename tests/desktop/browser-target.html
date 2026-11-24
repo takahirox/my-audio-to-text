@@ -3,7 +3,7 @@
 <meta charset="utf-8"><title>Voice typing test browser</title>
 <form>
   <label>Text <input id="field" autofocus value="left|right"></label>
-  <label>Multiline <textarea id="multiline"></textarea></label>
+  <label>Multiline <textarea id="multiline">left|right</textarea></label>
   <label>Password <input id="password" type="password" value="secret"></label>
   <label>Limited <input id="limited" maxlength="4" value="xy"></label>
   <button>Submit</button>
@@ -20,6 +20,7 @@
     fetch('/state', { method: 'POST', body: JSON.stringify({
       values: fields.map(field => field.value), focus: fields.indexOf(document.activeElement), submits,
       caret: field.selectionStart, active: document.hasFocus(),
+      multilineCaret: document.querySelector('#multiline').selectionStart,
       limitedCaret: document.querySelector('#limited').selectionStart,
       point: [Math.round(window.mozInnerScreenX + bounds.x + bounds.width / 2),
         Math.round(window.mozInnerScreenY + bounds.y + bounds.height / 2)],

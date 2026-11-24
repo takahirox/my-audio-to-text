@@ -2,7 +2,7 @@
 
 My Audio to Text Desktop is a resident application for local Japanese voice
 typing and saved processing graphs. The initial target is Debian 12 arm64 with
-an X11 window manager, a system tray, the AT-SPI accessibility service, and
+an X11 window manager, an XEmbed tray, the AT-SPI accessibility service, and
 PulseAudio. X11 supplies the global shortcut and active-window identity.
 AT-SPI can write directly to a specific editable control, and Xvfb and a
 PulseAudio monitor make that path testable without a physical microphone.
@@ -24,11 +24,16 @@ npm run build:desktop
 On another machine with the runtime dependencies, extract
 `dist/my-audio-to-text-linux-arm64.tar.gz` and run its `my-audio-to-text`
 executable from the extracted directory. Keep the companion runtime files
-alongside the executable. Use an X11 window manager that supports EWMH and a tray
-that supports XEmbed or StatusNotifierItem. The build pins Electron and checks
-the shared Moonshine runtime against the repository's checksums. The archive
-contains the application, runtime, and license notices. Model weights arrive
-through **Models → Prepare**.
+alongside the executable. The build pins Electron and checks the shared
+Moonshine runtime against the repository's checksums. The archive contains the
+application, runtime, and license notices. Model weights arrive through
+**Models → Prepare**.
+
+Use an EWMH-compatible X11 window manager such as Openbox. Install `trayer`
+and run `trayer --edge top --align right` before launching the app. Disable
+any StatusNotifierItem tray hosts or plugins in that session so Electron uses
+its GTK/XEmbed fallback. Tray Start needs that backend to remember the focused
+field when its menu opens. [Electron Linux tray behavior](https://www.electronjs.org/docs/latest/api/tray#linux).
 
 ## Voice typing
 
@@ -58,8 +63,9 @@ accessibility settings.
 
 The initial controls are GTK 3 plain-text editor views and ordinary Firefox
 162.0b1 text inputs that expose the AT-SPI `Text` and `EditableText` interfaces.
-Use a multiline editor for graph output containing line breaks. Place a caret
-with no selection. The app stops if the field closes, becomes unavailable,
+Use a multiline editor for graph output containing line breaks. Firefox
+textareas require LF line endings. The app rejects CR and CRLF before editing.
+Place a caret with no selection. The app stops if the field closes, becomes unavailable,
 loses focus, or rejects the output. The shortcut uses the field focused at the
 key press, even while the toolkit restores focus after the X11 keyboard grab.
 Tray Start uses the field focused before the XEmbed menu opened and requires

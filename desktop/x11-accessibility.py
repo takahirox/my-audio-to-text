@@ -246,12 +246,16 @@ class Focus:
         node, states = self.current(token)
         if not states.contains(Atspi.StateType.MULTI_LINE) and ("\n" in text or "\r" in text):
             raise TargetError("Use a multiline field for text containing line breaks.")
+        is_gecko = node.get_toolkit_name() == "Gecko"
+        if is_gecko and "\r" in text:
+            # Firefox textareas normalize CR and CRLF to LF during insertion.
+            raise TargetError("Firefox cannot preserve carriage returns. Use LF line endings for Firefox output.")
         offset = self.caret(node)
         before = node.get_character_count()
         prefix = node.get_text(0, offset)
         suffix = node.get_text(offset, before)
         expected = text
-        if node.get_toolkit_name() == "Gecko":
+        if is_gecko:
             # Gecko's ATK text pads non-BMP characters to preserve UTF-16 offsets.
             expected = "".join(character + ("\ufeff" if ord(character) > 0xFFFF else "") for character in text)
         self.current(token)

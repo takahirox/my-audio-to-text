@@ -200,6 +200,7 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   await page.getByRole('button', { name: 'Back to graphs' }).click();
   await importGraph(page, 'GTK fixture', literalGraph(' {1}\n'));
   await importGraph(page, 'Browser fixture', literalGraph(' [{1}] '));
+  await importGraph(page, 'CRLF fixture', literalGraph('{1}', FOCUSED_OUTPUT, '東京\r\n大阪'));
   await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, 'abcdef'));
   await importGraph(page, 'Live fixture', literalGraph(' {1}\n', 'Display'));
 
@@ -355,12 +356,27 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.equal(x('getwindowfocus'), firefox.id);
   const { values, focus, submits, caret, active } = firefox.get();
   assert.deepEqual({ values, focus, submits, caret, active },
-    { values: ['left| [東京🙂] right', '', 'secret', 'xy'], focus: 0, submits: 0, caret: 13, active: true });
+    { values: ['left| [東京🙂] right', 'left|right', 'secret', 'xy'], focus: 0, submits: 0, caret: 13, active: true });
+
+  await show();
+  await selectGraph(page, 'CRLF fixture');
+  x('windowactivate', '--sync', firefox.id);
+  x('key', 'Tab', 'Home', 'Right');
+  await eventually(() => firefox.get().focus === 1 && firefox.get().multilineCaret === 1,
+    'Firefox textarea did not receive the test caret');
+  await trigger(firefox.id);
+  const lineEndingError = await eventually(async () => {
+    const { session } = await view();
+    return session.phase === 'idle' && session.error;
+  }, 'Firefox textarea did not report the unsupported line ending');
+  await eventually(() => firefox.get().active, 'Firefox textarea did not regain focus after the keyboard grab');
+  assert.deepEqual([firefox.get().values[1], firefox.get().multilineCaret], ['left|right', 1]);
+  assert.match(lineEndingError, /carriage returns/);
 
   await show();
   await selectGraph(page, 'Length fixture');
   x('windowactivate', '--sync', firefox.id);
-  x('key', 'Tab', 'Tab', 'Tab', 'Home', 'Right');
+  x('key', 'Tab', 'Tab', 'Home', 'Right');
   await eventually(() => firefox.get().focus === 3 && firefox.get().limitedCaret === 1,
     'Firefox length-limited input did not receive the test caret');
   await trigger(firefox.id);
@@ -402,6 +418,32 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   reclaimed.stdin.end();
   await once(reclaimed, 'exit');
   assert.deepEqual(errors, []);
+});
+
+test('Models can retry preparation after the packaged runtime crashes', { timeout: 60000 }, async t => {
+  const { app, page } = await launch(t);
+  // Hold the model request open so the real download stays in progress without using the network.
+  await app.evaluate(({ session }) => {
+    session.defaultSession.webRequest.onBeforeRequest({ urls: ['https://download.moonshine.ai/*'] }, () => {});
+  });
+  await page.getByRole('button', { name: 'Models' }).click();
+  const status = page.locator('#model-status');
+  const prepare = page.locator('#prepare');
+  await expect(status).toHaveText('Not downloaded');
+  await prepare.click();
+  await expect(status).toHaveText('Downloading');
+  await app.evaluate(({ BrowserWindow }) => {
+    const runtime = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().endsWith('/runtime.html'));
+    runtime.webContents.forcefullyCrashRenderer();
+  });
+  await expect(status).toHaveText('Error');
+  await expect(page.locator('#model-error')).toContainText('runtime closed unexpectedly');
+  await expect(prepare).toHaveText('Retry');
+  await expect(prepare).toBeEnabled();
+  await prepare.click();
+  await expect(status).toHaveText('Downloading');
+  await page.locator('#cancel-download').click();
+  await expect(status).toHaveText('Canceled');
 });
 
 test('pinned Japanese Moonshine captures PulseAudio and inserts a real offline final', {
