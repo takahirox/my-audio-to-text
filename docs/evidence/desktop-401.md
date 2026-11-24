@@ -187,6 +187,44 @@ also left the web input inaccessible to the AT-SPI client in the Debian 12
 probe. Successful extension-free browser insertion remains open.
 Firefox remains deferred.
 
+## Packaged refusal and held-Stop regression
+
+Target refusal now releases the pending authorization without calling Cancel
+in a renderer that never started the graph. The X11 helper tracks the physical
+shortcut hold, drains focus events buffered by synchronous X11 calls, and
+waits for focus to settle before sending a pending edit.
+
+The Debian 12 arm64 archive SHA-256 was
+`4b499203375e73d1ccc3aa99d9fc792c20847fbc402b2e4670915ca4415f3f20`.
+All six checks passed with the extracted executable and
+`DESKTOP_REAL_ASR=1 npm run test:desktop`. The Chromium refusal and held-Stop
+checks both passed again against the same archive in a fresh Xvfb and D-Bus
+session using `npm run test:desktop -- --test-name-pattern='refuses unsupported Chromium|committed text waits'`.
+Both runs used the packaged Electron 45.4.1 app, Chromium 156.0.8078.108 without
+extensions, and Mousepad 0.5.10. Set `DESKTOP_TEST_BINARY` to the extracted
+executable for both commands.
+
+- The real shortcut returned to Idle for each of six Chromium controls.
+  Ordinary and length-limited inputs, the constrained textarea, plain-text
+  contenteditable, read-only input, and password kept their original values,
+  carets, and focus. The fixture observed zero edit events or form submissions.
+- In Mousepad, the pending IPC insertion remained unsettled through a 7.5-second
+  shortcut hold and committed `東京🙂` once at the original caret on release.
+  Switching documents as the shortcut was released rejected the next
+  pending insertion and left both documents unchanged.
+- The virtual microphone and pinned Moonshine revision above produced
+  `こんにちは、こんにちは、こんにちは` in Mousepad with HTTP(S) blocked.
+  All 940 Node tests, 75 standalone Chromium checks, 33 MV3 checks, and
+  `git diff --check` passed. The standalone and MV3 runs used Playwright's
+  pinned Chromium 153.0.8010.12 on macOS.
+
+Chromium's Linux AT-SPI implementation still lacks a target-bound editing
+operation for these fields. Its IME path can run page event handlers before
+the edit. Successful browser insertion is an open acceptance item, and
+Firefox remains deferred.
+[Chromium ATK implementation](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/ui/accessibility/platform/ax_platform_node_auralinux.cc).
+[Chromium IME implementation](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/renderer/core/editing/ime/input_method_controller.cc).
+
 ## Limits
 
 Physical devices, other application toolkit controls, Wayland, macOS and

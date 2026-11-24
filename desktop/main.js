@@ -26,7 +26,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'local-voice', privileges: {
 
 let library, controller, target, tray, runtime, management, indicator, runtimeReady;
 let modelView, shortcutError = '', registeredShortcut, quitting = false, shutDown = false;
-let modelOperation, shortcutTimer, shortcutChanging = false, runtimeSequence = 0;
+let modelOperation, shortcutChanging = false, runtimeSequence = 0;
 const pendingCommands = new Map(), displayItems = new Map();
 
 function isFrom(event, window, page) {
@@ -126,10 +126,8 @@ function shortcutReleased(value) {
   if (!controller.current) {
     void start(library.value.selected, 'dictation', 'bind-shortcut');
   } else {
-    // Let accessibility focus settle after the keyboard grab before draining.
-    const session = controller.current;
-    clearTimeout(shortcutTimer);
-    shortcutTimer = setTimeout(() => { if (controller.current === session) toggle(); }, 90);
+    // The helper waits for focus to settle before applying any final TEXT.
+    toggle();
   }
 }
 
@@ -329,7 +327,6 @@ app.on('before-quit', event => {
   event.preventDefault();
   if (quitting) return;
   quitting = true;
-  clearTimeout(shortcutTimer);
   tray?.destroy();
   indicator?.hide();
   const deadline = setTimeout(() => {

@@ -16,6 +16,7 @@
   const fields = [...document.querySelectorAll('[role=textbox], input, textarea')];
   const edits = [];
   let report = 0;
+  let selection = 0;
   let submits = 0;
   document.querySelector('form').onsubmit = event => { event.preventDefault(); submits++; };
   const password = document.querySelector('#password');
@@ -40,8 +41,15 @@
     fetch('/state', { method: 'POST', body: JSON.stringify({
       report: ++report, values: Object.fromEntries(fields.map(target => [target.id, target.value ?? target.textContent])),
       focus: document.activeElement.id, submits, edits,
-      caret: caret(), active: document.hasFocus(),
-    }) }).catch(() => {});
+      caret: caret(), active: document.hasFocus(), selection,
+    }) }).then(response => response.json()).then(request => {
+      if (!request || request.serial <= selection) return;
+      const target = document.getElementById(request.target);
+      target.focus();
+      if (target === editable) document.getSelection().collapse(target.firstChild, request.caret);
+      else target.setSelectionRange(request.caret, request.caret);
+      selection = request.serial;
+    }).catch(() => {});
   }, 100);
 </script>
 </html>

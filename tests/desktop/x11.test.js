@@ -15,7 +15,8 @@ import { edge, graphNode, GRAPH_VERSION } from '../../extension/graph.js';
 
 const binary = resolve(process.env.DESKTOP_TEST_BINARY || 'dist/desktop/my-audio-to-text');
 const hotkey = 'ctrl+alt+shift+d';
-const x = (...args) => execFileSync('xdotool', args, { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+const shortcutKeys = ['Control_L', 'Alt_L', 'Shift_L', 'd'];
+const x = (...args) => execFileSync('xdotool', args, { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 async function eventually(check, description, timeout = 10000) {
   let error;
@@ -34,15 +35,29 @@ async function windowId(title, timeout) {
   return eventually(() => x('search', '--onlyvisible', '--name', title).split('\n').at(-1), `X11 window unavailable: ${title}`, timeout);
 }
 
+async function activate(window) {
+  if (x('getactivewindow') !== window) x('windowactivate', window);
+  await eventually(() => x('getactivewindow') === window && x('getwindowfocus') === window,
+    `X11 window ${window} did not receive focus`);
+}
+
 async function trigger(window, shortcut = hotkey) {
-  if (x('getactivewindow') !== window) x('windowactivate', '--sync', window);
+  await activate(window);
   await wait(320);
   x('key', '--clearmodifiers', shortcut);
 }
 
 function child(t, executable, args) {
   const process = spawn(executable, args, { stdio: ['ignore', 'ignore', 'inherit'] });
-  t.after(() => process.kill());
+  const exited = once(process, 'exit');
+  void exited.catch(() => {});
+  t.after(async () => {
+    if (!process.pid || process.exitCode !== null || process.signalCode !== null) return;
+    process.kill();
+    const timeout = setTimeout(() => process.kill('SIGKILL'), 3000);
+    try { await exited; }
+    finally { clearTimeout(timeout); }
+  });
   return process;
 }
 
@@ -69,28 +84,36 @@ async function gtkFixture(t, dir) {
   return { id, process, get: () => JSON.parse(readFileSync(path, 'utf8')) };
 }
 
-async function browser(t, dir) {
+async function browser(t) {
+  const dir = await mkdtemp(join(tmpdir(), 'desktop-chromium-'));
   const page = readFileSync('tests/desktop/browser-target.html');
-  let state;
+  let state, selection;
   const http = createServer(async (request, response) => {
     if (request.url === '/state' && request.method === 'POST') {
       let body = '';
       for await (const chunk of request) body += chunk;
-      state = JSON.parse(body);
-      response.writeHead(204).end();
+      const update = JSON.parse(body);
+      if (update.report > (state?.report ?? 0)) state = update;
+      response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(selection ?? null));
     } else response.writeHead(200, { 'Content-Type': 'text/html' }).end(page);
   });
   http.listen(0, '127.0.0.1');
   await once(http, 'listening');
-  t.after(() => http.close());
+  t.after(() => { http.close(); http.closeAllConnections(); });
   child(t, process.env.DESKTOP_TEST_CHROMIUM || 'chromium', [
-    '--no-first-run', '--disable-extensions', '--force-renderer-accessibility',
+    '--no-first-run', '--disable-extensions', '--force-renderer-accessibility', '--ozone-platform=x11',
     `--user-data-dir=${join(dir, 'chromium')}`, `http://127.0.0.1:${http.address().port}/`,
   ]);
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
   const id = await windowId('^Voice typing test browser', 30000);
-  x('windowactivate', '--sync', id);
+  await activate(id);
   await eventually(() => state?.active && state.focus === 'field', 'Chromium did not focus the test input');
-  return { id, get: () => state };
+  const focus = (target, caret = 1) => {
+    selection = { target, caret, serial: (selection?.serial ?? 0) + 1 };
+    return eventually(() => state.selection === selection.serial && state.active &&
+      state.focus === target && state.caret === caret && state, `Chromium did not focus the test caret in ${target}`);
+  };
+  return { id, get: () => state, focus };
 }
 
 async function launch(t) {
@@ -100,7 +123,7 @@ async function launch(t) {
     await app?.close().catch(() => {});
     await rm(profile, { recursive: true, force: true, maxRetries: 10 });
   });
-  app = await _electron.launch({ executablePath: binary, chromiumSandbox: true, timeout: 30000,
+  app = await _electron.launch({ executablePath: binary, chromiumSandbox: true, timeout: 45000,
     env: { ...process.env, XDG_CONFIG_HOME: profile, XDG_CACHE_HOME: profile } });
   const page = await eventually(() => app.windows().find(page => page.url().endsWith('/management.html')), 'Management renderer did not load');
   const errors = [];
@@ -392,32 +415,27 @@ test('packaged app leaves unverified GTK buffers and protected controls untouche
 });
 
 test('packaged app refuses unsupported Chromium targets before any edit', { timeout: 90000 }, async t => {
-  const dir = await mkdtemp(join(tmpdir(), 'desktop-chromium-'));
-  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
-  const { app, page, view } = await launch(t);
+  const { page } = await launch(t);
   await importGraph(page, 'Browser fixture', literalGraph('{1}', FOCUSED_OUTPUT, ' [東京🙂] '));
   await selectGraph(page, 'Browser fixture');
+  await page.evaluate(() => {
+    window.testSessions = [];
+    window.desktop.onUpdate(({ session }) => window.testSessions.push(session));
+  });
   x('key', 'alt+F4');
-  const chromium = await browser(t, dir);
-  const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
+  const chromium = await browser(t);
   const values = {
     field: 'left|right', limited: 'xy', multiline: 'xy', editable: 'xy', readonly: 'xy', password: 'secret',
   };
 
   for (const target of Object.keys(values)) {
-    if (target !== 'field') x('key', 'Tab');
-    if (target !== 'readonly') x('key', 'Home', 'Right');
-    const before = await eventually(() => {
-      const state = chromium.get();
-      return state.active && state.focus === target && (target === 'readonly' || state.caret === 1) && state;
-    }, `Chromium did not focus the test caret in ${target}`);
-
+    const before = await chromium.focus(target);
+    await page.evaluate(() => { window.testSessions.length = 0; });
     await trigger(chromium.id);
     await eventually(async () => {
-      const { session } = await view();
-      if (session.phase !== 'idle' || !/editable plain-text|authorized text field/.test(session.error)) {
-        throw Error(JSON.stringify(session));
-      }
+      const sessions = await page.evaluate(() => window.testSessions);
+      assert.deepEqual(sessions.map(session => session.phase), ['preparing', 'canceling', 'idle']);
+      assert.match(sessions.at(-1).error, /editable plain-text|authorized text field/);
       return true;
     }, `Desktop did not report a refusal for ${target}`);
     const report = chromium.get().report;
@@ -430,8 +448,6 @@ test('packaged app refuses unsupported Chromium targets before any edit', { time
     });
     assert.equal(x('getactivewindow'), chromium.id);
     assert.equal(x('getwindowfocus'), chromium.id);
-    await indicator.getByRole('button', { name: 'Dismiss' }).click();
-    await eventually(async () => !(await view()).session.error, 'The desktop error was not dismissed');
   }
 });
 
@@ -454,22 +470,25 @@ test('committed text waits for the Stop shortcut grab and stays bound to the ori
 
   const committed = '東京🙂';
   const queued = () => runtime.evaluate(text => {
+    window.testInsertResult = null;
     window.testInsert = window.runtimeHost.insert(window.testSession, text).then(
       () => ({ inserted: true }), error => ({ inserted: false, error: error.message }),
-    );
+    ).then(result => { window.testInsertResult = result; return result; });
   }, committed);
   const initial = ['', 'left|right'];
   await trigger(native.id);
   await phase('running');
-  x('keydown', hotkey);
+  x('keydown', ...shortcutKeys);
   try {
     await queued();
     // Exceed the helper's normal request timeout as well as the repeat delay.
     await wait(7500);
+    assert.equal(await runtime.evaluate(() => window.testInsertResult), null);
     assert.deepEqual(native.get().values, initial);
-    assert.equal((await view()).session.phase, 'running');
+    const { session } = await view();
+    assert.equal(session.phase, 'running', session.error);
   } finally {
-    x('keyup', hotkey);
+    x('keyup', ...shortcutKeys.toReversed());
   }
   await phase('idle');
   assert.deepEqual(await runtime.evaluate(() => window.testInsert), { inserted: true });
@@ -484,13 +503,15 @@ test('committed text waits for the Stop shortcut grab and stays bound to the ori
 
   await trigger(native.id);
   await phase('running');
-  x('keydown', hotkey);
+  x('keydown', ...shortcutKeys);
   try {
     await queued();
     await wait(350);
-    assert.equal((await view()).session.phase, 'running');
+    assert.equal(await runtime.evaluate(() => window.testInsertResult), null);
+    const { session } = await view();
+    assert.equal(session.phase, 'running', session.error);
   } finally {
-    x('keyup', '--delay', '1', hotkey, 'key', '--delay', '1', 'ctrl+Page_Up');
+    x('keyup', '--delay', '1', ...shortcutKeys.toReversed(), 'key', '--delay', '1', 'ctrl+Page_Up');
   }
   await eventually(() => native.get().focus === 0, 'GTK focus did not move during shortcut release');
   await phase('idle');

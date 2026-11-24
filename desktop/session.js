@@ -45,6 +45,7 @@ export class DesktopSession {
   async cancel(error = '', id = this.current?.id) {
     const session = this.current;
     if (!session || session.id !== id || this.state.phase === 'canceling') return session?.canceling;
+    const started = session.admitted;
     session.admitted = false;
     this.update({ phase: 'canceling', microphone: false, error });
     return session.canceling = (async () => {
@@ -53,7 +54,7 @@ export class DesktopSession {
       const results = await Promise.allSettled([
         this.release(session),
         session.plan.focused ? session.queue : undefined,
-        this.run('cancel', session.id),
+        started ? this.run('cancel', session.id) : undefined,
       ]);
       await this.finish(session, 'canceling', error || results.find(result => result.status === 'rejected')?.reason?.message || '');
     })();

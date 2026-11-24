@@ -132,7 +132,7 @@ class Focus:
     def locate(self, window):
         frames = []
         for app in children(Atspi.get_desktop(0)):
-            if app is not None and app.get_process_id() == window[1]:
+            if app is not None and app.get_process_id() == window[1] and app.get_toolkit_name() == "gtk":
                 frames.extend(frame for frame in children(app) if frame is not None
                               and frame.get_state_set().contains(Atspi.StateType.ACTIVE))
         if len(frames) != 1:
@@ -197,8 +197,10 @@ class Focus:
 
     def bind(self, token, expected):
         window = self.window()
+        if window != expected[0]:
+            raise TargetError(LOST_TARGET)
         frame, focused = self.locate(window)
-        if window != expected[0] or not same_node(focused, expected[1]):
+        if not same_node(focused, expected[1]):
             raise TargetError(LOST_TARGET)
         self.caret(focused, self.editable(focused))
         self.whole_edit_supported(window)
@@ -226,7 +228,7 @@ class Focus:
             try:
                 if self.binding != (token, target) or self.watched != target[0]:
                     raise TargetError(LOST_TARGET)
-                if self.grabbed or not same_node(self.focused, target[1]):
+                if self.focus_is_settling() or not same_node(self.focused, target[1]):
                     if time.monotonic() < deadline:
                         return True
                     raise TargetError(LOST_TARGET)
@@ -255,7 +257,7 @@ class Focus:
         raise TargetError(LOST_TARGET)
 
     def focus_is_settling(self):
-        return self.grabbed or time.monotonic() < self.focus_settles_at
+        return self.grabbed or self.shortcut.pressed is not None or time.monotonic() < self.focus_settles_at
 
     def insert_after_grab(self, token, text, reply):
         next_update = 0
@@ -326,6 +328,9 @@ class Focus:
             send({"invalid": token, "error": LOST_TARGET})
 
     def check(self):
+        # Synchronous Xlib replies can pull events off the socket into its
+        # internal queue, where the GLib fd watch cannot see them.
+        self.x_event()
         if self.bound and not self.focus_is_settling():
             try:
                 self.current(self.bound[0])
@@ -390,6 +395,7 @@ class Focus:
             active_changed |= event.type == X.PropertyNotify and event.atom == self.active_atom
             self.track_tray_menu(event)
             if self.shortcut.released(event):
+                self.focus_settles_at = time.monotonic() + FOCUS_SETTLE_MS / 1000
                 self.shortcut_sequence += 1
                 self.shortcut_release = self.shortcut_sequence
                 if self.shortcut_target:
@@ -422,8 +428,6 @@ class Focus:
             if previous != self.watched:
                 self.binding = None
                 self.invalidate()
-            else:
-                self.check()
         return True
 
     def receive(self, fd, _condition):

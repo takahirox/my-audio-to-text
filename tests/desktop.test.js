@@ -145,7 +145,7 @@ test('target invalidation discards queued output and cannot overlap cleanup with
 });
 
 test('bind failure and microphone denial fail visibly, then a new Start succeeds', async () => {
-  let starts = 0, releases = 0;
+  let starts = 0, releases = 0, cancels = 0;
   let failBind = true;
   const controller = new DesktopSession({
     target: { request: async action => {
@@ -154,12 +154,14 @@ test('bind failure and microphone denial fail visibly, then a new Start succeeds
     } },
     run: async action => {
       if (action === 'start' && ++starts === 1) throw Error('Microphone permission denied');
+      if (action === 'cancel') cancels++;
     },
     onChange() {}, onDisplay() {},
   });
   await controller.start(plan());
   assert.equal(controller.state.error, 'Protected field');
   assert.equal(starts, 0);
+  assert.equal(cancels, 0);
   failBind = false;
   await controller.start(plan());
   assert.equal(controller.state.error, 'Microphone permission denied');
@@ -168,4 +170,5 @@ test('bind failure and microphone denial fail visibly, then a new Start succeeds
   assert.equal(controller.state.phase, 'running');
   await controller.cancel();
   assert.equal(releases, 3);
+  assert.equal(cancels, 2);
 });
