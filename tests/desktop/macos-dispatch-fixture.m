@@ -48,7 +48,10 @@ static CFRange selection;
 static NSUInteger selectionReads;
 static NSUInteger focused;
 static BOOL switchOnSecondSelection;
+static BOOL readOnlyOnSecondSelection;
+static BOOL denyAccessibilityOnSecondSelection;
 static BOOL pauseFinalFocus;
+static BOOL checkedEditabilityAfterSelection;
 static dispatch_semaphore_t resumeFocus;
 
 static void emitMessage(NSDictionary *message);
@@ -71,9 +74,12 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
     else if ([key isEqual:@"AXWindow"]) result = windows[0];
     else if ([key isEqual:@"AXValue"]) result = documents[object == fields[1]];
     else if ([key isEqual:@"AXSelectedTextRange"]) {
-        // Simulate the focus change on the final selection read. AX's
-        // observer callback has yet to run when the write is dispatched.
-        if (++selectionReads == 2 && switchOnSecondSelection) focused = 1;
+        // Change the target state on the final selection read without an observer callback.
+        if (++selectionReads == 2) {
+            if (switchOnSecondSelection) focused = 1;
+            if (readOnlyOnSecondSelection) readOnly = YES;
+            if (denyAccessibilityOnSecondSelection) trusted = NO;
+        }
         *value = AXValueCreate(kAXValueTypeCFRange, &selection);
         return kAXErrorSuccess;
     }
@@ -87,7 +93,7 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
     (void)options;
     assert([(__bridge NSArray *)keys isEqual:(@[@"AXFocusedWindow", @"AXFocusedUIElement"])]);
     *values = CFBridgingRetain(@[windows[focused], fields[focused]]);
-    if (pauseFinalFocus && selectionReads == 2) {
+    if (pauseFinalFocus && checkedEditabilityAfterSelection) {
         pauseFinalFocus = NO;
         emitMessage(@{@"focusReadPaused": @YES});
         assert(dispatch_semaphore_wait(resumeFocus,
@@ -97,6 +103,7 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
 }
 
 static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *allowed) {
+    if (selectionReads == 2) checkedEditabilityAfterSelection = YES;
     *allowed = (__bridge id)element == fields[0] && !readOnly &&
         CFEqual(key, browser ? kAXValueAttribute : kAXSelectedTextAttribute);
     return kAXErrorSuccess;
@@ -125,7 +132,7 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
     // AXTextOperation could redirect after selection changes or submit a form.
     assert(browser && CFEqual(key, CFSTR("AXReplaceRangeWithText")));
     assert((__bridge id)element == fields[focused] && focused == 0);
-    assert(trusted && !readOnly && !modifiers && !protectedField);
+    assert(!modifiers && !protectedField);
     NSDictionary *parameter = (__bridge NSDictionary *)input;
     NSString *text = parameter[@"AXReplacementText"];
     CFRange range;
@@ -135,7 +142,7 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
     writes++;
     *value = CFRetain(kCFBooleanTrue);
     if (moveCaretOnly) selection = CFRangeMake(range.location + 1, 0);
-    if (dropWrite || moveCaretOnly) return kAXErrorSuccess;
+    if (!trusted || readOnly || dropWrite || moveCaretOnly) return kAXErrorSuccess;
     if (singleLine) text = [text stringByReplacingOccurrencesOfString:@"\n" withString:@""];
     if (limit && text.length > limit) text = [text substringToIndex:limit];
     documents[0] = [documents[0] stringByReplacingCharactersInRange:
@@ -177,7 +184,10 @@ static void handleFixture(NSDictionary *message) {
     limit = [options[@"limit"] unsignedIntegerValue];
     if (options[@"focused"]) focused = [options[@"focused"] unsignedIntegerValue];
     switchOnSecondSelection = [options[@"switchOnSecondSelection"] boolValue];
+    readOnlyOnSecondSelection = [options[@"readOnlyOnSecondSelection"] boolValue];
+    denyAccessibilityOnSecondSelection = [options[@"denyAccessibilityOnSecondSelection"] boolValue];
     pauseFinalFocus = [options[@"pauseFinalFocus"] boolValue];
+    checkedEditabilityAfterSelection = NO;
     selectionReads = 0;
     trusted = ![options[@"denyAccessibility"] boolValue];
     readOnly = [options[@"readOnly"] boolValue];
