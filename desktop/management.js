@@ -60,11 +60,13 @@ async function edit(entry) {
       onSaved: graph => { editor.saved = structuredClone(graph); editor.updateSummary(); },
       onState: (state, error) => editor.setSaveState(state, error),
     });
-    const recovery = recoveryDrafts(localStorage, entry.id).find(item => item.base === entry.revision);
+    const checkpoints = recoveryDrafts(localStorage, entry.id).filter(item => item.base === entry.revision);
+    for (const checkpoint of checkpoints) draft.keys.add(checkpoint.key);
+    const [recovery] = checkpoints;
     if (recovery && JSON.stringify(recovery.graph) !== JSON.stringify(graph)) {
-      editor.draft = assertDesktopGraph(recovery.graph);
-      draft.keys.add(recovery.key);
-      draft.changed(editor.draft);
+      // Checkpoints can contain invalid settings. Restore the edit for repair
+      // or Undo, and let Auto Save validate it before replacing the saved graph.
+      editor.edit(() => { editor.draft = recovery.graph; });
       editor.draw();
     }
     editorId = entry.id;

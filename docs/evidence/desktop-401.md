@@ -1,6 +1,6 @@
 # Issue #401 desktop validation
 
-See [the latest macOS Chrome paste and model staging run](#macos-chrome-paste-and-model-staging)
+See [the macOS review fixes](#macos-review-fixes)
 and the [optional manual steps](../desktop.md#manual-test-on-macos) for the
 revised Issue #401 acceptance. The earlier runs below retain their original
 constraints and results.
@@ -633,3 +633,54 @@ after the final fixture adjustment. The focused macOS MV3 run passed 74
 checks with two optional real-model skips, and the updated IfCondition
 suite passed all seven checks in a follow-up run. `git diff --check` passed.
 The GitHub-hosted job still needs a run on the published fix revision.
+
+## macOS review fixes
+
+The review of PR #402 reproduced two races in Chrome's process-targeted paste.
+Chrome could consume an event after focus moved to another field in the same
+process. An unrelated caret move could also advance the queue and restore
+the prior clipboard contents before consumption. The macOS browser adapter
+now uses Safari, sending the original element and its checked caret markers
+together in one Accessibility text operation. Chrome's ordinary web fields
+are unsupported because the installed path had no field-bound dispatch and
+Chromium's range operation is disabled by default upstream.
+[Chromium range-operation feature](https://chromium.googlesource.com/chromium/src/+/a4037b9d04ff3754918f686344a8873ce05b22d0/ui/accessibility/accessibility_features.cc).
+
+WebKit resolves the supplied marker range within its editable root and uses
+its native editor for text entry. The adapter checks for the operation,
+rejects protected and known read-only fields, and requires the marker range
+to belong to the authorized field with a collapsed selection. An edit in
+flight can still complete in that field. The adapter never queues keyboard
+events or touches the clipboard. It requires a compatible value and caret
+change before sending the next chunk and stops on ambiguity. A single LF
+in a single-line field is refused because WebKit treats that text event as
+implicit form submission.
+[WebKit AX handler](https://github.com/WebKit/WebKit/blob/29886d4d7a5e943657447a2a0274dd0297abe4f1/Source/WebCore/accessibility/mac/WebAccessibilityObjectWrapperMac.mm#L3870),
+[WebKit range editing](https://github.com/WebKit/WebKit/blob/29886d4d7a5e943657447a2a0274dd0297abe4f1/Source/WebCore/accessibility/AccessibilityObject.cpp#L1354),
+[WebKit form submission](https://github.com/WebKit/WebKit/blob/29886d4d7a5e943657447a2a0274dd0297abe4f1/Source/WebCore/html/TextFieldInputType.cpp#L303).
+
+The macOS package was built in Aqua on macOS 27.2.1 (26B131) arm64 with Apple
+clang 21.0.0 and Electron 45.4.1. Safari 27.2 was installed. The helper and
+management source files for the tested package have Git blob IDs
+`2f5269e25204b54af82ee86204bce14c04c9bcd8` and
+`95822df440692a977177fae999804f60eab20298`. The recovered graph is validated
+on Auto Save. The packaged relaunch regression checks repair and immediate
+Undo after repeated relaunches.
+
+| Check | Observed result |
+| --- | --- |
+| Two `npm run build:desktop` runs and `codesign --verify --deep --strict` on the extracted macOS app | Both archives had SHA-256 `3895e3d288325ca0d674cd12df2c25fcedb59b8a2c70dbc88ac699dca5c94388`. Signature verification passed. |
+| `DESKTOP_MACOS_EDITOR=1 DESKTOP_REAL_ASR=1 npm run test:desktop` on the extracted package | Six passed, including launch, shortcut conflicts, residency, Quit, the stale Live release, and draft recovery. The simulated OS boundary covered delayed consumption after a same-process focus change, an unrelated caret move before consumption, Unicode order, truncation, protected and read-only fields, missing Accessibility, modifier release, and ambiguity without retry. |
+| Real offline model on macOS | BlackHole 2ch routed `tests/desktop/fixtures/konnichiwa.wav` to the actual microphone and Pipeline. Model `moonshine/small-streaming-ja` at revision `330a8fedc2c613a96902275ecf6f622bda1271d820221427c19ac2cea230ffee` produced `こんにちは、こんにちは、こんにちは` in Live Display with HTTP(S) blocked after preparation. |
+| Native TextEdit and Safari checks | Six skipped at the Swift driver's preflight (`{"accessibility":false,"keyboard":false}`). Real native external-field delivery remains unverified on this runner. [Optional manual test on macOS](../desktop.md#manual-test-on-macos). |
+| Debian 12 arm64/X11 extracted package with `DESKTOP_REAL_ASR=1 npm run test:desktop` | Six passed with Xvfb, Openbox and PulseAudio. The offline model inserted `こんにちは、こんにちは、こんにちは` into Mousepad. |
+
+The local `models` workflow stages ran on Debian 12 arm64 with Node 22.23.5,
+Python 3.11.2 and Playwright 1.63.0. The Hold feedback test waits for the
+temporary disconnect to persist, undoes it, and waits for the original
+graph before reloading. Asset preparation passed. `npm test` passed all
+940 tests. The Playground suite passed 233 and skipped five. The extension
+build verified 220 files, all three distribution audits passed, and the
+workflow's MV3 suite passed 43 and skipped two optional real-model cases.
+`git diff --check` passed. These are local results for the fix. The hosted
+workflow runs when the fix is published.

@@ -27,10 +27,15 @@ export class GraphDraftSession {
     const text = JSON.stringify(graph);
     if (text === this.text) { this.onState(this.status || 'Saved', this.error || ''); return; }
     this.graph = structuredClone(graph); this.text = text;
+    clearTimeout(this.timer);
+    if (text === this.savedText && !this.inflight && !this.blocked) {
+      // Undo can return to the saved graph immediately before the page closes.
+      // Clear the superseded draft before reporting Saved.
+      this.clearCheckpoints(); this.recoverable = true; this.state('Saved'); return;
+    }
     this.checkpoint();
     if (this.blocked) this.state('Save failed', this.blocked);
-    else if (this.recoverable) this.state(text === this.savedText && !this.inflight ? 'Saved' : 'Saving…');
-    clearTimeout(this.timer);
+    else if (this.recoverable) this.state('Saving…');
     this.timer = setTimeout(() => { void this.flush().catch(() => {}); }, this.delay);
   }
   async flush() {

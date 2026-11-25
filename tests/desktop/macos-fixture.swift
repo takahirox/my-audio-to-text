@@ -144,8 +144,8 @@ case "permissions":
     print("{\"accessibility\":\(AXIsProcessTrusted()),\"keyboard\":\(CGPreflightPostEventAccess())}")
 case "frontmost":
     print(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "")
-case "textedit-pids":
-    print(NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.TextEdit")
+case "app-pids":
+    print(NSRunningApplication.runningApplications(withBundleIdentifier: args[2])
         .map { String($0.processIdentifier) }.joined(separator: " "))
 case "front-pid":
     print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)

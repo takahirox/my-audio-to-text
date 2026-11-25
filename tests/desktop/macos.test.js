@@ -37,12 +37,12 @@ async function temp(t, prefix) {
   return path;
 }
 
-async function launch(t) {
-  const profile = await mkdtemp(join(tmpdir(), 'desktop-macos-'));
+async function launch(t, existingProfile) {
+  const profile = existingProfile ?? await mkdtemp(join(tmpdir(), 'desktop-macos-'));
   let desktop;
   t.after(async () => {
     await desktop?.close().catch(() => {});
-    await rm(profile, { recursive: true, force: true, maxRetries: 10 });
+    if (!existingProfile) await rm(profile, { recursive: true, force: true, maxRetries: 10 });
   });
   desktop = await _electron.launch({
     executablePath: binary, args: ['--user-data-dir=' + profile], chromiumSandbox: true, timeout: 30000,
@@ -54,7 +54,7 @@ async function launch(t) {
     packaged: app.isPackaged, profile: app.getPath('userData'), name: app.getName(),
   })), { packaged: true, profile: await realpath(profile), name: 'My Audio to Text' });
   const view = () => management.evaluate(() => window.desktop.get());
-  return { desktop, management, view };
+  return { desktop, management, view, profile };
 }
 
 function shortcutClient(t) {
@@ -118,7 +118,7 @@ async function selectFocusedGraph({ desktop, management }, name, literal = '') {
 async function externalEditor(t, run, name, initialText) {
   const path = join(await temp(t, 'desktop-textedit-'), `${name}.txt`);
   await writeFile(path, initialText);
-  const existing = new Set(run('textedit-pids').split(' '));
+  const existing = new Set(run('app-pids', 'com.apple.TextEdit').split(' '));
   execFileSync('/usr/bin/open', ['-n', '-a', '/System/Applications/TextEdit.app', path]);
   const pid = await eventually(() => {
     if (run('frontmost') !== 'com.apple.TextEdit') return false;
@@ -137,30 +137,21 @@ async function externalEditor(t, run, name, initialText) {
   return { pid, text };
 }
 
-async function externalChrome(t, run) {
+async function externalSafari(t, run) {
   const { url, state, select } = await browserFixture(t);
-  const profile = await mkdtemp(join(tmpdir(), 'desktop-chrome-'));
-  const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
-    '--no-first-run', '--no-default-browser-check', '--disable-extensions', `--user-data-dir=${profile}`, url,
-  ], { stdio: 'ignore' });
-  const closed = once(chrome, 'close');
-  void closed.catch(() => {});
-  t.after(async () => {
-    try {
-      if (chrome.pid && chrome.exitCode === null && chrome.signalCode === null) {
-        chrome.kill();
-        const timer = setTimeout(() => chrome.kill('SIGKILL'), 3000);
-        try { await closed; }
-        finally { clearTimeout(timer); }
-      }
-    } finally {
-      await rm(profile, { recursive: true, force: true, maxRetries: 10 });
-    }
+  const bundle = 'com.apple.Safari';
+  const existing = new Set(run('app-pids', bundle).split(' '));
+  execFileSync('/usr/bin/open', ['-n', '-a', '/Applications/Safari.app', url]);
+  const pid = await eventually(() => {
+    if (run('frontmost') !== bundle) return false;
+    const pid = run('front-pid');
+    return !existing.has(pid) && Number(pid);
+  }, 'The independent Safari test instance did not come to the foreground', 30000);
+  t.after(() => {
+    try { process.kill(pid, 'SIGTERM'); }
+    catch (error) { if (error.code !== 'ESRCH') throw error; }
   });
-  await once(chrome, 'spawn');
-  const pid = chrome.pid;
-  await eventually(() => Number(run('front-pid')) === pid && state()?.active,
-    'The independent Chrome window did not receive focus', 30000);
+  await eventually(() => state()?.active, 'The Safari test page did not receive focus');
 
   const focus = (field, caret, limitOnEdit) => {
     const serial = select(field, caret, limitOnEdit);
@@ -226,7 +217,7 @@ test('macOS dispatch rechecks the bound window and field after reading the selec
   assert.deepEqual(results, [{ request: 1, error: 'The authorized window or text field changed or lost focus.' }, { request: 2 }]);
 });
 
-test('macOS output queue and Chrome adapter serialize paste and guard authorization and clipboard ownership', async t => {
+test('macOS queue keeps Safari edits bound to the authorized field, including delayed consumption', async t => {
   const tool = await compileDispatchFixture(t);
   const target = new FocusedTarget(tool, ['browser'], {
     onInvalid: (id, error) => { void controller.cancel(error, id); },
@@ -256,87 +247,123 @@ test('macOS output queue and Chrome adapter serialize paste and guard authorizat
     await controller.start(plan, 'bind-tray');
     return controller.current?.id;
   };
-  const expectRestored = ({ clipboard, binary }) => {
-    assert.equal(clipboard, 'existing copy');
-    assert.equal(binary, 'binary data');
-  };
+  const commits = [];
+  const expectDispatches = async () => assert.deepEqual((await configure()).dispatches, commits);
 
-  for (const options of [{ secure: true }, { readOnly: true }, { denyKeyboard: true }]) {
+  for (const options of [{ secure: true }, { readOnly: true }, { denyAccessibility: true },
+    { missingOperation: true }, { foreignRange: true }, { chrome: true }]) {
     await configure(options);
     assert.equal(await start(), undefined);
-    assert.match(controller.state.error, /cannot be safely edited|keyboard event posting/);
+    assert.match(controller.state.error, /cannot be safely edited|Accessibility/);
     assert.deepEqual((await configure(options)).dispatches, []);
   }
 
-  await configure();
+  await configure({ singleLine: true });
   let id = await start();
+  assert.ok(id);
+  await assert.rejects(controller.insert(id, '\n'), /can treat a lone line break as Submit/);
+  await controller.cancel();
+  await expectDispatches();
+
+  id = await start();
   assert.ok(id);
   const chunks = [' 東京', '🙂\n ', 'か\u3099'];
   const pending = chunks.map(text => controller.insert(id, text));
   await controller.stop();
   await Promise.all(pending);
+  commits.push(...chunks);
   let observed = await configure();
-  assert.deepEqual(observed.dispatches, chunks);
-  assert.equal(observed.text, 'left|' + chunks.join('') + 'right');
-  expectRestored(observed);
+  assert.deepEqual(observed.dispatches, commits);
+  let prefix = 'left|' + chunks.join('');
+  assert.equal(observed.text, prefix + 'right');
 
-  await configure({ pasteLimit: 1 });
+  await configure({ editLimit: 1 });
   id = await start();
   await controller.insert(id, 'A東京🙂\n');
   await controller.stop();
+  commits.push('A東京🙂\n');
+  prefix += 'A';
   observed = await configure();
-  assert.deepEqual(observed.dispatches, [...chunks, 'A東京🙂\n']);
-  assert.equal(observed.text, 'left|' + chunks.join('') + 'Aright');
-  expectRestored(observed);
+  assert.deepEqual(observed.dispatches, commits);
+  assert.equal(observed.text, prefix + 'right');
 
-  // A target may reject an edit entirely. Ambiguity must never retry it or
-  // release the next queued chunk to a caret whose state is unknown.
-  await configure({ pasteLimit: 0 });
+  // A caret-only change occurs while consumption is delayed. The first
+  // request must remain pending and the second must not be dispatched.
+  await configure({ moveCaretBeforeConsumption: true });
+  id = await start();
+  const delayed = controller.insert(id, ' delayed');
+  const next = controller.insert(id, ' then next');
+  await eventually(async () => {
+    const snapshot = await configure({ moveCaretBeforeConsumption: true });
+    if (snapshot.consumed || snapshot.dispatches.length === commits.length) return false;
+    assert.deepEqual(snapshot.dispatches, [...commits, ' delayed']);
+    assert.equal(snapshot.text, prefix + 'right');
+    return true;
+  }, 'Did not observe the pending write after a caret-only change');
+  await controller.stop();
+  await Promise.all([delayed, next]);
+  commits.push(' delayed', ' then next');
+  prefix += ' delayed then next';
+  observed = await configure();
+  assert.deepEqual(observed.dispatches, commits);
+  assert.equal(observed.text, prefix + 'right');
+
+  // An acknowledged request that produced no edit is ambiguous. Stop
+  // without retry or another dispatch.
+  await configure({ editLimit: 0 });
   id = await start();
   await Promise.all([
-    assert.rejects(controller.insert(id, 'a rejected paste'), /dispatched.*could not be confirmed/),
+    assert.rejects(controller.insert(id, 'a rejected edit'), /did not confirm/),
     assert.rejects(controller.insert(id, 'must stay queued'), /no longer authorized/),
   ]);
+  commits.push('a rejected edit');
   await controller.cancel();
-  observed = await configure({ held: true });
-  assert.deepEqual(observed.dispatches, [...chunks, 'A東京🙂\n', 'a rejected paste']);
-  expectRestored(observed);
+  await expectDispatches();
 
+  await configure({ held: true });
   id = await start();
   const canceled = assert.rejects(controller.insert(id, 'discard while held'), /changed or lost focus/);
-  await eventually(() => waiting, 'The native adapter did not hold the pending paste');
+  await eventually(() => waiting, 'The native adapter did not hold the pending edit');
   await controller.cancel();
   await canceled;
   await assert.rejects(controller.insert(id, 'late callback'), /no longer authorized/);
-  assert.deepEqual((await configure()).dispatches, observed.dispatches);
+  await expectDispatches();
 
   await configure({ held: true });
   id = await start();
   waiting = false;
   const madeReadOnly = assert.rejects(controller.insert(id, 'became read only'), /cannot be safely edited/);
-  await eventually(() => waiting, 'The native adapter did not hold the pending paste');
+  await eventually(() => waiting, 'The native adapter did not hold the pending edit');
   await configure({ readOnly: true });
   await madeReadOnly;
   await controller.cancel();
-  assert.deepEqual((await configure()).dispatches, observed.dispatches);
+  await expectDispatches();
 
   id = await start();
-  await configure({ replaceClipboard: true });
-  await assert.rejects(controller.insert(id, 'edited once'), /clipboard changed/);
-  await controller.cancel();
-  observed = await configure({ stale: true });
-  assert.deepEqual(observed.dispatches, [...chunks, 'A東京🙂\n', 'a rejected paste', 'edited once']);
-  assert.equal(observed.clipboard, 'new user copy');
-
-  id = await start();
+  await configure({ stale: true });
   await assert.rejects(controller.insert(id, 'stale focus'), /changed or lost focus/);
   await controller.cancel();
-  const stale = await configure();
-  assert.equal(stale.focused, 1);
-  assert.equal(stale.other, 'other');
-  assert.equal(stale.text, observed.text);
-  assert.equal(stale.clipboard, 'new user copy');
-  assert.deepEqual(stale.dispatches, observed.dispatches);
+  observed = await configure({ restoreFocus: true });
+  assert.deepEqual(observed.dispatches, commits);
+  assert.equal(observed.text, prefix + 'right');
+  assert.equal(observed.other, 'other');
+
+  id = await start();
+  await configure({ focusBeforeConsumption: true });
+  await Promise.all([
+    assert.rejects(controller.insert(id, ' original only'), /changed or lost focus/),
+    assert.rejects(controller.insert(id, 'must never dispatch'), /no longer authorized/),
+  ]);
+  await controller.cancel();
+  commits.push(' original only');
+  observed = await eventually(async () => {
+    const snapshot = await configure();
+    return snapshot.consumed && snapshot;
+  }, 'The original field did not consume the addressed edit');
+  assert.equal(observed.focused, 1);
+  assert.equal(observed.other, 'other');
+  assert.equal(observed.text, prefix + ' original onlyright');
+  assert.deepEqual(observed.dispatches, commits);
 });
 
 test('macOS package launches, retains its shortcut after closing management, and releases it on Quit', {
@@ -370,6 +397,59 @@ test('macOS package launches, retains its shortcut after closing management, and
   assert.match(await reserve(defaultShortcut), /unavailable/);
   await desktop.close();
   assert.equal(await reserve(defaultShortcut), undefined);
+});
+
+test('macOS package reopens an invalid Auto Save draft for repair or Undo', {
+  timeout: 60000,
+}, async t => {
+  let app = await launch(t);
+  const name = 'Recover formatter draft';
+  const graph = testGraph('Display', 'hello');
+  graph.nodes.push(graphNode('TextFormatter', 'format', 260, 260));
+  graph.edges = [edge('literal', 'value', 'format', 'input1'), edge('format', 'text', 'out', 'input1')];
+  const { id } = await app.management.evaluate(({ name, graph }) => window.desktop.add(name, graph), { name, graph });
+  const saved = async () => (await app.view()).library.graphs.find(entry => entry.id === id);
+  const openEditor = async () => {
+    const { management } = app;
+    await management.getByRole('article', { name }).getByRole('button', { name: 'Edit' }).click();
+    await management.getByRole('button', { name: 'Select format', exact: true }).click();
+    return management.getByRole('textbox', { name: 'format template' });
+  };
+  const invalid = async (control, template, expected) => {
+    await control.fill(template);
+    await app.management.locator('#graph-state').filter({ hasText: /^Save failed$/ }).waitFor();
+    assert.match(await app.management.locator('#graph-save-error').textContent(), /99/);
+    assert.deepEqual(await saved(), expected);
+  };
+  const relaunch = async () => {
+    await app.desktop.close();
+    app = await launch(t, app.profile);
+  };
+
+  const original = await saved();
+  await invalid(await openEditor(), '{99}', original);
+  await relaunch();
+  let control = await openEditor();
+  assert.equal(await control.inputValue(), '{99}');
+  assert.deepEqual(await saved(), original);
+  await control.fill('Fixed {1}');
+  await app.management.locator('#graph-state').filter({ hasText: /^Saved$/ }).waitFor();
+  const repaired = await saved();
+  assert.equal(repaired.graph.nodes.find(node => node.id === 'format').settings.template, 'Fixed {1}');
+
+  await invalid(control, 'Discard {99}', repaired);
+  await relaunch();
+  control = await openEditor();
+  assert.equal(await control.inputValue(), 'Discard {99}');
+  await app.management.locator('#graph-state').filter({ hasText: /^Save failed$/ }).waitFor();
+  await relaunch();
+  control = await openEditor();
+  assert.equal(await control.inputValue(), 'Discard {99}');
+  await app.management.getByRole('button', { name: 'Undo', exact: true }).click();
+  await app.management.locator('#graph-state').filter({ hasText: /^Saved$/ }).waitFor();
+  assert.deepEqual(await saved(), repaired);
+  await relaunch();
+  assert.equal(await (await openEditor()).inputValue(), 'Fixed {1}');
 });
 
 test('macOS host ignores a shortcut release from an ended Display-only session', {
@@ -555,26 +635,26 @@ test('macOS rejects a pending edit when focus moves between documents in the sam
   assert.equal(text(), 'left|right');
 });
 
-test('native shortcut inserts rapid Unicode commits at the caret in independent Chrome', {
+test('native shortcut inserts rapid Unicode commits at the caret in independent Safari', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
   if (!run) return;
   const app = await launch(t);
   const emit = await textProducer(app.desktop);
-  await selectFocusedGraph(app, 'Chrome OS target');
-  const chrome = await externalChrome(t, run);
-  const before = await chrome.focus('notes', 5);
+  await selectFocusedGraph(app, 'Safari OS target');
+  const safari = await externalSafari(t, run);
+  const before = await safari.focus('notes', 5);
   const commits = [' 東京', '🙂\n ', 'か\u3099'];
   const prefix = 'left|' + commits.join('');
   const expected = { ...before.values, notes: prefix + 'right' };
 
   run('shortcut');
-  await runningWithExternalFocus(app, run, chrome.pid);
+  await runningWithExternalFocus(app, run, safari.pid);
   await emit(...commits);
-  await eventually(() => chrome.state().values.notes === expected.notes,
-    'Chrome did not receive the complete committed TEXT in order');
-  const inserted = chrome.state();
+  await eventually(() => safari.state().values.notes === expected.notes,
+    'Safari did not receive the complete committed TEXT in order');
+  const inserted = safari.state();
   assert.deepEqual(inserted.values, expected);
   assert.equal(inserted.focus, 'notes');
   assert.equal(inserted.caret, prefix.length);
@@ -582,23 +662,23 @@ test('native shortcut inserts rapid Unicode commits at the caret in independent 
   assert.equal(inserted.submits, 0);
   run('shortcut');
   assert.equal((await idle(app.view)).error, '');
-  assert.equal(Number(run('front-pid')), chrome.pid);
+  assert.equal(Number(run('front-pid')), safari.pid);
 
   run('shortcut');
-  await runningWithExternalFocus(app, run, chrome.pid);
+  await runningWithExternalFocus(app, run, safari.pid);
   run('shortcut-down');
   try {
     await emit('must never reach the newly focused field🙂');
-    await chrome.focus('field', 5);
+    await safari.focus('field', 5);
     assert.match((await idle(app.view)).error, /changed or lost focus/);
   } finally { run('shortcut-up'); }
-  const released = chrome.state().report;
-  await eventually(() => chrome.state().report > released, 'Chrome stopped reporting state after shortcut release');
-  assert.deepEqual(chrome.state().values, expected);
-  assert.equal(chrome.state().submits, 0);
+  const released = safari.state().report;
+  await eventually(() => safari.state().report > released, 'Safari stopped reporting state after shortcut release');
+  assert.deepEqual(safari.state().values, expected);
+  assert.equal(safari.state().submits, 0);
 });
 
-test('macOS rejects protected and read-only controls in independent Chrome before editing', {
+test('macOS rejects protected and read-only controls in independent Safari before editing', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
@@ -606,9 +686,9 @@ test('macOS rejects protected and read-only controls in independent Chrome befor
   const app = await launch(t);
   await selectFocusedGraph(app, 'Browser safety target', ' 東京🙂\n ');
   const indicator = app.desktop.windows().find(page => page.url().endsWith('/indicator.html'));
-  const chrome = await externalChrome(t, run);
+  const safari = await externalSafari(t, run);
   for (const field of ['password', 'readonly']) {
-    const { report: _report, ...original } = await chrome.focus(field, 1);
+    const { report: _report, ...original } = await safari.focus(field, 1);
     run('shortcut');
     await eventually(async () => {
       const { session } = await app.view();
@@ -616,13 +696,13 @@ test('macOS rejects protected and read-only controls in independent Chrome befor
       assert.match(session.error, /cannot be safely edited/i);
       return true;
     }, `The packaged app did not refuse ${field}`);
-    const report = chrome.state().report;
+    const report = safari.state().report;
     const after = await eventually(() => {
-      const current = chrome.state();
+      const current = safari.state();
       if (current.report <= report) return false;
       const { report: _, ...snapshot } = current;
       return snapshot;
-    }, 'Chrome did not report its state after the refusal');
+    }, 'Safari did not report its state after the refusal');
     assert.deepEqual(after, original);
     assert.deepEqual(original.edits, []);
     assert.equal(original.submits, 0);
@@ -631,7 +711,7 @@ test('macOS rejects protected and read-only controls in independent Chrome befor
   }
 });
 
-test('macOS lets independent Chrome enforce existing and late length limits during native paste', {
+test('macOS lets independent Safari enforce existing and late length limits during native text entry', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
@@ -639,30 +719,30 @@ test('macOS lets independent Chrome enforce existing and late length limits duri
   const app = await launch(t);
   const emit = await textProducer(app.desktop);
   await selectFocusedGraph(app, 'Late browser length constraint');
-  const chrome = await externalChrome(t, run);
+  const safari = await externalSafari(t, run);
   for (const [field, caret, late, expected] of [
     ['multiline', 2, false, 'xyA東'],
     ['notes', 5, true, 'left|Aright'],
   ]) {
-    const before = await chrome.focus(field, caret, late);
+    const before = await safari.focus(field, caret, late);
     if (late) assert.equal(before.notesMaxLength, -1);
     run('shortcut');
-    await runningWithExternalFocus(app, run, chrome.pid);
+    await runningWithExternalFocus(app, run, safari.pid);
     await emit('A東京🙂\n');
-    await eventually(() => chrome.state().values[field] === expected, 'Chrome did not apply its normal length limit');
+    await eventually(() => safari.state().values[field] === expected, 'Safari did not apply its normal length limit');
     run('shortcut');
     assert.equal((await idle(app.view)).error, '');
-    const report = chrome.state().report;
+    const report = safari.state().report;
     const after = await eventually(() => {
-      const current = chrome.state();
+      const current = safari.state();
       return current.report > report && current;
-    }, 'Chrome did not report its state after Stop');
+    }, 'Safari did not report its state after Stop');
     assert.deepEqual(after.values, { ...before.values, [field]: expected });
     assert.deepEqual(after.edits.slice(before.edits.length), [['beforeinput', field], ['input', field]]);
     if (!late) assert.equal(after.caret, expected.length);
     assert.equal(after.focus, field);
     assert.equal(after.active, true);
-    assert.equal(Number(run('front-pid')), chrome.pid);
+    assert.equal(Number(run('front-pid')), safari.pid);
     assert.equal(after.submits, 0);
   }
 });

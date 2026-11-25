@@ -16,28 +16,27 @@
 static BOOL browser;
 static BOOL readOnly;
 static BOOL secure;
-static BOOL keyboard = YES;
+static BOOL trusted = YES;
 static BOOL modifiers;
-static NSUInteger changeFocusAtDispatch;
-static BOOL replaceClipboard;
-static NSInteger pasteLimit = -1;
+static BOOL operationAvailable = YES;
+static BOOL chrome;
+static BOOL singleLine;
+static BOOL foreignRange;
+static BOOL focusBeforeConsumption;
+static BOOL moveCaretBeforeConsumption;
+static BOOL delayWasObserved;
+static NSInteger editLimit = -1;
 static NSMutableArray<NSString *> *dispatches;
-static NSPasteboard *testBoard;
 
 @implementation FixtureWorkspace
 + (instancetype)sharedWorkspace { return [self new]; }
 - (NSRunningApplication *)frontmostApplication { return (NSRunningApplication *)self; }
 - (NSNotificationCenter *)notificationCenter { return NSNotificationCenter.defaultCenter; }
 - (pid_t)processIdentifier { return 100; }
-- (NSString *)bundleIdentifier { return browser ? @"com.google.Chrome" : @"com.apple.TextEdit"; }
-@end
-
-@interface NSPasteboard (DispatchFixture)
-+ (NSPasteboard *)fixturePasteboard;
-@end
-
-@implementation NSPasteboard (DispatchFixture)
-+ (NSPasteboard *)fixturePasteboard { return testBoard; }
+- (NSString *)bundleIdentifier {
+    if (chrome) return @"com.google.Chrome";
+    return browser ? @"com.apple.Safari" : @"com.apple.TextEdit";
+}
 @end
 
 static id browserDocument;
@@ -48,6 +47,13 @@ static CFRange selection;
 static NSUInteger selectionReads;
 static NSUInteger focused;
 static BOOL switchOnSecondSelection;
+static NSUInteger focusReads;
+static BOOL switchOnFinalFocus;
+
+typedef struct {
+    NSUInteger field;
+    CFIndex offset;
+} FixtureMarker;
 
 static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTypeRef *value) {
     NSString *key = (__bridge NSString *)attribute;
@@ -56,7 +62,7 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
     if ([key isEqual:@"AXFocusedWindow"]) result = windows[focused];
     else if ([key isEqual:@"AXFocusedUIElement"]) result = fields[focused];
     else if ([key isEqual:@"AXRole"]) {
-        if (object == fields[0]) result = @"AXTextArea";
+        if (object == fields[0] || object == fields[1]) result = singleLine ? @"AXTextField" : @"AXTextArea";
         else result = browser && object == browserDocument ? @"AXWebArea" : @"AXScrollArea";
     }
     else if ([key isEqual:@"AXSubrole"] && object == windows[0]) result = @"AXStandardWindow";
@@ -66,6 +72,12 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
     else if ([key isEqual:@"AXParent"]) result = browser ? browserDocument : windows[0];
     else if ([key isEqual:@"AXWindow"]) result = windows[0];
     else if ([key isEqual:@"AXValue"]) result = documents[object == fields[1]];
+    else if ([key isEqual:@"AXSelectedTextMarkerRange"]) {
+        FixtureMarker point = { .field = foreignRange ? 1 : focused, .offset = selection.location };
+        AXTextMarkerRef marker = AXTextMarkerCreate(NULL, (const UInt8 *)&point, sizeof(point));
+        result = CFBridgingRelease(AXTextMarkerRangeCreate(NULL, marker, marker));
+        CFRelease(marker);
+    }
     else if ([key isEqual:@"AXSelectedTextRange"]) {
         // Simulate the focus change on the final selection read. AX's
         // observer callback has yet to run when the write is dispatched.
@@ -82,11 +94,7 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
     (void)element;
     (void)options;
     assert([(__bridge NSArray *)keys isEqual:(@[@"AXFocusedWindow", @"AXFocusedUIElement"])]);
-    if (changeFocusAtDispatch && [testBoard.pasteboardItems.firstObject.types containsObject:@"org.nspasteboard.TransientType"]) {
-        // Change fields on the final focus snapshot, without an observer
-        // callback. Both fields remain in the same window and process.
-        if (focused == 0 && changeFocusAtDispatch++ > 1) focused = 1;
-    }
+    if (++focusReads == 3 && switchOnFinalFocus) focused = 1;
     *values = CFBridgingRetain(@[windows[focused], fields[focused]]);
     return kAXErrorSuccess;
 }
@@ -98,8 +106,7 @@ static AXError selectedTextWritable(AXUIElementRef element, CFStringRef key, Boo
 }
 
 static AXError editDocument(AXUIElementRef element, CFStringRef key, CFTypeRef value) {
-    assert(!browser);
-    assert(CFEqual(key, kAXSelectedTextAttribute));
+    assert(!browser && CFEqual(key, kAXSelectedTextAttribute));
     NSUInteger document = (__bridge id)element == fields[1];
     NSString *text = (__bridge NSString *)value;
     documents[document] = [documents[document] stringByReplacingCharactersInRange:
@@ -108,39 +115,79 @@ static AXError editDocument(AXUIElementRef element, CFStringRef key, CFTypeRef v
     return kAXErrorSuccess;
 }
 
-static void postPaste(pid_t pid, CGEventRef event) {
-    assert(pid == 100 && CGEventGetFlags(event) == kCGEventFlagMaskCommand &&
-        CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == kVK_ANSI_V);
-    assert(focused == 0 && !readOnly && !secure && keyboard && !modifiers);
-    if (CGEventGetType(event) == kCGEventKeyUp) return;
-    assert(CGEventGetType(event) == kCGEventKeyDown);
-    NSString *text = [testBoard stringForType:NSPasteboardTypeString];
-    assert(text);
-    [dispatches addObject:text];
-    if (pasteLimit >= 0 && text.length > (NSUInteger)pasteLimit) text = [text substringToIndex:(NSUInteger)pasteLimit];
-    documents[0] = [documents[0] stringByReplacingCharactersInRange:
-        NSMakeRange((NSUInteger)selection.location, (NSUInteger)selection.length) withString:text];
-    selection = CFRangeMake(selection.location + (CFIndex)text.length, 0);
-    if (replaceClipboard) {
-        [testBoard clearContents];
-        [testBoard setString:@"new user copy" forType:NSPasteboardTypeString];
+static FixtureMarker fixtureMarker(AXTextMarkerRef marker) {
+    assert(AXTextMarkerGetLength(marker) == sizeof(FixtureMarker));
+    FixtureMarker point;
+    memcpy(&point, AXTextMarkerGetBytePtr(marker), sizeof(point));
+    return point;
+}
+
+static AXError copyParameterizedNames(AXUIElementRef element, CFArrayRef *names) {
+    assert((__bridge id)element == fields[focused]);
+    *names = CFBridgingRetain(operationAvailable ? @[@"AXTextOperation"] : @[]);
+    return kAXErrorSuccess;
+}
+
+static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFTypeRef input, CFTypeRef *value) {
+    id parameter = (__bridge id)input;
+    if (CFEqual(key, CFSTR("AXUIElementForTextMarker"))) {
+        FixtureMarker point = fixtureMarker((__bridge AXTextMarkerRef)parameter);
+        *value = CFBridgingRetain(fields[point.field]);
+        return kAXErrorSuccess;
     }
+
+    assert(CFEqual(key, CFSTR("AXTextOperation")) && browser && trusted && !modifiers);
+    assert(!secure && !readOnly && operationAvailable && (__bridge id)element == fields[0]);
+    assert([parameter[@"AXTextOperationType"] isEqual:@"TextOperationReplacePreserveCase"]);
+    assert([parameter[@"AXTextOperationSmartReplace"] isEqual:@NO]);
+    id range = [parameter[@"AXTextOperationMarkerRanges"] firstObject];
+    AXTextMarkerRef start = AXTextMarkerRangeCopyStartMarker((__bridge AXTextMarkerRangeRef)range);
+    FixtureMarker marker = fixtureMarker(start);
+    CFRelease(start);
+    assert(fields[marker.field] == (__bridge id)element);
+    NSUInteger document = marker.field;
+    NSUInteger offset = (NSUInteger)marker.offset;
+    NSString *text = parameter[@"AXTextOperationReplacementString"];
+    [dispatches addObject:text];
+    *value = CFBridgingRetain(@[text]);
+
+    if (editLimit >= 0 && text.length > (NSUInteger)editLimit) {
+        text = [text substringToIndex:(NSUInteger)editLimit];
+    }
+    if (!text.length) return kAXErrorSuccess;
+    void (^consume)(void) = ^{
+        documents[document] = [documents[document] stringByReplacingCharactersInRange:NSMakeRange(offset, 0) withString:text];
+        if (focused == document) selection = CFRangeMake((CFIndex)(offset + text.length), 0);
+    };
+    if (focusBeforeConsumption || moveCaretBeforeConsumption) {
+        // Delay consumption beyond the helper's post-dispatch read. A
+        // process-targeted event here would use the newly focused field.
+        if (focusBeforeConsumption) focused = 1;
+        else selection = CFRangeMake(0, 0);
+        delayWasObserved = NO;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+            consume();
+            delayWasObserved = YES;
+        });
+    } else {
+        consume();
+    }
+    return kAXErrorSuccess;
 }
 
 #define main packagedHelperMain
 #define NSWorkspace FixtureWorkspace
-#define AXIsProcessTrusted() YES
-#define CGPreflightPostEventAccess() keyboard
-#define CGRequestPostEventAccess() ((void)0)
+#define AXIsProcessTrusted() trusted
+#define AXIsProcessTrustedWithOptions(options) ((void)(options), trusted)
 #define GetCurrentKeyModifiers() (modifiers ? cmdKey : 0)
-#define CGEventPostToPid postPaste
 #define AXObserverCreate(pid, callback, observer) AXObserverCreate(getpid(), callback, observer)
 #define AXObserverAddNotification(...) kAXErrorSuccess
 #define AXUIElementCopyAttributeValue copyAttribute
 #define AXUIElementCopyMultipleAttributeValues copyFocus
 #define AXUIElementIsAttributeSettable selectedTextWritable
 #define AXUIElementSetAttributeValue editDocument
-#define generalPasteboard fixturePasteboard
+#define AXUIElementCopyParameterizedAttributeNames copyParameterizedNames
+#define AXUIElementCopyParameterizedAttributeValue copyParameterized
 #include "../../desktop/mac-target.m"
 #undef main
 
@@ -150,11 +197,6 @@ static void runBrowserFixture(void) {
     windows[1] = windows[0];
     selection = CFRangeMake(5, 0);
     dispatches = [NSMutableArray array];
-    testBoard = NSPasteboard.pasteboardWithUniqueName;
-    NSPasteboardItem *original = [NSPasteboardItem new];
-    [original setString:@"existing copy" forType:NSPasteboardTypeString];
-    [original setData:[@"binary data" dataUsingEncoding:NSUTF8StringEncoding] forType:@"fixture.binary"];
-    assert([testBoard writeObjects:@[original]]);
     dispatch_source_t poll = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(poll, DISPATCH_TIME_NOW, 25 * NSEC_PER_MSEC, NSEC_PER_MSEC);
     dispatch_source_set_event_handler(poll, ^{ insertWhenReleased(); });
@@ -172,18 +214,22 @@ static void runBrowserFixture(void) {
                         NSDictionary *options = message[@"text"];
                         readOnly = [options[@"readOnly"] boolValue];
                         secure = [options[@"secure"] boolValue];
-                        keyboard = ![options[@"denyKeyboard"] boolValue];
-                        changeFocusAtDispatch = [options[@"stale"] boolValue];
-                        replaceClipboard = [options[@"replaceClipboard"] boolValue];
-                        pasteLimit = options[@"pasteLimit"] ? [options[@"pasteLimit"] integerValue] : -1;
+                        trusted = ![options[@"denyAccessibility"] boolValue];
+                        switchOnFinalFocus = [options[@"stale"] boolValue];
+                        focusReads = 0;
+                        operationAvailable = ![options[@"missingOperation"] boolValue];
+                        chrome = [options[@"chrome"] boolValue];
+                        singleLine = [options[@"singleLine"] boolValue];
+                        foreignRange = [options[@"foreignRange"] boolValue];
+                        focusBeforeConsumption = [options[@"focusBeforeConsumption"] boolValue];
+                        moveCaretBeforeConsumption = [options[@"moveCaretBeforeConsumption"] boolValue];
+                        editLimit = options[@"editLimit"] ? [options[@"editLimit"] integerValue] : -1;
                         modifiers = [options[@"held"] boolValue];
+                        if ([options[@"restoreFocus"] boolValue]) focused = 0;
                         insertWhenReleased();
-                        NSData *data = [testBoard dataForType:@"fixture.binary"];
                         emitMessage(@{@"request": message[@"request"], @"fixture": @{
                             @"text": documents[0], @"other": documents[1], @"dispatches": dispatches,
-                            @"clipboard": [testBoard stringForType:NSPasteboardTypeString] ?: @"",
-                            @"binary": data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"",
-                            @"focused": @(focused),
+                            @"focused": @(focused), @"consumed": @(delayWasObserved),
                         }});
                     } else {
                         handle(message);

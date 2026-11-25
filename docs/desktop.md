@@ -3,10 +3,10 @@
 My Audio to Text Desktop runs saved graphs locally from a resident menu-bar
 or tray application. macOS on Apple Silicon is the primary v1 target. The
 arm64 macOS package builds and launches. It implements dictation into system
-TextEdit and ordinary editable fields in Google Chrome. Native insertion in
+TextEdit and ordinary editable fields in Safari. Native insertion in
 these two macOS targets remains unverified because the test runner lacks OS
 authorization. Stock Mousepad on Debian 12 arm64/X11 is the verified external
-target. See the [validation record](evidence/desktop-401.md#macos-chrome-paste-and-model-staging)
+target. See the [validation record](evidence/desktop-401.md#macos-review-fixes)
 for commands and results.
 
 ## Build and launch
@@ -60,7 +60,7 @@ field when its menu opens. [Electron Linux tray behavior](https://www.electronjs
 
 1. Open **Models**, prepare Moonshine Small Streaming Japanese, and wait for
    **Ready**. Allow at least 300 MB of free disk space and 2 GB of available RAM.
-2. Place a caret in TextEdit or a Chrome page field on macOS, or in Mousepad on X11.
+2. Place a caret in TextEdit or a Safari page field on macOS, or in Mousepad on X11.
 3. Press **Control+Option+Command+D** on macOS or **Ctrl+Alt+Shift+D** on X11.
    The indicator shows **Preparing** while the graph loads and **Recording**
    once microphone capture starts.
@@ -90,29 +90,22 @@ discarded.
 - **TextEdit** uses a targeted Accessibility selected-text edit in the
   system TextEdit document view. It confirms the edit and caret using
   Accessibility read-back. The clipboard stays untouched.
-- **Google Chrome** uses a process-targeted macOS **Command+V** in editable
-  text inputs and textareas within web content that Chrome exposes to
-  Accessibility. It sends each chunk once and lets Chrome apply ordinary
-  paste behavior, including selection replacement, input events and length
-  limits. The helper snapshots available clipboard items and formats and
-  restores them while it still owns the clipboard generation. If it cannot
-  see a value or selection change, it stops and reports the paste as
-  unconfirmed. It never retries that paste or repairs the browser's text.
+- **Safari** uses an Accessibility text operation addressed to the original
+  web field and its collapsed caret range. The helper validates that the
+  text markers belong to that field, then sends the entire chunk once. Safari
+  applies its ordinary text constraints. The helper waits for a value change
+  at the caret before advancing the queue. If it cannot confirm an edit, it
+  stops without retrying or rewriting the field.
 
-Secure fields, read-only fields, Chrome's address bar, native dialog fields
-and controls without a usable Accessibility identity are outside this scope.
-Custom editors, other macOS editors and other browsers have no supported
-adapter. On an initial Start, Chrome may still be exposing the web field to
-Accessibility. If the app reports that an ordinary field cannot be safely
-edited, refocus it and try again.
-
-Chrome consumes clipboard contents asynchronously after the last focus
-check. Avoid changing fields or copying at the same instant as paste.
-Already dispatched events cannot be recalled. The helper yields to a newer
-clipboard write and stops if it detects a conflict. Clipboard history tools
-may still observe the temporary text despite its transient marker. Some
-application-owned or delayed clipboard formats cannot be snapshotted. The
-helper refuses the paste when it cannot read the existing data.
+The macOS adapters leave the clipboard untouched. A focus change stops the
+session. A text operation already sent to the authorized field can complete
+there while the session stops. Secure and read-only fields, the Safari address
+bar, custom editors and controls without usable Accessibility markers are
+unsupported. Place a caret with no text selected in a Safari text input or
+textarea. The helper refuses a stand-alone line break in a single-line field
+because WebKit can interpret it as form submission. Google Chrome and other
+macOS browsers are unsupported. Chrome support needs a field-specific
+editing operation available in standard Chrome builds.
 
 The X11 helper uses AT-SPI `Text` and `EditableText` in stock Mousepad 0.5.10
 (`sudo apt-get install mousepad`). Place a caret with no selection. AT-SPI
@@ -133,7 +126,7 @@ capture are outside v1.
 
 This procedure is optional. The packaged test environment was macOS 27.2.1
 (26B131), Apple Silicon arm64, Apple clang 21.0.0 and Electron 45.4.1 in
-Aqua. The [validation record](evidence/desktop-401.md#macos-chrome-paste-and-model-staging)
+Aqua. The [validation record](evidence/desktop-401.md#macos-review-fixes)
 lists the tested source and results.
 
 Before merge, clone `takahirox/my-audio-to-text`, run
@@ -150,17 +143,13 @@ merge, check out the merge revision for #402. Follow the
   Text**, or enable it under **System Settings → Privacy & Security →
   Microphone**.
 - Under **Privacy & Security → Device Control and Data Access** on macOS
-  27.2, enable **My Audio to Text** for focused-field access and Chrome's
-  keyboard event posting. The setting is called **Accessibility** on older
+  27.2, enable **My Audio to Text** for focused-field access.
+  The setting is called **Accessibility** on older
   releases and again on macOS 27.3. Use **+** to select the actual built
   bundle if it is missing. If macOS identifies the native helper separately,
   add that executable using **Command+Shift+G** in the file picker. Its
   path inside the bundle is `Contents/MacOS/focused-text`. The app
-  executable is `Contents/MacOS/my-audio-to-text`. Accept the OS keyboard
-  event prompt if shown on the first Chrome Start. [Apple's privacy settings update](https://developer.apple.com/news/?id=oqng0zjk).
-- If macOS asks to allow pasteboard access, allow it for the app or its
-  helper when running the Chrome check. The helper reads the existing
-  clipboard to preserve it.
+  executable is `Contents/MacOS/my-audio-to-text`. [Apple's privacy settings update](https://developer.apple.com/news/?id=oqng0zjk).
 - Quit from the app's menu and relaunch the same bundle after changing
   authorization. Repeat Start after any permission prompt. If the same
   denial persists after moving or rebuilding the ad-hoc-signed bundle,
@@ -174,17 +163,18 @@ merge, check out the merge revision for #402. Follow the
 2. Place the caret in a normal TextEdit document. Press
    **Control+Option+Command+D**, wait for **Recording**, say
    `こんにちは`, then press the same shortcut to Stop.
-3. In independent Google Chrome with extensions disabled, open an ordinary
-   multiline field and repeat. For a local example, enter
+3. In Safari with extensions disabled, open an ordinary multiline field and
+   repeat. For a local example, enter
    `data:text/html,<form><textarea autofocus></textarea><input type=password><button>Submit</button></form>`
-   in Chrome's address bar and put the caret inside the textarea. Expect
-   text at the authorized caret with focus still in the target, no duplicate
-   chunks, and no automatic submission. Page limits and formatting still apply.
-4. Copy a harmless sample before the Chrome test and paste it into a scratch
-   document after Stop to check restoration. Try starting in the password
-   field and check that the app refuses it. During a separate run, change
-   fields or choose **Cancel voice typing** from the menu and check that
-   pending output is discarded.
+   in Safari's address bar and put the caret inside the textarea with no
+   selection. Expect text at the authorized caret with focus still in the
+   target, no duplicate chunks, and no automatic submission. Page limits
+   and formatting still apply.
+4. Copy a harmless sample before the Safari test and paste it into a scratch
+   document after Stop to check that the clipboard still holds the sample.
+   Try starting in the password field and check that the app refuses it.
+   During a separate run, change fields or choose **Cancel voice typing**
+   from the menu and check that queued output is discarded.
 
 ## Graphs and models
 
@@ -198,8 +188,10 @@ The sink accepts committed TEXT from any supported producer, including
 
 Use **Graph Library** to create, duplicate, edit, select, and import or export
 individual graphs. The editor uses the same typed ports, settings, wiring
-validation, Auto Save, and Undo/Redo as the extension. Desktop rejects graph
-nodes outside its supported subset and shows the original import error.
+validation, Auto Save, and Undo/Redo as the extension. If a recovered draft
+cannot be saved, repair the draft or use **Undo** to return to the saved
+graph. Desktop rejects graph nodes outside its supported subset and shows
+the original import error.
 A running graph uses the last saved snapshot taken at Start. Edits apply to the
 next session. Use **Live** to run Display graphs inside the management window.
 Graphs with both Display and a focused output start from a valid external
@@ -216,17 +208,16 @@ while a session owns the model.
 
 Electron provides the Web Audio, Worker and WASM APIs used by the existing
 processing code, with a sandbox for each renderer. The macOS helper uses
-Apple's Carbon, Accessibility, Core Graphics and AppKit frameworks. The
-Linux helper uses the distribution's AT-SPI and X11 bindings.
+Apple's Carbon, Accessibility and AppKit frameworks. The Linux helper uses
+the distribution's AT-SPI and X11 bindings.
 
 The main process owns the tray, global shortcut, permission policy, saved
 graph snapshots, and authorized target. Its X11 helper takes the active window,
 matches its process and focused AT-SPI object, and holds that identity for the
 session. It revalidates it before every insertion and uses the object's
 [EditableText insertion method](https://gnome.pages.gitlab.gnome.org/at-spi2-core/libatspi/method.EditableText.insert_text.html).
-Both platform helpers use private process pipes. Only the Chrome adapter
-uses the clipboard, for its bounded paste transaction. The drivers send
-text and leave submission to the user.
+Both platform helpers use private process pipes. They send text and leave
+submission to the user.
 
 A sandboxed hidden renderer owns microphone capture, the shared Pipeline, and
 its Moonshine CPU/WASM Worker. The management and indicator renderers use
@@ -259,8 +250,9 @@ DESKTOP_REAL_ASR=1 npm run test:desktop
 
 The basic macOS check exercises the packaged management and Live renderers,
 native shortcut conflicts, residency after closing the window, and shortcut
-release at Quit. The dispatch fixtures exercise the production queue and
-helper with simulated Accessibility responses and a private pasteboard.
+release at Quit. The suite also relaunches the package to verify Auto Save
+draft recovery. The dispatch fixtures exercise the production queue and
+helper with simulated Accessibility responses and real opaque text markers.
 The real-model smoke routes the licensed fixture through BlackHole 2ch and
 the app's microphone input. It temporarily selects BlackHole as the default
 input and restores the prior device.
@@ -269,9 +261,10 @@ input and restores the prior device.
 
 The optional native suite uses the packaged app permissions described above
 and a separate Swift driver. The driver sends the shortcut and uses
-Accessibility to observe TextEdit and exercise the menu. Chrome runs from
-`/Applications` with a disposable profile and extensions disabled. A local
-page checks focus, caret, edit events, truncation, and zero form submissions.
+Accessibility to observe TextEdit and exercise the menu. The tests open
+a separate instance of Safari from `/Applications`. Use a test account with
+Safari extensions disabled. A local page checks focus, caret, edit events,
+truncation, and zero form submissions.
 
 Build the driver at a stable path, then run its permission preflight.
 
