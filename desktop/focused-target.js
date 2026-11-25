@@ -20,7 +20,7 @@ export class FocusedTarget {
       if (message.invalid) this.onInvalid(message.invalid, message.error);
       if (message.shortcut) {
         worker.shortcutRelease = message.release;
-        this.onShortcut(message.shortcut);
+        this.onShortcut(message.shortcut, message.context);
       }
       const complete = this.pending.get(message.request);
       complete?.(message);

@@ -76,7 +76,9 @@ static EventHotKeyRef hotkey;
 static UInt32 hotkeyID;
 static NSString *shortcut;
 static BOOL held;
-static NSString *heldToken;
+static BOOL shortcutSessionActive;
+static NSNumber *shortcutContext;
+static NSNumber *heldContext;
 static BOOL waitingForRelease;
 static NSString *pendingText;
 static NSNumber *pendingRequest;
@@ -291,7 +293,7 @@ static NSString *setShortcut(NSString *value) {
     hotkeyID++;
     shortcut = value;
     held = NO;
-    heldToken = nil;
+    heldContext = nil;
     candidate = nil;
     return nil;
 }
@@ -313,18 +315,15 @@ static OSStatus shortcutEvent(EventHandlerCallRef call, EventRef event, void *co
     if (GetEventKind(event) == kEventHotKeyPressed) {
         if (!held) {
             held = YES;
-            heldToken = token;
-            if (!bound) snapshot();
+            heldContext = shortcutContext;
+            if (!shortcutSessionActive && !bound) snapshot();
         }
     } else if (held) {
         held = NO;
         writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
-        // A key held for Stop may outlive the session it was pressed in.
-        // Its release must not start another session after cancellation.
-        if (!heldToken || [heldToken isEqual:token]) {
-            emitMessage(@{@"shortcut": shortcut, @"release": snapshotNumber ?: @0});
-        }
-        heldToken = nil;
+        // The host owns session identity, including Live graphs without an AX binding.
+        emitMessage(@{@"shortcut": shortcut, @"release": snapshotNumber ?: @0, @"context": heldContext ?: @0});
+        heldContext = nil;
     }
     return noErr;
 }
@@ -335,6 +334,10 @@ static void handle(NSDictionary *message) {
     NSNumber *request = message[@"request"];
     if ([action isEqualToString:@"set-shortcut"]) {
         respond(request, setShortcut(message[@"text"]));
+    } else if ([action isEqualToString:@"shortcut-context"]) {
+        shortcutContext = message[@"text"];
+        shortcutSessionActive = [id isKindOfClass:NSString.class];
+        respond(request, nil);
     } else if ([action isEqualToString:@"snapshot-tray"]) {
         trayCandidate = !bound && !held ? captureTarget() : nil;
         respond(request, nil);
