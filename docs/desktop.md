@@ -103,12 +103,12 @@ is ambiguous, it stops without retrying. Protected and read-only fields,
 browser controls such as the address bar, custom editors without the required
 Accessibility attributes, and other browsers are outside the supported scope.
 
-A detected focus change stops the session and discards pending output. A
-native edit already dispatched can complete while the session stops. Safari
-resolves the range inside its editor after the final Accessibility focus
-check. Focus and editing are separate OS calls, so a focus change in that
-interval can still affect WebKit's edit. The macOS adapters leave the clipboard
-untouched and send no keyboard events for insertion.
+A detected focus change stops the session and discards pending output. If
+focus changes after the final Accessibility check, Safari can apply an
+already-dispatched edit to a different field. This is a known v1 limitation.
+Stop dictation and wait for the session to finish before switching fields or
+apps. The macOS adapters leave the clipboard untouched and send no keyboard
+events for insertion.
 
 The X11 helper uses AT-SPI `Text` and `EditableText` in stock Mousepad 0.5.10
 (`sudo apt-get install mousepad`). Place a caret with no selection. AT-SPI

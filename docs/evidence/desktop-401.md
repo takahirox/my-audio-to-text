@@ -807,8 +807,10 @@ an isolated diagnostic, invoking WebKit's method on a deliberately stale
 field whose focus handler redirected focus edited the other field. The
 dispatch fixture verifies that the helper sends zero edits when it observes
 stale focus. A focus change after the final check and before WebKit starts
-the edit can still redirect the in-flight range operation. The adapter
-therefore does not fully satisfy the wrong-target requirement.
+the edit can still cause Safari to apply the already-dispatched operation to
+a different field. Issue #401's November 26 clarification accepts this race
+as a v1 limitation. Stop dictation and wait for the session to finish before
+switching fields or apps. [Desktop guide](../desktop.md#focused-fields).
 
 The macOS runner used Aqua on macOS 27.2.1 (26B131), Apple Silicon arm64,
 Apple clang 21.0.0, Electron 45.4.1, and Safari 27.2
