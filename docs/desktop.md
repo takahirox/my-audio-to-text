@@ -3,10 +3,11 @@
 My Audio to Text Desktop runs saved graphs locally from a resident menu-bar
 or tray application. macOS on Apple Silicon is the primary v1 target. The
 arm64 macOS package builds and launches. It implements dictation into system
-TextEdit. Native TextEdit insertion remains unverified because the test
-runner lacks OS authorization. The macOS desktop host refuses browser fields.
+TextEdit and supported web text fields in the system Safari browser.
+Cross-application insertion in both remains unverified because the test
+runner lacks OS authorization.
 Stock Mousepad on Debian 12 arm64/X11 is the verified external target.
-See the [validation record](evidence/desktop-401.md#safari-dispatch-safety-and-mv3-round-trip)
+See the [validation record](evidence/desktop-401.md#safari-native-range-replacement)
 for commands and results.
 
 ## Build and launch
@@ -60,7 +61,8 @@ field when its menu opens. [Electron Linux tray behavior](https://www.electronjs
 
 1. Open **Models**, prepare Moonshine Small Streaming Japanese, and wait for
    **Ready**. Allow at least 300 MB of free disk space and 2 GB of available RAM.
-2. Place a caret in TextEdit on macOS or in Mousepad on X11.
+2. Place a caret in TextEdit or a supported Safari web field on macOS, or in
+   Mousepad on X11.
 3. Press **Control+Option+Command+D** on macOS or **Ctrl+Alt+Shift+D** on X11.
    The indicator shows **Preparing** while the graph loads and **Recording**
    once microphone capture starts.
@@ -91,13 +93,22 @@ TextEdit uses a targeted Accessibility selected-text edit in the system
 document view. The helper confirms the edit and caret using Accessibility
 read-back.
 
-The macOS adapter leaves the clipboard untouched. A focus change stops the
-session. A selected-text edit already sent to the authorized TextEdit field
-can complete there while the session stops. Browser support requires a
-field-addressed editing operation that preserves the caret and refuses
-protected controls. Safari's Accessibility range operation can redirect
-text after a same-page focus change and can submit a form on a lone line
-break. Start refuses Safari and other browser targets.
+In system Safari, ordinary enabled and writable AX text fields and text areas
+inside a web document can use WebKit's native range replacement. The helper
+sends the original chunk and the checked selection once. Safari applies the
+field's native editing rules, including length limits and single-line
+filtering. It may change, truncate or ignore text. The helper advances the
+queue only after observing a compatible value and caret change. If the result
+is ambiguous, it stops without retrying. Protected and read-only fields,
+browser controls such as the address bar, custom editors without the required
+Accessibility attributes, and other browsers are outside the supported scope.
+
+A detected focus change stops the session and discards pending output. A
+native edit already dispatched can complete while the session stops. Safari
+resolves the range inside its editor after the final Accessibility focus
+check. Focus and editing are separate OS calls, so a focus change in that
+interval can still affect WebKit's edit. The macOS adapters leave the clipboard
+untouched and send no keyboard events for insertion.
 
 The X11 helper uses AT-SPI `Text` and `EditableText` in stock Mousepad 0.5.10
 (`sudo apt-get install mousepad`). Place a caret with no selection. AT-SPI
@@ -118,7 +129,7 @@ capture are outside v1.
 
 This procedure is optional. The packaged test environment was macOS 27.2.1
 (26B131), Apple Silicon arm64, Apple clang 21.0.0 and Electron 45.4.1 in
-Aqua. The [validation record](evidence/desktop-401.md#safari-dispatch-safety-and-mv3-round-trip)
+Aqua. The [validation record](evidence/desktop-401.md#safari-native-range-replacement)
 lists the tested source and results.
 
 Before merge, clone `takahirox/my-audio-to-text`, run
@@ -147,7 +158,7 @@ merge, check out the merge revision for #402. Follow the
   denial persists after moving or rebuilding the ad-hoc-signed bundle,
   remove the stale entry and add the current bundle or helper again.
 
-### Try TextEdit and verify browser refusal
+### Try TextEdit and Safari
 
 1. Prepare **Moonshine Small Streaming Japanese** in **Models** and wait
    for **Ready**. Select the default voice typing graph as the shortcut
@@ -156,16 +167,16 @@ merge, check out the merge revision for #402. Follow the
    **Control+Option+Command+D**, wait for **Recording**, say
    `こんにちは`, then press the same shortcut to Stop. Expect text at the
    authorized caret with focus still in TextEdit and no duplicate chunks.
-3. In Safari with extensions disabled, open an ordinary multiline field
-   and press the shortcut. For a local example, enter
-   `data:text/html,<form><textarea autofocus></textarea><input type=password><button>Submit</button></form>`
-   in Safari's address bar and put the caret in the textarea. Expect Start
-   to refuse the target before capture, with no edit, clipboard change or
-   submission. The password field should also be refused.
-4. In a separate TextEdit run, change windows or choose **Cancel voice
-   typing** from the menu and check that queued output is discarded. To
-   check clipboard preservation, copy a sample before the run and paste it
-   into a scratch document afterward.
+3. Open system Safari with extensions disabled. For a local test page, enter
+   `data:text/html,<form><textarea>left%7Cright</textarea><input type=password><button>Submit</button></form>`
+   in Safari's address bar. Place the caret after `|` in the textarea.
+   Use the same shortcut, wait for **Recording**, say `こんにちは`, and
+   press the shortcut to Stop. Expect text at that caret with focus still
+   in Safari and no duplicate chunks or automatic submission. The field's
+   own editing rules apply. Move to the password field and try Start to
+   check that capture is refused.
+4. During a separate run, move focus or choose **Cancel voice typing**
+   from the menu and check that queued output is discarded.
 
 ## Graphs and models
 
@@ -242,11 +253,11 @@ DESKTOP_REAL_ASR=1 npm run test:desktop
 The basic macOS check exercises the packaged management and Live renderers,
 native shortcut conflicts, residency after closing the window, and shortcut
 release at Quit. The suite also relaunches the package to verify Auto Save
-draft recovery. The dispatch fixtures exercise the TextEdit focus check,
-ordered text delivery, cancellation and Safari refusal with simulated
-Accessibility responses. The Safari fixture models a focus change during
-WebKit's edit and implicit submission from an input that reports a
-multiline accessibility role.
+draft recovery. Dispatch fixtures exercise the TextEdit focus check and cover
+ordered Safari text delivery, constraints, protected fields, focus changes and
+cancellation using simulated Accessibility responses. A fixture-owned WebKit
+window checks the installed browser engine's edit behavior, including Unicode,
+length limits and a line break in a single-line form field.
 The real-model smoke routes the licensed fixture through BlackHole 2ch and
 the app's microphone input. It temporarily selects BlackHole as the default
 input and restores the prior device.
@@ -257,8 +268,9 @@ The optional native suite uses the packaged app permissions described above
 and a separate Swift driver. The driver sends the shortcut and uses
 Accessibility to observe TextEdit and exercise the menu. The tests open
 a separate instance of Safari from `/Applications`. Use a test account with
-Safari extensions disabled. A local page checks that refusal preserves
-focus, caret and text with zero edit events or form submissions.
+Safari extensions disabled. A local page checks Unicode insertion in order at
+the authorized caret, normal length limits, protected and read-only field
+refusal, and zero form submissions.
 
 Build the driver at a stable path, then run its permission preflight.
 

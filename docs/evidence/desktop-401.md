@@ -779,3 +779,46 @@ with five skips. The `models` workflow's MV3 selection passed 45 checks on
 macOS with two opt-in skips. All four revised JSON round-trip and input-limit
 cases passed under Node 22 and Playwright 1.63 on Debian 12 arm64. Asset
 preparation, the extension build and the model distribution audit passed.
+
+## Safari native range replacement
+
+The system Safari adapter checks the focused application's window and field,
+the field's web document, enabled state, editability and secure subrole. It
+sends the committed string and current range once using
+`AXReplaceRangeWithText`. TextEdit uses its existing selected-text operation.
+The desktop queue and native shortcut dispatch guard are shared. Safari
+read-back allows a compatible value and caret change, including a partial
+edit. Ambiguous completion stops the session without retry or rollback.
+The helper posts no insertion keys and does not use the pasteboard.
+[WebKit range replacement](https://github.com/WebKit/WebKit/blob/29886d4d7a5e943657447a2a0274dd0297abe4f1/Source/WebCore/accessibility/AccessibilityObject.cpp#L3130)
+· [Earlier insertion comparison](#insertion-decision).
+
+WebKit uses its edit command for the replacement. In a fixture-owned window,
+the installed WebKit inserted the original Unicode and whitespace at the
+caret, truncated text to a textarea's `maxlength`, and handled a bare line
+break in a single-line form field without submitting. When a `beforeinput`
+listener moved focus, the edit stayed in the original field in this fixture.
+A separate same-process AppKit probe confirmed the parameter dictionary
+reached the native selector with the original range and text.
+
+The helper checks the exact focused window and field immediately before
+the range call. That check and WebKit's edit are separate operations. In
+an isolated diagnostic, invoking WebKit's method on a deliberately stale
+field whose focus handler redirected focus edited the other field. The
+dispatch fixture verifies that the helper sends zero edits when it observes
+stale focus. A focus change after the final check and before WebKit starts
+the edit can still redirect the in-flight range operation. The adapter
+therefore does not fully satisfy the wrong-target requirement.
+
+The macOS runner used Aqua on macOS 27.2.1 (26B131), Apple Silicon arm64,
+Apple clang 21.0.0, Electron 45.4.1, and Safari 27.2
+(build `22625.2.8.11.9`). The tested helper source blob is
+`22bb5c54f93062529166186710716f8de807bebb`.
+
+| Check | Observed result |
+| --- | --- |
+| Two `npm run build:desktop` runs and `codesign --verify --deep --strict` on the extracted macOS bundle | Both builds produced archive SHA-256 `3b0e969df2cf2c7d60d162b850455037907edc26364c86312fc8e06bdf813702`. Signature verification passed. |
+| `DESKTOP_MACOS_EDITOR=1 DESKTOP_REAL_ASR=1 npm run test:desktop` using the extracted package | Eleven passed. This covers the packaged lifecycle and shortcut conflicts, the saved TextEdit guard, the Safari queue and authorization fixtures, and the owned WebKit window. Four optional native cases skipped because the Swift driver's preflight returned `{"accessibility":false,"keyboard":false}`. Successful insertion in independent Safari or TextEdit remains unverified. [Optional manual test](../desktop.md#manual-test-on-macos). |
+| macOS offline microphone smoke in the same run | BlackHole 2ch routed the licensed `tests/desktop/fixtures/konnichiwa.wav` through the packaged microphone and Pipeline. Japanese Moonshine at revision `330a8fedc2c613a96902275ecf6f622bda1271d820221427c19ac2cea230ffee` produced `こんにちは、こんにちは、こんにちは` in Live Display with HTTP(S) blocked after preparation. |
+| `npm test`, `npm run test:playground -- --workers=2`, and the `models` workflow's MV3 selection | All 940 Node tests passed. The Playground passed 233 and skipped five on Chromium and WebKit through the Pages fixture server on a free loopback port. MV3 passed 45 and skipped two opt-in real-model cases. Asset preparation, extension packaging, all three distribution audits and `git diff --check` passed. |
+| Debian 12 arm64 X11 package and `DESKTOP_REAL_ASR=1 npm run test:desktop` in the existing X11 image with default Docker isolation | Packaging passed. Electron refused to launch because the container's packaged Chrome sandbox helper lacked the required ownership and mode. The earlier six passing X11 checks above remain the evidence for the Linux path. |

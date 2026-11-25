@@ -31,8 +31,8 @@ Speech-to-text is the most-developed processing capability today. The Chrome ext
 The standalone [desktop app](docs/desktop.md) runs saved graphs independently
 of the Chrome extension and Web Playground. Dictation is verified in
 Mousepad on Debian X11. The Apple Silicon macOS package implements focused
-output for TextEdit. Native macOS insertion remains unverified due to OS
-permissions. Browser fields remain unsupported in the desktop host.
+output for TextEdit and supported Safari web fields. Cross-application
+insertion on macOS remains unverified because the runner lacks OS permissions.
 
 ## Node Playground
 
