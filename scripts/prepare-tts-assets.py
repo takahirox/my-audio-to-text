@@ -53,12 +53,12 @@ FRONTEND_FILES = [
      'b7733926d488d28d3e80d9590e1d9fd286dc880e8c4b70505ca15bd10dcdca27', 'openjtalk-wasm.wasm'),
 ]
 
-# The ORT npm archive omits notices. Stage the matching immutable source notices
-# alongside the binaries, and the conversion's own Apache-2.0 license.
+# Stage the matching ORT release notices alongside the binaries, and the
+# conversion's own Apache-2.0 license. The notice checksums are also pinned.
 QWEN_NOTICES = [
-    ('ort-qwen3-license', 'https://raw.githubusercontent.com/microsoft/onnxruntime/6af1a932e2286d5c58166085d24c68783033edee/LICENSE',
+    ('ort-qwen3-license', 'https://cdn.jsdelivr.net/gh/microsoft/onnxruntime@v1.31.1/LICENSE',
      '2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c', 'qwen3/ort-LICENSE'),
-    ('ort-qwen3-notices', 'https://raw.githubusercontent.com/microsoft/onnxruntime/6af1a932e2286d5c58166085d24c68783033edee/ThirdPartyNotices.txt',
+    ('ort-qwen3-notices', 'https://cdn.jsdelivr.net/gh/microsoft/onnxruntime@v1.31.1/ThirdPartyNotices.txt',
      '143764b952fdb1a7c69ce653bfba74a7744d6a8a573bfb73e235fba356c83de3', 'qwen3/ort-ThirdPartyNotices.txt'),
     ('qwen3-model-license', 'https://huggingface.co/danyalmalik/Qwen3-TTS-12Hz-0.6B-CustomVoice-ONNX-WebGPU/resolve/ccdd14012062ee383dda616d7799cc955924af8a/LICENSE',
      'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4', 'qwen3/model-LICENSE'),

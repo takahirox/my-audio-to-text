@@ -117,11 +117,12 @@ from corrections with held-out evaluation of improvement and regressions.
 Contracts and behavior should be reusable across Web, browser extensions,
 desktop and mobile while models, implementations and runtimes remain
 replaceable. The [standalone desktop host](desktop.md) reuses the saved graph format, Pipeline
-and Moonshine WASM worker. It supplies its own microphone, AT-SPI focused
-TEXT output, tray, shortcut, storage and model cache. Focused TEXT insertion is
-verified in Mousepad on Debian X11. Desktop insertion into extension-free
-browser fields remains open. The Chrome extension and standalone Web pages
-continue to run with their own resources.
+and Moonshine WASM worker. It supplies its own microphone, focused TEXT output,
+tray, shortcut, storage and model cache. The macOS helper implements TextEdit
+and extension-free Google Chrome input. Real macOS external-field insertion
+remains unverified due to OS permissions. The X11 helper uses AT-SPI and was
+verified in Mousepad on Debian 12. The Chrome extension and standalone Web
+pages continue to run with their own resources.
 Future hosts can choose different runtimes, including native ONNX.
 
 ## Next architectural step

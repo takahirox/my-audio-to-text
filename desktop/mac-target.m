@@ -4,11 +4,15 @@
 #import <stdio.h>
 
 static NSString *const permissionError =
-    @"Allow My Audio to Text in System Settings → Privacy & Security → Accessibility, then start again.";
+    @"Allow My Audio to Text in System Settings → Privacy & Security → Device Control and Data Access (Accessibility), then start again.";
+static NSString *const keyboardError =
+    @"Allow keyboard event posting for My Audio to Text under Device Control and Data Access (Accessibility), then restart the app.";
 static NSString *const targetError =
-    @"Focus an editable document in TextEdit. This field cannot be safely edited.";
-static NSString *const focusError = @"The authorized TextEdit document changed or lost focus.";
+    @"Focus an editable TextEdit document or a text field on a Chrome page. This field cannot be safely edited.";
+static NSString *const focusError = @"The authorized window or text field changed or lost focus.";
 static NSString *const writeError = @"TextEdit did not confirm the complete edit. Voice typing stopped.";
+static NSString *const clipboardError = @"The clipboard changed or could not be preserved. Voice typing stopped.";
+static NSString *const pasteUnconfirmed = @"Chrome paste was dispatched, but the edit could not be confirmed. Voice typing stopped.";
 
 static id attribute(AXUIElementRef element, CFStringRef key) {
     CFTypeRef value = NULL;
@@ -47,14 +51,56 @@ static BOOL isDocumentArea(AXUIElementRef area, AXUIElementRef window) {
     return owner && CFEqual((__bridge CFTypeRef)owner, window);
 }
 
+static BOOL isBrowserField(AXUIElementRef area, AXUIElementRef window) {
+    if (!area || !window || ![attribute(window, kAXSubroleAttribute) isEqual:@"AXStandardWindow"]) return NO;
+    id role = attribute(area, kAXRoleAttribute);
+    if (![role isEqual:@"AXTextField"] && ![role isEqual:@"AXTextArea"]) return NO;
+    CFTypeRef subrole = NULL;
+    AXError status = AXUIElementCopyAttributeValue(area, kAXSubroleAttribute, &subrole);
+    id fieldSubrole = CFBridgingRelease(subrole);
+    if ((status != kAXErrorSuccess && status != kAXErrorNoValue && status != kAXErrorAttributeUnsupported) ||
+        [fieldSubrole isEqual:@"AXSecureTextField"] ||
+        ![attribute(area, kAXEnabledAttribute) isEqual:@YES] ||
+        ![attribute(area, kAXFocusedAttribute) isEqual:@YES] ||
+        // Chrome exposes writable AXValue for editable fields. Use it only as
+        // evidence of editability. Paste does not require writable AXSelectedText.
+        !writable(area, kAXValueAttribute)) return NO;
+    id owner = elementAttribute(area, kAXWindowAttribute);
+    if (!owner || !CFEqual((__bridge CFTypeRef)owner, window)) return NO;
+
+    // Require a web document ancestor. Browser chrome, including the address
+    // bar and native dialogs, is outside this adapter.
+    id ancestor = elementAttribute(area, kAXParentAttribute);
+    for (NSUInteger depth = 0; ancestor && depth < 32; depth++) {
+        AXUIElementRef element = (__bridge AXUIElementRef)ancestor;
+        id parentRole = attribute(element, kAXRoleAttribute);
+        if ([parentRole isEqual:@"AXWebArea"]) return YES;
+        if (!parentRole || [parentRole isEqual:@"AXWindow"]) return NO;
+        ancestor = elementAttribute(element, kAXParentAttribute);
+    }
+    return NO;
+}
+
 @interface Binding : NSObject
 @property pid_t pid;
+@property BOOL browser;
 // ARC retains the CF-backed accessibility elements as Objective-C objects.
 @property (strong) id application;
 @property (strong) id window;
 @property (strong) id area;
 @property (strong) NSString *failed;
 @property AXObserverRef observer;
+@end
+
+@interface BrowserPaste : NSObject
+@property (strong) NSPasteboard *board;
+@property (strong) NSArray<NSPasteboardItem *> *saved;
+@property NSInteger generation;
+@property CFAbsoluteTime deadline;
+@property (strong) NSString *canceled;
+@end
+
+@implementation BrowserPaste
 @end
 
 @implementation Binding
@@ -84,6 +130,7 @@ static NSString *pendingText;
 static NSNumber *pendingRequest;
 static CFAbsoluteTime writeAfter;
 static CFAbsoluteTime nextWaitingNotice;
+static BrowserPaste *browserPaste;
 
 static void emitMessage(NSDictionary *message) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:message options:0 error:NULL];
@@ -105,11 +152,33 @@ static void finishWrite(NSString *error) {
     if (request) respond(request, error);
 }
 
+static NSString *restoreClipboard(BrowserPaste *paste) {
+    if (paste.board.changeCount != paste.generation) return clipboardError;
+    [paste.board clearContents];
+    return paste.saved.count && ![paste.board writeObjects:paste.saved] ? clipboardError : nil;
+}
+
+static void finishBrowserPaste(NSString *error) {
+    NSString *restoreError = restoreClipboard(browserPaste);
+    browserPaste = nil;
+    finishWrite(error ?: restoreError);
+}
+
+static void cancelWrite(NSString *error) {
+    if (browserPaste) {
+        // An enqueued key event may still read the board. Keep the same
+        // bounded settle time even when the session loses authorization.
+        if (!browserPaste.canceled) browserPaste.canceled = error;
+    } else {
+        finishWrite(error);
+    }
+}
+
 static void invalidate(Binding *binding, NSString *error) {
     if (!binding || binding.failed) return;
     binding.failed = error;
     if (binding == bound) {
-        finishWrite(error);
+        cancelWrite(error);
         emitMessage(@{@"invalid": token, @"error": error});
     }
 }
@@ -123,6 +192,12 @@ static void focusedChanged(AXObserverRef observer, AXUIElementRef element, CFStr
     invalidate(binding, focusError);
 }
 
+static BOOL supportedField(Binding *binding) {
+    AXUIElementRef area = (__bridge AXUIElementRef)binding.area;
+    AXUIElementRef window = (__bridge AXUIElementRef)binding.window;
+    return binding.browser ? isBrowserField(area, window) : isDocumentArea(area, window);
+}
+
 static Binding *captureTarget(void) {
     Binding *result = [Binding new];
     if (!AXIsProcessTrusted()) {
@@ -130,8 +205,10 @@ static Binding *captureTarget(void) {
         return result;
     }
     NSRunningApplication *front = NSWorkspace.sharedWorkspace.frontmostApplication;
-    if (![front.bundleIdentifier isEqualToString:@"com.apple.TextEdit"] ||
-        ![front.bundleURL.path isEqualToString:@"/System/Applications/TextEdit.app"]) {
+    result.browser = [front.bundleIdentifier isEqualToString:@"com.google.Chrome"];
+    BOOL textEdit = [front.bundleIdentifier isEqualToString:@"com.apple.TextEdit"] &&
+        [front.bundleURL.path isEqualToString:@"/System/Applications/TextEdit.app"];
+    if (!result.browser && !textEdit) {
         result.failed = targetError;
         return result;
     }
@@ -141,9 +218,18 @@ static Binding *captureTarget(void) {
     AXUIElementRef application = AXUIElementCreateApplication(pid);
     result.application = CFBridgingRelease(application);
     AXUIElementSetMessagingTimeout(application, 0.25);
+    // Reading the application role is Chrome's assistive-client discovery path.
+    if (result.browser) (void)attribute(application, kAXRoleAttribute);
     result.window = elementAttribute(application, kAXFocusedWindowAttribute);
     result.area = elementAttribute(application, kAXFocusedUIElementAttribute);
-    if (!isDocumentArea((__bridge AXUIElementRef)result.area, (__bridge AXUIElementRef)result.window)) {
+    if (!supportedField(result)) {
+        // Chrome may need time to expose its web accessibility tree on the
+        // first request. Let Chrome initialize it, but require a fresh Start
+        // to bind an identifiable field.
+        id role = attribute((__bridge AXUIElementRef)result.area, kAXRoleAttribute);
+        if (result.browser && (!result.area || [role isEqual:@"AXWebArea"])) {
+            AXUIElementSetAttributeValue(application, CFSTR("AXEnhancedUserInterface"), kCFBooleanTrue);
+        }
         result.failed = targetError;
         return result;
     }
@@ -183,8 +269,9 @@ static BOOL hasBoundFocus(Binding *binding) {
 static NSString *check(Binding *binding) {
     if (binding.failed) return binding.failed;
     if (!AXIsProcessTrusted()) return permissionError;
+    if (binding.browser && !CGPreflightPostEventAccess()) return keyboardError;
     if (!hasBoundFocus(binding)) return focusError;
-    return isDocumentArea((__bridge AXUIElementRef)binding.area, (__bridge AXUIElementRef)binding.window) ? nil : targetError;
+    return supportedField(binding) ? nil : targetError;
 }
 
 static void verifyWrite(NSNumber *request, NSString *expected, CFIndex caret, CFAbsoluteTime deadline) {
@@ -212,6 +299,130 @@ static BOOL shortcutHeld(void) {
     return held || (GetCurrentKeyModifiers() & (cmdKey | shiftKey | optionKey | controlKey));
 }
 
+static NSArray<NSPasteboardItem *> *copyClipboard(NSPasteboard *board) {
+    if (@available(macOS 15.4, *)) {
+        if (board.accessBehavior == NSPasteboardAccessBehaviorAlwaysDeny) return nil;
+    }
+    NSArray<NSPasteboardItem *> *items = board.pasteboardItems;
+    if (!items && board.types.count) return nil;
+    NSMutableArray<NSPasteboardItem *> *saved = [NSMutableArray array];
+    for (NSPasteboardItem *item in items) {
+        NSPasteboardItem *copy = [NSPasteboardItem new];
+        for (NSPasteboardType type in item.types) {
+            NSData *data = [item dataForType:type];
+            if (!data || ![copy setData:data forType:type]) return nil;
+        }
+        if (!copy.types.count) return nil;
+        [saved addObject:copy];
+    }
+    return saved;
+}
+
+static void verifyBrowserPaste(NSNumber *request, NSString *value, CFRange selection) {
+    if (![request isEqual:pendingRequest]) return;
+    if (browserPaste.board.changeCount != browserPaste.generation) {
+        finishBrowserPaste(browserPaste.canceled ?: clipboardError);
+        return;
+    }
+    NSString *error = browserPaste.canceled ?: check(bound);
+    if (error) browserPaste.canceled = error;
+    if (!error) {
+        AXUIElementRef area = (__bridge AXUIElementRef)bound.area;
+        NSString *current = attribute(area, kAXValueAttribute);
+        CFRange caret;
+        // Native paste is allowed to produce a partial or transformed edit.
+        // Read-back is evidence of consumption, never a reason to repair it.
+        if ([current isKindOfClass:NSString.class] && readSelection(area, &caret) &&
+            (![current isEqual:value] || caret.location != selection.location || caret.length != selection.length)) {
+            finishBrowserPaste(nil);
+            return;
+        }
+    }
+    if (CFAbsoluteTimeGetCurrent() >= browserPaste.deadline) {
+        finishBrowserPaste(error ?: pasteUnconfirmed);
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        verifyBrowserPaste(request, value, selection);
+    });
+}
+
+static void pasteInBrowser(void) {
+    Binding *binding = bound;
+    NSNumber *request = pendingRequest;
+    NSString *text = pendingText;
+    AXUIElementRef area = (__bridge AXUIElementRef)binding.area;
+    NSString *value = attribute(area, kAXValueAttribute);
+    CFRange selection;
+    if (![value isKindOfClass:NSString.class] || !readSelection(area, &selection)) {
+        finishWrite(targetError);
+        return;
+    }
+
+    CGEventRef down = CGEventCreateKeyboardEvent(NULL, kVK_ANSI_V, true);
+    CGEventRef up = CGEventCreateKeyboardEvent(NULL, kVK_ANSI_V, false);
+    if (!down || !up) {
+        if (down) CFRelease(down);
+        if (up) CFRelease(up);
+        finishWrite(@"The native Chrome paste command could not be created.");
+        return;
+    }
+    id keepDown = CFBridgingRelease(down);
+    id keepUp = CFBridgingRelease(up);
+    CGEventSetFlags((__bridge CGEventRef)keepDown, kCGEventFlagMaskCommand);
+    CGEventSetFlags((__bridge CGEventRef)keepUp, kCGEventFlagMaskCommand);
+
+    BrowserPaste *paste = [BrowserPaste new];
+    paste.board = NSPasteboard.generalPasteboard;
+    NSInteger generation = paste.board.changeCount;
+    paste.saved = copyClipboard(paste.board);
+    if (![request isEqual:pendingRequest]) return;
+    NSPasteboardItem *item = [NSPasteboardItem new];
+    if (!paste.saved || ![item setString:text forType:NSPasteboardTypeString] ||
+        ![item setData:NSData.data forType:@"org.nspasteboard.TransientType"]) {
+        finishWrite(clipboardError);
+        return;
+    }
+    NSString *error = check(binding);
+    if (error || paste.board.changeCount != generation) {
+        finishWrite(error ?: clipboardError);
+        return;
+    }
+    if (shortcutHeld()) return;
+    paste.generation = [paste.board clearContents];
+    if (![paste.board writeObjects:@[item]]) {
+        finishWrite(restoreClipboard(paste) ?: clipboardError);
+        return;
+    }
+    // writeObjects appends to the generation opened by clearContents.
+    // A different generation belongs to another writer.
+    CFRange currentSelection;
+    if (![attribute(area, kAXValueAttribute) isEqual:value] ||
+        !readSelection(area, &currentSelection) || currentSelection.location != selection.location ||
+        currentSelection.length != selection.length) {
+        error = @"The browser text or selection changed before paste. Voice typing stopped.";
+    }
+    if (!error) error = check(binding);
+    if (!error && !hasBoundFocus(binding)) error = focusError;
+    if (![request isEqual:pendingRequest]) {
+        restoreClipboard(paste);
+        return;
+    }
+    if (error || paste.board.changeCount != paste.generation || shortcutHeld()) {
+        NSString *restoreError = restoreClipboard(paste);
+        if (error || restoreError) finishWrite(error ?: restoreError);
+        return;
+    }
+    waitingForRelease = NO;
+    browserPaste = paste;
+    // Only Chrome can receive this key pair. The final AX focus read above
+    // also covers a change to a different field in the same process.
+    CGEventPostToPid(binding.pid, (__bridge CGEventRef)keepDown);
+    CGEventPostToPid(binding.pid, (__bridge CGEventRef)keepUp);
+    paste.deadline = CFAbsoluteTimeGetCurrent() + 0.6;
+    verifyBrowserPaste(request, value, selection);
+}
+
 static void insertWhenReleased(void) {
     if (!waitingForRelease) return;
     CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
@@ -227,6 +438,10 @@ static void insertWhenReleased(void) {
     NSString *error = check(bound);
     if (error) {
         finishWrite(error);
+        return;
+    }
+    if (bound.browser) {
+        pasteInBrowser();
         return;
     }
     AXUIElementRef area = (__bridge AXUIElementRef)bound.area;
@@ -368,13 +583,15 @@ static void handle(NSDictionary *message) {
         if (!error) {
             bound = start;
             token = id;
+        } else if (error == keyboardError) {
+            CGRequestPostEventAccess();
         }
         respond(request, error);
     } else if ([action isEqualToString:@"release"]) {
         if ([id isEqual:token]) {
             bound = nil;
             token = nil;
-            finishWrite(focusError);
+            cancelWrite(focusError);
         }
         respond(request, nil);
     } else if ([action isEqualToString:@"insert"] && [id isEqual:token] && !pendingRequest) {

@@ -13,7 +13,10 @@ async function setup(f, type, phase) {
     self.onmessage = ({data}) => {
       if (data.type === 'load') postMessage({id:data.id, type:${JSON.stringify(phase === 'load' ? 'error' : 'ready')}, message:'Controlled model load failure'});
       if (data.type === 'process') {
-        if (data.inputs[0].includes('slow')) { setTimeout(() => postMessage({id:data.id,type:'result',result:'stale notes'}),1500); return; }
+        if (data.inputs[0].includes('slow')) {
+          postMessage({id:data.id,type:'progress',message:'Fixture inference held',fixtureHeld:true});
+          return;
+        }
         postMessage({id:data.id,type:data.inputs[0].includes('fail')?'error':'result',message:'Controlled inference failure',result:'committed notes'});
       }
     };`);
@@ -76,12 +79,24 @@ for (const type of ['TextProcessingLfm2', 'TextProcessingQwen35']) {
   test(`${type}: internal cancellation interrupts Stop inference and a restart rejects stale output`, async ({ graphExtension: f }) => {
     const page = await setup(f, type, 'inference'); await startGraph(page);
     await emitFinal(page, 'first'); await settle(page); await expect(notes(page)).toHaveText('committed notes');
-    await emitFinal(page, 'slow'); await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Finalizing');
+    await page.evaluate(() => {
+      window.heldWorker = window.graphWorkers.findLast(worker => !worker.released && worker.url.endsWith('/text-summary-worker.js'));
+      window.heldWorker.addEventListener('message', ({ data }) => {
+        if (data.fixtureHeld) window.heldRequest = data.id;
+      });
+    });
+    await emitFinal(page, 'slow');
+    await expect.poll(() => page.evaluate(() => window.heldRequest ?? 0)).toBeGreaterThan(0);
+    await page.locator('#stop').click(); await expect(page.locator('#status')).toContainText('Finalizing');
     await page.evaluate(() => window.graphSession.cancel()); await expect(page.locator('#start')).toBeEnabled();
     await expect(notes(page)).toHaveText('committed notes');
     await expectPreparedIdle(page);
     await startGraph(page); await emitFinal(page, 'fresh'); await settle(page);
-    await page.waitForTimeout(1600); await expect(notes(page)).toHaveText('committed notes'); await expect(transcript(page)).toHaveText('fresh');
+    expect(await page.evaluate(() => window.heldWorker.released)).toBe(true);
+    await page.evaluate(() => window.heldWorker.dispatchEvent(new MessageEvent('message', {
+      data: { id: window.heldRequest, type: 'result', result: 'stale notes' },
+    })));
+    await expect(notes(page)).toHaveText('committed notes'); await expect(transcript(page)).toHaveText('fresh');
     await page.locator('#stop').click(); await expect(page.locator('#status')).toHaveText('Stopped. Outputs are ready.');
   });
 }

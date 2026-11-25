@@ -1,5 +1,10 @@
 # Issue #401 desktop validation
 
+See [the latest macOS Chrome paste and model staging run](#macos-chrome-paste-and-model-staging)
+and the [optional manual steps](../desktop.md#manual-test-on-macos) for the
+revised Issue #401 acceptance. The earlier runs below retain their original
+constraints and results.
+
 ## Target and build
 
 ### Original implementation (`ae1259245dbaade1cc725f5f3f5e36a8d1487c90`)
@@ -564,3 +569,67 @@ all six cases passed on Debian 12 arm64 under Xvfb, Openbox and PulseAudio.
 The offline smoke inserted `こんにちは、こんにちはこんにちは` into
 Mousepad using the same fixture and pinned model. Chromium refusal passed
 before any edit.
+
+## macOS Chrome paste and model staging
+
+The revised Issue #401 allows ordinary target-side truncation and makes
+permission-dependent native automation optional. The macOS helper now binds
+an editable Google Chrome web field using Accessibility and dispatches a
+single process-targeted Command+V per committed chunk after revalidating the
+original window, element, editability and selection. TextEdit keeps the
+element-addressed edit and its final focus guard. Linux keeps the verified
+AT-SPI Mousepad path. The Electron session queue, graph and inference runtime
+are shared.
+
+The [previous comparison](#insertion-decision) documents the inspected
+OpenWhispr, Handy and Vocalinux revisions and their test and bug evidence.
+The Chrome path uses ordinary paste, as in the OpenWhispr and Handy macOS
+paths. Chromium exposes editability and secure-field state through the Mac
+Accessibility interface. Chromium's selected-text setter does not provide the
+same path for web content, and replacing the whole value could overwrite
+unrelated text. One paste carries an entire UTF-16 string without splitting
+it into synthetic character keys. Clipboard restoration is guarded by the
+pasteboard generation. A value or selection change provides evidence of
+consumption, including after target-side truncation. An ambiguous dispatch
+ends the session without retry. The [desktop guide](../desktop.md#focused-fields)
+describes the remaining native event timing and clipboard limitations.
+[Chromium Mac accessibility](https://chromium.googlesource.com/chromium/src/+/a4037b9d04ff3754918f686344a8873ce05b22d0/ui/accessibility/platform/browser_accessibility_cocoa.mm),
+[Apple Core Graphics process-targeted event delivery](https://developer.apple.com/documentation/coregraphics/cgevent/posttopid(_:)).
+
+Validation used Aqua on macOS 27.2.1 (26B131), arm64, Apple clang 21.0.0 and
+Electron 45.4.1. Installed Google Chrome was 158.0.8127.36. The tested helper
+source has Git blob ID `9960b80b8ab25428fc7220fc8d14af01e0538477`.
+
+| Check | Observed result |
+| --- | --- |
+| Two `npm run build:desktop` runs and `codesign --verify --deep --strict` on the extracted macOS bundle | Both yielded archive SHA-256 `4a87ad22ef67142b1ff2984a85ac73547c143a100744b6da7a981a3918bc336b`. Signature verification passed. |
+| `DESKTOP_REAL_ASR=1 DESKTOP_MACOS_EDITOR=1 npm run test:desktop` with the extracted package and stable Swift driver | Five passed. The package launched, remained resident after closing management, handled shortcut conflicts, discarded stale Live releases and freed the shortcut on Quit. The production output queue and native adapter fixture covered ordered Unicode, truncation, protected fields, read-only at Start and dispatch, denied keyboard-event access, same-process stale focus, cancellation, and clipboard preservation and contention. The fixture simulates AX and modifier state, intercepts OS key posting, and writes to an actual private pasteboard. |
+| Real offline inference in the same packaged macOS run | BlackHole 2ch routed `tests/desktop/fixtures/konnichiwa.wav` through the actual microphone input. Model `moonshine/small-streaming-ja` at revision `330a8fedc2c613a96902275ecf6f622bda1271d820221427c19ac2cea230ffee` produced `こんにちは、こんにちは、こんにちは` in Live Display with HTTP(S) blocked after preparation. |
+| Six native macOS external-target cases | All skipped at the Swift driver's `{"accessibility":false,"keyboard":false}` preflight. Real TextEdit and Chrome delivery and external caret behavior remain unverified. [Optional manual test on macOS](../desktop.md#manual-test-on-macos). |
+| Extracted Debian 12 arm64 package with `DESKTOP_REAL_ASR=1 npm run test:desktop` in Docker, Xvfb/Openbox and PulseAudio | All six passed, including Mousepad insertion, Chromium refusal, held-Stop safety, and offline Japanese inference. Mousepad received `こんにちは、こんにちは、こんにちは`. |
+| Focused standalone Chromium graph and model suites | 75 passed on macOS with the Pages-style server on a free loopback port. |
+
+The `models` job's previous hosted run, `45569376038`, stopped before
+browser tests because the raw ONNX Runtime notice URLs returned 404.
+`npm run prepare:playground-assets` from a clean cache retrieved the
+`v1.31.1` notices from jsDelivr. For both files, their byte counts and
+SHA-256 pins still match the runtime and extension distribution inventories.
+The recovered workflow exposed stale test assumptions in the MV3 step.
+The IfCondition test now selects the AI node by its accessible label. The
+prompt-only Worker tests prepare assets in Models after seeding a saved
+graph directly, reflecting the current Auto Save behavior. Tests for corrupt
+downloads configure the fixture before graph editing can trigger Auto Save.
+The cancellation tests hold inference until Cancel and check Worker
+release and clean restart. The text-processing tests also deliver a late
+response to the released Worker boundary after restart.
+
+The local `models` job reproduction used Ubuntu 24.04 arm64, Node 22 and
+Playwright 1.63.0. Asset preparation from a fresh cache, all 940 Node tests,
+the Playground browser suite (233 passed, 5 skipped), extension packaging
+(220 verified files), and all three distribution audit tests passed. The
+Ubuntu MV3 run passed 42 checks and skipped two optional real-model checks.
+Its one failing IfCondition cancellation case passed separately on Ubuntu
+after the final fixture adjustment. The focused macOS MV3 run passed 74
+checks with two optional real-model skips, and the updated IfCondition
+suite passed all seven checks in a follow-up run. `git diff --check` passed.
+The GitHub-hosted job still needs a run on the published fix revision.

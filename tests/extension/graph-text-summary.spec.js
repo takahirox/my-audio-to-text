@@ -15,6 +15,7 @@ test('both AI text processing models: parked Save persists, independent settings
     await writeFile(path.join(f.root, 'extension', model.key + '-assets.json'), JSON.stringify(files));
   }
   const page = await openGraph(f), editor = page.editor;
+  f.mode('corrupt');
   for (const type of TEXT_PROCESSING_TYPES) {
     await openPalette(editor); await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'AI Models / Text' });
     await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
@@ -29,7 +30,7 @@ test('both AI text processing models: parked Save persists, independent settings
   await editor.getByLabel('textprocessingqwen35 Add input', { exact: true }).click();
   const cards = page.models.locator('#meeting-summary-lfm2, #meeting-summary-qwen35');
   const save = async () => { await settleAutoSave(editor);  };
-  f.mode('corrupt'); await save();
+  await save();
   await expect(cards).toHaveCount(2);
   await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
   for (const card of await cards.all()) await expect(card).toHaveAttribute('data-state', 'Not downloaded');
@@ -107,6 +108,9 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: saved prompt controls p
   await editor.getByLabel('summary System prompt', { exact: true }).fill(savedPrompt);
   await editor.getByLabel('summary System prompt', { exact: true }).press('Tab');
   await settleAutoSave(editor);
+  // Seeding the saved graph directly skips model preparation on model add.
+  // A prompt-only Auto Save keeps the existing asset requirements.
+  await live.models.locator('#' + spec.key).getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
   await expectGraphModelsReady(editor);
   const downloadPromise = editor.waitForEvent('download');
   await editor.locator('.graph-actions > summary').click(); await editor.locator('#graph-export').click();

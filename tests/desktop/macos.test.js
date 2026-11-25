@@ -8,7 +8,9 @@ import { createInterface } from 'node:readline';
 import { setTimeout as wait } from 'node:timers/promises';
 import { test } from 'node:test';
 import { _electron } from 'playwright';
+import { FocusedTarget } from '../../desktop/focused-target.js';
 import { defaultDesktopGraph, FOCUSED_OUTPUT } from '../../desktop/graph.js';
+import { DesktopSession } from '../../desktop/session.js';
 import { edge, graphNode, GRAPH_VERSION } from '../../extension/graph.js';
 import { browserFixture } from './browser-fixture.js';
 
@@ -86,14 +88,13 @@ async function fixture(t) {
   return (...args) => execFileSync(tool, args, { encoding: 'utf8', timeout: 25000 }).trim();
 }
 
-function requireNativeInput(run) {
-  assert.deepEqual(JSON.parse(run('permissions')), { accessibility: true, keyboard: true },
-    'The macOS test driver needs normal Accessibility and keyboard event permission');
-}
-
 async function inputFixture(t) {
   const run = await fixture(t);
-  requireNativeInput(run);
+  const permissions = JSON.parse(run('permissions'));
+  if (!permissions.accessibility || !permissions.keyboard) {
+    t.skip(`Native input permission preflight blocked: ${JSON.stringify(permissions)}`);
+    return;
+  }
   return run;
 }
 
@@ -210,14 +211,132 @@ async function textProducer(desktop) {
   return (...values) => runtime.evaluate(values => globalThis.emitTestText(values), values);
 }
 
-test('macOS dispatch rechecks the bound window and field after reading the selection', async t => {
+async function compileDispatchFixture(t) {
   const directory = await temp(t, 'desktop-macos-dispatch-');
   const tool = join(directory, 'dispatch-fixture');
   execFileSync('xcrun', ['clang', '-fobjc-arc', '-Wall', '-Wextra', '-Werror',
     '-framework', 'AppKit', '-framework', 'ApplicationServices', '-framework', 'Carbon',
     'tests/desktop/macos-dispatch-fixture.m', '-o', tool]);
+  return tool;
+}
+
+test('macOS dispatch rechecks the bound window and field after reading the selection', async t => {
+  const tool = await compileDispatchFixture(t);
   const results = execFileSync(tool, { encoding: 'utf8', timeout: 5000 }).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(results, [{ request: 1, error: 'The authorized TextEdit document changed or lost focus.' }, { request: 2 }]);
+  assert.deepEqual(results, [{ request: 1, error: 'The authorized window or text field changed or lost focus.' }, { request: 2 }]);
+});
+
+test('macOS output queue and Chrome adapter serialize paste and guard authorization and clipboard ownership', async t => {
+  const tool = await compileDispatchFixture(t);
+  const target = new FocusedTarget(tool, ['browser'], {
+    onInvalid: (id, error) => { void controller.cancel(error, id); },
+    onLost: () => {},
+  });
+  const controller = new DesktopSession({ target, run: async () => {}, onChange: () => {} });
+  const lines = createInterface({ input: target.connect().process.stdout });
+  t.after(() => {
+    lines.close();
+    target.close();
+  });
+  let state;
+  let waiting;
+  lines.on('line', line => {
+    const message = JSON.parse(line);
+    state = message.fixture ?? state;
+    waiting = message.waiting ?? waiting;
+  });
+  const configure = async (options = {}) => {
+    state = undefined;
+    await target.request('fixture', null, options);
+    return state;
+  };
+  const plan = { focused: true, microphone: false, displays: [], graph: {} };
+  const start = async () => {
+    await target.request('snapshot-tray');
+    await controller.start(plan, 'bind-tray');
+    return controller.current?.id;
+  };
+  const expectRestored = ({ clipboard, binary }) => {
+    assert.equal(clipboard, 'existing copy');
+    assert.equal(binary, 'binary data');
+  };
+
+  for (const options of [{ secure: true }, { readOnly: true }, { denyKeyboard: true }]) {
+    await configure(options);
+    assert.equal(await start(), undefined);
+    assert.match(controller.state.error, /cannot be safely edited|keyboard event posting/);
+    assert.deepEqual((await configure(options)).dispatches, []);
+  }
+
+  await configure();
+  let id = await start();
+  assert.ok(id);
+  const chunks = [' 東京', '🙂\n ', 'か\u3099'];
+  const pending = chunks.map(text => controller.insert(id, text));
+  await controller.stop();
+  await Promise.all(pending);
+  let observed = await configure();
+  assert.deepEqual(observed.dispatches, chunks);
+  assert.equal(observed.text, 'left|' + chunks.join('') + 'right');
+  expectRestored(observed);
+
+  await configure({ pasteLimit: 1 });
+  id = await start();
+  await controller.insert(id, 'A東京🙂\n');
+  await controller.stop();
+  observed = await configure();
+  assert.deepEqual(observed.dispatches, [...chunks, 'A東京🙂\n']);
+  assert.equal(observed.text, 'left|' + chunks.join('') + 'Aright');
+  expectRestored(observed);
+
+  // A target may reject an edit entirely. Ambiguity must never retry it or
+  // release the next queued chunk to a caret whose state is unknown.
+  await configure({ pasteLimit: 0 });
+  id = await start();
+  await Promise.all([
+    assert.rejects(controller.insert(id, 'a rejected paste'), /dispatched.*could not be confirmed/),
+    assert.rejects(controller.insert(id, 'must stay queued'), /no longer authorized/),
+  ]);
+  await controller.cancel();
+  observed = await configure({ held: true });
+  assert.deepEqual(observed.dispatches, [...chunks, 'A東京🙂\n', 'a rejected paste']);
+  expectRestored(observed);
+
+  id = await start();
+  const canceled = assert.rejects(controller.insert(id, 'discard while held'), /changed or lost focus/);
+  await eventually(() => waiting, 'The native adapter did not hold the pending paste');
+  await controller.cancel();
+  await canceled;
+  await assert.rejects(controller.insert(id, 'late callback'), /no longer authorized/);
+  assert.deepEqual((await configure()).dispatches, observed.dispatches);
+
+  await configure({ held: true });
+  id = await start();
+  waiting = false;
+  const madeReadOnly = assert.rejects(controller.insert(id, 'became read only'), /cannot be safely edited/);
+  await eventually(() => waiting, 'The native adapter did not hold the pending paste');
+  await configure({ readOnly: true });
+  await madeReadOnly;
+  await controller.cancel();
+  assert.deepEqual((await configure()).dispatches, observed.dispatches);
+
+  id = await start();
+  await configure({ replaceClipboard: true });
+  await assert.rejects(controller.insert(id, 'edited once'), /clipboard changed/);
+  await controller.cancel();
+  observed = await configure({ stale: true });
+  assert.deepEqual(observed.dispatches, [...chunks, 'A東京🙂\n', 'a rejected paste', 'edited once']);
+  assert.equal(observed.clipboard, 'new user copy');
+
+  id = await start();
+  await assert.rejects(controller.insert(id, 'stale focus'), /changed or lost focus/);
+  await controller.cancel();
+  const stale = await configure();
+  assert.equal(stale.focused, 1);
+  assert.equal(stale.other, 'other');
+  assert.equal(stale.text, observed.text);
+  assert.equal(stale.clipboard, 'new user copy');
+  assert.deepEqual(stale.dispatches, observed.dispatches);
 });
 
 test('macOS package launches, retains its shortcut after closing management, and releases it on Quit', {
@@ -297,6 +416,7 @@ test('native shortcut and menu insert ordered Unicode at the TextEdit caret with
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
+  if (!run) return;
   const app = await launch(t);
   const { desktop, view } = app;
   const emit = await textProducer(desktop);
@@ -343,6 +463,7 @@ test('held macOS shortcut cannot restart ended Live or commit after cancellation
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
+  if (!run) return;
   const app = await launch(t);
   const { desktop, management, view } = app;
   const emit = await textProducer(desktop);
@@ -400,6 +521,7 @@ test('macOS rejects a pending edit when focus moves between documents in the sam
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
+  if (!run) return;
   const app = await launch(t);
   const emit = await textProducer(app.desktop);
   await selectFocusedGraph(app, 'Same-process focus change');
@@ -436,14 +558,13 @@ test('macOS rejects a pending edit when focus moves between documents in the sam
 test('native shortcut inserts rapid Unicode commits at the caret in independent Chrome', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
-  const run = await fixture(t);
+  const run = await inputFixture(t);
+  if (!run) return;
   const app = await launch(t);
   const emit = await textProducer(app.desktop);
   await selectFocusedGraph(app, 'Chrome OS target');
   const chrome = await externalChrome(t, run);
   const before = await chrome.focus('notes', 5);
-  t.diagnostic('The independent Chrome window and ordinary textarea received focus.');
-  requireNativeInput(run);
   const commits = [' 東京', '🙂\n ', 'か\u3099'];
   const prefix = 'left|' + commits.join('');
   const expected = { ...before.values, notes: prefix + 'right' };
@@ -477,15 +598,16 @@ test('native shortcut inserts rapid Unicode commits at the caret in independent 
   assert.equal(chrome.state().submits, 0);
 });
 
-test('macOS rejects protected, read-only, and constrained controls in independent Chrome before editing', {
+test('macOS rejects protected and read-only controls in independent Chrome before editing', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
+  if (!run) return;
   const app = await launch(t);
   await selectFocusedGraph(app, 'Browser safety target', ' 東京🙂\n ');
   const indicator = app.desktop.windows().find(page => page.url().endsWith('/indicator.html'));
   const chrome = await externalChrome(t, run);
-  for (const field of ['password', 'readonly', 'limited', 'multiline']) {
+  for (const field of ['password', 'readonly']) {
     const { report: _report, ...original } = await chrome.focus(field, 1);
     run('shortcut');
     await eventually(async () => {
@@ -509,34 +631,40 @@ test('macOS rejects protected, read-only, and constrained controls in independen
   }
 });
 
-test('macOS avoids a partial edit when Chrome constrains a textarea during insertion', {
+test('macOS lets independent Chrome enforce existing and late length limits during native paste', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
+  if (!run) return;
   const app = await launch(t);
   const emit = await textProducer(app.desktop);
   await selectFocusedGraph(app, 'Late browser length constraint');
   const chrome = await externalChrome(t, run);
-  const before = await chrome.focus('notes', 5, true);
-  assert.equal(before.notesMaxLength, -1);
-
-  run('shortcut');
-  await runningWithExternalFocus(app, run, chrome.pid);
-  await emit('A東京🙂\n');
-  assert.ok((await idle(app.view)).error, 'The packaged app did not report the rejected edit');
-  const report = chrome.state().report;
-  const after = await eventually(() => {
-    const current = chrome.state();
-    return current.report > report && current;
-  }, 'Chrome did not report its state after the rejected edit');
-
-  assert.deepEqual(after.values, before.values);
-  assert.equal(after.caret, before.caret);
-  assert.equal(after.focus, 'notes');
-  assert.equal(after.active, true);
-  assert.equal(Number(run('front-pid')), chrome.pid);
-  assert.equal(after.submits, 0);
-  assert.equal(after.edits.some(([event]) => event === 'input'), false, 'A partial edit reached the page');
+  for (const [field, caret, late, expected] of [
+    ['multiline', 2, false, 'xyA東'],
+    ['notes', 5, true, 'left|Aright'],
+  ]) {
+    const before = await chrome.focus(field, caret, late);
+    if (late) assert.equal(before.notesMaxLength, -1);
+    run('shortcut');
+    await runningWithExternalFocus(app, run, chrome.pid);
+    await emit('A東京🙂\n');
+    await eventually(() => chrome.state().values[field] === expected, 'Chrome did not apply its normal length limit');
+    run('shortcut');
+    assert.equal((await idle(app.view)).error, '');
+    const report = chrome.state().report;
+    const after = await eventually(() => {
+      const current = chrome.state();
+      return current.report > report && current;
+    }, 'Chrome did not report its state after Stop');
+    assert.deepEqual(after.values, { ...before.values, [field]: expected });
+    assert.deepEqual(after.edits.slice(before.edits.length), [['beforeinput', field], ['input', field]]);
+    if (!late) assert.equal(after.caret, expected.length);
+    assert.equal(after.focus, field);
+    assert.equal(after.active, true);
+    assert.equal(Number(run('front-pid')), chrome.pid);
+    assert.equal(after.submits, 0);
+  }
 });
 
 test('macOS package captures a virtual microphone and delivers a real offline Japanese Moonshine final to Live', {

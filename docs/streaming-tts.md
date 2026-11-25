@@ -122,9 +122,9 @@ those reviewed full digests, explicitly downloading weights.
 
 [TTS staging](../scripts/prepare-tts-assets.py) verifies ORT archive SHA-256
 `bdccdb9fbb9ab537247c0c734e9b1d2b1b338b4f2a09faa58f0dc1cfa27c312c`
-and allowlists three runtime files. The npm archive omits notices; staging also
-pins its MIT license/third-party notices from ORT commit
-`6af1a932e2286d5c58166085d24c68783033edee` and the conversion's Apache license.
+and allowlists three runtime files. Staging verifies the MIT license and
+third-party notices from the matching ORT `v1.31.1` release by SHA-256 and
+includes the conversion's Apache license.
 Existing TTS runtimes remain isolated. CSP remains
 `script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'`.
 

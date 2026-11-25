@@ -19,12 +19,13 @@ const expectFailure=async page=>{
 
 test('IfCondition palette/settings/wires persist; headless preparation reports errors and Models recovers/reuses cache without inference',async({graphExtension:f})=>{
  await conditionAssets(f);const page=await openGraph(f),editor=page.editor;
+ f.mode('corrupt');
  await openPalette(editor);await editor.locator('#graph-node-type [data-type="IfCondition"]').click();
  await editor.getByLabel('ifcondition condition',{exact:true}).fill('Does this text mention an animal?');
  await editor.getByRole('button',{name:'speech output final',exact:true}).click();await editor.getByRole('button',{name:'ifcondition input text',exact:true}).click();
  await editor.getByRole('button',{name:'ifcondition output yes',exact:true}).click();await editor.getByRole('button',{name:'transcript input input1',exact:true}).click();
- f.mode('corrupt');await save(editor);await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
- await editor.reload();await editor.getByRole('button',{name:'Select ifcondition',exact:true}).click();
+ await save(editor);await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
+ await editor.reload();await editor.getByRole('button',{name:/^Select ifcondition:/}).click();
  await expect(editor.getByLabel('ifcondition condition',{exact:true})).toHaveValue('Does this text mention an animal?');
  expect(await editor.evaluate(()=>(() => { const library = JSON.parse(localStorage.getItem('processing-graph-library-v1')); return library.graphs.find(entry => entry.id === library.assignments.live).graph; })().edges.some(e=>e.from[0]==='ifcondition'&&e.from[1]==='yes'))).toBe(true);
  const models=page.models.locator('#if-condition');
@@ -62,9 +63,15 @@ test('Live recovers missing cache; Cancel during Stop/restart has no stale outpu
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await expect(page.locator('#start')).toBeEnabled();await expectGraphModelsReady(page.editor);
  expect(f.requests.some(url=>url.includes('if-condition'))).toBe(true);
- await startGraph(page);await emitFinal(page,'slow-fixture yes-fixture');await page.locator('#stop').click();await expect(page.locator('#status')).toContainText('Finalizing');
- await page.evaluate(() => window.graphSession.cancel());await expect(page.locator('#start')).toBeEnabled();await startGraph(page);await emitFinal(page,'yes-fixture');
- await expect(items(page,'yes')).toHaveText(['yes-fixture'].join('\n'));await page.waitForTimeout(1600);await expect(items(page,'yes')).toHaveText(['yes-fixture'].join('\n'));await page.locator('#stop').click();await expect(page.locator('#start')).toBeEnabled();
+ await startGraph(page);await emitFinal(page,'slow-fixture yes-fixture');
+ await expect.poll(()=>page.evaluate(()=>window.graphWorkers.some(worker=>!worker.released &&
+  worker.url.endsWith('/if-condition-worker.js') && worker.messages.some(message=>message.type==='decide')))).toBe(true);
+ await page.locator('#stop').click();await expect(page.locator('#status')).toContainText('Finalizing');
+ await page.evaluate(() => window.graphSession.cancel());await expect(page.locator('#start')).toBeEnabled();
+ await expectPreparedIdle(page);
+ await startGraph(page);await emitFinal(page,'yes-fixture');
+ await expect(items(page,'yes')).toHaveText('yes-fixture');await page.locator('#stop').click();await expect(page.locator('#start')).toBeEnabled();
+ await expect(items(page,'yes')).toHaveText('yes-fixture');
 });
 
 test('an unavailable packaged backend blocks Start and preserves the saved graph',async({graphExtension:f})=>{
