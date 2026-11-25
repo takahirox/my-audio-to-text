@@ -161,8 +161,8 @@ async function externalChrome(t, run) {
   await eventually(() => Number(run('front-pid')) === pid && state()?.active,
     'The independent Chrome window did not receive focus', 30000);
 
-  const focus = (field, caret) => {
-    const serial = select(field, caret);
+  const focus = (field, caret, limitOnEdit) => {
+    const serial = select(field, caret, limitOnEdit);
     return eventually(() => {
       const current = state();
       return current.selection === serial && current.active && current.focus === field && current.caret === caret && current;
@@ -460,6 +460,36 @@ test('macOS rejects protected, read-only, and constrained controls in independen
     await indicator.getByRole('button', { name: 'Dismiss' }).evaluate(button => button.click());
     await eventually(async () => !(await app.view()).session.error, 'The previous refusal was not dismissed');
   }
+});
+
+test('macOS avoids a partial edit when Chrome constrains a textarea during insertion', {
+  skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
+}, async t => {
+  const run = await inputFixture(t);
+  const app = await launch(t);
+  const emit = await textProducer(app.desktop);
+  await selectFocusedGraph(app, 'Late browser length constraint');
+  const chrome = await externalChrome(t, run);
+  const before = await chrome.focus('notes', 5, true);
+  assert.equal(before.notesMaxLength, -1);
+
+  run('shortcut');
+  await runningWithExternalFocus(app, run, chrome.pid);
+  await emit('A東京🙂\n');
+  assert.ok((await idle(app.view)).error, 'The packaged app did not report the rejected edit');
+  const report = chrome.state().report;
+  const after = await eventually(() => {
+    const current = chrome.state();
+    return current.report > report && current;
+  }, 'Chrome did not report its state after the rejected edit');
+
+  assert.deepEqual(after.values, before.values);
+  assert.equal(after.caret, before.caret);
+  assert.equal(after.focus, 'notes');
+  assert.equal(after.active, true);
+  assert.equal(Number(run('front-pid')), chrome.pid);
+  assert.equal(after.submits, 0);
+  assert.equal(after.edits.some(([event]) => event === 'input'), false, 'A partial edit reached the page');
 });
 
 test('macOS package captures a virtual microphone and delivers a real offline Japanese Moonshine final to Live', {

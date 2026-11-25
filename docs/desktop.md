@@ -201,6 +201,8 @@ refusal of password, read-only, and length-limited fields. The acceptance case
 requires the native shortcut to deliver rapid Unicode commits to an ordinary
 textarea in order, advance the caret by the inserted text, retain browser
 focus, and prevent a queued write after a focus change during a held shortcut.
+The late-constraint case requires an error with the original value, caret and
+focus intact when the page adds a length limit during the edit.
 Browser insertion remains unsupported. The acceptance case requires a safe
 browser insertion backend and an authorized Aqua runner.
 

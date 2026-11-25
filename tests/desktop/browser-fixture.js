@@ -20,8 +20,8 @@ export async function browserFixture(t) {
   return {
     url: `http://127.0.0.1:${server.address().port}/`,
     state: () => state,
-    select(target, caret) {
-      selection = { target, caret, serial: (selection?.serial ?? 0) + 1 };
+    select(target, caret, limitOnEdit = false) {
+      selection = { target, caret, limitOnEdit, serial: (selection?.serial ?? 0) + 1 };
       return selection.serial;
     },
   };

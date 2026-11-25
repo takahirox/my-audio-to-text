@@ -456,4 +456,60 @@ before editing in Chromium. The offline Moonshine smoke inserted
 940 checks. With no macOS desktop process running, the focused standalone
 Chromium and MV3 suites passed all 75 and 33 checks, respectively.
 `git diff --check` passed.
-| `git diff --check` | Passed. |
+
+## Late browser constraint regression (2026-11-25)
+
+The independent Chrome fixture can now add `maxlength` from
+`beforeinput` after a session has bound to its ordinary textarea. The native
+acceptance case requires the app to report an error and verifies the
+original text, focused element and caret, with zero input events or form
+submissions. The ordinary textarea success case remains required.
+
+In a separate browser diagnostic, Playwright's `keyboard.insertText` sent
+`A東京🙂\n` at UTF-16 offset 5 in `left|right` in Google Chrome
+158.0.8127.36. The unrestricted control became `left|A東京🙂\nright` with
+caret 11. When the same fixture added a limit of 11 during `beforeinput`,
+Chrome wrote `left|Aright`, emitted an input event and put the caret at 11.
+The password field stayed unchanged and neither edit submitted the form.
+This exercised Chromium's editor via Playwright. Native shortcut delivery
+and production insertion were outside the diagnostic.
+
+The established insertion options still leave a browser safety gap. Paste
+and Unicode input can encounter the new constraint inside the editor.
+Chromium's element-addressed range replacement also invokes replacement
+events, and its full-value setter can overwrite intervening text because it
+lacks an expected-value or expected-selection argument. The production
+adapter continues to refuse Chrome fields. [Chromium range replacement](https://github.com/chromium/chromium/blob/a4037b9d04ff3754918f686344a8873ce05b22d0/third_party/blink/renderer/modules/accessibility/ax_object.cc#L8441),
+[Chromium value setter](https://github.com/chromium/chromium/blob/a4037b9d04ff3754918f686344a8873ce05b22d0/third_party/blink/renderer/modules/accessibility/ax_node_object.cc#L5297).
+
+The follow-up ran on macOS 27.2.1 (26B131) arm64 in Aqua with Apple clang
+21.0.0 and Electron 45.4.1. `npm run build:desktop` produced the same
+archive SHA-256, `237f6d7e28ef080809bcab4a26f0bfe6cea15b57e3be0fc4e27053568640057a`.
+The extracted app passed `codesign --verify --deep --strict`. With
+`DESKTOP_TEST_BINARY` set to the extracted executable, the test command was
+`DESKTOP_MACOS_EDITOR=1 DESKTOP_REAL_ASR=1 npm run test:desktop`, using the
+compiled Swift fixture via `DESKTOP_MACOS_TEST_DRIVER`.
+
+- Three packaged checks passed. They covered launch, residency, shortcut
+  conflict and release on Quit, a stale Live shortcut release at the
+  helper boundary, and the offline BlackHole microphone smoke to Live
+  Display. The smoke again produced `こんにちは、こんにちは、こんにちは`
+  with the pinned model and fixture above.
+- Five native checks stopped at the Swift driver's
+  `{"accessibility":false,"keyboard":false}` preflight. The positive Chrome
+  case opened the independent browser and verified the fixture caret before
+  stopping. None of the five reached native shortcut delivery or insertion.
+  The repository listed zero registered self-hosted Actions runners.
+- The focused standalone Chromium and MV3 commands above passed all 75 and
+  33 tests without the desktop app running. `npm test` passed all 940
+  tests after the build staged the pinned runtime.
+- The rebuilt and extracted Debian 12 arm64 package passed all six tests
+  with `DESKTOP_REAL_ASR=1 npm run test:desktop` under Docker, Xvfb/Openbox and
+  PulseAudio. This covered the Mousepad OS path, protected and constrained
+  GTK fields, Chromium refusal, held-Stop safety and model retry. The
+  offline fixture inserted `こんにちは、こんにちは、こんにちは` into Mousepad.
+
+Packaged editor and browser insertion remain mandatory on macOS. A safe
+browser backend and an Aqua runner with normal OS authorization for the
+package and test driver are still required. Linux browser support remains
+optional.
