@@ -28,6 +28,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'local-voice', privileges: {
 let library, controller, target, tray, runtime, management, indicator, runtimeReady;
 let modelView, shortcutError = '', registeredShortcut, quitting = false, shutDown = false;
 let modelOperation, shortcutChanging = false, runtimeSequence = 0;
+let shortcutSession, shortcutContext = 0;
 let trayMenu;
 const pendingCommands = new Map(), displayItems = new Map();
 
@@ -125,8 +126,18 @@ function trayToggle() {
   }
 }
 
-function shortcutReleased(value) {
-  if (quitting || value !== registeredShortcut) return;
+function updateSession() {
+  const id = controller.current?.id;
+  if (mac && !quitting && id !== shortcutSession) {
+    // Distinguish each session and idle period, even when no text target is bound.
+    shortcutSession = id;
+    void target.request('shortcut-context', id ?? null, ++shortcutContext).catch(() => {});
+  }
+  publish();
+}
+
+function shortcutReleased(value, context) {
+  if (quitting || value !== registeredShortcut || (mac && context !== shortcutContext)) return;
   if (!controller.current) {
     void start(library.value.selected, 'dictation', 'bind-shortcut');
   } else {
@@ -142,6 +153,7 @@ async function registerShortcut(value, save = false) {
       || new Set(modifiers).size !== modifiers.length || !modifiers.some(key => key !== 'Shift')) {
     throw Error('Use at least two distinct modifiers (Control, Alt, Shift, Super) and a letter, digit, or F1–F12.');
   }
+  if (mac) await target.request('shortcut-context', shortcutSession ?? null, shortcutContext);
   await target.request('set-shortcut', null, value);
   try { if (save) library.shortcut(value); }
   catch (error) {
@@ -377,7 +389,7 @@ else {
       },
     });
     target.connect();
-    controller = new DesktopSession({ target, run, onChange: publish, onDisplay: item => {
+    controller = new DesktopSession({ target, run, onChange: updateSession, onDisplay: item => {
       displayItems.set(JSON.stringify([item.node, item.port]), item);
       send(management, 'management:display', item);
     } });

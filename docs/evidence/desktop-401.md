@@ -378,3 +378,36 @@ PR #402 remains partial. The remaining acceptance is successful OS-path
 insertion in TextEdit and in an independent macOS browser, with native menu
 and safety evidence from a provisioned Aqua runner. Required post-merge
 verification is none.
+
+## Display-only Live shortcut fix and macOS recheck (2026-11-25)
+
+The Electron host publishes a new shortcut context at each session start and
+end. The native helper captures that context on key-down and returns it when
+the shortcut is released. This covers Display-only Live, which has no native
+text binding. A release from a completed Live session can no longer trigger
+dictation in the external editor. The packaged regression injected a release
+message at the helper boundary after Stop and observed Idle with no error. It
+also delivered a release for the current Live session and observed a normal
+Stop.
+
+In a disposable profile of Google Chrome 158.0.8127.36 on macOS, with
+extensions disabled, `Accessibility.getPartialAXTree` reported the same role,
+value, editable, settable, focused, and read-only properties for a plain
+input and an otherwise identical input with `maxlength="4"`. The diagnostic
+read Chrome's internal accessibility tree through DevTools. In a separate
+browser-side `Input.insertText` probe from a caret after `xy`, the ordinary
+field received `xy東京🙂`. The length-limited field received `xy東京`, including
+when the limit was added in `beforeinput`, after focus and caret setup. That
+probe used the browser's editing path. Native macOS event delivery was gated at
+preflight. The macOS adapter still refuses browser fields. A browser path
+needs a field-bound edit with observable preconditions and whole-edit behavior
+before it can be enabled. Linux X11 browser insertion remains optional.
+
+| Check | Observed result |
+| --- | --- |
+| `npm run build:desktop` on macOS 27.2.1 (26B131) arm64 with Apple clang 21.0.0 and Electron 45.4.1 | Two builds produced SHA-256 `237f6d7e28ef080809bcab4a26f0bfe6cea15b57e3be0fc4e27053568640057a`. The extracted bundle passed `codesign --verify --deep --strict`. |
+| `DESKTOP_MACOS_EDITOR=1 DESKTOP_REAL_ASR=1 npm run test:desktop` with `DESKTOP_TEST_BINARY` pointing to that extracted package | Three passed. Packaged launch, residency, shortcut conflict and Quit, the helper-boundary Live regression, and the real model smoke passed. BlackHole 2ch fed `tests/desktop/fixtures/konnichiwa.wav` into the production Pipeline, which emitted `こんにちは、こんにちは、こんにちは` to Live Display with HTTP(S) blocked after model preparation. The model revision is the pinned revision listed above. |
+| Native tests in the same run | Three blocked at preflight. Both the shell and the Aqua Terminal launch of the Swift driver reported `{"accessibility":false,"keyboard":false}`. GitHub reported zero registered self-hosted runners for the repository. Native TextEdit insertion, indicator focus, menu actions, focus-change and cancellation, the held Live release, and browser control safety remain unverified on this runner. Successful macOS browser insertion remains open. |
+| Extracted Debian 12 arm64 package with `DESKTOP_REAL_ASR=1 npm run test:desktop` | Six passed using the documented Docker invocation with the existing X11 image. The Mousepad target received `こんにちは、こんにちは、こんにちは` from the same fixture and pinned revision via PulseAudio with HTTP(S) blocked. The Chromium refusal, GTK protected and constrained fields, held-Stop focus and target checks, and model retry passed. |
+| `npm test` and the focused standalone Chromium and MV3 suites listed above | 940 Node, 75 standalone Chromium, and 33 MV3 tests passed. The browser hosts ran independently of the desktop app. |
+| `git diff --check` | Passed. |

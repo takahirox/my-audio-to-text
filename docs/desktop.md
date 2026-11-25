@@ -86,8 +86,9 @@ the menu. It checks the active application, window, exact element and
 writable selection before using the target's selected-text setter. It reads
 back the full text and caret and ends the session if the edit cannot be
 confirmed. It holds pending text until the shortcut and its modifiers are
-released. If the session ends while the shortcut is down, releasing it
-discards the old Stop action. The adapter leaves the clipboard alone. Its
+released. The press belongs to the session or idle period in which it began.
+If a voice typing or Display-only Live session ends while the shortcut is
+held, the release is discarded. The adapter leaves the clipboard alone. Its
 intended scope is the document view in the system TextEdit app. Other editors,
 secure fields, native dialog fields and browser fields are refused.
 
@@ -189,7 +190,10 @@ The native tests require an automated Aqua session with normal Accessibility
 and keyboard event permission for the Swift driver and Accessibility for the
 packaged app. They exercise TextEdit with rapid committed chunks, focus while
 the indicator is visible, native menu Start, Stop, and Quit, and cancellation
-or focus change while the shortcut is held. With Google Chrome installed,
+or focus change while the shortcut is held. They also cover ending a
+Display-only Live session before releasing the shortcut in TextEdit. The basic
+packaged run separately checks stale release handling at the helper message
+boundary. With Google Chrome installed,
 the same suite checks refusal of a password field, read-only input, and
 length-limited input and textarea in a fresh extension-disabled profile. The
 Chrome tests cover safety refusals. Successful browser insertion remains

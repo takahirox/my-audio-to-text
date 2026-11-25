@@ -204,6 +204,46 @@ test('macOS package launches, retains its shortcut after closing management, and
   assert.equal(await reserve(defaultShortcut), undefined);
 });
 
+test('macOS host ignores a shortcut release from an ended Display-only session', {
+  timeout: 45000,
+}, async t => {
+  const { desktop, management, view } = await launch(t);
+  await desktop.evaluate(({ app }) => {
+    const { createRequire } = process.getBuiltinModule('node:module');
+    const load = createRequire(`${app.getAppPath()}/package.json`);
+    const { FocusedTarget } = load('./desktop/focused-target.js');
+    const request = FocusedTarget.prototype.request;
+    FocusedTarget.prototype.request = function (action, token, text) {
+      // Control only the shortcut message timing at the helper boundary.
+      if (action === 'shortcut-context' && token) {
+        globalThis.releaseTestShortcut = value => this.worker.process.stdout.emit('data', Buffer.from(
+          JSON.stringify({ shortcut: value, release: 0, context: text }) + '\n',
+        ));
+      }
+      return request.call(this, action, token, text);
+    };
+  });
+  const entry = await management.evaluate(graph => window.desktop.add('Held Live shortcut', graph),
+    testGraph('Display', 'Live output'));
+  const startLive = async () => {
+    await management.evaluate(id => window.desktop.startLive(id), entry.id);
+    await eventually(async () => (await view()).session.phase === 'running', 'Live did not start');
+  };
+  const release = () => desktop.evaluate((_electron, value) => globalThis.releaseTestShortcut(value), defaultShortcut);
+  await startLive();
+  await management.evaluate(() => window.desktop.stop());
+  assert.equal((await idle(view)).error, '');
+  await release();
+  await wait(250);
+  const { session } = await view();
+  assert.equal(session.phase, 'idle');
+  assert.equal(session.error, '');
+
+  await startLive();
+  await release();
+  assert.equal((await idle(view)).error, '');
+});
+
 test('native shortcut and menu insert ordered Unicode at the TextEdit caret with the indicator visible', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
@@ -250,7 +290,7 @@ test('native shortcut and menu insert ordered Unicode at the TextEdit caret with
   assert.equal(text(), prefix + ' held tray right');
 });
 
-test('held macOS shortcut cannot commit after cancellation or a change of TextEdit target', {
+test('held macOS shortcut cannot restart ended Live or commit after cancellation or a change of target', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
@@ -261,6 +301,19 @@ test('held macOS shortcut cannot commit after cancellation or a change of TextEd
   const second = await externalEditor(t, run, 'other target', 'other');
   const first = await externalEditor(t, run, 'original target', 'left|right');
   run('caret', '5');
+
+  const live = await management.evaluate(graph => window.desktop.add('Display-only Live', graph), testGraph('Display', ''));
+  await management.evaluate(id => window.desktop.startLive(id), live.id);
+  await runningWithExternalFocus(app, run, first.pid);
+  run('shortcut-down');
+  try {
+    await management.evaluate(() => window.desktop.stop());
+    assert.equal((await idle(view)).error, '');
+  } finally { run('shortcut-up'); }
+  await wait(250);
+  assert.equal((await view()).session.phase, 'idle');
+  assert.equal((await view()).session.error, '');
+  assert.equal(first.text(), 'left|right');
 
   run('shortcut');
   await runningWithExternalFocus(app, run, first.pid);
