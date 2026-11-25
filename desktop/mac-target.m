@@ -40,10 +40,10 @@ static BOOL isDocumentArea(AXUIElementRef area, AXUIElementRef window) {
         ![attribute(window, kAXSubroleAttribute) isEqual:@"AXStandardWindow"] ||
         !writable(area, kAXSelectedTextAttribute)) return NO;
 
-    id parent = attribute(area, kAXParentAttribute);
-    if (!parent || CFGetTypeID((__bridge CFTypeRef)parent) != AXUIElementGetTypeID() ||
+    id parent = elementAttribute(area, kAXParentAttribute);
+    if (!parent ||
         ![attribute((__bridge AXUIElementRef)parent, kAXRoleAttribute) isEqual:@"AXScrollArea"]) return NO;
-    id owner = attribute(area, kAXWindowAttribute);
+    id owner = elementAttribute(area, kAXWindowAttribute);
     return owner && CFEqual((__bridge CFTypeRef)owner, window);
 }
 
@@ -76,6 +76,7 @@ static EventHotKeyRef hotkey;
 static UInt32 hotkeyID;
 static NSString *shortcut;
 static BOOL held;
+static NSString *heldToken;
 static BOOL waitingForRelease;
 static NSString *pendingText;
 static NSNumber *pendingRequest;
@@ -197,10 +198,14 @@ static void verifyWrite(NSNumber *request, NSString *expected, CFIndex caret, CF
     }
 }
 
+static BOOL shortcutHeld(void) {
+    return held || (GetCurrentKeyModifiers() & (cmdKey | shiftKey | optionKey | controlKey));
+}
+
 static void insertWhenReleased(void) {
     if (!waitingForRelease) return;
     CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
-    if (held || (GetCurrentKeyModifiers() & (cmdKey | shiftKey | optionKey | controlKey))) {
+    if (shortcutHeld()) {
         writeAfter = now + 0.08;
         if (now >= nextWaitingNotice) {
             emitMessage(@{@"request": pendingRequest, @"waiting": @YES});
@@ -214,7 +219,6 @@ static void insertWhenReleased(void) {
         finishWrite(error);
         return;
     }
-    waitingForRelease = NO;
     AXUIElementRef area = (__bridge AXUIElementRef)bound.area;
     NSString *value = attribute(area, kAXValueAttribute);
     CFRange range;
@@ -233,6 +237,17 @@ static void insertWhenReleased(void) {
         finishWrite(error ?: @"The document changed before the edit. Voice typing stopped.");
         return;
     }
+    // Accessibility reads cross process boundaries. Recheck any modifiers
+    // pressed during those reads before dispatching a mutation.
+    if (shortcutHeld()) {
+        writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
+        return;
+    }
+    if (NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier != bound.pid) {
+        finishWrite(focusError);
+        return;
+    }
+    waitingForRelease = NO;
     CFIndex caret = range.location + (CFIndex)pendingText.length;
     // The write addresses the original element. No clipboard or keyboard event can reach a different field.
     if (AXUIElementSetAttributeValue(area, kAXSelectedTextAttribute, (__bridge CFStringRef)pendingText) != kAXErrorSuccess) {
@@ -276,6 +291,7 @@ static NSString *setShortcut(NSString *value) {
     hotkeyID++;
     shortcut = value;
     held = NO;
+    heldToken = nil;
     candidate = nil;
     return nil;
 }
@@ -297,12 +313,18 @@ static OSStatus shortcutEvent(EventHandlerCallRef call, EventRef event, void *co
     if (GetEventKind(event) == kEventHotKeyPressed) {
         if (!held) {
             held = YES;
+            heldToken = token;
             if (!bound) snapshot();
         }
     } else if (held) {
         held = NO;
         writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
-        emitMessage(@{@"shortcut": shortcut, @"release": snapshotNumber ?: @0});
+        // A key held for Stop may outlive the session it was pressed in.
+        // Its release must not start another session after cancellation.
+        if (!heldToken || [heldToken isEqual:token]) {
+            emitMessage(@{@"shortcut": shortcut, @"release": snapshotNumber ?: @0});
+        }
+        heldToken = nil;
     }
     return noErr;
 }

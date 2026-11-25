@@ -317,3 +317,64 @@ native commit, and successful extension-free browser entry. These remain
 pre-merge checks for an agent-executable macOS fixture with standard
 Accessibility and keyboard event authorization. Required post-merge
 verification is none.
+
+## Follow-up to the review of `1b6e5cd052e5a537b86a883e528ae0e187754769`
+
+The native helper now checks held modifiers again after the Accessibility
+reads that precede a write. A Stop key-down belongs to the session that
+received it. Cancel or focus invalidation can end that session while the key
+is held, so its eventual release is discarded. The helper still addresses the
+captured TextEdit element and verifies text and caret after one write.
+
+### macOS browser insertion decision
+
+The original project comparison above informs the input transport. Native
+Paste and Unicode events still route through focus and browser editing code.
+An AX check before sending the event cannot reserve the field or prevent a
+length limit from changing before the browser applies the edit. Reading the
+result can detect a partial edit only after it has occurred. The browser
+refusal stays in place while a field-bound whole-edit operation is unresolved.
+
+- Chromium's macOS platform node can dispatch a selected-text action, but
+  the Blink AX node has no corresponding native selected-text handler in
+  its action switch. Blink's separate value setter assigns the entire
+  control value and dispatches input and change events. It has no compare
+  against the previously observed value or caret. [Chromium Mac platform node](https://github.com/chromium/chromium/blob/a4037b9d04ff3754918f686344a8873ce05b22d0/ui/accessibility/platform/ax_platform_node_cocoa.mm),
+  [Blink AX node](https://github.com/chromium/chromium/blob/a4037b9d04ff3754918f686344a8873ce05b22d0/third_party/blink/renderer/modules/accessibility/ax_node_object.cc).
+- Firefox's macOS selected-text setter deletes the selection before
+  attempting insertion. That creates a partial-edit risk if the replacement
+  is constrained or rejected. [Firefox macOS text accessibility](https://github.com/mozilla-firefox/firefox/blob/4a7b56cdc419768220e195d758c9e3e4852bc6b2/accessible/mac/mozTextAccessible.mm).
+- WebKit's text-range replacement can use the focused frame's editor and
+  the same insertion path as ordinary typing. A browser implementation
+  needs evidence that the operation honors the expected field identity and
+  whole-edit guarantees when editing constraints apply. [WebKit accessibility text operations](https://github.com/WebKit/WebKit/blob/2ff591da8e6cff284eae89f299143f16fccd0d0a/Source/WebCore/accessibility/AccessibilityObject.cpp).
+
+These are source findings. A positive macOS browser case still needs an
+independent extension-free browser, actual shortcut delivery, complete rapid
+commits and observable caret and focus with zero form submissions. The
+authorized Aqua runner should exercise that case alongside rejection of
+protected and constrained fields. For optional Linux browser follow-up,
+verify that the browser exposes field identity and constraints and provides
+a whole-edit operation before enabling any X11 browser target.
+
+### Recheck results
+
+Two `npm run build:desktop` runs on macOS 27.2.1 (26B131) arm64 with Apple
+clang 21.0.0 produced SHA-256
+`31587b3deb32fb482dd8c96752164469855a634d58c872ae3921d23a11db6388`.
+The extracted Electron 45.4.1 application passed
+`codesign --verify --deep --strict`.
+
+| Check | Observed result |
+| --- | --- |
+| Extracted macOS package with `DESKTOP_REAL_ASR=1 DESKTOP_MACOS_EDITOR=1 npm run test:desktop` | Packaged launch, management and Live IPC, conflict handling, residency, and shortcut release on app Quit passed. |
+| Real-model macOS test in the same run | BlackHole 2ch routed the fixture into the packaged microphone path. With HTTP(S) blocked after preparation, Live Display received `こんにちは、こんにちは、こんにちは` from the pinned Moonshine revision recorded above. |
+| Three native macOS tests in the same run | All three stopped before driving either target. The Swift driver returned `{"accessibility":false,"keyboard":false}` from `AXIsProcessTrusted` and `CGPreflightPostEventAccess`. The installed Chrome was 158.0.8127.36. No TextEdit edit, native menu selection, or Chrome refusal was observed in this run. The repository exposed zero self-hosted Actions runners. |
+| Extracted Linux package with `DESKTOP_REAL_ASR=1 npm run test:desktop` | Six passed on Debian 12 arm64, Xvfb/Openbox and PulseAudio using the repository Dockerfile. Mousepad 0.5.10 received the same offline model transcript. Chromium 156.0.8078.108 refusal, protected and constrained fields, held-Stop focus changes, and model retry passed. |
+| `npm test`, focused standalone Chromium and focused MV3 suites listed above | 940 Node, 75 standalone Chromium, and 33 MV3 tests passed. The two browser hosts ran with no desktop process. |
+| `git diff --check` | Passed. |
+
+PR #402 remains partial. The remaining acceptance is successful OS-path
+insertion in TextEdit and in an independent macOS browser, with native menu
+and safety evidence from a provisioned Aqua runner. Required post-merge
+verification is none.
