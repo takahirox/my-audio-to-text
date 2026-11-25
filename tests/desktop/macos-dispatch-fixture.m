@@ -50,6 +50,8 @@ static NSUInteger focused;
 static BOOL switchOnSecondSelection;
 static BOOL readOnlyOnSecondSelection;
 static BOOL denyAccessibilityOnSecondSelection;
+static BOOL moveCaretOnFinalEditability;
+static BOOL changeValueOnFinalEditability;
 static BOOL pauseFinalFocus;
 static BOOL checkedEditabilityAfterSelection;
 static dispatch_semaphore_t resumeFocus;
@@ -103,7 +105,17 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
 }
 
 static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *allowed) {
-    if (selectionReads == 2) checkedEditabilityAfterSelection = YES;
+    if (selectionReads == 2) {
+        checkedEditabilityAfterSelection = YES;
+        if (moveCaretOnFinalEditability) {
+            moveCaretOnFinalEditability = NO;
+            selection = CFRangeMake(2, 0);
+        }
+        if (changeValueOnFinalEditability) {
+            changeValueOnFinalEditability = NO;
+            documents[0] = @"left|RIGHT";
+        }
+    }
     *allowed = (__bridge id)element == fields[0] && !readOnly &&
         CFEqual(key, browser ? kAXValueAttribute : kAXSelectedTextAttribute);
     return kAXErrorSuccess;
@@ -137,7 +149,7 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
     NSString *text = parameter[@"AXReplacementText"];
     CFRange range;
     assert(AXValueGetValue((__bridge AXValueRef)parameter[@"AXReplacementRange"], kAXValueTypeCFRange, &range));
-    assert(range.location == selection.location && range.length == selection.length);
+    // WebKit applies the supplied range independently of the current caret.
     [browserChunks addObject:text];
     writes++;
     *value = CFRetain(kCFBooleanTrue);
@@ -186,6 +198,9 @@ static void handleFixture(NSDictionary *message) {
     switchOnSecondSelection = [options[@"switchOnSecondSelection"] boolValue];
     readOnlyOnSecondSelection = [options[@"readOnlyOnSecondSelection"] boolValue];
     denyAccessibilityOnSecondSelection = [options[@"denyAccessibilityOnSecondSelection"] boolValue];
+    moveCaretOnFinalEditability = [options[@"moveCaretOnFinalEditability"] boolValue];
+    changeValueOnFinalEditability = [options[@"changeValueOnFinalEditability"] boolValue];
+    if (options[@"selectionLength"]) selection.length = [options[@"selectionLength"] integerValue];
     pauseFinalFocus = [options[@"pauseFinalFocus"] boolValue];
     checkedEditabilityAfterSelection = NO;
     selectionReads = 0;

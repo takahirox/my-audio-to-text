@@ -335,6 +335,32 @@ test('macOS Safari refuses protected, read-only and unsupported fields and reche
   });
 });
 
+test('macOS Safari refuses a stale replacement range when the caret moves within the focused field', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'browser');
+  const id = await start();
+  assert.ok(id);
+  await configure({ selectionLength: 2, moveCaretOnFinalEditability: true });
+
+  await assert.rejects(controller.insert(id, '東京🙂'), /text or selection changed/);
+  await controller.cancel();
+  assert.deepEqual(await configure(), {
+    text: 'left|right', other: 'other', writes: 0, focused: 0, chunks: [],
+  });
+});
+
+test('macOS Safari refuses a stale replacement range after a same-field value change', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'browser');
+  const id = await start();
+  assert.ok(id);
+  await configure({ changeValueOnFinalEditability: true });
+
+  await assert.rejects(controller.insert(id, '東京🙂'), /text or selection changed/);
+  await controller.cancel();
+  assert.deepEqual(await configure(), {
+    text: 'left|RIGHT', other: 'other', writes: 0, focused: 0, chunks: [],
+  });
+});
+
 test('macOS Safari discards cancelled deliveries and stops on ambiguity without retry', async t => {
   const { controller, configure, start, waiting } = await dispatchFixture(t, 'browser');
   await configure({ held: true });

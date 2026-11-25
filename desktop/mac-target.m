@@ -8,6 +8,7 @@ static NSString *const permissionError =
 static NSString *const targetError =
     @"Focus an editable TextEdit document or a supported Safari web text field. This field cannot be safely edited.";
 static NSString *const focusError = @"The authorized window or text field changed or lost focus.";
+static NSString *const selectionError = @"The text or selection changed before the edit. Voice typing stopped.";
 static NSString *const writeError = @"TextEdit did not confirm the complete edit. Voice typing stopped.";
 static NSString *const browserWriteError = @"Safari did not confirm the edit. Voice typing stopped.";
 static CFStringRef const replaceRange = CFSTR("AXReplaceRangeWithText");
@@ -31,6 +32,13 @@ static BOOL readSelection(AXUIElementRef element, CFRange *range) {
     id selection = attribute(element, kAXSelectedTextRangeAttribute);
     return selection && CFGetTypeID((__bridge CFTypeRef)selection) == AXValueGetTypeID() &&
         AXValueGetValue((__bridge AXValueRef)selection, kAXValueTypeCFRange, range);
+}
+
+static BOOL hasSameTextAndSelection(AXUIElementRef element, NSString *value, CFRange range) {
+    CFRange currentSelection;
+    return [attribute(element, kAXValueAttribute) isEqual:value] &&
+        readSelection(element, &currentSelection) &&
+        currentSelection.location == range.location && currentSelection.length == range.length;
 }
 
 static BOOL isDocumentArea(AXUIElementRef area, AXUIElementRef window) {
@@ -334,10 +342,8 @@ static void insertWhenReleased(void) {
         finishWrite(targetError);
         return;
     }
-    CFRange currentSelection;
-    if (![attribute(area, kAXValueAttribute) isEqual:value] || !readSelection(area, &currentSelection) ||
-        currentSelection.location != range.location || currentSelection.length != range.length) {
-        finishWrite(@"The text or selection changed before the edit. Voice typing stopped.");
+    if (!hasSameTextAndSelection(area, value, range)) {
+        finishWrite(selectionError);
         return;
     }
     NSRange selected = NSMakeRange((NSUInteger)range.location, (NSUInteger)range.length);
@@ -358,7 +364,12 @@ static void insertWhenReleased(void) {
         finishWrite(error);
         return;
     }
-    // Recheck window and field together after the editability queries.
+    // Safari will apply the supplied range even if the caret moved during authorization.
+    if (safariReplacement && !hasSameTextAndSelection(area, value, range)) {
+        finishWrite(selectionError);
+        return;
+    }
+    // Recheck window and field together after reading the field's state.
     if (!hasBoundFocus(binding)) {
         finishWrite(focusError);
         return;
