@@ -335,6 +335,53 @@ test('macOS package launches, retains its shortcut after closing management, and
   assert.equal(await reserve(defaultShortcut), undefined);
 });
 
+test('macOS Live Cancel clears unfinished text, keeps committed text, and ignores stale deliveries', {
+  timeout: 45000,
+}, async t => {
+  const { desktop, management, view } = await launch(t);
+  const runtime = await eventually(() => desktop.windows().find(page => page.url().endsWith('/runtime.html')),
+    'The packaged runtime did not load');
+  await runtime.evaluate(async () => {
+    const { TextNode } = await import(new URL('../web/text-constant-node.js', location.href));
+    TextNode.prototype.start = function (context) {
+      globalThis.deliver = (text, provisional) => context.emitOutputs({ value: text }, { provisional });
+    };
+  });
+
+  await management.evaluate(async graph => {
+    const entry = await window.desktop.add('Preview cancellation', graph);
+    await window.desktop.startLive(entry.id);
+  }, testGraph('Display', ''));
+  await management.getByRole('button', { name: 'Live', exact: true }).click();
+  await eventually(async () => (await view()).session.phase === 'running', 'Live did not start');
+  const display = management.locator('#displays');
+  const cancel = management.getByRole('button', { name: 'Cancel', exact: true });
+  const deliver = (text, provisional) => runtime.evaluate(
+    ({ text, provisional }) => globalThis.deliver(text, provisional), { text, provisional });
+
+  // Restore the committed snapshot after a newer preview.
+  await deliver('東京🙂', false);
+  await display.getByText('東京🙂', { exact: true }).waitFor();
+  await deliver('unfinished prediction', true);
+  await display.getByText('unfinished prediction', { exact: true }).waitFor();
+  await cancel.click();
+  assert.equal((await idle(view)).error, '');
+  await display.getByText('東京🙂', { exact: true }).waitFor();
+  assert.equal(await display.getByText('unfinished prediction', { exact: true }).count(), 0);
+
+  await deliver('stale final', false);
+  assert.deepEqual((await view()).items.map(({ item }) => item), ['東京🙂']);
+
+  await management.getByRole('button', { name: 'Start', exact: true }).click();
+  await eventually(async () => (await view()).session.phase === 'running', 'Live did not restart');
+  await deliver('preview only', true);
+  await display.getByText('preview only', { exact: true }).waitFor();
+  await cancel.click();
+  await idle(view);
+  await display.getByText('preview only', { exact: true }).waitFor({ state: 'hidden' });
+  assert.deepEqual((await view()).items.map(({ item }) => item), [[]]);
+});
+
 test('macOS package reopens an invalid Auto Save draft for repair or Undo', {
   timeout: 60000,
 }, async t => {

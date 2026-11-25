@@ -51,7 +51,9 @@ class DesktopDisplayNode {
   start(context) { this.signal = context.signal; }
   receiveInputs(values, context) {
     if (context.signal !== this.signal || context.signal.aborted) return;
-    for (const [port, item] of Object.entries(values)) this.show(port, snapshotItem(item));
+    for (const [port, item] of Object.entries(values)) {
+      this.show(port, snapshotItem(item), context.provisionalInputs.includes(port));
+    }
   }
 }
 
@@ -77,8 +79,8 @@ async function start(id, graph) {
       }
       case 'Text': return new TextNode(settings);
       case 'TextFormatter': return new TextFormatterNode(settings, { separatePreviews: true });
-      case 'Display': return new DesktopDisplayNode(settings, (port, item) => {
-        if (session.active) host.display(id, node, port, item);
+      case 'Display': return new DesktopDisplayNode(settings, (port, item, provisional) => {
+        if (session.active) host.display(id, node, port, item, provisional);
       });
       case FOCUSED_OUTPUT: return new FocusedApplicationTextOutputNode(text => host.insert(id, text));
       default: throw Error(`Unsupported desktop Node: ${type}.`);

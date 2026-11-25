@@ -263,15 +263,34 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: numbered connectors, Sy
   const exported = JSON.parse(await readFile(await (await download).path(), 'utf8'));
   expect(exported).toEqual(before);
 
-  // Seed the graph at the upper limit's boundary. Replaying every
-  // intermediate port count just adds canvas redraws to this browser test.
-  await editor.evaluate(async graph => {
+  await add.press('Enter');
+  await expect(inputs).toHaveCount(3);
+  await settleAutoSave(editor);
+  // Exercise the production import handler through its file input. Graph
+  // Library separately covers opening a native file chooser.
+  await editor.locator('.graph-actions input[type=file]').setInputFiles({
+    name: 'processing.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)),
+  });
+  await expect(inputs).toHaveCount(2);
+  await settleAutoSave(editor);
+  expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(before);
+});
+
+for (const type of TEXT_PROCESSING_TYPES) test(`${type}: maximum input count survives Undo/Redo and reload`, async ({ graphExtension: f }) => {
+  const { editor } = await openGraph(f);
+  // Seed the editor one input below its limit to cover the boundary without
+  // redrawing the canvas for every intermediate count.
+  await editor.evaluate(async type => {
+    const { graphNode, GRAPH_VERSION } = await import('./graph.js');
     const { saveLiveGraphData } = await import('./graph-library.js');
-    graph.nodes.find(node => node.id === 'processor').settings.inputCount = 31;
-    await saveLiveGraphData(localStorage, graph);
-  }, exported);
+    const processor = graphNode(type, 'processor');
+    processor.settings.inputCount = 31;
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes: [processor], edges: [] });
+  }, type);
   await editor.reload();
   await editor.getByRole('button', { name: /^Select processor:/ }).click();
+  const inputs = editor.locator('[data-node=processor] [data-side=input]');
+  const add = editor.getByRole('button', { name: 'processor Add input', exact: true });
   await expect(inputs).toHaveCount(31);
   await add.press('Enter');
   await expect(inputs).toHaveCount(32); await expect(add).toBeDisabled();
@@ -280,14 +299,6 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: numbered connectors, Sy
   await settleAutoSave(editor); await editor.reload();
   await editor.getByRole('button', { name: /^Select processor:/ }).click();
   await expect(inputs).toHaveCount(32); await expect(add).toBeDisabled();
-
-  await editor.locator('.graph-actions > summary').click();
-  const chooser = editor.waitForEvent('filechooser');
-  await editor.locator('#graph-import').click();
-  await (await chooser).setFiles({ name: 'processing.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
-  await expect(inputs).toHaveCount(2);
-  await settleAutoSave(editor);
-  expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(before);
 });
 
 for (const type of TEXT_PROCESSING_TYPES) test(`${type}: production Worker explains missing shader-f16 support`, async ({ graphExtension: f }) => {

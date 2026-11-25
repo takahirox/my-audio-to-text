@@ -12,7 +12,7 @@ export class DesktopSession {
 
   async start(plan, binding = 'bind-shortcut') {
     if (this.current) return;
-    const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false };
+    const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false, displays: new Map() };
     this.current = session;
     this.update({ phase: 'preparing', error: '', microphone: false, displays: plan.displays });
     try {
@@ -47,6 +47,11 @@ export class DesktopSession {
     if (!session || session.id !== id || this.state.phase === 'canceling') return session?.canceling;
     const started = session.admitted;
     session.admitted = false;
+    // Restore the last committed snapshot before publishing cancellation.
+    // Cleanup and ordinary deliveries from the canceled runtime stay closed.
+    for (const { node, port, committed, provisional } of session.displays.values()) {
+      if (provisional) this.onDisplay({ node, port, item: committed });
+    }
     this.update({ phase: 'canceling', microphone: false, error });
     return session.canceling = (async () => {
       // Release authorization before waiting for renderer cleanup. A response
@@ -92,9 +97,12 @@ export class DesktopSession {
     this.update({ microphone: false });
   }
 
-  display(id, node, port, item) {
+  display(id, node, port, item, provisional) {
     const session = this.current;
     if (session?.id === id && session.admitted && session.plan.displays.some(display => display.id === node)) {
+      const key = JSON.stringify([node, port]);
+      const committed = provisional ? session.displays.get(key)?.committed ?? [] : item;
+      session.displays.set(key, { node, port, committed, provisional });
       this.onDisplay({ node, port, item });
     }
   }

@@ -1,6 +1,6 @@
 # Issue #401 desktop validation
 
-See [the latest Safari and MV3 review fixes](#safari-dispatch-safety-and-mv3-round-trip)
+See [the latest review fixes](#live-cancel-and-mv3-review-fixes)
 and the [optional manual steps](../desktop.md#manual-test-on-macos) for the
 revised Issue #401 acceptance. The earlier runs below retain their original
 constraints and results.
@@ -737,3 +737,45 @@ source blob is `14085785ac55257dc2ac09f14342ad873a8a3a4f`.
 | `npm test` and local `models` workflow MV3 selection | All 940 Node tests passed. MV3 passed 43 checks and skipped two opt-in cases. The two revised round-trip cases passed three repetitions each. |
 | `npm run test:playground -- --workers=2` | Chromium and WebKit passed 233 checks and skipped five. The repository's fixture server used an alternate loopback port because port 8000 was occupied. |
 | Asset preparation, extension build and distribution audit | `npm run prepare:playground-assets`, `npm run build:extension` (220 verified files), and all three model distribution checks passed. |
+
+## Live Cancel and MV3 review fixes
+
+The desktop session now restores the last committed item for any Live pane
+showing a preview when Cancel begins. A preview-only pane clears. The
+packaged regression supplies controlled TEXT through the real Pipeline and
+checks both cases and stale delivery after cancellation.
+
+The LFM2 and Qwen35 round trips now send the exported JSON through the
+production file input and verify the saved result. Separate cases check the
+32-input limit, Undo/Redo and reload. The hosted `models` check on the new
+revision awaits publication. The [previous hosted result](https://github.com/takahirox/my-audio-to-text/actions/runs/45581968314/job/139093998316)
+records the two chooser timeouts.
+
+Extension-free macOS browser insertion remains open. Process-targeted paste
+can reach a different field in the same window. Safari's range operation can
+also route text to the new focus during editing. Chromium's experimental
+range operation sets the selection and dispatches `beforeinput` before
+inserting through the frame's current selection. These paths lack the field
+binding needed to replace the current dispatch policy.
+[Chromium range replacement](https://chromium.googlesource.com/chromium/src/+/942b107303a0369eb3eca84dcef8d6f7af15c8c5/third_party/blink/renderer/modules/accessibility/ax_object.cc)
+· [Chromium replacement event handling](https://chromium.googlesource.com/chromium/src/+/942b107303a0369eb3eca84dcef8d6f7af15c8c5/third_party/blink/renderer/core/editing/editing_utilities.cc)
+· [Safari dispatch evidence](#safari-dispatch-safety-and-mv3-round-trip).
+
+The extracted package ran on macOS 27.2.1 (26B131) arm64 in Aqua with
+Electron 45.4.1. The packaged suite passed nine checks, including the new
+Live Cancel regression and the existing TextEdit dispatch guard. Four
+optional external-target checks stopped at the driver's
+`{"accessibility":false,"keyboard":false}` preflight. The real microphone
+smoke routed the licensed `konnichiwa.wav` fixture through BlackHole 2ch and
+produced `こんにちは、こんにちは、こんにちは` in Live from the pinned
+Moonshine revision above, with HTTP(S) blocked during inference.
+
+The extracted Debian 12 arm64 package passed all six X11 checks in the
+documented Docker, Xvfb, Openbox and PulseAudio harness. The real offline
+smoke delivered the same transcript in Mousepad.
+
+`npm test` passed all 940 checks, and the standalone Playground passed 233
+with five skips. The `models` workflow's MV3 selection passed 45 checks on
+macOS with two opt-in skips. All four revised JSON round-trip and input-limit
+cases passed under Node 22 and Playwright 1.63 on Debian 12 arm64. Asset
+preparation, the extension build and the model distribution audit passed.

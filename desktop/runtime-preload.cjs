@@ -7,6 +7,6 @@ contextBridge.exposeInMainWorld('runtimeHost', {
   insert: (id, text) => ipcRenderer.invoke('runtime:insert', id, text),
   failure: (id, message) => ipcRenderer.send('runtime:failure', id, message),
   captureEnded: id => ipcRenderer.send('runtime:capture-ended', id),
-  display: (id, node, port, item) => ipcRenderer.send('runtime:display', id, node, port, item),
+  display: (id, node, port, item, provisional) => ipcRenderer.send('runtime:display', id, node, port, item, provisional),
   modelProgress: view => ipcRenderer.send('runtime:model-progress', view),
 });
