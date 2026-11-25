@@ -48,6 +48,10 @@ static CFRange selection;
 static NSUInteger selectionReads;
 static NSUInteger focused;
 static BOOL switchOnSecondSelection;
+static BOOL pauseFinalFocus;
+static dispatch_semaphore_t resumeFocus;
+
+static void emitMessage(NSDictionary *message);
 
 static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTypeRef *value) {
     NSString *key = (__bridge NSString *)attribute;
@@ -83,6 +87,12 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
     (void)options;
     assert([(__bridge NSArray *)keys isEqual:(@[@"AXFocusedWindow", @"AXFocusedUIElement"])]);
     *values = CFBridgingRetain(@[windows[focused], fields[focused]]);
+    if (pauseFinalFocus && selectionReads == 2) {
+        pauseFinalFocus = NO;
+        emitMessage(@{@"focusReadPaused": @YES});
+        assert(dispatch_semaphore_wait(resumeFocus,
+            dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0);
+    }
     return kAXErrorSuccess;
 }
 
@@ -150,6 +160,37 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
 #include "../../desktop/mac-target.m"
 #undef main
 
+static void handleFixture(NSDictionary *message) {
+    if ([message[@"action"] isEqual:@"resume-focus"]) {
+        respond(message[@"request"], nil);
+        return;
+    }
+    if (![message[@"action"] isEqual:@"fixture"]) {
+        handle(message);
+        return;
+    }
+    NSDictionary *options = message[@"text"];
+    singleLine = [options[@"singleLine"] boolValue];
+    protectedField = [options[@"protectedField"] boolValue];
+    noRangeReplacement = [options[@"noRangeReplacement"] boolValue];
+    moveCaretOnly = [options[@"moveCaretOnly"] boolValue];
+    limit = [options[@"limit"] unsignedIntegerValue];
+    if (options[@"focused"]) focused = [options[@"focused"] unsignedIntegerValue];
+    switchOnSecondSelection = [options[@"switchOnSecondSelection"] boolValue];
+    pauseFinalFocus = [options[@"pauseFinalFocus"] boolValue];
+    selectionReads = 0;
+    trusted = ![options[@"denyAccessibility"] boolValue];
+    readOnly = [options[@"readOnly"] boolValue];
+    modifiers = [options[@"held"] boolValue];
+    dropWrite = [options[@"dropWrite"] boolValue];
+    NSMutableDictionary *state = [@{
+        @"text": documents[0], @"other": documents[1], @"writes": @(writes),
+        @"focused": @(focused),
+    } mutableCopy];
+    if (browser) state[@"chunks"] = browserChunks;
+    emitMessage(@{@"request": message[@"request"], @"fixture": state});
+}
+
 static void runFixture(void) {
     if (browser) {
         browserDocument = CFBridgingRelease(AXUIElementCreateApplication(105));
@@ -157,47 +198,17 @@ static void runFixture(void) {
         browserChunks = [NSMutableArray array];
     }
     selection = CFRangeMake(5, 0);
+    resumeFocus = dispatch_semaphore_create(0);
     dispatch_source_t poll = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(poll, DISPATCH_TIME_NOW, 25 * NSEC_PER_MSEC, NSEC_PER_MSEC);
     dispatch_source_set_event_handler(poll, ^{ insertWhenReleased(); });
     dispatch_resume(poll);
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        char *line = NULL;
-        size_t capacity = 0;
-        ssize_t length;
-        while ((length = getline(&line, &capacity, stdin)) >= 0) {
-            @autoreleasepool {
-                NSDictionary *message = [NSJSONSerialization JSONObjectWithData:
-                    [NSData dataWithBytes:line length:(NSUInteger)length] options:0 error:NULL];
-                dispatch_sync(dispatch_get_main_queue(), ^{
-                    if ([message[@"action"] isEqual:@"fixture"]) {
-                        NSDictionary *options = message[@"text"];
-                        singleLine = [options[@"singleLine"] boolValue];
-                        protectedField = [options[@"protectedField"] boolValue];
-                        noRangeReplacement = [options[@"noRangeReplacement"] boolValue];
-                        moveCaretOnly = [options[@"moveCaretOnly"] boolValue];
-                        limit = [options[@"limit"] unsignedIntegerValue];
-                        if (options[@"focused"]) focused = [options[@"focused"] unsignedIntegerValue];
-                        switchOnSecondSelection = [options[@"switchOnSecondSelection"] boolValue];
-                        selectionReads = 0;
-                        trusted = ![options[@"denyAccessibility"] boolValue];
-                        readOnly = [options[@"readOnly"] boolValue];
-                        modifiers = [options[@"held"] boolValue];
-                        dropWrite = [options[@"dropWrite"] boolValue];
-                        NSMutableDictionary *state = [@{
-                            @"text": documents[0], @"other": documents[1], @"writes": @(writes),
-                            @"focused": @(focused),
-                        } mutableCopy];
-                        if (browser) state[@"chunks"] = browserChunks;
-                        emitMessage(@{@"request": message[@"request"], @"fixture": state});
-                    } else {
-                        handle(message);
-                    }
-                });
-            }
+    readRequests(^(NSDictionary *message) {
+        // This command follows release on stdin and runs while the AX call is paused.
+        if ([message[@"action"] isEqual:@"resume-focus"]) {
+            dispatch_semaphore_signal(resumeFocus);
         }
-        free(line);
-        dispatch_async(dispatch_get_main_queue(), ^{ exit(0); });
+        dispatch_async(dispatch_get_main_queue(), ^{ handleFixture(message); });
     });
     [NSApplication.sharedApplication setActivationPolicy:NSApplicationActivationPolicyProhibited];
     [NSApplication.sharedApplication run];

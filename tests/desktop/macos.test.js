@@ -237,11 +237,12 @@ async function dispatchFixture(t, application) {
     lines.close();
     target.close();
   });
-  let state, waiting;
+  let state, waiting, focusReadPaused;
   lines.on('line', line => {
     const message = JSON.parse(line);
     state = message.fixture ?? state;
     waiting = message.waiting ?? waiting;
+    focusReadPaused = message.focusReadPaused ?? focusReadPaused;
   });
   const configure = async (options = {}) => {
     await target.request('fixture', null, options);
@@ -252,7 +253,33 @@ async function dispatchFixture(t, application) {
     await controller.start({ focused: true, microphone: false, displays: [], graph: {} }, 'bind-tray');
     return controller.current?.id;
   };
-  return { controller, configure, start, waiting: () => waiting };
+  return { controller, configure, start, waiting: () => waiting,
+    focusReadPaused: () => focusReadPaused, resumeFocus: () => target.request('resume-focus') };
+}
+
+for (const [adapter, application] of [['TextEdit', 'textedit'], ['Safari', 'browser']]) {
+  test(`macOS ${adapter} Cancel during the final focus read prevents native edits`, async t => {
+    const { controller, configure, start, focusReadPaused, resumeFocus } = await dispatchFixture(t, application);
+    const id = await start();
+    assert.ok(id);
+    await configure({ pauseFinalFocus: true });
+
+    const pending = assert.rejects(controller.insert(id, 'discard 東京🙂'), /changed or lost focus/);
+    const queued = assert.rejects(controller.insert(id, 'discard queued'), /no longer authorized/);
+    await eventually(focusReadPaused, 'The native adapter did not pause the final focus read');
+    const canceled = controller.cancel();
+    await Promise.all([resumeFocus(), canceled, pending, queued]);
+
+    const state = { text: 'left|right', other: 'other', writes: 0, focused: 0 };
+    assert.deepEqual(await configure(), application === 'browser' ? { ...state, chunks: [] } : state);
+
+    const next = await start();
+    assert.ok(next);
+    await controller.insert(next, 'keep 東京🙂');
+    await controller.stop();
+    const inserted = { ...state, text: 'left|keep 東京🙂right', writes: 1 };
+    assert.deepEqual(await configure(), application === 'browser' ? { ...inserted, chunks: ['keep 東京🙂'] } : inserted);
+  });
 }
 
 test('macOS Safari drains ordered Unicode through the range adapter and accepts a constrained edit', async t => {

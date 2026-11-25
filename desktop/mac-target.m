@@ -112,6 +112,10 @@ static NSString *pendingText;
 static NSNumber *pendingRequest;
 static CFAbsoluteTime writeAfter;
 static CFAbsoluteTime nextWaitingNotice;
+// The stdin reader publishes revocations while the main queue is in AX calls.
+// Synchronize only this state so the reader never has to wait for an AX call.
+static NSMutableSet<NSString *> *releaseRequests;
+static BOOL inputClosed;
 
 static void emitMessage(NSDictionary *message) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:message options:0 error:NULL];
@@ -295,6 +299,12 @@ static BOOL shortcutHeld(void) {
     return held || (GetCurrentKeyModifiers() & (cmdKey | shiftKey | optionKey | controlKey));
 }
 
+static BOOL releaseRequested(void) {
+    @synchronized (releaseRequests) {
+        return inputClosed || (token && [releaseRequests containsObject:token]);
+    }
+}
+
 static void insertWhenReleased(void) {
     if (!waitingForRelease) return;
     CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
@@ -331,13 +341,18 @@ static void insertWhenReleased(void) {
         finishWrite(error ?: @"The text or selection changed before the edit. Voice typing stopped.");
         return;
     }
+    NSRange selected = NSMakeRange((NSUInteger)range.location, (NSUInteger)range.length);
+    NSString *expected = nil;
     NSDictionary *safariReplacement = nil;
     if (binding.webArea) {
         safariReplacement = @{
             @"AXReplacementRange": CFBridgingRelease(AXValueCreate(kAXValueTypeCFRange, &range)),
             @"AXReplacementText": text,
         };
+    } else {
+        expected = [value stringByReplacingCharactersInRange:selected withString:text];
     }
+    CFIndex caret = range.location + (CFIndex)text.length;
     // Value and selection reads can outlast a same-process focus change whose
     // observer callback has yet to run. Read window and field together last.
     if (!hasBoundFocus(binding)) {
@@ -350,8 +365,11 @@ static void insertWhenReleased(void) {
         return;
     }
     if (![request isEqual:pendingRequest]) return;
+    if (releaseRequested()) {
+        finishWrite(focusError);
+        return;
+    }
     waitingForRelease = NO;
-    NSRange selected = NSMakeRange((NSUInteger)range.location, (NSUInteger)range.length);
     if (safariReplacement) {
         // WebKit's range replacement uses a replacement fragment. AXTextOperation
         // instead routes a collapsed range through a text event, which can submit.
@@ -363,8 +381,6 @@ static void insertWhenReleased(void) {
         else verifySafariWrite(request, value, selected, CFAbsoluteTimeGetCurrent() + 0.6);
         return;
     }
-    NSString *expected = [value stringByReplacingCharactersInRange:selected withString:text];
-    CFIndex caret = range.location + (CFIndex)text.length;
     // The write addresses the original element. No clipboard or keyboard event can reach a different field.
     if (AXUIElementSetAttributeValue(area, kAXSelectedTextAttribute, (__bridge CFStringRef)text) != kAXErrorSuccess) {
         finishWrite(writeError);
@@ -481,6 +497,11 @@ static void handle(NSDictionary *message) {
             token = nil;
             finishWrite(focusError);
         }
+        if ([id isKindOfClass:NSString.class]) {
+            @synchronized (releaseRequests) {
+                [releaseRequests removeObject:id];
+            }
+        }
         respond(request, nil);
     } else if ([action isEqualToString:@"insert"] && [id isEqual:token] && !pendingRequest) {
         pendingRequest = request;
@@ -490,6 +511,34 @@ static void handle(NSDictionary *message) {
     } else {
         respond(request, focusError);
     }
+}
+
+static void readRequests(void (^receive)(NSDictionary *)) {
+    releaseRequests = [NSMutableSet set];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        char *line = NULL;
+        size_t capacity = 0;
+        ssize_t length;
+        while ((length = getline(&line, &capacity, stdin)) >= 0) {
+            @autoreleasepool {
+                NSData *data = [NSData dataWithBytes:line length:(NSUInteger)length];
+                NSDictionary *message = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
+                if (![message isKindOfClass:NSDictionary.class]) continue;
+                NSString *id = message[@"token"];
+                if ([message[@"action"] isEqual:@"release"] && [id isKindOfClass:NSString.class]) {
+                    @synchronized (releaseRequests) {
+                        [releaseRequests addObject:id];
+                    }
+                }
+                receive(message);
+            }
+        }
+        free(line);
+        @synchronized (releaseRequests) {
+            inputClosed = YES;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{ exit(0); });
+    });
 }
 
 int main(void) {
@@ -515,21 +564,8 @@ int main(void) {
             insertWhenReleased();
         });
         dispatch_resume(poll);
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            char *line = NULL;
-            size_t capacity = 0;
-            ssize_t length;
-            while ((length = getline(&line, &capacity, stdin)) >= 0) {
-                @autoreleasepool {
-                    NSData *data = [NSData dataWithBytes:line length:(NSUInteger)length];
-                    NSDictionary *message = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
-                    if ([message isKindOfClass:NSDictionary.class]) {
-                        dispatch_sync(dispatch_get_main_queue(), ^{ handle(message); });
-                    }
-                }
-            }
-            free(line);
-            dispatch_async(dispatch_get_main_queue(), ^{ exit(0); });
+        readRequests(^(NSDictionary *message) {
+            dispatch_async(dispatch_get_main_queue(), ^{ handle(message); });
         });
         [NSApplication.sharedApplication run];
     }
