@@ -6,15 +6,9 @@
 static NSString *const permissionError =
     @"Allow My Audio to Text in System Settings → Privacy & Security → Device Control and Data Access (Accessibility), then start again.";
 static NSString *const targetError =
-    @"Focus an editable TextEdit document or a text field on a Safari page. This field cannot be safely edited.";
+    @"Focus an editable TextEdit document. This field cannot be safely edited.";
 static NSString *const focusError = @"The authorized window or text field changed or lost focus.";
 static NSString *const writeError = @"TextEdit did not confirm the complete edit. Voice typing stopped.";
-static NSString *const browserWriteError = @"Safari did not confirm the edit. Voice typing stopped.";
-static NSString *const browserCaretError = @"Place the caret in the Safari text field with no text selected, then start again.";
-static NSString *const browserSubmitError = @"Safari can treat a lone line break as Submit in this field. Voice typing stopped.";
-
-static CFStringRef const textOperation = CFSTR("AXTextOperation");
-
 static id attribute(AXUIElementRef element, CFStringRef key) {
     CFTypeRef value = NULL;
     if (!element || AXUIElementCopyAttributeValue(element, key, &value) != kAXErrorSuccess) return nil;
@@ -24,13 +18,6 @@ static id attribute(AXUIElementRef element, CFStringRef key) {
 static id elementAttribute(AXUIElementRef element, CFStringRef key) {
     id value = attribute(element, key);
     return value && CFGetTypeID((__bridge CFTypeRef)value) == AXUIElementGetTypeID() ? value : nil;
-}
-
-static id parameterizedAttribute(AXUIElementRef element, CFStringRef key, id parameter) {
-    CFTypeRef value = NULL;
-    AXError status = AXUIElementCopyParameterizedAttributeValue(element, key, (__bridge CFTypeRef)parameter, &value);
-    id result = CFBridgingRelease(value);
-    return status == kAXErrorSuccess ? result : nil;
 }
 
 static BOOL writable(AXUIElementRef element, CFStringRef key) {
@@ -59,39 +46,8 @@ static BOOL isDocumentArea(AXUIElementRef area, AXUIElementRef window) {
     return owner && CFEqual((__bridge CFTypeRef)owner, window);
 }
 
-static BOOL isBrowserField(AXUIElementRef area, AXUIElementRef window) {
-    if (!area || !window || ![attribute(window, kAXSubroleAttribute) isEqual:@"AXStandardWindow"]) return NO;
-    id role = attribute(area, kAXRoleAttribute);
-    if (![role isEqual:@"AXTextField"] && ![role isEqual:@"AXTextArea"]) return NO;
-    CFTypeRef subrole = NULL;
-    AXError status = AXUIElementCopyAttributeValue(area, kAXSubroleAttribute, &subrole);
-    id fieldSubrole = CFBridgingRelease(subrole);
-    if ((status != kAXErrorSuccess && status != kAXErrorNoValue && status != kAXErrorAttributeUnsupported) ||
-        [fieldSubrole isEqual:@"AXSecureTextField"] ||
-        ![attribute(area, kAXEnabledAttribute) isEqual:@YES] ||
-        ![attribute(area, kAXFocusedAttribute) isEqual:@YES] ||
-        // WebKit exposes writable AXValue for editable text controls. Use it
-        // only to check editability. The write addresses the range.
-        !writable(area, kAXValueAttribute)) return NO;
-    id owner = elementAttribute(area, kAXWindowAttribute);
-    if (!owner || !CFEqual((__bridge CFTypeRef)owner, window)) return NO;
-
-    // Require a web document ancestor. Browser chrome, including the address
-    // bar and native dialogs, is outside this adapter.
-    id ancestor = elementAttribute(area, kAXParentAttribute);
-    for (NSUInteger depth = 0; ancestor && depth < 32; depth++) {
-        AXUIElementRef element = (__bridge AXUIElementRef)ancestor;
-        id parentRole = attribute(element, kAXRoleAttribute);
-        if ([parentRole isEqual:@"AXWebArea"]) return YES;
-        if (!parentRole || [parentRole isEqual:@"AXWindow"]) return NO;
-        ancestor = elementAttribute(element, kAXParentAttribute);
-    }
-    return NO;
-}
-
 @interface Binding : NSObject
 @property pid_t pid;
-@property BOOL browser;
 // ARC retains the CF-backed accessibility elements as Objective-C objects.
 @property (strong) id application;
 @property (strong) id window;
@@ -166,40 +122,6 @@ static void focusedChanged(AXObserverRef observer, AXUIElementRef element, CFStr
     invalidate(binding, focusError);
 }
 
-static BOOL supportedField(Binding *binding) {
-    AXUIElementRef area = (__bridge AXUIElementRef)binding.area;
-    AXUIElementRef window = (__bridge AXUIElementRef)binding.window;
-    return binding.browser ? isBrowserField(area, window) : isDocumentArea(area, window);
-}
-
-// A marker may resolve to an inner text node. Walk toward the authorized
-// control and refuse markers from a different field or document.
-static BOOL markerInField(AXUIElementRef area, id marker) {
-    if (!marker) return NO;
-    id owner = parameterizedAttribute(area, CFSTR("AXUIElementForTextMarker"), marker);
-    for (NSUInteger depth = 0; owner && depth < 16; depth++) {
-        CFTypeRef value = (__bridge CFTypeRef)owner;
-        if (CFGetTypeID(value) != AXUIElementGetTypeID()) return NO;
-        if (CFEqual(value, area)) return YES;
-        AXUIElementRef element = (__bridge AXUIElementRef)owner;
-        id role = attribute(element, kAXRoleAttribute);
-        if (!role || [@[@"AXTextField", @"AXTextArea", @"AXWebArea", @"AXWindow"] containsObject:role]) return NO;
-        owner = elementAttribute(element, kAXParentAttribute);
-    }
-    return NO;
-}
-
-static id browserRange(AXUIElementRef area) {
-    id range = attribute(area, CFSTR("AXSelectedTextMarkerRange"));
-    CFTypeRef value = (__bridge CFTypeRef)range;
-    if (!range || CFGetTypeID(value) != AXTextMarkerRangeGetTypeID()) return nil;
-    AXTextMarkerRangeRef markerRange = (__bridge AXTextMarkerRangeRef)range;
-    id start = CFBridgingRelease(AXTextMarkerRangeCopyStartMarker(markerRange));
-    id end = CFBridgingRelease(AXTextMarkerRangeCopyEndMarker(markerRange));
-    return start && end && CFEqual((__bridge CFTypeRef)start, (__bridge CFTypeRef)end) &&
-        markerInField(area, start) ? range : nil;
-}
-
 static Binding *captureTarget(void) {
     Binding *result = [Binding new];
     if (!AXIsProcessTrusted()) {
@@ -207,10 +129,13 @@ static Binding *captureTarget(void) {
         return result;
     }
     NSRunningApplication *front = NSWorkspace.sharedWorkspace.frontmostApplication;
-    result.browser = [front.bundleIdentifier isEqualToString:@"com.apple.Safari"];
     BOOL textEdit = [front.bundleIdentifier isEqualToString:@"com.apple.TextEdit"] &&
         [front.bundleURL.path isEqualToString:@"/System/Applications/TextEdit.app"];
-    if (!result.browser && !textEdit) {
+    // Safari's AXTextOperation selects a range before sending text to the
+    // document's then-focused element. A focus change can redirect the edit,
+    // and WebKit can treat a lone line break as Submit in a single-line input.
+    // Only authorize the system editor's field-addressed selected-text write.
+    if (!textEdit) {
         result.failed = targetError;
         return result;
     }
@@ -222,30 +147,10 @@ static Binding *captureTarget(void) {
     AXUIElementSetMessagingTimeout(application, 0.25);
     result.window = elementAttribute(application, kAXFocusedWindowAttribute);
     result.area = elementAttribute(application, kAXFocusedUIElementAttribute);
-    if (!supportedField(result)) {
+    if (!isDocumentArea((__bridge AXUIElementRef)result.area, (__bridge AXUIElementRef)result.window)) {
         result.failed = targetError;
         return result;
     }
-    if (result.browser) {
-        AXUIElementRef area = (__bridge AXUIElementRef)result.area;
-        CFArrayRef names = NULL;
-        AXError status = AXUIElementCopyParameterizedAttributeNames(area, &names);
-        NSArray *attributes = CFBridgingRelease(names);
-        if (status != kAXErrorSuccess || ![attributes containsObject:(__bridge NSString *)textOperation]) {
-            result.failed = targetError;
-            return result;
-        }
-        CFRange selection;
-        if (!readSelection(area, &selection) || selection.length != 0) {
-            result.failed = browserCaretError;
-            return result;
-        }
-        if (!browserRange(area)) {
-            result.failed = targetError;
-            return result;
-        }
-    }
-
     AXObserverRef observer = NULL;
     if (AXObserverCreate(pid, focusedChanged, &observer) != kAXErrorSuccess) {
         result.failed = targetError;
@@ -282,7 +187,8 @@ static NSString *check(Binding *binding) {
     if (binding.failed) return binding.failed;
     if (!AXIsProcessTrusted()) return permissionError;
     if (!hasBoundFocus(binding)) return focusError;
-    return supportedField(binding) ? nil : targetError;
+    return isDocumentArea((__bridge AXUIElementRef)binding.area,
+                          (__bridge AXUIElementRef)binding.window) ? nil : targetError;
 }
 
 static void verifyWrite(NSNumber *request, NSString *expected, CFIndex caret, CFAbsoluteTime deadline) {
@@ -308,34 +214,6 @@ static void verifyWrite(NSNumber *request, NSString *expected, CFIndex caret, CF
 
 static BOOL shortcutHeld(void) {
     return held || (GetCurrentKeyModifiers() & (cmdKey | shiftKey | optionKey | controlKey));
-}
-
-static void verifyBrowserWrite(NSNumber *request, NSString *original, NSString *prefix, NSString *suffix,
-                               CFAbsoluteTime deadline) {
-    if (![request isEqual:pendingRequest]) return;
-    NSString *error = check(bound);
-    if (error) {
-        finishWrite(error);
-        return;
-    }
-
-    AXUIElementRef area = (__bridge AXUIElementRef)bound.area;
-    NSString *current = attribute(area, kAXValueAttribute);
-    CFRange selection;
-    // WebKit may filter or truncate the inserted text. Require a value
-    // change at the original caret and a collapsed selection after it.
-    if ([current isKindOfClass:NSString.class] && ![current isEqual:original] &&
-        [current hasPrefix:prefix] && [current hasSuffix:suffix] && current.length > original.length &&
-        readSelection(area, &selection) && selection.length == 0 &&
-        selection.location == (CFIndex)(current.length - suffix.length)) {
-        finishWrite(nil);
-    } else if (CFAbsoluteTimeGetCurrent() >= deadline) {
-        finishWrite(browserWriteError);
-    } else {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-            verifyBrowserWrite(request, original, prefix, suffix, deadline);
-        });
-    }
 }
 
 static void insertWhenReleased(void) {
@@ -367,37 +245,10 @@ static void insertWhenReleased(void) {
         finishWrite(targetError);
         return;
     }
-    id markerRange = nil;
-    NSDictionary *operation = nil;
-    if (binding.browser) {
-        // WebKit's single-line controls interpret a text event containing
-        // just LF as an implicit form submission.
-        if ([text isEqual:@"\n"] && ![attribute(area, kAXRoleAttribute) isEqual:@"AXTextArea"]) {
-            finishWrite(browserSubmitError);
-            return;
-        }
-        if (range.length != 0) {
-            finishWrite(browserCaretError);
-            return;
-        }
-        markerRange = browserRange(area);
-        if (!markerRange) {
-            finishWrite(targetError);
-            return;
-        }
-        operation = @{
-            @"AXTextOperationType": @"TextOperationReplacePreserveCase",
-            @"AXTextOperationMarkerRanges": @[markerRange],
-            @"AXTextOperationReplacementString": text,
-            @"AXTextOperationSmartReplace": @NO,
-        };
-    }
-
     error = check(binding);
     CFRange currentSelection;
     if (error || ![attribute(area, kAXValueAttribute) isEqual:value] || !readSelection(area, &currentSelection) ||
-        currentSelection.location != range.location || currentSelection.length != range.length ||
-        (binding.browser && ![browserRange(area) isEqual:markerRange])) {
+        currentSelection.location != range.location || currentSelection.length != range.length) {
         finishWrite(error ?: @"The text or selection changed before the edit. Voice typing stopped.");
         return;
     }
@@ -414,20 +265,6 @@ static void insertWhenReleased(void) {
     }
     if (![request isEqual:pendingRequest]) return;
     waitingForRelease = NO;
-    if (binding.browser) {
-        // The original AX element and the range inside it travel together.
-        // A key event addressed to the browser process has neither property.
-        id result = parameterizedAttribute(area, textOperation, operation);
-        if (![request isEqual:pendingRequest]) return;
-        if (![result isEqual:@[text]]) {
-            finishWrite(browserWriteError);
-            return;
-        }
-        NSUInteger index = (NSUInteger)range.location;
-        verifyBrowserWrite(request, value, [value substringToIndex:index], [value substringFromIndex:index],
-                           CFAbsoluteTimeGetCurrent() + 0.6);
-        return;
-    }
     NSRange selected = NSMakeRange((NSUInteger)range.location, (NSUInteger)range.length);
     NSString *expected = [value stringByReplacingCharactersInRange:selected withString:text];
     CFIndex caret = range.location + (CFIndex)text.length;

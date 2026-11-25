@@ -10,23 +10,19 @@
 @property (readonly) NSNotificationCenter *notificationCenter;
 @property (readonly) pid_t processIdentifier;
 @property (readonly) NSString *bundleIdentifier;
+@property (readonly) NSURL *bundleURL;
 + (instancetype)sharedWorkspace;
 @end
 
 static BOOL browser;
-static BOOL readOnly;
-static BOOL secure;
-static BOOL trusted = YES;
-static BOOL modifiers;
-static BOOL operationAvailable = YES;
-static BOOL chrome;
 static BOOL singleLine;
-static BOOL foreignRange;
-static BOOL focusBeforeConsumption;
-static BOOL moveCaretBeforeConsumption;
-static BOOL delayWasObserved;
-static NSInteger editLimit = -1;
-static NSMutableArray<NSString *> *dispatches;
+static BOOL switchDuringDispatch;
+static BOOL trusted = YES;
+static BOOL readOnly;
+static BOOL modifiers;
+static BOOL dropWrite;
+static NSUInteger writes;
+static NSUInteger submissions;
 
 @implementation FixtureWorkspace
 + (instancetype)sharedWorkspace { return [self new]; }
@@ -34,8 +30,10 @@ static NSMutableArray<NSString *> *dispatches;
 - (NSNotificationCenter *)notificationCenter { return NSNotificationCenter.defaultCenter; }
 - (pid_t)processIdentifier { return 100; }
 - (NSString *)bundleIdentifier {
-    if (chrome) return @"com.google.Chrome";
     return browser ? @"com.apple.Safari" : @"com.apple.TextEdit";
+}
+- (NSURL *)bundleURL {
+    return [NSURL fileURLWithPath:browser ? @"/Applications/Safari.app" : @"/System/Applications/TextEdit.app"];
 }
 @end
 
@@ -47,8 +45,6 @@ static CFRange selection;
 static NSUInteger selectionReads;
 static NSUInteger focused;
 static BOOL switchOnSecondSelection;
-static NSUInteger focusReads;
-static BOOL switchOnFinalFocus;
 
 typedef struct {
     NSUInteger field;
@@ -62,18 +58,17 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
     if ([key isEqual:@"AXFocusedWindow"]) result = windows[focused];
     else if ([key isEqual:@"AXFocusedUIElement"]) result = fields[focused];
     else if ([key isEqual:@"AXRole"]) {
-        if (object == fields[0] || object == fields[1]) result = singleLine ? @"AXTextField" : @"AXTextArea";
+        if (object == fields[0] || object == fields[1]) result = @"AXTextArea";
         else result = browser && object == browserDocument ? @"AXWebArea" : @"AXScrollArea";
     }
     else if ([key isEqual:@"AXSubrole"] && object == windows[0]) result = @"AXStandardWindow";
-    else if ([key isEqual:@"AXSubrole"] && object == fields[0] && secure) result = @"AXSecureTextField";
     else if ([key isEqual:@"AXEnabled"]) result = @YES;
     else if ([key isEqual:@"AXFocused"]) result = @(object == fields[focused]);
     else if ([key isEqual:@"AXParent"]) result = browser ? browserDocument : windows[0];
     else if ([key isEqual:@"AXWindow"]) result = windows[0];
     else if ([key isEqual:@"AXValue"]) result = documents[object == fields[1]];
     else if ([key isEqual:@"AXSelectedTextMarkerRange"]) {
-        FixtureMarker point = { .field = foreignRange ? 1 : focused, .offset = selection.location };
+        FixtureMarker point = { .field = focused, .offset = selection.location };
         AXTextMarkerRef marker = AXTextMarkerCreate(NULL, (const UInt8 *)&point, sizeof(point));
         result = CFBridgingRelease(AXTextMarkerRangeCreate(NULL, marker, marker));
         CFRelease(marker);
@@ -94,19 +89,20 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
     (void)element;
     (void)options;
     assert([(__bridge NSArray *)keys isEqual:(@[@"AXFocusedWindow", @"AXFocusedUIElement"])]);
-    if (++focusReads == 3 && switchOnFinalFocus) focused = 1;
     *values = CFBridgingRetain(@[windows[focused], fields[focused]]);
     return kAXErrorSuccess;
 }
 
-static AXError selectedTextWritable(AXUIElementRef element, CFStringRef key, Boolean *allowed) {
+static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *allowed) {
     *allowed = (__bridge id)element == fields[0] && !readOnly &&
         CFEqual(key, browser ? kAXValueAttribute : kAXSelectedTextAttribute);
     return kAXErrorSuccess;
 }
 
 static AXError editDocument(AXUIElementRef element, CFStringRef key, CFTypeRef value) {
-    assert(!browser && CFEqual(key, kAXSelectedTextAttribute));
+    assert(!browser && trusted && !readOnly && !modifiers && CFEqual(key, kAXSelectedTextAttribute));
+    writes++;
+    if (dropWrite) return kAXErrorSuccess;
     NSUInteger document = (__bridge id)element == fields[1];
     NSString *text = (__bridge NSString *)value;
     documents[document] = [documents[document] stringByReplacingCharactersInRange:
@@ -122,13 +118,13 @@ static FixtureMarker fixtureMarker(AXTextMarkerRef marker) {
     return point;
 }
 
-static AXError copyParameterizedNames(AXUIElementRef element, CFArrayRef *names) {
+static AXError __attribute__((unused)) copyParameterizedNames(AXUIElementRef element, CFArrayRef *names) {
     assert((__bridge id)element == fields[focused]);
-    *names = CFBridgingRetain(operationAvailable ? @[@"AXTextOperation"] : @[]);
+    *names = CFBridgingRetain(@[@"AXTextOperation"]);
     return kAXErrorSuccess;
 }
 
-static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFTypeRef input, CFTypeRef *value) {
+static AXError __attribute__((unused)) copyParameterized(AXUIElementRef element, CFStringRef key, CFTypeRef input, CFTypeRef *value) {
     id parameter = (__bridge id)input;
     if (CFEqual(key, CFSTR("AXUIElementForTextMarker"))) {
         FixtureMarker point = fixtureMarker((__bridge AXTextMarkerRef)parameter);
@@ -136,42 +132,23 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
         return kAXErrorSuccess;
     }
 
-    assert(CFEqual(key, CFSTR("AXTextOperation")) && browser && trusted && !modifiers);
-    assert(!secure && !readOnly && operationAvailable && (__bridge id)element == fields[0]);
-    assert([parameter[@"AXTextOperationType"] isEqual:@"TextOperationReplacePreserveCase"]);
-    assert([parameter[@"AXTextOperationSmartReplace"] isEqual:@NO]);
-    id range = [parameter[@"AXTextOperationMarkerRanges"] firstObject];
-    AXTextMarkerRef start = AXTextMarkerRangeCopyStartMarker((__bridge AXTextMarkerRangeRef)range);
-    FixtureMarker marker = fixtureMarker(start);
-    CFRelease(start);
-    assert(fields[marker.field] == (__bridge id)element);
-    NSUInteger document = marker.field;
-    NSUInteger offset = (NSUInteger)marker.offset;
+    assert(CFEqual(key, CFSTR("AXTextOperation")) && browser);
+    assert((__bridge id)element == fields[0]);
     NSString *text = parameter[@"AXTextOperationReplacementString"];
-    [dispatches addObject:text];
+    writes++;
     *value = CFBridgingRetain(@[text]);
 
-    if (editLimit >= 0 && text.length > (NSUInteger)editLimit) {
-        text = [text substringToIndex:(NSUInteger)editLimit];
+    // WebKit sets the marker selection first, then dispatches the text event
+    // to the currently focused element. The old fixture wrote directly to
+    // the range owner, hiding the same-document focus race.
+    if (switchDuringDispatch) focused = 1;
+    if (singleLine && [text isEqual:@"\n"]) {
+        submissions++;
+        return kAXErrorSuccess;
     }
-    if (!text.length) return kAXErrorSuccess;
-    void (^consume)(void) = ^{
-        documents[document] = [documents[document] stringByReplacingCharactersInRange:NSMakeRange(offset, 0) withString:text];
-        if (focused == document) selection = CFRangeMake((CFIndex)(offset + text.length), 0);
-    };
-    if (focusBeforeConsumption || moveCaretBeforeConsumption) {
-        // Delay consumption beyond the helper's post-dispatch read. A
-        // process-targeted event here would use the newly focused field.
-        if (focusBeforeConsumption) focused = 1;
-        else selection = CFRangeMake(0, 0);
-        delayWasObserved = NO;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-            consume();
-            delayWasObserved = YES;
-        });
-    } else {
-        consume();
-    }
+    NSUInteger offset = focused == 0 ? (NSUInteger)selection.location : 0;
+    documents[focused] = [documents[focused] stringByReplacingCharactersInRange:NSMakeRange(offset, 0) withString:text];
+    selection = CFRangeMake((CFIndex)(offset + text.length), 0);
     return kAXErrorSuccess;
 }
 
@@ -179,24 +156,24 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
 #define NSWorkspace FixtureWorkspace
 #define AXIsProcessTrusted() trusted
 #define AXIsProcessTrustedWithOptions(options) ((void)(options), trusted)
-#define GetCurrentKeyModifiers() (modifiers ? cmdKey : 0)
 #define AXObserverCreate(pid, callback, observer) AXObserverCreate(getpid(), callback, observer)
+#define GetCurrentKeyModifiers() (modifiers ? cmdKey : 0)
 #define AXObserverAddNotification(...) kAXErrorSuccess
 #define AXUIElementCopyAttributeValue copyAttribute
 #define AXUIElementCopyMultipleAttributeValues copyFocus
-#define AXUIElementIsAttributeSettable selectedTextWritable
+#define AXUIElementIsAttributeSettable textWritable
 #define AXUIElementSetAttributeValue editDocument
 #define AXUIElementCopyParameterizedAttributeNames copyParameterizedNames
 #define AXUIElementCopyParameterizedAttributeValue copyParameterized
 #include "../../desktop/mac-target.m"
 #undef main
 
-static void runBrowserFixture(void) {
-    browser = YES;
-    browserDocument = CFBridgingRelease(AXUIElementCreateApplication(105));
-    windows[1] = windows[0];
+static void runFixture(void) {
+    if (browser) {
+        browserDocument = CFBridgingRelease(AXUIElementCreateApplication(105));
+        windows[1] = windows[0];
+    }
     selection = CFRangeMake(5, 0);
-    dispatches = [NSMutableArray array];
     dispatch_source_t poll = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(poll, DISPATCH_TIME_NOW, 25 * NSEC_PER_MSEC, NSEC_PER_MSEC);
     dispatch_source_set_event_handler(poll, ^{ insertWhenReleased(); });
@@ -212,24 +189,15 @@ static void runBrowserFixture(void) {
                 dispatch_sync(dispatch_get_main_queue(), ^{
                     if ([message[@"action"] isEqual:@"fixture"]) {
                         NSDictionary *options = message[@"text"];
-                        readOnly = [options[@"readOnly"] boolValue];
-                        secure = [options[@"secure"] boolValue];
-                        trusted = ![options[@"denyAccessibility"] boolValue];
-                        switchOnFinalFocus = [options[@"stale"] boolValue];
-                        focusReads = 0;
-                        operationAvailable = ![options[@"missingOperation"] boolValue];
-                        chrome = [options[@"chrome"] boolValue];
                         singleLine = [options[@"singleLine"] boolValue];
-                        foreignRange = [options[@"foreignRange"] boolValue];
-                        focusBeforeConsumption = [options[@"focusBeforeConsumption"] boolValue];
-                        moveCaretBeforeConsumption = [options[@"moveCaretBeforeConsumption"] boolValue];
-                        editLimit = options[@"editLimit"] ? [options[@"editLimit"] integerValue] : -1;
+                        switchDuringDispatch = [options[@"switchDuringDispatch"] boolValue];
+                        trusted = ![options[@"denyAccessibility"] boolValue];
+                        readOnly = [options[@"readOnly"] boolValue];
                         modifiers = [options[@"held"] boolValue];
-                        if ([options[@"restoreFocus"] boolValue]) focused = 0;
-                        insertWhenReleased();
+                        dropWrite = [options[@"dropWrite"] boolValue];
                         emitMessage(@{@"request": message[@"request"], @"fixture": @{
-                            @"text": documents[0], @"other": documents[1], @"dispatches": dispatches,
-                            @"focused": @(focused), @"consumed": @(delayWasObserved),
+                            @"text": documents[0], @"other": documents[1], @"writes": @(writes),
+                            @"focused": @(focused), @"submits": @(submissions),
                         }});
                     } else {
                         handle(message);
@@ -252,8 +220,9 @@ int main(int argc, const char **argv) {
         windows[1] = CFBridgingRelease(AXUIElementCreateApplication(102));
         fields[0] = CFBridgingRelease(AXUIElementCreateApplication(103));
         fields[1] = CFBridgingRelease(AXUIElementCreateApplication(104));
-        if (argc == 2 && strcmp(argv[1], "browser") == 0) {
-            runBrowserFixture();
+        if (argc == 2) {
+            browser = strcmp(argv[1], "browser") == 0;
+            runFixture();
             return 0;
         }
         bound = [Binding new];

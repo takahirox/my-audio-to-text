@@ -158,7 +158,7 @@ async function externalSafari(t, run) {
     return eventually(() => {
       const current = state();
       return current.selection === serial && current.active && current.focus === field && current.caret === caret && current;
-    }, `Chrome did not focus the test caret in ${field}`);
+    }, `Safari did not focus the test caret in ${field}`);
   };
   return { pid, state, focus };
 }
@@ -217,9 +217,9 @@ test('macOS dispatch rechecks the bound window and field after reading the selec
   assert.deepEqual(results, [{ request: 1, error: 'The authorized window or text field changed or lost focus.' }, { request: 2 }]);
 });
 
-test('macOS queue keeps Safari edits bound to the authorized field, including delayed consumption', async t => {
+async function dispatchFixture(t, application) {
   const tool = await compileDispatchFixture(t);
-  const target = new FocusedTarget(tool, ['browser'], {
+  const target = new FocusedTarget(tool, [application], {
     onInvalid: (id, error) => { void controller.cancel(error, id); },
     onLost: () => {},
   });
@@ -229,141 +229,77 @@ test('macOS queue keeps Safari edits bound to the authorized field, including de
     lines.close();
     target.close();
   });
-  let state;
-  let waiting;
+  let state, waiting;
   lines.on('line', line => {
     const message = JSON.parse(line);
     state = message.fixture ?? state;
     waiting = message.waiting ?? waiting;
   });
   const configure = async (options = {}) => {
-    state = undefined;
     await target.request('fixture', null, options);
     return state;
   };
-  const plan = { focused: true, microphone: false, displays: [], graph: {} };
   const start = async () => {
     await target.request('snapshot-tray');
-    await controller.start(plan, 'bind-tray');
+    await controller.start({ focused: true, microphone: false, displays: [], graph: {} }, 'bind-tray');
     return controller.current?.id;
   };
-  const commits = [];
-  const expectDispatches = async () => assert.deepEqual((await configure()).dispatches, commits);
+  return { controller, configure, start, waiting: () => waiting };
+}
 
-  for (const options of [{ secure: true }, { readOnly: true }, { denyAccessibility: true },
-    { missingOperation: true }, { foreignRange: true }, { chrome: true }]) {
+for (const { name, options, text } of [
+  { name: 'WebKit could change focus while applying the range', options: { switchDuringDispatch: true }, text: '東京🙂' },
+  { name: 'an AXTextArea is backed by a single-line form input', options: { singleLine: true }, text: '\n' },
+]) test(`macOS refuses unsafe Safari delivery when ${name}`, async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'browser');
+  await configure(options);
+  const id = await start();
+  // Let the production insertion run if authorization regresses, so the
+  // fixture detects WebKit-like wrong-target delivery or form submission.
+  if (id) {
+    await controller.insert(id, text).catch(() => {});
+    await controller.cancel();
+  }
+  assert.deepEqual(await configure(options), { text: 'left|right', other: 'other', writes: 0, focused: 0, submits: 0 });
+  assert.match(controller.state.error, /cannot be safely edited/);
+});
+
+test('macOS TextEdit queue drains ordered commits and stops on an unconfirmed write', async t => {
+  const { controller, configure, start, waiting } = await dispatchFixture(t, 'textedit');
+  for (const [options, error] of [
+    [{ denyAccessibility: true }, /Accessibility/], [{ readOnly: true }, /cannot be safely edited/],
+  ]) {
     await configure(options);
     assert.equal(await start(), undefined);
-    assert.match(controller.state.error, /cannot be safely edited|Accessibility/);
-    assert.deepEqual((await configure(options)).dispatches, []);
+    assert.match(controller.state.error, error);
   }
 
-  await configure({ singleLine: true });
+  await configure();
   let id = await start();
   assert.ok(id);
-  await assert.rejects(controller.insert(id, '\n'), /can treat a lone line break as Submit/);
-  await controller.cancel();
-  await expectDispatches();
-
-  id = await start();
-  assert.ok(id);
-  const chunks = [' 東京', '🙂\n ', 'か\u3099'];
+  const chunks = [' 東京', '\n', '🙂 か\u3099'];
   const pending = chunks.map(text => controller.insert(id, text));
   await controller.stop();
   await Promise.all(pending);
-  commits.push(...chunks);
-  let observed = await configure();
-  assert.deepEqual(observed.dispatches, commits);
-  let prefix = 'left|' + chunks.join('');
-  assert.equal(observed.text, prefix + 'right');
+  const inserted = { text: `left|${chunks.join('')}right`, other: 'other', writes: 3, focused: 0, submits: 0 };
+  assert.deepEqual(await configure(), inserted);
 
-  await configure({ editLimit: 1 });
+  await configure({ held: true });
   id = await start();
-  await controller.insert(id, 'A東京🙂\n');
-  await controller.stop();
-  commits.push('A東京🙂\n');
-  prefix += 'A';
-  observed = await configure();
-  assert.deepEqual(observed.dispatches, commits);
-  assert.equal(observed.text, prefix + 'right');
+  const pendingWhileHeld = assert.rejects(controller.insert(id, 'discard this'), /changed or lost focus/);
+  await eventually(waiting, 'The native adapter did not hold the pending edit');
+  await controller.cancel();
+  await pendingWhileHeld;
+  await assert.rejects(controller.insert(id, 'late callback'), /no longer authorized/);
+  assert.deepEqual(await configure({ dropWrite: true }), inserted);
 
-  // A caret-only change occurs while consumption is delayed. The first
-  // request must remain pending and the second must not be dispatched.
-  await configure({ moveCaretBeforeConsumption: true });
-  id = await start();
-  const delayed = controller.insert(id, ' delayed');
-  const next = controller.insert(id, ' then next');
-  await eventually(async () => {
-    const snapshot = await configure({ moveCaretBeforeConsumption: true });
-    if (snapshot.consumed || snapshot.dispatches.length === commits.length) return false;
-    assert.deepEqual(snapshot.dispatches, [...commits, ' delayed']);
-    assert.equal(snapshot.text, prefix + 'right');
-    return true;
-  }, 'Did not observe the pending write after a caret-only change');
-  await controller.stop();
-  await Promise.all([delayed, next]);
-  commits.push(' delayed', ' then next');
-  prefix += ' delayed then next';
-  observed = await configure();
-  assert.deepEqual(observed.dispatches, commits);
-  assert.equal(observed.text, prefix + 'right');
-
-  // An acknowledged request that produced no edit is ambiguous. Stop
-  // without retry or another dispatch.
-  await configure({ editLimit: 0 });
   id = await start();
   await Promise.all([
-    assert.rejects(controller.insert(id, 'a rejected edit'), /did not confirm/),
+    assert.rejects(controller.insert(id, 'ambiguous delivery'), /did not confirm/),
     assert.rejects(controller.insert(id, 'must stay queued'), /no longer authorized/),
   ]);
-  commits.push('a rejected edit');
   await controller.cancel();
-  await expectDispatches();
-
-  await configure({ held: true });
-  id = await start();
-  const canceled = assert.rejects(controller.insert(id, 'discard while held'), /changed or lost focus/);
-  await eventually(() => waiting, 'The native adapter did not hold the pending edit');
-  await controller.cancel();
-  await canceled;
-  await assert.rejects(controller.insert(id, 'late callback'), /no longer authorized/);
-  await expectDispatches();
-
-  await configure({ held: true });
-  id = await start();
-  waiting = false;
-  const madeReadOnly = assert.rejects(controller.insert(id, 'became read only'), /cannot be safely edited/);
-  await eventually(() => waiting, 'The native adapter did not hold the pending edit');
-  await configure({ readOnly: true });
-  await madeReadOnly;
-  await controller.cancel();
-  await expectDispatches();
-
-  id = await start();
-  await configure({ stale: true });
-  await assert.rejects(controller.insert(id, 'stale focus'), /changed or lost focus/);
-  await controller.cancel();
-  observed = await configure({ restoreFocus: true });
-  assert.deepEqual(observed.dispatches, commits);
-  assert.equal(observed.text, prefix + 'right');
-  assert.equal(observed.other, 'other');
-
-  id = await start();
-  await configure({ focusBeforeConsumption: true });
-  await Promise.all([
-    assert.rejects(controller.insert(id, ' original only'), /changed or lost focus/),
-    assert.rejects(controller.insert(id, 'must never dispatch'), /no longer authorized/),
-  ]);
-  await controller.cancel();
-  commits.push(' original only');
-  observed = await eventually(async () => {
-    const snapshot = await configure();
-    return snapshot.consumed && snapshot;
-  }, 'The original field did not consume the addressed edit');
-  assert.equal(observed.focused, 1);
-  assert.equal(observed.other, 'other');
-  assert.equal(observed.text, prefix + ' original onlyright');
-  assert.deepEqual(observed.dispatches, commits);
+  assert.deepEqual(await configure(), { ...inserted, writes: 4 });
 });
 
 test('macOS package launches, retains its shortcut after closing management, and releases it on Quit', {
@@ -635,50 +571,7 @@ test('macOS rejects a pending edit when focus moves between documents in the sam
   assert.equal(text(), 'left|right');
 });
 
-test('native shortcut inserts rapid Unicode commits at the caret in independent Safari', {
-  skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
-}, async t => {
-  const run = await inputFixture(t);
-  if (!run) return;
-  const app = await launch(t);
-  const emit = await textProducer(app.desktop);
-  await selectFocusedGraph(app, 'Safari OS target');
-  const safari = await externalSafari(t, run);
-  const before = await safari.focus('notes', 5);
-  const commits = [' 東京', '🙂\n ', 'か\u3099'];
-  const prefix = 'left|' + commits.join('');
-  const expected = { ...before.values, notes: prefix + 'right' };
-
-  run('shortcut');
-  await runningWithExternalFocus(app, run, safari.pid);
-  await emit(...commits);
-  await eventually(() => safari.state().values.notes === expected.notes,
-    'Safari did not receive the complete committed TEXT in order');
-  const inserted = safari.state();
-  assert.deepEqual(inserted.values, expected);
-  assert.equal(inserted.focus, 'notes');
-  assert.equal(inserted.caret, prefix.length);
-  assert.equal(inserted.active, true);
-  assert.equal(inserted.submits, 0);
-  run('shortcut');
-  assert.equal((await idle(app.view)).error, '');
-  assert.equal(Number(run('front-pid')), safari.pid);
-
-  run('shortcut');
-  await runningWithExternalFocus(app, run, safari.pid);
-  run('shortcut-down');
-  try {
-    await emit('must never reach the newly focused field🙂');
-    await safari.focus('field', 5);
-    assert.match((await idle(app.view)).error, /changed or lost focus/);
-  } finally { run('shortcut-up'); }
-  const released = safari.state().report;
-  await eventually(() => safari.state().report > released, 'Safari stopped reporting state after shortcut release');
-  assert.deepEqual(safari.state().values, expected);
-  assert.equal(safari.state().submits, 0);
-});
-
-test('macOS rejects protected and read-only controls in independent Safari before editing', {
+test('macOS rejects Safari web fields before editing or submitting', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
@@ -687,7 +580,7 @@ test('macOS rejects protected and read-only controls in independent Safari befor
   await selectFocusedGraph(app, 'Browser safety target', ' 東京🙂\n ');
   const indicator = app.desktop.windows().find(page => page.url().endsWith('/indicator.html'));
   const safari = await externalSafari(t, run);
-  for (const field of ['password', 'readonly']) {
+  for (const field of ['notes', 'field', 'password', 'readonly']) {
     const { report: _report, ...original } = await safari.focus(field, 1);
     run('shortcut');
     await eventually(async () => {
@@ -708,42 +601,6 @@ test('macOS rejects protected and read-only controls in independent Safari befor
     assert.equal(original.submits, 0);
     await indicator.getByRole('button', { name: 'Dismiss' }).evaluate(button => button.click());
     await eventually(async () => !(await app.view()).session.error, 'The previous refusal was not dismissed');
-  }
-});
-
-test('macOS lets independent Safari enforce existing and late length limits during native text entry', {
-  skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
-}, async t => {
-  const run = await inputFixture(t);
-  if (!run) return;
-  const app = await launch(t);
-  const emit = await textProducer(app.desktop);
-  await selectFocusedGraph(app, 'Late browser length constraint');
-  const safari = await externalSafari(t, run);
-  for (const [field, caret, late, expected] of [
-    ['multiline', 2, false, 'xyA東'],
-    ['notes', 5, true, 'left|Aright'],
-  ]) {
-    const before = await safari.focus(field, caret, late);
-    if (late) assert.equal(before.notesMaxLength, -1);
-    run('shortcut');
-    await runningWithExternalFocus(app, run, safari.pid);
-    await emit('A東京🙂\n');
-    await eventually(() => safari.state().values[field] === expected, 'Safari did not apply its normal length limit');
-    run('shortcut');
-    assert.equal((await idle(app.view)).error, '');
-    const report = safari.state().report;
-    const after = await eventually(() => {
-      const current = safari.state();
-      return current.report > report && current;
-    }, 'Safari did not report its state after Stop');
-    assert.deepEqual(after.values, { ...before.values, [field]: expected });
-    assert.deepEqual(after.edits.slice(before.edits.length), [['beforeinput', field], ['input', field]]);
-    if (!late) assert.equal(after.caret, expected.length);
-    assert.equal(after.focus, field);
-    assert.equal(after.active, true);
-    assert.equal(Number(run('front-pid')), safari.pid);
-    assert.equal(after.submits, 0);
   }
 });
 

@@ -1,6 +1,6 @@
 # Issue #401 desktop validation
 
-See [the macOS review fixes](#macos-review-fixes)
+See [the latest Safari and MV3 review fixes](#safari-dispatch-safety-and-mv3-round-trip)
 and the [optional manual steps](../desktop.md#manual-test-on-macos) for the
 revised Issue #401 acceptance. The earlier runs below retain their original
 constraints and results.
@@ -684,3 +684,56 @@ build verified 220 files, all three distribution audits passed, and the
 workflow's MV3 suite passed 43 and skipped two optional real-model cases.
 `git diff --check` passed. These are local results for the fix. The hosted
 workflow runs when the fix is published.
+
+## Safari dispatch safety and MV3 round trip
+
+The review of PR #402 found that Safari's Accessibility range edit can
+dispatch to the document's newly focused element after setting the range.
+It also found that WebKit can submit a form on a lone line break even when
+page-supplied ARIA makes a single-line input report `AXTextArea`. A
+post-edit focus check is too late to prevent either effect.
+[WebKit range edit](https://github.com/WebKit/WebKit/blob/29886d4d7a5e943657447a2a0274dd0297abe4f1/Source/WebCore/accessibility/AccessibilityObject.cpp#L1393)
+· [Text dispatch](https://github.com/WebKit/WebKit/blob/29886d4d7a5e943657447a2a0274dd0297abe4f1/Source/WebCore/page/EventHandler.cpp#L5178)
+· [Implicit submission](https://github.com/WebKit/WebKit/blob/29886d4d7a5e943657447a2a0274dd0297abe4f1/Source/WebCore/html/TextFieldInputType.cpp#L303).
+
+The helper now refuses browser targets before capture. TextEdit uses its
+element-addressed selected-text edit and dispatch-time focus check. The
+evaluated Firefox setter excludes collapsed selections and can use offset
+zero even when the caret is elsewhere. Process-targeted paste still has the
+same-window focus race described in the previous revision. Issue #401's
+browser acceptance remains open and requires a safe edit at the authorized
+browser caret. [Firefox selected-text setter](https://github.com/mozilla-firefox/firefox/blob/fb8002f3356cc08d45bfd77f7d522889c6345819/accessible/mac/mozTextAccessible.mm)
+· [Firefox selection ranges](https://github.com/mozilla-firefox/firefox/blob/fb8002f3356cc08d45bfd77f7d522889c6345819/accessible/basetypes/HyperTextAccessibleBase.cpp#L783).
+
+The native-boundary fixture models both WebKit behaviors. With the helper
+from `75fed7f`, the focus-race scenario edited the second field and the
+role-mismatch scenario registered a submission. The revised helper sends
+zero edits and leaves both values unchanged in both scenarios. These are
+fixture observations. The optional native run still stops at the Swift
+driver's `{"accessibility":false,"keyboard":false}` preflight. This leaves
+real TextEdit insertion and native Safari refusal unverified on this runner.
+[Optional macOS procedure](../desktop.md#manual-test-on-macos).
+
+The hosted `models` job on `75fed7f` passed asset preparation and failed
+at the 30-second test limit in the LFM2 round trip. The revised test seeds
+31 inputs before exercising the maximum, Undo/Redo and reload, replacing
+the 59-edit sequence. It imports the exported two-input graph through
+the actual file chooser and checks that the editor and saved graph return
+to two inputs. The hosted check on the revised PR head is pending
+publication. [Hosted job](https://github.com/takahirox/my-audio-to-text/actions/runs/45578368811/job/139081860799).
+
+The macOS package was built on macOS 27.2.1 (26B131) arm64 in Aqua with
+Apple clang 21.0.0 and Electron 45.4.1. Two `npm run build:desktop` runs
+produced SHA-256
+`21e2ae682a8469795c15fe42b78c047c799d235d766fdb30244f36768e51e219`.
+The extracted app passed `codesign --verify --deep --strict`. Its helper
+source blob is `14085785ac55257dc2ac09f14342ad873a8a3a4f`.
+
+| Check | Observed result |
+| --- | --- |
+| Extracted macOS package with `DESKTOP_REAL_ASR=1 DESKTOP_MACOS_EDITOR=1 npm run test:desktop` | Eight checks passed, including launch, residency, shortcuts and Quit, TextEdit queue and dispatch fixtures, and the two Safari regressions. Four optional native checks skipped at the permission preflight. |
+| macOS offline Japanese Moonshine smoke | BlackHole 2ch fed `tests/desktop/fixtures/konnichiwa.wav` into the packaged microphone path. Model `moonshine/small-streaming-ja` at revision `330a8fedc2c613a96902275ecf6f622bda1271d820221427c19ac2cea230ffee` produced `こんにちはこんにちは` in Live Display with HTTP(S) blocked after preparation. |
+| Extracted Debian 12 arm64 package with `DESKTOP_REAL_ASR=1 npm run test:desktop` | All six X11 checks passed under the documented Docker, Xvfb, Openbox and PulseAudio harness. The offline model produced `こんにちは、こんにちは、こんにちは` in Mousepad. |
+| `npm test` and local `models` workflow MV3 selection | All 940 Node tests passed. MV3 passed 43 checks and skipped two opt-in cases. The two revised round-trip cases passed three repetitions each. |
+| `npm run test:playground -- --workers=2` | Chromium and WebKit passed 233 checks and skipped five. The repository's fixture server used an alternate loopback port because port 8000 was occupied. |
+| Asset preparation, extension build and distribution audit | `npm run prepare:playground-assets`, `npm run build:extension` (220 verified files), and all three model distribution checks passed. |

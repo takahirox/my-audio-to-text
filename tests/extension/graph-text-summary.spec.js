@@ -238,14 +238,7 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: numbered connectors, Sy
   await expect(inputs).toHaveCount(3);
   await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(2);
   await editor.locator('#graph-redo').click(); await expect(inputs).toHaveCount(3);
-  for (let i = 3; i < 32; i++) await add.press('Enter');
-  await expect(inputs).toHaveCount(32); await expect(editor.getByLabel('processor Add input', { exact: true })).toBeDisabled();
-  await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(31);
-  await editor.locator('#graph-redo').click(); await expect(inputs).toHaveCount(32);
-  await settleAutoSave(editor); await editor.reload();
-  await editor.getByRole('button', { name: /^Select processor:/ }).click();
-  await expect(inputs).toHaveCount(32); await expect(add).toBeDisabled();
-  for (let i = 32; i > 2; i--) await remove.press('Enter');
+  await remove.press('Enter');
   await settleAutoSave(editor);
   const before = await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage));
   await editor.getByLabel('processor Remove last input', { exact: true }).click();
@@ -269,9 +262,30 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: numbered connectors, Sy
   await editor.locator('.graph-actions > summary').click(); await editor.locator('#graph-export').click();
   const exported = JSON.parse(await readFile(await (await download).path(), 'utf8'));
   expect(exported).toEqual(before);
+
+  // Seed the graph at the upper limit's boundary. Replaying every
+  // intermediate port count just adds canvas redraws to this browser test.
+  await editor.evaluate(async graph => {
+    const { saveLiveGraphData } = await import('./graph-library.js');
+    graph.nodes.find(node => node.id === 'processor').settings.inputCount = 31;
+    await saveLiveGraphData(localStorage, graph);
+  }, exported);
+  await editor.reload();
+  await editor.getByRole('button', { name: /^Select processor:/ }).click();
+  await expect(inputs).toHaveCount(31);
+  await add.press('Enter');
+  await expect(inputs).toHaveCount(32); await expect(add).toBeDisabled();
+  await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(31);
+  await editor.locator('#graph-redo').click(); await expect(inputs).toHaveCount(32);
+  await settleAutoSave(editor); await editor.reload();
+  await editor.getByRole('button', { name: /^Select processor:/ }).click();
+  await expect(inputs).toHaveCount(32); await expect(add).toBeDisabled();
+
   await editor.locator('.graph-actions > summary').click();
-  editor.once('dialog', dialog => dialog.accept());
-  await editor.locator('input[type=file]').setInputFiles({ name: 'processing.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
+  const chooser = editor.waitForEvent('filechooser');
+  await editor.locator('#graph-import').click();
+  await (await chooser).setFiles({ name: 'processing.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
+  await expect(inputs).toHaveCount(2);
   await settleAutoSave(editor);
   expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(before);
 });
