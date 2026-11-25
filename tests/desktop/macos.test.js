@@ -210,6 +210,16 @@ async function textProducer(desktop) {
   return (...values) => runtime.evaluate(values => globalThis.emitTestText(values), values);
 }
 
+test('macOS dispatch rechecks the bound window and field after reading the selection', async t => {
+  const directory = await temp(t, 'desktop-macos-dispatch-');
+  const tool = join(directory, 'dispatch-fixture');
+  execFileSync('xcrun', ['clang', '-fobjc-arc', '-Wall', '-Wextra', '-Werror',
+    '-framework', 'AppKit', '-framework', 'ApplicationServices', '-framework', 'Carbon',
+    'tests/desktop/macos-dispatch-fixture.m', '-o', tool]);
+  const results = execFileSync(tool, { encoding: 'utf8', timeout: 5000 }).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(results, [{ request: 1, error: 'The authorized TextEdit document changed or lost focus.' }, { request: 2 }]);
+});
+
 test('macOS package launches, retains its shortcut after closing management, and releases it on Quit', {
   timeout: 45000,
 }, async t => {
@@ -384,6 +394,43 @@ test('held macOS shortcut cannot restart ended Live or commit after cancellation
   run('activate', String(first.pid));
   await eventually(() => Number(run('front-pid')) === first.pid, 'The original TextEdit window did not receive focus');
   assert.equal(first.text(), 'left|right');
+});
+
+test('macOS rejects a pending edit when focus moves between documents in the same TextEdit process', {
+  skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
+}, async t => {
+  const run = await inputFixture(t);
+  const app = await launch(t);
+  const emit = await textProducer(app.desktop);
+  await selectFocusedGraph(app, 'Same-process focus change');
+  const { pid, text } = await externalEditor(t, run, 'original document', 'left|right');
+  const original = run('editor-window');
+  run('editor-new');
+  const other = await eventually(() => {
+    const title = run('editor-window');
+    return title !== original && title;
+  }, 'TextEdit did not open a second document');
+  const focus = async title => {
+    run('editor-raise', title);
+    await eventually(() => run('editor-window') === title, 'The requested TextEdit document did not receive focus');
+    assert.equal(Number(run('front-pid')), pid);
+  };
+  const otherText = text();
+  await focus(original);
+  run('caret', '5');
+  run('shortcut');
+  await runningWithExternalFocus(app, run, pid);
+  run('shortcut-down');
+  try {
+    await emit('must never reach either document🙂');
+    await wait(250);
+    assert.equal(text(), 'left|right');
+    await focus(other);
+  } finally { run('shortcut-up'); }
+  assert.match((await idle(app.view)).error, /changed or lost focus/);
+  assert.equal(text(), otherText);
+  await focus(original);
+  assert.equal(text(), 'left|right');
 });
 
 test('native shortcut inserts rapid Unicode commits at the caret in independent Chrome', {

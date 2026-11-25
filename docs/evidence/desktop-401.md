@@ -513,3 +513,54 @@ Packaged editor and browser insertion remain mandatory on macOS. A safe
 browser backend and an Aqua runner with normal OS authorization for the
 package and test driver are still required. Linux browser support remains
 optional.
+
+## TextEdit dispatch guard
+
+The native helper reads the focused window and field together immediately
+after re-reading text and selection, then checks for held modifiers before
+the element-addressed write. A regression changes focus during the last
+selection read, keeps the same PID, and delays the observer notification.
+The helper rejected the edit and left both fixture documents unchanged.
+Restoring the previous PID-only guard reproduced the stale write. The
+fixture exercises the production dispatch logic with simulated AX responses.
+[Apple Accessibility API](https://developer.apple.com/documentation/applicationservices/1462051-axuielementcopymultipleattribute).
+
+Two builds on Aqua macOS 27.2.1 (26B131) arm64 with Apple clang 21.0.0 and
+Electron 45.4.1 produced archive SHA-256
+`c71de0aae586eb9759ed816086040fc429ef2001c53a78808506061f660961aa`.
+The extracted app passed `codesign --verify --deep --strict`.
+
+With `DESKTOP_TEST_BINARY` pointing to that extracted app and
+`DESKTOP_MACOS_TEST_DRIVER` pointing to the compiled Swift fixture,
+`DESKTOP_MACOS_EDITOR=1 DESKTOP_REAL_ASR=1 npm run test:desktop` passed
+four checks. These covered the dispatch fixture, packaged lifecycle and
+shortcut conflicts, the stale Live shortcut release, and offline Moonshine
+inference from the licensed BlackHole fixture. The production Pipeline sent
+`こんにちは` to Live Display with HTTP(S) blocked after preparing the
+previously documented pinned Japanese model.
+The default packaged run passed three checks and skipped the seven
+opt-in native target and model checks.
+
+All six native target cases stopped before key delivery. The Swift
+driver reported `{"accessibility":false,"keyboard":false}`. The positive
+Chrome case opened the independent browser and confirmed focus in its
+textarea before the permission check. The repository reported zero
+self-hosted Actions runners. Packaged TextEdit insertion and native safety
+still need an authorized Aqua runner.
+
+The browser safety finding remains open. Paste and Unicode events leave
+the final edit to the browser, and the recorded late-`maxlength` experiment
+shows that the browser can write a partial result. The Chromium AX value
+setter replaces the whole field and lacks an expected-value or
+expected-selection precondition. The app continues to reject browser
+targets pending an operation that can preserve the field and edit
+safeguards. An independent macOS browser success case remains required.
+
+`npm test` passed all 940 checks. The focused standalone Chromium and
+MV3 commands above passed 75 and 33 checks with the macOS app shut down.
+The first X11 run used an existing image and timed out waiting for external
+windows in four cases. After rebuilding from `tests/desktop/Dockerfile`,
+all six cases passed on Debian 12 arm64 under Xvfb, Openbox and PulseAudio.
+The offline smoke inserted `こんにちは、こんにちはこんにちは` into
+Mousepad using the same fixture and pinned model. Chromium refusal passed
+before any edit.

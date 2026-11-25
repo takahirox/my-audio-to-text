@@ -167,16 +167,24 @@ static Binding *captureTarget(void) {
     return result;
 }
 
+static BOOL hasBoundFocus(Binding *binding) {
+    AXUIElementRef application = (__bridge AXUIElementRef)binding.application;
+    NSArray *keys = @[(__bridge NSString *)kAXFocusedWindowAttribute, (__bridge NSString *)kAXFocusedUIElementAttribute];
+    CFArrayRef values = NULL;
+    if (AXUIElementCopyMultipleAttributeValues(application, (__bridge CFArrayRef)keys,
+            kAXCopyMultipleAttributeOptionStopOnError, &values) != kAXErrorSuccess) return NO;
+    NSArray *focus = CFBridgingRelease(values);
+    return focus.count == 2 &&
+        CFEqual((__bridge CFTypeRef)focus[0], (__bridge CFTypeRef)binding.window) &&
+        CFEqual((__bridge CFTypeRef)focus[1], (__bridge CFTypeRef)binding.area) &&
+        NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == binding.pid;
+}
+
 static NSString *check(Binding *binding) {
     if (binding.failed) return binding.failed;
     if (!AXIsProcessTrusted()) return permissionError;
-    if (NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier != binding.pid) return focusError;
-    AXUIElementRef application = (__bridge AXUIElementRef)binding.application;
-    id window = elementAttribute(application, kAXFocusedWindowAttribute);
-    id area = elementAttribute(application, kAXFocusedUIElementAttribute);
-    if (!window || !area || !CFEqual((__bridge CFTypeRef)window, (__bridge CFTypeRef)binding.window) ||
-        !CFEqual((__bridge CFTypeRef)area, (__bridge CFTypeRef)binding.area)) return focusError;
-    return isDocumentArea((__bridge AXUIElementRef)area, (__bridge AXUIElementRef)window) ? nil : targetError;
+    if (!hasBoundFocus(binding)) return focusError;
+    return isDocumentArea((__bridge AXUIElementRef)binding.area, (__bridge AXUIElementRef)binding.window) ? nil : targetError;
 }
 
 static void verifyWrite(NSNumber *request, NSString *expected, CFIndex caret, CFAbsoluteTime deadline) {
@@ -239,14 +247,15 @@ static void insertWhenReleased(void) {
         finishWrite(error ?: @"The document changed before the edit. Voice typing stopped.");
         return;
     }
-    // Accessibility reads cross process boundaries. Recheck any modifiers
-    // pressed during those reads before dispatching a mutation.
-    if (shortcutHeld()) {
-        writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
+    // Value and selection reads can outlast a same-process focus change whose
+    // observer callback has yet to run. Read window and field together last.
+    if (!hasBoundFocus(bound)) {
+        finishWrite(focusError);
         return;
     }
-    if (NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier != bound.pid) {
-        finishWrite(focusError);
+    // Check modifiers again after the final cross-process read.
+    if (shortcutHeld()) {
+        writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
         return;
     }
     waitingForRelease = NO;
@@ -419,4 +428,5 @@ int main(void) {
         });
         [NSApplication.sharedApplication run];
     }
+    return 0;
 }
