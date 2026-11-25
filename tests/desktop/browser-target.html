@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><title>Voice typing test browser</title>
+<style>label { display: block; }</style>
+<form>
+  <label>Text <input id="field" type="text" autofocus value="left|right"></label>
+  <label>Notes <textarea id="notes">left|right</textarea></label>
+  <label>Limited <input id="limited" maxlength="4" value="xy"></label>
+  <label>Multiline <textarea id="multiline" maxlength="4">xy</textarea></label>
+  <div id="editable" role="textbox" aria-label="Editable text" aria-multiline="true"
+    contenteditable="plaintext-only">xy</div>
+  <label>Read only <input id="readonly" readonly value="xy"></label>
+  <label>Password <input id="password" type="password" value="secret" autocomplete="off"></label>
+  <button>Submit</button>
+</form>
+<script>
+  const fields = [...document.querySelectorAll('[role=textbox], input, textarea')];
+  const edits = [];
+  let report = 0;
+  let selection = 0;
+  let submits = 0;
+  let limitOnEdit = false;
+  document.querySelector('form').onsubmit = event => { event.preventDefault(); submits++; };
+  const password = document.querySelector('#password');
+  const editable = document.querySelector('#editable');
+  const notes = document.querySelector('#notes');
+  for (const target of fields) {
+    target.addEventListener('beforeinput', () => {
+      edits.push(['beforeinput', target.id]);
+      // The textarea is unrestricted when dictation binds to it.
+      if (target === notes && limitOnEdit) notes.maxLength = notes.value.length + 1;
+    });
+    target.addEventListener('input', () => {
+      edits.push(['input', target.id]);
+      if (target.id === 'limited') password.focus();
+    });
+  }
+  function caret() {
+    if (document.activeElement !== editable) return document.activeElement.selectionStart;
+    const selection = document.getSelection();
+    if (!editable.contains(selection.anchorNode) || !selection.isCollapsed) return -1;
+    const range = document.createRange();
+    range.selectNodeContents(editable);
+    range.setEnd(selection.anchorNode, selection.anchorOffset);
+    return range.toString().length;
+  }
+  setInterval(() => {
+    fetch('/state', { method: 'POST', body: JSON.stringify({
+      report: ++report, values: Object.fromEntries(fields.map(target => [target.id, target.value ?? target.textContent])),
+      focus: document.activeElement.id, submits, edits, notesMaxLength: notes.maxLength,
+      caret: caret(), active: document.hasFocus(), selection,
+    }) }).then(response => response.json()).then(request => {
+      if (!request || request.serial <= selection) return;
+      const target = document.getElementById(request.target);
+      limitOnEdit = request.limitOnEdit;
+      target.focus();
+      if (target === editable) document.getSelection().collapse(target.firstChild, request.caret);
+      else target.setSelectionRange(request.caret, request.caret);
+      selection = request.serial;
+    }).catch(() => {});
+  }, 100);
+</script>
+</html>

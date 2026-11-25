@@ -42,13 +42,17 @@ test('MV3 imports and reloads Hold feedback; real Worker replies serialize A/B/C
     await editor.evaluate(async graph => (await import('./graph-library.js')).saveLiveGraphData(localStorage, graph), graph);
     await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
     expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(graph);
-    // An ordinary emitting self-cycle is disabled interactively without
-    // invalidating the stored graph.
+    // Check that an ordinary emitting self-cycle is disabled. Undo the
+    // temporary disconnect and wait for Auto Save before reloading.
     await editor.getByRole('button', { name: 'Select connection window.text to format.input2', exact: true }).press('Enter');
     await editor.getByRole('button', { name: 'Disconnect window.text to format.input2', exact: true }).click();
     await editor.getByRole('button', { name: 'format output text', exact: true }).click();
     await expect(editor.getByRole('button', { name: 'format input input2', exact: true })).toBeDisabled();
     await expect(editor.locator('#graph-errors')).toBeEmpty();
+    const savedGraph = () => editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage));
+    await expect.poll(savedGraph).not.toEqual(graph);
+    await editor.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(savedGraph).toEqual(graph);
     await editor.reload(); await expect(editor.locator('#graph-errors')).toBeEmpty();
     const page = await context.newPage(); await page.goto(base + 'recorder.html');
     const errors = []; page.on('pageerror', error => errors.push(error.message));

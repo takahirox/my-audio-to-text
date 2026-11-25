@@ -116,9 +116,15 @@ from corrections with held-out evaluation of improvement and regressions.
 
 Contracts and behavior should be reusable across Web, browser extensions,
 desktop and mobile while models, implementations and runtimes remain
-replaceable. A native processor may use a native ONNX runtime rather than
-browser WASM. This is a platform direction, not a claim that a common
-cross-platform runtime or native applications exist.
+replaceable. The [standalone desktop host](desktop.md) reuses the saved graph format, Pipeline
+and Moonshine WASM worker. It supplies its own microphone, focused TEXT output,
+tray, shortcut, storage and model cache. The macOS helper implements
+TextEdit input and guarded range replacement for supported Safari web
+fields. Cross-application insertion in both remains unverified due to OS
+permissions. The X11 helper uses AT-SPI and was
+verified in Mousepad on Debian 12. The Chrome extension and standalone Web
+pages continue to run with their own resources.
+Future hosts can choose different runtimes, including native ONNX.
 
 ## Next architectural step
 

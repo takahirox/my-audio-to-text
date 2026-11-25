@@ -82,6 +82,26 @@ test('direct grouped formatter update emits once; separate branches emit latest 
   a({ one: 'C' }); await pipeline.stop(); assert.deepEqual(result, ['', 'A||grouped', 'A|B|grouped', 'C|B|']); await pipeline.dispose();
 });
 
+test('browser formatter retains the latest preview when an independent input updates', async () => {
+  let asr, other;
+  const displayed = [];
+  const pipeline = new Pipeline({ nodes: {
+    asr: { outputs: { preview: TEXT }, provisionalOutputs: ['preview'], start(context) { asr = context; } },
+    other: { outputs: { text: TEXT }, start(context) { other = context; } },
+    formatter: new TextFormatterNode({ template: '{1}|{2}', inputCount: 2 }),
+    display: new TextSink(text => displayed.push(text)),
+  }, connections: [
+    edge('asr', 'preview', 'formatter', 'input1'), edge('other', 'text', 'formatter', 'input2'),
+    edge('formatter', 'text', 'display', 'input'),
+  ] });
+  await pipeline.start();
+  asr.emit('preview', '途中まで');
+  other.emit('text', '更新');
+  await pipeline.stop();
+  await pipeline.dispose();
+  assert.deepEqual(displayed, ['', '途中まで|', '途中まで|更新']);
+});
+
 test('formatter instances have independent counts above four, safe multi-digit references and literal data', () => {
   const a = new TextFormatterNode({ inputCount: 12, template: '{12}\n{5}|{{{1}}}' });
   const b = new TextFormatterNode({ inputCount: 1 });

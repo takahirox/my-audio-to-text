@@ -26,7 +26,9 @@
     "test:playground-real": "PLAYGROUND_MODEL_SMOKE=1 playwright test tests/browser/playground-model-smoke.spec.js --project=chromium --workers=1",
     "test:playground": "playwright test tests/browser/model-playground.spec.js tests/browser/playground-assets.spec.js tests/browser/translation.spec.js tests/browser/tts.spec.js tests/browser/correction.spec.js tests/browser/plamo.spec.js",
     "prepare:plamo-assets": "python3 scripts/prepare-plamo-assets.py",
-    "test:plamo-real": "PLAMO_SMOKE=1 TRANSLATION_CHANNEL=chrome playwright test tests/browser/plamo-smoke.spec.js --project=chromium --workers=1"
+    "test:plamo-real": "PLAMO_SMOKE=1 TRANSLATION_CHANNEL=chrome playwright test tests/browser/plamo-smoke.spec.js --project=chromium --workers=1",
+    "build:desktop": "python3 scripts/build-desktop.py",
+    "test:desktop": "bash tests/desktop/run.sh"
   },
   "devDependencies": {
     "@lexical/history": "0.38.2",

@@ -9,6 +9,7 @@ export { portContract } from './port-contracts.js';
  * start(context), receive(port, value, context), stop(context), cancel(context), dispose().
  * context provides emit(port, value), emitOutputs(values, { provisional }), fail(error), and an AbortSignal.
  * Optional receiveInputs(values, context) receives one emission mapped to input names.
+ * context.provisionalInputs identifies unfinished inputs within a mixed delivery.
  * Optional inputQueueLimits { deliveries, chars } bounds active + queued deliveries before retention.
  * Cancel hooks emit cleanup snapshots.
  * receive context.defer() owns queued async work separately from input admission;
@@ -144,22 +145,30 @@ export class Pipeline {
     const deliveries = new Map();
     for (const [port, value] of outputs) {
       for (const { entry: target, port: input } of entry.routes.get(port) || []) {
-        if (!deliveries.has(target)) deliveries.set(target, {});
-        Object.defineProperty(deliveries.get(target), input, { value: target.inputs[input] === ANY ? undefined : value, enumerable: true });
+        if (!deliveries.has(target)) deliveries.set(target, { inputs: {}, previews: [] });
+        const { inputs, previews } = deliveries.get(target);
+        Object.defineProperty(inputs, input, { value: target.inputs[input] === ANY ? undefined : value, enumerable: true });
+        if (provisional || entry.provisionalOutputs.has(port)) previews.push(input);
       }
     }
-    for (const [target, inputs] of deliveries) {
+    for (const [target, { inputs, previews }] of deliveries) {
       // Delivery-local provenance, never payload metadata or cross-branch matching.
-      const groupInputs = grouped ? Object.freeze([...new Set([...entry.routes].filter(([port]) => groupOutputs.has(port)).flatMap(([, routes]) => routes)
-        .filter(route => route.entry === target).map(route => route.port))]) : undefined;
+      const groupInputs = grouped ? [] : undefined;
       // Producers can mark unfinished results without changing primitive ports.
       // Retaining a receive context also retains this flag across async forwarding.
       // A simultaneous final/preview-clear group can route unfinished outputs
       // to one consumer and committed outputs to another. Preserve that meaning
       // without splitting the atomic delivery or interpreting port names.
-      const unfinished = provisional || outputs.filter(([port]) => (entry.routes.get(port) || []).some(route => route.entry === target))
-        .every(([port]) => entry.provisionalOutputs.has(port));
-      this.enqueue(target, inputs, { groupInputs, provisional: unfinished, cleanup, receiveScoped }, turn);
+      const unfinished = previews.length === Object.keys(inputs).length;
+      if (groupInputs) for (const port of groupOutputs) {
+        for (const { entry: consumer, port: input } of entry.routes.get(port) || []) {
+          if (consumer !== target) continue;
+          groupInputs.push(input);
+          if (!Object.hasOwn(inputs, input) && (provisional || entry.provisionalOutputs.has(port))) previews.push(input);
+        }
+      }
+      this.enqueue(target, inputs, { groupInputs: Object.freeze(groupInputs), provisional: unfinished,
+        provisionalInputs: Object.freeze(previews), cleanup, receiveScoped }, turn);
     }
   }
   enqueue(target, inputs, event, parent) {
@@ -219,7 +228,7 @@ export class Pipeline {
           callback();
         };
         const context = Object.freeze({ ...target.context,
-          groupInputs: event.groupInputs, provisional: event.provisional,
+          groupInputs: event.groupInputs, provisional: event.provisional, provisionalInputs: event.provisionalInputs,
           signal: event.cleanup ? this.cleanupController.signal : target.controller.signal,
           fail: error => { if (turn) turn.error ||= error; this.fail(target, error); },
           emit: (port, value) => emit(() => emissions.emit(port, value)),

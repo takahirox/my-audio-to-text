@@ -15,6 +15,7 @@ test('both AI text processing models: parked Save persists, independent settings
     await writeFile(path.join(f.root, 'extension', model.key + '-assets.json'), JSON.stringify(files));
   }
   const page = await openGraph(f), editor = page.editor;
+  f.mode('corrupt');
   for (const type of TEXT_PROCESSING_TYPES) {
     await openPalette(editor); await editor.getByLabel('Node category', { exact: true }).selectOption({ label: 'AI Models / Text' });
     await editor.locator(`#graph-node-type [data-type="${type}"]`).click();
@@ -29,7 +30,7 @@ test('both AI text processing models: parked Save persists, independent settings
   await editor.getByLabel('textprocessingqwen35 Add input', { exact: true }).click();
   const cards = page.models.locator('#meeting-summary-lfm2, #meeting-summary-qwen35');
   const save = async () => { await settleAutoSave(editor);  };
-  f.mode('corrupt'); await save();
+  await save();
   await expect(cards).toHaveCount(2);
   await expect(editor.locator('#graph-model-warning')).toContainText('model preparation unavailable');
   for (const card of await cards.all()) await expect(card).toHaveAttribute('data-state', 'Not downloaded');
@@ -107,6 +108,9 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: saved prompt controls p
   await editor.getByLabel('summary System prompt', { exact: true }).fill(savedPrompt);
   await editor.getByLabel('summary System prompt', { exact: true }).press('Tab');
   await settleAutoSave(editor);
+  // Seeding the saved graph directly skips model preparation on model add.
+  // A prompt-only Auto Save keeps the existing asset requirements.
+  await live.models.locator('#' + spec.key).getByRole('button', { name: /^(Download|Retry)$/, exact: true }).click();
   await expectGraphModelsReady(editor);
   const downloadPromise = editor.waitForEvent('download');
   await editor.locator('.graph-actions > summary').click(); await editor.locator('#graph-export').click();
@@ -234,14 +238,7 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: numbered connectors, Sy
   await expect(inputs).toHaveCount(3);
   await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(2);
   await editor.locator('#graph-redo').click(); await expect(inputs).toHaveCount(3);
-  for (let i = 3; i < 32; i++) await add.press('Enter');
-  await expect(inputs).toHaveCount(32); await expect(editor.getByLabel('processor Add input', { exact: true })).toBeDisabled();
-  await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(31);
-  await editor.locator('#graph-redo').click(); await expect(inputs).toHaveCount(32);
-  await settleAutoSave(editor); await editor.reload();
-  await editor.getByRole('button', { name: /^Select processor:/ }).click();
-  await expect(inputs).toHaveCount(32); await expect(add).toBeDisabled();
-  for (let i = 32; i > 2; i--) await remove.press('Enter');
+  await remove.press('Enter');
   await settleAutoSave(editor);
   const before = await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage));
   await editor.getByLabel('processor Remove last input', { exact: true }).click();
@@ -265,11 +262,43 @@ for (const type of TEXT_PROCESSING_TYPES) test(`${type}: numbered connectors, Sy
   await editor.locator('.graph-actions > summary').click(); await editor.locator('#graph-export').click();
   const exported = JSON.parse(await readFile(await (await download).path(), 'utf8'));
   expect(exported).toEqual(before);
-  await editor.locator('.graph-actions > summary').click();
-  editor.once('dialog', dialog => dialog.accept());
-  await editor.locator('input[type=file]').setInputFiles({ name: 'processing.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
+
+  await add.press('Enter');
+  await expect(inputs).toHaveCount(3);
+  await settleAutoSave(editor);
+  // Exercise the production import handler through its file input. Graph
+  // Library separately covers opening a native file chooser.
+  await editor.locator('.graph-actions input[type=file]').setInputFiles({
+    name: 'processing.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)),
+  });
+  await expect(inputs).toHaveCount(2);
   await settleAutoSave(editor);
   expect(await editor.evaluate(async () => (await import('./graph-library.js')).readLiveGraphData(localStorage))).toEqual(before);
+});
+
+for (const type of TEXT_PROCESSING_TYPES) test(`${type}: maximum input count survives Undo/Redo and reload`, async ({ graphExtension: f }) => {
+  const { editor } = await openGraph(f);
+  // Seed the editor one input below its limit to cover the boundary without
+  // redrawing the canvas for every intermediate count.
+  await editor.evaluate(async type => {
+    const { graphNode, GRAPH_VERSION } = await import('./graph.js');
+    const { saveLiveGraphData } = await import('./graph-library.js');
+    const processor = graphNode(type, 'processor');
+    processor.settings.inputCount = 31;
+    await saveLiveGraphData(localStorage, { version: GRAPH_VERSION, nodes: [processor], edges: [] });
+  }, type);
+  await editor.reload();
+  await editor.getByRole('button', { name: /^Select processor:/ }).click();
+  const inputs = editor.locator('[data-node=processor] [data-side=input]');
+  const add = editor.getByRole('button', { name: 'processor Add input', exact: true });
+  await expect(inputs).toHaveCount(31);
+  await add.press('Enter');
+  await expect(inputs).toHaveCount(32); await expect(add).toBeDisabled();
+  await editor.locator('#graph-undo').click(); await expect(inputs).toHaveCount(31);
+  await editor.locator('#graph-redo').click(); await expect(inputs).toHaveCount(32);
+  await settleAutoSave(editor); await editor.reload();
+  await editor.getByRole('button', { name: /^Select processor:/ }).click();
+  await expect(inputs).toHaveCount(32); await expect(add).toBeDisabled();
 });
 
 for (const type of TEXT_PROCESSING_TYPES) test(`${type}: production Worker explains missing shader-f16 support`, async ({ graphExtension: f }) => {

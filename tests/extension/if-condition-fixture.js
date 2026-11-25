@@ -23,7 +23,8 @@ export async function pipeline(id,model,options){
  const tokenizer=(text,options)=>({input_ids:{data:BigInt64Array.from([/yes/i.test(text)?2n:3n]),dims:[1,text.includes('long-token-fixture')?513:20],text}});
  const infer=async inputs=>{
  const text=inputs.input_ids.text;
- if(text.includes('slow-fixture'))await new Promise(r=>setTimeout(r,1500));
+ // This request stays in inference until the session terminates the Worker.
+ if(text.includes('slow-fixture'))return new Promise(()=>{});
  if(text.includes('error-fixture'))throw Error('Controlled inference failure');
  const branch=text.includes('yes-fixture')?0:1;
  const data=Float32Array.from({length:2},(_,i)=>i===branch?8:0);
