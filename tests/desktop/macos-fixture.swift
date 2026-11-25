@@ -89,23 +89,31 @@ func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
     return nil
 }
 
+func editorApp() -> AXUIElement {
+    guard let front = NSWorkspace.shared.frontmostApplication, front.bundleIdentifier == "com.apple.TextEdit"
+    else { fail("An independent TextEdit document must be focused") }
+    return AXUIElementCreateApplication(front.processIdentifier)
+}
+
 func editor() -> AXUIElement {
-    guard let front = NSWorkspace.shared.frontmostApplication, front.bundleIdentifier == "com.apple.TextEdit",
-          let field = attribute(AXUIElementCreateApplication(front.processIdentifier), kAXFocusedUIElementAttribute),
+    guard let field = attribute(editorApp(), kAXFocusedUIElementAttribute),
           CFGetTypeID(field) == AXUIElementGetTypeID() else { fail("An independent TextEdit document must be focused") }
     return field as! AXUIElement
 }
 
-func shortcut(_ keys: [Bool]) {
+func keyEvents(_ key: Int, _ flags: CGEventFlags, _ keys: [Bool]) {
     guard CGPreflightPostEventAccess() else { fail("The test driver has no macOS keyboard event permission") }
-    let flags: CGEventFlags = [.maskControl, .maskAlternate, .maskCommand]
     for down in keys {
-        guard let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_D), keyDown: down)
-        else { fail("Cannot construct the shortcut") }
+        guard let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(key), keyDown: down)
+        else { fail("Cannot construct the keyboard event") }
         event.flags = flags
         event.post(tap: .cghidEventTap)
         usleep(60_000)
     }
+}
+
+func shortcut(_ keys: [Bool]) {
+    keyEvents(kVK_ANSI_D, [.maskControl, .maskAlternate, .maskCommand], keys)
 }
 
 func trayItem(_ pid: pid_t, _ label: String) {
@@ -147,6 +155,20 @@ case "shortcut-down":
     shortcut([true])
 case "shortcut-up":
     shortcut([false])
+case "editor-new":
+    _ = editorApp()
+    keyEvents(kVK_ANSI_N, .maskCommand, [true, false])
+case "editor-window":
+    guard let window = attribute(editorApp(), kAXFocusedWindowAttribute),
+          CFGetTypeID(window) == AXUIElementGetTypeID(),
+          let title = attribute(window as! AXUIElement, kAXTitleAttribute) as? String
+    else { fail("Cannot read the focused TextEdit window title") }
+    print(title)
+case "editor-raise":
+    guard let windows = attribute(editorApp(), kAXWindowsAttribute) as? [AXUIElement],
+          let window = windows.first(where: { attribute($0, kAXTitleAttribute) as? String == args[2] }),
+          AXUIElementPerformAction(window, kAXRaiseAction as CFString) == .success
+    else { fail("Cannot raise the requested TextEdit window") }
 case "activate":
     guard NSRunningApplication(processIdentifier: pid_t(args[2])!)?.activate() == true
     else { fail("Cannot activate the requested test application") }
