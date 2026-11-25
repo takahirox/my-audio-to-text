@@ -1,11 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, protocol, screen, session, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, protocol, screen, session, systemPreferences, Tray } from 'electron';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { extname, join, resolve, sep } from 'node:path';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { DesktopLibrary } from './library.js';
 import { assertDesktopGraph, planGraph } from './graph.js';
 import { DesktopSession } from './session.js';
-import { X11Target } from './x11-target.js';
+import { FocusedTarget } from './focused-target.js';
 
 const root = resolve(import.meta.dirname, '..');
 const origin = 'local-voice://desktop';
@@ -16,9 +16,10 @@ const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
   '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const files = JSON.parse(readFileSync(join(root, 'extension/moonshine-small-ja-assets.json'), 'utf8')).files;
 const modelURLs = new Set(files.map(file => file.sourceURL));
+const mac = process.platform === 'darwin';
 
 app.setName('My Audio to Text');
-app.commandLine.appendSwitch('ozone-platform', 'x11');
+if (!mac) app.commandLine.appendSwitch('ozone-platform', 'x11');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 protocol.registerSchemesAsPrivileged([{ scheme: 'local-voice', privileges: {
   standard: true, secure: true, supportFetchAPI: true, allowServiceWorkers: true, corsEnabled: true,
@@ -27,6 +28,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'local-voice', privileges: {
 let library, controller, target, tray, runtime, management, indicator, runtimeReady;
 let modelView, shortcutError = '', registeredShortcut, quitting = false, shutDown = false;
 let modelOperation, shortcutChanging = false, runtimeSequence = 0;
+let trayMenu;
 const pendingCommands = new Map(), displayItems = new Map();
 
 function isFrom(event, window, page) {
@@ -39,7 +41,7 @@ function send(window, channel, value) {
 }
 
 function view() {
-  return { library: library.value, session: controller.state, shortcutError, model: modelView,
+  return { library: library.value, session: controller.state, shortcutError, model: modelView, platform: process.platform,
     items: [...displayItems.values()] };
 }
 
@@ -72,7 +74,7 @@ function showIndicator() {
 function updateTray() {
   const state = controller.state;
   tray.setToolTip(`My Audio to Text · ${statusText()} · ${registeredShortcut || 'Set a shortcut in Settings'}`);
-  tray.setContextMenu(Menu.buildFromTemplate([
+  trayMenu = Menu.buildFromTemplate([
     { label: state.phase === 'preparing' ? 'Cancel preparation' : state.phase === 'idle' ? 'Start voice typing' : 'Stop voice typing',
       enabled: !['stopping', 'canceling'].includes(state.phase), click: trayToggle },
     ...(state.phase === 'running' || state.phase === 'stopping' ? [
@@ -88,12 +90,14 @@ function updateTray() {
     { label: 'Settings', click: () => showManagement('settings') },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
-  ]));
+  ]);
+  if (!mac) tray.setContextMenu(trayMenu);
 }
 
 function showManagement(page) {
   send(management, 'management:navigate', page);
   management.show();
+  if (mac) app.focus({ steal: true });
   management.focus();
 }
 
@@ -199,6 +203,13 @@ async function installProtocol() {
 async function run(action, ...args) {
   const window = runtime;
   if (quitting && !['cancel', 'modelCancel'].includes(action)) throw Error('Desktop is quitting.');
+  if (mac && action === 'start' && controller.current?.id === args[0] && controller.current.plan.microphone) {
+    const status = systemPreferences.getMediaAccessStatus('microphone');
+    const allowed = status === 'granted'
+      || (status === 'not-determined' && await systemPreferences.askForMediaAccess('microphone'));
+    if (!allowed) throw Error('Allow microphone access in System Settings → Privacy & Security → Microphone, then start again.');
+    if (quitting || controller.current?.id !== args[0] || controller.state.phase !== 'preparing') return;
+  }
   await runtimeReady;
   if (window !== runtime || window.isDestroyed()) throw Error('The local graph runtime closed.');
   const request = ++runtimeSequence;
@@ -346,20 +357,22 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (management && !quitting) showManagement('library'); });
   app.whenReady().then(async () => {
-    if (process.platform !== 'linux' || !process.env.DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland') {
-      throw Error('My Audio to Text Desktop requires a Linux X11 session.');
+    if (!mac && (process.platform !== 'linux' || !process.env.DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland')) {
+      throw Error('My Audio to Text Desktop requires macOS or a Linux X11 session.');
     }
     const path = app.getPath('userData');
     mkdirSync(path, { recursive: true, mode: 0o700 });
-    library = new DesktopLibrary(join(path, 'desktop-library.json'));
+    library = new DesktopLibrary(join(path, 'desktop-library.json'), mac ? 'Control+Alt+Super+D' : undefined);
     await installProtocol();
-    target = new X11Target(join(import.meta.dirname, 'x11-accessibility.py'), {
+    const helper = mac ? [join(dirname(process.execPath), 'focused-text'), []]
+      : ['/usr/bin/python3', ['-u', join(import.meta.dirname, 'x11-accessibility.py')]];
+    target = new FocusedTarget(...helper, {
       onInvalid: (id, error) => { void controller.cancel(error, id); },
       onShortcut: shortcutReleased,
       onLost: () => {
         if (!registeredShortcut || quitting) return;
         registeredShortcut = undefined;
-        shortcutError = 'The shortcut was released. Check X11 accessibility, then save the shortcut again in Settings.';
+        shortcutError = 'The shortcut was released. Save the shortcut again in Settings.';
         controller.update({ error: shortcutError });
       },
     });
@@ -370,12 +383,20 @@ else {
     } });
     bindIPC();
     createRuntime();
-    indicator = makeWindow('indicator', { frame: false, focusable: false, alwaysOnTop: true, skipTaskbar: true, resizable: false });
+    indicator = makeWindow('indicator', {
+      ...(mac && { type: 'panel' }), frame: false, focusable: false, alwaysOnTop: true, skipTaskbar: true, resizable: false,
+    });
     await indicator.loadURL(appURL('indicator'));
     management = makeWindow('management', { width: 1100, height: 760, minWidth: 650, minHeight: 470, icon });
     management.on('close', event => { if (!quitting) { event.preventDefault(); management.hide(); } });
     await management.loadURL(appURL('management'));
     tray = new Tray(icon);
+    if (mac) {
+      tray.on('mouse-down', async () => {
+        if (!controller.current) await target.request('snapshot-tray').catch(() => {});
+        if (!quitting) tray.popUpContextMenu(trayMenu);
+      });
+    }
     try { await registerShortcut(library.value.shortcut); }
     catch (error) {
       shortcutError = error.message;

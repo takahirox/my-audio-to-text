@@ -200,6 +200,9 @@ function update(value) {
   current = value;
   renderLibrary(value.library);
   element('library-shortcut').textContent = value.shortcutError ? 'See Settings' : value.library.shortcut;
+  element('accessibility-help').textContent = value.platform === 'darwin'
+    ? 'Enable My Audio to Text in System Settings → Privacy & Security → Accessibility. Place a caret in a supported text field before starting.'
+    : 'Enable assistive technology in your X11 desktop session and reopen the target application. Place a caret in a supported text field before starting.';
   const shortcut = element('shortcut');
   if (!shortcut.value || (!value.shortcutError && document.activeElement !== shortcut)) shortcut.value = value.library.shortcut;
   element('shortcut-error').textContent = value.shortcutError;

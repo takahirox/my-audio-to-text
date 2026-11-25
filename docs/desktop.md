@@ -1,16 +1,39 @@
-# Desktop voice typing on Linux X11
+# Desktop voice typing
 
-My Audio to Text Desktop is a resident application for local Japanese voice
-typing and saved processing graphs. The initial target is Debian 12 arm64 with
-an X11 window manager, an XEmbed tray, the AT-SPI accessibility service, and
-PulseAudio. X11 supplies the global shortcut and active-window identity.
-AT-SPI can write directly to a specific editable control, and Xvfb and a
-PulseAudio monitor make that path testable without a physical microphone.
+My Audio to Text Desktop runs saved graphs locally from a resident menu-bar
+or tray application. macOS on Apple Silicon is the primary v1 target. The
+arm64 macOS package builds and launches, and its TextEdit adapter is pending
+automated insertion validation. The verified dictation target is stock
+Mousepad 0.5.10 on Debian 12 arm64/X11. See the
+[validation record](evidence/desktop-401.md) for current acceptance status.
 
 ## Build and launch
 
-Use Node.js 22.12 or newer, npm, Python 3, and curl to build. Install the
-X11 session and audio dependencies through your distribution. For Debian, use the following commands.
+Both builds use Node.js 22.12 or newer, npm, Python 3, and curl. The build pins
+Electron and verifies the shared Moonshine runtime against the repository
+checksums. The package contains the runtime and license notices. Download the
+model weights separately through **Models → Prepare**.
+
+### Apple Silicon macOS
+
+Install the Xcode Command Line Tools. In an Aqua session run:
+
+```sh
+npm ci --prefix desktop
+npm exec --prefix desktop -- install-electron
+npm run build:desktop
+open 'dist/desktop/My Audio to Text.app'
+```
+
+The archive is `dist/my-audio-to-text-macos-arm64.tar.gz`. Extract it, keep
+the `.app` bundle intact, and open it. The build ad-hoc signs its bundle for
+local execution. It is a development package. Signing for distribution,
+notarization and public installation are outside this issue.
+
+### Debian X11
+
+Use an X11 session with AT-SPI, an XEmbed tray and PulseAudio. Install the
+build and runtime dependencies and start the app:
 
 ```sh
 sudo apt-get install at-spi2-core dbus-x11 gir1.2-atspi-2.0 libgtk-3-0 \
@@ -21,13 +44,9 @@ npm run build:desktop
 ./dist/desktop/my-audio-to-text
 ```
 
-On another machine with the runtime dependencies, extract
-`dist/my-audio-to-text-linux-arm64.tar.gz` and run its `my-audio-to-text`
-executable from the extracted directory. Keep the companion runtime files
-alongside the executable. The build pins Electron and checks the shared
-Moonshine runtime against the repository's checksums. The archive contains the
-application, runtime, and license notices. Model weights arrive through
-**Models → Prepare**.
+On another Debian 12 machine with the runtime dependencies, extract
+`dist/my-audio-to-text-linux-arm64.tar.gz` and keep the companion runtime files
+alongside the executable.
 
 Use an EWMH-compatible X11 window manager such as Openbox. Install `trayer`
 and run `trayer --edge top --align right` before launching the app. Disable
@@ -39,9 +58,10 @@ field when its menu opens. [Electron Linux tray behavior](https://www.electronjs
 
 1. Open **Models**, prepare Moonshine Small Streaming Japanese, and wait for
    **Ready**. Allow at least 300 MB of free disk space and 2 GB of available RAM.
-2. Place a caret in a writable Mousepad document.
-3. Press **Ctrl+Alt+Shift+D**. The status indicator shows **Preparing** while the
-   graph loads, then **Recording** once microphone capture starts.
+2. Place a caret in a writable document in TextEdit on macOS or Mousepad on X11.
+3. Press **Control+Option+Command+D** on macOS or **Ctrl+Alt+Shift+D** on X11.
+   The indicator shows **Preparing** while the graph loads and **Recording**
+   once microphone capture starts.
 4. Speak Japanese. Committed text goes to the authorized caret. Press the same
    shortcut or **Stop** on the indicator to finish and drain accepted audio.
    **Cancel voice typing** in the tray discards work still pending.
@@ -52,38 +72,39 @@ shortcut available. Quit stops capture and releases the shortcut and runtime.
 A shortcut conflict leaves the current valid binding in place. Choose a
 different combination in Settings and save it.
 
-Use your default system audio input. If the app reports a microphone error,
-check that this device is enabled and available to your desktop session.
-Accessibility must be enabled in both the session and the target application.
-Reopen the target after changing accessibility settings.
+The app uses the default system audio input. Grant microphone access through
+the normal OS dialog after an intentional Start. On macOS, check **System
+Settings → Privacy & Security → Microphone** and **Accessibility** if access
+is refused. On X11, enable assistive technology in the session and reopen
+the target application.
 
 ### Focused fields
 
-Desktop insertion uses the AT-SPI `Text` and `EditableText` interfaces. Use
-the stock Debian Mousepad editor (`sudo apt-get install mousepad`) and place the
-caret in a writable document. The packaged app was tested with Mousepad 0.5.10
-in Debian 12 arm64. Its GTK 3 document buffer preserves Unicode, spaces, and
-line breaks.
+The macOS helper registers the global shortcut with Carbon and uses
+Accessibility to bind the TextEdit document at key-down or before opening
+the menu. It checks the active application, window, exact element and
+writable selection before using the target's selected-text setter. It reads
+back the full text and caret and ends the session if the edit cannot be
+confirmed. The adapter never sends a Paste shortcut or changes the clipboard.
+Its intended scope is the document view in the system TextEdit app. Other
+editors, secure fields, native dialog fields and browser fields are refused.
 
-Place a caret with no selection. The app stops if the field closes, becomes
-unavailable, loses focus, or rejects the output. The shortcut uses the field
-focused at the key press, even while the toolkit restores focus after the X11
-keyboard grab. Tray Start uses the field focused before the XEmbed menu opened
-and requires that same field when the menu closes.
+The X11 helper uses AT-SPI `Text` and `EditableText` in stock Mousepad 0.5.10
+(`sudo apt-get install mousepad`). Place a caret with no selection. AT-SPI
+does not expose custom GTK insertion handlers or their constraints. Other
+GTK text views, single-line entries, and locked text ranges are refused.
+If the target closes, changes, loses focus, or rejects output, the app stops.
+The shortcut binds at key-down and starts or stops on key release. The tray
+checks the field captured before opening the XEmbed menu.
 
-GTK applications can intercept an insertion and commit only a prefix. AT-SPI
-doesn't expose the buffer's custom handlers. The app refuses other GTK text
-views and all GTK single-line entries before sending an edit. Password fields,
-rich-text editors, read-only controls, and locked text ranges are unsupported.
-
-Desktop dictation into extension-free browser fields remains an open acceptance
-requirement. Chromium 156 on Debian X11 exposes focused web text inputs through
-AT-SPI without `EditableText`, and the packaged app refuses them before
-recording. Firefox support is deferred. See the
-[packaged browser refusal results](evidence/desktop-401.md#packaged-refusal-and-held-stop-regression).
-
-Wayland, macOS, Windows, mobile, newer field families, system audio capture,
-and a public installer are follow-up scope.
+Extension-free browser insertion on **macOS** remains a pre-merge acceptance
+requirement. The current macOS adapter refuses browser fields. Linux browser
+insertion is an optional follow-up. Chromium 156 on X11 exposes focused web
+fields through AT-SPI without `EditableText`, and the package refuses these
+fields before recording. Firefox remains deferred. The
+[insertion decision](evidence/desktop-401.md#insertion-decision) explains the
+remaining field-level requirements. Wayland, Windows, mobile and system audio
+capture are outside v1.
 
 ## Graphs and models
 
@@ -114,16 +135,17 @@ while a session owns the model.
 ## Host boundaries
 
 Electron provides the Web Audio, Worker and WASM APIs used by the existing
-processing code, with a sandbox for each renderer. The Linux helper uses the
-distribution's AT-SPI and X11 bindings for focused output.
+processing code, with a sandbox for each renderer. The macOS helper uses
+Apple's Carbon and Accessibility frameworks. The Linux helper uses the
+distribution's AT-SPI and X11 bindings.
 
 The main process owns the tray, global shortcut, permission policy, saved
 graph snapshots, and authorized target. Its X11 helper takes the active window,
 matches its process and focused AT-SPI object, and holds that identity for the
 session. It revalidates it before every insertion and uses the object's
 [EditableText insertion method](https://gnome.pages.gitlab.gnome.org/at-spi2-core/libatspi/method.EditableText.insert_text.html).
-The helper uses private process pipes. It sends no keystrokes, submits no forms,
-and leaves clipboard data untouched.
+Both platform helpers use private process pipes and edit an authorized
+element directly. Neither helper changes clipboard data or submits forms.
 
 A sandboxed hidden renderer owns microphone capture, the shared Pipeline, and
 its Moonshine CPU/WASM Worker. The management and indicator renderers use
@@ -132,17 +154,41 @@ access during an intentional Start. The packaged resources load through a
 local Electron protocol. HTTP(S) is limited to the pinned model file requests.
 Speech and text are processed locally.
 
-The Electron profile under `${XDG_CONFIG_HOME:-~/.config}/My Audio to Text/`
-holds `desktop-library.json`, the graph editor draft recovery state, and the
-verified model cache. The Chrome extension and Web Playground have their own
-storage, model caches, runtimes, and lifecycle. Each application can launch and
-run independently. Concurrent sessions use their own memory.
+The Electron profile holds `desktop-library.json`, graph editor draft
+recovery state, and the verified model cache. The profile lives in
+`~/Library/Application Support/My Audio to Text/` on macOS and
+`${XDG_CONFIG_HOME:-~/.config}/My Audio to Text/` on X11. The Chrome extension
+and Web Playground have their own storage, model caches, runtimes, and
+lifecycle. Each application can launch and run independently.
 
 ## Automated checks
 
+Install the repository test dependencies with `npm ci` and run `npm test`.
+Build the target package before running its desktop tests.
+
+On macOS, use a graphical test session and the extracted executable:
+
 ```sh
-npm ci
-npm test
+mkdir -p dist/verify-macos
+tar -xzf dist/my-audio-to-text-macos-arm64.tar.gz -C dist/verify-macos
+export DESKTOP_TEST_BINARY="$PWD/dist/verify-macos/My Audio to Text.app/Contents/MacOS/my-audio-to-text"
+npm run test:desktop
+DESKTOP_REAL_ASR=1 npm run test:desktop
+DESKTOP_MACOS_EDITOR=1 npm run test:desktop
+```
+
+The basic macOS check exercises the packaged management and Live renderers,
+native shortcut conflicts, residency after closing the window, and shortcut
+release at Quit. The real-model smoke routes the licensed fixture through
+BlackHole 2ch and the app's microphone input. It temporarily selects BlackHole
+as the default input and restores the previous device. The TextEdit test
+requires a macOS automation session with normal Accessibility and keyboard
+event permission for the test driver and Accessibility for the packaged app.
+It checks those permissions before attempting the OS-path edit.
+
+On X11:
+
+```sh
 sudo apt-get install chromium xvfb xauth openbox trayer xdotool pulseaudio-utils \
   gir1.2-gtk-3.0 mousepad
 npm run test:desktop
