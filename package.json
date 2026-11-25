@@ -28,7 +28,7 @@
     "prepare:plamo-assets": "python3 scripts/prepare-plamo-assets.py",
     "test:plamo-real": "PLAMO_SMOKE=1 TRANSLATION_CHANNEL=chrome playwright test tests/browser/plamo-smoke.spec.js --project=chromium --workers=1",
     "build:desktop": "python3 scripts/build-desktop.py",
-    "test:desktop": "dbus-run-session -- xvfb-run -a -s \"-screen 0 1400x900x24\" bash tests/desktop/run-x11.sh"
+    "test:desktop": "bash tests/desktop/run.sh"
   },
   "devDependencies": {
     "@lexical/history": "0.38.2",

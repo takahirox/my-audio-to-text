@@ -28,10 +28,10 @@ Speech-to-text is the most-developed processing capability today. The Chrome ext
 
 ## Desktop
 
-The standalone [Linux X11 desktop app](docs/desktop.md) runs saved graphs and
-inserts committed Japanese dictation into writable Mousepad documents using a
-global shortcut. Desktop dictation into extension-free browser fields remains
-open. The desktop app, Chrome extension and Web Playground each run independently.
+The standalone [desktop app](docs/desktop.md) runs saved graphs independently
+of the Chrome extension and Web Playground. Dictation is verified in
+Mousepad on Debian X11. The Apple Silicon macOS package launches and the
+focused editor and browser acceptance checks are still open.
 
 ## Node Playground
 

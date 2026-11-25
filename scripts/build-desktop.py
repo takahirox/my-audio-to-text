@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Build the pinned Linux X11 app and a reproducible, weight-free tarball."""
+"""Build the pinned desktop app and a reproducible, weight-free tarball."""
 import gzip
 import hashlib
 import json
 from pathlib import Path
 import platform
+import plistlib
 import shutil
 import subprocess
 import tarfile
@@ -41,13 +42,48 @@ def archive(directory, destination):
                 member.uname = member.gname = ""
                 return member
 
-            tar.add(directory, arcname=APP, filter=normalize)
+            tar.add(directory, arcname=directory.name if directory.suffix == ".app" else APP, filter=normalize)
+
+
+def mac_bundle(executable):
+    bundle = TARGET / "My Audio to Text.app"
+    contents = bundle / "Contents"
+    shutil.copytree(executable.parents[2], bundle, symlinks=True)
+    executable = contents / "MacOS" / executable.name
+    binary = executable.with_name(APP)
+    executable.rename(binary)
+    plist = contents / "Info.plist"
+    info = plistlib.loads(plist.read_bytes())
+    info.update(
+        CFBundleExecutable=APP,
+        CFBundleIdentifier="com.takahirox.my-audio-to-text",
+        CFBundleName="My Audio to Text",
+        CFBundleDisplayName="My Audio to Text",
+        CFBundleShortVersionString="0.1.0",
+        CFBundleVersion="0.1.0",
+        LSUIElement=True,
+        NSMicrophoneUsageDescription="Capture audio for the selected local processing graph when you start a session.",
+    )
+    plist.write_bytes(plistlib.dumps(info))
+    helper = contents / "MacOS" / "focused-text"
+    subprocess.run([
+        "xcrun", "clang", "-fobjc-arc", "-O2", "-Wall", "-Wextra", "-Werror",
+        "-mmacosx-version-min=13.0", "-framework", "AppKit",
+        "-framework", "ApplicationServices", "-framework", "Carbon",
+        "desktop/mac-target.m", "-o", str(helper),
+    ], cwd=ROOT, check=True)
+    return bundle, binary, contents / "Resources"
 
 
 def main():
     architectures = {"aarch64": "arm64", "x86_64": "x64"}
-    if platform.system() != "Linux" or platform.machine() not in architectures:
-        raise SystemExit("Build on Linux arm64 or x64. See docs/desktop.md for the container harness.")
+    system = platform.system()
+    if system == "Darwin" and platform.machine() == "arm64":
+        target_name = "macos-arm64"
+    elif system == "Linux" and platform.machine() in architectures:
+        target_name = f"linux-{architectures[platform.machine()]}"
+    else:
+        raise SystemExit("Build on Apple Silicon macOS or Linux arm64/x64. See docs/desktop.md.")
     electron = SOURCE / "node_modules/electron"
     if not (electron / "package.json").is_file():
         raise SystemExit("Run npm ci --prefix desktop first.")
@@ -56,17 +92,23 @@ def main():
         ["node", "--input-type=module", "-e", "import electron from 'electron'; console.log(electron);"],
         cwd=SOURCE, text=True).strip())
     if not executable.is_file():
-        raise SystemExit("Electron binary is missing. Run npm exec --prefix desktop -- electron --version on Linux.")
+        raise SystemExit("Electron binary is missing. Run npm exec --prefix desktop -- install-electron.")
     subprocess.run(["python3", str(ROOT / "scripts/prepare-optional-asr-assets.py")], check=True)
     if TARGET.exists():
         shutil.rmtree(TARGET)
-    shutil.copytree(executable.parent, TARGET, symlinks=True)
-    (TARGET / "electron").rename(TARGET / APP)
-    resources = TARGET / "resources"
+    if system == "Darwin":
+        bundle, binary, resources = mac_bundle(executable)
+    else:
+        bundle = TARGET
+        shutil.copytree(executable.parent, bundle, symlinks=True)
+        binary = bundle / APP
+        (bundle / "electron").rename(binary)
+        resources = bundle / "resources"
     (resources / "default_app.asar").unlink(missing_ok=True)
     app_root = resources / "app"
     for file in sorted(SOURCE.iterdir()):
-        if file.is_file() and file.name not in {"package.json", "package-lock.json"}:
+        if (file.is_file() and file.name not in {"package.json", "package-lock.json", "mac-target.m"}
+                and not (system == "Darwin" and file.suffix == ".py")):
             copy(file, app_root / "desktop" / file.name)
     for source, names in (("extension", EXTENSION), ("web", WEB)):
         for name in names:
@@ -81,9 +123,15 @@ def main():
         "name": APP, "productName": "My Audio to Text", "version": "0.1.0",
         "type": "module", "main": "desktop/main.js",
     }, indent=2) + "\n")
-    output = TARGET.with_name(f"{APP}-linux-{architectures[platform.machine()]}.tar.gz")
-    archive(TARGET, output)
-    print(f"Desktop app: {TARGET / APP}\nRelease archive: {output}")
+    if system == "Darwin":
+        frameworks = bundle / "Contents" / "Frameworks"
+        nested = sorted(path for path in frameworks.iterdir() if path.suffix in (".app", ".framework"))
+        for path in [*nested, binary.with_name("focused-text"), bundle]:
+            subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(path)], check=True)
+        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(bundle)], check=True)
+    output = TARGET.with_name(f"{APP}-{target_name}.tar.gz")
+    archive(bundle, output)
+    print(f"Desktop app: {binary}\nRelease archive: {output}")
 
 
 if __name__ == "__main__":

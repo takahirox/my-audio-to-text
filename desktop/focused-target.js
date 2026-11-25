@@ -1,16 +1,16 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
-export class X11Target {
-  constructor(helper, { onInvalid, onShortcut, onLost }) {
-    Object.assign(this, { helper, onInvalid, onShortcut, onLost });
+export class FocusedTarget {
+  constructor(command, args, { onInvalid, onShortcut, onLost }) {
+    Object.assign(this, { command, args, onInvalid, onShortcut, onLost });
     this.pending = new Map();
     this.sequence = 0;
   }
 
   connect() {
     if (this.worker) return this.worker;
-    const process = spawn('/usr/bin/python3', ['-u', this.helper], { stdio: ['pipe', 'pipe', 'ignore'] });
+    const process = spawn(this.command, this.args, { stdio: ['pipe', 'pipe', 'ignore'] });
     const worker = { process };
     this.worker = worker;
     const lines = createInterface({ input: process.stdout });
@@ -25,7 +25,7 @@ export class X11Target {
       const complete = this.pending.get(message.request);
       complete?.(message);
     });
-    const lost = () => this.disconnect(worker, 'X11 accessibility is unavailable. Check AT-SPI and reopen the text field.');
+    const lost = () => this.disconnect(worker, 'The desktop accessibility service stopped. Reopen the text field and try again.');
     process.on('error', lost);
     process.on('exit', lost);
     process.stdin.on('error', lost);

@@ -229,3 +229,91 @@ Firefox remains deferred.
 
 Physical devices, other application toolkit controls, Wayland, macOS and
 Windows were outside this validation. Required post-merge verification is none.
+
+## macOS-primary reassessment (2026-11-25)
+
+Issue #401 requires real macOS editor and browser insertion from the extracted
+standalone app. The Linux X11 supported editor and regressions remain in scope.
+Linux browser insertion is optional. The macOS build, editor insertion,
+browser insertion, and ASR output are separate acceptance checks.
+
+### Environment and test scope
+
+The primary runner was macOS 27.2.1 (26B131) on Apple Silicon arm64, with an
+Aqua session, Apple clang 21.0.0, Electron 45.4.1, and BlackHole 2ch. The macOS
+harness loads the extracted app with Playwright and its native shortcut helper
+in a disposable Electron profile. The external editor test uses stock TextEdit
+and a native test driver for keyboard events and Accessibility reads.
+
+### Insertion decision
+
+The inspected products show how input transports vary by platform. Each
+ordered TEXT delivery in this app also needs field-specific authorization
+and whole-edit validation.
+
+| Project and inspected revision | Mechanism and limitation |
+| --- | --- |
+| OpenWhispr, MIT, `62546b70a552d9dcb915b71f7c08c135ccbe3a2b` | Electron clipboard plus native paste helpers and environment-specific fallback. On Wayland the clipboard transport and paste transport can differ. Chromium paste failure with a different layout was reported even when the transcript reached history. [Clipboard implementation](https://github.com/OpenWhispr/openwhispr/blob/62546b70a552d9dcb915b71f7c08c135ccbe3a2b/src/helpers/clipboard.js), [troubleshooting](https://github.com/OpenWhispr/openwhispr/blob/62546b70a552d9dcb915b71f7c08c135ccbe3a2b/TROUBLESHOOTING.md#wayland-clipboard-issues-linux), [issue #2055](https://github.com/OpenWhispr/openwhispr/issues/2055). |
+| Handy, MIT, `ca2334c9099c53a2c4fd9bad63073f11baaa8dbd` | Serializes paste and uses Enigo 0.6.1 for input. Its macOS transaction can restore after a pasteboard data request and guard against overwriting a newer copy using `changeCount`. A read can come from a clipboard manager, and the previous clipboard has been observed in the target when restoration happens early. [Clipboard code and tests](https://github.com/cjpais/Handy/blob/ca2334c9099c53a2c4fd9bad63073f11baaa8dbd/src-tauri/src/clipboard.rs), [macOS transaction](https://github.com/cjpais/Handy/blob/ca2334c9099c53a2c4fd9bad63073f11baaa8dbd/src-tauri/src/paste_tx/macos.rs), [issue #502](https://github.com/cjpais/Handy/issues/502). |
+| Vocalinux, AGPL-3.0, `7ad089e1fbc49fe8170565aed61ec660a03464e7` | Uses IBus or xdotool on X11 and environment-dependent IBus, portal, wtype, ydotool and clipboard tools under Wayland. The guide describes non-US layouts and clipboard history. Its restoration tests cover text and binary formats. An IBus path reported success without text reaching KDE Wayland clients. [Injection code](https://github.com/VocaHQ/vocalinux/blob/7ad089e1fbc49fe8170565aed61ec660a03464e7/src/vocalinux/text_injection/text_injector.py), [clipboard tests](https://github.com/VocaHQ/vocalinux/blob/7ad089e1fbc49fe8170565aed61ec660a03464e7/tests/test_clipboard_restore.py), [guide](https://github.com/VocaHQ/vocalinux/blob/7ad089e1fbc49fe8170565aed61ec660a03464e7/docs/USER_GUIDE.md), [issue #574](https://github.com/VocaHQ/vocalinux/issues/574). |
+
+- **Clipboard and native Paste.** Cmd+V and Ctrl+V offer broad application
+  coverage. A pasteboard generation guards restoration from a newer copy.
+  Even a read receipt cannot identify the field that consumed the text or
+  confirm a complete edit. The X11 Chromium probes above saw focus redirected
+  during paste and an edit truncated by a constraint installed during
+  `beforeinput`. Those results are from Linux Chromium. [Apple NSPasteboard](https://developer.apple.com/documentation/appkit/nspasteboard),
+  [Electron clipboard](https://www.electronjs.org/docs/latest/api/clipboard).
+- **Native Unicode typing.** Core Graphics can attach Unicode to keyboard
+  events. Delivery still uses the event consumer's focus, and keyboard or
+  input-method handlers can interpret or split the edit. The test harness
+  uses Core Graphics only for the registered shortcut. Production uses
+  Carbon pressed and released notifications. [Apple CGEvent](https://developer.apple.com/documentation/coregraphics/cgevent),
+  [Electron globalShortcut](https://www.electronjs.org/docs/latest/api/global-shortcut).
+- **Element-bound accessibility writes.** The macOS adapter is scoped to an
+  editable TextEdit document view. AX selected-text writes address the
+  captured element and can be checked against the expected text and caret.
+  It sends each accepted chunk once, leaves the clipboard untouched, and
+  stops on an error or ambiguous result. Linux retains its direct AT-SPI
+  editor path. Chromium's experimental Mac text-range operation is disabled
+  by default in source and invokes Blink's editing events. Its AX value
+  setter assigns the whole HTML input value. WebKit's text-operation path
+  goes through the editor. These source findings do not establish safe
+  browser writes. [Chromium Mac text operations](https://chromium.googlesource.com/chromium/src/+/d9cb4b533984666bb34c9a1c0a305a92eeb78693/ui/accessibility/platform/browser_accessibility_cocoa.mm),
+  [Chromium accessibility feature defaults](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/ui/accessibility/accessibility_features.cc),
+  [Chromium value setter](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/renderer/modules/accessibility/ax_node_object.cc),
+  [WebKit text operations](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/accessibility/AccessibilityObject.cpp).
+
+The Electron host, isolated renderer, target transport, graph runtime and
+serialized TEXT queue are shared. The native adapter owns target identity,
+editability and shortcut state. A future browser path needs an operation that
+binds the mutation to a specific accessible field and whose preconditions
+reject protected, read-only and constrained controls. Verify it in a normal,
+extension-free browser with rapid commits, a focus change, and a late
+constraint. Successful macOS browser insertion is still required. The same
+experiment on X11 is optional.
+
+### Validation results
+
+Two macOS builds produced the same SHA-256,
+`95c8384a302f9c7a857a7707ed24797acdf6d51cb1059060b656d48a3be49d8a`.
+The extracted bundle passed `codesign --verify --deep --strict`.
+
+| Check | Observed result |
+| --- | --- |
+| `npm run build:desktop` and `DESKTOP_REAL_ASR=1 npm run test:desktop` with `DESKTOP_TEST_BINARY` pointing to the extracted macOS app | Packaged launch, management and Live renderer IPC, native shortcut conflict and preservation of the original binding, management close with continued shortcut ownership, and reclamation after Quit passed. Menu-bar clicking and global shortcut delivery from an external field are outside this successful test. |
+| macOS real model smoke in the same run | BlackHole 2ch fed the [licensed konnichiwa fixture](../../tests/desktop/fixtures/konnichiwa.md) into the packaged app's real microphone. The local Pipeline and the production Moonshine worker sent `こんにちは、こんにちは、こんにちは` to Live Display with HTTP(S) blocked after preparation. Model `moonshine/small-streaming-ja`, revision `330a8fedc2c613a96902275ecf6f622bda1271d820221427c19ac2cea230ffee`. The smoke used Display as its output. |
+| `DESKTOP_MACOS_EDITOR=1 npm run test:desktop -- --test-name-pattern='native shortcut inserts'` | Blocked before creating the editor window. The Aqua runner returned `false` for both `AXIsProcessTrusted` and `CGPreflightPostEventAccess`. System Events also returned error `-1719` for an assistive-access query. The repository lists zero self-hosted GitHub Actions runners. |
+| macOS extension-free browser insertion | Open. The adapter allows only TextEdit document views, and successful browser insertion has no macOS evidence. |
+| `DESKTOP_REAL_ASR=1 npm run test:desktop` with the extracted Debian 12 arm64 package | All six checks passed under Docker, Xvfb/Openbox and PulseAudio. Mousepad remained the verified standalone editor. The Chromium refusal, protected and constrained GTK fields, held-Stop focus-change checks, and model retry tests passed. The offline graph inserted `こんにちは、こんにちは、こんにちは` into Mousepad from the same fixture and revision. |
+| `npm test` | 940 passed. |
+| `npm run test:browser -- --project=chromium --workers=2 tests/browser/graph-selection.spec.js tests/browser/graph-routing.spec.js tests/browser/model-playground.spec.js` | 75 passed with the Pages-style server on a free loopback port. |
+| `npm run test:extension -- tests/extension/graph-interactions.spec.js tests/extension/graph-autosave.spec.js tests/extension/graph-optional-asr.spec.js` | 33 passed on the pinned Playwright Chromium, without a running desktop instance. |
+| `git diff --check` | Passed. |
+
+The missing macOS insertion evidence includes TextEdit focus, protected and
+read-only control behavior, held-key and focus-change handling during a
+native commit, and successful extension-free browser entry. These remain
+pre-merge checks for an agent-executable macOS fixture with standard
+Accessibility and keyboard event authorization. Required post-merge
+verification is none.
