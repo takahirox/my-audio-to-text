@@ -410,4 +410,50 @@ before it can be enabled. Linux X11 browser insertion remains optional.
 | Native tests in the same run | Three blocked at preflight. Both the shell and the Aqua Terminal launch of the Swift driver reported `{"accessibility":false,"keyboard":false}`. GitHub reported zero registered self-hosted runners for the repository. Native TextEdit insertion, indicator focus, menu actions, focus-change and cancellation, the held Live release, and browser control safety remain unverified on this runner. Successful macOS browser insertion remains open. |
 | Extracted Debian 12 arm64 package with `DESKTOP_REAL_ASR=1 npm run test:desktop` | Six passed using the documented Docker invocation with the existing X11 image. The Mousepad target received `こんにちは、こんにちは、こんにちは` from the same fixture and pinned revision via PulseAudio with HTTP(S) blocked. The Chromium refusal, GTK protected and constrained fields, held-Stop focus and target checks, and model retry passed. |
 | `npm test` and the focused standalone Chromium and MV3 suites listed above | 940 Node, 75 standalone Chromium, and 33 MV3 tests passed. The browser hosts ran independently of the desktop app. |
+
+## Independent Chrome acceptance harness
+
+The macOS browser tests launch installed Google Chrome 158.0.8127.36 with a
+disposable profile, extensions disabled, and no debugging connection. The
+loopback page prepares the requested caret and reports the resulting browser
+state. The successful-insertion case uses the extracted app's global shortcut
+and sends three rapid committed chunks through its Pipeline and native helper.
+It checks exact text, the UTF-16 caret, indicator focus, normal Stop, a focus
+change during the held shortcut, and zero form submissions. The refusal case
+also checks the browser state after the desktop reports failure.
+
+A separate browser diagnostic used Playwright's `keyboard.insertText` with
+the same Chrome version. It prepared a caret after `xy` in an ordinary
+textarea and delivered `東京🙂\n ` as one commit. The resulting value was
+`xy東京🙂\n ` with caret 8. When the page set `maxlength=4` in
+`beforeinput`, the value became `xy東京` with caret 4. The password field
+remained untouched and neither case submitted. This diagnostic exercised
+Chromium's editor through its browser test interface. Chromium's
+element-addressed range replacement also invokes
+replacement input events. The full-value setter overwrites the field from a
+previous observation and cannot guard the current value and caret in one
+operation. [Chromium range replacement](https://github.com/chromium/chromium/blob/a4037b9d04ff3754918f686344a8873ce05b22d0/third_party/blink/renderer/modules/accessibility/ax_object.cc#L8441),
+[Chromium value setter](https://github.com/chromium/chromium/blob/a4037b9d04ff3754918f686344a8873ce05b22d0/third_party/blink/renderer/modules/accessibility/ax_node_object.cc#L5297).
+
+The extracted macOS package built and passed strict signature verification
+on macOS 27.2.1 (26B131), arm64. The SHA-256 was
+`237f6d7e28ef080809bcab4a26f0bfe6cea15b57e3be0fc4e27053568640057a`.
+In the Aqua run with `DESKTOP_MACOS_EDITOR=1 DESKTOP_REAL_ASR=1`, packaged
+lifecycle, the held Live release regression, and the offline BlackHole
+Moonshine smoke passed. The smoke produced
+`こんにちは、こんにちは、こんにちは` in Live Display. The independent
+Chrome window reached the foreground and reported the caret in its textarea.
+The Swift driver reported `{"accessibility":false,"keyboard":false}` in all
+four native cases, before any shortcut or insertion attempt. The repository
+reported zero self-hosted Actions runners. TextEdit and browser OS insertion
+remain mandatory acceptance checks, and the browser backend still needs a
+field-bound whole edit that respects editability and length constraints.
+
+The extracted Debian 12 arm64 package passed all six X11 tests under
+Xvfb/Openbox and PulseAudio. The shared browser fixture confirmed refusal
+before editing in Chromium. The offline Moonshine smoke inserted
+`こんにちは、こんにちは、こんにちは` into Mousepad. `npm test` passed all
+940 checks. With no macOS desktop process running, the focused standalone
+Chromium and MV3 suites passed all 75 and 33 checks, respectively.
+`git diff --check` passed.
 | `git diff --check` | Passed. |

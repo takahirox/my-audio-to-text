@@ -2,15 +2,15 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as wait } from 'node:timers/promises';
 import { test } from 'node:test';
-import { _electron, chromium } from 'playwright';
+import { _electron } from 'playwright';
 import { defaultDesktopGraph, FOCUSED_OUTPUT } from '../../desktop/graph.js';
 import { edge, graphNode, GRAPH_VERSION } from '../../extension/graph.js';
+import { browserFixture } from './browser-fixture.js';
 
 const binary = resolve(process.env.DESKTOP_TEST_BINARY
   || 'dist/desktop/My Audio to Text.app/Contents/MacOS/my-audio-to-text');
@@ -86,10 +86,14 @@ async function fixture(t) {
   return (...args) => execFileSync(tool, args, { encoding: 'utf8', timeout: 25000 }).trim();
 }
 
-async function inputFixture(t) {
-  const run = await fixture(t);
+function requireNativeInput(run) {
   assert.deepEqual(JSON.parse(run('permissions')), { accessibility: true, keyboard: true },
     'The macOS test driver needs normal Accessibility and keyboard event permission');
+}
+
+async function inputFixture(t) {
+  const run = await fixture(t);
+  requireNativeInput(run);
   return run;
 }
 
@@ -130,6 +134,41 @@ async function externalEditor(t, run, name, initialText) {
     catch { return false; }
   }, 'Independent editor did not open the test document');
   return { pid, text };
+}
+
+async function externalChrome(t, run) {
+  const { url, state, select } = await browserFixture(t);
+  const profile = await mkdtemp(join(tmpdir(), 'desktop-chrome-'));
+  const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+    '--no-first-run', '--no-default-browser-check', '--disable-extensions', `--user-data-dir=${profile}`, url,
+  ], { stdio: 'ignore' });
+  const closed = once(chrome, 'close');
+  void closed.catch(() => {});
+  t.after(async () => {
+    try {
+      if (chrome.pid && chrome.exitCode === null && chrome.signalCode === null) {
+        chrome.kill();
+        const timer = setTimeout(() => chrome.kill('SIGKILL'), 3000);
+        try { await closed; }
+        finally { clearTimeout(timer); }
+      }
+    } finally {
+      await rm(profile, { recursive: true, force: true, maxRetries: 10 });
+    }
+  });
+  await once(chrome, 'spawn');
+  const pid = chrome.pid;
+  await eventually(() => Number(run('front-pid')) === pid && state()?.active,
+    'The independent Chrome window did not receive focus', 30000);
+
+  const focus = (field, caret) => {
+    const serial = select(field, caret);
+    return eventually(() => {
+      const current = state();
+      return current.selection === serial && current.active && current.focus === field && current.caret === caret && current;
+    }, `Chrome did not focus the test caret in ${field}`);
+  };
+  return { pid, state, focus };
 }
 
 async function runningWithExternalFocus({ desktop, view }, run, pid) {
@@ -347,6 +386,50 @@ test('held macOS shortcut cannot restart ended Live or commit after cancellation
   assert.equal(first.text(), 'left|right');
 });
 
+test('native shortcut inserts rapid Unicode commits at the caret in independent Chrome', {
+  skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
+}, async t => {
+  const run = await fixture(t);
+  const app = await launch(t);
+  const emit = await textProducer(app.desktop);
+  await selectFocusedGraph(app, 'Chrome OS target');
+  const chrome = await externalChrome(t, run);
+  const before = await chrome.focus('notes', 5);
+  t.diagnostic('The independent Chrome window and ordinary textarea received focus.');
+  requireNativeInput(run);
+  const commits = [' 東京', '🙂\n ', 'か\u3099'];
+  const prefix = 'left|' + commits.join('');
+  const expected = { ...before.values, notes: prefix + 'right' };
+
+  run('shortcut');
+  await runningWithExternalFocus(app, run, chrome.pid);
+  await emit(...commits);
+  await eventually(() => chrome.state().values.notes === expected.notes,
+    'Chrome did not receive the complete committed TEXT in order');
+  const inserted = chrome.state();
+  assert.deepEqual(inserted.values, expected);
+  assert.equal(inserted.focus, 'notes');
+  assert.equal(inserted.caret, prefix.length);
+  assert.equal(inserted.active, true);
+  assert.equal(inserted.submits, 0);
+  run('shortcut');
+  assert.equal((await idle(app.view)).error, '');
+  assert.equal(Number(run('front-pid')), chrome.pid);
+
+  run('shortcut');
+  await runningWithExternalFocus(app, run, chrome.pid);
+  run('shortcut-down');
+  try {
+    await emit('must never reach the newly focused field🙂');
+    await chrome.focus('field', 5);
+    assert.match((await idle(app.view)).error, /changed or lost focus/);
+  } finally { run('shortcut-up'); }
+  const released = chrome.state().report;
+  await eventually(() => chrome.state().report > released, 'Chrome stopped reporting state after shortcut release');
+  assert.deepEqual(chrome.state().values, expected);
+  assert.equal(chrome.state().submits, 0);
+});
+
 test('macOS rejects protected, read-only, and constrained controls in independent Chrome before editing', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
@@ -354,33 +437,9 @@ test('macOS rejects protected, read-only, and constrained controls in independen
   const app = await launch(t);
   await selectFocusedGraph(app, 'Browser safety target', ' 東京🙂\n ');
   const indicator = app.desktop.windows().find(page => page.url().endsWith('/indicator.html'));
-  const fixture = await readFile('tests/desktop/browser-target.html');
-  const server = createServer((request, response) => {
-    if (request.url === '/state') {
-      request.resume();
-      response.writeHead(200, { 'Content-Type': 'application/json' }).end('null');
-    } else response.writeHead(200, { 'Content-Type': 'text/html' }).end(fixture);
-  });
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  t.after(() => { server.close(); server.closeAllConnections(); });
-  const browser = await chromium.launch({
-    channel: 'chrome', headless: false, args: ['--disable-extensions'],
-  });
-  t.after(() => browser.close());
-  const page = await browser.newPage();
-  await page.goto(`http://127.0.0.1:${server.address().port}/`);
-  await page.bringToFront();
-  await eventually(() => run('frontmost') === 'com.google.Chrome', 'Independent Chrome did not become active');
-  const state = () => page.evaluate(() => ({
-    values: Object.fromEntries(fields.map(field => [field.id, field.value ?? field.textContent])),
-    focus: document.activeElement.id, caret: caret(), edits, submits, active: document.hasFocus(),
-  }));
+  const chrome = await externalChrome(t, run);
   for (const field of ['password', 'readonly', 'limited', 'multiline']) {
-    await page.locator('#' + field).click();
-    const original = await state();
-    assert.equal(original.focus, field);
-    assert.equal(original.active, true);
+    const { report: _report, ...original } = await chrome.focus(field, 1);
     run('shortcut');
     await eventually(async () => {
       const { session } = await app.view();
@@ -388,7 +447,14 @@ test('macOS rejects protected, read-only, and constrained controls in independen
       assert.match(session.error, /cannot be safely edited/i);
       return true;
     }, `The packaged app did not refuse ${field}`);
-    assert.deepEqual(await state(), original);
+    const report = chrome.state().report;
+    const after = await eventually(() => {
+      const current = chrome.state();
+      if (current.report <= report) return false;
+      const { report: _, ...snapshot } = current;
+      return snapshot;
+    }, 'Chrome did not report its state after the refusal');
+    assert.deepEqual(after, original);
     assert.deepEqual(original.edits, []);
     assert.equal(original.submits, 0);
     await indicator.getByRole('button', { name: 'Dismiss' }).evaluate(button => button.click());

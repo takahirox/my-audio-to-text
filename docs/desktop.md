@@ -188,16 +188,21 @@ as the default input and restores the previous device.
 
 The native tests require an automated Aqua session with normal Accessibility
 and keyboard event permission for the Swift driver and Accessibility for the
-packaged app. They exercise TextEdit with rapid committed chunks, focus while
-the indicator is visible, native menu Start, Stop, and Quit, and cancellation
-or focus change while the shortcut is held. They also cover ending a
-Display-only Live session before releasing the shortcut in TextEdit. The basic
-packaged run separately checks stale release handling at the helper message
-boundary. With Google Chrome installed,
-the same suite checks refusal of a password field, read-only input, and
-length-limited input and textarea in a fresh extension-disabled profile. The
-Chrome tests cover safety refusals. Successful browser insertion remains
-required before merge.
+packaged app. The TextEdit cases check rapid committed chunks, focus while the
+indicator is visible, native menu Start, Stop, and Quit, and cancellation or
+focus change while the shortcut is held. They also check ending a Display-only
+Live session before releasing the shortcut in TextEdit. The basic packaged run
+checks stale release handling at the helper message boundary.
+
+The browser cases launch Google Chrome from `/Applications` with a disposable
+profile, extensions disabled, and no debugging port. A local fixture reports
+field values, caret, focus, edit events, and submissions. The safety case checks
+refusal of password, read-only, and length-limited fields. The acceptance case
+requires the native shortcut to deliver rapid Unicode commits to an ordinary
+textarea in order, advance the caret by the inserted text, retain browser
+focus, and prevent a queued write after a focus change during a held shortcut.
+Browser insertion remains unsupported. The acceptance case requires a safe
+browser insertion backend and an authorized Aqua runner.
 
 The harness compiles the Swift driver by default. A provisioned runner can
 compile it at a stable location using

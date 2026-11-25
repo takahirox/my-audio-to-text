@@ -3,7 +3,6 @@ import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
@@ -12,6 +11,7 @@ import { expect } from '@playwright/test';
 import { _electron } from 'playwright';
 import { FOCUSED_OUTPUT } from '../../desktop/graph.js';
 import { edge, graphNode, GRAPH_VERSION } from '../../extension/graph.js';
+import { browserFixture } from './browser-fixture.js';
 
 const binary = resolve(process.env.DESKTOP_TEST_BINARY || 'dist/desktop/my-audio-to-text');
 const hotkey = 'ctrl+alt+shift+d';
@@ -86,34 +86,23 @@ async function gtkFixture(t, dir) {
 
 async function browser(t) {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-chromium-'));
-  const page = readFileSync('tests/desktop/browser-target.html');
-  let state, selection;
-  const http = createServer(async (request, response) => {
-    if (request.url === '/state' && request.method === 'POST') {
-      let body = '';
-      for await (const chunk of request) body += chunk;
-      const update = JSON.parse(body);
-      if (update.report > (state?.report ?? 0)) state = update;
-      response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(selection ?? null));
-    } else response.writeHead(200, { 'Content-Type': 'text/html' }).end(page);
-  });
-  http.listen(0, '127.0.0.1');
-  await once(http, 'listening');
-  t.after(() => { http.close(); http.closeAllConnections(); });
+  const { url, state, select } = await browserFixture(t);
   child(t, process.env.DESKTOP_TEST_CHROMIUM || 'chromium', [
     '--no-first-run', '--disable-extensions', '--force-renderer-accessibility', '--ozone-platform=x11',
-    `--user-data-dir=${join(dir, 'chromium')}`, `http://127.0.0.1:${http.address().port}/`,
+    `--user-data-dir=${join(dir, 'chromium')}`, url,
   ]);
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
   const id = await windowId('^Voice typing test browser', 30000);
   await activate(id);
-  await eventually(() => state?.active && state.focus === 'field', 'Chromium did not focus the test input');
+  await eventually(() => state()?.active && state().focus === 'field', 'Chromium did not focus the test input');
   const focus = (target, caret = 1) => {
-    selection = { target, caret, serial: (selection?.serial ?? 0) + 1 };
-    return eventually(() => state.selection === selection.serial && state.active &&
-      state.focus === target && state.caret === caret && state, `Chromium did not focus the test caret in ${target}`);
+    const serial = select(target, caret);
+    return eventually(() => {
+      const current = state();
+      return current.selection === serial && current.active && current.focus === target && current.caret === caret && current;
+    }, `Chromium did not focus the test caret in ${target}`);
   };
-  return { id, get: () => state, focus };
+  return { id, get: state, focus };
 }
 
 async function launch(t) {
@@ -425,7 +414,7 @@ test('packaged app refuses unsupported Chromium targets before any edit', { time
   x('key', 'alt+F4');
   const chromium = await browser(t);
   const values = {
-    field: 'left|right', limited: 'xy', multiline: 'xy', editable: 'xy', readonly: 'xy', password: 'secret',
+    field: 'left|right', notes: 'left|right', limited: 'xy', multiline: 'xy', editable: 'xy', readonly: 'xy', password: 'secret',
   };
 
   for (const target of Object.keys(values)) {
