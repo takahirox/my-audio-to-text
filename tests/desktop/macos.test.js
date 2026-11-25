@@ -319,6 +319,8 @@ test('macOS Safari refuses protected, read-only and unsupported fields and reche
   for (const [options, error] of [
     [{ readOnly: true }, /cannot be safely edited/],
     [{ protectedField: true }, /cannot be safely edited/],
+    [{ readOnlyOnSecondSelection: true }, /cannot be safely edited/],
+    [{ denyAccessibilityOnSecondSelection: true }, /Accessibility/],
     [{ switchOnSecondSelection: true }, /changed or lost focus/],
   ]) {
     await configure();

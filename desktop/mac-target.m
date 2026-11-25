@@ -334,11 +334,10 @@ static void insertWhenReleased(void) {
         finishWrite(targetError);
         return;
     }
-    error = check(binding);
     CFRange currentSelection;
-    if (error || ![attribute(area, kAXValueAttribute) isEqual:value] || !readSelection(area, &currentSelection) ||
+    if (![attribute(area, kAXValueAttribute) isEqual:value] || !readSelection(area, &currentSelection) ||
         currentSelection.location != range.location || currentSelection.length != range.length) {
-        finishWrite(error ?: @"The text or selection changed before the edit. Voice typing stopped.");
+        finishWrite(@"The text or selection changed before the edit. Voice typing stopped.");
         return;
     }
     NSRange selected = NSMakeRange((NSUInteger)range.location, (NSUInteger)range.length);
@@ -353,8 +352,13 @@ static void insertWhenReleased(void) {
         expected = [value stringByReplacingCharactersInRange:selected withString:text];
     }
     CFIndex caret = range.location + (CFIndex)text.length;
-    // Value and selection reads can outlast a same-process focus change whose
-    // observer callback has yet to run. Read window and field together last.
+    // Revalidate permission and editability after the value and selection reads.
+    error = check(binding);
+    if (error) {
+        finishWrite(error);
+        return;
+    }
+    // Recheck window and field together after the editability queries.
     if (!hasBoundFocus(binding)) {
         finishWrite(focusError);
         return;
