@@ -85,9 +85,11 @@ Accessibility to bind the TextEdit document at key-down or before opening
 the menu. It checks the active application, window, exact element and
 writable selection before using the target's selected-text setter. It reads
 back the full text and caret and ends the session if the edit cannot be
-confirmed. The adapter never sends a Paste shortcut or changes the clipboard.
-Its intended scope is the document view in the system TextEdit app. Other
-editors, secure fields, native dialog fields and browser fields are refused.
+confirmed. It holds pending text until the shortcut and its modifiers are
+released. If the session ends while the shortcut is down, releasing it
+discards the old Stop action. The adapter leaves the clipboard alone. Its
+intended scope is the document view in the system TextEdit app. Other editors,
+secure fields, native dialog fields and browser fields are refused.
 
 The X11 helper uses AT-SPI `Text` and `EditableText` in stock Mousepad 0.5.10
 (`sudo apt-get install mousepad`). Place a caret with no selection. AT-SPI
@@ -181,10 +183,23 @@ The basic macOS check exercises the packaged management and Live renderers,
 native shortcut conflicts, residency after closing the window, and shortcut
 release at Quit. The real-model smoke routes the licensed fixture through
 BlackHole 2ch and the app's microphone input. It temporarily selects BlackHole
-as the default input and restores the previous device. The TextEdit test
-requires a macOS automation session with normal Accessibility and keyboard
-event permission for the test driver and Accessibility for the packaged app.
-It checks those permissions before attempting the OS-path edit.
+as the default input and restores the previous device.
+
+The native tests require an automated Aqua session with normal Accessibility
+and keyboard event permission for the Swift driver and Accessibility for the
+packaged app. They exercise TextEdit with rapid committed chunks, focus while
+the indicator is visible, native menu Start, Stop, and Quit, and cancellation
+or focus change while the shortcut is held. With Google Chrome installed,
+the same suite checks refusal of a password field, read-only input, and
+length-limited input and textarea in a fresh extension-disabled profile. The
+Chrome tests cover safety refusals. Successful browser insertion remains
+required before merge.
+
+The harness compiles the Swift driver by default. A provisioned runner can
+compile it at a stable location using
+`xcrun swiftc -O tests/desktop/macos-fixture.swift -o /path/to/driver`, then set
+`DESKTOP_MACOS_TEST_DRIVER=/path/to/driver`. The driver's `permissions` command
+must report both permissions as granted before the native tests can run.
 
 On X11:
 

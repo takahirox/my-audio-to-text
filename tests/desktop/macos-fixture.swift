@@ -96,16 +96,38 @@ func editor() -> AXUIElement {
     return field as! AXUIElement
 }
 
-func shortcut() {
+func shortcut(_ keys: [Bool]) {
     guard CGPreflightPostEventAccess() else { fail("The test driver has no macOS keyboard event permission") }
     let flags: CGEventFlags = [.maskControl, .maskAlternate, .maskCommand]
-    for down in [true, false] {
+    for down in keys {
         guard let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_D), keyDown: down)
         else { fail("Cannot construct the shortcut") }
         event.flags = flags
         event.post(tap: .cghidEventTap)
         usleep(60_000)
     }
+}
+
+func trayItem(_ pid: pid_t, _ label: String) {
+    let app = AXUIElementCreateApplication(pid)
+    guard let extras = attribute(app, "AXExtrasMenuBar"), CFGetTypeID(extras) == AXUIElementGetTypeID(),
+          let items = attribute(extras as! AXUIElement, kAXChildrenAttribute) as? [AXUIElement],
+          items.count == 1, let item = items.first
+    else { fail("Cannot locate the packaged app's native menu-bar item") }
+    guard AXUIElementPerformAction(item, kAXPressAction as CFString) == .success
+    else { fail("Cannot open the packaged app's native menu") }
+    for _ in 0..<30 {
+        if let menus = attribute(item, kAXChildrenAttribute) as? [AXUIElement],
+           let menu = menus.first(where: { attribute($0, kAXRoleAttribute) as? String == "AXMenu" }),
+           let actions = attribute(menu, kAXChildrenAttribute) as? [AXUIElement],
+           let action = actions.first(where: { attribute($0, kAXTitleAttribute) as? String == label }) {
+            guard AXUIElementPerformAction(action, kAXPressAction as CFString) == .success
+            else { fail("Cannot select the native menu item: \(label)") }
+            return
+        }
+        usleep(100_000)
+    }
+    fail("The native menu did not expose its item: \(label)")
 }
 
 let args = CommandLine.arguments
@@ -120,7 +142,16 @@ case "textedit-pids":
 case "front-pid":
     print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)
 case "shortcut":
-    shortcut()
+    shortcut([true, false])
+case "shortcut-down":
+    shortcut([true])
+case "shortcut-up":
+    shortcut([false])
+case "activate":
+    guard NSRunningApplication(processIdentifier: pid_t(args[2])!)?.activate() == true
+    else { fail("Cannot activate the requested test application") }
+case "tray":
+    trayItem(pid_t(args[2])!, args[3])
 case "text":
     guard let value = attribute(editor(), kAXValueAttribute) as? String else { fail("Cannot read TextEdit text") }
     // JSON preserves leading/trailing whitespace, including a document's final newline.
