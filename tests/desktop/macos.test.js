@@ -311,13 +311,13 @@ test('macOS range replacement drains ordered Unicode through the range adapter a
   });
 });
 
-test('macOS range replacement refuses protected, read-only and unsupported fields and rechecks authorization at dispatch', async t => {
+test('macOS range replacement refuses protected fields and rechecks authorization at dispatch', async t => {
   const { controller, configure, start } = await dispatchFixture(t, 'range');
   for (const [options, error] of [
-    [{ protectedField: true }, /exposes Accessibility editing/],
-    [{ readOnly: true }, /exposes Accessibility editing/],
-    [{ disabledField: true }, /exposes Accessibility editing/],
-    [{ noEditingOperation: true }, /exposes Accessibility editing/],
+    [{ protectedField: true }, /protected/],
+    [{ readOnly: true }, /read-only/],
+    [{ disabledField: true }, /disabled/],
+    [{ notEditable: true }, /read-only/],
     [{ denyAccessibility: true }, /Accessibility/],
   ]) {
     await configure(options);
@@ -325,9 +325,9 @@ test('macOS range replacement refuses protected, read-only and unsupported field
     assert.match(controller.state.error, error);
   }
   for (const [options, error] of [
-    [{ readOnly: true }, /exposes Accessibility editing/],
-    [{ protectedField: true }, /exposes Accessibility editing/],
-    [{ readOnlyOnSecondSelection: true }, /exposes Accessibility editing/],
+    [{ readOnly: true }, /read-only/],
+    [{ protectedField: true }, /protected/],
+    [{ readOnlyOnSecondSelection: true }, /read-only/],
     [{ denyAccessibilityOnSecondSelection: true }, /Accessibility/],
     [{ switchOnSecondSelection: true }, /changed or lost focus/],
   ]) {
@@ -432,13 +432,13 @@ test('macOS rejects settable selected text in a read-only field at bind and disp
   const field = { singleLine: true, selectionLength: 2 };
   await configure({ ...field, readOnly: true });
   assert.equal(await start(), undefined);
-  assert.match(controller.state.error, /exposes Accessibility editing/);
+  assert.match(controller.state.error, /read-only/);
 
   await configure(field);
   const id = await start();
   assert.ok(id);
   await configure({ ...field, readOnlyOnFinalEditability: true });
-  await assert.rejects(controller.insert(id, 'never dispatch'), /exposes Accessibility editing/);
+  await assert.rejects(controller.insert(id, 'never dispatch'), /read-only/);
   await controller.cancel();
   assert.deepEqual(await configure(), { text: 'left|right', other: 'other', writes: 0, focused: 0 });
 });
@@ -448,7 +448,7 @@ test('macOS replaces the selection in an editable combo box and refuses a read-o
   const field = { comboBox: true, singleLine: true, selectionLength: 2 };
   await configure({ ...field, readOnly: true });
   assert.equal(await start(), undefined);
-  assert.match(controller.state.error, /exposes Accessibility editing/);
+  assert.match(controller.state.error, /read-only/);
   assert.equal((await configure(field)).writes, 0);
 
   const id = await start();
@@ -471,12 +471,89 @@ test('macOS types into an autocomplete combo box with a writable value and selec
   });
 });
 
-test('macOS refuses keyboard input in selection-only and read-only combo boxes', async t => {
+test('macOS sends native input when AX editability metadata is incomplete', async t => {
   const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
-  for (const field of [{}, { readOnly: true, writableSelectionRange: true }]) {
-    await configure({ comboBox: true, ...field });
+  const cases = [
+    { comboBox: true }, // No AXEditable or settable AXSelectedTextRange.
+    { noWritableValue: true },
+    { noEditingOperation: true, customRole: true },
+    { noRole: true },
+    { noFocusedWindow: true },
+    { noFocusedField: true },
+    { noFocusedWindow: true, noFocusedField: true },
+    { noFocusedWindow: true, noFocusedField: true, systemReportsField: true, fieldReportsWindow: true },
+  ];
+  const text = '東京🙂';
+  for (const [index, options] of cases.entries()) {
+    await configure(options);
+    const id = await start();
+    assert.ok(id, JSON.stringify(options));
+    await controller.insert(id, text);
+    await controller.stop();
+    const state = await configure(options);
+    assert.equal(state.text, `left|${text.repeat(index + 1)}right`);
+    assert.equal(state.keyUps, index + 1);
+    assert.equal(state.writes, index + 1);
+  }
+});
+
+test('macOS direct range editing falls back to keyboard input without AX selection data', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'range');
+  const id = await start();
+  assert.ok(id);
+  await configure({ noSelection: true, restoreSelectionAfterKeyPair: true });
+  const first = 'x'.repeat(20) + '東京🙂';
+  const next = ' 次';
+  const deliveries = [first, next].map(text => controller.insert(id, text));
+  await controller.stop();
+  await Promise.all(deliveries);
+  assert.deepEqual(await configure(), { text: `left|${first}${next}right`, other: 'other', writes: 3, focused: 0, chunks: [next] });
+});
+
+test('macOS native input rejects known protection and revoked keyboard permission with incomplete AX metadata', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
+  for (const [options, error] of [
+    [{ comboBox: true, readOnly: true, writableSelectionRange: true }, /read-only/],
+    [{ customRole: true, protectedField: true }, /protected/],
+    [{ noFocusedField: true, systemReportsField: true, disabledField: true }, /disabled/],
+    [{ noFocusedField: true, noFocusedWindow: true, secureInput: true }, /Secure Keyboard Entry/],
+    [{ noFocusedField: true, noFocusedWindow: true, denyAccessibility: true }, /Accessibility/],
+  ]) {
+    await configure(options);
     assert.equal(await start(), undefined);
-    assert.match(controller.state.error, /exposes Accessibility editing/);
+    assert.match(controller.state.error, error);
+  }
+  const unknown = { noFocusedField: true, noFocusedWindow: true };
+  for (const [options, error] of [
+    [{ secureInput: true }, /Secure Keyboard Entry/],
+    [{ noFocusedField: false, protectedField: true }, /protected/],
+    [{ denyPostEvents: true }, /post keyboard events/],
+  ]) {
+    await configure(unknown);
+    const id = await start();
+    assert.ok(id);
+    await configure({ ...unknown, ...options });
+    await assert.rejects(controller.insert(id, 'never dispatch'), error);
+    await controller.cancel();
+  }
+  assert.equal((await configure()).writes, 0);
+});
+
+test('macOS native input stops on observed window, field or application changes with partial focus data', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
+  for (const [known, change] of [
+    [{ noFocusedField: true }, { focused: 1 }],
+    [{ noFocusedWindow: true }, { focused: 1 }],
+    [{ noFocusedField: true, noFocusedWindow: true, systemReportsField: true }, { focused: 1 }],
+    [{ noFocusedWindow: true }, { noFocusedField: true }],
+    [{ noFocusedField: true, noFocusedWindow: true }, { alternateApplication: true }],
+  ]) {
+    await configure({ ...known, focused: 0 });
+    const id = await start();
+    assert.ok(id);
+    await configure({ ...known, ...change });
+    await assert.rejects(controller.insert(id, 'never dispatch'), /changed or lost focus/);
+    await controller.cancel();
   }
   assert.equal((await configure()).writes, 0);
 });
@@ -905,16 +982,25 @@ test('native Safari receives ordered Unicode without submitting and refuses prot
   for (const field of ['password', 'readonly']) {
     const original = await safari.focus(field, 1);
     run('shortcut');
-    await eventually(async () => {
+    const session = await eventually(async () => {
       const { session } = await app.view();
-      return session.phase === 'idle' && /exposes Accessibility editing/i.test(session.error);
-    }, `The packaged app did not refuse ${field}`);
+      return (session.phase === 'running' || (session.phase === 'idle' && session.error)) && session;
+    }, `The packaged app did not handle ${field}`);
+    if (field === 'password' || session.error) {
+      assert.match(session.error, /protected|Secure Keyboard Entry/);
+      await dismissError();
+    } else {
+      // Safari can expose a read-only field without an explicit read-only flag.
+      // In that case its native editor is responsible for ignoring the input.
+      await emit('must not change this field');
+      run('shortcut');
+      assert.equal((await idle(app.view)).error, '');
+    }
     const after = await eventually(() => safari.state().report > original.report && safari.state(),
-      'Safari did not report its state after the refusal');
+      'Safari did not report its state after the protected field check');
     assert.deepEqual(after.values, original.values);
     assert.deepEqual(after.edits, original.edits);
     assert.equal(after.submits, 0);
-    await dismissError();
   }
 });
 

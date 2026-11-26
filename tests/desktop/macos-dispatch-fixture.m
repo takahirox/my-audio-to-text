@@ -19,11 +19,13 @@ static BOOL keyboardOnly;
 static BOOL alternateApplication;
 static BOOL canPostEvents = YES;
 static BOOL disabledField;
+static BOOL secureInput;
 static BOOL failWrite;
 static NSPasteboard *clipboard;
 static NSUInteger keyUps;
 static BOOL delayInput;
 static BOOL switchAfterKeyPair;
+static BOOL restoreSelectionAfterKeyPair;
 static NSMutableArray<dispatch_block_t> *delayedInput;
 static BOOL noObserverNotifications;
 static BOOL comboBox;
@@ -31,6 +33,15 @@ static BOOL writableSelectionRange;
 static BOOL singleLine;
 static BOOL protectedField;
 static BOOL noEditingOperation;
+static BOOL noFocusedWindow;
+static BOOL noFocusedField;
+static BOOL fieldReportsWindow;
+static BOOL systemReportsField;
+static BOOL noRole;
+static BOOL customRole;
+static BOOL noWritableValue;
+static BOOL noSelection;
+static BOOL notEditable;
 static NSUInteger limit;
 static BOOL trusted = YES;
 static BOOL readOnly;
@@ -53,6 +64,7 @@ static NSMutableArray<NSString *> *browserChunks;
 
 static id windows[2];
 static id fields[2];
+static id systemElement;
 static NSString *documents[2] = {@"left|right", @"other"};
 static CFRange selection;
 static NSUInteger selectionReads;
@@ -73,18 +85,25 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
     NSString *key = (__bridge NSString *)attribute;
     id object = (__bridge id)element;
     id result = nil;
-    if ([key isEqual:@"AXFocusedWindow"]) result = windows[focused];
-    else if ([key isEqual:@"AXFocusedUIElement"]) result = fields[focused];
+    if ([key isEqual:@"AXFocusedWindow"] && !noFocusedWindow) result = windows[focused];
+    else if ([key isEqual:@"AXFocusedUIElement"]) {
+        if (object == systemElement ? systemReportsField : !noFocusedField) result = fields[focused];
+    }
+    else if ([key isEqual:@"AXWindow"] && fieldReportsWindow) result = windows[object == fields[1]];
     else if ([key isEqual:@"AXRole"]) {
         if (object != fields[0] && object != fields[1]) result = @"AXGroup";
+        else if (noRole) result = nil;
+        else if (customRole) result = @"AXCustomEditor";
         else if (comboBox) result = @"AXComboBox";
         else result = singleLine ? @"AXTextField" : @"AXTextArea";
     }
     else if ([key isEqual:@"AXSubrole"] && protectedField) result = @"AXSecureTextField";
     else if ([key isEqual:@"AXEnabled"]) result = @(!disabledField);
     else if ([key isEqual:@"AXFocused"]) result = @(object == fields[focused]);
+    else if ([key isEqual:@"AXReadOnly"] && readOnly) result = @YES;
+    else if ([key isEqual:@"AXEditable"] && notEditable) result = @NO;
     else if ([key isEqual:@"AXValue"]) result = documents[object == fields[1]];
-    else if ([key isEqual:@"AXSelectedTextRange"]) {
+    else if ([key isEqual:@"AXSelectedTextRange"] && !noSelection) {
         // Change state while capturing an explicit range, without an observer callback.
         if (++selectionReads == 2) {
             if (switchOnSecondSelection) focused = 1;
@@ -100,10 +119,15 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
 
 static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultipleAttributeOptions options,
                          CFArrayRef *values) {
-    (void)element;
-    (void)options;
-    assert([(__bridge NSArray *)keys isEqual:(@[@"AXFocusedWindow", @"AXFocusedUIElement"])]);
-    *values = CFBridgingRetain(@[windows[focused], fields[focused]]);
+    assert(options == 0);
+    NSMutableArray *focus = [NSMutableArray array];
+    for (NSString *key in (__bridge NSArray *)keys) {
+        CFTypeRef value = NULL;
+        AXError status = copyAttribute(element, (__bridge CFStringRef)key, &value);
+        if (status != kAXErrorSuccess) value = AXValueCreate(kAXValueTypeAXError, &status);
+        [focus addObject:CFBridgingRelease(value)];
+    }
+    *values = CFBridgingRetain(focus);
     if (pauseFinalFocus && editabilityChecks >= (keyboardOnly ? 1 : 2)) {
         pauseFinalFocus = NO;
         emitMessage(@{@"focusReadPaused": @YES});
@@ -127,7 +151,7 @@ static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *al
     }
     // In a read-only WebKit text input, AXSelectedText can still be settable.
     *allowed = (__bridge id)element == fields[0] && !noEditingOperation &&
-        ((!readOnly && CFEqual(key, kAXValueAttribute)) ||
+        ((!readOnly && !noWritableValue && CFEqual(key, kAXValueAttribute)) ||
          (writableSelectionRange && CFEqual(key, kAXSelectedTextRangeAttribute)) ||
          (!browser && !keyboardOnly && CFEqual(key, kAXSelectedTextAttribute)));
     return kAXErrorSuccess;
@@ -182,14 +206,15 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
 @end
 
 static void postKeyboardEvent(pid_t pid, CGEventRef event) {
-    assert(keyboardOnly && pid == (alternateApplication ? 200 : 100));
+    assert(pid == (alternateApplication ? 200 : 100));
     if (CGEventGetType(event) == kCGEventKeyUp) {
         keyUps++;
         if (switchAfterKeyPair) focused = 1;
+        if (restoreSelectionAfterKeyPair) noSelection = NO;
         return;
     }
     assert(CGEventGetType(event) == kCGEventKeyDown);
-    assert(trusted && !protectedField && !readOnly && !modifiers);
+    assert(trusted && !secureInput && !protectedField && !disabledField && !readOnly && !notEditable && !modifiers);
     CGKeyCode key = (CGKeyCode)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
     CGEventFlags flags = CGEventGetFlags(event);
     BOOL paste = key == kVK_ANSI_V && flags == kCGEventFlagMaskCommand;
@@ -214,6 +239,12 @@ static void postKeyboardEvent(pid_t pid, CGEventRef event) {
     else consume();
 }
 
+static AXError focusedElementPID(AXUIElementRef element, pid_t *pid) {
+    assert((__bridge id)element == fields[focused]);
+    *pid = alternateApplication ? 200 : 100;
+    return kAXErrorSuccess;
+}
+
 #define main packagedHelperMain
 #define NSWorkspace FixtureWorkspace
 #define AXIsProcessTrusted() trusted
@@ -223,6 +254,8 @@ static void postKeyboardEvent(pid_t pid, CGEventRef event) {
 #define AXObserverAddNotification(...) (noObserverNotifications ? kAXErrorNotificationUnsupported : kAXErrorSuccess)
 #define AXUIElementCopyAttributeValue copyAttribute
 #define AXUIElementCopyMultipleAttributeValues copyFocus
+#define AXUIElementCreateSystemWide() ((__bridge_retained AXUIElementRef)systemElement)
+#define AXUIElementGetPid focusedElementPID
 #define AXUIElementIsAttributeSettable textWritable
 #define AXUIElementSetAttributeValue editDocument
 #define AXUIElementCopyParameterizedAttributeNames copyParameterizedNames
@@ -230,6 +263,7 @@ static void postKeyboardEvent(pid_t pid, CGEventRef event) {
 #define generalPasteboard fixtureGeneralPasteboard
 #define CGPreflightPostEventAccess() canPostEvents
 #define CGEventPostToPid postKeyboardEvent
+#define IsSecureEventInputEnabled() secureInput
 #include "../../desktop/mac-target.m"
 #undef generalPasteboard
 #undef main
@@ -249,10 +283,21 @@ static void handleFixture(NSDictionary *message) {
     singleLine = [options[@"singleLine"] boolValue];
     protectedField = [options[@"protectedField"] boolValue];
     disabledField = [options[@"disabledField"] boolValue];
+    secureInput = [options[@"secureInput"] boolValue];
     noObserverNotifications = [options[@"noObserverNotifications"] boolValue];
     canPostEvents = ![options[@"denyPostEvents"] boolValue];
     failWrite = [options[@"failWrite"] boolValue];
     noEditingOperation = [options[@"noEditingOperation"] boolValue];
+    noFocusedWindow = [options[@"noFocusedWindow"] boolValue];
+    noFocusedField = [options[@"noFocusedField"] boolValue];
+    fieldReportsWindow = [options[@"fieldReportsWindow"] boolValue];
+    systemReportsField = [options[@"systemReportsField"] boolValue];
+    noRole = [options[@"noRole"] boolValue];
+    customRole = [options[@"customRole"] boolValue];
+    noWritableValue = [options[@"noWritableValue"] boolValue];
+    noSelection = [options[@"noSelection"] boolValue];
+    notEditable = [options[@"notEditable"] boolValue];
+    if (options[@"alternateApplication"]) alternateApplication = [options[@"alternateApplication"] boolValue];
     limit = [options[@"limit"] unsignedIntegerValue];
     if (options[@"focused"]) focused = [options[@"focused"] unsignedIntegerValue];
     switchOnSecondSelection = [options[@"switchOnSecondSelection"] boolValue];
@@ -270,6 +315,7 @@ static void handleFixture(NSDictionary *message) {
     modifiers = [options[@"held"] boolValue];
     delayInput = [options[@"delayInput"] boolValue];
     switchAfterKeyPair = [options[@"switchAfterKeyPair"] boolValue];
+    restoreSelectionAfterKeyPair = [options[@"restoreSelectionAfterKeyPair"] boolValue];
     NSString *copy = options[@"copyClipboard"];
     if (copy) {
         [clipboard clearContents];
@@ -337,6 +383,7 @@ int main(int argc, const char **argv) {
         windows[1] = CFBridgingRelease(AXUIElementCreateApplication(102));
         fields[0] = CFBridgingRelease(AXUIElementCreateApplication(103));
         fields[1] = CFBridgingRelease(AXUIElementCreateApplication(104));
+        systemElement = CFBridgingRelease(AXUIElementCreateApplication(105));
         assert(argc == 2 || argc == 3);
         browser = strcmp(argv[1], "range") == 0;
         keyboardOnly = strcmp(argv[1], "keyboard") == 0;

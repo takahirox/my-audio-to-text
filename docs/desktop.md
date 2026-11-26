@@ -5,7 +5,7 @@ or tray application. macOS on Apple Silicon is the primary v1 target. The
 macOS app writes to the active editor, browser field, or other editable text
 control through Accessibility editing or native keyboard input. The X11 app
 uses AT-SPI editing. Compatibility depends on the focused field and the
-editing methods it exposes.
+input it accepts.
 
 ## Build and launch
 
@@ -80,30 +80,32 @@ enable assistive technology in the session and reopen the target application.
 
 ### Focused fields
 
-The macOS helper binds the active application, window and exact field at
-key-down or before opening the tray menu. Before each dispatch it rechecks
-focus, identity and editability, and waits for shortcut and modifier release.
-A release from an ended voice typing or Display-only Live session is
-discarded.
+The macOS helper binds the active application at key-down or before opening
+the tray menu. It also binds the window and exact field whenever macOS can
+identify them. Before each dispatch it rechecks the available focus information
+and waits for the shortcut and modifiers to be released. A release from an
+ended voice typing or Display-only Live session is discarded.
 
-The macOS helper uses Accessibility selected-text editing or range replacement
-when the field exposes one of those operations. For an Accessibility-confirmed
-editable field without a direct operation, it sends Unicode text in keyboard
-events to the active application. This fallback requires macOS authorization
-to post keyboard events and leaves the clipboard untouched. It converts line
-breaks and tabs to spaces to avoid submitting forms or moving focus. Some
-applications ignore Unicode text supplied through keyboard events.
+The helper prefers Accessibility selected-text editing or range replacement
+when the field reliably exposes it. Otherwise it sends Unicode keyboard
+events to the active application, including when Accessibility provides only
+partial focus or editing information. The fallback requires macOS authorization
+to post keyboard events. Each event carries its own text and leaves the clipboard
+untouched. Cmd+V would require the receiving app to read each streamed chunk
+from the shared clipboard before dictation could safely restore or replace it.
 
 Single-line fields, multiline fields, and selections use the target's editing
-rules. A field can normalize, truncate, or ignore a chunk. Protected, disabled,
-and read-only controls are refused when identified by Accessibility. An
-application that exposes no usable editable field or returns an edit error
-will stop voice typing. Voice typing sends text without a submit command.
+rules. A field can normalize, truncate, or ignore a chunk, and some apps ignore
+the Unicode payload in keyboard events. The keyboard fallback converts line
+breaks and tabs to spaces and omits key-command characters to avoid submitting
+forms or moving focus. The helper stops if macOS reports secure keyboard input
+or identifies the field as protected, disabled, or read-only.
 
-A detected focus change stops the session and discards pending output. An
-edit already in flight can reach a different field if focus changes after
-the final check. Stop dictation and wait for the session to finish before
-switching fields or apps.
+A detected focus change or the loss of a previously verified identity stops
+the session and discards pending output. If macOS reports only the active
+application, changes within it may be invisible to the helper. An edit already
+in flight can reach a different field if focus changes after the final check.
+Stop dictation and wait for the session to finish before switching fields or apps.
 
 On X11, the focused control must expose AT-SPI `Text` and `EditableText`
 interfaces. Place a caret in an editable span. AT-SPI inserts at the caret
@@ -143,8 +145,9 @@ using the [Apple Silicon build commands](#apple-silicon-macos).
 1. Prepare **Moonshine Small Streaming Japanese** in **Models** and wait
    for **Ready**. Select the default voice typing graph as the shortcut
    graph.
-2. Open a blank document in an editor you use, or open a browser page with
-   a text field. For a local browser example, open
+2. Open a blank document in an editor you use or a browser page with a text
+   field. You can try an editor with limited Accessibility support if you
+   can type into it normally. For a local browser example, open
    `data:text/html,<form><textarea>left%7Cright</textarea><input maxlength=6><input type=password><button>Submit</button></form>`
    and place the caret after `|`.
 3. Press **Control+Option+Command+D**, wait for **Recording**, say
@@ -232,10 +235,10 @@ native shortcut conflicts, residency after closing the window, and shortcut
 release at Quit. The suite also relaunches the package to verify Auto Save
 draft recovery. Dispatch fixtures use simulated Accessibility responses to
 exercise distinct application identities, selected-text and range editing,
-delayed keyboard input and clipboard preservation, native constraints,
-protected fields, order, focus changes, and cancellation. A fixture-owned WebKit
-window checks the installed browser engine's edit behavior, including Unicode,
-length limits and a line break in a single-line form field.
+keyboard fallback with incomplete metadata, delayed input and clipboard
+preservation, native constraints, protected fields, order, focus changes,
+and cancellation. A fixture-owned WebKit window checks Unicode editing, length
+limits and a line break in a single-line form field.
 The real-model smoke routes the licensed fixture through BlackHole 2ch and
 the app's microphone input. It temporarily selects BlackHole as the default
 input and restores the prior device.
@@ -247,8 +250,8 @@ and a separate Swift driver. The driver sends the shortcut and uses
 Accessibility to observe TextEdit and exercise the menu. The tests open
 a separate instance of Safari from `/Applications`. Use a test account with
 Safari extensions disabled. A local page checks Unicode insertion in order at
-the authorized caret, normal length limits, protected and read-only field
-refusal, and zero form submissions.
+the authorized caret, normal length limits, password-field refusal, unchanged
+read-only values, and zero form submissions.
 
 Build the driver at a stable path, then run its permission preflight.
 
