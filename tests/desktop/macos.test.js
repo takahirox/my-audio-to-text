@@ -291,6 +291,7 @@ test('macOS clipboard paste', async t => {
       const staged = await dispatched(index + 1);
       assert.equal(controller.state.phase, 'running');
       assert.equal(staged.keyUps, index + 1);
+      assert.deepEqual(staged.keyCodes.slice(-2), [47, 47]); // Command+V in Dvorak.
       assert.equal(staged.clipboard[0][plainText], chunk);
       assert.equal(staged.currentHostOnly, true);
       assert.deepEqual(staged.reads, chunks.slice(0, index));
@@ -309,6 +310,20 @@ test('macOS clipboard paste', async t => {
     await controller.stop();
     assert.equal(controller.state.error, '');
     assert.equal((await configure()).keyDowns, chunks.length);
+  });
+
+  await t.test('uses the keyboard layout selected during clipboard staging', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+    await configure({ switchLayoutAfterStage: true });
+    const id = await start();
+    assert.ok(id);
+    const pending = controller.insert(id, 'new layout');
+    await dispatched(1);
+    const settled = await configure({ advance: 250 });
+    await pending;
+    await controller.stop();
+    assert.deepEqual(settled.keyCodes, [9, 9]); // Command+V in US.
+    assert.deepEqual(settled.clipboard, originalClipboard);
   });
 
   await t.test('waits for modifiers and drains accepted chunks on Stop', async t => {
