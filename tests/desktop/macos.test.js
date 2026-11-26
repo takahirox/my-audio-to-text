@@ -558,6 +558,20 @@ test('macOS native input stops on observed window, field or application changes 
   assert.equal((await configure()).writes, 0);
 });
 
+test('macOS native input posts no events when focus moves during the final field protection check', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
+  const { clipboard } = await configure({ sameWindow: true });
+  const id = await start();
+  assert.ok(id);
+  await configure({ sameWindow: true, switchOnFinalSubrole: true });
+
+  await assert.rejects(controller.insert(id, 'never dispatch'), /changed or lost focus/);
+  await controller.cancel();
+  assert.deepEqual(await configure(), {
+    text: 'left|right', other: 'other', writes: 0, focused: 1, clipboard, keyUps: 0,
+  });
+});
+
 test('macOS equivalent editable fields accept the same selected-text edit in unrelated apps', async t => {
   const fixtures = await Promise.all([dispatchFixture(t, 'selected text'), dispatchFixture(t, 'selected text', true)]);
   for (const { controller, configure, start } of fixtures) {
@@ -987,7 +1001,7 @@ test('native Safari receives ordered Unicode without submitting and refuses prot
       return (session.phase === 'running' || (session.phase === 'idle' && session.error)) && session;
     }, `The packaged app did not handle ${field}`);
     if (field === 'password' || session.error) {
-      assert.match(session.error, /protected|Secure Keyboard Entry/);
+      assert.match(session.error, field === 'password' ? /protected|Secure Keyboard Entry/ : /read-only/);
       await dismissError();
     } else {
       // Safari can expose a read-only field without an explicit read-only flag.

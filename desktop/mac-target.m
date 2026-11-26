@@ -282,6 +282,14 @@ static BOOL releaseRequested(void) {
 static NSString *dispatchError(Binding *binding) {
     NSString *error = checkTarget(binding);
     if (error) return error;
+    id checkedArea = binding.area;
+    // Focus can move within the same application during the protection lookups.
+    if (!hasBoundFocus(binding)) return focusError;
+    if (!checkedArea && binding.area) {
+        error = fieldError((__bridge AXUIElementRef)binding.area);
+        if (error) return error;
+        if (!hasBoundFocus(binding)) return focusError;
+    }
     if (!AXIsProcessTrusted()) return permissionError;
     if (IsSecureEventInputEnabled()) return secureInputError;
     if (releaseRequested() || NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier != binding.pid) return focusError;

@@ -69,6 +69,9 @@ static NSString *documents[2] = {@"left|right", @"other"};
 static CFRange selection;
 static NSUInteger selectionReads;
 static NSUInteger focused;
+static BOOL sameWindow;
+static BOOL switchOnFinalSubrole;
+static NSUInteger subroleReads;
 static BOOL switchOnSecondSelection;
 static BOOL readOnlyOnSecondSelection;
 static BOOL denyAccessibilityOnSecondSelection;
@@ -85,11 +88,11 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
     NSString *key = (__bridge NSString *)attribute;
     id object = (__bridge id)element;
     id result = nil;
-    if ([key isEqual:@"AXFocusedWindow"] && !noFocusedWindow) result = windows[focused];
+    if ([key isEqual:@"AXFocusedWindow"] && !noFocusedWindow) result = windows[sameWindow ? 0 : focused];
     else if ([key isEqual:@"AXFocusedUIElement"]) {
         if (object == systemElement ? systemReportsField : !noFocusedField) result = fields[focused];
     }
-    else if ([key isEqual:@"AXWindow"] && fieldReportsWindow) result = windows[object == fields[1]];
+    else if ([key isEqual:@"AXWindow"] && fieldReportsWindow) result = windows[!sameWindow && object == fields[1]];
     else if ([key isEqual:@"AXRole"]) {
         if (object != fields[0] && object != fields[1]) result = @"AXGroup";
         else if (noRole) result = nil;
@@ -97,7 +100,11 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
         else if (comboBox) result = @"AXComboBox";
         else result = singleLine ? @"AXTextField" : @"AXTextArea";
     }
-    else if ([key isEqual:@"AXSubrole"] && protectedField) result = @"AXSecureTextField";
+    else if ([key isEqual:@"AXSubrole"]) {
+        // The second protection check during a keyboard delivery runs just before dispatch.
+        if (switchOnFinalSubrole && ++subroleReads == 2) focused = 1;
+        if (protectedField) result = @"AXSecureTextField";
+    }
     else if ([key isEqual:@"AXEnabled"]) result = @(!disabledField);
     else if ([key isEqual:@"AXFocused"]) result = @(object == fields[focused]);
     else if ([key isEqual:@"AXReadOnly"] && readOnly) result = @YES;
@@ -300,6 +307,9 @@ static void handleFixture(NSDictionary *message) {
     if (options[@"alternateApplication"]) alternateApplication = [options[@"alternateApplication"] boolValue];
     limit = [options[@"limit"] unsignedIntegerValue];
     if (options[@"focused"]) focused = [options[@"focused"] unsignedIntegerValue];
+    sameWindow = [options[@"sameWindow"] boolValue];
+    switchOnFinalSubrole = [options[@"switchOnFinalSubrole"] boolValue];
+    subroleReads = 0;
     switchOnSecondSelection = [options[@"switchOnSecondSelection"] boolValue];
     readOnlyOnSecondSelection = [options[@"readOnlyOnSecondSelection"] boolValue];
     denyAccessibilityOnSecondSelection = [options[@"denyAccessibilityOnSecondSelection"] boolValue];
