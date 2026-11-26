@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import time
+from collections import deque
 
 import gi
 
@@ -13,6 +14,10 @@ from x11_shortcut import Shortcut
 
 
 class TargetError(Exception):
+    pass
+
+
+class AuthorizationError(Exception):
     pass
 
 
@@ -39,7 +44,12 @@ class Focus:
         self.shortcut_context = 0
         self.held_context = 0
         self.focus_settles_at = 0
+        self.input_fd = sys.stdin.fileno()
+        os.set_blocking(self.input_fd, False)
         self.input = b""
+        self.input_closed = False
+        self.requests = deque()
+        self.dispatch_source = None
 
     def window(self):
         active = self.root.get_full_property(self.active_atom, Xatom.WINDOW)
@@ -127,23 +137,23 @@ class Focus:
         def settle():
             nonlocal next_update
             self.x_event()
-            if self.token != token:
+            try:
+                self.require_authorization(token)
+                if self.focus_is_settling() or not self.insert(token, text):
+                    # A held shortcut can outlast the host request timeout.
+                    now = time.monotonic()
+                    if now >= next_update:
+                        send({**reply, "waiting": True})
+                        next_update = now + 1
+                    return True
+            except AuthorizationError:
                 reply["error"] = AUTHORIZATION_ERROR
-            else:
-                try:
-                    if self.focus_is_settling() or not self.insert(text):
-                        # A held shortcut can outlast the host request timeout.
-                        now = time.monotonic()
-                        if now >= next_update:
-                            send({**reply, "waiting": True})
-                            next_update = now + 1
-                        return True
-                except (TargetError, GLib.Error, error.XError):
-                    # The target can disappear or reject an edit. Consume the
-                    # chunk even if AT-SPI may have already applied it.
-                    pass
-                except Exception:
-                    reply["error"] = "The X11 accessibility service could not deliver text."
+            except (TargetError, GLib.Error, error.XError):
+                # The target can disappear or reject an edit. Consume the
+                # chunk even if AT-SPI may have already applied it.
+                pass
+            except Exception:
+                reply["error"] = "The X11 accessibility service could not deliver text."
             send(reply)
             return False
 
@@ -155,7 +165,16 @@ class Focus:
             raise TargetError()
         self.editable(node)
 
-    def insert(self, text):
+    def require_authorization(self, token):
+        # Synchronous target discovery can delay the stdin watch. Read any
+        # pending revocations without running other commands inside an insert.
+        self.read_requests()
+        if self.token != token or self.input_closed or any(
+                request.get("action") == "release" and request.get("token") == token
+                for request in self.requests):
+            raise AuthorizationError()
+
+    def insert(self, token, text):
         window = self.window()
         frame, node = self.locate(window)
         offset, before = self.caret(node)
@@ -165,12 +184,15 @@ class Focus:
         self.verify(window, frame, node)
         if self.caret(node) != (offset, before):
             raise TargetError()
-        if node.insert_text(offset, text, len(text.encode("utf-8"))):
+        length = len(text.encode("utf-8"))
+        self.require_authorization(token)
+        if node.insert_text(offset, text, length):
             # Some implementations leave the caret in place. Advance by the
             # actual insertion length, including any native filtering.
             inserted = node.get_character_count() - before
             if inserted > 0 and node.get_caret_offset() == offset and not node.get_n_selections():
                 self.verify(window, frame, node)
+                self.require_authorization(token)
                 node.set_caret_offset(offset + inserted)
         return True
 
@@ -187,19 +209,35 @@ class Focus:
                 self.held_context = self.shortcut_context
         return True
 
-    def receive(self, fd, _condition):
-        data = os.read(fd, 65536)
-        if not data:
-            loop.quit()
-            return False
-        self.input += data
+    def read_requests(self):
+        while not self.input_closed:
+            try:
+                data = os.read(self.input_fd, 65536)
+            except BlockingIOError:
+                break
+            if not data:
+                self.input_closed = True
+                break
+            self.input += data
         while b"\n" in self.input:
             line, self.input = self.input.split(b"\n", 1)
-            self.handle(line)
-        return True
+            self.requests.append(json.loads(line))
+        if self.dispatch_source is None and (self.requests or self.input_closed):
+            self.dispatch_source = GLib.idle_add(self.dispatch_requests, priority=GLib.PRIORITY_DEFAULT)
 
-    def handle(self, line):
-        message = json.loads(line)
+    def receive(self, *_args):
+        self.read_requests()
+        return not self.input_closed
+
+    def dispatch_requests(self):
+        while self.requests:
+            self.handle(self.requests.popleft())
+        self.dispatch_source = None
+        if self.input_closed:
+            loop.quit()
+        return False
+
+    def handle(self, message):
         reply = {"request": message["request"]}
         try:
             action = message["action"]
@@ -238,7 +276,7 @@ if __name__ == "__main__":
     Atspi.init()
     focus = Focus()
     GLib.io_add_watch(focus.x.fileno(), GLib.PRIORITY_DEFAULT, GLib.IO_IN, focus.x_event)
-    GLib.io_add_watch(sys.stdin.fileno(), GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP, focus.receive)
+    GLib.io_add_watch(focus.input_fd, GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP, focus.receive)
     GLib.timeout_add(75, focus.x_event)
     send({"ready": True})
     loop = GLib.MainLoop()

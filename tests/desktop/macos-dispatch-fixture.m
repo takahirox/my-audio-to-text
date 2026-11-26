@@ -11,6 +11,7 @@ static NSTextView *editors[3];
 static id fields[3], systemElement;
 static NSUInteger focused, keyDowns, keyUps;
 static pid_t frontPid = 100;
+static pid_t systemFieldPID;
 static BOOL trusted = YES, canPost = YES;
 static BOOL secureInput, protectedField, disabledField, readOnly, notEditable;
 static BOOL modifiers, noField, systemField, noRole, menu;
@@ -119,7 +120,7 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
 
 static AXError getPid(AXUIElementRef element, pid_t *pid) {
     assert((__bridge id)element == fields[focused]);
-    *pid = frontPid;
+    *pid = systemFieldPID ?: frontPid;
     return kAXErrorSuccess;
 }
 
@@ -258,6 +259,7 @@ static void handleFixture(NSDictionary *message) {
     if (options[@"frontPid"]) frontPid = [options[@"frontPid"] intValue];
     if (options[@"noField"]) noField = [options[@"noField"] boolValue];
     if (options[@"systemField"]) systemField = [options[@"systemField"] boolValue];
+    if (options[@"systemFieldPID"]) systemFieldPID = [options[@"systemFieldPID"] intValue];
     if (options[@"menu"]) menu = [options[@"menu"] boolValue];
     if (options[@"noRole"]) noRole = [options[@"noRole"] boolValue];
     if (options[@"editorEditable"]) editors[0].editable = [options[@"editorEditable"] boolValue];

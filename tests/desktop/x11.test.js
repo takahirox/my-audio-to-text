@@ -173,6 +173,17 @@ async function trayClick(button) {
   await wait(350);
 }
 
+test('Cancel during X11 target lookup revokes the pending edit', () => {
+  const output = execFileSync('/usr/bin/python3', ['-B', 'tests/desktop/x11-cancel-fixture.py'], {
+    encoding: 'utf8', timeout: 5000,
+  });
+  assert.deepEqual(output.trim().split('\n').map(line => JSON.parse(line)), [
+    { request: 1 },
+    { request: 2, error: 'The voice typing session is no longer authorized.' },
+    { request: 3 },
+  ]);
+});
+
 test('packaged app uses the real tray, editor, shortcut and focused desktop controls', { timeout: 150000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-x11-'));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
