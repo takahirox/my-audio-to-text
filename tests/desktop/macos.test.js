@@ -507,6 +507,29 @@ test('macOS clipboard paste', async t => {
       assert.deepEqual(state.clipboard, originalClipboard);
     }
   });
+
+  await t.test('restores the clipboard without posting Paste when focus moves during the last protection check', async t => {
+    const { controller, configure, start } = dispatchFixture(t, tool);
+    await configure({ sameWindow: true });
+    const id = await start();
+    assert.ok(id);
+    await configure({ switchDuringProtection: true });
+
+    await assert.rejects(controller.insert(id, 'must not cross fields'), /changed or lost focus/);
+    await controller.current?.canceling;
+    const state = await configure();
+    assert.equal(state.keyDowns, 0);
+    assert.equal(state.keyUps, 0);
+    assert.deepEqual(state.clipboard, originalClipboard);
+  });
+});
+
+test('macOS WebKit Paste honors native field limits and pastes a newline without submitting', async t => {
+  const directory = await temp(t, 'desktop-macos-webkit-');
+  const tool = join(directory, 'webkit-fixture');
+  execFileSync('xcrun', ['clang', '-fobjc-arc', '-Wall', '-Wextra', '-Werror', '-Wno-deprecated-declarations',
+    '-framework', 'AppKit', '-framework', 'WebKit', 'tests/desktop/macos-webkit-fixture.m', '-o', tool]);
+  execFileSync(tool, { timeout: 10000 });
 });
 
 test('macOS package launches, retains its shortcut after closing management, and releases it on Quit', {
